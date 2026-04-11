@@ -1,0 +1,185 @@
+import { expect, test } from "bun:test";
+import path from "node:path";
+
+import { loadResolvedGraph } from "../src/config.ts";
+import { createRuntime } from "../src/runtime.ts";
+import { createRepo, makeTempDir, write } from "./helpers.ts";
+
+test("loadResolvedGraph accepts valid local and external config", () => {
+  const sandbox = makeTempDir("config-valid");
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+    "apps/consumer/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+  consumer:
+    path: apps/consumer
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: consumer
+        env: DATABASE_URL
+`,
+  });
+
+  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+
+  expect(graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
+  expect(graph.reposByRoot.get(root)?.localPortOrder).toEqual(["API_PORT"]);
+  expect(graph.reposByRoot.get(root)?.externalMappingsInOrder).toHaveLength(1);
+});
+
+test("loadResolvedGraph rejects duplicate yaml keys", () => {
+  const sandbox = makeTempDir("config-duplicate-keys");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/Invalid/);
+});
+
+test("loadResolvedGraph rejects duplicate rewrite targets", () => {
+  const sandbox = makeTempDir("config-duplicate-targets");
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: DATABASE_URL
+external:
+  dep:
+    path: ../dep
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /Duplicate rewrite target/,
+  );
+  expect(depRoot).toBeTruthy();
+});
+
+test("loadResolvedGraph rejects direct dependency references to non-local ports", () => {
+  const sandbox = makeTempDir("config-direct-only");
+  const leafRoot = createRepo(path.join(sandbox, "leaf"), {
+    "services/leaf/.env.local": "PORT=9000\n",
+    "monke.yml": `apps:
+  leaf:
+    path: services/leaf
+    envFile: .env.local
+    mappings:
+      - port: LEAF_PORT
+        env: PORT
+`,
+  });
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/dep/.env.local": "PORT=5432\nLEAF_URL=http://localhost:9000\n",
+    "monke.yml": `apps:
+  dep:
+    path: services/dep
+    envFile: .env.local
+    mappings:
+      - port: DEP_PORT
+        env: PORT
+external:
+  leaf:
+    path: ../leaf
+    mappings:
+      - port: LEAF_PORT
+        app: dep
+        env: LEAF_URL
+`,
+  });
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    mappings:
+      - port: LEAF_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/not owned locally/);
+  expect(leafRoot).toBeTruthy();
+  expect(depRoot).toBeTruthy();
+});
+
+test("loadResolvedGraph rejects unused zero-port apps", () => {
+  const sandbox = makeTempDir("config-unused-zero-port");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "apps/consumer/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+  consumer:
+    path: apps/consumer
+    envFile: .env.local
+    mappings: []
+`,
+  });
+  write(root, "apps/consumer/.keep", "");
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /owns no local ports/,
+  );
+});
