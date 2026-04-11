@@ -1,38 +1,82 @@
 #!/usr/bin/env bun
 
+import { Command, CommanderError } from "commander";
+
 import { MonkeError } from "./errors.ts";
 import { runCleanup, runCreate, runMaterialize } from "./monke.ts";
 import { createRuntime } from "./runtime.ts";
+import type { Runtime } from "./types.ts";
+
+const ROOT_USAGE = "Usage:\n  monke create <session>\n  monke materialize\n  monke cleanup";
 
 export function runCli(argv: string[], runtime = createRuntime()): void {
-  const [command, ...rest] = argv;
+  if (argv.length === 0) {
+    throw new MonkeError(ROOT_USAGE);
+  }
 
-  switch (command) {
-    case "create": {
-      if (rest.length !== 1) {
-        throw new MonkeError("Usage: monke create <session>");
-      }
-      runCreate(runtime, rest[0]!);
-      return;
-    }
-    case "materialize": {
-      if (rest.length !== 0) {
-        throw new MonkeError("Usage: monke materialize");
-      }
+  try {
+    createProgram(runtime).parse(argv, { from: "user" });
+  } catch (error) {
+    throw mapCliError(error, argv);
+  }
+}
+
+function createProgram(runtime: Runtime): Command {
+  const program = new Command()
+    .name("monke")
+    .helpOption(false)
+    .addHelpCommand(false)
+    .showSuggestionAfterError(false)
+    .allowExcessArguments(false)
+    .configureOutput({
+      writeErr: () => undefined,
+      writeOut: () => undefined,
+    });
+
+  program.exitOverride();
+
+  program
+    .command("create")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .argument("<session>")
+    .action((session: string) => {
+      runCreate(runtime, session);
+    });
+
+  program
+    .command("materialize")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .action(() => {
       runMaterialize(runtime);
-      return;
-    }
-    case "cleanup": {
-      if (rest.length !== 0) {
-        throw new MonkeError("Usage: monke cleanup");
-      }
+    });
+
+  program
+    .command("cleanup")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .action(() => {
       runCleanup(runtime);
-      return;
-    }
+    });
+
+  return program;
+}
+
+function mapCliError(error: unknown, argv: string[]): Error {
+  if (!(error instanceof CommanderError)) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+
+  switch (argv[0]) {
+    case "create":
+      return new MonkeError("Usage: monke create <session>");
+    case "materialize":
+      return new MonkeError("Usage: monke materialize");
+    case "cleanup":
+      return new MonkeError("Usage: monke cleanup");
     default:
-      throw new MonkeError(
-        "Usage:\n  monke create <session>\n  monke materialize\n  monke cleanup",
-      );
+      return new MonkeError(ROOT_USAGE);
   }
 }
 

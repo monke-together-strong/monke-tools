@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -6,7 +6,10 @@ import { getExpectedWorktreePath } from "../src/git.ts";
 import {
   createRepo,
   git,
+  installFailingBrew,
   installFakeBrew,
+  installGitShim,
+  installNoopBrew,
   installFakeWt,
   makeTempDir,
   read,
@@ -149,6 +152,65 @@ external:
   expect(read(depWorktree, ".monke/ports.env")).toBe("DEP_POSTGRES_PORT=10000");
 });
 
+test("materialize from the root worktree re-applies dependency repos", () => {
+  const sandbox = makeTempDir("rematerialize-dependency");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+external:
+  dep:
+    path: ../dep
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["create", "refresh"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const depWorktree = getExpectedWorktreePath(depRoot, "refresh");
+  write(depWorktree, "services/db/.env.local", "PORT=5432\n");
+  write(depWorktree, ".monke/ports.env", "");
+
+  runMonke({
+    cwd: getExpectedWorktreePath(root, "refresh"),
+    args: ["materialize"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10000\n");
+  expect(read(depWorktree, ".monke/ports.env")).toBe("DEP_POSTGRES_PORT=10000");
+});
+
 test("cleanup removes dead session state but leaves repo reservations intact", () => {
   const sandbox = makeTempDir("cleanup");
   const binDirectory = path.join(sandbox, "bin");
@@ -193,9 +255,10 @@ test("cleanup removes dead session state but leaves repo reservations intact", (
   expect(reservationState.sourceRoot).toBe(root);
 });
 
-test("create installs worktrunk through Homebrew when wt is missing", () => {
+test("create installs worktrunk through Homebrew and configures shell integration when wt is missing", () => {
   const sandbox = makeTempDir("bootstrap");
   const binDirectory = path.join(sandbox, "bin");
+  installGitShim(binDirectory);
   const brewLog = installFakeBrew(binDirectory);
   const home = path.join(sandbox, "home");
 
@@ -218,8 +281,98 @@ test("create installs worktrunk through Homebrew when wt is missing", () => {
     args: ["create", "brew-me"],
     monkeHome: home,
     binDirectory,
+    extraEnv: { PATH: binDirectory },
   });
 
   expect(read(path.dirname(brewLog), "brew.log")).toContain("install worktrunk");
   expect(existsSync(path.join(binDirectory, "wt"))).toBe(true);
+  expect(read(path.dirname(brewLog), "wt.log")).toContain("config shell install");
+});
+
+test("create fails when wt is missing and Homebrew is unavailable", () => {
+  const sandbox = makeTempDir("bootstrap-no-brew");
+  const binDirectory = path.join(sandbox, "empty-bin");
+  installGitShim(binDirectory);
+  const home = path.join(sandbox, "home");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => {
+    runMonke({
+      cwd: root,
+      args: ["create", "no-brew"],
+      monkeHome: home,
+      binDirectory,
+      extraEnv: { PATH: binDirectory },
+    });
+  }).toThrow(/Homebrew is not available/);
+});
+
+test("create surfaces Homebrew install failures when wt bootstrap does not succeed", () => {
+  const sandbox = makeTempDir("bootstrap-brew-fails");
+  const binDirectory = path.join(sandbox, "bin");
+  installGitShim(binDirectory);
+  const brewLog = installFailingBrew(binDirectory);
+  const home = path.join(sandbox, "home");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => {
+    runMonke({
+      cwd: root,
+      args: ["create", "brew-fails"],
+      monkeHome: home,
+      binDirectory,
+      extraEnv: { PATH: binDirectory },
+    });
+  }).toThrow(/Command failed: .*brew install worktrunk/);
+  expect(read(path.dirname(brewLog), "brew.log")).toContain("install worktrunk");
+});
+
+test("create fails if Homebrew finishes but wt is still missing", () => {
+  const sandbox = makeTempDir("bootstrap-no-wt");
+  const binDirectory = path.join(sandbox, "bin");
+  installGitShim(binDirectory);
+  const brewLog = installNoopBrew(binDirectory);
+  const home = path.join(sandbox, "home");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => {
+    runMonke({
+      cwd: root,
+      args: ["create", "brew-no-wt"],
+      monkeHome: home,
+      binDirectory,
+      extraEnv: { PATH: binDirectory },
+    });
+  }).toThrow(/could not find wt on PATH/);
+  expect(read(path.dirname(brewLog), "brew.log")).toContain("install worktrunk");
 });

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -68,4 +68,67 @@ external:
     repos: Array<{ sourceRoot: string }>;
   };
   expect(sessionState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
+});
+
+test("create fans out one dependency-owned port to multiple local targets", () => {
+  const sandbox = makeTempDir("multi-repo-fanout");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/api\n",
+    "apps/worker/.env.local": "DATABASE_URL=postgres://localhost:5432/worker\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+  worker:
+    path: apps/worker
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+      - port: DEP_POSTGRES_PORT
+        app: worker
+        env: DATABASE_URL
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["create", "swing"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const rootWorktree = getExpectedWorktreePath(root, "swing");
+
+  expect(read(rootWorktree, "apps/api/.env.local")).toBe(
+    "DATABASE_URL=postgres://localhost:10000/api\n",
+  );
+  expect(read(rootWorktree, "apps/worker/.env.local")).toBe(
+    "DATABASE_URL=postgres://localhost:10000/worker\n",
+  );
+  expect(read(rootWorktree, ".monke/ports.env")).toBe("DEP_POSTGRES_PORT=10000");
+
+  expect(depRoot).toBeTruthy();
 });

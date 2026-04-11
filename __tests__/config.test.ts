@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import path from "node:path";
 
 import { loadResolvedGraph } from "../src/config.ts";
@@ -182,4 +182,81 @@ test("loadResolvedGraph rejects unused zero-port apps", () => {
   expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
     /owns no local ports/,
   );
+});
+
+test("loadResolvedGraph rejects duplicate local port keys across the resolved session graph", () => {
+  const sandbox = makeTempDir("config-duplicate-port-keys");
+  createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: SHARED_PORT
+        env: PORT
+`,
+  });
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "apps/consumer/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: SHARED_PORT
+        env: PORT
+  consumer:
+    path: apps/consumer
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    mappings:
+      - port: SHARED_PORT
+        app: consumer
+        env: DATABASE_URL
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/owned by both/);
+});
+
+test("loadResolvedGraph rejects envFile paths that escape the app directory", () => {
+  const sandbox = makeTempDir("config-envfile-escape");
+  const root = createRepo(path.join(sandbox, "root"), {
+    ".env.root": "DATABASE_URL=postgres://localhost:5432/root\n",
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: ../../.env.root
+    mappings:
+      - port: DB_PORT
+        env: DATABASE_URL
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /envFile.*must resolve inside/,
+  );
+});
+
+test("loadResolvedGraph defaults envFile to .env when omitted", () => {
+  const sandbox = makeTempDir("config-default-envfile");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+  expect(graph.reposByRoot.get(root)?.appsByLabel.get("api")?.relativeEnvFile).toBe(".env");
 });

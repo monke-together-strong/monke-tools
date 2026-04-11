@@ -53,16 +53,17 @@ export function rewriteManagedEnvFiles(
   localAssignments: Map<string, number>,
   externalAssignments: AssignedPort[],
 ): void {
+  const externalValuesByKey = new Map(
+    externalAssignments.map((assignment) => [assignment.key, assignment.value]),
+  );
   const externalByApp = new Map<string, Array<{ env: string; value: number }>>();
-  for (const assignment of externalAssignments) {
-    const mapping = config.externalMappingsInOrder.find(
-      (candidate) => candidate.portKey === assignment.key,
-    );
-    if (!mapping) {
+  for (const mapping of config.externalMappingsInOrder) {
+    const value = externalValuesByKey.get(mapping.portKey);
+    if (value === undefined) {
       continue;
     }
     const targetEntries = externalByApp.get(mapping.targetApp) ?? [];
-    targetEntries.push({ env: mapping.targetEnv, value: assignment.value });
+    targetEntries.push({ env: mapping.targetEnv, value });
     externalByApp.set(mapping.targetApp, targetEntries);
   }
 

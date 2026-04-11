@@ -136,46 +136,18 @@ export function runMaterialize(runtime: Runtime): void {
     );
 
     const currentRepoRoot = context.sourceRoot;
-    const currentIndex = graph.reposInMaterializationOrder.findIndex(
-      (repo) => repo.sourceRoot === currentRepoRoot,
-    );
-    const firstWorkIndex = findFirstIndexNeedingWork(
-      runtime,
-      graph.reposInMaterializationOrder,
-      sessionState,
-      session,
-      currentIndex,
-    );
-
     const results = new Map<string, RepoMaterializationResult>();
-    for (const [index, repoConfig] of graph.reposInMaterializationOrder.entries()) {
+    for (const repoConfig of graph.reposInMaterializationOrder) {
       const existingState = sessionState.repos.find(
         (repo) => repo.sourceRoot === repoConfig.sourceRoot,
       );
-      const shouldSkip = index < firstWorkIndex && repoConfig.sourceRoot !== currentRepoRoot;
+      const isCurrentRepo = repoConfig.sourceRoot === currentRepoRoot;
+      const dependencyWorktree = isCurrentRepo
+        ? null
+        : ensureSessionWorktree(runtime, repoConfig.sourceRoot, session);
+      const worktreePath = isCurrentRepo ? context.worktreeRoot : dependencyWorktree.path;
 
-      if (shouldSkip && existingState) {
-        validateWorktreeForSession(
-          runtime,
-          repoConfig.sourceRoot,
-          existingState.worktreePath,
-          session,
-        );
-        results.set(repoConfig.sourceRoot, {
-          state: existingState,
-          localAssignments: new Map(
-            existingState.assignedPorts.map((entry) => [entry.key, entry.value]),
-          ),
-        });
-        continue;
-      }
-
-      const worktreePath =
-        repoConfig.sourceRoot === currentRepoRoot
-          ? context.worktreeRoot
-          : ensureSessionWorktree(runtime, repoConfig.sourceRoot, session).path;
-
-      if (repoConfig.sourceRoot === currentRepoRoot) {
+      if (isCurrentRepo) {
         validateWorktreeForSession(runtime, repoConfig.sourceRoot, worktreePath, session);
       }
 
@@ -186,10 +158,7 @@ export function runMaterialize(runtime: Runtime): void {
         session,
         repoConfig,
         worktreePath,
-        worktreeCreated:
-          repoConfig.sourceRoot === currentRepoRoot
-            ? false
-            : !existingState || !existsSync(existingState.worktreePath),
+        worktreeCreated: isCurrentRepo ? false : dependencyWorktree.created,
         existingState,
         dependencyResults: results,
       });
@@ -322,9 +291,11 @@ function ensureWorktrunkInstalled(runtime: Runtime): void {
   }
 
   runtime.exec(brew, ["install", "worktrunk"]);
-  if (!findExecutable("wt", runtime.env)) {
+  const wt = findExecutable("wt", runtime.env);
+  if (!wt) {
     throw new MonkeError("Installed worktrunk with Homebrew but could not find wt on PATH");
   }
+  runtime.exec(wt, ["config", "shell", "install"]);
 }
 
 function findFirstIndexNeedingWork(

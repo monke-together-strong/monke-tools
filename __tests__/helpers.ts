@@ -1,4 +1,4 @@
-import { afterEach } from "bun:test";
+import { afterEach } from "vitest";
 import {
   chmodSync,
   mkdirSync,
@@ -74,21 +74,53 @@ export function installFakeWt(binDirectory: string): void {
   writeExecutable(path.join(binDirectory, "wt"), "#!/bin/sh\nexit 0\n");
 }
 
+export function installGitShim(binDirectory: string): void {
+  writeExecutable(
+    path.join(binDirectory, "git"),
+    `#!/bin/sh\nexec "${findExecutableOnPath("git")}" "$@"\n`,
+  );
+}
+
 export function installFakeBrew(binDirectory: string): string {
   const logPath = path.join(binDirectory, "brew.log");
+  const wtLogPath = path.join(binDirectory, "wt.log");
   const script = `#!/bin/sh
 set -eu
 echo "$@" >> "${logPath}"
 if [ "$1" = "install" ] && [ "$2" = "worktrunk" ]; then
-  cat > "${path.join(binDirectory, "wt")}" <<'EOF'
+  /bin/cat > "${path.join(binDirectory, "wt")}" <<'EOF'
 #!/bin/sh
+echo "$@" >> "${wtLogPath}"
 exit 0
 EOF
-  chmod +x "${path.join(binDirectory, "wt")}"
+  /bin/chmod +x "${path.join(binDirectory, "wt")}"
   exit 0
 fi
 echo "unsupported brew invocation: $*" >&2
 exit 1
+`;
+  writeExecutable(path.join(binDirectory, "brew"), script);
+  return logPath;
+}
+
+export function installFailingBrew(binDirectory: string): string {
+  const logPath = path.join(binDirectory, "brew.log");
+  const script = `#!/bin/sh
+set -eu
+echo "$@" >> "${logPath}"
+echo "brew install failed" >&2
+exit 1
+`;
+  writeExecutable(path.join(binDirectory, "brew"), script);
+  return logPath;
+}
+
+export function installNoopBrew(binDirectory: string): string {
+  const logPath = path.join(binDirectory, "brew.log");
+  const script = `#!/bin/sh
+set -eu
+echo "$@" >> "${logPath}"
+exit 0
 `;
   writeExecutable(path.join(binDirectory, "brew"), script);
   return logPath;
@@ -136,4 +168,21 @@ function writeExecutable(targetPath: string, contents: string): void {
   mkdirSync(path.dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, contents, "utf8");
   chmodSync(targetPath, 0o755);
+}
+
+function findExecutableOnPath(command: string): string {
+  const pathValue = process.env.PATH ?? "";
+  for (const segment of pathValue.split(path.delimiter)) {
+    if (!segment) {
+      continue;
+    }
+    const candidate = path.join(segment, command);
+    try {
+      return realpathSync.native(candidate);
+    } catch {
+      continue;
+    }
+  }
+
+  throw new Error(`Could not find ${command} on PATH`);
 }

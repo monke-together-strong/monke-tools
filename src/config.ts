@@ -17,6 +17,7 @@ import type {
 const LABEL_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ENV_RE = /^[A-Z][A-Z0-9_]*$/;
 const PORT_RE = /^[A-Z][A-Z0-9_]*_PORT$/;
+const DEFAULT_ENV_FILE = ".env";
 
 export function loadResolvedGraph(runtime: Runtime, rootSourceRoot: string): ResolvedGraph {
   const configCache = new Map<string, RepoConfig>();
@@ -141,15 +142,27 @@ function parseRepoConfigObject(
     assertKnownKeys(appValue, ["path", "envFile", "mappings"], `${configPath}#apps.${label}`);
 
     const relativePath = requireString(appValue.path, `${configPath}#apps.${label}.path`);
-    const relativeEnvFile = requireString(appValue.envFile, `${configPath}#apps.${label}.envFile`);
+    const relativeEnvFile =
+      appValue.envFile === undefined
+        ? DEFAULT_ENV_FILE
+        : requireString(appValue.envFile, `${configPath}#apps.${label}.envFile`);
     const absoluteAppPath = resolveInside(
       sourceRoot,
       relativePath,
       `${configPath}#apps.${label}.path`,
     );
+    const absoluteEnvFilePath = resolveInside(
+      absoluteAppPath,
+      relativeEnvFile,
+      `${configPath}#apps.${label}.envFile`,
+    );
 
     if (normalize(absoluteAppPath) === normalize(sourceRoot)) {
       throw new MonkeError(`App ${label} cannot point at the repo root`);
+    }
+
+    if (normalize(absoluteEnvFilePath) === normalize(absoluteAppPath)) {
+      throw new MonkeError(`App ${label} envFile must point to a file inside the app path`);
     }
 
     if (!existsSync(absoluteAppPath)) {

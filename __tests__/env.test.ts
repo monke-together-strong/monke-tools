@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import path from "node:path";
 
 import { rewriteEnvFile } from "../src/env.ts";
