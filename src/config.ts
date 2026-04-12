@@ -219,13 +219,25 @@ function parseRepoConfigObject(
   const externalInOrder: ExternalRepoConfig[] = [];
   const externalMappingsInOrder: ExternalMapping[] = [];
   const externalTargetApps = new Set<string>();
+  const externalPathEnvOwners = new Map<string, string>();
 
   for (const [label, rawExternal] of Object.entries(externalRecord)) {
     validateLabel(label, `${configPath}#external`);
     const externalValue = asRecord(rawExternal, `${configPath}#external.${label}`);
-    assertKnownKeys(externalValue, ["path", "mappings"], `${configPath}#external.${label}`);
+    assertKnownKeys(externalValue, ["path", "pathEnv", "mappings"], `${configPath}#external.${label}`);
 
     const relativePath = requireString(externalValue.path, `${configPath}#external.${label}.path`);
+    const pathEnv = requireEnvName(
+      externalValue.pathEnv,
+      `${configPath}#external.${label}.pathEnv`,
+    );
+    const existingPathEnvOwner = externalPathEnvOwners.get(pathEnv);
+    if (existingPathEnvOwner) {
+      throw new MonkeError(
+        `Duplicate external pathEnv ${pathEnv} in ${configPath} for ${existingPathEnvOwner} and ${label}`,
+      );
+    }
+    externalPathEnvOwners.set(pathEnv, label);
     const absoluteRepoRoot = path.resolve(sourceRoot, relativePath);
     const resolvedRepoRoot = resolveGitRepoRoot(runtime, absoluteRepoRoot);
     if (normalize(resolvedRepoRoot) !== normalize(absoluteRepoRoot)) {
@@ -292,6 +304,7 @@ function parseRepoConfigObject(
     externalInOrder.push({
       label,
       relativePath,
+      pathEnv,
       absoluteRepoRoot,
       mappings,
     });

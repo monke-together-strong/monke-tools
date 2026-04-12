@@ -3,11 +3,11 @@
 import { Command, CommanderError } from "commander";
 
 import { MonkeError } from "./errors.ts";
-import { runCleanup, runCreate, runMaterialize } from "./monke.ts";
+import { runCleanup, runCreate, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
-const ROOT_USAGE = "Usage:\n  monke create <session>\n  monke materialize\n  monke cleanup";
+const ROOT_USAGE = "Usage:\n  monke create <session>\n  monke materialize\n  monke cleanup\n  monke setup";
 
 export function runCli(argv: string[], runtime = createRuntime()): void {
   if (argv.length === 0) {
@@ -60,6 +60,14 @@ function createProgram(runtime: Runtime): Command {
       runCleanup(runtime);
     });
 
+  program
+    .command("setup")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .action(() => {
+      runSetup(runtime);
+    });
+
   return program;
 }
 
@@ -75,6 +83,8 @@ function mapCliError(error: unknown, argv: string[]): Error {
       return new MonkeError("Usage: monke materialize");
     case "cleanup":
       return new MonkeError("Usage: monke cleanup");
+    case "setup":
+      return new MonkeError("Usage: monke setup");
     default:
       return new MonkeError(ROOT_USAGE);
   }

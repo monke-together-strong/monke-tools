@@ -112,6 +112,44 @@ export function writePortsEnv(
   writeFileSync(path.join(monkeDirectory, "ports.env"), lines.join("\n"), "utf8");
 }
 
+export function syncRootPathEnvFile(
+  worktreeRoot: string,
+  assignments: Array<{ env: string; value: string }>,
+): void {
+  if (assignments.length === 0) {
+    return;
+  }
+
+  const envPath = path.join(worktreeRoot, ".env");
+  const requests = new Map(assignments.map((assignment) => [assignment.env, assignment.value]));
+  const original = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
+  const lines = original ? stripTrailingNewline(original).split("\n") : [];
+  const touched = new Set<string>();
+
+  const rewritten = lines.map((line) => {
+    const parsed = parseAssignmentLine(line);
+    if (!parsed) {
+      return line;
+    }
+
+    const nextValue = requests.get(parsed.key);
+    if (nextValue === undefined) {
+      return line;
+    }
+
+    touched.add(parsed.key);
+    return `${parsed.prefix}${nextValue}${parsed.comment}`;
+  });
+
+  for (const [env, value] of requests) {
+    if (!touched.has(env)) {
+      rewritten.push(`${env}=${value}`);
+    }
+  }
+
+  writeFileSync(envPath, `${rewritten.join("\n")}\n`, "utf8");
+}
+
 export function rewriteEnvFile(filePath: string, requests: Map<string, number>): void {
   const original = readFileSync(filePath, "utf8");
   const lines = original.split("\n");
@@ -206,6 +244,10 @@ function parseAssignmentLine(line: string): ParsedAssignmentLine | null {
     rawValue: value,
     comment,
   };
+}
+
+function stripTrailingNewline(text: string): string {
+  return text.endsWith("\n") ? text.slice(0, -1) : text;
 }
 
 function splitValueAndComment(value: string): { value: string; comment: string } {

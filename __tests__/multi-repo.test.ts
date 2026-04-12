@@ -9,6 +9,7 @@ import {
   read,
   readSingleYamlFile,
   runMonke,
+  write,
 } from "./helpers.ts";
 
 test("create materializes direct dependencies before the root repo and propagates external ports", () => {
@@ -41,6 +42,7 @@ test("create materializes direct dependencies before the root repo and propagate
 external:
   dep:
     path: ../dep
+    pathEnv: DEP_DIR
     mappings:
       - port: DEP_POSTGRES_PORT
         app: api
@@ -61,6 +63,9 @@ external:
   expect(read(depWorktree, ".monke/ports.env")).toBe("DEP_POSTGRES_PORT=10000");
   expect(read(rootWorktree, "apps/api/.env.local")).toBe(
     "PORT=10001\nDATABASE_URL=postgres://localhost:10000/app\n",
+  );
+  expect(read(rootWorktree, ".env")).toBe(
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\n`,
   );
   expect(read(rootWorktree, ".monke/ports.env")).toBe("API_PORT=10001\nDEP_POSTGRES_PORT=10000");
 
@@ -103,6 +108,7 @@ test("create fans out one dependency-owned port to multiple local targets", () =
 external:
   dep:
     path: ../dep
+    pathEnv: DEP_DIR
     mappings:
       - port: DEP_POSTGRES_PORT
         app: api
@@ -121,6 +127,7 @@ external:
   });
 
   const rootWorktree = getExpectedWorktreePath(root, "swing");
+  const depWorktree = getExpectedWorktreePath(depRoot, "swing");
 
   expect(read(rootWorktree, "apps/api/.env.local")).toBe(
     "DATABASE_URL=postgres://localhost:10000/api\n",
@@ -128,7 +135,138 @@ external:
   expect(read(rootWorktree, "apps/worker/.env.local")).toBe(
     "DATABASE_URL=postgres://localhost:10000/worker\n",
   );
+  expect(read(rootWorktree, ".env")).toBe(
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\n`,
+  );
   expect(read(rootWorktree, ".monke/ports.env")).toBe("DEP_POSTGRES_PORT=10000");
 
   expect(depRoot).toBeTruthy();
+});
+
+test("materialize overwrites stale root path env values and preserves unrelated entries", () => {
+  const sandbox = makeTempDir("multi-repo-pathenv-refresh");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    ".env": "KEEP_ME=1\nDEP_DIR=../somewhere-else\n",
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["create", "refresh-env"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const rootWorktree = getExpectedWorktreePath(root, "refresh-env");
+  const depWorktree = getExpectedWorktreePath(depRoot, "refresh-env");
+  write(rootWorktree, ".env", "KEEP_ME=1\nDEP_DIR=../stale\n");
+
+  runMonke({
+    cwd: rootWorktree,
+    args: ["materialize"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(rootWorktree, ".env")).toBe(
+    `KEEP_ME=1\nDEP_DIR=${path.relative(rootWorktree, depWorktree)}\n`,
+  );
+});
+
+test("root path env file only includes direct externals", { timeout: 30_000 }, () => {
+  const sandbox = makeTempDir("multi-repo-direct-pathenvs");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  createRepo(path.join(sandbox, "leaf"), {
+    "services/leaf/.env.local": "PORT=9000\n",
+    "monke.yml": `apps:
+  leaf:
+    path: services/leaf
+    envFile: .env.local
+    mappings:
+      - port: LEAF_PORT
+        env: PORT
+`,
+  });
+  const dep = createRepo(path.join(sandbox, "dep"), {
+    "services/dep/.env.local": "PORT=5432\nLEAF_URL=http://localhost:9000\n",
+    "monke.yml": `apps:
+  dep:
+    path: services/dep
+    envFile: .env.local
+    mappings:
+      - port: DEP_PORT
+        env: PORT
+external:
+  leaf:
+    path: ../leaf
+    pathEnv: LEAF_DIR
+    mappings:
+      - port: LEAF_PORT
+        app: dep
+        env: LEAF_URL
+`,
+  });
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["create", "direct-only"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const rootWorktree = getExpectedWorktreePath(root, "direct-only");
+  const depWorktree = getExpectedWorktreePath(dep, "direct-only");
+  expect(read(rootWorktree, ".env")).toBe(
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\n`,
+  );
 });

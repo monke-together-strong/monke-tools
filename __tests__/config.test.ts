@@ -35,6 +35,7 @@ test("loadResolvedGraph accepts valid local and external config", () => {
 external:
   dep:
     path: ../dep
+    pathEnv: DEP_DIR
     mappings:
       - port: DEP_POSTGRES_PORT
         app: consumer
@@ -47,6 +48,130 @@ external:
   expect(graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
   expect(graph.reposByRoot.get(root)?.localPortOrder).toEqual(["API_PORT"]);
   expect(graph.reposByRoot.get(root)?.externalMappingsInOrder).toHaveLength(1);
+  expect(graph.reposByRoot.get(root)?.externalInOrder[0]?.pathEnv).toBe("DEP_DIR");
+});
+
+test("loadResolvedGraph rejects missing external pathEnv", () => {
+  const sandbox = makeTempDir("config-missing-pathenv");
+  createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/pathEnv/);
+});
+
+test("loadResolvedGraph rejects invalid external pathEnv", () => {
+  const sandbox = makeTempDir("config-invalid-pathenv");
+  createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: dep_dir
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /must be an uppercase env name/,
+  );
+});
+
+test("loadResolvedGraph rejects duplicate external pathEnv names", () => {
+  const sandbox = makeTempDir("config-duplicate-pathenv");
+  createRepo(path.join(sandbox, "dep-a"), {
+    "services/a/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  a:
+    path: services/a
+    envFile: .env.local
+    mappings:
+      - port: DEP_A_PORT
+        env: PORT
+`,
+  });
+  createRepo(path.join(sandbox, "dep-b"), {
+    "services/b/.env.local": "PORT=6432\n",
+    "monke.yml": `apps:
+  b:
+    path: services/b
+    envFile: .env.local
+    mappings:
+      - port: DEP_B_PORT
+        env: PORT
+`,
+  });
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\nCACHE_URL=redis://localhost:6432/0\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep-a:
+    path: ../dep-a
+    pathEnv: SHARED_DEP_DIR
+    mappings:
+      - port: DEP_A_PORT
+        app: api
+        env: DATABASE_URL
+  dep-b:
+    path: ../dep-b
+    pathEnv: SHARED_DEP_DIR
+    mappings:
+      - port: DEP_B_PORT
+        app: api
+        env: CACHE_URL
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /Duplicate external pathEnv SHARED_DEP_DIR/,
+  );
 });
 
 test("loadResolvedGraph rejects duplicate yaml keys", () => {
@@ -93,6 +218,7 @@ test("loadResolvedGraph rejects duplicate rewrite targets", () => {
 external:
   dep:
     path: ../dep
+    pathEnv: DEP_DIR
     mappings:
       - port: DEP_POSTGRES_PORT
         app: api
@@ -131,6 +257,7 @@ test("loadResolvedGraph rejects direct dependency references to non-local ports"
 external:
   leaf:
     path: ../leaf
+    pathEnv: LEAF_DIR
     mappings:
       - port: LEAF_PORT
         app: dep
@@ -147,6 +274,7 @@ external:
 external:
   dep:
     path: ../dep
+    pathEnv: DEP_DIR
     mappings:
       - port: LEAF_PORT
         app: api
@@ -214,6 +342,7 @@ test("loadResolvedGraph rejects duplicate local port keys across the resolved se
 external:
   dep:
     path: ../dep
+    pathEnv: DEP_DIR
     mappings:
       - port: SHARED_PORT
         app: consumer

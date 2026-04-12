@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { runCli } from "../src/index.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
-const ROOT_USAGE = "Usage:\n  monke create <session>\n  monke materialize\n  monke cleanup";
+const ROOT_USAGE = "Usage:\n  monke create <session>\n  monke materialize\n  monke cleanup\n  monke setup";
 
 test("runCli preserves top-level usage for missing and unknown commands", () => {
   expect(() => runCli([])).toThrow(ROOT_USAGE);
@@ -17,6 +17,7 @@ test("runCli preserves command-specific usage for invalid arity", () => {
   expect(() => runCli(["create", "banana", "extra"])).toThrow("Usage: monke create <session>");
   expect(() => runCli(["materialize", "extra"])).toThrow("Usage: monke materialize");
   expect(() => runCli(["cleanup", "extra"])).toThrow("Usage: monke cleanup");
+  expect(() => runCli(["setup", "extra"])).toThrow("Usage: monke setup");
 });
 
 test("main entrypoint writes usage errors to stderr", () => {

@@ -53,6 +53,7 @@ export interface AppConfig {
 export interface ExternalRepoConfig {
   label: string;
   relativePath: string;
+  pathEnv: string;
   absoluteRepoRoot: string;
   mappings: ExternalMapping[];
 }

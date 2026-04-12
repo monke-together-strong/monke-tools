@@ -48,6 +48,7 @@ test("create preserves successful dependency state after root failure and resume
 external:
   dep:
     path: ../dep
+    pathEnv: DEP_DIR
     mappings:
       - port: DEP_POSTGRES_PORT
         app: api
@@ -123,6 +124,7 @@ test("materialize recreates a missing dependency worktree", () => {
 external:
   dep:
     path: ../dep
+    pathEnv: DEP_DIR
     mappings:
       - port: DEP_POSTGRES_PORT
         app: api
@@ -182,6 +184,7 @@ test("materialize from the root worktree re-applies dependency repos", () => {
 external:
   dep:
     path: ../dep
+    pathEnv: DEP_DIR
     mappings:
       - port: DEP_POSTGRES_PORT
         app: api

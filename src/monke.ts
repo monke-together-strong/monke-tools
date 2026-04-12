@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { loadResolvedGraph } from "./config.ts";
 import {
+  syncRootPathEnvFile,
   rewriteManagedEnvFiles,
   seedEnvFiles,
   writePortsEnv,
@@ -196,6 +197,29 @@ export function runCleanup(runtime: Runtime): void {
   runtime.writeStdout(`Removed ${removed} dead session${removed === 1 ? "" : "s"}\n`);
 }
 
+export function runSetup(runtime: Runtime): void {
+  const context = resolveRepoContext(runtime);
+  if (!context.isSourceCheckout) {
+    throw new MonkeError("monke setup must run from the source checkout");
+  }
+
+  const graph = loadResolvedGraph(runtime, context.sourceRoot);
+  const repoConfig = graph.reposByRoot.get(context.sourceRoot);
+  if (!repoConfig) {
+    throw new MonkeError(`Missing repo config for ${context.sourceRoot}`);
+  }
+
+  syncRootPathEnvFile(
+    context.sourceRoot,
+    repoConfig.externalInOrder.map((externalRepo) => ({
+      env: externalRepo.pathEnv,
+      value: path.relative(context.sourceRoot, externalRepo.absoluteRepoRoot) || ".",
+    })),
+  );
+
+  runtime.writeStdout(`Updated root .env for ${path.basename(context.sourceRoot)}\n`);
+}
+
 function materializeRepo(options: {
   runtime: Runtime;
   home: string;
@@ -240,6 +264,10 @@ function materializeRepo(options: {
 
   const externalAssignments = resolveExternalAssignments(repoConfig, dependencyResults);
   rewriteManagedEnvFiles(repoConfig, worktreePath, localAssignments, externalAssignments);
+  syncRootPathEnvFile(
+    worktreePath,
+    resolveExternalPathAssignments(repoConfig, worktreePath, dependencyResults),
+  );
 
   const localAssignedPorts = toAssignedPorts(repoConfig, localAssignments);
   writePortsEnv(worktreePath, localAssignedPorts, externalAssignments);
@@ -278,6 +306,27 @@ function resolveExternalAssignments(
     }
   }
   return assignments;
+}
+
+function resolveExternalPathAssignments(
+  repoConfig: RepoConfig,
+  worktreePath: string,
+  dependencyResults: Map<string, RepoMaterializationResult>,
+): Array<{ env: string; value: string }> {
+  return repoConfig.externalInOrder.map((externalRepo) => {
+    const dependency = dependencyResults.get(externalRepo.absoluteRepoRoot);
+    if (!dependency) {
+      throw new MonkeError(
+        `Missing dependency materialization result for ${externalRepo.absoluteRepoRoot}`,
+      );
+    }
+
+    const relativePath = path.relative(worktreePath, dependency.state.worktreePath) || ".";
+    return {
+      env: externalRepo.pathEnv,
+      value: relativePath,
+    };
+  });
 }
 
 function ensureWorktrunkInstalled(runtime: Runtime): void {
