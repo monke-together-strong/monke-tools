@@ -93,8 +93,8 @@ test("materialize rejects source checkout context and reuses sticky ports inside
   }).toThrow(/must run inside a session worktree/);
 
   const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
-  expect(inferSessionName(worktreeRoot, "banana")).toBe("banana");
-  expect(() => inferSessionName(worktreeRoot, "wrong")).toThrow(/match current branch/);
+  expect(inferSessionName(repoRoot, worktreeRoot, "banana")).toBe("banana");
+  expect(() => inferSessionName(repoRoot, worktreeRoot, "wrong")).toThrow(/match current branch/);
 
   const before = read(worktreeRoot, ".env");
   expect(before).toBe("API_PORT=10000\nDB_PORT=10001\n");
@@ -156,7 +156,7 @@ test("create seeds configured directories and files into a new session worktree"
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
-    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{ \"theme\": \"dark\" }\n",
+    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": '{ "theme": "dark" }\n',
     "apps/frostbite-crawler/data/sessions/hoangbn/Cookies": "cookie-jar\n",
     "scripts/bootstrap.sh": "#!/bin/sh\necho seeded\n",
     "monke.yml": `seedPaths:
@@ -181,12 +181,52 @@ apps:
 
   const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
   expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
-    "{ \"theme\": \"dark\" }\n",
+    '{ "theme": "dark" }\n',
   );
   expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Cookies")).toBe(
     "cookie-jar\n",
   );
   expect(read(worktreeRoot, "scripts/bootstrap.sh")).toBe("#!/bin/sh\necho seeded\n");
+});
+
+test("create merges seeded directories into tracked worktree directories without clobbering existing files", () => {
+  const sandbox = makeTempDir("single-seedpaths-merge");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    ".gitignore": "apps/frostbite-crawler/data/sessions/hoangbn/Cookies\n",
+    "apps/api/.env.local": "PORT=3000\n",
+    "apps/frostbite-crawler/data/sessions/.gitkeep": "",
+    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": '{ "theme": "dark" }\n',
+    "monke.yml": `seedPaths:
+  - apps/frostbite-crawler/data/sessions
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  write(repoRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Cookies", "cookie-jar\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/.gitkeep")).toBe("");
+  expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
+    '{ "theme": "dark" }\n',
+  );
+  expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Cookies")).toBe(
+    "cookie-jar\n",
+  );
 });
 
 test("repeated create and materialize do not clobber seeded paths already changed in the worktree", () => {
@@ -196,7 +236,7 @@ test("repeated create and materialize do not clobber seeded paths already change
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
-    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{ \"theme\": \"dark\" }\n",
+    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": '{ "theme": "dark" }\n',
     "monke.yml": `seedPaths:
   - apps/frostbite-crawler/data/sessions
 apps:
@@ -220,7 +260,7 @@ apps:
   write(
     worktreeRoot,
     "apps/frostbite-crawler/data/sessions/hoangbn/Preferences",
-    "{ \"theme\": \"light\" }\n",
+    '{ "theme": "light" }\n',
   );
 
   runMonke({
@@ -238,7 +278,7 @@ apps:
   });
 
   expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
-    "{ \"theme\": \"light\" }\n",
+    '{ "theme": "light" }\n',
   );
 });
 
@@ -268,7 +308,9 @@ apps:
     binDirectory,
   });
 
-  expect(result.stderr).toContain("Warning: seedPath apps/frostbite-crawler/data/sessions is missing");
+  expect(result.stderr).toContain(
+    "Warning: seedPath apps/frostbite-crawler/data/sessions is missing",
+  );
   expect(result.stdout).toContain("Created or updated session banana");
 });
 

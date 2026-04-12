@@ -68,51 +68,54 @@ function loadRepoConfig(
   cache: Map<string, RepoConfig>,
   visiting: Set<string>,
 ): RepoConfig {
+  if (visiting.has(sourceRoot)) {
+    throw new MonkeError(`Dependency cycles are not supported: ${sourceRoot}`);
+  }
+
   const cached = cache.get(sourceRoot);
   if (cached) {
     return cached;
   }
 
-  if (visiting.has(sourceRoot)) {
-    throw new MonkeError(`Dependency cycles are not supported: ${sourceRoot}`);
-  }
-
   visiting.add(sourceRoot);
-  const configPath = path.join(sourceRoot, "monke.yml");
-  if (!existsSync(configPath)) {
-    throw new MonkeError(`Expected monke.yml at ${configPath}`);
-  }
+  try {
+    const configPath = path.join(sourceRoot, "monke.yml");
+    if (!existsSync(configPath)) {
+      throw new MonkeError(`Expected monke.yml at ${configPath}`);
+    }
 
-  const document = parseDocument(readFileSync(configPath, "utf8"), {
-    uniqueKeys: true,
-    merge: false,
-    strict: true,
-  });
+    const document = parseDocument(readFileSync(configPath, "utf8"), {
+      uniqueKeys: true,
+      merge: false,
+      strict: true,
+    });
 
-  if (document.errors.length > 0) {
-    const message = document.errors.map((error) => error.message).join("\n");
-    throw new MonkeError(`Invalid ${configPath}:\n${message}`);
-  }
+    if (document.errors.length > 0) {
+      const message = document.errors.map((error) => error.message).join("\n");
+      throw new MonkeError(`Invalid ${configPath}:\n${message}`);
+    }
 
-  const rawConfig = document.toJS() as unknown;
-  const repoConfig = parseRepoConfigObject(runtime, sourceRoot, configPath, rawConfig);
-  cache.set(sourceRoot, repoConfig);
+    const rawConfig = document.toJS() as unknown;
+    const repoConfig = parseRepoConfigObject(runtime, sourceRoot, configPath, rawConfig);
 
-  for (const externalRepo of repoConfig.externalInOrder) {
-    const dependency = loadRepoConfig(runtime, externalRepo.absoluteRepoRoot, cache, visiting);
-    const dependencyLocalPorts = new Set(dependency.localPortOrder);
+    for (const externalRepo of repoConfig.externalInOrder) {
+      const dependency = loadRepoConfig(runtime, externalRepo.absoluteRepoRoot, cache, visiting);
+      const dependencyLocalPorts = new Set(dependency.localPortOrder);
 
-    for (const mapping of externalRepo.mappings) {
-      if (!dependencyLocalPorts.has(mapping.portKey)) {
-        throw new MonkeError(
-          `External mapping ${mapping.portKey} in ${configPath} is not owned locally by ${externalRepo.absoluteRepoRoot}`,
-        );
+      for (const mapping of externalRepo.mappings) {
+        if (!dependencyLocalPorts.has(mapping.portKey)) {
+          throw new MonkeError(
+            `External mapping ${mapping.portKey} in ${configPath} is not owned locally by ${externalRepo.absoluteRepoRoot}`,
+          );
+        }
       }
     }
-  }
 
-  visiting.delete(sourceRoot);
-  return repoConfig;
+    cache.set(sourceRoot, repoConfig);
+    return repoConfig;
+  } finally {
+    visiting.delete(sourceRoot);
+  }
 }
 
 function parseRepoConfigObject(
@@ -198,7 +201,14 @@ function parseRepoConfigObject(
       }
       claimedTargets.set(targetKey, portKey);
 
-      if (!localMappingsByPort.has(portKey)) {
+      const existingMappings = localMappingsByPort.get(portKey);
+      if (existingMappings && existingMappings.length > 0) {
+        throw new MonkeError(
+          `Duplicate local port key ${portKey} in ${configPath} for ${existingMappings[0]?.targetApp} and ${label}`,
+        );
+      }
+
+      if (!existingMappings) {
         localPortOrder.push(portKey);
         localMappingsByPort.set(portKey, []);
       }
@@ -229,7 +239,11 @@ function parseRepoConfigObject(
   for (const [label, rawExternal] of Object.entries(externalRecord)) {
     validateLabel(label, `${configPath}#external`);
     const externalValue = asRecord(rawExternal, `${configPath}#external.${label}`);
-    assertKnownKeys(externalValue, ["path", "pathEnv", "mappings"], `${configPath}#external.${label}`);
+    assertKnownKeys(
+      externalValue,
+      ["path", "pathEnv", "mappings"],
+      `${configPath}#external.${label}`,
+    );
 
     const relativePath = requireString(externalValue.path, `${configPath}#external.${label}.path`);
     const pathEnv = requireEnvName(
@@ -406,11 +420,7 @@ function normalize(targetPath: string): string {
   return path.normalize(targetPath);
 }
 
-function parseSeedPaths(
-  rawSeedPaths: unknown,
-  sourceRoot: string,
-  configPath: string,
-): string[] {
+function parseSeedPaths(rawSeedPaths: unknown, sourceRoot: string, configPath: string): string[] {
   if (rawSeedPaths === undefined) {
     return [];
   }
@@ -424,7 +434,11 @@ function parseSeedPaths(
 
   for (const [index, rawSeedPath] of rawSeedPaths.entries()) {
     const relativePath = requireString(rawSeedPath, `${configPath}#seedPaths[${index}]`);
-    const absolutePath = resolveInside(sourceRoot, relativePath, `${configPath}#seedPaths[${index}]`);
+    const absolutePath = resolveInside(
+      sourceRoot,
+      relativePath,
+      `${configPath}#seedPaths[${index}]`,
+    );
     const normalizedPath = normalize(absolutePath);
     const existing = seen.get(normalizedPath);
     if (existing) {

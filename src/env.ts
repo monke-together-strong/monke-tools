@@ -207,19 +207,33 @@ function seedRelativePath(
   const sourcePath = path.join(sourceRoot, normalizedRelativePath);
   if (!existsSync(sourcePath)) {
     if (warnIfMissing) {
-      onWarning?.(`Warning: seedPath ${normalizedRelativePath} is missing at ${sourcePath}; skipping`);
+      onWarning?.(
+        `Warning: seedPath ${normalizedRelativePath} is missing at ${sourcePath}; skipping`,
+      );
     }
     return;
   }
 
   const targetPath = path.join(worktreeRoot, normalizedRelativePath);
+  const sourceIsDirectory = statSync(sourcePath).isDirectory();
   if (existsSync(targetPath)) {
+    if (sourceIsDirectory) {
+      cpSync(sourcePath, targetPath, {
+        recursive: true,
+        force: false,
+        errorOnExist: false,
+      });
+    }
     return;
   }
 
   mkdirSync(path.dirname(targetPath), { recursive: true });
-  if (statSync(sourcePath).isDirectory()) {
-    cpSync(sourcePath, targetPath, { recursive: true });
+  if (sourceIsDirectory) {
+    cpSync(sourcePath, targetPath, {
+      recursive: true,
+      force: false,
+      errorOnExist: false,
+    });
     return;
   }
 

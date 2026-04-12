@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-04-11 14:22'
-updated_date: '2026-04-11 14:25'
+updated_date: '2026-04-12 22:57'
 labels: []
 dependencies: []
 ---
@@ -35,29 +35,27 @@ Replace the hand-rolled argv parsing in the monke CLI with commander.js while pr
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-- Added commander as a runtime dependency and replaced the manual argv switch with a commander-backed program in src/index.ts.
-- Preserved the existing usage strings by mapping commander parse failures back to the repo's current MonkeError messages.
-- Added a focused cli.test.ts file for arity validation and stderr output coverage.
-
-- Verified with `bun test` and `bun run lint`.
-- Repo-wide `bun run fmt:check` still reports a pre-existing formatting issue in tests/helpers.ts; formatted the touched files directly with `bunx oxfmt src/index.ts tests/cli.test.ts`.
+- Added `commander` as a runtime dependency and replaced the manual argv switch with a commander-backed program in `./src/index.ts`.
+- Preserved the existing usage strings by mapping commander parse failures back to the repo's `MonkeError` messages.
+- Added focused coverage in `./__tests__/cli.test.ts` for arity validation and stderr output.
+- Verified with `bun run test` and `bun run lint`.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Replaced the manual CLI switch with a commander-backed program while keeping the existing `monke` command surface and usage strings intact.
+Refactored the manual CLI switch into a commander-backed entrypoint while keeping the current `mt` command surface and usage strings stable.
+
+Traceability:
+- PR: [#10](https://github.com/monke-together-strong/monke-tools/pull/10) introduced the commander refactor in commit `5177198243e09b5f61c5439ceb653926597404c8`.
+- PR: [#11](https://github.com/monke-together-strong/monke-tools/pull/11) renamed the shipped CLI surface to `mt` in commit `357a8eb62feaa8503d6730bdc45e0009bde6543d`.
 
 Changes:
-- Added `commander` as a runtime dependency and built subcommands for `create`, `materialize`, and `cleanup` in `src/index.ts`.
-- Mapped commander parse failures back to the repo's existing `MonkeError` messages so missing, extra, and unknown args still report the same usage text.
-- Added `tests/cli.test.ts` to cover top-level usage, per-command arity validation, and stderr output from the main entrypoint.
+- Added `commander` as a runtime dependency and built subcommands for `create`, `materialize`, and `cleanup` in `./src/index.ts`.
+- Mapped commander parse failures back to the repo's `MonkeError` messages so `mt` preserves the existing usage and validation semantics.
+- Added focused coverage in `./__tests__/cli.test.ts` for top-level usage, per-command arity validation, and stderr output.
 
 Verification:
-- `bun test`
+- `bun run test`
 - `bun run lint`
-- `bunx oxfmt src/index.ts tests/cli.test.ts`
-
-Note:
-- `bun run fmt:check` still flags a pre-existing formatting issue in `tests/helpers.ts` unrelated to this refactor.
 <!-- SECTION:FINAL_SUMMARY:END -->

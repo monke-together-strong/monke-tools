@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-04-11 06:54'
-updated_date: '2026-04-11 06:56'
+updated_date: '2026-04-12 22:57'
 labels: []
 dependencies: []
 ---
@@ -42,15 +42,15 @@ Address the review findings on the Monke issue #1 branch by ensuring materialize
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Fixed the two review gaps on the issue #1 branch.
+Fixed the two review gaps on issue #1 branch.
 
 Changes:
-- Constrained each app's `envFile` to resolve within that app directory during config loading, which prevents repo-root or sibling env rewrites from escaping the app boundary.
-- Updated `monke materialize` to re-materialize dependency repos before the current repo instead of short-circuiting on saved dependency state, so dependency-managed env files and `.monke/ports.env` are healed on rerun.
-- Added regression tests for `envFile` path containment and for root-triggered dependency re-materialization, alongside the existing orchestration coverage.
+- Constrained each app's `envFile` to resolve within that app directory during config loading, preventing repo-root or sibling env rewrites.
+- Updated `mt materialize` to re-materialize dependency repos before the current repo instead of short-circuiting on saved dependency state, so dependency-managed env files and `.monke/ports.env` heal on rerun.
+- Added regression tests for `envFile` containment and root-triggered dependency re-materialization.
 
 Tests:
-- bun test tests/config.test.ts tests/recovery-bootstrap-cleanup.test.ts
-- bun test
-- bun run lint
+- `bunx --bun vitest run __tests__/config.test.ts __tests__/recovery-bootstrap-cleanup.test.ts`
+- `bun run test`
+- `bun run lint`
 <!-- SECTION:FINAL_SUMMARY:END -->

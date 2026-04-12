@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-04-11 14:28'
-updated_date: '2026-04-11 14:34'
+updated_date: '2026-04-12 22:57'
 labels: []
 dependencies: []
 ---
@@ -34,27 +34,27 @@ Replace the current bun:test-based test setup with Vitest while keeping the test
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-- Moved the bun:test suite from `tests/` into `__tests__/`, including the shared `helpers.ts` module.
-- No runner or package script changes were needed; imports continued to work from the new directory layout.
-- Verified the moved suite with `bun test` and `bun run lint`.
-
-- Added `vitest` as a dev dependency, introduced `vitest.config.ts`, and switched the project test command to Bun-backed Vitest via `bunx --bun vitest run`.
-- Replaced `bun:test` imports in `__tests__/` with `vitest` imports while keeping the suite under `__tests__/`.
-- Verified the migration with `bun run test`, `bun run lint`, and `bun run fmt:check`.
+- Moved the `bun:test` suite from `tests/` into `__tests__/`, including the shared `helpers.ts` module.
+- Added Bun-backed Vitest wiring in `./package.json` and `./vitest.config.ts`, while keeping imports working from the new directory layout.
+- Replaced `bun:test` imports in `./__tests__/` with `vitest` imports.
+- Verified the migration with `bun run test` and `bun run lint`.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Migrated the project test runner from `bun:test` to Vitest while keeping the suite under `__tests__/`.
+Migrated the project test runner from `bun:test` to Bun-backed Vitest while keeping the suite under `./__tests__/`.
+
+Traceability:
+- PR: [#10](https://github.com/monke-together-strong/monke-tools/pull/10)
+- Commit: `5177198243e09b5f61c5439ceb653926597404c8`
 
 Changes:
-- Added `vitest` as a dev dependency and introduced [vitest.config.ts](/Users/hoangbn/Documents/projects/monke-tribe/vitest.config.ts) to target `__tests__/**/*.test.ts` with file parallelism disabled.
-- Switched the package test command in [package.json](/Users/hoangbn/Documents/projects/monke-tribe/package.json) to `bunx --bun vitest run` so Vitest runs on Bun and preserves the existing Bun-specific code paths.
-- Updated the migrated `__tests__` files to import their test APIs from `vitest` instead of `bun:test`.
+- Added `vitest` as a dev dependency and introduced [./vitest.config.ts](../../vitest.config.ts) to target `./__tests__/**/*.test.ts` with file parallelism disabled.
+- Switched the package test command in [./package.json](../../package.json) to `bunx --bun vitest run` so Vitest runs on Bun and preserves the existing Bun-specific code paths.
+- Updated the migrated files under `./__tests__/` to import their test APIs from `vitest` instead of `bun:test`.
 
 Verification:
 - `bun run test`
 - `bun run lint`
-- `bun run fmt:check`
 <!-- SECTION:FINAL_SUMMARY:END -->

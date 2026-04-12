@@ -8,11 +8,10 @@ import { makeTempDir } from "./helpers.ts";
 test("allocateLocalPorts skips ports that are already taken inside the reserved block", () => {
   const sandbox = makeTempDir("registry-taken");
   const repoConfig = makeRepoConfig(path.join(sandbox, "root"), ["API_PORT"]);
-  const reservation = makeReservation(repoConfig.sourceRoot, 10_000, 2);
 
   const listener = Bun.listen({
     hostname: "127.0.0.1",
-    port: 10_000,
+    port: 0,
     socket: {
       data() {},
       open() {},
@@ -24,6 +23,7 @@ test("allocateLocalPorts skips ports that are already taken inside the reserved 
       return new Response("ok");
     },
   });
+  const reservation = makeReservation(repoConfig.sourceRoot, listener.port, 2);
 
   try {
     const assignments = allocateLocalPorts({
@@ -36,7 +36,7 @@ test("allocateLocalPorts skips ports that are already taken inside the reserved 
       baselinePorts: new Set(),
     });
 
-    expect(assignments.get("API_PORT")).toBe(10_001);
+    expect(assignments.get("API_PORT")).toBe(listener.port + 1);
   } finally {
     listener.stop(true);
   }

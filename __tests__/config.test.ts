@@ -199,9 +199,7 @@ apps:
 `,
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /Duplicate seedPath/,
-  );
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/Duplicate seedPath/);
 });
 
 test("loadResolvedGraph rejects missing external pathEnv", () => {
@@ -298,7 +296,8 @@ test("loadResolvedGraph rejects duplicate external pathEnv names", () => {
 `,
   });
   const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\nCACHE_URL=redis://localhost:6432/0\n",
+    "apps/api/.env.local":
+      "DATABASE_URL=postgres://localhost:5432/app\nCACHE_URL=redis://localhost:6432/0\n",
     "monke.yml": `apps:
   api:
     path: apps/api
@@ -504,6 +503,82 @@ external:
   });
 
   expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/owned by both/);
+});
+
+test("loadResolvedGraph rejects duplicate local port keys within one repo", () => {
+  const sandbox = makeTempDir("config-duplicate-local-port");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "apps/worker/.env.local": "PORT=3001\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: SHARED_PORT
+        env: PORT
+  worker:
+    path: apps/worker
+    envFile: .env.local
+    mappings:
+      - port: SHARED_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /Duplicate local port key SHARED_PORT.*api and worker/,
+  );
+});
+
+test("loadResolvedGraph rejects dependency cycles instead of returning cached partial config", () => {
+  const sandbox = makeTempDir("config-cycle");
+  const root = path.join(sandbox, "root");
+  const dep = path.join(sandbox, "dep");
+
+  createRepo(root, {
+    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  createRepo(dep, {
+    "apps/db/.env.local": "PORT=5432\nDATABASE_URL=postgres://localhost:3000/dep\n",
+    "monke.yml": `apps:
+  db:
+    path: apps/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_PORT
+        env: PORT
+external:
+  root:
+    path: ../root
+    pathEnv: ROOT_DIR
+    mappings:
+      - port: API_PORT
+        app: db
+        env: DATABASE_URL
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /Dependency cycles are not supported/,
+  );
 });
 
 test("loadResolvedGraph rejects envFile paths that escape the app directory", () => {

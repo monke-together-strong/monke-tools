@@ -1,4 +1,14 @@
-import { accessSync, closeSync, existsSync, mkdirSync, openSync, rmSync } from "node:fs";
+import {
+  accessSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -6,6 +16,9 @@ import { createHash } from "node:crypto";
 
 import { MonkeError } from "./errors.ts";
 import type { ExecOptions, ExecResult, Runtime } from "./types.ts";
+
+const GLOBAL_LOCK_TIMEOUT_MS = 5_000;
+const STALE_LOCK_AGE_MS = 60_000;
 
 export function createRuntime(options?: {
   cwd?: string;
@@ -37,7 +50,14 @@ export function createRuntime(options?: {
 
       const stdout = result.stdout ?? "";
       const stderr = result.stderr ?? "";
-      const exitCode = result.status ?? 0;
+      const exitCode = result.status === null ? -1 : result.status;
+
+      if (!execOptions?.allowFailure && result.status === null) {
+        const reason = result.signal
+          ? `terminated by signal ${result.signal}`
+          : "terminated by signal";
+        throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
+      }
 
       if (!execOptions?.allowFailure && exitCode !== 0) {
         const reason = stderr.trim() || stdout.trim() || `exit code ${exitCode}`;
@@ -114,16 +134,21 @@ export function findExecutable(
 export function withGlobalLock<T>(home: string, callback: () => T): T {
   ensureDirectory(home);
   const lockPath = path.join(home, "lock");
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
   let fileDescriptor: number | null = null;
 
   while (fileDescriptor === null) {
     try {
       fileDescriptor = openSync(lockPath, "wx");
+      writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }), "utf8");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes("EEXIST")) {
         throw error;
+      }
+
+      if (tryEvictStaleLock(lockPath)) {
+        continue;
       }
 
       if (Date.now() >= deadline) {
@@ -169,4 +194,62 @@ export function isPortAvailable(port: number): boolean {
 
 function sleep(milliseconds: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function tryEvictStaleLock(lockPath: string): boolean {
+  const staleSince = Date.now() - STALE_LOCK_AGE_MS;
+
+  let fileTimestamp = 0;
+  try {
+    fileTimestamp = statSync(lockPath).mtimeMs;
+  } catch {
+    return true;
+  }
+
+  let isStale = fileTimestamp <= staleSince;
+  try {
+    const metadata = JSON.parse(readFileSync(lockPath, "utf8")) as {
+      pid?: number;
+      acquiredAt?: number;
+    };
+
+    if (typeof metadata.acquiredAt === "number") {
+      isStale = metadata.acquiredAt <= staleSince;
+    }
+
+    if (typeof metadata.pid === "number" && metadata.pid > 0 && !isProcessRunning(metadata.pid)) {
+      isStale = true;
+    }
+  } catch {
+    // Fall back to the lock file timestamp when metadata is unreadable.
+  }
+
+  if (!isStale) {
+    return false;
+  }
+
+  try {
+    rmSync(lockPath, { force: true });
+  } catch {
+    return false;
+  }
+
+  return true;
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error) {
+      if (error.code === "EPERM") {
+        return true;
+      }
+      if (error.code === "ESRCH") {
+        return false;
+      }
+    }
+    return false;
+  }
 }

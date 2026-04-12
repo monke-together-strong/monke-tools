@@ -19,7 +19,9 @@ export function resolveRepoContext(runtime: Runtime, cwd: string = runtime.cwd):
   const currentBranch = trim(runGit(runtime, cwd, ["rev-parse", "--abbrev-ref", "HEAD"]));
   const sourceRoot = path.dirname(gitCommonDir);
   const isSourceCheckout = normalize(worktreeRoot) === normalize(sourceRoot);
-  const sessionName = isSourceCheckout ? null : inferSessionName(worktreeRoot, currentBranch);
+  const sessionName = isSourceCheckout
+    ? null
+    : inferSessionName(sourceRoot, worktreeRoot, currentBranch);
 
   return {
     cwd,
@@ -32,14 +34,29 @@ export function resolveRepoContext(runtime: Runtime, cwd: string = runtime.cwd):
   };
 }
 
-export function inferSessionName(worktreeRoot: string, branch: string): string {
-  const basename = path.basename(worktreeRoot);
-  if (basename !== branch) {
+export function inferSessionName(sourceRoot: string, worktreeRoot: string, branch: string): string {
+  const expectedRoot = path.join(
+    path.dirname(sourceRoot),
+    ".monke-worktrees",
+    path.basename(sourceRoot),
+  );
+  const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
+  const sessionName = toSessionPath(relativeSessionPath);
+
+  if (
+    !relativeSessionPath ||
+    relativeSessionPath.startsWith("..") ||
+    path.isAbsolute(relativeSessionPath)
+  ) {
+    throw new MonkeError(`Expected linked worktree ${worktreeRoot} to live under ${expectedRoot}`);
+  }
+
+  if (sessionName !== branch) {
     throw new MonkeError(
-      `Expected linked worktree basename "${basename}" to match current branch "${branch}"`,
+      `Expected linked worktree session "${sessionName}" to match current branch "${branch}"`,
     );
   }
-  return branch;
+  return sessionName;
 }
 
 export function resolveGitRepoRoot(runtime: Runtime, checkoutPath: string): string {
@@ -183,6 +200,12 @@ export function validateWorktreeForSession(
     throw new MonkeError(`Expected ${worktreePath} to be a linked session worktree`);
   }
 
+  if (normalize(context.sourceRoot) !== normalize(sourceRoot)) {
+    throw new MonkeError(
+      `Expected worktree ${worktreePath} to belong to ${sourceRoot}, found ${context.sourceRoot}`,
+    );
+  }
+
   if (context.currentBranch !== session) {
     throw new MonkeError(
       `Expected worktree ${worktreePath} to be on branch ${session}, found ${context.currentBranch}`,
@@ -196,6 +219,10 @@ function runGit(runtime: Runtime, cwd: string, args: string[]): string {
 
 function normalize(targetPath: string): string {
   return path.normalize(targetPath);
+}
+
+function toSessionPath(targetPath: string): string {
+  return targetPath.split(path.sep).join("/");
 }
 
 function trim(value: string): string {
