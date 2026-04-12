@@ -66,7 +66,7 @@ external:
   }).toThrow(/Missing mapped env vars/);
 
   const depWorktree = getExpectedWorktreePath(depRoot, "resume");
-  const firstMtime = statSync(path.join(depWorktree, ".monke/ports.env")).mtimeMs;
+  const firstMtime = statSync(path.join(depWorktree, ".env")).mtimeMs;
 
   const partialState = readSingleYamlFile(path.join(home, "sessions")) as {
     repos: Array<{ sourceRoot: string }>;
@@ -87,7 +87,7 @@ external:
     binDirectory,
   });
 
-  const secondMtime = statSync(path.join(depWorktree, ".monke/ports.env")).mtimeMs;
+  const secondMtime = statSync(path.join(depWorktree, ".env")).mtimeMs;
   expect(secondMtime).toBe(firstMtime);
   expect(read(getExpectedWorktreePath(root, "resume"), "apps/api/.env.local")).toBe(
     "PORT=10001\nDATABASE_URL=postgres://localhost:10000/app\n",
@@ -151,7 +151,7 @@ external:
   });
 
   expect(existsSync(depWorktree)).toBe(true);
-  expect(read(depWorktree, ".monke/ports.env")).toBe("DEP_POSTGRES_PORT=10000");
+  expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
 });
 
 test("materialize from the root worktree re-applies dependency repos", () => {
@@ -201,7 +201,7 @@ external:
 
   const depWorktree = getExpectedWorktreePath(depRoot, "refresh");
   write(depWorktree, "services/db/.env.local", "PORT=5432\n");
-  write(depWorktree, ".monke/ports.env", "");
+  write(depWorktree, ".env", "");
 
   runMonke({
     cwd: getExpectedWorktreePath(root, "refresh"),
@@ -211,7 +211,36 @@ external:
   });
 
   expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10000\n");
-  expect(read(depWorktree, ".monke/ports.env")).toBe("DEP_POSTGRES_PORT=10000");
+  expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
+});
+
+test("bootstrap failure is fatal for create and surfaces the repo and command", () => {
+  const sandbox = makeTempDir("bootstrap-failure");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `bootstrapCommand: exit 7
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => {
+    runMonke({
+      cwd: root,
+      args: ["create", "boom"],
+      monkeHome: home,
+      binDirectory,
+    });
+  }).toThrow(new RegExp(`Bootstrap command failed for ${root}: exit 7`));
 });
 
 test("cleanup removes dead session state but leaves repo reservations intact", () => {

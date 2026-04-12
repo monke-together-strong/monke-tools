@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "monke-tribe",
+      "name": "monke-tools",
       "dependencies": {
         "commander": "^14.0.3",
         "yaml": "^2.8.3",

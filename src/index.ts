@@ -7,7 +7,7 @@ import { runCleanup, runCreate, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
-const ROOT_USAGE = "Usage:\n  monke create <session>\n  monke materialize\n  monke cleanup\n  monke setup";
+const ROOT_USAGE = "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup";
 
 export function runCli(argv: string[], runtime = createRuntime()): void {
   if (argv.length === 0) {
@@ -23,7 +23,7 @@ export function runCli(argv: string[], runtime = createRuntime()): void {
 
 function createProgram(runtime: Runtime): Command {
   const program = new Command()
-    .name("monke")
+    .name("mt")
     .helpOption(false)
     .addHelpCommand(false)
     .showSuggestionAfterError(false)
@@ -78,13 +78,13 @@ function mapCliError(error: unknown, argv: string[]): Error {
 
   switch (argv[0]) {
     case "create":
-      return new MonkeError("Usage: monke create <session>");
+      return new MonkeError("Usage: mt create <session>");
     case "materialize":
-      return new MonkeError("Usage: monke materialize");
+      return new MonkeError("Usage: mt materialize");
     case "cleanup":
-      return new MonkeError("Usage: monke cleanup");
+      return new MonkeError("Usage: mt cleanup");
     case "setup":
-      return new MonkeError("Usage: monke setup");
+      return new MonkeError("Usage: mt setup");
     default:
       return new MonkeError(ROOT_USAGE);
   }

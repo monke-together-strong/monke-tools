@@ -3,10 +3,9 @@ import path from "node:path";
 
 import { loadResolvedGraph } from "./config.ts";
 import {
-  syncRootPathEnvFile,
+  syncRootEnvFile,
   rewriteManagedEnvFiles,
-  seedEnvFiles,
-  writePortsEnv,
+  seedWorktreeFiles,
   collectBaselinePorts,
 } from "./env.ts";
 import {
@@ -39,12 +38,12 @@ import type {
 
 export function runCreate(runtime: Runtime, session: string): void {
   if (!session) {
-    throw new MonkeError("monke create requires a session name");
+    throw new MonkeError("mt create requires a session name");
   }
 
   const context = resolveRepoContext(runtime);
   if (!context.isSourceCheckout) {
-    throw new MonkeError("monke create must run from the source checkout");
+    throw new MonkeError("mt create must run from the source checkout");
   }
 
   ensureWorktrunkInstalled(runtime);
@@ -118,7 +117,7 @@ export function runCreate(runtime: Runtime, session: string): void {
 export function runMaterialize(runtime: Runtime): void {
   const context = resolveRepoContext(runtime);
   if (context.isSourceCheckout) {
-    throw new MonkeError("monke materialize must run inside a session worktree");
+    throw new MonkeError("mt materialize must run inside a session worktree");
   }
   if (!context.sessionName) {
     throw new MonkeError("Unable to infer the current session");
@@ -200,7 +199,7 @@ export function runCleanup(runtime: Runtime): void {
 export function runSetup(runtime: Runtime): void {
   const context = resolveRepoContext(runtime);
   if (!context.isSourceCheckout) {
-    throw new MonkeError("monke setup must run from the source checkout");
+    throw new MonkeError("mt setup must run from the source checkout");
   }
 
   const graph = loadResolvedGraph(runtime, context.sourceRoot);
@@ -209,7 +208,7 @@ export function runSetup(runtime: Runtime): void {
     throw new MonkeError(`Missing repo config for ${context.sourceRoot}`);
   }
 
-  syncRootPathEnvFile(
+  syncRootEnvFile(
     context.sourceRoot,
     repoConfig.externalInOrder.map((externalRepo) => ({
       env: externalRepo.pathEnv,
@@ -243,7 +242,9 @@ function materializeRepo(options: {
   } = options;
 
   if (worktreeCreated) {
-    seedEnvFiles(repoConfig.sourceRoot, worktreePath);
+    seedWorktreeFiles(repoConfig, worktreePath, (message) => {
+      options.runtime.writeStderr(`${message}\n`);
+    });
   }
 
   const reservation = getOrCreateReservation(
@@ -263,14 +264,19 @@ function materializeRepo(options: {
   });
 
   const externalAssignments = resolveExternalAssignments(repoConfig, dependencyResults);
-  rewriteManagedEnvFiles(repoConfig, worktreePath, localAssignments, externalAssignments);
-  syncRootPathEnvFile(
+  const externalPathAssignments = resolveExternalPathAssignments(
+    repoConfig,
     worktreePath,
-    resolveExternalPathAssignments(repoConfig, worktreePath, dependencyResults),
+    dependencyResults,
   );
-
+  rewriteManagedEnvFiles(repoConfig, worktreePath, localAssignments, externalAssignments);
   const localAssignedPorts = toAssignedPorts(repoConfig, localAssignments);
-  writePortsEnv(worktreePath, localAssignedPorts, externalAssignments);
+  syncRootEnvFile(worktreePath, [
+    ...externalPathAssignments,
+    ...toRootEnvAssignments(localAssignedPorts),
+    ...toRootEnvAssignments(dedupeAssignedPorts(externalAssignments)),
+  ]);
+  runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
 
   return {
     state: {
@@ -327,6 +333,46 @@ function resolveExternalPathAssignments(
       value: relativePath,
     };
   });
+}
+
+function toRootEnvAssignments(assignments: AssignedPort[]): Array<{ env: string; value: string }> {
+  return assignments.map((assignment) => ({
+    env: assignment.key,
+    value: String(assignment.value),
+  }));
+}
+
+function dedupeAssignedPorts(assignments: AssignedPort[]): AssignedPort[] {
+  const deduped = new Map<string, AssignedPort>();
+  for (const assignment of assignments) {
+    deduped.set(assignment.key, assignment);
+  }
+  return [...deduped.values()];
+}
+
+function runBootstrapCommand(
+  runtime: Runtime,
+  repoConfig: RepoConfig,
+  worktreePath: string,
+  externalPathAssignments: Array<{ env: string; value: string }>,
+): void {
+  if (!repoConfig.bootstrapCommand) {
+    return;
+  }
+
+  try {
+    runtime.exec("sh", ["-lc", repoConfig.bootstrapCommand], {
+      cwd: worktreePath,
+      env: Object.fromEntries(
+        externalPathAssignments.map((assignment) => [assignment.env, assignment.value]),
+      ),
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new MonkeError(
+      `Bootstrap command failed for ${repoConfig.sourceRoot}: ${repoConfig.bootstrapCommand}\n${detail}`,
+    );
+  }
 }
 
 function ensureWorktrunkInstalled(runtime: Runtime): void {

@@ -1,9 +1,11 @@
 import {
+  cpSync,
   copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -11,15 +13,19 @@ import path from "node:path";
 import { MonkeError } from "./errors.ts";
 import type { AssignedPort, RepoConfig } from "./types.ts";
 
-export function seedEnvFiles(sourceRoot: string, worktreeRoot: string): void {
-  for (const relativePath of listEnvFiles(sourceRoot)) {
-    const sourcePath = path.join(sourceRoot, relativePath);
-    const targetPath = path.join(worktreeRoot, relativePath);
-    if (existsSync(targetPath)) {
-      continue;
-    }
-    mkdirSync(path.dirname(targetPath), { recursive: true });
-    copyFileSync(sourcePath, targetPath);
+export function seedWorktreeFiles(
+  config: RepoConfig,
+  worktreeRoot: string,
+  onWarning?: (message: string) => void,
+): void {
+  const seededPaths = new Set<string>();
+
+  for (const relativePath of listEnvFiles(config.sourceRoot)) {
+    seedRelativePath(config.sourceRoot, worktreeRoot, relativePath, false, seededPaths, onWarning);
+  }
+
+  for (const relativePath of config.seedPaths) {
+    seedRelativePath(config.sourceRoot, worktreeRoot, relativePath, true, seededPaths, onWarning);
   }
 }
 
@@ -94,25 +100,7 @@ export function rewriteManagedEnvFiles(
   }
 }
 
-export function writePortsEnv(
-  worktreeRoot: string,
-  localAssignments: AssignedPort[],
-  externalAssignments: AssignedPort[],
-): void {
-  const monkeDirectory = path.join(worktreeRoot, ".monke");
-  mkdirSync(monkeDirectory, { recursive: true });
-
-  const lines = [
-    ...localAssignments.map((assignment) => `${assignment.key}=${assignment.value}`),
-    ...dedupeAssignments(externalAssignments).map(
-      (assignment) => `${assignment.key}=${assignment.value}`,
-    ),
-  ];
-
-  writeFileSync(path.join(monkeDirectory, "ports.env"), lines.join("\n"), "utf8");
-}
-
-export function syncRootPathEnvFile(
+export function syncRootEnvFile(
   worktreeRoot: string,
   assignments: Array<{ env: string; value: string }>,
 ): void {
@@ -200,6 +188,42 @@ function listEnvFiles(root: string, relativeRoot: string = ""): string[] {
   }
 
   return results;
+}
+
+function seedRelativePath(
+  sourceRoot: string,
+  worktreeRoot: string,
+  relativePath: string,
+  warnIfMissing: boolean,
+  seededPaths: Set<string>,
+  onWarning?: (message: string) => void,
+): void {
+  const normalizedRelativePath = path.normalize(relativePath);
+  if (seededPaths.has(normalizedRelativePath)) {
+    return;
+  }
+  seededPaths.add(normalizedRelativePath);
+
+  const sourcePath = path.join(sourceRoot, normalizedRelativePath);
+  if (!existsSync(sourcePath)) {
+    if (warnIfMissing) {
+      onWarning?.(`Warning: seedPath ${normalizedRelativePath} is missing at ${sourcePath}; skipping`);
+    }
+    return;
+  }
+
+  const targetPath = path.join(worktreeRoot, normalizedRelativePath);
+  if (existsSync(targetPath)) {
+    return;
+  }
+
+  mkdirSync(path.dirname(targetPath), { recursive: true });
+  if (statSync(sourcePath).isDirectory()) {
+    cpSync(sourcePath, targetPath, { recursive: true });
+    return;
+  }
+
+  copyFileSync(sourcePath, targetPath);
 }
 
 function readActiveAssignments(filePath: string): Map<string, string[]> {
@@ -402,17 +426,4 @@ function requireAssignedPort(
     throw new MonkeError(`Missing assigned local port ${key} for ${appLabel}`);
   }
   return value;
-}
-
-function dedupeAssignments(assignments: AssignedPort[]): AssignedPort[] {
-  const seen = new Set<string>();
-  const result: AssignedPort[] = [];
-  for (const assignment of assignments) {
-    if (seen.has(assignment.key)) {
-      continue;
-    }
-    seen.add(assignment.key);
-    result.push(assignment);
-  }
-  return result;
 }

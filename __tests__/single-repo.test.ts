@@ -9,6 +9,7 @@ import {
   read,
   readSingleYamlFile,
   runMonke,
+  write,
 } from "./helpers.ts";
 
 test("create bootstraps a single-repo session and rewrites only mapped env vars", () => {
@@ -46,7 +47,7 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
   expect(read(repoRoot, "apps/api/.env.local")).toBe(
     "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\nOTHER=keep\n",
   );
-  expect(read(worktreeRoot, ".monke/ports.env")).toBe("API_PORT=10000\nDB_PORT=10001");
+  expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nDB_PORT=10001\n");
 
   const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
     repos: Array<{ sourceRoot: string; worktreePath: string }>;
@@ -95,8 +96,8 @@ test("materialize rejects source checkout context and reuses sticky ports inside
   expect(inferSessionName(worktreeRoot, "banana")).toBe("banana");
   expect(() => inferSessionName(worktreeRoot, "wrong")).toThrow(/match current branch/);
 
-  const before = read(worktreeRoot, ".monke/ports.env");
-  expect(before).toBe("API_PORT=10000\nDB_PORT=10001");
+  const before = read(worktreeRoot, ".env");
+  expect(before).toBe("API_PORT=10000\nDB_PORT=10001\n");
 
   runMonke({
     cwd: worktreeRoot,
@@ -105,7 +106,170 @@ test("materialize rejects source checkout context and reuses sticky ports inside
     binDirectory,
   });
 
-  expect(read(worktreeRoot, ".monke/ports.env")).toBe(before);
+  expect(read(worktreeRoot, ".env")).toBe(before);
+});
+
+test("create and materialize run bootstrapCommand after env sync from the repo worktree root", () => {
+  const sandbox = makeTempDir("single-bootstrap");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `bootstrapCommand: grep -q 'PORT=10000' apps/api/.env.local && grep -q 'DB_PORT=10001' .env && pwd >> bootstrap-runs
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+      - port: DB_PORT
+        env: DATABASE_URL
+`,
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  expect(read(worktreeRoot, "bootstrap-runs")).toBe(`${worktreeRoot}\n`);
+
+  runMonke({
+    cwd: worktreeRoot,
+    args: ["materialize"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(worktreeRoot, "bootstrap-runs")).toBe(`${worktreeRoot}\n${worktreeRoot}\n`);
+});
+
+test("create seeds configured directories and files into a new session worktree", () => {
+  const sandbox = makeTempDir("single-seedpaths");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{ \"theme\": \"dark\" }\n",
+    "apps/frostbite-crawler/data/sessions/hoangbn/Cookies": "cookie-jar\n",
+    "scripts/bootstrap.sh": "#!/bin/sh\necho seeded\n",
+    "monke.yml": `seedPaths:
+  - apps/frostbite-crawler/data/sessions
+  - scripts/bootstrap.sh
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
+    "{ \"theme\": \"dark\" }\n",
+  );
+  expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Cookies")).toBe(
+    "cookie-jar\n",
+  );
+  expect(read(worktreeRoot, "scripts/bootstrap.sh")).toBe("#!/bin/sh\necho seeded\n");
+});
+
+test("repeated create and materialize do not clobber seeded paths already changed in the worktree", () => {
+  const sandbox = makeTempDir("single-seedpaths-no-clobber");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{ \"theme\": \"dark\" }\n",
+    "monke.yml": `seedPaths:
+  - apps/frostbite-crawler/data/sessions
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  write(
+    worktreeRoot,
+    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences",
+    "{ \"theme\": \"light\" }\n",
+  );
+
+  runMonke({
+    cwd: worktreeRoot,
+    args: ["materialize"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
+    "{ \"theme\": \"light\" }\n",
+  );
+});
+
+test("missing configured seedPaths warn and do not fail session creation", () => {
+  const sandbox = makeTempDir("single-seedpaths-missing");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `seedPaths:
+  - apps/frostbite-crawler/data/sessions
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  const result = runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(result.stderr).toContain("Warning: seedPath apps/frostbite-crawler/data/sessions is missing");
+  expect(result.stdout).toContain("Created or updated session banana");
 });
 
 test("setup creates the root .env with direct external path env defaults", () => {

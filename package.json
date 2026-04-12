@@ -1,9 +1,11 @@
 {
-  "name": "monke-tribe",
+  "name": "monke-tools",
   "private": true,
   "type": "module",
   "scripts": {
-    "monke": "bun run src/index.ts",
+    "mt": "bun run src/index.ts",
+    "monke-tools": "bun run src/index.ts",
+    "install:local": "sh ./scripts/install-local.sh",
     "test": "bunx --bun vitest run",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",

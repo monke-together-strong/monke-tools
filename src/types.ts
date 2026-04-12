@@ -61,6 +61,8 @@ export interface ExternalRepoConfig {
 export interface RepoConfig {
   sourceRoot: string;
   configPath: string;
+  bootstrapCommand?: string;
+  seedPaths: string[];
   appsInOrder: AppConfig[];
   appsByLabel: Map<string, AppConfig>;
   externalInOrder: ExternalRepoConfig[];

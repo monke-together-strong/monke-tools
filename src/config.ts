@@ -122,7 +122,12 @@ function parseRepoConfigObject(
   rawConfig: unknown,
 ): RepoConfig {
   const config = asRecord(rawConfig, configPath);
-  assertKnownKeys(config, ["apps", "external"], configPath);
+  assertKnownKeys(config, ["apps", "external", "bootstrapCommand", "seedPaths"], configPath);
+  const bootstrapCommand =
+    config.bootstrapCommand === undefined
+      ? undefined
+      : requireString(config.bootstrapCommand, `${configPath}#bootstrapCommand`);
+  const seedPaths = parseSeedPaths(config.seedPaths, sourceRoot, configPath);
 
   const rawApps = config.apps;
   if (!rawApps) {
@@ -321,6 +326,8 @@ function parseRepoConfigObject(
   return {
     sourceRoot,
     configPath,
+    bootstrapCommand,
+    seedPaths,
     appsInOrder,
     appsByLabel,
     externalInOrder,
@@ -397,4 +404,38 @@ function resolveInside(root: string, relativePath: string, location: string): st
 
 function normalize(targetPath: string): string {
   return path.normalize(targetPath);
+}
+
+function parseSeedPaths(
+  rawSeedPaths: unknown,
+  sourceRoot: string,
+  configPath: string,
+): string[] {
+  if (rawSeedPaths === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(rawSeedPaths)) {
+    throw new MonkeError(`${configPath}#seedPaths must be an array`);
+  }
+
+  const seedPaths: string[] = [];
+  const seen = new Map<string, string>();
+
+  for (const [index, rawSeedPath] of rawSeedPaths.entries()) {
+    const relativePath = requireString(rawSeedPath, `${configPath}#seedPaths[${index}]`);
+    const absolutePath = resolveInside(sourceRoot, relativePath, `${configPath}#seedPaths[${index}]`);
+    const normalizedPath = normalize(absolutePath);
+    const existing = seen.get(normalizedPath);
+    if (existing) {
+      throw new MonkeError(
+        `Duplicate seedPath ${relativePath} in ${configPath}; already declared as ${existing}`,
+      );
+    }
+
+    seen.set(normalizedPath, relativePath);
+    seedPaths.push(path.relative(sourceRoot, absolutePath) || ".");
+  }
+
+  return seedPaths;
 }

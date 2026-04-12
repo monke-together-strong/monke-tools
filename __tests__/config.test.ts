@@ -49,6 +49,159 @@ external:
   expect(graph.reposByRoot.get(root)?.localPortOrder).toEqual(["API_PORT"]);
   expect(graph.reposByRoot.get(root)?.externalMappingsInOrder).toHaveLength(1);
   expect(graph.reposByRoot.get(root)?.externalInOrder[0]?.pathEnv).toBe("DEP_DIR");
+  expect(graph.reposByRoot.get(root)?.bootstrapCommand).toBeUndefined();
+});
+
+test("loadResolvedGraph accepts bootstrapCommand when present", () => {
+  const sandbox = makeTempDir("config-bootstrap");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `bootstrapCommand: pnpm install && pnpm generate
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+
+  expect(graph.reposByRoot.get(root)?.bootstrapCommand).toBe("pnpm install && pnpm generate");
+});
+
+test("loadResolvedGraph accepts repo-level seedPaths", () => {
+  const sandbox = makeTempDir("config-seedpaths");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{}\n",
+    "scripts/bootstrap.sh": "#!/bin/sh\n",
+    "monke.yml": `seedPaths:
+  - apps/frostbite-crawler/data/sessions
+  - scripts/bootstrap.sh
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+
+  expect(graph.reposByRoot.get(root)?.seedPaths).toEqual([
+    "apps/frostbite-crawler/data/sessions",
+    "scripts/bootstrap.sh",
+  ]);
+});
+
+test("loadResolvedGraph rejects non-string bootstrapCommand", () => {
+  const sandbox = makeTempDir("config-bootstrap-non-string");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `bootstrapCommand:
+  nested: nope
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /bootstrapCommand.*non-empty string/,
+  );
+});
+
+test("loadResolvedGraph rejects empty bootstrapCommand", () => {
+  const sandbox = makeTempDir("config-bootstrap-empty");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `bootstrapCommand: "   "
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /bootstrapCommand.*non-empty string/,
+  );
+});
+
+test("loadResolvedGraph rejects non-array seedPaths", () => {
+  const sandbox = makeTempDir("config-seedpaths-not-array");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `seedPaths: apps/frostbite-crawler/data/sessions
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /seedPaths must be an array/,
+  );
+});
+
+test("loadResolvedGraph rejects seedPaths that escape the repo root", () => {
+  const sandbox = makeTempDir("config-seedpaths-escape");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `seedPaths:
+  - ../shared/sessions
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /seedPaths\[0\].*must resolve inside/,
+  );
+});
+
+test("loadResolvedGraph rejects duplicate normalized seedPaths", () => {
+  const sandbox = makeTempDir("config-seedpaths-duplicate");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{}\n",
+    "monke.yml": `seedPaths:
+  - apps/frostbite-crawler/data/sessions
+  - apps/frostbite-crawler/data/../data/sessions
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /Duplicate seedPath/,
+  );
 });
 
 test("loadResolvedGraph rejects missing external pathEnv", () => {

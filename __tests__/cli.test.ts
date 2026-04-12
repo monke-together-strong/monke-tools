@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { runCli } from "../src/index.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
-const ROOT_USAGE = "Usage:\n  monke create <session>\n  monke materialize\n  monke cleanup\n  monke setup";
+const ROOT_USAGE = "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup";
 
 test("runCli preserves top-level usage for missing and unknown commands", () => {
   expect(() => runCli([])).toThrow(ROOT_USAGE);
@@ -13,11 +13,11 @@ test("runCli preserves top-level usage for missing and unknown commands", () => 
 });
 
 test("runCli preserves command-specific usage for invalid arity", () => {
-  expect(() => runCli(["create"])).toThrow("Usage: monke create <session>");
-  expect(() => runCli(["create", "banana", "extra"])).toThrow("Usage: monke create <session>");
-  expect(() => runCli(["materialize", "extra"])).toThrow("Usage: monke materialize");
-  expect(() => runCli(["cleanup", "extra"])).toThrow("Usage: monke cleanup");
-  expect(() => runCli(["setup", "extra"])).toThrow("Usage: monke setup");
+  expect(() => runCli(["create"])).toThrow("Usage: mt create <session>");
+  expect(() => runCli(["create", "banana", "extra"])).toThrow("Usage: mt create <session>");
+  expect(() => runCli(["materialize", "extra"])).toThrow("Usage: mt materialize");
+  expect(() => runCli(["cleanup", "extra"])).toThrow("Usage: mt cleanup");
+  expect(() => runCli(["setup", "extra"])).toThrow("Usage: mt setup");
 });
 
 test("main entrypoint writes usage errors to stderr", () => {
@@ -28,5 +28,5 @@ test("main entrypoint writes usage errors to stderr", () => {
 
   expect(result.status).toBe(1);
   expect(result.stdout).toBe("");
-  expect(result.stderr).toBe("Usage: monke cleanup\n");
+  expect(result.stderr).toBe("Usage: mt cleanup\n");
 });
