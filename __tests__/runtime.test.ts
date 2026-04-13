@@ -17,7 +17,11 @@ test("withGlobalLock evicts stale locks left by dead processes", () => {
   const lockPath = path.join(home, "lock");
 
   mkdirSync(home, { recursive: true });
-  writeFileSync(lockPath, JSON.stringify({ pid: 999_999, acquiredAt: Date.now() }), "utf8");
+  writeFileSync(
+    lockPath,
+    JSON.stringify({ pid: 999_999, acquiredAt: Date.now() - 86_400_000 }),
+    "utf8",
+  );
 
   const result = withGlobalLock(home, () => "acquired");
 

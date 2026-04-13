@@ -7,6 +7,7 @@ import type { RepoContext, Runtime } from "./types.ts";
 export interface WorktreeEntry {
   path: string;
   branch: string | null;
+  prunable: boolean;
 }
 
 export function resolveRepoContext(runtime: Runtime, cwd: string = runtime.cwd): RepoContext {
@@ -76,6 +77,7 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
         entries.push({
           path: current.path,
           branch: current.branch ?? null,
+          prunable: current.prunable ?? false,
         });
       }
       current = {};
@@ -89,6 +91,11 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
 
     if (line.startsWith("branch refs/heads/")) {
       current.branch = line.slice("branch refs/heads/".length);
+      continue;
+    }
+
+    if (line.startsWith("prunable")) {
+      current.prunable = true;
     }
   }
 
@@ -96,6 +103,7 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
     entries.push({
       path: current.path,
       branch: current.branch ?? null,
+      prunable: current.prunable ?? false,
     });
   }
 
@@ -133,11 +141,34 @@ export function ensureSessionWorktree(
   sourceRoot: string,
   session: string,
 ): { path: string; created: boolean } {
-  const expectedPath = getExpectedWorktreePath(sourceRoot, session);
-  const worktrees = listWorktrees(runtime, sourceRoot);
+  try {
+    runGit(runtime, sourceRoot, ["check-ref-format", "--branch", session]);
+  } catch {
+    throw new MonkeError(`Invalid session name "${session}": must be a valid git branch name`);
+  }
 
-  const branchMatch = worktrees.find((entry) => entry.branch === session);
-  const pathMatch = worktrees.find((entry) => normalize(entry.path) === normalize(expectedPath));
+  const expectedPath = getExpectedWorktreePath(sourceRoot, session);
+  let worktrees = listWorktrees(runtime, sourceRoot);
+
+  const shouldPruneCachedEntries = worktrees.some(
+    (entry) =>
+      (entry.branch === session || normalize(entry.path) === normalize(expectedPath)) &&
+      (entry.prunable || !existsSync(entry.path)),
+  );
+  if (shouldPruneCachedEntries) {
+    runGit(runtime, sourceRoot, ["worktree", "prune"]);
+    worktrees = listWorktrees(runtime, sourceRoot);
+  }
+
+  const branchMatch = worktrees.find(
+    (entry) => entry.branch === session && !entry.prunable && existsSync(entry.path),
+  );
+  const pathMatch = worktrees.find(
+    (entry) =>
+      normalize(entry.path) === normalize(expectedPath) &&
+      !entry.prunable &&
+      existsSync(entry.path),
+  );
 
   if (branchMatch && normalize(branchMatch.path) !== normalize(expectedPath)) {
     throw new MonkeError(

@@ -202,6 +202,49 @@ apps:
   expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/Duplicate seedPath/);
 });
 
+test("loadResolvedGraph rejects seedPaths that point at the repo root", () => {
+  const sandbox = makeTempDir("config-seedpaths-root");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `seedPaths:
+  - .
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /seedPath "." is not allowed/,
+  );
+});
+
+test("loadResolvedGraph rejects seedPaths that normalize to the repo root", () => {
+  const sandbox = makeTempDir("config-seedpaths-normalized-root");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "apps/.keep": "\n",
+    "monke.yml": `seedPaths:
+  - apps/..
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /seedPath "." is not allowed/,
+  );
+});
+
 test("loadResolvedGraph rejects missing external pathEnv", () => {
   const sandbox = makeTempDir("config-missing-pathenv");
   createRepo(path.join(sandbox, "dep"), {

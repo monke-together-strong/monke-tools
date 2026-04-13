@@ -440,6 +440,12 @@ function parseSeedPaths(rawSeedPaths: unknown, sourceRoot: string, configPath: s
       `${configPath}#seedPaths[${index}]`,
     );
     const normalizedPath = normalize(absolutePath);
+    if (relativePath === "." || normalizedPath === normalize(sourceRoot)) {
+      throw new MonkeError(
+        `${configPath}#seedPaths[${index}] cannot point at the repo root; seedPath "." is not allowed`,
+      );
+    }
+
     const existing = seen.get(normalizedPath);
     if (existing) {
       throw new MonkeError(
