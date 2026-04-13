@@ -1,4 +1,4 @@
-project_name: "monke-tribe"
+project_name: "monke-tools"
 default_status: "To Do"
 statuses: ["To Do", "In Progress", "Done"]
 labels: []

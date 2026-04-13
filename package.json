@@ -1,17 +1,26 @@
 {
-  "name": "monke-tribe",
+  "name": "monke-tools",
   "private": true,
   "type": "module",
   "scripts": {
+    "mt": "bun run src/index.ts",
+    "monke-tools": "bun run src/index.ts",
+    "install:local": "sh ./scripts/install-local.sh",
+    "test": "bunx --bun vitest run",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"
   },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "yaml": "^2.8.3"
+  },
   "devDependencies": {
     "@types/bun": "^1.3.12",
     "oxfmt": "^0.44.0",
-    "oxlint": "^1.59.0"
+    "oxlint": "^1.59.0",
+    "vitest": "^4.1.4"
   },
   "packageManager": "bun@1.3.11"
 }
