@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-04-16 00:44'
-updated_date: '2026-04-16 04:57'
+updated_date: '2026-04-16 15:46'
 labels: []
 dependencies: []
 references:
@@ -17,7 +17,7 @@ documentation:
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Implement GitHub issue #13 from PRD #12 by adding a top-level mt run command that accepts raw plan text, preserves multiline plan input exactly as provided by the shell, checkpoints dirty startup work when needed, runs Codex-backed implementer and reviewer passes from the current checkout with live streamed agent output, blocks commits outside the cleanup checkpoint phase, and ends with a short workflow summary via a dedicated module instead of CLI-embedded orchestration.
+Implement GitHub issue #13 from PRD #12 by adding a top-level mt run command that accepts raw plan text, preserves multiline plan input exactly as provided by the shell, checkpoints dirty startup work when needed, runs Codex-backed implementer and reviewer passes from the current checkout with live-streamed agent output, blocks commits outside the cleanup checkpoint phase, and ends with a short workflow summary via a dedicated module instead of CLI-embedded orchestration.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -47,6 +47,10 @@ Implement GitHub issue #13 from PRD #12 by adding a top-level mt run command tha
 - Added Monke-owned implementer prompt/standards assets, repo-root normalization, Codex executable lookup, live child-process streaming, and short success/failure summaries.
 - Added focused CLI and integration tests using a fake `codex` binary to verify raw multiline plan passthrough, repo-root execution, streamed output, and failure summaries.
 - Verified with `bun test` and `bun run lint`; formatted touched files with `bunx oxfmt ...`. Full `bun run fmt:check` still reports a pre-existing issue in `__tests__/multi-repo.test.ts` outside this change.
+
+- Follow-up: The earlier note "Pulled GitHub issue #13 and PRD #12 context to confirm this slice stays implementer-only, not full cleanup/reviewer workflow." is now stale.
+- Scope expanded during implementation because the shipped `mt run` flow needed cleanup checkpointing, reviewer execution, and commit-guard enforcement to match the end-to-end workflow behavior captured in the acceptance criteria and final summary.
+- Shipped outcome: the task now covers cleanup, implementer, and reviewer passes in one workflow rather than an implementer-only slice.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

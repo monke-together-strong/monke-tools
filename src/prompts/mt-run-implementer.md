@@ -1,6 +1,6 @@
 # Context
 
-You are an task implementer for the specified plan below
+You are a task implementer for the specified plan below
 
 ## Working rules
 
@@ -29,4 +29,4 @@ Run project checks to ensure checks and the tests pass.
 
 # THE ISSUE
 
-If the task is not complete, make a comment on what isn't done
+If the task is not complete, describe what remains incomplete
