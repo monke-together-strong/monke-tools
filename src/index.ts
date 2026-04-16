@@ -1,29 +1,50 @@
 #!/usr/bin/env bun
 
-import { Command, CommanderError } from "commander";
+import { Command, CommanderError, Option } from "commander";
 
 import { MonkeError } from "./errors.ts";
 import { runCleanup, runCreate, runMaterialize, runSetup } from "./monke.ts";
-import { runSinglePassWorkflow } from "./run.ts";
+import {
+  CODEX_REASONING_EFFORTS,
+  runSinglePassWorkflow,
+  type CodexReasoningEffort,
+} from "./run.ts";
 import { createRuntime } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt run --plan <text>";
+  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt run --plan <text> [--effort <level>]";
+const RUN_USAGE = "Usage: mt run --plan <text> [--effort <level>]";
 
-export function runCli(argv: string[], runtime = createRuntime()): void {
+interface RunCommandOptions {
+  plan: string;
+  effort?: CodexReasoningEffort;
+}
+
+/** Run the Monke Tools CLI. Valid `mt run` invocations return a workflow promise. */
+export function runCli(argv: string[], runtime = createRuntime()): void | Promise<void> {
   if (argv.length === 0) {
     throw new MonkeError(ROOT_USAGE);
   }
 
+  const pendingRun: { options: RunCommandOptions | null } = { options: null };
+
   try {
-    createProgram(runtime).parse(argv, { from: "user" });
+    createProgram(runtime, (options) => {
+      pendingRun.options = options;
+    }).parse(argv, { from: "user" });
   } catch (error) {
     throw mapCliError(error, argv);
   }
+
+  if (pendingRun.options) {
+    return runSinglePassWorkflow(runtime, pendingRun.options.plan, {
+      effort: pendingRun.options.effort,
+    });
+  }
 }
 
-function createProgram(runtime: Runtime): Command {
+function createProgram(runtime: Runtime, onRun: (options: RunCommandOptions) => void): Command {
   const program = new Command()
     .name("mt")
     .helpOption(false)
@@ -75,8 +96,9 @@ function createProgram(runtime: Runtime): Command {
     .helpOption(false)
     .allowExcessArguments(false)
     .requiredOption("--plan <text>")
-    .action((options: { plan: string }) => {
-      runSinglePassWorkflow(runtime, options.plan);
+    .addOption(new Option("--effort <level>").choices([...CODEX_REASONING_EFFORTS]))
+    .action((options: RunCommandOptions) => {
+      onRun(options);
     });
 
   return program;
@@ -97,7 +119,7 @@ function mapCliError(error: unknown, argv: string[]): Error {
     case "setup":
       return new MonkeError("Usage: mt setup");
     case "run":
-      return new MonkeError("Usage: mt run --plan <text>");
+      return new MonkeError(RUN_USAGE);
     default:
       return new MonkeError(ROOT_USAGE);
   }
@@ -105,7 +127,7 @@ function mapCliError(error: unknown, argv: string[]): Error {
 
 if (import.meta.main) {
   try {
-    runCli(Bun.argv.slice(2));
+    await runCli(Bun.argv.slice(2));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`${message}\n`);

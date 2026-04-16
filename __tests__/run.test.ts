@@ -1,6 +1,7 @@
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { existsSync, readdirSync } from "node:fs";
 import { expect, test } from "vitest";
 
 import { createRepo, git, installFakeCodex, makeTempDir, read, write } from "./helpers.ts";
@@ -36,19 +37,80 @@ test("mt run executes codex from the git repo root, passes the raw plan through,
   expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("2");
   expect(read(sandbox, path.relative(sandbox, cwdLogPath))).toBe(`${repoRoot}\n${repoRoot}\n`);
   expect(read(sandbox, path.relative(sandbox, phaseLogPath))).toBe("implementer\nreviewer\n");
-  expect(read(sandbox, path.relative(sandbox, argsLogPath))).toContain("--cd");
-  expect(read(sandbox, path.relative(sandbox, argsLogPath))).toContain(repoRoot);
+  const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
+  expect(argsLog).toContain("--cd");
+  expect(argsLog).toContain(repoRoot);
+  expect(argsLog).not.toContain("model_reasoning_effort");
   const stdinLog = read(sandbox, path.relative(sandbox, stdinLogPath));
   expect(stdinLog).toContain(`<<<MONKE_PLAN_START>>>\n${plan}`);
   expect(stdinLog).not.toContain("<<<MONKE_PLAN_END>>>");
-  expect(stdinLog).toContain("You are an task implementer for the specified plan below");
-  expect(stdinLog).toContain("You are an expert code reviewer focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality.");
+  expect(stdinLog).toContain("You are a task implementer for the specified plan below");
+  expect(stdinLog).toContain(
+    "You are an expert code reviewer focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality.",
+  );
   expect(stdinLog).not.toContain("You are the cleanup checkpointing phase.");
   expect(result.stdout).toContain("fake codex stdout");
   expect(result.stdout).toContain(
     "Implementer finished successfully. Reviewer finished successfully.",
   );
   expect(result.stderr).toContain("fake codex stderr");
+});
+
+test("mt run forwards effort and writes attempted phase logs", () => {
+  const sandbox = makeTempDir("run-effort-logs");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "repo"), {
+    "README.md": "# sandbox\n",
+  });
+  const { argsLogPath } = installFakeCodex(binDirectory, {
+    implementer: {
+      stdoutText: "implementer streamed stdout",
+      stderrText: "implementer streamed stderr",
+    },
+    reviewer: {
+      stdoutText: "reviewer streamed stdout",
+      stderrText: "reviewer streamed stderr",
+    },
+  });
+
+  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it", "--effort", "high"], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+    },
+    encoding: "utf8",
+  });
+
+  expect(result.status).toBe(0);
+  const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
+  expect(argsLog.match(/model_reasoning_effort="high"/g)).toHaveLength(2);
+  expect(result.stdout).toContain("implementer streamed stdout");
+  expect(result.stdout).toContain("reviewer streamed stdout");
+  expect(result.stderr).toContain("implementer streamed stderr");
+  expect(result.stderr).toContain("reviewer streamed stderr");
+
+  const logsRoot = path.join(repoRoot, "logs");
+  const [runLogDirectoryName] = readdirSync(logsRoot);
+  expect(runLogDirectoryName).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[a-f0-9]{6}$/);
+  const runLogDirectory = path.join(logsRoot, runLogDirectoryName);
+  expect(result.stdout).toContain(runLogDirectory);
+  expect(existsSync(path.join(runLogDirectory, "cleanup.log"))).toBe(false);
+
+  const implementerLog = read(repoRoot, path.join("logs", runLogDirectoryName, "implementer.log"));
+  expect(implementerLog).toContain("phase: implementer");
+  expect(implementerLog).toContain("provider: codex");
+  expect(implementerLog).toContain("effort: high");
+  expect(implementerLog).toContain("startedAt:");
+  expect(implementerLog).toContain("implementer streamed stdout");
+  expect(implementerLog).toContain("implementer streamed stderr");
+
+  const reviewerLog = read(repoRoot, path.join("logs", runLogDirectoryName, "reviewer.log"));
+  expect(reviewerLog).toContain("phase: reviewer");
+  expect(reviewerLog).toContain("provider: codex");
+  expect(reviewerLog).toContain("effort: high");
+  expect(reviewerLog).toContain("reviewer streamed stdout");
+  expect(reviewerLog).toContain("reviewer streamed stderr");
 });
 
 test("mt run tells the reviewer when there is no implementation diff after a clean implementer run", () => {
@@ -136,9 +198,8 @@ test("mt run checkpoints dirty startup work before running the implementer", () 
     "staged.txt": "before\n",
     "unstaged.txt": "before\n",
   });
-  const { cwdLogPath, stdinLogPath, invocationCountPath, phaseLogPath } = installFakeCodex(
-    binDirectory,
-    {
+  const { argsLogPath, cwdLogPath, stdinLogPath, invocationCountPath, phaseLogPath } =
+    installFakeCodex(binDirectory, {
       cleanup: {
         stdoutText: "cleanup stdout",
         stderrText: "cleanup stderr",
@@ -152,15 +213,14 @@ test("mt run checkpoints dirty startup work before running the implementer", () 
         stdoutText: "reviewer stdout",
         stderrText: "reviewer stderr",
       },
-    },
-  );
+    });
 
   write(repoRoot, "staged.txt", "after staged change\n");
   git(repoRoot, ["add", "staged.txt"]);
   write(repoRoot, "unstaged.txt", "after unstaged change\n");
   write(repoRoot, "untracked.txt", "brand new file\n");
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it", "--effort", "high"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -171,6 +231,8 @@ test("mt run checkpoints dirty startup work before running the implementer", () 
 
   expect(result.status).toBe(0);
   expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("3");
+  const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
+  expect(argsLog.match(/model_reasoning_effort="high"/g)).toHaveLength(3);
   expect(read(sandbox, path.relative(sandbox, cwdLogPath))).toBe(
     `${repoRoot}\n${repoRoot}\n${repoRoot}\n`,
   );
@@ -179,8 +241,10 @@ test("mt run checkpoints dirty startup work before running the implementer", () 
   );
   const stdinLog = read(sandbox, path.relative(sandbox, stdinLogPath));
   expect(stdinLog).toContain("You are the cleanup checkpointing phase.");
-  expect(stdinLog).toContain("You are an task implementer for the specified plan below");
-  expect(stdinLog).toContain("You are an expert code reviewer focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality.");
+  expect(stdinLog).toContain("You are a task implementer for the specified plan below");
+  expect(stdinLog).toContain(
+    "You are an expert code reviewer focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality.",
+  );
   expect(git(repoRoot, ["show", "-s", "--format=%s", "HEAD"])).toBe(
     "clean up: checkpoint dirty work",
   );
@@ -190,6 +254,11 @@ test("mt run checkpoints dirty startup work before running the implementer", () 
   expect(result.stdout).toContain(
     "Cleanup checkpointed existing changes. Implementer finished successfully. Reviewer finished successfully.",
   );
+  const [runLogDirectoryName] = readdirSync(path.join(repoRoot, "logs"));
+  const cleanupLog = read(repoRoot, path.join("logs", runLogDirectoryName, "cleanup.log"));
+  expect(cleanupLog).toContain("phase: cleanup");
+  expect(cleanupLog).toContain("cleanup stdout");
+  expect(cleanupLog).toContain("cleanup stderr");
   expect(result.stderr).toContain("cleanup stderr");
   expect(result.stderr).toContain("implementer stderr");
   expect(result.stderr).toContain("reviewer stderr");
@@ -269,7 +338,7 @@ test("mt run aborts before implementation when cleanup does not create the requi
     "You are the cleanup checkpointing phase.",
   );
   expect(read(sandbox, path.relative(sandbox, stdinLogPath))).not.toContain(
-    "You are an task implementer for the specified plan below",
+    "You are a task implementer for the specified plan below",
   );
   expect(result.stdout).toContain("cleanup attempt");
   expect(result.stderr).toContain("cleanup diagnostics");
@@ -313,7 +382,7 @@ test("mt run aborts before implementation when cleanup exits with failures", () 
     "You are the cleanup checkpointing phase.",
   );
   expect(read(sandbox, path.relative(sandbox, stdinLogPath))).not.toContain(
-    "You are an task implementer for the specified plan below",
+    "You are a task implementer for the specified plan below",
   );
   expect(result.stdout).toContain("cleanup failed output");
   expect(result.stderr).toContain("cleanup failed diagnostics");
@@ -357,7 +426,7 @@ test("mt run aborts before implementation when cleanup creates a checkpoint comm
     "You are the cleanup checkpointing phase.",
   );
   expect(read(sandbox, path.relative(sandbox, stdinLogPath))).not.toContain(
-    "You are an task implementer for the specified plan below",
+    "You are a task implementer for the specified plan below",
   );
   expect(result.stdout).toContain("cleanup invalid subject output");
   expect(result.stderr).toContain("cleanup invalid subject diagnostics");
@@ -407,7 +476,7 @@ test("mt run aborts before implementation when cleanup leaves the checkout dirty
     "You are the cleanup checkpointing phase.",
   );
   expect(read(sandbox, path.relative(sandbox, stdinLogPath))).not.toContain(
-    "You are an task implementer for the specified plan below",
+    "You are a task implementer for the specified plan below",
   );
   expect(result.stdout).toContain("cleanup partial");
   expect(result.stderr).toContain("cleanup left dirt");

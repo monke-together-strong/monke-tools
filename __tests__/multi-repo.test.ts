@@ -367,7 +367,5 @@ external:
   const rootWorktree = getExpectedWorktreePath(root, "swing");
 
   expect(read(depWorktree, ".dep-ready")).toBe("");
-  expect(read(rootWorktree, "root-saw-dep")).toBe(
-    path.relative(rootWorktree, depWorktree),
-  );
+  expect(read(rootWorktree, "root-saw-dep")).toBe(path.relative(rootWorktree, depWorktree));
 });
