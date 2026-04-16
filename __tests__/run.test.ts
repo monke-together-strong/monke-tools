@@ -13,6 +13,24 @@ function getInvocationPrompts(stdinLog: string): string[] {
   return stdinLog.split(/\n<<<END-OF-INVOKE-\d+>>>\n/).filter(Boolean);
 }
 
+function getRunLogDirectoryName(repoRoot: string): string {
+  const logsRoot = path.join(repoRoot, "logs");
+
+  if (!existsSync(logsRoot)) {
+    throw new Error(
+      `Expected logs directory to exist at ${logsRoot} before reading runLogDirectoryName.`,
+    );
+  }
+
+  const [runLogDirectoryName] = readdirSync(logsRoot);
+
+  if (!runLogDirectoryName) {
+    throw new Error(`Expected ${logsRoot} to contain a runLogDirectoryName entry.`);
+  }
+
+  return runLogDirectoryName;
+}
+
 test("mt run executes codex from the git repo root, passes the raw plan through, and prints a short summary", () => {
   const sandbox = makeTempDir("run-success");
   const binDirectory = path.join(sandbox, "bin");
@@ -91,7 +109,7 @@ test("mt run forwards effort and writes attempted phase logs", () => {
   expect(result.stderr).toContain("reviewer streamed stderr");
 
   const logsRoot = path.join(repoRoot, "logs");
-  const [runLogDirectoryName] = readdirSync(logsRoot);
+  const runLogDirectoryName = getRunLogDirectoryName(repoRoot);
   expect(runLogDirectoryName).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[a-f0-9]{6}$/);
   const runLogDirectory = path.join(logsRoot, runLogDirectoryName);
   expect(result.stdout).toContain(runLogDirectory);
@@ -254,7 +272,7 @@ test("mt run checkpoints dirty startup work before running the implementer", () 
   expect(result.stdout).toContain(
     "Cleanup checkpointed existing changes. Implementer finished successfully. Reviewer finished successfully.",
   );
-  const [runLogDirectoryName] = readdirSync(path.join(repoRoot, "logs"));
+  const runLogDirectoryName = getRunLogDirectoryName(repoRoot);
   const cleanupLog = read(repoRoot, path.join("logs", runLogDirectoryName, "cleanup.log"));
   expect(cleanupLog).toContain("phase: cleanup");
   expect(cleanupLog).toContain("cleanup stdout");
