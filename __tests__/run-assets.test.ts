@@ -33,7 +33,9 @@ test("run prompt assets load the local role prompts and vendored standards clean
   expect(instructions.reviewerInstructions).not.toContain("{{LIST_TASKS_COMMAND}}");
   expect(instructions.reviewerInstructions).not.toContain("{{CLOSE_TASK_COMMAND}}");
 
-  expect(codingStandards).toContain("Wherever possible, use Effect primitives like `FileSystem` over promises.");
+  expect(codingStandards).toContain(
+    "Any public-facing properties or functions should have JSDOC comments explaining them.",
+  );
   expect(codingStandards).toContain("## Testing");
   expect(codingStandards).toContain("## Interface Design");
 });

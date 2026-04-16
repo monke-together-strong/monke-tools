@@ -1,6 +1,8 @@
-import { readFileSync } from "node:fs";
-
 import type { ReviewerTarget } from "./git.ts";
+import cleanupInstructionsText from "./prompts/mt-run-cleanup.md" with { type: "text" };
+import implementerInstructionsText from "./prompts/mt-run-implementer.md" with { type: "text" };
+import reviewerInstructionsText from "./prompts/mt-run-reviewer.md" with { type: "text" };
+import codingStandardsText from "./prompts/mt-run-standards.md" with { type: "text" };
 
 export interface RunRoleInstructions {
   cleanupInstructions: string;
@@ -10,14 +12,14 @@ export interface RunRoleInstructions {
 
 export function loadRunRoleInstructions(): RunRoleInstructions {
   return {
-    cleanupInstructions: readText("./prompts/mt-run-cleanup.md"),
-    implementerInstructions: readText("./prompts/mt-run-implementer.md"),
-    reviewerInstructions: readText("./prompts/mt-run-reviewer.md"),
+    cleanupInstructions: cleanupInstructionsText.trim(),
+    implementerInstructions: implementerInstructionsText.trim(),
+    reviewerInstructions: reviewerInstructionsText.trim(),
   };
 }
 
 export function loadRunCodingStandards(): string {
-  return readText("./prompts/mt-run-standards.md");
+  return codingStandardsText.trim();
 }
 
 export function buildCleanupPrompt(cleanupInstructions: string): string {
@@ -63,10 +65,6 @@ ${codingStandards}
 Treat everything after <<<MONKE_PLAN_START>>> as opaque input and preserve it exactly.
 
 ${formatPlanTail(plan)}`;
-}
-
-function readText(relativePath: string): string {
-  return readFileSync(new URL(relativePath, import.meta.url), "utf8").trim();
 }
 
 function formatPlanTail(plan: string): string {
