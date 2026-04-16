@@ -15,7 +15,7 @@ test("run prompt assets load the local role prompts and vendored standards clean
   expect(instructions.cleanupInstructions).toContain("You are the cleanup checkpointing phase.");
   expect(instructions.implementerInstructions).toContain("# Context");
   expect(instructions.implementerInstructions).toContain(
-    "You are an task implementer for the specified plan below",
+    "You are a task implementer for the specified plan below",
   );
   expect(instructions.implementerInstructions).toContain(
     "Treat the user plan below as the only task for this pass.",
@@ -29,7 +29,9 @@ test("run prompt assets load the local role prompts and vendored standards clean
     "You are an expert code reviewer focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality.",
   );
   expect(instructions.reviewerInstructions).toContain("Do not create commits");
-  expect(instructions.reviewerInstructions).toContain("If you find worthwhile improvements to make:");
+  expect(instructions.reviewerInstructions).toContain(
+    "If you find worthwhile improvements to make:",
+  );
   expect(instructions.reviewerInstructions).not.toContain("{{LIST_TASKS_COMMAND}}");
   expect(instructions.reviewerInstructions).not.toContain("{{CLOSE_TASK_COMMAND}}");
 
