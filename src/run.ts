@@ -85,6 +85,7 @@ export function executeRunWorkflow(runtime: Runtime, plan: string): RunOutcome {
     cleanupCompleted = true;
   }
 
+  const preImplementerHead = getHeadCommitInfo(runtime, repoRoot);
   const implementerResult = runWorkflowPhase(
     runtime,
     codex,
@@ -92,7 +93,7 @@ export function executeRunWorkflow(runtime: Runtime, plan: string): RunOutcome {
     "implementer",
     buildImplementerPrompt(plan, instructions.implementerInstructions, codingStandards),
   );
-  const reviewerTarget = determineReviewerTarget(runtime, repoRoot);
+  const reviewerTarget = determineReviewerTarget(runtime, repoRoot, preImplementerHead);
   const reviewerResult = runWorkflowPhase(
     runtime,
     codex,

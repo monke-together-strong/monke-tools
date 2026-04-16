@@ -37,12 +37,9 @@ ${codingStandards}
 
 # User plan
 
-Treat the following plan as opaque input and preserve it exactly.
+Treat everything after <<<MONKE_PLAN_START>>> as opaque input and preserve it exactly.
 
-<<<MONKE_PLAN_START>>>
-${plan}
-<<<MONKE_PLAN_END>>>
-`;
+${formatPlanTail(plan)}`;
 }
 
 export function buildReviewerPrompt(
@@ -63,16 +60,17 @@ ${codingStandards}
 
 # User plan
 
-Treat the following plan as opaque input and preserve it exactly.
+Treat everything after <<<MONKE_PLAN_START>>> as opaque input and preserve it exactly.
 
-<<<MONKE_PLAN_START>>>
-${plan}
-<<<MONKE_PLAN_END>>>
-`;
+${formatPlanTail(plan)}`;
 }
 
 function readText(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8").trim();
+}
+
+function formatPlanTail(plan: string): string {
+  return `<<<MONKE_PLAN_START>>>\n${plan}`;
 }
 
 function formatReviewerTarget(reviewerTarget: ReviewerTarget): string {
@@ -84,13 +82,15 @@ function formatReviewerTarget(reviewerTarget: ReviewerTarget): string {
       ].join("\n");
     case "last-commit":
       return [
-        "- Inspect the last commit because the checkout is clean after implementation.",
+        "- Inspect the last commit because HEAD changed during implementation and the checkout is now clean.",
         `- Commit: ${reviewerTarget.commit.sha} ${reviewerTarget.commit.subject}`,
       ].join("\n");
-    case "repository-state":
+    case "no-implementation-diff":
       return [
-        "- Inspect the current repository state directly because there is no working tree diff and no HEAD commit to review.",
-        `- Reason: ${reviewerTarget.reason}`,
+        "- There is no implementation diff to review because the checkout is clean and HEAD did not change during implementation.",
+        reviewerTarget.headCommit
+          ? `- HEAD is unchanged at: ${reviewerTarget.headCommit.sha} ${reviewerTarget.headCommit.subject}`
+          : "- The repository still does not have a HEAD commit.",
       ].join("\n");
   }
 }

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-04-16 00:44'
-updated_date: '2026-04-16 00:52'
+updated_date: '2026-04-16 04:03'
 labels: []
 dependencies: []
 references:
@@ -64,4 +64,7 @@ Verification:
 - `bun test`
 - `bun run lint`
 - `bunx oxfmt --check src/run.ts __tests__/cli.test.ts __tests__/run.test.ts README.md`
+
+Audit trail:
+- Closed by PR #18 (commit 135fd71b1aa892847d4f0c786069e8db3db979a2).
 <!-- SECTION:FINAL_SUMMARY:END -->

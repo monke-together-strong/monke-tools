@@ -56,14 +56,17 @@ test("implementer and reviewer prompts both load the shared coding standards con
   expect(implementerPrompt).toContain(instructions.implementerInstructions);
   expect(implementerPrompt).toContain("# Shared coding standards");
   expect(implementerPrompt).toContain(codingStandards);
-  expect(implementerPrompt).toContain(`<<<MONKE_PLAN_START>>>\n${plan}\n<<<MONKE_PLAN_END>>>`);
+  expect(implementerPrompt).toEndWith(`<<<MONKE_PLAN_START>>>\n${plan}`);
+  expect(implementerPrompt).not.toContain("<<<MONKE_PLAN_END>>>");
 
   expect(reviewerPrompt).toContain(instructions.reviewerInstructions);
   expect(reviewerPrompt).toContain("# Shared coding standards");
   expect(reviewerPrompt).toContain(codingStandards);
   expect(reviewerPrompt).toContain("# Explicit review target");
   expect(reviewerPrompt).toContain(
-    "- Inspect the last commit because the checkout is clean after implementation.",
+    "- Inspect the last commit because HEAD changed during implementation and the checkout is now clean.",
   );
   expect(reviewerPrompt).toContain("- Commit: abc123 ship it");
+  expect(reviewerPrompt).toEndWith(`<<<MONKE_PLAN_START>>>\n${plan}`);
+  expect(reviewerPrompt).not.toContain("<<<MONKE_PLAN_END>>>");
 });

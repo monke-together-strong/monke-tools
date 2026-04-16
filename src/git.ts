@@ -30,8 +30,8 @@ export type ReviewerTarget =
       commit: GitCommitInfo;
     }
   | {
-      kind: "repository-state";
-      reason: string;
+      kind: "no-implementation-diff";
+      headCommit: GitCommitInfo | null;
     };
 
 export function resolveRepoContext(runtime: Runtime, cwd: string = runtime.cwd): RepoContext {
@@ -124,7 +124,11 @@ export function getHeadCommitInfo(runtime: Runtime, checkoutPath: string): GitCo
   };
 }
 
-export function determineReviewerTarget(runtime: Runtime, checkoutPath: string): ReviewerTarget {
+export function determineReviewerTarget(
+  runtime: Runtime,
+  checkoutPath: string,
+  preImplementerHead: GitCommitInfo | null,
+): ReviewerTarget {
   const checkoutState = inspectCheckoutState(runtime, checkoutPath);
   if (checkoutState.isDirty) {
     return {
@@ -134,7 +138,7 @@ export function determineReviewerTarget(runtime: Runtime, checkoutPath: string):
   }
 
   const headCommit = getHeadCommitInfo(runtime, checkoutPath);
-  if (headCommit) {
+  if (headCommit && headCommit.sha !== preImplementerHead?.sha) {
     return {
       kind: "last-commit",
       commit: headCommit,
@@ -142,8 +146,8 @@ export function determineReviewerTarget(runtime: Runtime, checkoutPath: string):
   }
 
   return {
-    kind: "repository-state",
-    reason: "The checkout is clean and does not have a HEAD commit yet.",
+    kind: "no-implementation-diff",
+    headCommit,
   };
 }
 

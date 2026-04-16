@@ -178,23 +178,49 @@ test("determineReviewerTarget selects the working tree diff when the checkout is
 
   write(sourceRoot, "dirty.txt", "left behind\n");
 
-  expect(determineReviewerTarget(createRuntime({ cwd: sourceRoot }), sourceRoot)).toEqual({
+  const preImplementerHead = getHeadCommitInfo(createRuntime({ cwd: sourceRoot }), sourceRoot);
+
+  expect(
+    determineReviewerTarget(createRuntime({ cwd: sourceRoot }), sourceRoot, preImplementerHead),
+  ).toEqual({
     kind: "working-tree-diff",
     statusLines: ["?? dirty.txt"],
   });
 });
 
-test("determineReviewerTarget selects the last commit when the checkout is clean", () => {
-  const sandbox = makeTempDir("git-review-target-clean");
+test("determineReviewerTarget reports no implementation diff when the checkout is clean and HEAD is unchanged", () => {
+  const sandbox = makeTempDir("git-review-target-no-diff");
   const sourceRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "# sandbox\n",
   });
+  const preImplementerHead = getHeadCommitInfo(createRuntime({ cwd: sourceRoot }), sourceRoot);
 
-  expect(determineReviewerTarget(createRuntime({ cwd: sourceRoot }), sourceRoot)).toEqual({
+  expect(
+    determineReviewerTarget(createRuntime({ cwd: sourceRoot }), sourceRoot, preImplementerHead),
+  ).toEqual({
+    kind: "no-implementation-diff",
+    headCommit: {
+      sha: expect.stringMatching(/^[0-9a-f]{40}$/),
+      subject: "init",
+    },
+  });
+});
+
+test("determineReviewerTarget selects the last commit when HEAD changes during implementation", () => {
+  const sandbox = makeTempDir("git-review-target-last-commit");
+  const sourceRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "# sandbox\n",
+  });
+  const runtime = createRuntime({ cwd: sourceRoot });
+  const preImplementerHead = getHeadCommitInfo(runtime, sourceRoot);
+
+  git(sourceRoot, ["commit", "--allow-empty", "-m", "implementer commit"]);
+
+  expect(determineReviewerTarget(runtime, sourceRoot, preImplementerHead)).toEqual({
     kind: "last-commit",
     commit: {
       sha: expect.stringMatching(/^[0-9a-f]{40}$/),
-      subject: "init",
+      subject: "implementer commit",
     },
   });
 });

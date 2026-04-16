@@ -39,7 +39,8 @@ test("mt run executes codex from the git repo root, passes the raw plan through,
   expect(read(sandbox, path.relative(sandbox, argsLogPath))).toContain("--cd");
   expect(read(sandbox, path.relative(sandbox, argsLogPath))).toContain(repoRoot);
   const stdinLog = read(sandbox, path.relative(sandbox, stdinLogPath));
-  expect(stdinLog).toContain(`<<<MONKE_PLAN_START>>>\n${plan}\n<<<MONKE_PLAN_END>>>`);
+  expect(stdinLog).toContain(`<<<MONKE_PLAN_START>>>\n${plan}`);
+  expect(stdinLog).not.toContain("<<<MONKE_PLAN_END>>>");
   expect(stdinLog).toContain("You are Monke's implementer for a single-pass CLI workflow.");
   expect(stdinLog).toContain("You are Monke's reviewer for a fixed CLI workflow.");
   expect(stdinLog).not.toContain("cleanup checkpointing phase");
@@ -50,8 +51,8 @@ test("mt run executes codex from the git repo root, passes the raw plan through,
   expect(result.stderr).toContain("fake codex stderr");
 });
 
-test("mt run tells the reviewer to inspect the last commit when implementation leaves a clean checkout", () => {
-  const sandbox = makeTempDir("run-review-target-clean");
+test("mt run tells the reviewer when there is no implementation diff after a clean implementer run", () => {
+  const sandbox = makeTempDir("run-review-target-no-diff");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
     "README.md": "# sandbox\n",
@@ -66,7 +67,6 @@ test("mt run tells the reviewer to inspect the last commit when implementation l
       stderrText: "reviewer diagnostics",
     },
   });
-  const headCommit = git(repoRoot, ["show", "-s", "--format=%H %s", "HEAD"]);
 
   const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
     cwd: repoRoot,
@@ -83,9 +83,9 @@ test("mt run tells the reviewer to inspect the last commit when implementation l
   )[1];
   expect(reviewerPrompt).toContain("# Explicit review target");
   expect(reviewerPrompt).toContain(
-    "Inspect the last commit because the checkout is clean after implementation.",
+    "There is no implementation diff to review because the checkout is clean and HEAD did not change during implementation.",
   );
-  expect(reviewerPrompt).toContain(`Commit: ${headCommit}`);
+  expect(reviewerPrompt).toContain("HEAD is unchanged at:");
 });
 
 test("mt run tells the reviewer to inspect the working tree diff when implementation leaves the checkout dirty", () => {
@@ -335,7 +335,7 @@ test("mt run fails when the implementer creates a commit", () => {
     "README.md": "# sandbox\n",
   });
 
-  const { invocationCountPath, phaseLogPath } = installFakeCodex(binDirectory, {
+  const { invocationCountPath, phaseLogPath, stdinLogPath } = installFakeCodex(binDirectory, {
     implementer: {
       stdoutText: "implementer committed",
       stderrText: "implementer diagnostics",
@@ -363,6 +363,14 @@ test("mt run fails when the implementer creates a commit", () => {
   expect(result.stdout).toContain("reviewer still ran");
   expect(result.stderr).toContain("implementer diagnostics");
   expect(result.stderr).toContain("reviewer diagnostics");
+  const reviewerPrompt = getInvocationPrompts(
+    read(sandbox, path.relative(sandbox, stdinLogPath)),
+  )[1];
+  expect(reviewerPrompt).toContain(
+    "Inspect the last commit because HEAD changed during implementation and the checkout is now clean.",
+  );
+  expect(reviewerPrompt).toContain("Commit:");
+  expect(reviewerPrompt).toContain("implementer commit");
   expect(result.stderr).toContain(
     'Implementer finished successfully. Implementer created commit "implementer commit" but implementer must not create commits. Reviewer finished successfully.',
   );
