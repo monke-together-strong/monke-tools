@@ -4,10 +4,12 @@ import { Command, CommanderError } from "commander";
 
 import { MonkeError } from "./errors.ts";
 import { runCleanup, runCreate, runMaterialize, runSetup } from "./monke.ts";
+import { runSinglePassWorkflow } from "./run.ts";
 import { createRuntime } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
-const ROOT_USAGE = "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup";
+const ROOT_USAGE =
+  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt run --plan <text>";
 
 export function runCli(argv: string[], runtime = createRuntime()): void {
   if (argv.length === 0) {
@@ -68,6 +70,15 @@ function createProgram(runtime: Runtime): Command {
       runSetup(runtime);
     });
 
+  program
+    .command("run")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .requiredOption("--plan <text>")
+    .action((options: { plan: string }) => {
+      runSinglePassWorkflow(runtime, options.plan);
+    });
+
   return program;
 }
 
@@ -85,6 +96,8 @@ function mapCliError(error: unknown, argv: string[]): Error {
       return new MonkeError("Usage: mt cleanup");
     case "setup":
       return new MonkeError("Usage: mt setup");
+    case "run":
+      return new MonkeError("Usage: mt run --plan <text>");
     default:
       return new MonkeError(ROOT_USAGE);
   }
