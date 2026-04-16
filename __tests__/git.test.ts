@@ -3,14 +3,17 @@ import { rmSync } from "node:fs";
 import path from "node:path";
 
 import {
+  determineReviewerTarget,
   ensureSessionWorktree,
+  getHeadCommitInfo,
   getExpectedWorktreePath,
   inferSessionName,
+  inspectCheckoutState,
   listWorktrees,
   validateWorktreeForSession,
 } from "../src/git.ts";
 import { createRuntime } from "../src/runtime.ts";
-import { createRepo, git, makeTempDir } from "./helpers.ts";
+import { createRepo, git, makeTempDir, write } from "./helpers.ts";
 import type { Runtime } from "../src/types.ts";
 
 test("inferSessionName supports slash-delimited session names", () => {
@@ -132,4 +135,66 @@ test("ensureSessionWorktree rejects invalid session names before worktree operat
   expect(() =>
     ensureSessionWorktree(createRuntime({ cwd: sourceRoot }), sourceRoot, "--help"),
   ).toThrow(/Invalid session name "--help"/);
+});
+
+test("inspectCheckoutState reports staged, unstaged, and untracked changes as dirty", () => {
+  const sandbox = makeTempDir("git-checkout-state");
+  const sourceRoot = createRepo(path.join(sandbox, "root"), {
+    "tracked.txt": "before\n",
+    "unstaged.txt": "before\n",
+  });
+
+  write(sourceRoot, "tracked.txt", "after staged\n");
+  git(sourceRoot, ["add", "tracked.txt"]);
+  write(sourceRoot, "unstaged.txt", "after unstaged\n");
+  write(sourceRoot, "untracked.txt", "brand new\n");
+
+  const state = inspectCheckoutState(createRuntime({ cwd: sourceRoot }), sourceRoot);
+
+  expect(state.isDirty).toBe(true);
+  expect(state.statusLines).toEqual(
+    expect.arrayContaining(["M  tracked.txt", " M unstaged.txt", "?? untracked.txt"]),
+  );
+});
+
+test("getHeadCommitInfo returns the latest commit sha and subject", () => {
+  const sandbox = makeTempDir("git-head-commit");
+  const sourceRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "# sandbox\n",
+  });
+
+  const head = getHeadCommitInfo(createRuntime({ cwd: sourceRoot }), sourceRoot);
+
+  expect(head).not.toBeNull();
+  expect(head?.subject).toBe("init");
+  expect(head?.sha).toMatch(/^[0-9a-f]{40}$/);
+});
+
+test("determineReviewerTarget selects the working tree diff when the checkout is dirty", () => {
+  const sandbox = makeTempDir("git-review-target-dirty");
+  const sourceRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "# sandbox\n",
+  });
+
+  write(sourceRoot, "dirty.txt", "left behind\n");
+
+  expect(determineReviewerTarget(createRuntime({ cwd: sourceRoot }), sourceRoot)).toEqual({
+    kind: "working-tree-diff",
+    statusLines: ["?? dirty.txt"],
+  });
+});
+
+test("determineReviewerTarget selects the last commit when the checkout is clean", () => {
+  const sandbox = makeTempDir("git-review-target-clean");
+  const sourceRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "# sandbox\n",
+  });
+
+  expect(determineReviewerTarget(createRuntime({ cwd: sourceRoot }), sourceRoot)).toEqual({
+    kind: "last-commit",
+    commit: {
+      sha: expect.stringMatching(/^[0-9a-f]{40}$/),
+      subject: "init",
+    },
+  });
 });

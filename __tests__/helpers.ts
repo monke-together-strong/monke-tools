@@ -126,6 +126,124 @@ exit 0
   return logPath;
 }
 
+export function installFakeCodex(
+  binDirectory: string,
+  options?: {
+    stdoutText?: string;
+    stderrText?: string;
+    exitCode?: number;
+    cleanup?: {
+      stdoutText?: string;
+      stderrText?: string;
+      exitCode?: number;
+      commitMessage?: string;
+      stageAll?: boolean;
+    };
+    implementer?: {
+      stdoutText?: string;
+      stderrText?: string;
+      exitCode?: number;
+      commitMessage?: string;
+      dirtyFilePath?: string;
+      dirtyFileContents?: string;
+    };
+    reviewer?: {
+      stdoutText?: string;
+      stderrText?: string;
+      exitCode?: number;
+      commitMessage?: string;
+    };
+  },
+): {
+  argsLogPath: string;
+  cwdLogPath: string;
+  stdinLogPath: string;
+  invocationCountPath: string;
+  phaseLogPath: string;
+} {
+  const argsLogPath = path.join(binDirectory, "codex-args.log");
+  const cwdLogPath = path.join(binDirectory, "codex-cwd.log");
+  const stdinLogPath = path.join(binDirectory, "codex-stdin.log");
+  const invocationCountPath = path.join(binDirectory, "codex-count.log");
+  const phaseLogPath = path.join(binDirectory, "codex-phase.log");
+  const defaultStdoutText = options?.stdoutText ?? "fake codex stdout";
+  const defaultStderrText = options?.stderrText ?? "fake codex stderr";
+  const defaultExitCode = options?.exitCode ?? 0;
+  const cleanupStdoutText = options?.cleanup?.stdoutText ?? defaultStdoutText;
+  const cleanupStderrText = options?.cleanup?.stderrText ?? defaultStderrText;
+  const cleanupExitCode = options?.cleanup?.exitCode ?? defaultExitCode;
+  const cleanupCommitMessage = options?.cleanup?.commitMessage ?? "";
+  const cleanupStageAll = options?.cleanup?.stageAll ?? true;
+  const implementerStdoutText = options?.implementer?.stdoutText ?? defaultStdoutText;
+  const implementerStderrText = options?.implementer?.stderrText ?? defaultStderrText;
+  const implementerExitCode = options?.implementer?.exitCode ?? defaultExitCode;
+  const implementerCommitMessage = options?.implementer?.commitMessage ?? "";
+  const implementerDirtyFilePath = options?.implementer?.dirtyFilePath ?? "";
+  const implementerDirtyFileContents = options?.implementer?.dirtyFileContents ?? "";
+  const reviewerStdoutText = options?.reviewer?.stdoutText ?? defaultStdoutText;
+  const reviewerStderrText = options?.reviewer?.stderrText ?? defaultStderrText;
+  const reviewerExitCode = options?.reviewer?.exitCode ?? defaultExitCode;
+  const reviewerCommitMessage = options?.reviewer?.commitMessage ?? "";
+
+  const script = `#!/bin/sh
+set -eu
+count=0
+if [ -f ${shellQuote(invocationCountPath)} ]; then
+  count=$(/bin/cat ${shellQuote(invocationCountPath)})
+fi
+count=$((count + 1))
+printf '%s' "$count" > ${shellQuote(invocationCountPath)}
+printf '%s\n' "$PWD" >> ${shellQuote(cwdLogPath)}
+printf '%s\n' "$@" >> ${shellQuote(argsLogPath)}
+stdin_file="$(dirname ${shellQuote(stdinLogPath)})/codex-stdin-$count.log"
+/bin/cat > "$stdin_file"
+/bin/cat "$stdin_file" >> ${shellQuote(stdinLogPath)}
+printf '\n<<<END-OF-INVOKE-%s>>>\n' "$count" >> ${shellQuote(stdinLogPath)}
+
+phase="implementer"
+if /usr/bin/grep -q "cleanup checkpointing phase" "$stdin_file"; then
+  phase="cleanup"
+elif /usr/bin/grep -q "Monke's reviewer for a fixed CLI workflow" "$stdin_file"; then
+  phase="reviewer"
+fi
+printf '%s\n' "$phase" >> ${shellQuote(phaseLogPath)}
+
+if [ "$phase" = "cleanup" ]; then
+  if [ -n ${shellQuote(cleanupCommitMessage)} ]; then
+    if [ ${cleanupStageAll} = true ]; then
+      git add -A >/dev/null 2>&1
+    fi
+    git commit -m ${shellQuote(cleanupCommitMessage)} >/dev/null 2>&1 || true
+  fi
+  printf '%s\n' ${shellQuote(cleanupStdoutText)}
+  printf '%s\n' ${shellQuote(cleanupStderrText)} >&2
+  exit ${cleanupExitCode}
+fi
+
+if [ "$phase" = "reviewer" ]; then
+  if [ -n ${shellQuote(reviewerCommitMessage)} ]; then
+    git commit --allow-empty -m ${shellQuote(reviewerCommitMessage)} >/dev/null 2>&1 || true
+  fi
+  printf '%s\n' ${shellQuote(reviewerStdoutText)}
+  printf '%s\n' ${shellQuote(reviewerStderrText)} >&2
+  exit ${reviewerExitCode}
+fi
+
+if [ -n ${shellQuote(implementerCommitMessage)} ]; then
+  git commit --allow-empty -m ${shellQuote(implementerCommitMessage)} >/dev/null 2>&1 || true
+fi
+if [ -n ${shellQuote(implementerDirtyFilePath)} ]; then
+  /bin/mkdir -p "$(dirname ${shellQuote(implementerDirtyFilePath)})"
+  printf '%s' ${shellQuote(implementerDirtyFileContents)} > ${shellQuote(implementerDirtyFilePath)}
+fi
+printf '%s\n' ${shellQuote(implementerStdoutText)}
+printf '%s\n' ${shellQuote(implementerStderrText)} >&2
+exit ${implementerExitCode}
+`;
+  writeExecutable(path.join(binDirectory, "codex"), script);
+  return { argsLogPath, cwdLogPath, stdinLogPath, invocationCountPath, phaseLogPath };
+}
+
 export function runMonke(options: {
   cwd: string;
   args: string[];
@@ -168,6 +286,10 @@ function writeExecutable(targetPath: string, contents: string): void {
   mkdirSync(path.dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, contents, "utf8");
   chmodSync(targetPath, 0o755);
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 function findExecutableOnPath(command: string): string {
