@@ -8,22 +8,34 @@ import {
   loadRunRoleInstructions,
 } from "../src/run-assets.ts";
 
-test("run prompt assets are monke-owned sandcastle adaptations without issue workflow placeholders", () => {
+test("run prompt assets load the local role prompts and vendored standards cleanly", () => {
   const instructions = loadRunRoleInstructions();
+  const codingStandards = loadRunCodingStandards();
 
-  expect(instructions.cleanupInstructions).toContain("cleanup checkpointing phase");
+  expect(instructions.cleanupInstructions).toContain("You are the cleanup checkpointing phase.");
   expect(instructions.implementerInstructions).toContain("# Context");
-  expect(instructions.implementerInstructions).toContain("single-pass CLI workflow");
-  expect(instructions.implementerInstructions).toContain("Do not create commits");
+  expect(instructions.implementerInstructions).toContain(
+    "You are an task implementer for the specified plan below",
+  );
+  expect(instructions.implementerInstructions).toContain(
+    "Treat the user plan below as the only task for this pass.",
+  );
   expect(instructions.implementerInstructions).not.toContain("{{LIST_TASKS_COMMAND}}");
   expect(instructions.implementerInstructions).not.toContain("{{CLOSE_TASK_COMMAND}}");
   expect(instructions.implementerInstructions).not.toContain("RALPH:");
 
   expect(instructions.reviewerInstructions).toContain("# Review Process");
+  expect(instructions.reviewerInstructions).toContain(
+    "You are an expert code reviewer focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality.",
+  );
   expect(instructions.reviewerInstructions).toContain("Do not create commits");
-  expect(instructions.reviewerInstructions).toContain("Run the checks you judge necessary");
-  expect(instructions.reviewerInstructions).not.toContain("git diff main...{{BRANCH}}");
-  expect(instructions.reviewerInstructions).not.toContain("commit describing the refinements");
+  expect(instructions.reviewerInstructions).toContain("If you find worthwhile improvements to make:");
+  expect(instructions.reviewerInstructions).not.toContain("{{LIST_TASKS_COMMAND}}");
+  expect(instructions.reviewerInstructions).not.toContain("{{CLOSE_TASK_COMMAND}}");
+
+  expect(codingStandards).toContain("Wherever possible, use Effect primitives like `FileSystem` over promises.");
+  expect(codingStandards).toContain("## Testing");
+  expect(codingStandards).toContain("## Interface Design");
 });
 
 test("implementer and reviewer prompts both load the shared coding standards contract", () => {
@@ -56,7 +68,7 @@ test("implementer and reviewer prompts both load the shared coding standards con
   expect(implementerPrompt).toContain(instructions.implementerInstructions);
   expect(implementerPrompt).toContain("# Shared coding standards");
   expect(implementerPrompt).toContain(codingStandards);
-  expect(implementerPrompt).toEndWith(`<<<MONKE_PLAN_START>>>\n${plan}`);
+  expect(implementerPrompt.endsWith(`<<<MONKE_PLAN_START>>>\n${plan}`)).toBe(true);
   expect(implementerPrompt).not.toContain("<<<MONKE_PLAN_END>>>");
 
   expect(reviewerPrompt).toContain(instructions.reviewerInstructions);
@@ -67,6 +79,6 @@ test("implementer and reviewer prompts both load the shared coding standards con
     "- Inspect the last commit because HEAD changed during implementation and the checkout is now clean.",
   );
   expect(reviewerPrompt).toContain("- Commit: abc123 ship it");
-  expect(reviewerPrompt).toEndWith(`<<<MONKE_PLAN_START>>>\n${plan}`);
+  expect(reviewerPrompt.endsWith(`<<<MONKE_PLAN_START>>>\n${plan}`)).toBe(true);
   expect(reviewerPrompt).not.toContain("<<<MONKE_PLAN_END>>>");
 });

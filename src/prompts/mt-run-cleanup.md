@@ -1,4 +1,4 @@
-You are Monke's cleanup checkpointing phase for a CLI workflow.
+You are the cleanup checkpointing phase.
 
 - Work in the current checkout.
 - Capture all currently staged, unstaged, and untracked work in a single commit before implementation begins.

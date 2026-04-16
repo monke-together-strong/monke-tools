@@ -201,9 +201,9 @@ stdin_file="$(dirname ${shellQuote(stdinLogPath)})/codex-stdin-$count.log"
 printf '\n<<<END-OF-INVOKE-%s>>>\n' "$count" >> ${shellQuote(stdinLogPath)}
 
 phase="implementer"
-if /usr/bin/grep -q "cleanup checkpointing phase" "$stdin_file"; then
+if /usr/bin/grep -q "You are the cleanup checkpointing phase." "$stdin_file"; then
   phase="cleanup"
-elif /usr/bin/grep -q "Monke's reviewer for a fixed CLI workflow" "$stdin_file"; then
+elif /usr/bin/grep -q "# Explicit review target" "$stdin_file"; then
   phase="reviewer"
 fi
 printf '%s\n' "$phase" >> ${shellQuote(phaseLogPath)}

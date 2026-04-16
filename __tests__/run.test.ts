@@ -41,9 +41,9 @@ test("mt run executes codex from the git repo root, passes the raw plan through,
   const stdinLog = read(sandbox, path.relative(sandbox, stdinLogPath));
   expect(stdinLog).toContain(`<<<MONKE_PLAN_START>>>\n${plan}`);
   expect(stdinLog).not.toContain("<<<MONKE_PLAN_END>>>");
-  expect(stdinLog).toContain("You are Monke's implementer for a single-pass CLI workflow.");
-  expect(stdinLog).toContain("You are Monke's reviewer for a fixed CLI workflow.");
-  expect(stdinLog).not.toContain("cleanup checkpointing phase");
+  expect(stdinLog).toContain("You are an task implementer for the specified plan below");
+  expect(stdinLog).toContain("You are an expert code reviewer focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality.");
+  expect(stdinLog).not.toContain("You are the cleanup checkpointing phase.");
   expect(result.stdout).toContain("fake codex stdout");
   expect(result.stdout).toContain(
     "Implementer finished successfully. Reviewer finished successfully.",
@@ -178,9 +178,9 @@ test("mt run checkpoints dirty startup work before running the implementer", () 
     "cleanup\nimplementer\nreviewer\n",
   );
   const stdinLog = read(sandbox, path.relative(sandbox, stdinLogPath));
-  expect(stdinLog).toContain("cleanup checkpointing phase");
-  expect(stdinLog).toContain("You are Monke's implementer for a single-pass CLI workflow.");
-  expect(stdinLog).toContain("You are Monke's reviewer for a fixed CLI workflow.");
+  expect(stdinLog).toContain("You are the cleanup checkpointing phase.");
+  expect(stdinLog).toContain("You are an task implementer for the specified plan below");
+  expect(stdinLog).toContain("You are an expert code reviewer focused on enhancing code clarity, consistency, and maintainability while preserving exact functionality.");
   expect(git(repoRoot, ["show", "-s", "--format=%s", "HEAD"])).toBe(
     "clean up: checkpoint dirty work",
   );
@@ -266,10 +266,10 @@ test("mt run aborts before implementation when cleanup does not create the requi
   expect(result.status).toBe(1);
   expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("1");
   expect(read(sandbox, path.relative(sandbox, stdinLogPath))).toContain(
-    "cleanup checkpointing phase",
+    "You are the cleanup checkpointing phase.",
   );
   expect(read(sandbox, path.relative(sandbox, stdinLogPath))).not.toContain(
-    "You are Monke's implementer for a single-pass CLI workflow.",
+    "You are an task implementer for the specified plan below",
   );
   expect(result.stdout).toContain("cleanup attempt");
   expect(result.stderr).toContain("cleanup diagnostics");
@@ -316,10 +316,10 @@ test("mt run aborts before implementation when cleanup leaves the checkout dirty
   expect(result.status).toBe(1);
   expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("1");
   expect(read(sandbox, path.relative(sandbox, stdinLogPath))).toContain(
-    "cleanup checkpointing phase",
+    "You are the cleanup checkpointing phase.",
   );
   expect(read(sandbox, path.relative(sandbox, stdinLogPath))).not.toContain(
-    "You are Monke's implementer for a single-pass CLI workflow.",
+    "You are an task implementer for the specified plan below",
   );
   expect(result.stdout).toContain("cleanup partial");
   expect(result.stderr).toContain("cleanup left dirt");
