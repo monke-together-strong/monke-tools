@@ -24,6 +24,7 @@ import {
 import type { Runtime } from "./types.ts";
 
 const REQUIRED_CLEANUP_COMMIT_PREFIX = "clean up";
+const MAX_RUN_LOG_DIRECTORY_ATTEMPTS = 10;
 
 type WorkflowRole = "implementer" | "reviewer";
 
@@ -207,8 +208,9 @@ function createRunLogDirectory(runtime: Runtime, repoRoot: string): string {
   ensureRunLogsIgnored(runtime, repoRoot);
   const logsRoot = path.join(repoRoot, "logs");
   mkdirSync(logsRoot, { recursive: true });
+  let lastError: Error | null = null;
 
-  while (true) {
+  for (let attempts = 1; attempts <= MAX_RUN_LOG_DIRECTORY_ATTEMPTS; attempts += 1) {
     const timestamp = new Date().toISOString().replaceAll(":", "-").replace(".", "-");
     const suffix = randomBytes(3).toString("hex");
     const runLogDirectory = path.join(logsRoot, `${timestamp}-${suffix}`);
@@ -218,12 +220,18 @@ function createRunLogDirectory(runtime: Runtime, repoRoot: string): string {
       return runLogDirectory;
     } catch (error) {
       if (hasErrorCode(error, "EEXIST")) {
+        lastError = error instanceof Error ? error : new Error(String(error));
         continue;
       }
 
       throw error;
     }
   }
+
+  const lastErrorSummary = lastError ? ` Last error: ${lastError.message}` : "";
+  throw new Error(
+    `Failed to create a unique run log directory in ${logsRoot} after ${MAX_RUN_LOG_DIRECTORY_ATTEMPTS} attempts.${lastErrorSummary}`,
+  );
 }
 
 function ensureRunLogsIgnored(runtime: Runtime, repoRoot: string): void {

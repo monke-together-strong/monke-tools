@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
@@ -61,6 +61,7 @@ export class CodexAgentProvider implements AgentProvider {
   run(options: AgentRunOptions): Promise<AgentRunResult> {
     mkdirSync(path.dirname(options.logPath), { recursive: true });
     writeFileSync(options.logPath, this.#formatLogHeader(options), "utf8");
+    const logStream = createWriteStream(options.logPath, { flags: "a" });
 
     const args = this.#buildCodexArgs(options);
     const child = spawn(this.#codexPath, args, {
@@ -70,32 +71,72 @@ export class CodexAgentProvider implements AgentProvider {
     });
 
     child.stdout.on("data", (chunk: Buffer) => {
-      appendFileSync(options.logPath, chunk);
-      this.#runtime.writeStdout(chunk.toString("utf8"));
+      const text = chunk.toString("utf8");
+      logStream.write(chunk);
+      this.#runtime.writeStdout(text);
     });
 
     child.stderr.on("data", (chunk: Buffer) => {
-      appendFileSync(options.logPath, chunk);
-      this.#runtime.writeStderr(chunk.toString("utf8"));
+      const text = chunk.toString("utf8");
+      logStream.write(chunk);
+      this.#runtime.writeStderr(text);
     });
 
     const completion = new Promise<AgentRunResult>((resolve, reject) => {
+      let settled = false;
+      let streamError: Error | null = null;
+
+      const rejectOnce = (error: Error): void => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        reject(error);
+      };
+
+      const resolveOnce = (result: AgentRunResult): void => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        resolve(result);
+      };
+
+      logStream.on("error", (error) => {
+        streamError = error;
+        child.kill();
+        rejectOnce(new MonkeError(`Failed to write log ${options.logPath}: ${error.message}`));
+      });
+
       child.on("error", (error) => {
-        reject(
+        logStream.destroy();
+        rejectOnce(
           new MonkeError(`Failed to run ${formatCommand(this.#codexPath, args)}: ${error.message}`),
         );
       });
 
       child.on("close", (exitCode, signal) => {
-        if (exitCode === null) {
-          const reason = signal ? `terminated by signal ${signal}` : "terminated by signal";
-          reject(
-            new MonkeError(`Command failed: ${formatCommand(this.#codexPath, args)}\n${reason}`),
-          );
+        if (settled) {
           return;
         }
 
-        resolve({ exitCode });
+        logStream.end(() => {
+          if (streamError) {
+            return;
+          }
+
+          if (exitCode === null) {
+            const reason = signal ? `terminated by signal ${signal}` : "terminated by signal";
+            rejectOnce(
+              new MonkeError(`Command failed: ${formatCommand(this.#codexPath, args)}\n${reason}`),
+            );
+            return;
+          }
+
+          resolveOnce({ exitCode });
+        });
       });
     });
 
