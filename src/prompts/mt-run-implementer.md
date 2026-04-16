@@ -25,7 +25,7 @@ If applicable, use RGR to complete the task.
 
 # FEEDBACK LOOPS
 
-Before committing, run project checks to ensure checks and the tests pass.
+Run project checks to ensure checks and the tests pass.
 
 # THE ISSUE
 

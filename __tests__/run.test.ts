@@ -278,6 +278,94 @@ test("mt run aborts before implementation when cleanup does not create the requi
   );
 });
 
+test("mt run aborts before implementation when cleanup exits with failures", () => {
+  const sandbox = makeTempDir("run-cleanup-failure");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "repo"), {
+    "README.md": "# sandbox\n",
+  });
+  const { stdinLogPath, invocationCountPath } = installFakeCodex(binDirectory, {
+    cleanup: {
+      stdoutText: "cleanup failed output",
+      stderrText: "cleanup failed diagnostics",
+      exitCode: 7,
+    },
+    implementer: {
+      stdoutText: "implementer should not run",
+      stderrText: "implementer should not run",
+    },
+  });
+
+  write(repoRoot, "dirty.txt", "needs checkpointing\n");
+
+  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+    },
+    encoding: "utf8",
+  });
+
+  expect(result.status).toBe(1);
+  expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("1");
+  expect(read(sandbox, path.relative(sandbox, stdinLogPath))).toContain(
+    "You are the cleanup checkpointing phase.",
+  );
+  expect(read(sandbox, path.relative(sandbox, stdinLogPath))).not.toContain(
+    "You are an task implementer for the specified plan below",
+  );
+  expect(result.stdout).toContain("cleanup failed output");
+  expect(result.stderr).toContain("cleanup failed diagnostics");
+  expect(result.stderr).toContain(
+    "Cleanup finished with failures (exit code 7). Aborting before implementation.",
+  );
+});
+
+test("mt run aborts before implementation when cleanup creates a checkpoint commit with an invalid subject", () => {
+  const sandbox = makeTempDir("run-cleanup-invalid-subject");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "repo"), {
+    "README.md": "# sandbox\n",
+  });
+  const { stdinLogPath, invocationCountPath } = installFakeCodex(binDirectory, {
+    cleanup: {
+      stdoutText: "cleanup invalid subject output",
+      stderrText: "cleanup invalid subject diagnostics",
+      commitMessage: "checkpoint dirty work",
+    },
+    implementer: {
+      stdoutText: "implementer should not run",
+      stderrText: "implementer should not run",
+    },
+  });
+
+  write(repoRoot, "dirty.txt", "needs checkpointing\n");
+
+  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+    },
+    encoding: "utf8",
+  });
+
+  expect(result.status).toBe(1);
+  expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("1");
+  expect(read(sandbox, path.relative(sandbox, stdinLogPath))).toContain(
+    "You are the cleanup checkpointing phase.",
+  );
+  expect(read(sandbox, path.relative(sandbox, stdinLogPath))).not.toContain(
+    "You are an task implementer for the specified plan below",
+  );
+  expect(result.stdout).toContain("cleanup invalid subject output");
+  expect(result.stderr).toContain("cleanup invalid subject diagnostics");
+  expect(result.stderr).toContain(
+    'Cleanup created "checkpoint dirty work" but the commit message must start with "clean up". Aborting before implementation.',
+  );
+});
+
 test("mt run aborts before implementation when cleanup leaves the checkout dirty", () => {
   const sandbox = makeTempDir("run-cleanup-dirty");
   const binDirectory = path.join(sandbox, "bin");

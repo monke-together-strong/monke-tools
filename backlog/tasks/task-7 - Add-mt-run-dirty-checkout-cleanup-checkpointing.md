@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-04-16 01:11'
-updated_date: '2026-04-16 03:27'
+updated_date: '2026-04-16 04:57'
 labels: []
 dependencies: []
 references:
@@ -17,14 +17,14 @@ documentation:
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Implement GitHub issue #14 from PRD #12 by teaching mt run to detect dirty startup checkouts, run a cleanup phase through the shared harness only when needed, and abort before implementation unless that cleanup phase creates a commit whose message starts with 'clean up'.
+Implement GitHub issue #14 from PRD #12 by extending mt run so dirty startup checkouts are checkpointed through the shared harness only when needed, the streamed Codex-backed implementer and reviewer workflow proceeds only after cleanup succeeds, and any commit outside the cleanup checkpoint phase is blocked and reported.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 mt run detects whether the startup checkout is dirty and only invokes cleanup when staged, unstaged, or untracked changes are present
-- [x] #2 The cleanup phase runs through the shared harness contract, is the only phase allowed to commit, and must produce a commit whose message starts with 'clean up'
-- [x] #3 If cleanup runs but fails to create the required commit, the workflow aborts before implementation and reports the failure clearly
+- [x] #1 mt run detects whether the startup checkout is dirty and only invokes cleanup when staged, unstaged, or untracked changes are present before continuing to the implementer and reviewer workflow
+- [x] #2 The cleanup phase runs through the shared harness, is the only phase allowed to commit, must produce a commit whose message starts with clean up, and later implementer or reviewer commit attempts are treated as failures
+- [x] #3 If cleanup runs but fails to create the required checkpoint commit or leaves the checkout dirty, the workflow aborts before implementation and reports the failure clearly; otherwise reviewer execution and the final summary still reflect the full workflow result
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -53,19 +53,16 @@ Implement GitHub issue #14 from PRD #12 by teaching mt run to detect dirty start
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed the remaining enforcement work for issue #14 so `mt run` now rejects both incomplete cleanup checkpointing and forbidden implementer commits.
+Completed the cleanup enforcement slice so the shipped `mt run` workflow safely handles dirty repos before the implementer and reviewer passes continue.
 
-Changes:
-- `src/run.ts` now re-inspects checkout state after cleanup and aborts before implementation if any staged, unstaged, or untracked changes remain.
-- `src/run.ts` now snapshots HEAD around the implementer phase and fails the run if implementer creates a commit, preserving cleanup as the only commit-capable phase.
-- `__tests__/run.test.ts` adds coverage for the two missing repros: partial cleanup commits that leave dirt behind, and implementer-created commits.
-- `__tests__/helpers.ts` extends the fake Codex harness so those workflow invariants can be tested directly.
+Impact:
+- Dirty startup work is checkpointed only when needed and must land in a required `clean up:` commit before the main workflow can proceed.
+- After successful cleanup, `mt run` still runs the Codex-backed implementer and reviewer passes with live streaming and reports the combined workflow outcome at the end.
+- Cleanup remains the only phase allowed to create commits, and commit attempts from later phases are surfaced as workflow failures.
 
-Tests:
-- `bun test __tests__/run.test.ts __tests__/git.test.ts __tests__/cli.test.ts`
-- `bunx oxfmt --check src/run.ts __tests__/helpers.ts __tests__/run.test.ts`
-- `bun run lint`
-
-Notes:
-- `bun run fmt:check` still reports a pre-existing unrelated formatting issue in `__tests__/multi-repo.test.ts`.
+Key changes:
+- Extended the shared run harness so cleanup, implementer, and reviewer phases execute from the repo root with common prompt loading and streamed output behavior.
+- Added post-cleanup validation that aborts before implementation when the checkpoint commit is missing, uses the wrong prefix, or leaves the checkout dirty.
+- Added commit detection around the implementer and reviewer phases so later workflow phases cannot create commits.
+- Expanded fake-Codex workflow coverage for dirty startup repos, incomplete cleanup checkpoints, reviewer execution after implementation, and forbidden commit creation.
 <!-- SECTION:FINAL_SUMMARY:END -->

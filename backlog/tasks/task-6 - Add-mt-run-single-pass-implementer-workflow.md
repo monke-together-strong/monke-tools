@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@codex'
 created_date: '2026-04-16 00:44'
-updated_date: '2026-04-16 04:03'
+updated_date: '2026-04-16 04:57'
 labels: []
 dependencies: []
 references:
@@ -17,14 +17,14 @@ documentation:
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Implement GitHub issue #13 from PRD #12 by adding a top-level mt run command that accepts raw plan text, runs one Codex-backed implementer pass in the current checkout, streams live agent output, and ends with a short summary via a dedicated workflow module instead of CLI-embedded orchestration.
+Implement GitHub issue #13 from PRD #12 by adding a top-level mt run command that accepts raw plan text, preserves multiline plan input exactly as provided by the shell, checkpoints dirty startup work when needed, runs Codex-backed implementer and reviewer passes from the current checkout with live streamed agent output, blocks commits outside the cleanup checkpoint phase, and ends with a short workflow summary via a dedicated module instead of CLI-embedded orchestration.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 mt run is available as a top-level command, requires --plan, and preserves multiline plan text exactly as provided by the shell
-- [x] #2 Running mt run --plan ... starts a Codex-backed implementer pass in the current checkout and streams the underlying agent output live
-- [x] #3 The command ends with a short summary of the implementer result, and the workflow logic is routed through a dedicated module rather than embedded in CLI parsing
+- [x] #1 mt run is available as a top-level command, requires --plan, preserves multiline plan text exactly as provided by the shell, and routes execution through a dedicated workflow module
+- [x] #2 Running mt run --plan ... checkpoints dirty startup work when needed, then runs Codex-backed implementer and reviewer passes in the current checkout while streaming the underlying agent output live
+- [x] #3 The command ends with a short summary covering cleanup, implementer, and reviewer outcomes; aborts before implementation if cleanup fails to checkpoint cleanly; and fails when implementer or reviewer create commits
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -52,19 +52,17 @@ Implement GitHub issue #13 from PRD #12 by adding a top-level mt run command tha
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Added the first `mt run` slice as a top-level CLI command that requires `--plan`, preserves multiline plan text, and routes execution through a dedicated workflow module.
+Recorded the shipped `mt run` workflow as the top-level Codex entrypoint rather than the earlier implementer-only slice.
 
-Changes:
-- Wired `mt run --plan <text>` into the commander entrypoint and updated usage coverage.
-- Added a deep run workflow that resolves the current git repo root, loads Monke-owned implementer prompt/standards assets, invokes `codex exec` from the repo root, streams child stdout/stderr live, and prints a short success/failure summary.
-- Documented the new command in the README.
-- Added focused tests for CLI validation plus fake-Codex integration coverage of repo-root execution, exact plan passthrough, streamed output, and failure summaries.
+Impact:
+- `mt run --plan <text>` preserves raw multiline plan text, resolves execution to the git repo root, and drives the full workflow from one CLI entrypoint.
+- Dirty startup work is checkpointed first when needed, so existing changes are either captured in a required `clean up:` commit or the run aborts before implementation.
+- The command streams live agent output for both the Codex-backed implementer and reviewer passes, then reports a short combined summary of cleanup, implementation, and review outcomes.
+- Commit creation is blocked outside cleanup, so implementer and reviewer passes may not create commits even when they otherwise finish successfully.
 
-Verification:
-- `bun test`
-- `bun run lint`
-- `bunx oxfmt --check src/run.ts __tests__/cli.test.ts __tests__/run.test.ts README.md`
-
-Audit trail:
-- Closed by PR #18 (commit 135fd71b1aa892847d4f0c786069e8db3db979a2).
+Key changes:
+- Wired `mt run --plan <text>` into the CLI and routed execution through dedicated workflow orchestration in `src/run.ts`.
+- Loaded Monke-owned cleanup, implementer, and reviewer prompts plus shared coding standards for the sequential workflow phases.
+- Added repo-root execution, live stdout/stderr streaming, reviewer target selection from the resulting diff or HEAD state, and summary reporting across cleanup, implementer, and reviewer phases.
+- Added focused CLI and workflow coverage for exact plan passthrough, streamed agent output, cleanup checkpointing, reviewer execution, and commit-blocking enforcement.
 <!-- SECTION:FINAL_SUMMARY:END -->
