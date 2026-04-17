@@ -132,6 +132,8 @@ export function installFakeCodex(
     stdoutText?: string;
     stderrText?: string;
     exitCode?: number;
+    jsonOutput?: string;
+    removeJsonOutput?: boolean;
     cleanup?: {
       stdoutText?: string;
       stderrText?: string;
@@ -160,15 +162,19 @@ export function installFakeCodex(
   stdinLogPath: string;
   invocationCountPath: string;
   phaseLogPath: string;
+  schemaLogPath: string;
 } {
   const argsLogPath = path.join(binDirectory, "codex-args.log");
   const cwdLogPath = path.join(binDirectory, "codex-cwd.log");
   const stdinLogPath = path.join(binDirectory, "codex-stdin.log");
   const invocationCountPath = path.join(binDirectory, "codex-count.log");
   const phaseLogPath = path.join(binDirectory, "codex-phase.log");
+  const schemaLogPath = path.join(binDirectory, "codex-schema.log");
   const defaultStdoutText = options?.stdoutText ?? "fake codex stdout";
   const defaultStderrText = options?.stderrText ?? "fake codex stderr";
   const defaultExitCode = options?.exitCode ?? 0;
+  const jsonOutput = options?.jsonOutput ?? "";
+  const removeJsonOutput = options?.removeJsonOutput === true ? "true" : "false";
   const cleanupStdoutText = options?.cleanup?.stdoutText ?? defaultStdoutText;
   const cleanupStderrText = options?.cleanup?.stderrText ?? defaultStderrText;
   const cleanupExitCode = options?.cleanup?.exitCode ?? defaultExitCode;
@@ -199,6 +205,30 @@ stdin_file="$(dirname ${shellQuote(stdinLogPath)})/codex-stdin-$count.log"
 /bin/cat > "$stdin_file"
 /bin/cat "$stdin_file" >> ${shellQuote(stdinLogPath)}
 printf '\n<<<END-OF-INVOKE-%s>>>\n' "$count" >> ${shellQuote(stdinLogPath)}
+
+json_output=${shellQuote(jsonOutput)}
+remove_json_output=${shellQuote(removeJsonOutput)}
+output_file=""
+schema_file=""
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = "--output-last-message" ]; then
+    output_file="$arg"
+  fi
+  if [ "$previous" = "--output-schema" ]; then
+    schema_file="$arg"
+  fi
+  previous="$arg"
+done
+if [ -n "$schema_file" ]; then
+  /bin/cat "$schema_file" >> ${shellQuote(schemaLogPath)}
+fi
+if [ -n "$output_file" ] && [ -n "$json_output" ]; then
+  printf '%s' "$json_output" > "$output_file"
+fi
+if [ -n "$output_file" ] && [ "$remove_json_output" = "true" ]; then
+  /bin/rm -f "$output_file"
+fi
 
 phase="implementer"
 if /usr/bin/grep -q "You are the cleanup checkpointing phase." "$stdin_file"; then
@@ -241,7 +271,14 @@ printf '%s\n' ${shellQuote(implementerStderrText)} >&2
 exit ${implementerExitCode}
 `;
   writeExecutable(path.join(binDirectory, "codex"), script);
-  return { argsLogPath, cwdLogPath, stdinLogPath, invocationCountPath, phaseLogPath };
+  return {
+    argsLogPath,
+    cwdLogPath,
+    stdinLogPath,
+    invocationCountPath,
+    phaseLogPath,
+    schemaLogPath,
+  };
 }
 
 export function runMonke(options: {
