@@ -204,7 +204,8 @@ export function formatRunSummary(
   return appendRunLogDirectory(phaseSummary, runLogDirectory);
 }
 
-function createRunLogDirectory(runtime: Runtime, repoRoot: string): string {
+/** Create one ignored top-level log directory for a workflow run. */
+export function createRunLogDirectory(runtime: Runtime, repoRoot: string): string {
   ensureRunLogsIgnored(runtime, repoRoot);
   const logsRoot = path.join(repoRoot, "logs");
   mkdirSync(logsRoot, { recursive: true });
