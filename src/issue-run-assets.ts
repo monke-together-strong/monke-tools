@@ -1,4 +1,8 @@
-import type { GitHubIssueContext, GitHubIssueRunContext } from "./github-issue-context.ts";
+import type {
+  GitHubIssueCommentContext,
+  GitHubIssueContext,
+  GitHubIssueRunContext,
+} from "./github-issue-context.ts";
 import issueImplementerInstructionsText from "./prompts/mt-run-issue-implementer.md" with { type: "text" };
 import issueReviewerInstructionsText from "./prompts/mt-run-issue-reviewer.md" with { type: "text" };
 
@@ -27,13 +31,7 @@ export function buildIssueImplementerPrompt(
   implementerInstructions: string,
   codingStandards: string,
 ): string {
-  return `${implementerInstructions}
-
-${formatIssueRunContext(context)}
-
-# Shared coding standards
-
-${codingStandards}`;
+  return buildIssuePrompt(implementerInstructions, context, codingStandards);
 }
 
 /** Build the reviewer prompt for one PRD-scoped GitHub issue. */
@@ -42,7 +40,15 @@ export function buildIssueReviewerPrompt(
   reviewerInstructions: string,
   codingStandards: string,
 ): string {
-  return `${reviewerInstructions}
+  return buildIssuePrompt(reviewerInstructions, context, codingStandards);
+}
+
+function buildIssuePrompt(
+  instructions: string,
+  context: IssueRunPromptContext,
+  codingStandards: string,
+): string {
+  return `${instructions}
 
 ${formatIssueRunContext(context)}
 
@@ -77,7 +83,7 @@ function formatBody(body: string): string {
   return body.trim() ? body : "(empty body)";
 }
 
-function formatComments(comments: readonly { readonly body: string }[]): string {
+function formatComments(comments: readonly GitHubIssueCommentContext[]): string {
   if (comments.length === 0) {
     return "(no comments)";
   }
