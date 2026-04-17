@@ -12,8 +12,9 @@ There is already a different `backlog` executable installed on this machine, so 
 
 - `backlog/` stores tasks, drafts, docs, decisions, milestones, and archive folders.
 - `backlog.config.yml` stores repo-level Backlog.md configuration.
-- `AGENTS.md` contains the generated CLI guidance plus repo-specific notes.
+- `AGENTS.md` contains the root agent instructions for this repo.
 - `CLAUDE.md` is a symlink to `AGENTS.md`.
+- `docs/agents/` contains task-specific agent guides.
 
 ## Quick start
 
@@ -48,7 +49,7 @@ bunx backlog.md browser --no-open
 bunx backlog.md agents --update-instructions
 ```
 
-Any repo-specific notes placed above the `BACKLOG.MD GUIDELINES` marker in `AGENTS.md` are preserved when instructions are refreshed.
+This command regenerates Backlog's default agent instructions. If you run it, re-apply this repo's progressive-disclosure layout for `AGENTS.md` afterward.
 
 ### Adjust project settings
 
@@ -67,7 +68,9 @@ bunx backlog.md decision create "Use Backlog.md for local task management"
 
 ## Working agreement for agents
 
-- Use the CLI for task changes; do not hand-edit task markdown files under `backlog/tasks/`.
+- Use the CLI for task reads and writes.
+- You may read task files directly for inspection when useful.
+- Do not hand-edit task markdown files under `backlog/tasks/`.
 - Prefer `--plain` when reading tasks or search results for agent consumption.
 - Keep task descriptions, acceptance criteria, notes, and final summaries updated through the CLI as work progresses.
 
