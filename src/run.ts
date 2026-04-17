@@ -4,6 +4,14 @@ import {
   type CodexReasoningEffort,
 } from "./agent-provider.ts";
 import { MonkeError } from "./errors.ts";
+import { resolveGitRepoRoot } from "./git.ts";
+import {
+  createGitHubIssueContextLoader,
+  type GitHubIssueContextLoader,
+} from "./github-issue-context.ts";
+import { loadIssuePlannerInstructions, runIssuePlanner } from "./issue-planner.ts";
+import { createGitHubIssueCloser, type IssueCloser } from "./prd-issue-executor.ts";
+import { formatPrdIssuePlanSummary, PrdIssueLoopOrchestrator } from "./prd-issue-loop.ts";
 import { findExecutable } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 import { WorkflowOrchestrator, type RunOutcome } from "./workflow-orchestrator.ts";
@@ -12,6 +20,24 @@ import { WorkflowOrchestrator, type RunOutcome } from "./workflow-orchestrator.t
 export interface RunWorkflowOptions {
   /** Reasoning effort forwarded to every attempted Codex-backed phase. */
   readonly effort?: CodexReasoningEffort;
+}
+
+/** Execute the PRD-driven `mt run --prd` workflow and write the final summary. */
+export async function runPrdIssueWorkflow(
+  runtime: Runtime,
+  prdInput: string,
+  options: RunWorkflowOptions,
+): Promise<void> {
+  if (!prdInput) {
+    throw new MonkeError("mt run requires --prd");
+  }
+
+  const outcome = await executePrdIssueWorkflow(runtime, prdInput, options);
+  if (outcome.exitCode !== 0) {
+    throw new MonkeError(outcome.summary);
+  }
+
+  runtime.writeStdout(`${outcome.summary}\n`);
 }
 
 /** Execute `mt run` and write the final summary to the runtime streams. */
@@ -45,6 +71,57 @@ export async function executeRunWorkflow(
 
   const orchestrator = new WorkflowOrchestrator(runtime, new CodexAgentProvider(runtime, codex));
   return orchestrator.run(plan, options);
+}
+
+/** Execute the PRD-driven workflow and return the summary without applying CLI exit behavior. */
+export async function executePrdIssueWorkflow(
+  runtime: Runtime,
+  prdInput: string,
+  options: RunWorkflowOptions,
+): Promise<RunOutcome> {
+  const codex = findExecutable("codex", runtime.env);
+  if (!codex) {
+    throw new MonkeError("Could not find `codex` on PATH");
+  }
+
+  const repoRoot = resolveGitRepoRoot(runtime, runtime.cwd);
+  const repo = resolveGitHubRepository(runtime, repoRoot);
+  const plan = await runIssuePlanner({
+    codexPath: codex,
+    cwd: repoRoot,
+    prdInput,
+    plannerInstructions: loadIssuePlannerInstructions(),
+    effort: options.effort,
+    env: runtime.env,
+  });
+  runtime.writeStdout(`${formatPrdIssuePlanSummary(plan)}\n`);
+
+  const issueContextLoader: GitHubIssueContextLoader = createGitHubIssueContextLoader(runtime, {
+    repo,
+  });
+  const issueCloser: IssueCloser = createGitHubIssueCloser(runtime, { repo });
+  const orchestrator = new PrdIssueLoopOrchestrator(
+    runtime,
+    new CodexAgentProvider(runtime, codex),
+    issueContextLoader,
+    issueCloser,
+  );
+
+  return orchestrator.run(plan, options);
+}
+
+function resolveGitHubRepository(runtime: Runtime, repoRoot: string): string {
+  const result = runtime.exec(
+    "gh",
+    ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+    { cwd: repoRoot },
+  );
+  const repo = result.stdout.trim();
+  if (!repo) {
+    throw new MonkeError("Could not resolve GitHub repository for `mt run --prd`.");
+  }
+
+  return repo;
 }
 
 export type { CodexReasoningEffort, RunOutcome };

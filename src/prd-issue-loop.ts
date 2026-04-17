@@ -2,8 +2,13 @@ import type { AgentProvider, CodexReasoningEffort } from "./agent-provider.ts";
 import type { GitHubIssueContextLoader, GitHubIssueRunContext } from "./github-issue-context.ts";
 import { resolveGitRepoRoot } from "./git.ts";
 import { PrdIssueExecutor, type IssueCloser } from "./prd-issue-executor.ts";
+import { loadRunRoleInstructions } from "./run-assets.ts";
 import type { Runtime } from "./types.ts";
-import { createRunLogDirectory, type RunOutcome } from "./workflow-orchestrator.ts";
+import {
+  createRunLogDirectory,
+  runStartupCleanupCheckpoint,
+  type RunOutcome,
+} from "./workflow-orchestrator.ts";
 
 /** Validated ordered issue plan for one PRD-driven workflow run. */
 export interface PrdIssueLoopPlan {
@@ -22,6 +27,7 @@ export interface PrdIssueLoopOptions {
 /** Coordinates ordered execution of validated PRD task issues in the current checkout. */
 export class PrdIssueLoopOrchestrator {
   readonly #runtime: Runtime;
+  readonly #agentProvider: AgentProvider;
   readonly #issueContextLoader: GitHubIssueContextLoader;
   readonly #issueExecutor: PrdIssueExecutor;
 
@@ -33,6 +39,7 @@ export class PrdIssueLoopOrchestrator {
     issueCloser: IssueCloser,
   ) {
     this.#runtime = runtime;
+    this.#agentProvider = agentProvider;
     this.#issueContextLoader = issueContextLoader;
     this.#issueExecutor = new PrdIssueExecutor(runtime, agentProvider, issueCloser);
   }
@@ -41,8 +48,26 @@ export class PrdIssueLoopOrchestrator {
   async run(plan: PrdIssueLoopPlan, options: PrdIssueLoopOptions): Promise<RunOutcome> {
     const repoRoot = resolveGitRepoRoot(this.#runtime, this.#runtime.cwd);
     const runLogDirectory = createRunLogDirectory(this.#runtime, repoRoot);
+    const startupCleanup = await runStartupCleanupCheckpoint(this.#runtime, this.#agentProvider, {
+      repoRoot,
+      runLogDirectory,
+      cleanupInstructions: loadRunRoleInstructions().cleanupInstructions,
+      effort: options.effort,
+    });
+    if (startupCleanup.failureSummary) {
+      return {
+        repoRoot,
+        runLogDirectory,
+        exitCode: startupCleanup.exitCode,
+        summary: formatIssueLoopSummary([startupCleanup.failureSummary], runLogDirectory),
+      };
+    }
+
     const prd = this.#issueContextLoader.loadIssue(plan.prdIssueNumber);
-    const summaries = [formatIssuePlanSummary(plan)];
+    const summaries = [
+      ...(startupCleanup.completed ? ["Cleanup checkpointed existing changes."] : []),
+      formatPrdIssuePlanSummary(plan),
+    ];
 
     for (const [index, issueNumber] of plan.taskIssueNumbers.entries()) {
       const context: GitHubIssueRunContext = {
@@ -77,7 +102,8 @@ export class PrdIssueLoopOrchestrator {
   }
 }
 
-function formatIssuePlanSummary(plan: PrdIssueLoopPlan): string {
+/** Format the resolved PRD issue and ordered executable task issue list. */
+export function formatPrdIssuePlanSummary(plan: PrdIssueLoopPlan): string {
   const issueList = plan.taskIssueNumbers.map((issueNumber) => `#${issueNumber}`).join(", ");
   return `PRD #${plan.prdIssueNumber} planned issues: ${issueList}.`;
 }

@@ -64,6 +64,28 @@ export interface RunOutcome {
   readonly summary: string;
 }
 
+/** Result of applying the shared dirty-checkout cleanup checkpoint before workflow execution. */
+export interface StartupCleanupOutcome {
+  /** Whether cleanup ran and created the required checkpoint successfully. */
+  readonly completed: boolean;
+  /** Process exit code to surface when cleanup failed; zero when cleanup was not needed or succeeded. */
+  readonly exitCode: number;
+  /** Human-readable failure summary when cleanup failed before workflow execution. */
+  readonly failureSummary: string | null;
+}
+
+/** Inputs for the shared dirty-checkout cleanup checkpoint phase. */
+export interface StartupCleanupOptions {
+  /** Git repository root where cleanup should inspect and checkpoint changes. */
+  readonly repoRoot: string;
+  /** Existing top-level run log directory that receives cleanup.log. */
+  readonly runLogDirectory: string;
+  /** Cleanup role instructions loaded by the calling workflow. */
+  readonly cleanupInstructions: string;
+  /** Reasoning effort forwarded to the cleanup phase when it runs. */
+  readonly effort?: CodexReasoningEffort;
+}
+
 /** Coordinates the cleanup, implementer, and reviewer phases for `mt run`. */
 export class WorkflowOrchestrator {
   readonly #runtime: Runtime;
@@ -81,36 +103,19 @@ export class WorkflowOrchestrator {
     const runLogDirectory = createRunLogDirectory(this.#runtime, repoRoot);
     const instructions = loadRunRoleInstructions();
     const codingStandards = loadRunCodingStandards();
-    const startupState = inspectCheckoutState(this.#runtime, repoRoot);
-    let cleanupCompleted = false;
-
-    if (startupState.isDirty) {
-      const beforeCleanupCommit = getHeadCommitInfo(this.#runtime, repoRoot);
-      const cleanupResult = await this.#runAgentPhase({
-        phase: "cleanup",
+    const startupCleanup = await runStartupCleanupCheckpoint(this.#runtime, this.#agentProvider, {
+      repoRoot,
+      runLogDirectory,
+      cleanupInstructions: instructions.cleanupInstructions,
+      effort: options.effort,
+    });
+    if (startupCleanup.failureSummary) {
+      return {
         repoRoot,
         runLogDirectory,
-        prompt: buildCleanupPrompt(instructions.cleanupInstructions),
-        effort: options.effort,
-      });
-      const afterCleanupCommit = getHeadCommitInfo(this.#runtime, repoRoot);
-      const postCleanupState = inspectCheckoutState(this.#runtime, repoRoot);
-      const cleanupFailure = getCleanupFailureSummary(
-        cleanupResult.exitCode,
-        beforeCleanupCommit?.sha ?? null,
-        afterCleanupCommit,
-        postCleanupState,
-      );
-      if (cleanupFailure) {
-        return {
-          repoRoot,
-          runLogDirectory,
-          exitCode: cleanupResult.exitCode === 0 ? 1 : cleanupResult.exitCode,
-          summary: appendRunLogDirectory(cleanupFailure, runLogDirectory),
-        };
-      }
-
-      cleanupCompleted = true;
+        exitCode: startupCleanup.exitCode,
+        summary: appendRunLogDirectory(startupCleanup.failureSummary, runLogDirectory),
+      };
     }
 
     const preImplementerHead = getHeadCommitInfo(this.#runtime, repoRoot);
@@ -145,7 +150,7 @@ export class WorkflowOrchestrator {
       runLogDirectory,
       exitCode: workflowFailed ? 1 : 0,
       summary: formatRunSummary(
-        cleanupCompleted,
+        startupCleanup.completed,
         implementerResult,
         reviewerResult,
         runLogDirectory,
@@ -184,6 +189,53 @@ export class WorkflowOrchestrator {
       reasoningEffort: options.effort,
     });
   }
+}
+
+/** Checkpoint dirty startup work with the shared cleanup phase before a run modifies the checkout. */
+export async function runStartupCleanupCheckpoint(
+  runtime: Runtime,
+  agentProvider: AgentProvider,
+  options: StartupCleanupOptions,
+): Promise<StartupCleanupOutcome> {
+  const startupState = inspectCheckoutState(runtime, options.repoRoot);
+  if (!startupState.isDirty) {
+    return {
+      completed: false,
+      exitCode: 0,
+      failureSummary: null,
+    };
+  }
+
+  const beforeCleanupCommit = getHeadCommitInfo(runtime, options.repoRoot);
+  const cleanupResult = await agentProvider.run({
+    repoRoot: options.repoRoot,
+    phase: "cleanup",
+    prompt: buildCleanupPrompt(options.cleanupInstructions),
+    logPath: path.join(options.runLogDirectory, "cleanup.log"),
+    reasoningEffort: options.effort,
+  });
+  const afterCleanupCommit = getHeadCommitInfo(runtime, options.repoRoot);
+  const postCleanupState = inspectCheckoutState(runtime, options.repoRoot);
+  const cleanupFailure = getCleanupFailureSummary(
+    cleanupResult.exitCode,
+    beforeCleanupCommit?.sha ?? null,
+    afterCleanupCommit,
+    postCleanupState,
+  );
+
+  if (cleanupFailure) {
+    return {
+      completed: false,
+      exitCode: cleanupResult.exitCode === 0 ? 1 : cleanupResult.exitCode,
+      failureSummary: cleanupFailure,
+    };
+  }
+
+  return {
+    completed: true,
+    exitCode: 0,
+    failureSummary: null,
+  };
 }
 
 /** Format the user-facing run summary including phase outcomes and log location. */

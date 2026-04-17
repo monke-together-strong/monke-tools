@@ -4,7 +4,15 @@ import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync } from "node:fs";
 import { expect, test } from "vitest";
 
-import { createRepo, git, installFakeCodex, makeTempDir, read, write } from "./helpers.ts";
+import {
+  createRepo,
+  git,
+  installFakeCodex,
+  installFakeGh,
+  makeTempDir,
+  read,
+  write,
+} from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const cliEntrypoint = path.join(projectRoot, "src/index.ts");
@@ -133,6 +141,171 @@ test("mt run forwards effort and writes attempted phase logs", () => {
   expect(reviewerLog).toContain("effort: high");
   expect(reviewerLog).toContain("reviewer streamed stdout");
   expect(reviewerLog).toContain("reviewer streamed stderr");
+});
+
+test("mt run --prd plans issues, prints the resolved order, and executes the PRD issue loop", () => {
+  const sandbox = makeTempDir("run-prd-dispatch");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "repo"), {
+    "README.md": "# sandbox\n",
+  });
+  const { argsLogPath, cwdLogPath, stdinLogPath, invocationCountPath, phaseLogPath } =
+    installFakeCodex(binDirectory, {
+      jsonOutput: JSON.stringify({
+        prdIssueNumber: 22,
+        taskIssueNumbers: [27],
+      }),
+      implementer: {
+        stdoutText: "implementer completed issue 27",
+        stderrText: "implementer diagnostics",
+        commitMessage: "implement issue 27",
+      },
+      reviewer: {
+        stdoutText: "reviewer completed issue 27",
+        stderrText: "reviewer diagnostics",
+      },
+    });
+  const ghLogPath = installFakeGh(binDirectory, {
+    22: {
+      title: "PRD issue-loop workflow",
+      body: "Parent PRD context.",
+      comments: ["PRD clarification."],
+    },
+    27: {
+      title: "Wire PRD dispatcher",
+      body: "Add the late PRD dispatcher path.",
+      comments: ["Current issue clarification."],
+    },
+  });
+
+  const result = spawnSync(
+    "bun",
+    [
+      cliEntrypoint,
+      "run",
+      "--prd",
+      "Use PRD https://github.com/monke-together-strong/monke-tools/issues/22",
+      "--effort",
+      "high",
+    ],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+      },
+      encoding: "utf8",
+    },
+  );
+
+  expect(result.status).toBe(0);
+  expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("3");
+  expect(read(sandbox, path.relative(sandbox, cwdLogPath))).toBe(
+    `${repoRoot}\n${repoRoot}\n${repoRoot}\n`,
+  );
+  expect(read(sandbox, path.relative(sandbox, phaseLogPath))).toBe(
+    "planner\nimplementer\nreviewer\n",
+  );
+  const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
+  expect(argsLog).toContain("--output-schema");
+  expect(argsLog).toContain("-s\nread-only");
+  expect(argsLog.match(/--dangerously-bypass-approvals-and-sandbox/g)).toHaveLength(2);
+  expect(argsLog.match(/model_reasoning_effort="high"/g)).toHaveLength(3);
+
+  const stdinLog = read(sandbox, path.relative(sandbox, stdinLogPath));
+  expect(stdinLog).toContain("<<<MONKE_PRD_INPUT_START>>>\nUse PRD https://github.com");
+  expect(stdinLog).toContain("PRD #22: PRD issue-loop workflow");
+  expect(stdinLog).toContain("Current issue #27: Wire PRD dispatcher");
+
+  const ghLog = read(sandbox, path.relative(sandbox, ghLogPath));
+  expect(ghLog).toContain("repo view --json nameWithOwner --jq .nameWithOwner");
+  expect(ghLog).toContain("issue view 22 --repo owner/repo --json number,title,body,comments");
+  expect(ghLog).toContain("issue view 27 --repo owner/repo --json number,title,body,comments");
+  expect(ghLog).toContain("issue close 27 --repo owner/repo");
+
+  const planIndex = result.stdout.indexOf("PRD #22 planned issues: #27.");
+  const executionIndex = result.stdout.indexOf("implementer completed issue 27");
+  expect(planIndex).toBeGreaterThanOrEqual(0);
+  expect(executionIndex).toBeGreaterThan(planIndex);
+  expect(result.stdout).toContain("Issue #27:");
+  expect(result.stdout).toContain("Issue closed.");
+  expect(result.stderr).toContain("implementer diagnostics");
+  expect(result.stderr).toContain("reviewer diagnostics");
+});
+
+test("mt run --prd checkpoints dirty startup work before executing planned issues", () => {
+  const sandbox = makeTempDir("run-prd-cleanup");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "repo"), {
+    "README.md": "# sandbox\n",
+    "dirty.txt": "before\n",
+  });
+  const { argsLogPath, stdinLogPath, invocationCountPath, phaseLogPath } = installFakeCodex(
+    binDirectory,
+    {
+      jsonOutput: JSON.stringify({
+        prdIssueNumber: 22,
+        taskIssueNumbers: [27],
+      }),
+      cleanup: {
+        stdoutText: "cleanup checkpointed startup work",
+        stderrText: "cleanup diagnostics",
+        commitMessage: "clean up: checkpoint dirty work",
+      },
+      implementer: {
+        stdoutText: "implementer completed issue 27",
+        stderrText: "implementer diagnostics",
+        commitMessage: "implement issue 27",
+      },
+      reviewer: {
+        stdoutText: "reviewer completed issue 27",
+        stderrText: "reviewer diagnostics",
+      },
+    },
+  );
+  installFakeGh(binDirectory, {
+    22: {
+      title: "PRD issue-loop workflow",
+      body: "Parent PRD context.",
+    },
+    27: {
+      title: "Wire PRD dispatcher",
+      body: "Add the late PRD dispatcher path.",
+    },
+  });
+  write(repoRoot, "dirty.txt", "after\n");
+
+  const result = spawnSync("bun", [cliEntrypoint, "run", "--prd", "issue 22", "--effort", "high"], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+    },
+    encoding: "utf8",
+  });
+
+  expect(result.status).toBe(0);
+  expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("4");
+  expect(read(sandbox, path.relative(sandbox, phaseLogPath))).toBe(
+    "planner\ncleanup\nimplementer\nreviewer\n",
+  );
+  expect(
+    read(sandbox, path.relative(sandbox, argsLogPath)).match(/model_reasoning_effort="high"/g),
+  ).toHaveLength(4);
+  expect(read(sandbox, path.relative(sandbox, stdinLogPath))).toContain(
+    "You are the cleanup checkpointing phase.",
+  );
+  expect(git(repoRoot, ["show", "-s", "--format=%s", "HEAD~1"])).toBe(
+    "clean up: checkpoint dirty work",
+  );
+  const planIndex = result.stdout.indexOf("PRD #22 planned issues: #27.");
+  const cleanupIndex = result.stdout.indexOf("cleanup checkpointed startup work");
+  expect(planIndex).toBeGreaterThanOrEqual(0);
+  expect(cleanupIndex).toBeGreaterThan(planIndex);
+  expect(result.stdout).toContain(
+    "Cleanup checkpointed existing changes. PRD #22 planned issues: #27.",
+  );
+  expect(result.stderr).toContain("cleanup diagnostics");
 });
 
 test("mt run tells the reviewer when there is no implementation diff after a clean implementer run", () => {
