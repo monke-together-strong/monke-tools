@@ -145,7 +145,8 @@ export class CodexAgentProvider implements AgentProvider {
   }
 
   #buildCodexArgs(options: AgentRunOptions): string[] {
-    const args = ["exec", "--full-auto", "--cd", options.repoRoot];
+    // `mt run` needs real repo access for git metadata updates and agent-authored edits.
+    const args = ["exec", "--dangerously-bypass-approvals-and-sandbox", "--cd", options.repoRoot];
 
     if (options.reasoningEffort !== undefined) {
       args.push("-c", `model_reasoning_effort="${options.reasoningEffort}"`);

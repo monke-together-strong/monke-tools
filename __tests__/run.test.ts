@@ -56,8 +56,10 @@ test("mt run executes codex from the git repo root, passes the raw plan through,
   expect(read(sandbox, path.relative(sandbox, cwdLogPath))).toBe(`${repoRoot}\n${repoRoot}\n`);
   expect(read(sandbox, path.relative(sandbox, phaseLogPath))).toBe("implementer\nreviewer\n");
   const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
+  expect(argsLog.match(/--dangerously-bypass-approvals-and-sandbox/g)).toHaveLength(2);
   expect(argsLog).toContain("--cd");
   expect(argsLog).toContain(repoRoot);
+  expect(argsLog).not.toContain("--full-auto");
   expect(argsLog).not.toContain("model_reasoning_effort");
   const stdinLog = read(sandbox, path.relative(sandbox, stdinLogPath));
   expect(stdinLog).toContain(`<<<MONKE_PLAN_START>>>\n${plan}`);
@@ -102,6 +104,8 @@ test("mt run forwards effort and writes attempted phase logs", () => {
 
   expect(result.status).toBe(0);
   const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
+  expect(argsLog.match(/--dangerously-bypass-approvals-and-sandbox/g)).toHaveLength(2);
+  expect(argsLog).not.toContain("--full-auto");
   expect(argsLog.match(/model_reasoning_effort="high"/g)).toHaveLength(2);
   expect(result.stdout).toContain("implementer streamed stdout");
   expect(result.stdout).toContain("reviewer streamed stdout");
@@ -250,6 +254,8 @@ test("mt run checkpoints dirty startup work before running the implementer", () 
   expect(result.status).toBe(0);
   expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("3");
   const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
+  expect(argsLog.match(/--dangerously-bypass-approvals-and-sandbox/g)).toHaveLength(3);
+  expect(argsLog).not.toContain("--full-auto");
   expect(argsLog.match(/model_reasoning_effort="high"/g)).toHaveLength(3);
   expect(read(sandbox, path.relative(sandbox, cwdLogPath))).toBe(
     `${repoRoot}\n${repoRoot}\n${repoRoot}\n`,
