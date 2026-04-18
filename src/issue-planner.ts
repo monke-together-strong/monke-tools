@@ -35,6 +35,8 @@ export interface RunIssuePlannerOptions {
   readonly effort?: CodexReasoningEffort;
   /** Optional environment overrides merged on top of `process.env`. */
   readonly env?: Record<string, string | undefined>;
+  /** Optional plain-text log file for the planner's structured Codex invocation. */
+  readonly logPath?: string;
 }
 
 /** Load bundled planner role instructions for the PRD-driven issue workflow. */
@@ -53,6 +55,13 @@ export async function runIssuePlanner(
     schema: issuePlannerResultSchema,
     reasoningEffort: options.effort,
     env: options.env,
+    log:
+      options.logPath === undefined
+        ? undefined
+        : {
+            path: options.logPath,
+            phase: "planner",
+          },
   });
 
   return parseIssuePlannerResult(output);

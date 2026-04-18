@@ -231,6 +231,13 @@ test("mt run --prd plans issues, prints the resolved order, and executes the PRD
   expect(result.stdout).toContain("Issue closed.");
   expect(result.stderr).toContain("implementer diagnostics");
   expect(result.stderr).toContain("reviewer diagnostics");
+
+  const runLogDirectoryName = getRunLogDirectoryName(repoRoot);
+  const plannerLog = read(repoRoot, path.join("logs", runLogDirectoryName, "planner.log"));
+  expect(plannerLog).toContain("phase: planner");
+  expect(plannerLog).toContain("provider: codex-json");
+  expect(plannerLog).toContain("effort: high");
+  expect(plannerLog).toContain("fake codex stdout");
 });
 
 test("mt run --prd checkpoints dirty startup work before planning or executing issues", () => {

@@ -62,6 +62,39 @@ test("runCodexJson passes structured output files, preserves stdin, and returns 
   });
 });
 
+test("runCodexJson writes a structured process log when requested", async () => {
+  const sandbox = makeTempDir("codex-json-log");
+  const binDirectory = path.join(sandbox, "bin");
+  const logPath = path.join(sandbox, "logs", "planner.log");
+  installFakeCodex(binDirectory, {
+    jsonOutput: JSON.stringify({ ok: true }),
+    stdoutText: "structured stdout",
+    stderrText: "structured stderr",
+  });
+
+  await runCodexJson({
+    codexPath: path.join(binDirectory, "codex"),
+    cwd: sandbox,
+    prompt: "Return JSON",
+    schema: z.object({ ok: z.boolean() }),
+    reasoningEffort: "high",
+    log: {
+      path: logPath,
+      phase: "planner",
+    },
+  });
+
+  const log = read(sandbox, path.relative(sandbox, logPath));
+  expect(log).toContain("# Monke Tools Structured Codex Log");
+  expect(log).toContain("phase: planner");
+  expect(log).toContain("provider: codex-json");
+  expect(log).toContain("effort: high");
+  expect(log).toMatch(/startedAt: \d{4}-\d{2}-\d{2}T/);
+  expect(log).toContain("--- stdout ---\nstructured stdout");
+  expect(log).toContain("--- stderr ---\nstructured stderr");
+  expect(log).toContain('--- final message ---\n{"ok":true}');
+});
+
 test("runCodexJson throws when Codex writes invalid JSON", async () => {
   const sandbox = makeTempDir("codex-json-invalid");
   const binDirectory = path.join(sandbox, "bin");

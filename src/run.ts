@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import {
   CODEX_REASONING_EFFORTS,
   CodexAgentProvider,
@@ -117,6 +119,7 @@ export async function executePrdIssueWorkflow(
     plannerInstructions: loadIssuePlannerInstructions(),
     effort: options.effort,
     env: runtime.env,
+    logPath: path.join(runLogDirectory, "planner.log"),
   });
   runtime.writeStdout(`${formatPrdIssuePlanSummary(plan)}\n`);
 

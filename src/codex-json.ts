@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import * as z from "zod";
@@ -9,6 +9,14 @@ import { MonkeError } from "./errors.ts";
 import { formatCommand } from "./runtime.ts";
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Log destination and workflow identity for one structured Codex invocation. */
+export interface CodexJsonLogOptions {
+  /** Plain-text log file that receives structured Codex process output. */
+  readonly path: string;
+  /** Workflow phase label written to the structured Codex log. */
+  readonly phase: string;
+}
 
 /** Options for one non-streaming structured `codex exec` invocation. */
 export interface RunCodexJsonOptions<TSchema extends z.ZodTypeAny> {
@@ -28,6 +36,8 @@ export interface RunCodexJsonOptions<TSchema extends z.ZodTypeAny> {
   readonly images?: readonly string[];
   /** Optional environment overrides merged on top of `process.env`. */
   readonly env?: Record<string, string | undefined>;
+  /** Optional log destination for the structured Codex process output. */
+  readonly log?: CodexJsonLogOptions;
 }
 
 /** Run Codex once with a Zod-backed output schema and return validated JSON data. */
@@ -44,14 +54,18 @@ export async function runCodexJson<TSchema extends z.ZodTypeAny>(
     await writeTempFile("output-create", outputPath, "");
 
     const args = buildCodexJsonArgs(options, schemaPath, outputPath);
+    const startedAt = new Date();
     const processResult = await runCodexProcess(options, args);
+    const capturedOutputText = await tryReadOutputFile(outputPath);
+    await writeCodexJsonLog(options, processResult, capturedOutputText, startedAt);
+
     if (processResult.exitCode !== 0) {
       throw new MonkeError(
         formatProcessError("codex-exit", options.codexPath, args, processResult),
       );
     }
 
-    const outputText = await readOutputFile(outputPath, processResult);
+    const outputText = capturedOutputText ?? (await readOutputFile(outputPath, processResult));
     const parsed = parseJsonOutput(outputText, processResult);
     return parseSchema(options.schema, parsed, processResult);
   } finally {
@@ -216,6 +230,66 @@ async function readOutputFile(outputPath: string, processResult: ProcessResult):
       `${formatProcessDetails("output-read", processResult)}\nreadError: ${formatUnknownError(error)}`,
     );
   }
+}
+
+async function tryReadOutputFile(outputPath: string): Promise<string | null> {
+  try {
+    return await readFile(outputPath, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+async function writeCodexJsonLog<TSchema extends z.ZodTypeAny>(
+  options: RunCodexJsonOptions<TSchema>,
+  processResult: ProcessResult,
+  outputText: string | null,
+  startedAt: Date,
+): Promise<void> {
+  if (options.log === undefined) {
+    return;
+  }
+
+  try {
+    await mkdir(path.dirname(options.log.path), { recursive: true });
+    await writeFile(
+      options.log.path,
+      formatCodexJsonLog(
+        options.log,
+        options.reasoningEffort,
+        processResult,
+        outputText,
+        startedAt,
+      ),
+      "utf8",
+    );
+  } catch (error) {
+    throw new MonkeError(`Failed to write log ${options.log.path}: ${formatUnknownError(error)}`);
+  }
+}
+
+function formatCodexJsonLog(
+  log: CodexJsonLogOptions,
+  reasoningEffort: CodexReasoningEffort | undefined,
+  processResult: ProcessResult,
+  outputText: string | null,
+  startedAt: Date,
+): string {
+  return [
+    "# Monke Tools Structured Codex Log",
+    `phase: ${log.phase}`,
+    "provider: codex-json",
+    `effort: ${reasoningEffort ?? "omitted"}`,
+    `startedAt: ${startedAt.toISOString()}`,
+    "",
+    "--- stdout ---",
+    processResult.stdout,
+    "--- stderr ---",
+    processResult.stderr,
+    "--- final message ---",
+    outputText ?? "(unavailable)",
+    "",
+  ].join("\n");
 }
 
 function parseJsonOutput(outputText: string, processResult: ProcessResult): unknown {
