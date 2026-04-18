@@ -91,6 +91,10 @@ export async function executePrdIssueWorkflow(
   if (!codex) {
     throw new MonkeError("Could not find `codex` on PATH");
   }
+  const gh = findExecutable("gh", runtime.env);
+  if (!gh) {
+    throw new MonkeError("Could not find `gh` on PATH");
+  }
 
   const repoRoot = resolveGitRepoRoot(runtime, runtime.cwd);
   const repo = resolveGitHubRepository(runtime, repoRoot);

@@ -9,6 +9,7 @@ import {
   git,
   installFakeCodex,
   installFakeGh,
+  installGitShim,
   makeTempDir,
   read,
   write,
@@ -238,6 +239,29 @@ test("mt run --prd plans issues, prints the resolved order, and executes the PRD
   expect(plannerLog).toContain("provider: codex-json");
   expect(plannerLog).toContain("effort: high");
   expect(plannerLog).toContain("fake codex stdout");
+});
+
+test("mt run --prd fails before startup cleanup when gh is missing from PATH", () => {
+  const sandbox = makeTempDir("run-prd-missing-gh");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "repo"), {
+    "README.md": "# sandbox\n",
+  });
+  const { invocationCountPath } = installFakeCodex(binDirectory);
+  installGitShim(binDirectory);
+
+  const result = spawnSync(process.execPath, [cliEntrypoint, "run", "--prd", "issue 22"], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      PATH: binDirectory,
+    },
+    encoding: "utf8",
+  });
+
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("Could not find `gh` on PATH");
+  expect(existsSync(invocationCountPath)).toBe(false);
 });
 
 test("mt run --prd checkpoints dirty startup work before planning or executing issues", () => {
