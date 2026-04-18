@@ -24,6 +24,16 @@ export interface PrdIssueLoopOptions {
   readonly effort?: CodexReasoningEffort;
 }
 
+/** Prepared PRD issue-loop context after shared startup work has already completed. */
+export interface PreparedPrdIssueLoopOptions extends PrdIssueLoopOptions {
+  /** Git repository root where the prepared PRD issue loop should execute. */
+  readonly repoRoot: string;
+  /** Existing top-level run log directory that receives every issue phase log. */
+  readonly runLogDirectory: string;
+  /** Whether the shared startup cleanup checkpoint completed before planning. */
+  readonly startupCleanupCompleted: boolean;
+}
+
 /** Coordinates ordered execution of validated PRD task issues in the current checkout. */
 export class PrdIssueLoopOrchestrator {
   readonly #runtime: Runtime;
@@ -63,9 +73,23 @@ export class PrdIssueLoopOrchestrator {
       };
     }
 
+    return this.runPrepared(plan, {
+      repoRoot,
+      runLogDirectory,
+      startupCleanupCompleted: startupCleanup.completed,
+      effort: options.effort,
+    });
+  }
+
+  /** Execute a validated plan using a caller-prepared run directory and cleanup state. */
+  async runPrepared(
+    plan: PrdIssueLoopPlan,
+    options: PreparedPrdIssueLoopOptions,
+  ): Promise<RunOutcome> {
+    const { effort, repoRoot, runLogDirectory, startupCleanupCompleted } = options;
     const prd = this.#issueContextLoader.loadIssue(plan.prdIssueNumber);
     const summaries = [
-      ...(startupCleanup.completed ? ["Cleanup checkpointed existing changes."] : []),
+      ...(startupCleanupCompleted ? ["Cleanup checkpointed existing changes."] : []),
       formatPrdIssuePlanSummary(plan),
     ];
 
@@ -79,7 +103,7 @@ export class PrdIssueLoopOrchestrator {
         runLogDirectory,
         issueOrdinal: index + 1,
         context,
-        effort: options.effort,
+        effort,
       });
       summaries.push(issueOutcome.summary);
 

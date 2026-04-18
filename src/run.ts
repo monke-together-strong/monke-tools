@@ -13,8 +13,14 @@ import { loadIssuePlannerInstructions, runIssuePlanner } from "./issue-planner.t
 import { createGitHubIssueCloser, type IssueCloser } from "./prd-issue-executor.ts";
 import { formatPrdIssuePlanSummary, PrdIssueLoopOrchestrator } from "./prd-issue-loop.ts";
 import { findExecutable } from "./runtime.ts";
+import { loadRunRoleInstructions } from "./run-assets.ts";
 import type { Runtime } from "./types.ts";
-import { WorkflowOrchestrator, type RunOutcome } from "./workflow-orchestrator.ts";
+import {
+  createRunLogDirectory,
+  runStartupCleanupCheckpoint,
+  WorkflowOrchestrator,
+  type RunOutcome,
+} from "./workflow-orchestrator.ts";
 
 /** Options accepted by the public `mt run` workflow entrypoint. */
 export interface RunWorkflowOptions {
@@ -86,6 +92,24 @@ export async function executePrdIssueWorkflow(
 
   const repoRoot = resolveGitRepoRoot(runtime, runtime.cwd);
   const repo = resolveGitHubRepository(runtime, repoRoot);
+  const agentProvider = new CodexAgentProvider(runtime, codex);
+  const runLogDirectory = createRunLogDirectory(runtime, repoRoot);
+  const runRoleInstructions = loadRunRoleInstructions();
+  const startupCleanup = await runStartupCleanupCheckpoint(runtime, agentProvider, {
+    repoRoot,
+    runLogDirectory,
+    cleanupInstructions: runRoleInstructions.cleanupInstructions,
+    effort: options.effort,
+  });
+  if (startupCleanup.failureSummary) {
+    return {
+      repoRoot,
+      runLogDirectory,
+      exitCode: startupCleanup.exitCode,
+      summary: `${startupCleanup.failureSummary} Run logs: ${runLogDirectory}`,
+    };
+  }
+
   const plan = await runIssuePlanner({
     codexPath: codex,
     cwd: repoRoot,
@@ -102,12 +126,17 @@ export async function executePrdIssueWorkflow(
   const issueCloser: IssueCloser = createGitHubIssueCloser(runtime, { repo });
   const orchestrator = new PrdIssueLoopOrchestrator(
     runtime,
-    new CodexAgentProvider(runtime, codex),
+    agentProvider,
     issueContextLoader,
     issueCloser,
   );
 
-  return orchestrator.run(plan, options);
+  return orchestrator.runPrepared(plan, {
+    repoRoot,
+    runLogDirectory,
+    startupCleanupCompleted: startupCleanup.completed,
+    effort: options.effort,
+  });
 }
 
 function resolveGitHubRepository(runtime: Runtime, repoRoot: string): string {

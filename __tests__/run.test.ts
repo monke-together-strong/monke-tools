@@ -233,7 +233,7 @@ test("mt run --prd plans issues, prints the resolved order, and executes the PRD
   expect(result.stderr).toContain("reviewer diagnostics");
 });
 
-test("mt run --prd checkpoints dirty startup work before executing planned issues", () => {
+test("mt run --prd checkpoints dirty startup work before planning or executing issues", () => {
   const sandbox = makeTempDir("run-prd-cleanup");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -287,7 +287,7 @@ test("mt run --prd checkpoints dirty startup work before executing planned issue
   expect(result.status).toBe(0);
   expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("4");
   expect(read(sandbox, path.relative(sandbox, phaseLogPath))).toBe(
-    "planner\ncleanup\nimplementer\nreviewer\n",
+    "cleanup\nplanner\nimplementer\nreviewer\n",
   );
   expect(
     read(sandbox, path.relative(sandbox, argsLogPath)).match(/model_reasoning_effort="high"/g),
@@ -301,11 +301,64 @@ test("mt run --prd checkpoints dirty startup work before executing planned issue
   const planIndex = result.stdout.indexOf("PRD #22 planned issues: #27.");
   const cleanupIndex = result.stdout.indexOf("cleanup checkpointed startup work");
   expect(planIndex).toBeGreaterThanOrEqual(0);
-  expect(cleanupIndex).toBeGreaterThan(planIndex);
+  expect(cleanupIndex).toBeGreaterThanOrEqual(0);
+  expect(planIndex).toBeGreaterThan(cleanupIndex);
   expect(result.stdout).toContain(
     "Cleanup checkpointed existing changes. PRD #22 planned issues: #27.",
   );
   expect(result.stderr).toContain("cleanup diagnostics");
+});
+
+test("mt run --prd aborts before planning when startup cleanup fails", () => {
+  const sandbox = makeTempDir("run-prd-cleanup-failure");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "repo"), {
+    "README.md": "# sandbox\n",
+    "dirty.txt": "before\n",
+  });
+  const { stdinLogPath, invocationCountPath, phaseLogPath } = installFakeCodex(binDirectory, {
+    jsonOutput: JSON.stringify({
+      prdIssueNumber: 22,
+      taskIssueNumbers: [27],
+    }),
+    cleanup: {
+      stdoutText: "cleanup failed before planner",
+      stderrText: "cleanup failure diagnostics",
+      exitCode: 7,
+    },
+  });
+  installFakeGh(binDirectory, {
+    22: {
+      title: "PRD issue-loop workflow",
+      body: "Parent PRD context.",
+    },
+    27: {
+      title: "Wire PRD dispatcher",
+      body: "Add the late PRD dispatcher path.",
+    },
+  });
+  write(repoRoot, "dirty.txt", "after\n");
+
+  const result = spawnSync("bun", [cliEntrypoint, "run", "--prd", "issue 22"], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+    },
+    encoding: "utf8",
+  });
+
+  expect(result.status).toBe(1);
+  expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("1");
+  expect(read(sandbox, path.relative(sandbox, phaseLogPath))).toBe("cleanup\n");
+  const stdinLog = read(sandbox, path.relative(sandbox, stdinLogPath));
+  expect(stdinLog).toContain("You are the cleanup checkpointing phase.");
+  expect(stdinLog).not.toContain("<<<MONKE_PRD_INPUT_START>>>");
+  expect(result.stdout).toContain("cleanup failed before planner");
+  expect(result.stderr).toContain("cleanup failure diagnostics");
+  expect(result.stderr).toContain(
+    "Cleanup finished with failures (exit code 7). Aborting before implementation.",
+  );
 });
 
 test("mt run tells the reviewer when there is no implementation diff after a clean implementer run", () => {
