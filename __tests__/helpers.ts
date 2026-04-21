@@ -233,10 +233,20 @@ fi
 phase="implementer"
 if /usr/bin/grep -q "You are the cleanup checkpointing phase." "$stdin_file"; then
   phase="cleanup"
+elif /usr/bin/grep -q "<<<MONKE_PRD_INPUT_START>>>" "$stdin_file"; then
+  phase="planner"
 elif /usr/bin/grep -q "# Explicit review target" "$stdin_file"; then
+  phase="reviewer"
+elif /usr/bin/grep -q "You are a reviewer for one GitHub issue in a PRD-driven" "$stdin_file"; then
   phase="reviewer"
 fi
 printf '%s\n' "$phase" >> ${shellQuote(phaseLogPath)}
+
+if [ "$phase" = "planner" ]; then
+  printf '%s\n' ${shellQuote(defaultStdoutText)}
+  printf '%s\n' ${shellQuote(defaultStderrText)} >&2
+  exit ${defaultExitCode}
+fi
 
 if [ "$phase" = "cleanup" ]; then
   if [ -n ${shellQuote(cleanupCommitMessage)} ]; then
@@ -279,6 +289,53 @@ exit ${implementerExitCode}
     phaseLogPath,
     schemaLogPath,
   };
+}
+
+export function installFakeGh(
+  binDirectory: string,
+  issues: Record<number, { title: string; body: string; comments?: readonly string[] }>,
+): string {
+  const logPath = path.join(binDirectory, "gh.log");
+  const issueCases = Object.entries(issues)
+    .map(([issueNumber, issue]) => {
+      const issueJson = JSON.stringify({
+        number: Number.parseInt(issueNumber, 10),
+        title: issue.title,
+        body: issue.body,
+        comments: (issue.comments ?? []).map((body) => ({ body })),
+      });
+      return `    ${issueNumber}) printf '%s\\n' ${shellQuote(issueJson)}; exit 0 ;;`;
+    })
+    .join("\n");
+  const script = `#!/bin/sh
+set -eu
+first_arg=true
+for arg in "$@"; do
+  if [ "$first_arg" = true ]; then
+    first_arg=false
+  else
+    printf ' ' >> ${shellQuote(logPath)}
+  fi
+  printf '%s' "$arg" >> ${shellQuote(logPath)}
+done
+printf '\\n' >> ${shellQuote(logPath)}
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '%s\\n' "owner/repo"
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  case "$3" in
+${issueCases}
+  esac
+fi
+if [ "$1" = "issue" ] && [ "$2" = "close" ]; then
+  exit 0
+fi
+echo "unsupported gh invocation: $*" >&2
+exit 1
+`;
+  writeExecutable(path.join(binDirectory, "gh"), script);
+  return logPath;
 }
 
 export function runMonke(options: {
