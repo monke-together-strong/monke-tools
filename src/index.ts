@@ -6,6 +6,7 @@ import { MonkeError } from "./errors.ts";
 import { runCleanup, runCreate, runMaterialize, runSetup } from "./monke.ts";
 import {
   CODEX_REASONING_EFFORTS,
+  runPrdIssueWorkflow,
   runSinglePassWorkflow,
   type CodexReasoningEffort,
 } from "./run.ts";
@@ -13,11 +14,24 @@ import { createRuntime } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt run --plan <text> [--effort <level>]";
-const RUN_USAGE = "Usage: mt run --plan <text> [--effort <level>]";
+  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt run (--plan <text> | --prd <text>) [--effort <level>]";
+const RUN_USAGE = "Usage: mt run (--plan <text> | --prd <text>) [--effort <level>]";
 
-interface RunCommandOptions {
-  plan: string;
+type RunCommandOptions =
+  | {
+      kind: "plan";
+      plan: string;
+      effort?: CodexReasoningEffort;
+    }
+  | {
+      kind: "prd";
+      prd: string;
+      effort?: CodexReasoningEffort;
+    };
+
+interface RawRunCommandOptions {
+  plan?: string;
+  prd?: string;
   effort?: CodexReasoningEffort;
 }
 
@@ -38,7 +52,13 @@ export function runCli(argv: string[], runtime = createRuntime()): void | Promis
   }
 
   if (pendingRun.options) {
-    return runSinglePassWorkflow(runtime, pendingRun.options.plan, {
+    if (pendingRun.options.kind === "plan") {
+      return runSinglePassWorkflow(runtime, pendingRun.options.plan, {
+        effort: pendingRun.options.effort,
+      });
+    }
+
+    return runPrdIssueWorkflow(runtime, pendingRun.options.prd, {
       effort: pendingRun.options.effort,
     });
   }
@@ -95,13 +115,34 @@ function createProgram(runtime: Runtime, onRun: (options: RunCommandOptions) => 
     .command("run")
     .helpOption(false)
     .allowExcessArguments(false)
-    .requiredOption("--plan <text>")
+    .option("--plan <text>")
+    .option("--prd <text>")
     .addOption(new Option("--effort <level>").choices([...CODEX_REASONING_EFFORTS]))
-    .action((options: RunCommandOptions) => {
-      onRun(options);
+    .action((options: RawRunCommandOptions) => {
+      onRun(parseRunCommandOptions(options));
     });
 
   return program;
+}
+
+function parseRunCommandOptions(options: RawRunCommandOptions): RunCommandOptions {
+  if (options.plan !== undefined && options.prd === undefined) {
+    return {
+      kind: "plan",
+      plan: options.plan,
+      effort: options.effort,
+    };
+  }
+
+  if (options.prd !== undefined && options.plan === undefined) {
+    return {
+      kind: "prd",
+      prd: options.prd,
+      effort: options.effort,
+    };
+  }
+
+  throw new MonkeError(RUN_USAGE);
 }
 
 function mapCliError(error: unknown, argv: string[]): Error {
