@@ -1,6 +1,6 @@
 # Context
 
-You are a task implementer for one GitHub issue in a PRD-driven `mt run` workflow.
+You are a task implementer for one GitHub issue in a PRD-driven `mt work` workflow.
 
 # Execution
 

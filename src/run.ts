@@ -24,20 +24,20 @@ import {
   type RunOutcome,
 } from "./workflow-orchestrator.ts";
 
-/** Options accepted by the public `mt run` workflow entrypoint. */
+/** Options accepted by the public `mt work` workflow entrypoint. */
 export interface RunWorkflowOptions {
   /** Reasoning effort forwarded to every attempted Codex-backed phase. */
   readonly effort?: CodexReasoningEffort;
 }
 
-/** Execute the PRD-driven `mt run --prd` workflow and write the final summary. */
+/** Execute the PRD-driven `mt work --prd` workflow and write the final summary. */
 export async function runPrdIssueWorkflow(
   runtime: Runtime,
   prdInput: string,
   options: RunWorkflowOptions,
 ): Promise<void> {
   if (!prdInput) {
-    throw new MonkeError("mt run requires --prd");
+    throw new MonkeError("mt work requires --prd");
   }
 
   const outcome = await executePrdIssueWorkflow(runtime, prdInput, options);
@@ -48,14 +48,14 @@ export async function runPrdIssueWorkflow(
   runtime.writeStdout(`${outcome.summary}\n`);
 }
 
-/** Execute `mt run` and write the final summary to the runtime streams. */
+/** Execute `mt work` and write the final summary to the runtime streams. */
 export async function runSinglePassWorkflow(
   runtime: Runtime,
   plan: string,
   options: RunWorkflowOptions,
 ): Promise<void> {
   if (!plan) {
-    throw new MonkeError("mt run requires --plan");
+    throw new MonkeError("mt work requires --plan");
   }
 
   const outcome = await executeRunWorkflow(runtime, plan, options);
@@ -66,7 +66,7 @@ export async function runSinglePassWorkflow(
   runtime.writeStdout(`${outcome.summary}\n`);
 }
 
-/** Execute the `mt run` workflow and return the summary without applying CLI exit behavior. */
+/** Execute the `mt work` workflow and return the summary without applying CLI exit behavior. */
 export async function executeRunWorkflow(
   runtime: Runtime,
   plan: string,
@@ -154,7 +154,7 @@ function resolveGitHubRepository(runtime: Runtime, repoRoot: string): string {
   );
   const repo = result.stdout.trim();
   if (!repo) {
-    throw new MonkeError("Could not resolve GitHub repository for `mt run --prd`.");
+    throw new MonkeError("Could not resolve GitHub repository for `mt work --prd`.");
   }
 
   return repo;

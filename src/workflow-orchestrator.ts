@@ -52,7 +52,7 @@ export interface WorkflowRunOptions {
   readonly effort?: CodexReasoningEffort;
 }
 
-/** Final observable outcome for an `mt run` workflow invocation. */
+/** Final observable outcome for an `mt work` workflow invocation. */
 export interface RunOutcome {
   /** Git repository root where the run executed. */
   readonly repoRoot: string;
@@ -86,7 +86,7 @@ export interface StartupCleanupOptions {
   readonly effort?: CodexReasoningEffort;
 }
 
-/** Coordinates the cleanup, implementer, and reviewer phases for `mt run`. */
+/** Coordinates the cleanup, implementer, and reviewer phases for `mt work`. */
 export class WorkflowOrchestrator {
   readonly #runtime: Runtime;
   readonly #agentProvider: AgentProvider;

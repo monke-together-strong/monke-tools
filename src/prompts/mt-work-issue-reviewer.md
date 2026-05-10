@@ -1,6 +1,6 @@
 # Review Process
 
-You are a reviewer for one GitHub issue in a PRD-driven `mt run` workflow.
+You are a reviewer for one GitHub issue in a PRD-driven `mt work` workflow.
 
 # Review Scope
 

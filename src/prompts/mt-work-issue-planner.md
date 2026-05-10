@@ -1,6 +1,6 @@
 # Context
 
-You are the planner for a PRD-driven `mt run` workflow.
+You are the planner for a PRD-driven `mt work` workflow.
 
 # Planning Rules
 

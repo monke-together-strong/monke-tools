@@ -14,8 +14,8 @@ import { createRuntime } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt run (--plan <text> | --prd <text>) [--effort <level>]";
-const RUN_USAGE = "Usage: mt run (--plan <text> | --prd <text>) [--effort <level>]";
+  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt work (--plan <text> | --prd <text>) [--effort <level>]";
+const RUN_USAGE = "Usage: mt work (--plan <text> | --prd <text>) [--effort <level>]";
 
 type RunCommandOptions =
   | {
@@ -35,7 +35,7 @@ interface RawRunCommandOptions {
   effort?: CodexReasoningEffort;
 }
 
-/** Run the Monke Tools CLI. Valid `mt run` invocations return a workflow promise. */
+/** Run the Monke Tools CLI. Valid `mt work` invocations return a workflow promise. */
 export function runCli(argv: string[], runtime = createRuntime()): void | Promise<void> {
   if (argv.length === 0) {
     throw new MonkeError(ROOT_USAGE);
@@ -112,7 +112,7 @@ function createProgram(runtime: Runtime, onRun: (options: RunCommandOptions) => 
     });
 
   program
-    .command("run")
+    .command("work")
     .helpOption(false)
     .allowExcessArguments(false)
     .option("--plan <text>")
@@ -159,7 +159,7 @@ function mapCliError(error: unknown, argv: string[]): Error {
       return new MonkeError("Usage: mt cleanup");
     case "setup":
       return new MonkeError("Usage: mt setup");
-    case "run":
+    case "work":
       return new MonkeError(RUN_USAGE);
     default:
       return new MonkeError(ROOT_USAGE);

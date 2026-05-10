@@ -40,7 +40,7 @@ function getRunLogDirectoryName(repoRoot: string): string {
   return runLogDirectoryName;
 }
 
-test("mt run executes codex from the git repo root, passes the raw plan through, and prints a short summary", () => {
+test("mt work executes codex from the git repo root, passes the raw plan through, and prints a short summary", () => {
   const sandbox = makeTempDir("run-success");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -51,7 +51,7 @@ test("mt run executes codex from the git repo root, passes the raw plan through,
     installFakeCodex(binDirectory);
   const plan = "1. Keep line one\n2. Preserve\n\nFinal line";
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", plan], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", plan], {
     cwd: path.join(repoRoot, "nested/feature"),
     env: {
       ...process.env,
@@ -85,7 +85,7 @@ test("mt run executes codex from the git repo root, passes the raw plan through,
   expect(result.stderr).toContain("fake codex stderr");
 });
 
-test("mt run forwards effort and writes attempted phase logs", () => {
+test("mt work forwards effort and writes attempted phase logs", () => {
   const sandbox = makeTempDir("run-effort-logs");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -102,14 +102,18 @@ test("mt run forwards effort and writes attempted phase logs", () => {
     },
   });
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it", "--effort", "high"], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+  const result = spawnSync(
+    "bun",
+    [cliEntrypoint, "work", "--plan", "ship it", "--effort", "high"],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+      },
+      encoding: "utf8",
     },
-    encoding: "utf8",
-  });
+  );
 
   expect(result.status).toBe(0);
   const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
@@ -144,7 +148,7 @@ test("mt run forwards effort and writes attempted phase logs", () => {
   expect(reviewerLog).toContain("reviewer streamed stderr");
 });
 
-test("mt run --prd plans issues, prints the resolved order, and executes the PRD issue loop", () => {
+test("mt work --prd plans issues, prints the resolved order, and executes the PRD issue loop", () => {
   const sandbox = makeTempDir("run-prd-dispatch");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -183,7 +187,7 @@ test("mt run --prd plans issues, prints the resolved order, and executes the PRD
     "bun",
     [
       cliEntrypoint,
-      "run",
+      "work",
       "--prd",
       "Use PRD https://github.com/monke-together-strong/monke-tools/issues/22",
       "--effort",
@@ -241,7 +245,7 @@ test("mt run --prd plans issues, prints the resolved order, and executes the PRD
   expect(plannerLog).toContain("fake codex stdout");
 });
 
-test("mt run --prd fails before startup cleanup when gh is missing from PATH", () => {
+test("mt work --prd fails before startup cleanup when gh is missing from PATH", () => {
   const sandbox = makeTempDir("run-prd-missing-gh");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -250,7 +254,7 @@ test("mt run --prd fails before startup cleanup when gh is missing from PATH", (
   const { invocationCountPath } = installFakeCodex(binDirectory);
   installGitShim(binDirectory);
 
-  const result = spawnSync(process.execPath, [cliEntrypoint, "run", "--prd", "issue 22"], {
+  const result = spawnSync(process.execPath, [cliEntrypoint, "work", "--prd", "issue 22"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -264,7 +268,7 @@ test("mt run --prd fails before startup cleanup when gh is missing from PATH", (
   expect(existsSync(invocationCountPath)).toBe(false);
 });
 
-test("mt run --prd checkpoints dirty startup work before planning or executing issues", () => {
+test("mt work --prd checkpoints dirty startup work before planning or executing issues", () => {
   const sandbox = makeTempDir("run-prd-cleanup");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -306,14 +310,18 @@ test("mt run --prd checkpoints dirty startup work before planning or executing i
   });
   write(repoRoot, "dirty.txt", "after\n");
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--prd", "issue 22", "--effort", "high"], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+  const result = spawnSync(
+    "bun",
+    [cliEntrypoint, "work", "--prd", "issue 22", "--effort", "high"],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+      },
+      encoding: "utf8",
     },
-    encoding: "utf8",
-  });
+  );
 
   expect(result.status).toBe(0);
   expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("4");
@@ -340,7 +348,7 @@ test("mt run --prd checkpoints dirty startup work before planning or executing i
   expect(result.stderr).toContain("cleanup diagnostics");
 });
 
-test("mt run --prd aborts before planning when startup cleanup fails", () => {
+test("mt work --prd aborts before planning when startup cleanup fails", () => {
   const sandbox = makeTempDir("run-prd-cleanup-failure");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -370,7 +378,7 @@ test("mt run --prd aborts before planning when startup cleanup fails", () => {
   });
   write(repoRoot, "dirty.txt", "after\n");
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--prd", "issue 22"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--prd", "issue 22"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -392,7 +400,7 @@ test("mt run --prd aborts before planning when startup cleanup fails", () => {
   );
 });
 
-test("mt run tells the reviewer when there is no implementation diff after a clean implementer run", () => {
+test("mt work tells the reviewer when there is no implementation diff after a clean implementer run", () => {
   const sandbox = makeTempDir("run-review-target-no-diff");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -409,7 +417,7 @@ test("mt run tells the reviewer when there is no implementation diff after a cle
     },
   });
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", "ship it"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -429,7 +437,7 @@ test("mt run tells the reviewer when there is no implementation diff after a cle
   expect(reviewerPrompt).toContain("HEAD is unchanged at:");
 });
 
-test("mt run tells the reviewer to inspect the working tree diff when implementation leaves the checkout dirty", () => {
+test("mt work tells the reviewer to inspect the working tree diff when implementation leaves the checkout dirty", () => {
   const sandbox = makeTempDir("run-review-target-dirty");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -448,7 +456,7 @@ test("mt run tells the reviewer to inspect the working tree diff when implementa
     },
   });
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", "ship it"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -469,7 +477,7 @@ test("mt run tells the reviewer to inspect the working tree diff when implementa
   expect(git(repoRoot, ["status", "--porcelain", "--untracked-files=normal"])).toBe("?? dirty.txt");
 });
 
-test("mt run checkpoints dirty startup work before running the implementer", () => {
+test("mt work checkpoints dirty startup work before running the implementer", () => {
   const sandbox = makeTempDir("run-cleanup-success");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -499,14 +507,18 @@ test("mt run checkpoints dirty startup work before running the implementer", () 
   write(repoRoot, "unstaged.txt", "after unstaged change\n");
   write(repoRoot, "untracked.txt", "brand new file\n");
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it", "--effort", "high"], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+  const result = spawnSync(
+    "bun",
+    [cliEntrypoint, "work", "--plan", "ship it", "--effort", "high"],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+      },
+      encoding: "utf8",
     },
-    encoding: "utf8",
-  });
+  );
 
   expect(result.status).toBe(0);
   expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("3");
@@ -546,7 +558,7 @@ test("mt run checkpoints dirty startup work before running the implementer", () 
   expect(git(repoRoot, ["status", "--porcelain", "--untracked-files=normal"])).toBe("");
 });
 
-test("mt run still runs the reviewer after implementer failures and reports both phase outcomes", () => {
+test("mt work still runs the reviewer after implementer failures and reports both phase outcomes", () => {
   const sandbox = makeTempDir("run-failure");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -564,7 +576,7 @@ test("mt run still runs the reviewer after implementer failures and reports both
     },
   });
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", "ship it"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -585,7 +597,7 @@ test("mt run still runs the reviewer after implementer failures and reports both
   );
 });
 
-test("mt run aborts before implementation when cleanup does not create the required checkpoint commit", () => {
+test("mt work aborts before implementation when cleanup does not create the required checkpoint commit", () => {
   const sandbox = makeTempDir("run-cleanup-abort");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -604,7 +616,7 @@ test("mt run aborts before implementation when cleanup does not create the requi
 
   write(repoRoot, "dirty.txt", "needs checkpointing\n");
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", "ship it"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -628,7 +640,7 @@ test("mt run aborts before implementation when cleanup does not create the requi
   );
 });
 
-test("mt run aborts before implementation when cleanup exits with failures", () => {
+test("mt work aborts before implementation when cleanup exits with failures", () => {
   const sandbox = makeTempDir("run-cleanup-failure");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -648,7 +660,7 @@ test("mt run aborts before implementation when cleanup exits with failures", () 
 
   write(repoRoot, "dirty.txt", "needs checkpointing\n");
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", "ship it"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -672,7 +684,7 @@ test("mt run aborts before implementation when cleanup exits with failures", () 
   );
 });
 
-test("mt run aborts before implementation when cleanup creates a checkpoint commit with an invalid subject", () => {
+test("mt work aborts before implementation when cleanup creates a checkpoint commit with an invalid subject", () => {
   const sandbox = makeTempDir("run-cleanup-invalid-subject");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -692,7 +704,7 @@ test("mt run aborts before implementation when cleanup creates a checkpoint comm
 
   write(repoRoot, "dirty.txt", "needs checkpointing\n");
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", "ship it"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -716,7 +728,7 @@ test("mt run aborts before implementation when cleanup creates a checkpoint comm
   );
 });
 
-test("mt run aborts before implementation when cleanup leaves the checkout dirty", () => {
+test("mt work aborts before implementation when cleanup leaves the checkout dirty", () => {
   const sandbox = makeTempDir("run-cleanup-dirty");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -742,7 +754,7 @@ test("mt run aborts before implementation when cleanup leaves the checkout dirty
   write(repoRoot, "unstaged.txt", "after unstaged change\n");
   write(repoRoot, "untracked.txt", "brand new file\n");
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", "ship it"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -766,7 +778,7 @@ test("mt run aborts before implementation when cleanup leaves the checkout dirty
   expect(result.stderr).toContain("?? untracked.txt");
 });
 
-test("mt run fails when the implementer creates a commit", () => {
+test("mt work fails when the implementer creates a commit", () => {
   const sandbox = makeTempDir("run-implementer-commit");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -785,7 +797,7 @@ test("mt run fails when the implementer creates a commit", () => {
     },
   });
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", "ship it"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -814,7 +826,7 @@ test("mt run fails when the implementer creates a commit", () => {
   );
 });
 
-test("mt run surfaces reviewer failures in the final summary", () => {
+test("mt work surfaces reviewer failures in the final summary", () => {
   const sandbox = makeTempDir("run-reviewer-failure");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -833,7 +845,7 @@ test("mt run surfaces reviewer failures in the final summary", () => {
     },
   });
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", "ship it"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -852,7 +864,7 @@ test("mt run surfaces reviewer failures in the final summary", () => {
   );
 });
 
-test("mt run fails when the reviewer creates a commit", () => {
+test("mt work fails when the reviewer creates a commit", () => {
   const sandbox = makeTempDir("run-reviewer-commit");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -867,7 +879,7 @@ test("mt run fails when the reviewer creates a commit", () => {
     },
   });
 
-  const result = spawnSync("bun", [cliEntrypoint, "run", "--plan", "ship it"], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", "ship it"], {
     cwd: repoRoot,
     env: {
       ...process.env,
