@@ -3,7 +3,7 @@ import * as z from "zod";
 import type { CodexReasoningEffort } from "./agent-provider.ts";
 import { runCodexJson } from "./codex-json.ts";
 import { MonkeError } from "./errors.ts";
-import issuePlannerInstructionsText from "./prompts/mt-run-issue-planner.md" with { type: "text" };
+import issuePlannerInstructionsText from "./prompts/mt-work-issue-planner.md" with { type: "text" };
 
 const issueNumberSchema = z.number().int().positive();
 const issuePlannerResultSchema = z

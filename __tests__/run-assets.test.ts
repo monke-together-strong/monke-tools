@@ -67,16 +67,16 @@ test("implementer and reviewer prompts both load the shared coding standards con
   );
 
   expect(cleanupPrompt).toBe(instructions.cleanupInstructions);
-  expect(cleanupPrompt).not.toContain("# Shared coding standards");
+  expect(cleanupPrompt).not.toContain("# Coding Standards");
 
   expect(implementerPrompt).toContain(instructions.implementerInstructions);
-  expect(implementerPrompt).toContain("# Shared coding standards");
+  expect(implementerPrompt).toContain("# Coding Standards");
   expect(implementerPrompt).toContain(codingStandards);
   expect(implementerPrompt.endsWith(`<<<MONKE_PLAN_START>>>\n${plan}`)).toBe(true);
   expect(implementerPrompt).not.toContain("<<<MONKE_PLAN_END>>>");
 
   expect(reviewerPrompt).toContain(instructions.reviewerInstructions);
-  expect(reviewerPrompt).toContain("# Shared coding standards");
+  expect(reviewerPrompt).toContain("# Coding Standards");
   expect(reviewerPrompt).toContain(codingStandards);
   expect(reviewerPrompt).toContain("# Explicit review target");
   expect(reviewerPrompt).toContain(

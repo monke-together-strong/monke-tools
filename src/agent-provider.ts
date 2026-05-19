@@ -6,14 +6,14 @@ import { MonkeError } from "./errors.ts";
 import { formatCommand } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
-/** Codex reasoning effort levels supported by `mt run --effort`. */
+/** Codex reasoning effort levels supported by `mt work --effort`. */
 export const CODEX_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
 
 /** Codex reasoning effort level accepted by the current Codex-backed provider. */
 export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORTS)[number];
 
 /** Workflow phases that can be delegated to an agent provider. */
-export type AgentPhase = "cleanup" | "implementer" | "reviewer";
+export type AgentPhase = "cleanup" | "implementer" | "reviewer" | "final-prd-reviewer";
 
 /** Options required to execute one agent-backed workflow phase. */
 export interface AgentRunOptions {
@@ -33,6 +33,8 @@ export interface AgentRunOptions {
 export interface AgentRunResult {
   /** Process exit code returned by the provider. */
   readonly exitCode: number;
+  /** Wall-clock duration spent in the provider process. */
+  readonly durationMs?: number;
 }
 
 /** Minimal provider contract used by the run workflow orchestrator. */
@@ -43,7 +45,7 @@ export interface AgentProvider {
   run(options: AgentRunOptions): Promise<AgentRunResult>;
 }
 
-/** Codex CLI-backed provider for the current `mt run` workflow. */
+/** Codex CLI-backed provider for the current `mt work` workflow. */
 export class CodexAgentProvider implements AgentProvider {
   /** Stable provider identifier used in logs and summaries. */
   readonly id = "codex";
@@ -59,8 +61,9 @@ export class CodexAgentProvider implements AgentProvider {
 
   /** Execute Codex with live stdout/stderr teeing and a self-describing phase log. */
   run(options: AgentRunOptions): Promise<AgentRunResult> {
+    const startedAt = new Date();
     mkdirSync(path.dirname(options.logPath), { recursive: true });
-    writeFileSync(options.logPath, this.#formatLogHeader(options), "utf8");
+    writeFileSync(options.logPath, this.#formatLogHeader(options, startedAt), "utf8");
     const logStream = createWriteStream(options.logPath, { flags: "a" });
 
     const args = this.#buildCodexArgs(options);
@@ -118,6 +121,8 @@ export class CodexAgentProvider implements AgentProvider {
       });
 
       child.on("close", (exitCode, signal) => {
+        const completedAt = new Date();
+        const durationMs = completedAt.getTime() - startedAt.getTime();
         if (settled) {
           return;
         }
@@ -135,7 +140,7 @@ export class CodexAgentProvider implements AgentProvider {
             return;
           }
 
-          resolveOnce({ exitCode });
+          resolveOnce({ exitCode, durationMs });
         });
       });
     });
@@ -145,7 +150,7 @@ export class CodexAgentProvider implements AgentProvider {
   }
 
   #buildCodexArgs(options: AgentRunOptions): string[] {
-    // `mt run` needs real repo access for git metadata updates and agent-authored edits.
+    // `mt work` needs real repo access for git metadata updates and agent-authored edits.
     const args = ["exec", "--dangerously-bypass-approvals-and-sandbox", "--cd", options.repoRoot];
 
     if (options.reasoningEffort !== undefined) {
@@ -156,13 +161,13 @@ export class CodexAgentProvider implements AgentProvider {
     return args;
   }
 
-  #formatLogHeader(options: AgentRunOptions): string {
+  #formatLogHeader(options: AgentRunOptions, startedAt: Date): string {
     return [
       "# Monke Tools Agent Phase Log",
       `phase: ${options.phase}`,
       `provider: ${this.id}`,
       `effort: ${options.reasoningEffort ?? "omitted"}`,
-      `startedAt: ${new Date().toISOString()}`,
+      `startedAt: ${startedAt.toISOString()}`,
       "",
       "--- output ---",
       "",

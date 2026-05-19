@@ -14,8 +14,8 @@ import { createRuntime } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt run (--plan <text> | --prd <text>) [--effort <level>]";
-const RUN_USAGE = "Usage: mt run (--plan <text> | --prd <text>) [--effort <level>]";
+  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
+const RUN_USAGE = "Usage: mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
 
 type RunCommandOptions =
   | {
@@ -35,7 +35,7 @@ interface RawRunCommandOptions {
   effort?: CodexReasoningEffort;
 }
 
-/** Run the Monke Tools CLI. Valid `mt run` invocations return a workflow promise. */
+/** Run the Monke Tools CLI. Valid `mt work` invocations return a workflow promise. */
 export function runCli(argv: string[], runtime = createRuntime()): void | Promise<void> {
   if (argv.length === 0) {
     throw new MonkeError(ROOT_USAGE);
@@ -112,21 +112,35 @@ function createProgram(runtime: Runtime, onRun: (options: RunCommandOptions) => 
     });
 
   program
-    .command("run")
+    .command("work")
     .helpOption(false)
     .allowExcessArguments(false)
+    .argument("[plan...]")
     .option("--plan <text>")
     .option("--prd <text>")
     .addOption(new Option("--effort <level>").choices([...CODEX_REASONING_EFFORTS]))
-    .action((options: RawRunCommandOptions) => {
-      onRun(parseRunCommandOptions(options));
+    .action((planParts: string[], options: RawRunCommandOptions) => {
+      onRun(parseRunCommandOptions(planParts, options));
     });
 
   return program;
 }
 
-function parseRunCommandOptions(options: RawRunCommandOptions): RunCommandOptions {
-  if (options.plan !== undefined && options.prd === undefined) {
+function parseRunCommandOptions(
+  planParts: readonly string[],
+  options: RawRunCommandOptions,
+): RunCommandOptions {
+  const positionalPlan = planParts.length > 0 ? planParts.join(" ") : undefined;
+
+  if (positionalPlan !== undefined && options.plan === undefined && options.prd === undefined) {
+    return {
+      kind: "plan",
+      plan: positionalPlan,
+      effort: options.effort,
+    };
+  }
+
+  if (options.plan !== undefined && options.prd === undefined && positionalPlan === undefined) {
     return {
       kind: "plan",
       plan: options.plan,
@@ -134,7 +148,7 @@ function parseRunCommandOptions(options: RawRunCommandOptions): RunCommandOption
     };
   }
 
-  if (options.prd !== undefined && options.plan === undefined) {
+  if (options.prd !== undefined && options.plan === undefined && positionalPlan === undefined) {
     return {
       kind: "prd",
       prd: options.prd,
@@ -159,7 +173,7 @@ function mapCliError(error: unknown, argv: string[]): Error {
       return new MonkeError("Usage: mt cleanup");
     case "setup":
       return new MonkeError("Usage: mt setup");
-    case "run":
+    case "work":
       return new MonkeError(RUN_USAGE);
     default:
       return new MonkeError(ROOT_USAGE);
