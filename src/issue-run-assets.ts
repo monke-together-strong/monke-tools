@@ -52,14 +52,21 @@ export function buildIssueReviewerPrompt(
 }
 
 /** Build the final whole-PRD validation prompt after all planned task issues pass. */
-export function buildFinalPrdReviewerPrompt(prd: GitHubIssueContext): string {
+export function buildFinalPrdReviewerPrompt(
+  prd: GitHubIssueContext,
+  codingStandards: string,
+): string {
   return `${FINAL_PRD_REVIEWER_INSTRUCTIONS}
 
 # PRD validation context
 
 Only the parent PRD below is in scope. Validate the completed repo state against this PRD and its comments.
 
-${formatIssueContext("PRD", prd)}`;
+${formatIssueContext("PRD", prd)}
+
+# Shared coding standards
+
+${codingStandards}`;
 }
 
 function buildIssuePrompt(

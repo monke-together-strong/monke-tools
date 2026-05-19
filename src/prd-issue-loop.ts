@@ -6,7 +6,7 @@ import type { GitHubIssueContextLoader, GitHubIssueRunContext } from "./github-i
 import { getHeadCommitInfo, inspectCheckoutState, resolveGitRepoRoot } from "./git.ts";
 import { PrdIssueExecutor, type IssueCloser } from "./prd-issue-executor.ts";
 import { buildFinalPrdReviewerPrompt } from "./issue-run-assets.ts";
-import { loadRunRoleInstructions } from "./run-assets.ts";
+import { loadRunCodingStandards, loadRunRoleInstructions } from "./run-assets.ts";
 import type { Runtime } from "./types.ts";
 import {
   appendTotalDuration,
@@ -110,6 +110,7 @@ export class PrdIssueLoopOrchestrator {
     const { effort, repoRoot, runLogDirectory, startupCleanupCompleted } = options;
     const totalStartedAtMs = options.totalStartedAtMs ?? Date.now();
     const prd = this.#issueContextLoader.loadIssue(plan.prdIssueNumber);
+    const codingStandards = loadRunCodingStandards();
     const summaries = [
       ...(startupCleanupCompleted ? ["Cleanup checkpointed existing changes."] : []),
       formatPrdIssuePlanSummary(plan),
@@ -146,7 +147,7 @@ export class PrdIssueLoopOrchestrator {
     const finalPrdReviewResult = await this.#runFinalPrdReviewer({
       repoRoot,
       runLogDirectory,
-      prompt: buildFinalPrdReviewerPrompt(prd),
+      prompt: buildFinalPrdReviewerPrompt(prd, codingStandards),
       effort,
     });
     summaries.push(
