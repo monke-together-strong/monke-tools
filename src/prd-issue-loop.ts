@@ -13,7 +13,6 @@ import {
   runStartupCleanupCheckpoint,
   type RunOutcome,
 } from "./workflow-orchestrator.ts";
-import { formatDuration } from "./duration.ts";
 
 /** Validated ordered issue plan for one PRD-driven workflow run. */
 export interface PrdIssueLoopPlan {
@@ -143,9 +142,7 @@ export class PrdIssueLoopOrchestrator {
       logPath: path.join(runLogDirectory, "final-prd-reviewer.log"),
       reasoningEffort: effort,
     });
-    summaries.push(
-      formatFinalPrdReviewSummary(finalPrdReviewResult.exitCode, finalPrdReviewResult.durationMs),
-    );
+    summaries.push(formatFinalPrdReviewSummary(finalPrdReviewResult.exitCode));
 
     return {
       repoRoot,
@@ -177,18 +174,10 @@ function appendRunLogDirectory(summary: string, runLogDirectory: string): string
   return `${summary} Run logs: ${runLogDirectory}`;
 }
 
-function formatFinalPrdReviewSummary(exitCode: number, durationMs: number | undefined): string {
-  const parts: string[] = [];
-
+function formatFinalPrdReviewSummary(exitCode: number): string {
   if (exitCode === 0) {
-    parts.push("Final PRD validation finished successfully.");
-  } else {
-    parts.push(`Final PRD validation finished with failures (exit code ${exitCode}).`);
+    return "Final PRD validation finished successfully.";
   }
 
-  if (durationMs !== undefined) {
-    parts.push(`Final PRD validation duration: ${formatDuration(durationMs)}.`);
-  }
-
-  return parts.join(" ");
+  return `Final PRD validation finished with failures (exit code ${exitCode}).`;
 }
