@@ -155,6 +155,12 @@ export function installFakeCodex(
       exitCode?: number;
       commitMessage?: string;
     };
+    finalPrdReviewer?: {
+      stdoutText?: string;
+      stderrText?: string;
+      exitCode?: number;
+      commitMessage?: string;
+    };
   },
 ): {
   argsLogPath: string;
@@ -190,6 +196,10 @@ export function installFakeCodex(
   const reviewerStderrText = options?.reviewer?.stderrText ?? defaultStderrText;
   const reviewerExitCode = options?.reviewer?.exitCode ?? defaultExitCode;
   const reviewerCommitMessage = options?.reviewer?.commitMessage ?? "";
+  const finalPrdReviewerStdoutText = options?.finalPrdReviewer?.stdoutText ?? defaultStdoutText;
+  const finalPrdReviewerStderrText = options?.finalPrdReviewer?.stderrText ?? defaultStderrText;
+  const finalPrdReviewerExitCode = options?.finalPrdReviewer?.exitCode ?? defaultExitCode;
+  const finalPrdReviewerCommitMessage = options?.finalPrdReviewer?.commitMessage ?? "";
 
   const script = `#!/bin/sh
 set -eu
@@ -235,6 +245,8 @@ if /usr/bin/grep -q "You are the cleanup checkpointing phase." "$stdin_file"; th
   phase="cleanup"
 elif /usr/bin/grep -q "<<<MONKE_PRD_INPUT_START>>>" "$stdin_file"; then
   phase="planner"
+elif /usr/bin/grep -q "You are the Final PRD Reviewer for a completed PRD-driven workflow." "$stdin_file"; then
+  phase="final-prd-reviewer"
 elif /usr/bin/grep -q "# Explicit review target" "$stdin_file"; then
   phase="reviewer"
 elif /usr/bin/grep -q "You are a reviewer for one GitHub issue in a PRD-driven" "$stdin_file"; then
@@ -267,6 +279,15 @@ if [ "$phase" = "reviewer" ]; then
   printf '%s\n' ${shellQuote(reviewerStdoutText)}
   printf '%s\n' ${shellQuote(reviewerStderrText)} >&2
   exit ${reviewerExitCode}
+fi
+
+if [ "$phase" = "final-prd-reviewer" ]; then
+  if [ -n ${shellQuote(finalPrdReviewerCommitMessage)} ]; then
+    git commit --allow-empty -m ${shellQuote(finalPrdReviewerCommitMessage)} >/dev/null 2>&1 || true
+  fi
+  printf '%s\n' ${shellQuote(finalPrdReviewerStdoutText)}
+  printf '%s\n' ${shellQuote(finalPrdReviewerStderrText)} >&2
+  exit ${finalPrdReviewerExitCode}
 fi
 
 if [ -n ${shellQuote(implementerCommitMessage)} ]; then

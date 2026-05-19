@@ -26,8 +26,8 @@ mt create banana
 - `mt materialize` refreshes the current session worktree in place and keeps the existing port assignments sticky.
 - `mt cleanup` removes session records whose worktrees no longer exist.
 - `mt setup` syncs external repo path env vars into the source checkout root `.env`.
-- `mt run --plan "..."` runs Monke's single-pass Codex-backed workflow in the current Git checkout: it checkpoints dirty startup work when needed, runs the implementer and reviewer passes in sequence, streams the agent output live, and ends with a short summary.
-- `mt run --prd "..."` resolves one PRD issue plus an ordered task issue list, prints the resolved order, then executes each task issue through the PRD issue loop. Exactly one of `--plan` or `--prd` is required.
+- `mt work --plan "..."` runs Monke's single-pass Codex-backed workflow in the current Git checkout: it checkpoints dirty startup work when needed, runs the implementer and reviewer passes in sequence, streams the agent output live, and ends with a short summary.
+- `mt work --prd "..."` resolves one PRD issue plus an ordered task issue list, prints the resolved order, then executes each task issue through the PRD issue loop. Exactly one of `--plan` or `--prd` is required.
 
 ## `monke.yml`
 
@@ -61,8 +61,8 @@ bun run src/index.ts create banana
 bun run src/index.ts materialize
 bun run src/index.ts cleanup
 bun run src/index.ts setup
-bun run src/index.ts run --plan $'1. Update the CLI\n2. Add tests'
-bun run src/index.ts run --prd 'https://github.com/monke-together-strong/monke-tools/issues/22'
+bun run src/index.ts work --plan $'1. Update the CLI\n2. Add tests'
+bun run src/index.ts work --prd 'https://github.com/monke-together-strong/monke-tools/issues/22'
 ```
 
 Repo-specific tooling notes live in [docs/backlog-usage.md](docs/backlog-usage.md).

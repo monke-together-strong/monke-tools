@@ -60,10 +60,10 @@ test("PRD issue executor runs implementer then reviewer for the current issue an
     {
       implementer(options) {
         git(options.repoRoot, ["commit", "--allow-empty", "-m", "implement issue 25"]);
-        return { exitCode: 0 };
+        return { exitCode: 0, durationMs: 65_000 };
       },
       reviewer() {
-        return { exitCode: 0 };
+        return { exitCode: 0, durationMs: 2_000 };
       },
     },
   );
@@ -97,6 +97,7 @@ test("PRD issue executor runs implementer then reviewer for the current issue an
     "01-issue-25-implementer.log",
     "01-issue-25-reviewer.log",
   ]);
+  expect(outcome.summary).toContain("Durations: Implementer 1m 5s, Reviewer 2s.");
 
   for (const call of agentProvider.calls) {
     expect(call.repoRoot).toBe(repoRoot);

@@ -6,6 +6,7 @@ import type {
   AgentPhase,
   CodexReasoningEffort,
 } from "./agent-provider.ts";
+import { formatDuration } from "./duration.ts";
 import { MonkeError } from "./errors.ts";
 import { getHeadCommitInfo } from "./git.ts";
 import type { GitHubIssueRunContext } from "./github-issue-context.ts";
@@ -22,6 +23,7 @@ type IssuePhase = Extract<AgentPhase, "implementer" | "reviewer">;
 interface IssuePhaseResult {
   readonly phase: IssuePhase;
   readonly exitCode: number;
+  readonly durationMs?: number;
 }
 
 interface IssuePhaseRequest {
@@ -175,6 +177,7 @@ export class PrdIssueExecutor {
     return {
       phase: options.phase,
       exitCode: result.exitCode,
+      durationMs: result.durationMs,
     };
   }
 }
@@ -227,6 +230,11 @@ function formatIssueExecutionSummary(
     formatIssuePhaseSummary(reviewerResult),
     `Commits created: ${commitCount}.`,
   ];
+  const durationSummary = formatIssueDurationBreakdown(implementerResult, reviewerResult);
+
+  if (durationSummary) {
+    parts.push(durationSummary);
+  }
 
   if (policyViolation) {
     parts.push(policyViolation);
@@ -246,6 +254,26 @@ function formatIssuePhaseSummary(result: IssuePhaseResult): string {
   }
 
   return `${label} finished with failures (exit code ${result.exitCode}).`;
+}
+
+function formatIssueDurationBreakdown(
+  implementerResult: IssuePhaseResult,
+  reviewerResult: IssuePhaseResult,
+): string | null {
+  const parts = [
+    formatPhaseDuration("Implementer", implementerResult.durationMs),
+    formatPhaseDuration("Reviewer", reviewerResult.durationMs),
+  ].filter((part): part is string => part !== null);
+
+  return parts.length > 0 ? `Durations: ${parts.join(", ")}.` : null;
+}
+
+function formatPhaseDuration(label: string, durationMs: number | undefined): string | null {
+  if (durationMs === undefined) {
+    return null;
+  }
+
+  return `${label} ${formatDuration(durationMs)}`;
 }
 
 function formatIssueOrdinal(issueOrdinal: number): string {
