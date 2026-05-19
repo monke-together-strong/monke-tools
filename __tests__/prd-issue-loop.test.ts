@@ -107,7 +107,6 @@ test("PRD issue loop executes planned issues in order with lazy issue fetches an
     expect.stringContaining("Current issue #26"),
     expect.stringContaining("PRD #22: PRD issue-loop workflow"),
   ]);
-  expect(agentProvider.calls[4]?.prompt).toContain("# Goal Objective");
   expect(agentProvider.calls[4]?.prompt).toContain("Parent PRD context.");
   expect(agentProvider.calls[4]?.prompt).not.toContain("Current issue #25");
   expect(agentProvider.calls[4]?.prompt).not.toContain("Current issue #26");

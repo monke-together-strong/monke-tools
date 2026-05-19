@@ -54,20 +54,16 @@ test("issue run prompts include only PRD and current issue context", () => {
   }
 });
 
-test("final PRD reviewer prompt includes only parent PRD context and validation objective", () => {
+test("final PRD reviewer prompt includes only parent PRD validation context", () => {
   const prompt = buildFinalPrdReviewerPrompt({
     number: 22,
-    title: "Goal objective PRD",
+    title: "Validation PRD",
     body: "Testing plan: run bun test.",
     comments: [{ body: "Parent PRD clarification." }],
   });
 
-  expect(prompt).toContain("# Goal Objective");
-  expect(prompt).toContain(
-    "Validate that PRD #22: Goal objective PRD is fully implemented end to end, including the PRD testing plan, and record proof for the verdict.",
-  );
   expect(prompt).toContain("Run needed checks, make any necessary fixes");
-  expect(prompt).toContain("PRD #22: Goal objective PRD");
+  expect(prompt).toContain("PRD #22: Validation PRD");
   expect(prompt).toContain("Testing plan: run bun test.");
   expect(prompt).toContain("Parent PRD clarification.");
   expect(prompt).not.toContain("# Shared coding standards");

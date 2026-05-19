@@ -226,7 +226,6 @@ test("mt work --prd plans issues, prints the resolved order, and executes the PR
   expect(stdinLog).toContain("PRD #22: PRD issue-loop workflow");
   expect(stdinLog).toContain("Current issue #27: Wire PRD dispatcher");
   expect(stdinLog).toContain("You are the Final PRD Reviewer for a completed PRD-driven workflow.");
-  expect(stdinLog).toContain("# Goal Objective");
 
   const ghLog = read(sandbox, path.relative(sandbox, ghLogPath));
   expect(ghLog).toContain("repo view --json nameWithOwner --jq .nameWithOwner");

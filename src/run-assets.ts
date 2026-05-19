@@ -1,12 +1,8 @@
 import type { ReviewerTarget } from "./git.ts";
-import { formatGoalObjective } from "./goal-objective.ts";
 import cleanupInstructionsText from "./prompts/mt-work-cleanup.md" with { type: "text" };
 import implementerInstructionsText from "./prompts/mt-work-implementer.md" with { type: "text" };
 import reviewerInstructionsText from "./prompts/mt-work-reviewer.md" with { type: "text" };
 import codingStandardsText from "./prompts/mt-work-standards.md" with { type: "text" };
-
-const SINGLE_PLAN_IMPLEMENTER_GOAL_OBJECTIVE =
-  "Implement the user plan completely in the current checkout and leave the result ready for review.";
 
 export interface RunRoleInstructions {
   /** Cleanup checkpoint instructions loaded from the bundled cleanup prompt. */
@@ -43,8 +39,6 @@ export function buildImplementerPrompt(
   codingStandards: string,
 ): string {
   return `${implementerInstructions}
-
-${formatGoalObjective(SINGLE_PLAN_IMPLEMENTER_GOAL_OBJECTIVE)}
 
 # Shared coding standards
 
