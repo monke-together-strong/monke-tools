@@ -260,6 +260,58 @@ test("mt work --prd plans issues, prints the resolved order, and executes the PR
   expect(finalPrdReviewLog).toContain("final PRD validation passed");
 });
 
+test("mt work --prd succeeds when final PRD validation creates a commit", () => {
+  const sandbox = makeTempDir("run-prd-final-review-commit");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "repo"), {
+    "README.md": "# sandbox\n",
+  });
+  installFakeCodex(binDirectory, {
+    jsonOutput: JSON.stringify({
+      prdIssueNumber: 22,
+      taskIssueNumbers: [27],
+    }),
+    implementer: {
+      commitMessage: "implement issue 27",
+    },
+    finalPrdReviewer: {
+      stdoutText: "final PRD validation passed",
+      commitMessage: "final review fix",
+    },
+  });
+  installFakeGh(binDirectory, {
+    22: {
+      title: "PRD issue-loop workflow",
+      body: "Parent PRD context.",
+    },
+    27: {
+      title: "Wire PRD dispatcher",
+      body: "Add the late PRD dispatcher path.",
+    },
+  });
+
+  const result = spawnSync("bun", [cliEntrypoint, "work", "--prd", "issue 22"], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      PATH: [binDirectory, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter),
+    },
+    encoding: "utf8",
+  });
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("final PRD validation passed");
+  expect(result.stdout).toContain("Final PRD validation finished successfully.");
+  expect(result.stdout).toContain('Final PRD reviewer created commit "final review fix".');
+  const runLogDirectoryName = getRunLogDirectoryName(repoRoot);
+  const finalPrdReviewLog = read(
+    repoRoot,
+    path.join("logs", runLogDirectoryName, "final-prd-review-proof.log"),
+  );
+  expect(finalPrdReviewLog).toContain("--- host mutation summary ---");
+  expect(finalPrdReviewLog).toContain("final review fix");
+});
+
 test("mt work --prd fails before startup cleanup when gh is missing from PATH", () => {
   const sandbox = makeTempDir("run-prd-missing-gh");
   const binDirectory = path.join(sandbox, "bin");

@@ -159,6 +159,7 @@ export function installFakeCodex(
       stdoutText?: string;
       stderrText?: string;
       exitCode?: number;
+      commitMessage?: string;
     };
   },
 ): {
@@ -198,6 +199,7 @@ export function installFakeCodex(
   const finalPrdReviewerStdoutText = options?.finalPrdReviewer?.stdoutText ?? defaultStdoutText;
   const finalPrdReviewerStderrText = options?.finalPrdReviewer?.stderrText ?? defaultStderrText;
   const finalPrdReviewerExitCode = options?.finalPrdReviewer?.exitCode ?? defaultExitCode;
+  const finalPrdReviewerCommitMessage = options?.finalPrdReviewer?.commitMessage ?? "";
 
   const script = `#!/bin/sh
 set -eu
@@ -280,6 +282,9 @@ if [ "$phase" = "reviewer" ]; then
 fi
 
 if [ "$phase" = "final-prd-reviewer" ]; then
+  if [ -n ${shellQuote(finalPrdReviewerCommitMessage)} ]; then
+    git commit --allow-empty -m ${shellQuote(finalPrdReviewerCommitMessage)} >/dev/null 2>&1 || true
+  fi
   printf '%s\n' ${shellQuote(finalPrdReviewerStdoutText)}
   printf '%s\n' ${shellQuote(finalPrdReviewerStderrText)} >&2
   exit ${finalPrdReviewerExitCode}
