@@ -13,7 +13,7 @@ export const CODEX_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"] as con
 export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORTS)[number];
 
 /** Workflow phases that can be delegated to an agent provider. */
-export type AgentPhase = "cleanup" | "implementer" | "reviewer";
+export type AgentPhase = "cleanup" | "implementer" | "reviewer" | "final-prd-reviewer";
 
 /** Options required to execute one agent-backed workflow phase. */
 export interface AgentRunOptions {

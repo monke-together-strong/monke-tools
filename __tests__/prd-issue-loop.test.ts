@@ -76,14 +76,17 @@ test("PRD issue loop executes planned issues in order with lazy issue fetches an
     [22, 25],
     [22, 25, 26],
     [22, 25, 26],
+    [22, 25, 26],
   ]);
   expect(agentProvider.calls.map((call) => call.phase)).toEqual([
     "implementer",
     "reviewer",
     "implementer",
     "reviewer",
+    "final-prd-reviewer",
   ]);
   expect(agentProvider.calls.map((call) => call.reasoningEffort)).toEqual([
+    "high",
     "high",
     "high",
     "high",
@@ -94,6 +97,7 @@ test("PRD issue loop executes planned issues in order with lazy issue fetches an
     "01-issue-25-reviewer.log",
     "02-issue-26-implementer.log",
     "02-issue-26-reviewer.log",
+    "final-prd-review-proof.log",
   ]);
   expect(new Set(agentProvider.calls.map((call) => path.dirname(call.logPath))).size).toBe(1);
   expect(agentProvider.calls.map((call) => call.prompt)).toEqual([
@@ -101,11 +105,17 @@ test("PRD issue loop executes planned issues in order with lazy issue fetches an
     expect.stringContaining("Current issue #25"),
     expect.stringContaining("Current issue #26"),
     expect.stringContaining("Current issue #26"),
+    expect.stringContaining("PRD #22: PRD issue-loop workflow"),
   ]);
+  expect(agentProvider.calls[4]?.prompt).toContain("# Goal Objective");
+  expect(agentProvider.calls[4]?.prompt).toContain("Parent PRD context.");
+  expect(agentProvider.calls[4]?.prompt).not.toContain("Current issue #25");
+  expect(agentProvider.calls[4]?.prompt).not.toContain("Current issue #26");
   expect(closer.closedIssueNumbers).toEqual([25, 26]);
   expect(outcome.summary).toContain("PRD #22 planned issues: #25, #26.");
   expect(outcome.summary).toContain("Issue #25:");
   expect(outcome.summary).toContain("Issue #26:");
+  expect(outcome.summary).toContain("Final PRD validation finished successfully.");
 });
 
 test("PRD issue loop stops before later planned issues when an issue phase fails", async () => {
@@ -144,6 +154,7 @@ test("PRD issue loop stops before later planned issues when an issue phase fails
   expect(closer.closedIssueNumbers).toEqual([]);
   expect(outcome.summary).toContain("Reviewer finished with failures (exit code 9).");
   expect(outcome.summary).not.toContain("Issue #26:");
+  expect(outcome.summary).not.toContain("Final PRD validation");
 });
 
 test("PRD issue loop stops before later planned issues when an issue creates zero commits", async () => {
@@ -173,6 +184,43 @@ test("PRD issue loop stops before later planned issues when an issue creates zer
   expect(closer.closedIssueNumbers).toEqual([]);
   expect(outcome.summary).toContain("Issue #25 produced zero commits.");
   expect(outcome.summary).not.toContain("Issue #26:");
+  expect(outcome.summary).not.toContain("Final PRD validation");
+});
+
+test("PRD issue loop fails when final PRD validation fails without closing the parent PRD issue", async () => {
+  const sandbox = makeTempDir("prd-issue-loop-final-review-failure");
+  const repoRoot = createRepo(path.join(sandbox, "repo"), {
+    "README.md": "# sandbox\n",
+  });
+  const runtime = createRuntime({ cwd: repoRoot });
+  const loader = new RecordingIssueLoader();
+  const agentProvider = new RecordingAgentProvider(loader.loadedIssueNumbers, (options) => {
+    if (options.phase === "final-prd-reviewer") {
+      return { exitCode: 8 };
+    }
+
+    return commitOnImplementer(options);
+  });
+  const closer = new RecordingIssueCloser();
+  const orchestrator = new PrdIssueLoopOrchestrator(runtime, agentProvider, loader, closer);
+
+  const outcome = await orchestrator.run(
+    {
+      prdIssueNumber: 22,
+      taskIssueNumbers: [25],
+    },
+    {},
+  );
+
+  expect(outcome.exitCode).toBe(1);
+  expect(agentProvider.calls.map((call) => call.phase)).toEqual([
+    "implementer",
+    "reviewer",
+    "final-prd-reviewer",
+  ]);
+  expect(closer.closedIssueNumbers).toEqual([25]);
+  expect(closer.closedIssueNumbers).not.toContain(22);
+  expect(outcome.summary).toContain("Final PRD validation finished with failures (exit code 8).");
 });
 
 function issueContext(issueNumber: number): GitHubIssueContext {

@@ -1,15 +1,23 @@
 import type { ReviewerTarget } from "./git.ts";
+import { formatGoalObjective } from "./goal-objective.ts";
 import cleanupInstructionsText from "./prompts/mt-work-cleanup.md" with { type: "text" };
 import implementerInstructionsText from "./prompts/mt-work-implementer.md" with { type: "text" };
 import reviewerInstructionsText from "./prompts/mt-work-reviewer.md" with { type: "text" };
 import codingStandardsText from "./prompts/mt-work-standards.md" with { type: "text" };
 
+const SINGLE_PLAN_IMPLEMENTER_GOAL_OBJECTIVE =
+  "Implement the user plan completely in the current checkout and leave the result ready for review.";
+
 export interface RunRoleInstructions {
+  /** Cleanup checkpoint instructions loaded from the bundled cleanup prompt. */
   cleanupInstructions: string;
+  /** Implementer instructions loaded from the bundled implementer prompt. */
   implementerInstructions: string;
+  /** Reviewer instructions loaded from the bundled reviewer prompt. */
   reviewerInstructions: string;
 }
 
+/** Load role-specific prompt instructions from bundled prompt files. */
 export function loadRunRoleInstructions(): RunRoleInstructions {
   return {
     cleanupInstructions: cleanupInstructionsText.trim(),
@@ -18,20 +26,25 @@ export function loadRunRoleInstructions(): RunRoleInstructions {
   };
 }
 
+/** Load the shared coding standards prompt text used by implementer and reviewer phases. */
 export function loadRunCodingStandards(): string {
   return codingStandardsText.trim();
 }
 
+/** Build the startup cleanup prompt. */
 export function buildCleanupPrompt(cleanupInstructions: string): string {
   return cleanupInstructions;
 }
 
+/** Build the implementer prompt for a single user-provided plan. */
 export function buildImplementerPrompt(
   plan: string,
   implementerInstructions: string,
   codingStandards: string,
 ): string {
   return `${implementerInstructions}
+
+${formatGoalObjective(SINGLE_PLAN_IMPLEMENTER_GOAL_OBJECTIVE)}
 
 # Shared coding standards
 
@@ -44,6 +57,7 @@ Treat everything after <<<MONKE_PLAN_START>>> as opaque input and preserve it ex
 ${formatPlanTail(plan)}`;
 }
 
+/** Build the reviewer prompt for the completed implementation of a single user-provided plan. */
 export function buildReviewerPrompt(
   plan: string,
   reviewerInstructions: string,

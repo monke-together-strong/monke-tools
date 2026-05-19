@@ -1,7 +1,10 @@
+import path from "node:path";
+
 import type { AgentProvider, CodexReasoningEffort } from "./agent-provider.ts";
 import type { GitHubIssueContextLoader, GitHubIssueRunContext } from "./github-issue-context.ts";
 import { resolveGitRepoRoot } from "./git.ts";
 import { PrdIssueExecutor, type IssueCloser } from "./prd-issue-executor.ts";
+import { buildFinalPrdReviewerPrompt } from "./issue-run-assets.ts";
 import { loadRunRoleInstructions } from "./run-assets.ts";
 import type { Runtime } from "./types.ts";
 import {
@@ -117,10 +120,19 @@ export class PrdIssueLoopOrchestrator {
       }
     }
 
+    const finalPrdReviewResult = await this.#agentProvider.run({
+      repoRoot,
+      phase: "final-prd-reviewer",
+      prompt: buildFinalPrdReviewerPrompt(prd),
+      logPath: path.join(runLogDirectory, "final-prd-review-proof.log"),
+      reasoningEffort: effort,
+    });
+    summaries.push(formatFinalPrdReviewSummary(finalPrdReviewResult.exitCode));
+
     return {
       repoRoot,
       runLogDirectory,
-      exitCode: 0,
+      exitCode: finalPrdReviewResult.exitCode === 0 ? 0 : 1,
       summary: formatIssueLoopSummary(summaries, runLogDirectory),
     };
   }
@@ -138,4 +150,12 @@ function formatIssueLoopSummary(summaries: readonly string[], runLogDirectory: s
 
 function appendRunLogDirectory(summary: string, runLogDirectory: string): string {
   return `${summary} Run logs: ${runLogDirectory}`;
+}
+
+function formatFinalPrdReviewSummary(exitCode: number): string {
+  if (exitCode === 0) {
+    return "Final PRD validation finished successfully.";
+  }
+
+  return `Final PRD validation finished with failures (exit code ${exitCode}).`;
 }

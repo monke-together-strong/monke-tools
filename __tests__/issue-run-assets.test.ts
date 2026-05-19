@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
 import {
+  buildFinalPrdReviewerPrompt,
   buildIssueImplementerPrompt,
   buildIssueReviewerPrompt,
   loadIssueRunRoleInstructions,
@@ -51,4 +52,25 @@ test("issue run prompts include only PRD and current issue context", () => {
     expect(prompt).not.toContain(labelName);
     expect(prompt).not.toContain(assigneeLogin);
   }
+});
+
+test("final PRD reviewer prompt includes only parent PRD context and validation objective", () => {
+  const prompt = buildFinalPrdReviewerPrompt({
+    number: 22,
+    title: "Goal objective PRD",
+    body: "Testing plan: run bun test.",
+    comments: [{ body: "Parent PRD clarification." }],
+  });
+
+  expect(prompt).toContain("# Goal Objective");
+  expect(prompt).toContain(
+    "Validate that PRD #22: Goal objective PRD is fully implemented end to end, including the PRD testing plan, and record proof for the verdict.",
+  );
+  expect(prompt).toContain("Run needed checks, make any necessary fixes");
+  expect(prompt).toContain("PRD #22: Goal objective PRD");
+  expect(prompt).toContain("Testing plan: run bun test.");
+  expect(prompt).toContain("Parent PRD clarification.");
+  expect(prompt).not.toContain("# Shared coding standards");
+  expect(prompt).not.toContain("Current issue #");
+  expect(prompt).not.toContain("Issue closed.");
 });

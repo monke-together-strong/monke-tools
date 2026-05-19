@@ -3,8 +3,17 @@ import type {
   GitHubIssueContext,
   GitHubIssueRunContext,
 } from "./github-issue-context.ts";
+import { formatGoalObjective } from "./goal-objective.ts";
 import issueImplementerInstructionsText from "./prompts/mt-work-issue-implementer.md" with { type: "text" };
 import issueReviewerInstructionsText from "./prompts/mt-work-issue-reviewer.md" with { type: "text" };
+
+const FINAL_PRD_REVIEWER_INSTRUCTIONS = [
+  "You are the Final PRD Reviewer for a completed PRD-driven workflow.",
+  "",
+  "Validate the completed repository state against the parent PRD below, including its testing plan. Run needed checks, make any necessary fixes, and record concise proof for your verdict.",
+  "",
+  "Do not close the parent PRD issue.",
+].join("\n");
 
 /** Role-specific prompt instructions for PRD-driven issue execution. */
 export interface IssueRunRoleInstructions {
@@ -41,6 +50,23 @@ export function buildIssueReviewerPrompt(
   codingStandards: string,
 ): string {
   return buildIssuePrompt(reviewerInstructions, context, codingStandards);
+}
+
+/** Build the final whole-PRD validation prompt after all planned task issues pass. */
+export function buildFinalPrdReviewerPrompt(prd: GitHubIssueContext): string {
+  return `${FINAL_PRD_REVIEWER_INSTRUCTIONS}
+
+${formatGoalObjective(formatFinalPrdReviewerGoalObjective(prd))}
+
+# PRD validation context
+
+Only the parent PRD below is in scope. Validate the completed repo state against this PRD and its comments.
+
+${formatIssueContext("PRD", prd)}`;
+}
+
+function formatFinalPrdReviewerGoalObjective(prd: GitHubIssueContext): string {
+  return `Validate that PRD #${prd.number}: ${prd.title} is fully implemented end to end, including the PRD testing plan, and record proof for the verdict.`;
 }
 
 function buildIssuePrompt(

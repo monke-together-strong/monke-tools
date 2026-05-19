@@ -169,6 +169,10 @@ test("mt work --prd plans issues, prints the resolved order, and executes the PR
         stdoutText: "reviewer completed issue 27",
         stderrText: "reviewer diagnostics",
       },
+      finalPrdReviewer: {
+        stdoutText: "final PRD validation passed",
+        stderrText: "final PRD validation diagnostics",
+      },
     });
   const ghLogPath = installFakeGh(binDirectory, {
     22: {
@@ -204,23 +208,25 @@ test("mt work --prd plans issues, prints the resolved order, and executes the PR
   );
 
   expect(result.status).toBe(0);
-  expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("3");
+  expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("4");
   expect(read(sandbox, path.relative(sandbox, cwdLogPath))).toBe(
-    `${repoRoot}\n${repoRoot}\n${repoRoot}\n`,
+    `${repoRoot}\n${repoRoot}\n${repoRoot}\n${repoRoot}\n`,
   );
   expect(read(sandbox, path.relative(sandbox, phaseLogPath))).toBe(
-    "planner\nimplementer\nreviewer\n",
+    "planner\nimplementer\nreviewer\nfinal-prd-reviewer\n",
   );
   const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
   expect(argsLog).toContain("--output-schema");
   expect(argsLog).toContain("-s\nread-only");
-  expect(argsLog.match(/--dangerously-bypass-approvals-and-sandbox/g)).toHaveLength(2);
-  expect(argsLog.match(/model_reasoning_effort="high"/g)).toHaveLength(3);
+  expect(argsLog.match(/--dangerously-bypass-approvals-and-sandbox/g)).toHaveLength(3);
+  expect(argsLog.match(/model_reasoning_effort="high"/g)).toHaveLength(4);
 
   const stdinLog = read(sandbox, path.relative(sandbox, stdinLogPath));
   expect(stdinLog).toContain("<<<MONKE_PRD_INPUT_START>>>\nUse PRD https://github.com");
   expect(stdinLog).toContain("PRD #22: PRD issue-loop workflow");
   expect(stdinLog).toContain("Current issue #27: Wire PRD dispatcher");
+  expect(stdinLog).toContain("You are the Final PRD Reviewer for a completed PRD-driven workflow.");
+  expect(stdinLog).toContain("# Goal Objective");
 
   const ghLog = read(sandbox, path.relative(sandbox, ghLogPath));
   expect(ghLog).toContain("repo view --json nameWithOwner --jq .nameWithOwner");
@@ -234,8 +240,11 @@ test("mt work --prd plans issues, prints the resolved order, and executes the PR
   expect(executionIndex).toBeGreaterThan(planIndex);
   expect(result.stdout).toContain("Issue #27:");
   expect(result.stdout).toContain("Issue closed.");
+  expect(result.stdout).toContain("final PRD validation passed");
+  expect(result.stdout).toContain("Final PRD validation finished successfully.");
   expect(result.stderr).toContain("implementer diagnostics");
   expect(result.stderr).toContain("reviewer diagnostics");
+  expect(result.stderr).toContain("final PRD validation diagnostics");
 
   const runLogDirectoryName = getRunLogDirectoryName(repoRoot);
   const plannerLog = read(repoRoot, path.join("logs", runLogDirectoryName, "planner.log"));
@@ -243,6 +252,12 @@ test("mt work --prd plans issues, prints the resolved order, and executes the PR
   expect(plannerLog).toContain("provider: codex-json");
   expect(plannerLog).toContain("effort: high");
   expect(plannerLog).toContain("fake codex stdout");
+  const finalPrdReviewLog = read(
+    repoRoot,
+    path.join("logs", runLogDirectoryName, "final-prd-review-proof.log"),
+  );
+  expect(finalPrdReviewLog).toContain("phase: final-prd-reviewer");
+  expect(finalPrdReviewLog).toContain("final PRD validation passed");
 });
 
 test("mt work --prd fails before startup cleanup when gh is missing from PATH", () => {
@@ -296,6 +311,10 @@ test("mt work --prd checkpoints dirty startup work before planning or executing 
         stdoutText: "reviewer completed issue 27",
         stderrText: "reviewer diagnostics",
       },
+      finalPrdReviewer: {
+        stdoutText: "final PRD validation passed",
+        stderrText: "final PRD validation diagnostics",
+      },
     },
   );
   installFakeGh(binDirectory, {
@@ -324,13 +343,13 @@ test("mt work --prd checkpoints dirty startup work before planning or executing 
   );
 
   expect(result.status).toBe(0);
-  expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("4");
+  expect(read(sandbox, path.relative(sandbox, invocationCountPath))).toBe("5");
   expect(read(sandbox, path.relative(sandbox, phaseLogPath))).toBe(
-    "cleanup\nplanner\nimplementer\nreviewer\n",
+    "cleanup\nplanner\nimplementer\nreviewer\nfinal-prd-reviewer\n",
   );
   expect(
     read(sandbox, path.relative(sandbox, argsLogPath)).match(/model_reasoning_effort="high"/g),
-  ).toHaveLength(4);
+  ).toHaveLength(5);
   expect(read(sandbox, path.relative(sandbox, stdinLogPath))).toContain(
     "You are the cleanup checkpointing phase.",
   );
@@ -345,7 +364,9 @@ test("mt work --prd checkpoints dirty startup work before planning or executing 
   expect(result.stdout).toContain(
     "Cleanup checkpointed existing changes. PRD #22 planned issues: #27.",
   );
+  expect(result.stdout).toContain("Final PRD validation finished successfully.");
   expect(result.stderr).toContain("cleanup diagnostics");
+  expect(result.stderr).toContain("final PRD validation diagnostics");
 });
 
 test("mt work --prd aborts before planning when startup cleanup fails", () => {

@@ -42,6 +42,27 @@ test("run prompt assets load the local role prompts and vendored standards clean
   expect(codingStandards).toContain("## Interface Design");
 });
 
+test("implementer prompt includes a Goal Objective before preserving the raw plan exactly", () => {
+  const instructions = loadRunRoleInstructions();
+  const codingStandards = loadRunCodingStandards();
+  const plan = "Line 1\n\n# Heading that must stay raw\n<<<MONKE_PLAN_START>>> nested marker";
+
+  const implementerPrompt = buildImplementerPrompt(
+    plan,
+    instructions.implementerInstructions,
+    codingStandards,
+  );
+
+  expect(implementerPrompt).toContain("# Goal Objective");
+  expect(implementerPrompt.indexOf("# Goal Objective")).toBeLessThan(
+    implementerPrompt.indexOf("# User plan"),
+  );
+  expect(implementerPrompt).toContain(
+    "Implement the user plan completely in the current checkout and leave the result ready for review.",
+  );
+  expect(implementerPrompt.endsWith(`<<<MONKE_PLAN_START>>>\n${plan}`)).toBe(true);
+});
+
 test("implementer and reviewer prompts both load the shared coding standards contract", () => {
   const instructions = loadRunRoleInstructions();
   const codingStandards = loadRunCodingStandards();
@@ -79,6 +100,7 @@ test("implementer and reviewer prompts both load the shared coding standards con
   expect(reviewerPrompt).toContain("# Shared coding standards");
   expect(reviewerPrompt).toContain(codingStandards);
   expect(reviewerPrompt).toContain("# Explicit review target");
+  expect(reviewerPrompt).not.toContain("# Goal Objective");
   expect(reviewerPrompt).toContain(
     "- Inspect the last commit because HEAD changed during implementation and the checkout is now clean.",
   );
