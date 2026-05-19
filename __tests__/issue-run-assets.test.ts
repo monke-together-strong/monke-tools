@@ -70,7 +70,7 @@ test("final PRD reviewer prompt includes only parent PRD validation context", ()
   expect(prompt).toContain("PRD #22: Validation PRD");
   expect(prompt).toContain("Testing plan: run bun test.");
   expect(prompt).toContain("Parent PRD clarification.");
-  expect(prompt).toContain("# Shared coding standards");
+  expect(prompt).toContain("# Coding Standards");
   expect(prompt).toContain(codingStandards);
   expect(prompt).not.toContain("Current issue #");
   expect(prompt).not.toContain("Issue closed.");

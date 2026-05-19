@@ -40,7 +40,7 @@ export function buildImplementerPrompt(
 ): string {
   return `${implementerInstructions}
 
-# Shared coding standards
+# Coding Standards
 
 ${codingStandards}
 
@@ -64,7 +64,7 @@ export function buildReviewerPrompt(
 
 ${formatReviewerTarget(reviewerTarget)}
 
-# Shared coding standards
+# Coding Standards
 
 ${codingStandards}
 

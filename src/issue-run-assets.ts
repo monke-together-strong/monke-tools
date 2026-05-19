@@ -64,7 +64,7 @@ Only the parent PRD below is in scope. Validate the completed repo state against
 
 ${formatIssueContext("PRD", prd)}
 
-# Shared coding standards
+# Coding Standards
 
 ${codingStandards}`;
 }
@@ -78,7 +78,7 @@ function buildIssuePrompt(
 
 ${formatIssueRunContext(context)}
 
-# Shared coding standards
+# Coding Standards
 
 ${codingStandards}`;
 }
