@@ -40,7 +40,7 @@ function getRunLogDirectoryName(repoRoot: string): string {
   return runLogDirectoryName;
 }
 
-test("mt work executes codex from the git repo root, passes the raw plan through, and prints a short summary", () => {
+test("mt work executes codex from the git repo root, passes the default positional plan through, and prints a short summary", () => {
   const sandbox = makeTempDir("run-success");
   const binDirectory = path.join(sandbox, "bin");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
@@ -51,7 +51,7 @@ test("mt work executes codex from the git repo root, passes the raw plan through
     installFakeCodex(binDirectory);
   const plan = "1. Keep line one\n2. Preserve\n\nFinal line";
 
-  const result = spawnSync("bun", [cliEntrypoint, "work", "--plan", plan], {
+  const result = spawnSync("bun", [cliEntrypoint, "work", plan], {
     cwd: path.join(repoRoot, "nested/feature"),
     env: {
       ...process.env,
