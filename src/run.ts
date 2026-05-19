@@ -18,6 +18,7 @@ import { findExecutable } from "./runtime.ts";
 import { loadRunRoleInstructions } from "./run-assets.ts";
 import type { Runtime } from "./types.ts";
 import {
+  appendTotalDuration,
   createRunLogDirectory,
   runStartupCleanupCheckpoint,
   WorkflowOrchestrator,
@@ -87,6 +88,7 @@ export async function executePrdIssueWorkflow(
   prdInput: string,
   options: RunWorkflowOptions,
 ): Promise<RunOutcome> {
+  const startedAtMs = Date.now();
   const codex = findExecutable("codex", runtime.env);
   if (!codex) {
     throw new MonkeError("Could not find `codex` on PATH");
@@ -112,7 +114,10 @@ export async function executePrdIssueWorkflow(
       repoRoot,
       runLogDirectory,
       exitCode: startupCleanup.exitCode,
-      summary: `${startupCleanup.failureSummary} Run logs: ${runLogDirectory}`,
+      summary: `${appendTotalDuration(
+        startupCleanup.failureSummary,
+        Date.now() - startedAtMs,
+      )} Run logs: ${runLogDirectory}`,
     };
   }
 
@@ -142,6 +147,7 @@ export async function executePrdIssueWorkflow(
     repoRoot,
     runLogDirectory,
     startupCleanupCompleted: startupCleanup.completed,
+    totalStartedAtMs: startedAtMs,
     effort: options.effort,
   });
 }

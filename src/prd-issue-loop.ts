@@ -9,10 +9,12 @@ import { buildFinalPrdReviewerPrompt } from "./issue-run-assets.ts";
 import { loadRunRoleInstructions } from "./run-assets.ts";
 import type { Runtime } from "./types.ts";
 import {
+  appendTotalDuration,
   createRunLogDirectory,
   runStartupCleanupCheckpoint,
   type RunOutcome,
 } from "./workflow-orchestrator.ts";
+import { formatDuration } from "./duration.ts";
 
 /** Validated ordered issue plan for one PRD-driven workflow run. */
 export interface PrdIssueLoopPlan {
@@ -36,10 +38,13 @@ export interface PreparedPrdIssueLoopOptions extends PrdIssueLoopOptions {
   readonly runLogDirectory: string;
   /** Whether the shared startup cleanup checkpoint completed before planning. */
   readonly startupCleanupCompleted: boolean;
+  /** Optional wall-clock start time for the full workflow, including caller-owned setup. */
+  readonly totalStartedAtMs?: number;
 }
 
 interface FinalPrdReviewResult {
   readonly exitCode: number;
+  readonly durationMs?: number;
   readonly mutationSummary: string | null;
   readonly workingTreeViolation: string | null;
 }
@@ -66,6 +71,7 @@ export class PrdIssueLoopOrchestrator {
 
   /** Execute planned task issues in order, stopping immediately after the first failed issue. */
   async run(plan: PrdIssueLoopPlan, options: PrdIssueLoopOptions): Promise<RunOutcome> {
+    const startedAtMs = Date.now();
     const repoRoot = resolveGitRepoRoot(this.#runtime, this.#runtime.cwd);
     const runLogDirectory = createRunLogDirectory(this.#runtime, repoRoot);
     const startupCleanup = await runStartupCleanupCheckpoint(this.#runtime, this.#agentProvider, {
@@ -79,7 +85,11 @@ export class PrdIssueLoopOrchestrator {
         repoRoot,
         runLogDirectory,
         exitCode: startupCleanup.exitCode,
-        summary: formatIssueLoopSummary([startupCleanup.failureSummary], runLogDirectory),
+        summary: formatIssueLoopSummary(
+          [startupCleanup.failureSummary],
+          runLogDirectory,
+          Date.now() - startedAtMs,
+        ),
       };
     }
 
@@ -87,6 +97,7 @@ export class PrdIssueLoopOrchestrator {
       repoRoot,
       runLogDirectory,
       startupCleanupCompleted: startupCleanup.completed,
+      totalStartedAtMs: startedAtMs,
       effort: options.effort,
     });
   }
@@ -97,6 +108,7 @@ export class PrdIssueLoopOrchestrator {
     options: PreparedPrdIssueLoopOptions,
   ): Promise<RunOutcome> {
     const { effort, repoRoot, runLogDirectory, startupCleanupCompleted } = options;
+    const totalStartedAtMs = options.totalStartedAtMs ?? Date.now();
     const prd = this.#issueContextLoader.loadIssue(plan.prdIssueNumber);
     const summaries = [
       ...(startupCleanupCompleted ? ["Cleanup checkpointed existing changes."] : []),
@@ -122,7 +134,11 @@ export class PrdIssueLoopOrchestrator {
           repoRoot,
           runLogDirectory,
           exitCode: 1,
-          summary: formatIssueLoopSummary(summaries, runLogDirectory),
+          summary: formatIssueLoopSummary(
+            summaries,
+            runLogDirectory,
+            Date.now() - totalStartedAtMs,
+          ),
         };
       }
     }
@@ -136,6 +152,7 @@ export class PrdIssueLoopOrchestrator {
     summaries.push(
       formatFinalPrdReviewSummary(
         finalPrdReviewResult.exitCode,
+        finalPrdReviewResult.durationMs,
         finalPrdReviewResult.mutationSummary,
         finalPrdReviewResult.workingTreeViolation,
       ),
@@ -148,7 +165,7 @@ export class PrdIssueLoopOrchestrator {
         finalPrdReviewResult.exitCode === 0 && finalPrdReviewResult.workingTreeViolation === null
           ? 0
           : 1,
-      summary: formatIssueLoopSummary(summaries, runLogDirectory),
+      summary: formatIssueLoopSummary(summaries, runLogDirectory, Date.now() - totalStartedAtMs),
     };
   }
 
@@ -189,6 +206,7 @@ export class PrdIssueLoopOrchestrator {
 
     return {
       exitCode: result.exitCode,
+      durationMs: result.durationMs,
       mutationSummary,
       workingTreeViolation,
     };
@@ -201,8 +219,15 @@ export function formatPrdIssuePlanSummary(plan: PrdIssueLoopPlan): string {
   return `PRD #${plan.prdIssueNumber} planned issues: ${issueList}.`;
 }
 
-function formatIssueLoopSummary(summaries: readonly string[], runLogDirectory: string): string {
-  return appendRunLogDirectory(summaries.join(" "), runLogDirectory);
+function formatIssueLoopSummary(
+  summaries: readonly string[],
+  runLogDirectory: string,
+  totalDurationMs?: number,
+): string {
+  return appendRunLogDirectory(
+    appendTotalDuration(summaries.join(" "), totalDurationMs),
+    runLogDirectory,
+  );
 }
 
 function appendRunLogDirectory(summary: string, runLogDirectory: string): string {
@@ -211,6 +236,7 @@ function appendRunLogDirectory(summary: string, runLogDirectory: string): string
 
 function formatFinalPrdReviewSummary(
   exitCode: number,
+  durationMs: number | undefined,
   mutationSummary: string | null,
   workingTreeViolation: string | null,
 ): string {
@@ -220,6 +246,10 @@ function formatFinalPrdReviewSummary(
     parts.push("Final PRD validation finished successfully.");
   } else {
     parts.push(`Final PRD validation finished with failures (exit code ${exitCode}).`);
+  }
+
+  if (durationMs !== undefined) {
+    parts.push(`Final PRD validation duration: ${formatDuration(durationMs)}.`);
   }
 
   if (mutationSummary) {

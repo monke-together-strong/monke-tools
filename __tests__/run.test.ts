@@ -82,6 +82,8 @@ test("mt work executes codex from the git repo root, passes the raw plan through
   expect(result.stdout).toContain(
     "Implementer finished successfully. Reviewer finished successfully.",
   );
+  expect(result.stdout).toMatch(/Durations: Implementer \d+(?:ms|s), Reviewer \d+(?:ms|s)\./);
+  expect(result.stdout).toMatch(/Total duration: \d+(?:ms|s)\./);
   expect(result.stderr).toContain("fake codex stderr");
 });
 
@@ -241,6 +243,9 @@ test("mt work --prd plans issues, prints the resolved order, and executes the PR
   expect(result.stdout).toContain("Issue closed.");
   expect(result.stdout).toContain("final PRD validation passed");
   expect(result.stdout).toContain("Final PRD validation finished successfully.");
+  expect(result.stdout).toMatch(/Durations: Implementer \d+(?:ms|s), Reviewer \d+(?:ms|s)\./);
+  expect(result.stdout).toMatch(/Final PRD validation duration: \d+(?:ms|s)\./);
+  expect(result.stdout).toMatch(/Total duration: \d+(?:ms|s)\./);
   expect(result.stderr).toContain("implementer diagnostics");
   expect(result.stderr).toContain("reviewer diagnostics");
   expect(result.stderr).toContain("final PRD validation diagnostics");

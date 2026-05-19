@@ -8,6 +8,7 @@ import type {
   AgentPhase,
   CodexReasoningEffort,
 } from "./agent-provider.ts";
+import { formatDuration } from "./duration.ts";
 import {
   determineReviewerTarget,
   getHeadCommitInfo,
@@ -31,6 +32,7 @@ type WorkflowRole = "implementer" | "reviewer";
 interface WorkflowPhaseResult {
   role: WorkflowRole;
   exitCode: number;
+  durationMs?: number;
   commitViolation: string | null;
 }
 
@@ -99,6 +101,7 @@ export class WorkflowOrchestrator {
 
   /** Execute the current single-pass cleanup -> implementer -> reviewer workflow. */
   async run(plan: string, options: WorkflowRunOptions): Promise<RunOutcome> {
+    const startedAtMs = Date.now();
     const repoRoot = resolveGitRepoRoot(this.#runtime, this.#runtime.cwd);
     const runLogDirectory = createRunLogDirectory(this.#runtime, repoRoot);
     const instructions = loadRunRoleInstructions();
@@ -154,6 +157,7 @@ export class WorkflowOrchestrator {
         implementerResult,
         reviewerResult,
         runLogDirectory,
+        Date.now() - startedAtMs,
       ),
     };
   }
@@ -172,6 +176,7 @@ export class WorkflowOrchestrator {
     return {
       role: options.role,
       exitCode: phaseResult.exitCode,
+      durationMs: phaseResult.durationMs,
       commitViolation: getWorkflowCommitViolation(
         options.role,
         beforePhaseCommit?.sha ?? null,
@@ -244,16 +249,21 @@ export function formatRunSummary(
   implementerResult: WorkflowPhaseResult,
   reviewerResult: WorkflowPhaseResult,
   runLogDirectory: string,
+  totalDurationMs?: number,
 ): string {
   const phaseSummaries = [
     formatWorkflowPhaseSummary(implementerResult),
     formatWorkflowPhaseSummary(reviewerResult),
   ];
-  const phaseSummary = cleanupCompleted
+  const durationSummary = formatWorkflowDurationBreakdown(implementerResult, reviewerResult);
+  const basePhaseSummary = cleanupCompleted
     ? `Cleanup checkpointed existing changes. ${phaseSummaries.join(" ")}`
     : phaseSummaries.join(" ");
+  const phaseSummary = durationSummary
+    ? `${basePhaseSummary} ${durationSummary}`
+    : basePhaseSummary;
 
-  return appendRunLogDirectory(phaseSummary, runLogDirectory);
+  return appendRunLogDirectory(appendTotalDuration(phaseSummary, totalDurationMs), runLogDirectory);
 }
 
 /** Create one ignored top-level log directory for a workflow run. */
@@ -325,6 +335,15 @@ function appendRunLogDirectory(summary: string, runLogDirectory: string): string
   return `${summary} Run logs: ${runLogDirectory}`;
 }
 
+/** Append total wall-clock duration when the caller measured it. */
+export function appendTotalDuration(summary: string, totalDurationMs: number | undefined): string {
+  if (totalDurationMs === undefined) {
+    return summary;
+  }
+
+  return `${summary} Total duration: ${formatDuration(totalDurationMs)}.`;
+}
+
 function getCleanupFailureSummary(
   cleanupExitCode: number,
   beforeCleanupSha: string | null,
@@ -383,4 +402,24 @@ function formatWorkflowPhaseSummary(result: WorkflowPhaseResult): string {
 
 function capitalizeRole(role: WorkflowRole): string {
   return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function formatWorkflowDurationBreakdown(
+  implementerResult: WorkflowPhaseResult,
+  reviewerResult: WorkflowPhaseResult,
+): string | null {
+  const parts = [
+    formatPhaseDuration("Implementer", implementerResult.durationMs),
+    formatPhaseDuration("Reviewer", reviewerResult.durationMs),
+  ].filter((part): part is string => part !== null);
+
+  return parts.length > 0 ? `Durations: ${parts.join(", ")}.` : null;
+}
+
+function formatPhaseDuration(label: string, durationMs: number | undefined): string | null {
+  if (durationMs === undefined) {
+    return null;
+  }
+
+  return `${label} ${formatDuration(durationMs)}`;
 }

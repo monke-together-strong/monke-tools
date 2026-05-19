@@ -33,6 +33,8 @@ export interface AgentRunOptions {
 export interface AgentRunResult {
   /** Process exit code returned by the provider. */
   readonly exitCode: number;
+  /** Wall-clock duration spent in the provider process. */
+  readonly durationMs?: number;
 }
 
 /** Minimal provider contract used by the run workflow orchestrator. */
@@ -59,8 +61,9 @@ export class CodexAgentProvider implements AgentProvider {
 
   /** Execute Codex with live stdout/stderr teeing and a self-describing phase log. */
   run(options: AgentRunOptions): Promise<AgentRunResult> {
+    const startedAt = new Date();
     mkdirSync(path.dirname(options.logPath), { recursive: true });
-    writeFileSync(options.logPath, this.#formatLogHeader(options), "utf8");
+    writeFileSync(options.logPath, this.#formatLogHeader(options, startedAt), "utf8");
     const logStream = createWriteStream(options.logPath, { flags: "a" });
 
     const args = this.#buildCodexArgs(options);
@@ -118,6 +121,8 @@ export class CodexAgentProvider implements AgentProvider {
       });
 
       child.on("close", (exitCode, signal) => {
+        const completedAt = new Date();
+        const durationMs = completedAt.getTime() - startedAt.getTime();
         if (settled) {
           return;
         }
@@ -135,7 +140,7 @@ export class CodexAgentProvider implements AgentProvider {
             return;
           }
 
-          resolveOnce({ exitCode });
+          resolveOnce({ exitCode, durationMs });
         });
       });
     });
@@ -156,13 +161,13 @@ export class CodexAgentProvider implements AgentProvider {
     return args;
   }
 
-  #formatLogHeader(options: AgentRunOptions): string {
+  #formatLogHeader(options: AgentRunOptions, startedAt: Date): string {
     return [
       "# Monke Tools Agent Phase Log",
       `phase: ${options.phase}`,
       `provider: ${this.id}`,
       `effort: ${options.reasoningEffort ?? "omitted"}`,
-      `startedAt: ${new Date().toISOString()}`,
+      `startedAt: ${startedAt.toISOString()}`,
       "",
       "--- output ---",
       "",
