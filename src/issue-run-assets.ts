@@ -3,8 +3,8 @@ import type {
   GitHubIssueContext,
   GitHubIssueRunContext,
 } from "./github-issue-context.ts";
-import issueImplementerInstructionsText from "./prompts/mt-run-issue-implementer.md" with { type: "text" };
-import issueReviewerInstructionsText from "./prompts/mt-run-issue-reviewer.md" with { type: "text" };
+import issueImplementerInstructionsText from "./prompts/mt-work-issue-implementer.md" with { type: "text" };
+import issueReviewerInstructionsText from "./prompts/mt-work-issue-reviewer.md" with { type: "text" };
 
 /** Role-specific prompt instructions for PRD-driven issue execution. */
 export interface IssueRunRoleInstructions {

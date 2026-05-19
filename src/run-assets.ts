@@ -1,8 +1,8 @@
 import type { ReviewerTarget } from "./git.ts";
-import cleanupInstructionsText from "./prompts/mt-run-cleanup.md" with { type: "text" };
-import implementerInstructionsText from "./prompts/mt-run-implementer.md" with { type: "text" };
-import reviewerInstructionsText from "./prompts/mt-run-reviewer.md" with { type: "text" };
-import codingStandardsText from "./prompts/mt-run-standards.md" with { type: "text" };
+import cleanupInstructionsText from "./prompts/mt-work-cleanup.md" with { type: "text" };
+import implementerInstructionsText from "./prompts/mt-work-implementer.md" with { type: "text" };
+import reviewerInstructionsText from "./prompts/mt-work-reviewer.md" with { type: "text" };
+import codingStandardsText from "./prompts/mt-work-standards.md" with { type: "text" };
 
 export interface RunRoleInstructions {
   cleanupInstructions: string;

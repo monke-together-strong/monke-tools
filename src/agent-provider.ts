@@ -6,7 +6,7 @@ import { MonkeError } from "./errors.ts";
 import { formatCommand } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
-/** Codex reasoning effort levels supported by `mt run --effort`. */
+/** Codex reasoning effort levels supported by `mt work --effort`. */
 export const CODEX_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
 
 /** Codex reasoning effort level accepted by the current Codex-backed provider. */
@@ -43,7 +43,7 @@ export interface AgentProvider {
   run(options: AgentRunOptions): Promise<AgentRunResult>;
 }
 
-/** Codex CLI-backed provider for the current `mt run` workflow. */
+/** Codex CLI-backed provider for the current `mt work` workflow. */
 export class CodexAgentProvider implements AgentProvider {
   /** Stable provider identifier used in logs and summaries. */
   readonly id = "codex";
@@ -145,7 +145,7 @@ export class CodexAgentProvider implements AgentProvider {
   }
 
   #buildCodexArgs(options: AgentRunOptions): string[] {
-    // `mt run` needs real repo access for git metadata updates and agent-authored edits.
+    // `mt work` needs real repo access for git metadata updates and agent-authored edits.
     const args = ["exec", "--dangerously-bypass-approvals-and-sandbox", "--cd", options.repoRoot];
 
     if (options.reasoningEffort !== undefined) {
