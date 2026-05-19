@@ -258,7 +258,7 @@ test("mt work --prd plans issues, prints the resolved order, and executes the PR
   expect(plannerLog).toContain("fake codex stdout");
   const finalPrdReviewLog = read(
     repoRoot,
-    path.join("logs", runLogDirectoryName, "final-prd-review-proof.log"),
+    path.join("logs", runLogDirectoryName, "final-prd-reviewer.log"),
   );
   expect(finalPrdReviewLog).toContain("phase: final-prd-reviewer");
   expect(finalPrdReviewLog).toContain("final PRD validation passed");
@@ -306,14 +306,13 @@ test("mt work --prd succeeds when final PRD validation creates a commit", () => 
   expect(result.status).toBe(0);
   expect(result.stdout).toContain("final PRD validation passed");
   expect(result.stdout).toContain("Final PRD validation finished successfully.");
-  expect(result.stdout).toContain('Final PRD reviewer created commit "final review fix".');
   const runLogDirectoryName = getRunLogDirectoryName(repoRoot);
   const finalPrdReviewLog = read(
     repoRoot,
-    path.join("logs", runLogDirectoryName, "final-prd-review-proof.log"),
+    path.join("logs", runLogDirectoryName, "final-prd-reviewer.log"),
   );
-  expect(finalPrdReviewLog).toContain("--- host mutation summary ---");
-  expect(finalPrdReviewLog).toContain("final review fix");
+  expect(finalPrdReviewLog).toContain("phase: final-prd-reviewer");
+  expect(finalPrdReviewLog).toContain("final PRD validation passed");
 });
 
 test("mt work --prd fails before startup cleanup when gh is missing from PATH", () => {

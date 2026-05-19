@@ -1,9 +1,8 @@
 import path from "node:path";
-import { appendFileSync } from "node:fs";
 
 import type { AgentProvider, CodexReasoningEffort } from "./agent-provider.ts";
 import type { GitHubIssueContextLoader, GitHubIssueRunContext } from "./github-issue-context.ts";
-import { getHeadCommitInfo, inspectCheckoutState, resolveGitRepoRoot } from "./git.ts";
+import { resolveGitRepoRoot } from "./git.ts";
 import { PrdIssueExecutor, type IssueCloser } from "./prd-issue-executor.ts";
 import { buildFinalPrdReviewerPrompt } from "./issue-run-assets.ts";
 import { loadRunCodingStandards, loadRunRoleInstructions } from "./run-assets.ts";
@@ -40,13 +39,6 @@ export interface PreparedPrdIssueLoopOptions extends PrdIssueLoopOptions {
   readonly startupCleanupCompleted: boolean;
   /** Optional wall-clock start time for the full workflow, including caller-owned setup. */
   readonly totalStartedAtMs?: number;
-}
-
-interface FinalPrdReviewResult {
-  readonly exitCode: number;
-  readonly durationMs?: number;
-  readonly mutationSummary: string | null;
-  readonly workingTreeViolation: string | null;
 }
 
 /** Coordinates ordered execution of validated PRD task issues in the current checkout. */
@@ -144,72 +136,22 @@ export class PrdIssueLoopOrchestrator {
       }
     }
 
-    const finalPrdReviewResult = await this.#runFinalPrdReviewer({
+    const finalPrdReviewResult = await this.#agentProvider.run({
       repoRoot,
-      runLogDirectory,
+      phase: "final-prd-reviewer",
       prompt: buildFinalPrdReviewerPrompt(prd, codingStandards),
-      effort,
+      logPath: path.join(runLogDirectory, "final-prd-reviewer.log"),
+      reasoningEffort: effort,
     });
     summaries.push(
-      formatFinalPrdReviewSummary(
-        finalPrdReviewResult.exitCode,
-        finalPrdReviewResult.durationMs,
-        finalPrdReviewResult.mutationSummary,
-        finalPrdReviewResult.workingTreeViolation,
-      ),
+      formatFinalPrdReviewSummary(finalPrdReviewResult.exitCode, finalPrdReviewResult.durationMs),
     );
 
     return {
       repoRoot,
       runLogDirectory,
-      exitCode:
-        finalPrdReviewResult.exitCode === 0 && finalPrdReviewResult.workingTreeViolation === null
-          ? 0
-          : 1,
+      exitCode: finalPrdReviewResult.exitCode === 0 ? 0 : 1,
       summary: formatIssueLoopSummary(summaries, runLogDirectory, Date.now() - totalStartedAtMs),
-    };
-  }
-
-  async #runFinalPrdReviewer(options: {
-    readonly repoRoot: string;
-    readonly runLogDirectory: string;
-    readonly prompt: string;
-    readonly effort?: CodexReasoningEffort;
-  }): Promise<FinalPrdReviewResult> {
-    const beforeCommit = getHeadCommitInfo(this.#runtime, options.repoRoot);
-    const beforeState = inspectCheckoutState(this.#runtime, options.repoRoot);
-    const logPath = path.join(options.runLogDirectory, "final-prd-review-proof.log");
-    const result = await this.#agentProvider.run({
-      repoRoot: options.repoRoot,
-      phase: "final-prd-reviewer",
-      prompt: options.prompt,
-      logPath,
-      reasoningEffort: options.effort,
-    });
-    const afterCommit = getHeadCommitInfo(this.#runtime, options.repoRoot);
-    const afterState = inspectCheckoutState(this.#runtime, options.repoRoot);
-    const mutationSummary = formatFinalPrdReviewMutationSummary(
-      beforeCommit?.sha ?? null,
-      afterCommit,
-    );
-    const workingTreeViolation = formatFinalPrdReviewWorkingTreeViolation(
-      beforeState.statusLines,
-      afterState.statusLines,
-    );
-
-    if (mutationSummary) {
-      appendFileSync(logPath, `\n--- host mutation summary ---\n${mutationSummary}\n`, "utf8");
-    }
-
-    if (workingTreeViolation) {
-      appendFileSync(logPath, `\n--- host policy violation ---\n${workingTreeViolation}\n`, "utf8");
-    }
-
-    return {
-      exitCode: result.exitCode,
-      durationMs: result.durationMs,
-      mutationSummary,
-      workingTreeViolation,
     };
   }
 }
@@ -235,12 +177,7 @@ function appendRunLogDirectory(summary: string, runLogDirectory: string): string
   return `${summary} Run logs: ${runLogDirectory}`;
 }
 
-function formatFinalPrdReviewSummary(
-  exitCode: number,
-  durationMs: number | undefined,
-  mutationSummary: string | null,
-  workingTreeViolation: string | null,
-): string {
+function formatFinalPrdReviewSummary(exitCode: number, durationMs: number | undefined): string {
   const parts: string[] = [];
 
   if (exitCode === 0) {
@@ -253,47 +190,5 @@ function formatFinalPrdReviewSummary(
     parts.push(`Final PRD validation duration: ${formatDuration(durationMs)}.`);
   }
 
-  if (mutationSummary) {
-    parts.push(mutationSummary);
-  }
-
-  if (workingTreeViolation) {
-    parts.push(workingTreeViolation);
-  }
-
   return parts.join(" ");
-}
-
-function formatFinalPrdReviewMutationSummary(
-  beforeSha: string | null,
-  afterCommit: { readonly sha: string; readonly subject: string } | null,
-): string | null {
-  if (afterCommit && afterCommit.sha !== beforeSha) {
-    return `Final PRD reviewer created commit "${afterCommit.subject}".`;
-  }
-
-  return null;
-}
-
-function formatFinalPrdReviewWorkingTreeViolation(
-  beforeStatusLines: readonly string[],
-  afterStatusLines: readonly string[],
-): string | null {
-  if (!areStatusLinesEqual(beforeStatusLines, afterStatusLines)) {
-    return `Final PRD reviewer left uncommitted working tree changes: status changed from ${formatStatusLines(beforeStatusLines)} to ${formatStatusLines(afterStatusLines)}.`;
-  }
-
-  return null;
-}
-
-function areStatusLinesEqual(left: readonly string[], right: readonly string[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((line, index) => line === right[index]);
-}
-
-function formatStatusLines(statusLines: readonly string[]): string {
-  return statusLines.length === 0 ? "clean" : statusLines.join(", ");
 }

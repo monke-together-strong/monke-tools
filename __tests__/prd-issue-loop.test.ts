@@ -6,7 +6,7 @@ import type { GitHubIssueContext, GitHubIssueContextLoader } from "../src/github
 import type { IssueCloser } from "../src/prd-issue-executor.ts";
 import { PrdIssueLoopOrchestrator } from "../src/prd-issue-loop.ts";
 import { createRuntime } from "../src/runtime.ts";
-import { createRepo, git, makeTempDir, write } from "./helpers.ts";
+import { createRepo, git, makeTempDir } from "./helpers.ts";
 
 type AgentRunHandler = (options: AgentRunOptions) => AgentRunResult;
 
@@ -97,7 +97,7 @@ test("PRD issue loop executes planned issues in order with lazy issue fetches an
     "01-issue-25-reviewer.log",
     "02-issue-26-implementer.log",
     "02-issue-26-reviewer.log",
-    "final-prd-review-proof.log",
+    "final-prd-reviewer.log",
   ]);
   expect(new Set(agentProvider.calls.map((call) => path.dirname(call.logPath))).size).toBe(1);
   expect(agentProvider.calls.map((call) => call.prompt)).toEqual([
@@ -222,7 +222,7 @@ test("PRD issue loop fails when final PRD validation fails without closing the p
   expect(outcome.summary).toContain("Final PRD validation finished with failures (exit code 8).");
 });
 
-test("PRD issue loop allows final PRD validation commits and fails on uncommitted changes", async () => {
+test("PRD issue loop allows final PRD validation commits", async () => {
   const sandbox = makeTempDir("prd-issue-loop-final-review-mutation");
   const repoRoot = createRepo(path.join(sandbox, "repo"), {
     "README.md": "# sandbox\n",
@@ -232,7 +232,6 @@ test("PRD issue loop allows final PRD validation commits and fails on uncommitte
   const agentProvider = new RecordingAgentProvider(loader.loadedIssueNumbers, (options) => {
     if (options.phase === "final-prd-reviewer") {
       git(options.repoRoot, ["commit", "--allow-empty", "-m", "final review fix"]);
-      write(options.repoRoot, "final-review-notes.txt", "mutated\n");
       return { exitCode: 0 };
     }
 
@@ -249,13 +248,10 @@ test("PRD issue loop allows final PRD validation commits and fails on uncommitte
     {},
   );
 
-  expect(outcome.exitCode).toBe(1);
+  expect(outcome.exitCode).toBe(0);
   expect(closer.closedIssueNumbers).toEqual([25]);
   expect(outcome.summary).toContain("Final PRD validation finished successfully.");
-  expect(outcome.summary).toContain('Final PRD reviewer created commit "final review fix".');
-  expect(outcome.summary).toContain(
-    "Final PRD reviewer left uncommitted working tree changes: status changed from clean to ?? final-review-notes.txt.",
-  );
+  expect(outcome.summary).not.toContain("Final PRD reviewer created commit");
 });
 
 function issueContext(issueNumber: number): GitHubIssueContext {
