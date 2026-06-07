@@ -27,7 +27,7 @@ import {
 
 /** Options accepted by the public `mt work` workflow entrypoint. */
 export interface RunWorkflowOptions {
-  /** Reasoning effort forwarded to every attempted Codex-backed phase. */
+  /** Reasoning effort forwarded to non-cleanup Codex-backed phases. */
   readonly effort?: CodexReasoningEffort;
 }
 
@@ -107,7 +107,6 @@ export async function executePrdIssueWorkflow(
     repoRoot,
     runLogDirectory,
     cleanupInstructions: runRoleInstructions.cleanupInstructions,
-    effort: options.effort,
   });
   if (startupCleanup.failureSummary) {
     return {

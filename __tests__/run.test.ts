@@ -401,9 +401,9 @@ test("mt work --prd checkpoints dirty startup work before planning or executing 
   expect(read(sandbox, path.relative(sandbox, phaseLogPath))).toBe(
     "cleanup\nplanner\nimplementer\nreviewer\nfinal-prd-reviewer\n",
   );
-  expect(
-    read(sandbox, path.relative(sandbox, argsLogPath)).match(/model_reasoning_effort="high"/g),
-  ).toHaveLength(5);
+  const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
+  expect(argsLog.match(/model_reasoning_effort="medium"/g)).toHaveLength(1);
+  expect(argsLog.match(/model_reasoning_effort="high"/g)).toHaveLength(4);
   expect(read(sandbox, path.relative(sandbox, stdinLogPath))).toContain(
     "You are the cleanup checkpointing phase.",
   );
@@ -600,7 +600,8 @@ test("mt work checkpoints dirty startup work before running the implementer", ()
   const argsLog = read(sandbox, path.relative(sandbox, argsLogPath));
   expect(argsLog.match(/--dangerously-bypass-approvals-and-sandbox/g)).toHaveLength(3);
   expect(argsLog).not.toContain("--full-auto");
-  expect(argsLog.match(/model_reasoning_effort="high"/g)).toHaveLength(3);
+  expect(argsLog.match(/model_reasoning_effort="medium"/g)).toHaveLength(1);
+  expect(argsLog.match(/model_reasoning_effort="high"/g)).toHaveLength(2);
   expect(read(sandbox, path.relative(sandbox, cwdLogPath))).toBe(
     `${repoRoot}\n${repoRoot}\n${repoRoot}\n`,
   );
@@ -625,6 +626,7 @@ test("mt work checkpoints dirty startup work before running the implementer", ()
   const runLogDirectoryName = getRunLogDirectoryName(repoRoot);
   const cleanupLog = read(repoRoot, path.join("logs", runLogDirectoryName, "cleanup.log"));
   expect(cleanupLog).toContain("phase: cleanup");
+  expect(cleanupLog).toContain("effort: medium");
   expect(cleanupLog).toContain("cleanup stdout");
   expect(cleanupLog).toContain("cleanup stderr");
   expect(result.stderr).toContain("cleanup stderr");

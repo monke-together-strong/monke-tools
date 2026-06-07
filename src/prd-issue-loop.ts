@@ -69,7 +69,6 @@ export class PrdIssueLoopOrchestrator {
       repoRoot,
       runLogDirectory,
       cleanupInstructions: loadRunRoleInstructions().cleanupInstructions,
-      effort: options.effort,
     });
     if (startupCleanup.failureSummary) {
       return {
