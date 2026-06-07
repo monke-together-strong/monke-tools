@@ -58,11 +58,29 @@ export interface ExternalRepoConfig {
   mappings: ExternalMapping[];
 }
 
+/** A deterministic Resource value declared by one repo in monke.yml. */
+export interface ResourceValueConfig {
+  /** Uppercase environment variable name written to the session root .env. */
+  env: string;
+  /** Literal value template supporting ${session} and ${user}. */
+  literal: string;
+}
+
+/** A resolved Resource value remembered in Session state. */
+export interface ResourceValueState {
+  /** Uppercase environment variable name for the resource. */
+  env: string;
+  /** Resolved non-empty value for the current session. */
+  value: string;
+}
+
 export interface RepoConfig {
   sourceRoot: string;
   configPath: string;
   bootstrapCommand?: string;
+  cleanupCommand?: string;
   seedPaths: string[];
+  resourceValuesInOrder: ResourceValueConfig[];
   appsInOrder: AppConfig[];
   appsByLabel: Map<string, AppConfig>;
   externalInOrder: ExternalRepoConfig[];
@@ -94,6 +112,7 @@ export interface SessionRepoState {
   sourceRoot: string;
   worktreePath: string;
   assignedPorts: AssignedPort[];
+  resourceValues?: ResourceValueState[];
 }
 
 export interface SessionState {

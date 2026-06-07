@@ -287,6 +287,110 @@ test("cleanup removes dead session state but leaves repo reservations intact", (
   expect(reservationState.sourceRoot).toBe(root);
 });
 
+test("cleanupCommand runs only for dead worktrees and removes state after success", () => {
+  const sandbox = makeTempDir("cleanup-command");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `cleanupCommand: 'printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$PWD" "$DISCORD_CHANNEL" "$MONKE_SESSION" "$MONKE_SOURCE_ROOT" "$MONKE_WORKTREE_PATH" > cleanup.log'
+resources:
+  values:
+    DISCORD_CHANNEL: mt-\${user}-\${session}
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["create", "clean-command"],
+    monkeHome: home,
+    binDirectory,
+    extraEnv: { USER: "ada" },
+  });
+
+  const liveCleanup = runMonke({
+    cwd: root,
+    args: ["cleanup"],
+    monkeHome: home,
+    binDirectory,
+  });
+  expect(liveCleanup.stdout).toContain("Removed 0 dead sessions");
+  expect(existsSync(path.join(root, "cleanup.log"))).toBe(false);
+
+  const worktree = getExpectedWorktreePath(root, "clean-command");
+  git(root, ["worktree", "remove", worktree, "--force"]);
+
+  runMonke({
+    cwd: root,
+    args: ["cleanup"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(root, "cleanup.log")).toBe(
+    `${root}\nmt-ada-clean-command\nclean-command\n${root}\n${worktree}\n`,
+  );
+  expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow();
+});
+
+test("cleanupCommand failure keeps session state for retry", () => {
+  const sandbox = makeTempDir("cleanup-command-failure");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `cleanupCommand: 'printf "%s\\n" "$DISCORD_CHANNEL" > cleanup-failure.log; echo cleanup failed >&2; exit 9'
+resources:
+  values:
+    DISCORD_CHANNEL: mt-\${session}
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["create", "retry-me"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  git(root, ["worktree", "remove", getExpectedWorktreePath(root, "retry-me"), "--force"]);
+
+  expect(() =>
+    runMonke({
+      cwd: root,
+      args: ["cleanup"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/Cleanup command failed.*cleanup failed/s);
+
+  expect(read(root, "cleanup-failure.log")).toBe("mt-retry-me\n");
+  const retainedState = readSingleYamlFile(path.join(home, "sessions")) as {
+    repos: Array<{ resourceValues?: Array<{ env: string; value: string }> }>;
+  };
+  expect(retainedState.repos[0]?.resourceValues).toEqual([
+    { env: "DISCORD_CHANNEL", value: "mt-retry-me" },
+  ]);
+});
+
 test("create installs worktrunk through Homebrew and configures shell integration when wt is missing", () => {
   const sandbox = makeTempDir("bootstrap");
   const binDirectory = path.join(sandbox, "bin");

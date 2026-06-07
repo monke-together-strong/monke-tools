@@ -57,6 +57,120 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
   expect(sessionState.repos[0]?.worktreePath).toBe(worktreeRoot);
 });
 
+test("create and materialize resolve, reuse, write, and prune resource values", () => {
+  const sandbox = makeTempDir("single-repo-resources");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\nOTHER=keep\n",
+    "monke.yml": `resources:
+  values:
+    DISCORD_CHANNEL: mt-\${user}-\${session}
+    STATIC_HANDLE: fixed-\${session}
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+    extraEnv: { USER: "ada" },
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nOTHER=keep\n");
+  expect(read(worktreeRoot, ".env")).toBe(
+    "API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\nSTATIC_HANDLE=fixed-banana\n",
+  );
+
+  const initialState = readSingleYamlFile(path.join(home, "sessions")) as {
+    repos: Array<{ resourceValues?: Array<{ env: string; value: string }> }>;
+  };
+  expect(initialState.repos[0]?.resourceValues).toEqual([
+    { env: "DISCORD_CHANNEL", value: "mt-ada-banana" },
+    { env: "STATIC_HANDLE", value: "fixed-banana" },
+  ]);
+
+  write(
+    repoRoot,
+    "monke.yml",
+    `resources:
+  values:
+    DISCORD_CHANNEL: changed-\${session}
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  );
+
+  runMonke({
+    cwd: worktreeRoot,
+    args: ["materialize"],
+    monkeHome: home,
+    binDirectory,
+    extraEnv: { USER: "ada" },
+  });
+
+  expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\n");
+
+  const nextState = readSingleYamlFile(path.join(home, "sessions")) as {
+    repos: Array<{ resourceValues?: Array<{ env: string; value: string }> }>;
+  };
+  expect(nextState.repos[0]?.resourceValues).toEqual([
+    { env: "DISCORD_CHANNEL", value: "mt-ada-banana" },
+  ]);
+});
+
+test("create rejects resource value collisions with retained sessions", () => {
+  const sandbox = makeTempDir("single-repo-resource-collision");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  values:
+    DISCORD_CHANNEL: shared
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "first"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["create", "second"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/Resource value collision for DISCORD_CHANNEL=shared/);
+});
+
 test("materialize rejects source checkout context and reuses sticky ports inside a valid session worktree", () => {
   const sandbox = makeTempDir("single-materialize");
   const binDirectory = path.join(sandbox, "bin");

@@ -72,6 +72,34 @@ apps:
   expect(graph.reposByRoot.get(root)?.bootstrapCommand).toBe("pnpm install && pnpm generate");
 });
 
+test("loadResolvedGraph accepts nested resource values and cleanupCommand", () => {
+  const sandbox = makeTempDir("config-resources");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `cleanupCommand: pnpm cleanup:session
+resources:
+  values:
+    DISCORD_CHANNEL: mt-\${user}-\${session}
+    STATIC_HANDLE: stable
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+
+  expect(graph.reposByRoot.get(root)?.cleanupCommand).toBe("pnpm cleanup:session");
+  expect(graph.reposByRoot.get(root)?.resourceValuesInOrder).toEqual([
+    { env: "DISCORD_CHANNEL", literal: "mt-${user}-${session}" },
+    { env: "STATIC_HANDLE", literal: "stable" },
+  ]);
+});
+
 test("loadResolvedGraph accepts repo-level seedPaths", () => {
   const sandbox = makeTempDir("config-seedpaths");
   const root = createRepo(path.join(sandbox, "root"), {
@@ -137,6 +165,156 @@ apps:
 
   expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
     /bootstrapCommand.*non-empty string/,
+  );
+});
+
+test("loadResolvedGraph rejects old flat resources mappings", () => {
+  const sandbox = makeTempDir("config-flat-resources");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  DISCORD_CHANNEL: mt-\${session}
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /Unknown key DISCORD_CHANNEL.*resources/,
+  );
+});
+
+test("loadResolvedGraph rejects empty resources sections", () => {
+  const sandbox = makeTempDir("config-empty-resources");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources: {}
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /resources must contain a values section/,
+  );
+});
+
+test("loadResolvedGraph rejects invalid resource value declarations", () => {
+  const sandbox = makeTempDir("config-invalid-resources");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  values:
+    discord_channel: mt-\${session}
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /resources.values.*uppercase env name/,
+  );
+});
+
+test("loadResolvedGraph rejects empty resource literals", () => {
+  const sandbox = makeTempDir("config-empty-resource-literal");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  values:
+    DISCORD_CHANNEL: "   "
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /DISCORD_CHANNEL.*non-empty string/,
+  );
+});
+
+test("loadResolvedGraph rejects unsupported resource placeholders", () => {
+  const sandbox = makeTempDir("config-resource-placeholder");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  values:
+    DISCORD_CHANNEL: mt-\${branch}
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /unsupported placeholder.*session.*user/,
+  );
+});
+
+test("loadResolvedGraph rejects duplicate resource env names", () => {
+  const sandbox = makeTempDir("config-duplicate-resource");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  values:
+    DISCORD_CHANNEL: one
+    DISCORD_CHANNEL: two
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /Map keys must be unique|duplicate key/i,
+  );
+});
+
+test("loadResolvedGraph rejects invalid cleanupCommand values", () => {
+  const sandbox = makeTempDir("config-invalid-cleanup");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `cleanupCommand: ""
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /cleanupCommand.*non-empty string/,
   );
 });
 
