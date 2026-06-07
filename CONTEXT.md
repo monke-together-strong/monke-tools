@@ -38,13 +38,45 @@ _Avoid_: Provider, pool item, resolved env value
 The configured literal string that becomes a session resource value, with `${session}` available as the session-name placeholder and `${user}` available as the machine-user placeholder.
 _Avoid_: Provider acquisition, allocator, command output
 
+**Resource values**:
+The repo configuration section for deterministic literal session resources.
+_Avoid_: Resource commands, dynamic resources
+
 **Resource cleanup**:
-A repo-scoped shell command run during cleanup with the session's resolved resources and session metadata available in its environment.
+A repo-scoped shell command run during cleanup with the session's resolved resources, resource command outputs, and session metadata available in its environment.
 _Avoid_: Provider release, per-resource cleanup hook
 
 **Cleanup command**:
 The `monke.yml` field that configures resource cleanup for one repo.
 _Avoid_: Resource cleanup command, teardown script
+
+**Resource command**:
+A named repo-scoped command run from a session worktree to choose dynamic session values while monke-tools coordinates concurrent runs.
+_Avoid_: Provider, allocator, pool
+
+**Declaring repo**:
+The repo whose `monke.yml` defines a resource command.
+_Avoid_: Root repo, consumer repo, command worktree
+
+**Resource command output**:
+The exact required non-empty env-style string values returned by a resource command for one session worktree and remembered as inputs to later matching resource command runs.
+_Avoid_: Claim, provider result, pool item
+
+**Resource command input**:
+The remembered values from other retained session states for previous runs of the same resource command, grouped by required resource command output name.
+_Avoid_: Claim list, session history, lock state
+
+**Resource command contract**:
+The machine-readable stdin/stdout exchange for a resource command: resource command input is provided on stdin, and resource command output is returned on stdout.
+_Avoid_: CLI log format, cleanup protocol
+
+**Command lock**:
+The exclusive concurrency boundary for one declaring repo and one resource command name, preventing matching resource commands from running at the same time across multiple session worktrees.
+_Avoid_: Claim, resource value, cleanup handle
+
+**Resource command timeout**:
+The maximum duration a resource command may run while holding its command lock.
+_Avoid_: Cleanup timeout, lock lifetime
 
 **Dead worktree**:
 A session worktree recorded in session state whose filesystem path no longer exists.
@@ -157,22 +189,59 @@ _Avoid_: Delete session, prune repos
 - Each participating repo contributes exactly one **Session worktree** per **Session**.
 - A **Session state** records one entry per participating repo in the **Session**.
 - A **Session resource** belongs to exactly one repo within one **Session state**.
+- A **Session state** may remember **Resource command outputs** for a repo within one **Session**.
+- Remembered **Resource command outputs** are grouped by **Resource command** name in **Session state**.
 - A **Resource value** resolves to exactly one **Session resource** value.
-- A **Resource cleanup** belongs to one repo and may use any **Session resources** resolved for that repo.
+- **Resource values** configure deterministic **Session resources**.
+- A **Resource cleanup** belongs to one repo and may use any **Session resources** and **Resource command outputs** resolved for that repo.
 - **Session resources** for different **Session worktrees** must resolve to distinct values when they use the same resource name.
 - A **Cleanup command** runs from the repo's **Source checkout** when cleanup finds a **Dead worktree**.
-- A **Cleanup command** receives **Session resources**, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment.
+- A **Cleanup command** receives **Session resources**, **Resource command outputs**, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment.
+- A **Resource command** belongs to one repo and runs for one **Session worktree**.
+- A **Declaring repo** owns the namespace for its **Resource commands**.
+- A **Resource command** runs from the target **Session worktree**.
+- A **Resource command** name uses the same lowercase label style as repo configuration labels.
+- A **Resource command** has a non-empty shell command and one or more declared **Resource command outputs**.
+- A **Resource command** executes as a repo-authored shell command.
+- A **Resource command timeout** defaults to 60 seconds unless the repo config overrides it.
+- A **Resource command output** belongs to one **Resource command** run for one **Session worktree**.
+- A **Resource command** declares one or more required **Resource command outputs**.
+- A **Resource command output** must match the outputs declared by its **Resource command** exactly.
+- A **Resource command output** is written to the session root `.env`.
+- **Resource values** and **Resource command outputs** for the same repo must not use the same env name.
+- Multiple **Resource commands** for one repo run in repo configuration order and use separate **Command locks**.
+- A **Resource command input** is grouped by **Resource command output** name.
+- A **Resource command input** includes every declared **Resource command output** name with an array of remembered values, using an empty array when no values are remembered for that output.
+- A **Resource command input** deduplicates remembered values but does not promise a sorted order.
+- A **Resource command input** only includes earlier **Resource command outputs** from other retained **Session states** with the same **Declaring repo** and **Resource command** name.
+- A **Resource command input** is derived from retained **Session states**, not from a separate resource-command index.
+- Current repo configuration controls which **Resource command output** names appear in **Resource command input**.
+- A **Resource command** name defines the input and lock namespace; renaming a **Resource command** creates a new namespace.
+- A **Resource command input** does not include **Session resources**.
+- A **Resource command output** may not reuse a value already present for the same output name in the **Resource command input**.
+- A **Resource command contract** uses stdin for **Resource command input** and stdout for **Resource command output** as the only monke-specific command channels.
+- **Resource command** failures identify the command, the failure kind, and stderr; stdout is diagnostic only when it violates the **Resource command contract**.
+- **Resource commands** do not receive **Session resources** or other **Resource command outputs** through monke-specific environment variables.
+- **Create** and **Materialize** reuse complete remembered **Resource command outputs** and run the **Resource command** only when outputs are missing or incomplete.
+- Persisted **Resource command outputs** are the durable boundary for reuse after a failed **Create** or **Materialize** attempt.
+- **Resource command outputs** are persisted immediately after they are validated.
+- **Create** and **Materialize** prune remembered **Resource command outputs** for the current repo and **Session** when they are no longer declared by repo configuration.
+- A **Command lock** belongs to exactly one **Declaring repo** and one **Resource command** name.
+- A **Command lock** serializes matching **Resource commands** across multiple **Session worktrees** for the same **Declaring repo**.
+- A **Command lock** covers reading remembered **Resource command outputs**, running the **Resource command**, validating its output, and persisting the new output.
+- Remembered **Resource command outputs** stop contributing to **Resource command input** when their **Session state** is removed by **Cleanup**.
+- Later matching **Resource command** runs may receive earlier **Resource command outputs** as input.
 - An **App** belongs to exactly one repo and may own zero or more **Local mappings**.
 - A **Port key** is owned by exactly one repo across a resolved session graph.
 - A **Local mapping** consumes a **Port key** owned by the same repo.
 - An **External mapping** consumes a **Port key** owned by a **Dependency repo**.
 - A **Port reservation** belongs to exactly one repo and may back many **Sessions** over time.
 - An **Assigned port** belongs to exactly one **Port key** within one repo's **Session state**.
-- **Create** and **Materialize** both update **Assigned ports**, **Managed env files**, **Path env** values, and **Session resources** in the session root `.env`.
+- **Create** and **Materialize** both update **Assigned ports**, **Managed env files**, **Path env** values, **Session resources**, and **Resource command outputs**.
 - **Create** and **Materialize** both resolve missing **Session resources** and reuse existing **Session resources** from **Session state**.
 - **Setup** updates **Path env** values in the **Source checkout** but does not create a **Session worktree**.
 - **Cleanup** runs **Cleanup commands** for **Dead worktrees** before removing eligible **Session state**.
-- **Cleanup** keeps **Session state** when a **Cleanup command** fails so teardown can be retried with the same **Session resources**.
+- **Cleanup** keeps **Session state** when a **Cleanup command** fails so teardown can be retried with the same **Session resources** and **Resource command outputs**.
 - A **Consumer repo** may use monke-tools without being the **Root repo** of an active **Session**.
 - A **Local tool install** can make one `mt` command available to many **Consumer repos** on the same machine.
 - A **Local tool install** may also provide one shared **Skill discovery surface** for those **Consumer repos**.
@@ -209,8 +278,13 @@ _Avoid_: Delete session, prune repos
 - "port", "port key", and "assigned port" should stay distinct: a **Port key** is the symbolic slot, an **Assigned port** is the numeric value, and a raw "port" should only be used when the distinction does not matter.
 - "root .env" can mean either the source checkout or a session worktree. Prefer **Source checkout root `.env`** for `setup` output and **session root `.env`** for materialized worktree output.
 - "cleanup" previously meant only pruning dead **Session state**. It now also includes registered per-session teardown, such as deleting external state created for that **Session**.
-- Failed **Cleanup commands** do not consume **Session resources**. The **Session state** remains the retry handle.
+- Failed **Cleanup commands** do not consume **Session resources** or **Resource command outputs**. The **Session state** remains the retry handle.
 - **Session resource** collisions are scoped by resource name and resolved value. Equal values under different resource names are allowed.
+- `resources` uses the nested resource surface. Use **Resource values** for deterministic literals and **Resource commands** for dynamic command outputs; do not use a flat `resources` mapping.
+- The nested resource surface may include **Resource values**, **Resource commands**, or both, but it must not be empty when present.
+- The nested resource surface ships as one feature slice: deterministic **Resource values** and dynamic **Resource commands** share the same resource surface.
+- "claim" is ambiguous in the resource command design. Prefer **Resource command output** for values returned by the command and **Command lock** for monke-tools concurrency control.
+- Cross-output uniqueness is repo-owned. monke-tools enforces same-output collisions for **Resource command outputs**, not whether different output names may share a value.
 - "repo that uses monke-tools" is ambiguous. Use **Consumer repo** when discussing agent guidance and package installation; use **Root repo** or **Dependency repo** when discussing a concrete session graph.
 - "local setup" is ambiguous. Use **Local tool install** for the shared `mt` command and **Skill discovery surface** for where agents find **Package skills**.
 - "global install" is ambiguous. Use **Global package link** when the package root points back to the local source checkout; avoid implying a published package has been installed.
