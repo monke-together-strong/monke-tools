@@ -20,6 +20,40 @@ bun run install:local
 mt create banana
 ```
 
+`bun run install:local` rebuilds the local `mt` executable from the current checkout, installs it to `~/.local/bin/mt` and `~/.local/bin/monke-tools`, and links this checkout into global package roots so TanStack Intent can discover this repo's package skills.
+
+After changing CLI source code, run `bun run install:local` again before testing from another repo. Skill changes under `skills/` are visible through the global package link without rebuilding the executable.
+
+## Intent skill
+
+Consumer repos can load monke-tools guidance with TanStack Intent:
+
+```bash
+bunx @tanstack/intent@latest list --global
+bunx @tanstack/intent@latest load monke-tools#core --global
+```
+
+If global scanning misses the local package link in a consumer repo, force Intent to scan npm's global package root:
+
+```bash
+INTENT_GLOBAL_NODE_MODULES="$(npm root -g)" bunx @tanstack/intent@latest load monke-tools#core --global
+```
+
+For persistent agent guidance, add an `intent-skills` block to the consumer repo's `AGENTS.md` that keeps global discovery explicit:
+
+```md
+<!-- intent-skills:start -->
+
+## Skill Loading
+
+Before substantial work:
+
+- Skill check: run `bunx @tanstack/intent@latest list --global`, or use skills already listed in context.
+- Skill guidance: if one local or global skill clearly matches the task, run `bunx @tanstack/intent@latest load <package>#<skill> --global` and follow the returned `SKILL.md`.
+- Multiple matches: prefer the most specific skill for the package or concern you are changing; load additional skills only when the task spans multiple packages or concerns.
+<!-- intent-skills:end -->
+```
+
 ## Commands
 
 - `mt create <session>` creates or updates a session from the source checkout. It materializes dependency repos first, seeds configured files, rewrites mapped env vars, and records the session state under `~/.monke` by default.

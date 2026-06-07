@@ -72,6 +72,40 @@ _Avoid_: Setup script, install step
 A root-level env variable that points from one repo to a dependency repo's path.
 _Avoid_: Dependency path, repo link
 
+### Agent guidance
+
+**Consumer repo**:
+A repo whose developer or agent uses monke-tools as a local workflow tool.
+_Avoid_: Target repo, downstream repo, using repo
+
+**Local tool install**:
+A developer-machine install of monke-tools built from a source checkout and shared by all **Consumer repos** through the `mt` command.
+_Avoid_: Published package, consumer dependency
+
+**Local install refresh**:
+The act of rebuilding the **Local tool install** from the current monke-tools source checkout before validating behavior in a **Consumer repo**.
+_Avoid_: Publish, dependency update, session refresh
+
+**Package skill**:
+Versioned agent guidance distributed with monke-tools so agents in a **Consumer repo** can learn the matching monke-tools workflows.
+_Avoid_: Copied prompt, generated instruction file, session guide
+
+**Core package skill**:
+The first monke-tools **Package skill**, covering the local install, consumer setup, session operations, repo configuration, and `mt work` workflow together.
+_Avoid_: Skill family, split skill set, command reference
+
+**Skill discovery surface**:
+A package installation location that agent tooling can scan to find monke-tools **Package skills**.
+_Avoid_: CLI binary, shell path, compiled executable
+
+**Global package link**:
+A developer-machine package link that points global package discovery back to the monke-tools source checkout.
+_Avoid_: Bun global install, copied package, published package
+
+**Skill loading guidance**:
+Opt-in agent instructions in a **Consumer repo** that tell agents how to discover and load **Package skills**.
+_Avoid_: Session bootstrap, AGENTS rewrite, monke setup
+
 ### Port assignment
 
 **Port key**:
@@ -139,6 +173,15 @@ _Avoid_: Delete session, prune repos
 - **Setup** updates **Path env** values in the **Source checkout** but does not create a **Session worktree**.
 - **Cleanup** runs **Cleanup commands** for **Dead worktrees** before removing eligible **Session state**.
 - **Cleanup** keeps **Session state** when a **Cleanup command** fails so teardown can be retried with the same **Session resources**.
+- A **Consumer repo** may use monke-tools without being the **Root repo** of an active **Session**.
+- A **Local tool install** can make one `mt` command available to many **Consumer repos** on the same machine.
+- A **Local tool install** may also provide one shared **Skill discovery surface** for those **Consumer repos**.
+- A **Local install refresh** happens before testing monke-tools changes from any **Consumer repo**.
+- The local **Skill discovery surface** is a **Global package link** so Intent's global scan can find monke-tools package metadata and skills.
+- A **Package skill** belongs to the monke-tools package version that ships it.
+- A **Package skill** is available to **Consumer repos** only through a **Skill discovery surface**.
+- The initial monke-tools skill set contains one **Core package skill**.
+- **Skill loading guidance** belongs to a **Consumer repo**, not to a **Session**.
 
 ## Example dialogue
 
@@ -154,6 +197,10 @@ _Avoid_: Delete session, prune repos
 >
 > **Domain expert:** "Right. **Cleanup** can remove dead **Session state**, but the **Port reservation** stays so future sessions stay stable."
 
+> **Dev:** "Should **Create** write monke-tools instructions into every repo it touches?"
+>
+> **Domain expert:** "No. A **Consumer repo** opts into **Skill loading guidance**, then its agent can load the monke-tools **Package skill** that matches the installed package version."
+
 ## Flagged ambiguities
 
 - "session" and "branch" are closely related but not the same thing. Use **Session** for the workspace instance and **branch** only for the Git ref carried by each **Session worktree**.
@@ -164,3 +211,6 @@ _Avoid_: Delete session, prune repos
 - "cleanup" previously meant only pruning dead **Session state**. It now also includes registered per-session teardown, such as deleting external state created for that **Session**.
 - Failed **Cleanup commands** do not consume **Session resources**. The **Session state** remains the retry handle.
 - **Session resource** collisions are scoped by resource name and resolved value. Equal values under different resource names are allowed.
+- "repo that uses monke-tools" is ambiguous. Use **Consumer repo** when discussing agent guidance and package installation; use **Root repo** or **Dependency repo** when discussing a concrete session graph.
+- "local setup" is ambiguous. Use **Local tool install** for the shared `mt` command and **Skill discovery surface** for where agents find **Package skills**.
+- "global install" is ambiguous. Use **Global package link** when the package root points back to the local source checkout; avoid implying a published package has been installed.

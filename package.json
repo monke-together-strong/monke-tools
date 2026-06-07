@@ -1,6 +1,16 @@
 {
   "name": "monke-tools",
+  "version": "0.0.0",
   "private": true,
+  "description": "Bun CLI for isolated per-session repo worktrees, local env rewrites, and agent workflows.",
+  "keywords": [
+    "tanstack-intent"
+  ],
+  "homepage": "https://github.com/monke-together-strong/monke-tools#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/monke-together-strong/monke-tools.git"
+  },
   "type": "module",
   "scripts": {
     "mt": "bun run src/index.ts",
@@ -18,10 +28,16 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@tanstack/intent": "^0.0.41",
     "@types/bun": "^1.3.12",
     "oxfmt": "^0.44.0",
     "oxlint": "^1.59.0",
     "vitest": "^4.1.4"
   },
-  "packageManager": "bun@1.3.11"
+  "packageManager": "bun@1.3.11",
+  "intent": {
+    "version": 1,
+    "repo": "monke-together-strong/monke-tools",
+    "docs": "https://github.com/monke-together-strong/monke-tools#readme"
+  }
 }
