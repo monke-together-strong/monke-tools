@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import path from "node:path";
 
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
+import { loadSessionState, saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
   installFakeWt,
@@ -196,6 +197,518 @@ apps:
       ],
     },
   ]);
+});
+
+test("create builds resource command stdin from retained command outputs only", () => {
+  const sandbox = makeTempDir("single-repo-resource-command-retained-input");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  values:
+    DISCORD_CHANNEL: discord-\${session}
+  commands:
+    e2e-symbols:
+      command: |
+        cat > command-stdin.json
+        if grep -q 'SOL/USDT:USDT' command-stdin.json; then
+          printf '%s' '{"E2E_FLOW1_SYMBOL":"LINK/USDT:USDT","E2E_FLOW2_SYMBOL":"NEAR/USDT:USDT"}'
+        else
+          printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT","E2E_FLOW2_SYMBOL":"ATOM/USDT:USDT"}'
+        fi
+      outputs:
+        - E2E_FLOW1_SYMBOL
+        - E2E_FLOW2_SYMBOL
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  saveSessionState(home, {
+    version: 1,
+    rootSourceRoot: repoRoot,
+    session: "first",
+    repos: [
+      {
+        sourceRoot: repoRoot,
+        worktreePath: path.join(sandbox, "missing-first"),
+        assignedPorts: [],
+        resourceValues: [{ env: "DISCORD_CHANNEL", value: "discord-first" }],
+        resourceCommandOutputs: [
+          {
+            name: "e2e-symbols",
+            outputs: [
+              { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
+              { env: "E2E_FLOW2_SYMBOL", value: "ATOM/USDT:USDT" },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "second"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const secondInput = JSON.parse(
+    read(getExpectedWorktreePath(repoRoot, "second"), "command-stdin.json"),
+  ) as Record<string, string[]>;
+  expect(Object.keys(secondInput)).toEqual(["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]);
+  expect(secondInput).toEqual({
+    E2E_FLOW1_SYMBOL: ["SOL/USDT:USDT"],
+    E2E_FLOW2_SYMBOL: ["ATOM/USDT:USDT"],
+  });
+  expect(JSON.stringify(secondInput)).not.toContain("discord-first");
+});
+
+test("create dedupes retained resource command input values", () => {
+  const sandbox = makeTempDir("single-repo-resource-command-input-dedupe");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  commands:
+    e2e-symbols:
+      command: |
+        cat > command-stdin.json
+        printf '%s' '{"E2E_FLOW1_SYMBOL":"LINK/USDT:USDT","E2E_FLOW2_SYMBOL":"ATOM/USDT:USDT"}'
+      outputs:
+        - E2E_FLOW1_SYMBOL
+        - E2E_FLOW2_SYMBOL
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  saveSessionState(home, {
+    version: 1,
+    rootSourceRoot: path.join(sandbox, "graph-a"),
+    session: "retained-a",
+    repos: [
+      {
+        sourceRoot: repoRoot,
+        worktreePath: path.join(sandbox, "missing-a"),
+        assignedPorts: [],
+        resourceValues: [{ env: "E2E_FLOW2_SYMBOL", value: "DETERMINISTIC_SHOULD_NOT_APPEAR" }],
+        resourceCommandOutputs: [
+          {
+            name: "e2e-symbols",
+            outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }],
+          },
+          {
+            name: "renamed-symbols",
+            outputs: [{ env: "E2E_FLOW2_SYMBOL", value: "RENAMED_SHOULD_NOT_APPEAR" }],
+          },
+        ],
+      },
+    ],
+  });
+  saveSessionState(home, {
+    version: 1,
+    rootSourceRoot: path.join(sandbox, "graph-b"),
+    session: "retained-b",
+    repos: [
+      {
+        sourceRoot: repoRoot,
+        worktreePath: path.join(sandbox, "missing-b"),
+        assignedPorts: [],
+        resourceCommandOutputs: [
+          {
+            name: "e2e-symbols",
+            outputs: [
+              { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
+              { env: "E2E_FLOW2_SYMBOL", value: "NEAR/USDT:USDT" },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  saveSessionState(home, {
+    version: 1,
+    rootSourceRoot: path.join(sandbox, "graph-c"),
+    session: "current",
+    repos: [
+      {
+        sourceRoot: repoRoot,
+        worktreePath: path.join(sandbox, "current-worktree-from-another-graph"),
+        assignedPorts: [],
+        resourceCommandOutputs: [
+          {
+            name: "e2e-symbols",
+            outputs: [{ env: "E2E_FLOW2_SYMBOL", value: "CURRENT_SHOULD_NOT_APPEAR" }],
+          },
+        ],
+      },
+    ],
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "current"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const input = JSON.parse(
+    read(getExpectedWorktreePath(repoRoot, "current"), "command-stdin.json"),
+  ) as Record<string, string[]>;
+  expect(input.E2E_FLOW1_SYMBOL?.sort()).toEqual(["SOL/USDT:USDT"]);
+  expect(input.E2E_FLOW2_SYMBOL?.sort()).toEqual(["NEAR/USDT:USDT"]);
+  expect(JSON.stringify(input)).not.toContain("DETERMINISTIC_SHOULD_NOT_APPEAR");
+  expect(JSON.stringify(input)).not.toContain("RENAMED_SHOULD_NOT_APPEAR");
+  expect(JSON.stringify(input)).not.toContain("CURRENT_SHOULD_NOT_APPEAR");
+});
+
+test("materialize excludes current-session command outputs when rerunning incomplete outputs", () => {
+  const sandbox = makeTempDir("single-repo-resource-command-current-session-input");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  commands:
+    e2e-symbols:
+      command: printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'
+      outputs:
+        - E2E_FLOW1_SYMBOL
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  write(
+    repoRoot,
+    "monke.yml",
+    `resources:
+  commands:
+    e2e-symbols:
+      command: |
+        cat > command-stdin-rerun.json
+        printf '%s' '{"E2E_FLOW1_SYMBOL":"LINK/USDT:USDT","E2E_FLOW2_SYMBOL":"ATOM/USDT:USDT"}'
+      outputs:
+        - E2E_FLOW1_SYMBOL
+        - E2E_FLOW2_SYMBOL
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  );
+
+  runMonke({
+    cwd: worktreeRoot,
+    args: ["materialize"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(JSON.parse(read(worktreeRoot, "command-stdin-rerun.json"))).toEqual({
+    E2E_FLOW1_SYMBOL: [],
+    E2E_FLOW2_SYMBOL: [],
+  });
+});
+
+test("create rejects same-output resource command collisions", () => {
+  const sandbox = makeTempDir("single-repo-resource-command-output-collision");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createResourceCommandRepo(
+    path.join(sandbox, "root"),
+    `cat > command-stdin.json
+printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'`,
+    60,
+  );
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "first"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["create", "second"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/kind: same-output collision for E2E_FLOW1_SYMBOL[\s\S]*stdout:/);
+});
+
+test("create leaves cross-output uniqueness to repo-owned resource commands", () => {
+  const sandbox = makeTempDir("single-repo-resource-command-cross-output");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  commands:
+    e2e-symbols:
+      command: |
+        cat > command-stdin.json
+        if grep -q 'ALPHA/USDT:USDT' command-stdin.json; then
+          printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT","E2E_FLOW2_SYMBOL":"LINK/USDT:USDT"}'
+        else
+          printf '%s' '{"E2E_FLOW1_SYMBOL":"ALPHA/USDT:USDT","E2E_FLOW2_SYMBOL":"SOL/USDT:USDT"}'
+        fi
+      outputs:
+        - E2E_FLOW1_SYMBOL
+        - E2E_FLOW2_SYMBOL
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  saveSessionState(home, {
+    version: 1,
+    rootSourceRoot: repoRoot,
+    session: "first",
+    repos: [
+      {
+        sourceRoot: repoRoot,
+        worktreePath: path.join(sandbox, "missing-first"),
+        assignedPorts: [],
+        resourceCommandOutputs: [
+          {
+            name: "e2e-symbols",
+            outputs: [
+              { env: "E2E_FLOW1_SYMBOL", value: "ALPHA/USDT:USDT" },
+              { env: "E2E_FLOW2_SYMBOL", value: "SOL/USDT:USDT" },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "second"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(getExpectedWorktreePath(repoRoot, "second"), ".env")).toBe(
+    "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n",
+  );
+});
+
+test("resource command renames create a new retained input namespace", () => {
+  const sandbox = makeTempDir("single-repo-resource-command-rename");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createResourceCommandRepo(
+    path.join(sandbox, "root"),
+    "printf '%s' '{\"E2E_FLOW1_SYMBOL\":\"SOL/USDT:USDT\"}'",
+    60,
+  );
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  write(
+    repoRoot,
+    "monke.yml",
+    `resources:
+  commands:
+    renamed-symbols:
+      command: |
+        cat > command-stdin-renamed.json
+        printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'
+      outputs:
+        - E2E_FLOW1_SYMBOL
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  );
+
+  runMonke({
+    cwd: worktreeRoot,
+    args: ["materialize"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(JSON.parse(read(worktreeRoot, "command-stdin-renamed.json"))).toEqual({
+    E2E_FLOW1_SYMBOL: [],
+  });
+});
+
+test("multiple resource commands run in YAML order", () => {
+  const sandbox = makeTempDir("single-repo-resource-command-order");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  commands:
+    first-symbols:
+      command: |
+        printf '%s\\n' first >> command-order.log
+        printf '%s' '{"FIRST_SYMBOL":"SOL/USDT:USDT"}'
+      outputs:
+        - FIRST_SYMBOL
+    second-symbols:
+      command: |
+        printf '%s\\n' second >> command-order.log
+        printf '%s' '{"SECOND_SYMBOL":"LINK/USDT:USDT"}'
+      outputs:
+        - SECOND_SYMBOL
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(getExpectedWorktreePath(repoRoot, "banana"), "command-order.log")).toBe(
+    "first\nsecond\n",
+  );
+});
+
+test("retained dead session states contribute until cleanup removes them", () => {
+  const sandbox = makeTempDir("single-repo-resource-command-cleanup-boundary");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  commands:
+    e2e-symbols:
+      command: |
+        cat > command-stdin.json
+        if grep -q 'LINK/USDT:USDT' command-stdin.json; then
+          value='ATOM/USDT:USDT'
+        elif grep -q 'SOL/USDT:USDT' command-stdin.json; then
+          value='LINK/USDT:USDT'
+        else
+          value='SOL/USDT:USDT'
+        fi
+        printf '{"E2E_FLOW1_SYMBOL":"%s"}' "$value"
+      outputs:
+        - E2E_FLOW1_SYMBOL
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  saveSessionState(home, {
+    version: 1,
+    rootSourceRoot: repoRoot,
+    session: "first",
+    repos: [
+      {
+        sourceRoot: repoRoot,
+        worktreePath: path.join(sandbox, "missing-first"),
+        assignedPorts: [],
+        resourceCommandOutputs: [
+          {
+            name: "e2e-symbols",
+            outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }],
+          },
+        ],
+      },
+    ],
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "second"],
+    monkeHome: home,
+    binDirectory,
+  });
+  expect(read(getExpectedWorktreePath(repoRoot, "second"), "command-stdin.json")).toContain(
+    "SOL/USDT:USDT",
+  );
+
+  const secondState = loadSessionState(home, repoRoot, "second");
+  saveSessionState(home, {
+    ...secondState,
+    repos: secondState.repos.map((repo) => ({ ...repo, assignedPorts: [] })),
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["cleanup"],
+    monkeHome: home,
+    binDirectory,
+  });
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "third"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const thirdInput = read(getExpectedWorktreePath(repoRoot, "third"), "command-stdin.json");
+  expect(thirdInput).not.toContain("SOL/USDT:USDT");
+  expect(thirdInput).toContain("LINK/USDT:USDT");
 });
 
 test("create and materialize reuse complete resource command outputs and prune undeclared outputs", () => {

@@ -1,5 +1,6 @@
 import { MonkeError } from "./errors.ts";
 import { listSessionStates } from "./registry.ts";
+import { withScopedLock } from "./runtime.ts";
 import type {
   RepoConfig,
   ResourceCommandConfig,
@@ -24,6 +25,8 @@ export interface ResolvedResourceCommands {
   /** Previously remembered Resource command env names no longer declared by the repo. */
   removedEnvNames: string[];
 }
+
+type ResourceCommandInput = Record<string, string[]>;
 
 /** Resolve, reuse, prune, and collision-check deterministic Resource values. */
 export function resolveResourceValues(options: {
@@ -86,6 +89,8 @@ export function resolveResourceValues(options: {
 /** Resolve, reuse, prune, execute, and validate Resource command outputs. */
 export function resolveResourceCommands(options: {
   runtime: Runtime;
+  home: string;
+  session: string;
   repoConfig: RepoConfig;
   existingRepoState: SessionRepoState | undefined;
   worktreePath: string;
@@ -107,21 +112,31 @@ export function resolveResourceCommands(options: {
       continue;
     }
 
-    currentByName.set(
-      command.name,
-      runResourceCommand({
-        runtime: options.runtime,
+    withResourceCommandLock(options.home, options.repoConfig.sourceRoot, command.name, () => {
+      const stdin = buildResourceCommandInput({
+        home: options.home,
+        session: options.session,
+        sourceRoot: options.repoConfig.sourceRoot,
         command,
-        worktreePath: options.worktreePath,
-      }),
-    );
-    options.onResolvedCommandOutputs(
-      toImmediateResourceCommandStates(
-        options.repoConfig.resourceCommandsInOrder,
-        currentByName,
-        existingCommands,
-      ),
-    );
+      });
+
+      currentByName.set(
+        command.name,
+        runResourceCommand({
+          runtime: options.runtime,
+          command,
+          worktreePath: options.worktreePath,
+          stdin,
+        }),
+      );
+      options.onResolvedCommandOutputs(
+        toImmediateResourceCommandStates(
+          options.repoConfig.resourceCommandsInOrder,
+          currentByName,
+          existingCommands,
+        ),
+      );
+    });
   }
 
   const commands = toResourceCommandStates(
@@ -168,10 +183,9 @@ function runResourceCommand(options: {
   runtime: Runtime;
   command: ResourceCommandConfig;
   worktreePath: string;
+  stdin: ResourceCommandInput;
 }): ResourceCommandState {
-  const stdin = JSON.stringify(
-    Object.fromEntries(options.command.outputs.map((output) => [output, []])),
-  );
+  const stdin = JSON.stringify(options.stdin);
   const result = options.runtime.exec("sh", ["-lc", options.command.command], {
     cwd: options.worktreePath,
     stdin,
@@ -195,17 +209,74 @@ function runResourceCommand(options: {
     });
   }
 
-  const outputs = validateResourceCommandStdout(options.command, result.stdout, result.stderr);
+  const outputs = validateResourceCommandStdout(
+    options.command,
+    result.stdout,
+    result.stderr,
+    options.stdin,
+  );
   return {
     name: options.command.name,
     outputs,
   };
 }
 
+function withResourceCommandLock<T>(
+  home: string,
+  sourceRoot: string,
+  commandName: string,
+  callback: () => T,
+): T {
+  return withScopedLock(home, `resource-command\u0000${sourceRoot}\u0000${commandName}`, callback);
+}
+
+function buildResourceCommandInput(options: {
+  home: string;
+  session: string;
+  sourceRoot: string;
+  command: ResourceCommandConfig;
+}): ResourceCommandInput {
+  const valuesByEnv = new Map(options.command.outputs.map((env) => [env, new Set<string>()]));
+
+  for (const state of listSessionStates(options.home)) {
+    if (state.session === options.session) {
+      continue;
+    }
+
+    for (const repoState of state.repos) {
+      if (repoState.sourceRoot !== options.sourceRoot) {
+        continue;
+      }
+
+      const rememberedCommand = (repoState.resourceCommandOutputs ?? []).find(
+        (command) => command.name === options.command.name,
+      );
+      if (!rememberedCommand) {
+        continue;
+      }
+
+      const rememberedByEnv = new Map(
+        rememberedCommand.outputs.map((output) => [output.env, output.value]),
+      );
+      for (const env of options.command.outputs) {
+        const remembered = rememberedByEnv.get(env);
+        if (remembered?.trim()) {
+          valuesByEnv.get(env)?.add(remembered);
+        }
+      }
+    }
+  }
+
+  return Object.fromEntries(
+    options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])]]),
+  );
+}
+
 function validateResourceCommandStdout(
   command: ResourceCommandConfig,
   stdout: string,
   stderr: string,
+  stdin: ResourceCommandInput,
 ): Array<{ env: string; value: string }> {
   let parsed: unknown;
   try {
@@ -248,6 +319,14 @@ function validateResourceCommandStdout(
       throw resourceCommandFailure({
         command,
         kind: "stdout contract violation",
+        stderr,
+        stdout,
+      });
+    }
+    if ((stdin[env] ?? []).includes(outputValue)) {
+      throw resourceCommandFailure({
+        command,
+        kind: `same-output collision for ${env}`,
         stderr,
         stdout,
       });

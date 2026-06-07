@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
+import { saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
   installFakeWt,
@@ -72,6 +73,102 @@ external:
     repos: Array<{ sourceRoot: string }>;
   };
   expect(sessionState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
+});
+
+test("resource command retained inputs are scoped to the declaring repo across root graphs", () => {
+  const sandbox = makeTempDir("multi-repo-resource-command-declaring-scope");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `resources:
+  commands:
+    e2e-symbols:
+      command: |
+        cat > command-stdin.json
+        if grep -q 'SOL/USDT:USDT' command-stdin.json; then
+          value='LINK/USDT:USDT'
+        else
+          value='SOL/USDT:USDT'
+        fi
+        printf '{"E2E_FLOW1_SYMBOL":"%s"}' "$value"
+      outputs:
+        - E2E_FLOW1_SYMBOL
+apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+
+  const rootA = createRepo(path.join(sandbox, "root-a"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+  const rootB = createRepo(path.join(sandbox, "root-b"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  saveSessionState(home, {
+    version: 1,
+    rootSourceRoot: rootA,
+    session: "alpha",
+    repos: [
+      {
+        sourceRoot: depRoot,
+        worktreePath: path.join(sandbox, "missing-alpha-dep"),
+        assignedPorts: [],
+        resourceCommandOutputs: [
+          {
+            name: "e2e-symbols",
+            outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }],
+          },
+        ],
+      },
+    ],
+  });
+  runMonke({
+    cwd: rootB,
+    args: ["create", "beta"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const betaDepWorktree = getExpectedWorktreePath(depRoot, "beta");
+  expect(read(betaDepWorktree, "command-stdin.json")).toContain("SOL/USDT:USDT");
+  expect(read(betaDepWorktree, ".env")).toContain("E2E_FLOW1_SYMBOL=LINK/USDT:USDT\n");
 });
 
 test("create fans out one dependency-owned port to multiple local targets", () => {

@@ -277,6 +277,8 @@ function materializeRepo(options: {
   });
   const resolvedResourceCommands = resolveResourceCommands({
     runtime: options.runtime,
+    home,
+    session,
     repoConfig,
     existingRepoState: existingState,
     worktreePath,

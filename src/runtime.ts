@@ -148,8 +148,16 @@ export function findExecutable(
 }
 
 export function withGlobalLock<T>(home: string, callback: () => T): T {
-  ensureDirectory(home);
-  const lockPath = path.join(home, "lock");
+  return withLockPath(path.join(home, "lock"), callback);
+}
+
+/** Run a synchronous callback while holding a lock scoped inside the monke home directory. */
+export function withScopedLock<T>(home: string, namespace: string, callback: () => T): T {
+  return withLockPath(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
+}
+
+function withLockPath<T>(lockPath: string, callback: () => T): T {
+  ensureDirectory(path.dirname(lockPath));
   const deadline = Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
   let fileDescriptor: number | null = null;
 
