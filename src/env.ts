@@ -107,7 +107,7 @@ export function syncRootEnvFile(
   syncRootEnvFileWithRemovals(worktreeRoot, assignments, []);
 }
 
-/** Synchronize root .env assignments and remove stale managed env names. */
+/** Synchronize root .env assignments and remove stale root env names. */
 export function syncRootEnvFileWithRemovals(
   worktreeRoot: string,
   assignments: Array<{ env: string; value: string }>,

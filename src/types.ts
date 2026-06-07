@@ -78,8 +78,10 @@ export interface RepoConfig {
   sourceRoot: string;
   configPath: string;
   bootstrapCommand?: string;
+  /** Repo-owned command run during Cleanup for dead session worktrees. */
   cleanupCommand?: string;
   seedPaths: string[];
+  /** Deterministic Resource values declared by this repo, in YAML order. */
   resourceValuesInOrder: ResourceValueConfig[];
   appsInOrder: AppConfig[];
   appsByLabel: Map<string, AppConfig>;
@@ -112,6 +114,7 @@ export interface SessionRepoState {
   sourceRoot: string;
   worktreePath: string;
   assignedPorts: AssignedPort[];
+  /** Deterministic Resource values remembered for this repo and session. */
   resourceValues?: ResourceValueState[];
 }
 
