@@ -16,7 +16,7 @@ import {
   validateWorktreeForSession,
 } from "./git.ts";
 import { MonkeError } from "./errors.ts";
-import { resolveResourceValues } from "./resources.ts";
+import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
 import { findExecutable, getMonkeHome, withGlobalLock } from "./runtime.ts";
 import {
   allocateLocalPorts,
@@ -33,6 +33,7 @@ import type {
   AssignedPort,
   RepoConfig,
   RepoMaterializationResult,
+  ResourceCommandState,
   ResourceValueState,
   Runtime,
   SessionRepoState,
@@ -106,6 +107,10 @@ export function runCreate(runtime: Runtime, session: string): void {
         worktreeCreated: worktree.created,
         existingState,
         dependencyResults: results,
+        persistRepoState(repoState) {
+          sessionState = recordRepoSuccess(sessionState, repoState);
+          saveSessionState(home, sessionState);
+        },
       });
 
       results.set(repoConfig.sourceRoot, materialized);
@@ -164,6 +169,10 @@ export function runMaterialize(runtime: Runtime): void {
         worktreeCreated: isCurrentRepo ? false : dependencyWorktree.created,
         existingState,
         dependencyResults: results,
+        persistRepoState(repoState) {
+          sessionState = recordRepoSuccess(sessionState, repoState);
+          saveSessionState(home, sessionState);
+        },
       });
 
       results.set(repoConfig.sourceRoot, materialized);
@@ -239,6 +248,7 @@ function materializeRepo(options: {
   worktreeCreated: boolean;
   existingState: SessionRepoState | undefined;
   dependencyResults: Map<string, RepoMaterializationResult>;
+  persistRepoState: (repoState: SessionRepoState) => void;
 }): RepoMaterializationResult {
   const {
     home,
@@ -264,6 +274,27 @@ function materializeRepo(options: {
     repoConfig,
     existingRepoState: existingState,
     env: options.runtime.env,
+  });
+  const resolvedResourceCommands = resolveResourceCommands({
+    runtime: options.runtime,
+    repoConfig,
+    existingRepoState: existingState,
+    worktreePath,
+    onResolvedCommandOutputs(resourceCommandOutputs) {
+      options.persistRepoState(
+        buildSessionRepoState({
+          sourceRoot: repoConfig.sourceRoot,
+          worktreePath,
+          assignedPorts: existingState?.assignedPorts ?? [],
+          resourceValues: preserveStaleResourceValues(
+            existingState?.resourceValues ?? [],
+            resolvedResourceValues.values,
+          ),
+          resourceCommandOutputs,
+          isComplete: false,
+        }),
+      );
+    },
   });
   const reservation = getOrCreateReservation(
     home,
@@ -296,18 +327,21 @@ function materializeRepo(options: {
       ...toRootEnvAssignments(localAssignedPorts),
       ...toRootEnvAssignments(dedupeAssignedPorts(externalAssignments)),
       ...toResourceEnvAssignments(resolvedResourceValues.values),
+      ...toResourceCommandEnvAssignments(resolvedResourceCommands.commands),
     ],
-    resolvedResourceValues.removedEnvNames,
+    [...resolvedResourceValues.removedEnvNames, ...resolvedResourceCommands.removedEnvNames],
   );
   runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
 
   return {
-    state: {
+    state: buildSessionRepoState({
       sourceRoot: repoConfig.sourceRoot,
       worktreePath,
       assignedPorts: localAssignedPorts,
       resourceValues: resolvedResourceValues.values,
-    },
+      resourceCommandOutputs: resolvedResourceCommands.commands,
+      isComplete: true,
+    }),
     localAssignments,
   };
 }
@@ -383,6 +417,57 @@ function toResourceEnvAssignments(
   }));
 }
 
+function toResourceCommandEnvAssignments(
+  commands: ResourceCommandState[],
+): Array<{ env: string; value: string }> {
+  return commands.flatMap((command) =>
+    command.outputs.map((assignment) => ({
+      env: assignment.env,
+      value: assignment.value,
+    })),
+  );
+}
+
+function buildSessionRepoState(options: {
+  sourceRoot: string;
+  worktreePath: string;
+  assignedPorts: AssignedPort[];
+  resourceValues: ResourceValueState[];
+  resourceCommandOutputs: ResourceCommandState[];
+  isComplete: boolean;
+}): SessionRepoState {
+  const state: SessionRepoState = {
+    sourceRoot: options.sourceRoot,
+    worktreePath: options.worktreePath,
+    assignedPorts: options.assignedPorts,
+  };
+
+  if (options.resourceValues.length > 0) {
+    state.resourceValues = options.resourceValues;
+  }
+
+  if (options.resourceCommandOutputs.length > 0) {
+    state.resourceCommandOutputs = options.resourceCommandOutputs;
+  }
+
+  if (!options.isComplete) {
+    state.materializationComplete = false;
+  }
+
+  return state;
+}
+
+function preserveStaleResourceValues(
+  existingValues: ResourceValueState[],
+  currentValues: ResourceValueState[],
+): ResourceValueState[] {
+  const currentEnvNames = new Set(currentValues.map((resource) => resource.env));
+  return [
+    ...currentValues,
+    ...existingValues.filter((resource) => !currentEnvNames.has(resource.env)),
+  ];
+}
+
 function runCleanupCommands(
   runtime: Runtime,
   reposByRoot: Map<string, RepoConfig>,
@@ -397,12 +482,18 @@ function runCleanupCommands(
     const resourceEnv = Object.fromEntries(
       (repoState.resourceValues ?? []).map((resource) => [resource.env, resource.value]),
     );
+    const resourceCommandEnv = Object.fromEntries(
+      (repoState.resourceCommandOutputs ?? []).flatMap((command) =>
+        command.outputs.map((resource) => [resource.env, resource.value]),
+      ),
+    );
 
     try {
       runtime.exec("sh", ["-lc", repoConfig.cleanupCommand], {
         cwd: repoConfig.sourceRoot,
         env: {
           ...resourceEnv,
+          ...resourceCommandEnv,
           MONKE_SESSION: state.session,
           MONKE_SOURCE_ROOT: repoConfig.sourceRoot,
           MONKE_WORKTREE_PATH: repoState.worktreePath,
@@ -471,6 +562,10 @@ function findFirstIndexNeedingWork(
     const repoConfig = reposInOrder[index]!;
     const existing = state.repos.find((repo) => repo.sourceRoot === repoConfig.sourceRoot);
     if (!existing) {
+      return index;
+    }
+
+    if (existing.materializationComplete === false) {
       return index;
     }
 

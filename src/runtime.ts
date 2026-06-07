@@ -40,9 +40,21 @@ export function createRuntime(options?: {
           ...execOptions?.env,
         },
         encoding: "utf8",
+        input: execOptions?.stdin,
+        timeout:
+          execOptions?.timeoutSeconds === undefined ? undefined : execOptions.timeoutSeconds * 1000,
       });
 
       if (result.error) {
+        if (execOptions?.allowFailure && isTimeoutError(result.error)) {
+          return {
+            stdout: result.stdout ?? "",
+            stderr: result.stderr ?? "",
+            exitCode: -1,
+            timedOut: true,
+          };
+        }
+
         throw new MonkeError(
           `Failed to run ${formatCommand(command, args)}: ${result.error.message}`,
         );
@@ -83,6 +95,10 @@ export function createRuntime(options?: {
       process.stderr.write(text);
     },
   };
+}
+
+function isTimeoutError(error: Error): boolean {
+  return "code" in error && error.code === "ETIMEDOUT";
 }
 
 export function formatCommand(command: string, args: string[]): string {

@@ -1,12 +1,27 @@
 import { MonkeError } from "./errors.ts";
 import { listSessionStates } from "./registry.ts";
-import type { RepoConfig, ResourceValueState, SessionRepoState } from "./types.ts";
+import type {
+  RepoConfig,
+  ResourceCommandConfig,
+  ResourceCommandState,
+  ResourceValueState,
+  Runtime,
+  SessionRepoState,
+} from "./types.ts";
 
 /** Result of resolving deterministic Resource values for one repo/session pair. */
 export interface ResolvedResourceValues {
   /** Declared Resource values to persist and write to the session root .env. */
   values: ResourceValueState[];
   /** Previously remembered Resource env names no longer declared by the repo. */
+  removedEnvNames: string[];
+}
+
+/** Result of resolving Resource command outputs for one repo/session pair. */
+export interface ResolvedResourceCommands {
+  /** Declared Resource command outputs to persist and write to the session root .env. */
+  commands: ResourceCommandState[];
+  /** Previously remembered Resource command env names no longer declared by the repo. */
   removedEnvNames: string[];
 }
 
@@ -66,6 +81,233 @@ export function resolveResourceValues(options: {
       existingValues.map((resource) => resource.env).filter((env) => !declaredEnvNames.has(env)),
     ),
   };
+}
+
+/** Resolve, reuse, prune, execute, and validate Resource command outputs. */
+export function resolveResourceCommands(options: {
+  runtime: Runtime;
+  repoConfig: RepoConfig;
+  existingRepoState: SessionRepoState | undefined;
+  worktreePath: string;
+  onResolvedCommandOutputs: (commands: ResourceCommandState[]) => void;
+}): ResolvedResourceCommands {
+  const existingCommands = options.existingRepoState?.resourceCommandOutputs ?? [];
+  const existingByName = new Map(existingCommands.map((command) => [command.name, command]));
+  const currentByName = new Map<string, ResourceCommandState>();
+
+  for (const command of options.repoConfig.resourceCommandsInOrder) {
+    const reusable = getReusableResourceCommand(command, existingByName.get(command.name));
+    if (reusable) {
+      currentByName.set(command.name, reusable);
+    }
+  }
+
+  for (const command of options.repoConfig.resourceCommandsInOrder) {
+    if (currentByName.has(command.name)) {
+      continue;
+    }
+
+    currentByName.set(
+      command.name,
+      runResourceCommand({
+        runtime: options.runtime,
+        command,
+        worktreePath: options.worktreePath,
+      }),
+    );
+    options.onResolvedCommandOutputs(
+      toImmediateResourceCommandStates(
+        options.repoConfig.resourceCommandsInOrder,
+        currentByName,
+        existingCommands,
+      ),
+    );
+  }
+
+  const commands = toResourceCommandStates(
+    options.repoConfig.resourceCommandsInOrder,
+    currentByName,
+  );
+  const finalEnvNames = new Set(
+    commands.flatMap((command) => command.outputs.map((output) => output.env)),
+  );
+  const removedEnvNames = dedupe(
+    existingCommands
+      .flatMap((command) => command.outputs.map((output) => output.env))
+      .filter((env) => !finalEnvNames.has(env)),
+  );
+
+  return { commands, removedEnvNames };
+}
+
+function getReusableResourceCommand(
+  command: ResourceCommandConfig,
+  existing: ResourceCommandState | undefined,
+): ResourceCommandState | null {
+  if (!existing) {
+    return null;
+  }
+
+  const rememberedByEnv = new Map(existing.outputs.map((output) => [output.env, output.value]));
+  const outputs: Array<{ env: string; value: string }> = [];
+  for (const env of command.outputs) {
+    const value = rememberedByEnv.get(env);
+    if (!value?.trim()) {
+      return null;
+    }
+    outputs.push({ env, value });
+  }
+
+  return {
+    name: command.name,
+    outputs,
+  };
+}
+
+function runResourceCommand(options: {
+  runtime: Runtime;
+  command: ResourceCommandConfig;
+  worktreePath: string;
+}): ResourceCommandState {
+  const stdin = JSON.stringify(
+    Object.fromEntries(options.command.outputs.map((output) => [output, []])),
+  );
+  const result = options.runtime.exec("sh", ["-lc", options.command.command], {
+    cwd: options.worktreePath,
+    stdin,
+    timeoutSeconds: options.command.timeoutSeconds,
+    allowFailure: true,
+  });
+
+  if (result.timedOut) {
+    throw resourceCommandFailure({
+      command: options.command,
+      kind: "timeout",
+      stderr: result.stderr,
+    });
+  }
+
+  if (result.exitCode !== 0) {
+    throw resourceCommandFailure({
+      command: options.command,
+      kind: `nonzero exit ${result.exitCode}`,
+      stderr: result.stderr,
+    });
+  }
+
+  const outputs = validateResourceCommandStdout(options.command, result.stdout, result.stderr);
+  return {
+    name: options.command.name,
+    outputs,
+  };
+}
+
+function validateResourceCommandStdout(
+  command: ResourceCommandConfig,
+  stdout: string,
+  stderr: string,
+): Array<{ env: string; value: string }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw resourceCommandFailure({
+      command,
+      kind: "invalid stdout JSON",
+      stderr,
+      stdout,
+    });
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw resourceCommandFailure({
+      command,
+      kind: "stdout contract violation",
+      stderr,
+      stdout,
+    });
+  }
+
+  const value = parsed as Record<string, unknown>;
+  const expected = new Set(command.outputs);
+  const actual = Object.keys(value);
+  const missing = command.outputs.filter((output) => !(output in value));
+  const extra = actual.filter((output) => !expected.has(output));
+  if (missing.length > 0 || extra.length > 0) {
+    throw resourceCommandFailure({
+      command,
+      kind: "stdout contract violation",
+      stderr,
+      stdout,
+    });
+  }
+
+  return command.outputs.map((env) => {
+    const outputValue = value[env];
+    if (typeof outputValue !== "string" || !outputValue.trim()) {
+      throw resourceCommandFailure({
+        command,
+        kind: "stdout contract violation",
+        stderr,
+        stdout,
+      });
+    }
+    return { env, value: outputValue };
+  });
+}
+
+function resourceCommandFailure(options: {
+  command: ResourceCommandConfig;
+  kind: string;
+  stderr: string;
+  stdout?: string;
+}): MonkeError {
+  const stderr = options.stderr.trim() || "<empty>";
+  const stdout =
+    options.stdout === undefined ? "" : `\nstdout:\n${options.stdout.trim() || "<empty>"}`;
+  return new MonkeError(
+    `Resource command ${options.command.name} failed: ${options.command.command}\nkind: ${options.kind}\nstderr:\n${stderr}${stdout}`,
+  );
+}
+
+function toResourceCommandStates(
+  declaredCommands: ResourceCommandConfig[],
+  currentByName: Map<string, ResourceCommandState>,
+): ResourceCommandState[] {
+  return declaredCommands.flatMap((command) => {
+    const state = currentByName.get(command.name);
+    return state ? [state] : [];
+  });
+}
+
+function toImmediateResourceCommandStates(
+  declaredCommands: ResourceCommandConfig[],
+  currentByName: Map<string, ResourceCommandState>,
+  existingCommands: ResourceCommandState[],
+): ResourceCommandState[] {
+  const existingByName = new Map(existingCommands.map((command) => [command.name, command]));
+  const declaredNames = new Set(declaredCommands.map((command) => command.name));
+  const declaredStates = declaredCommands.flatMap((command) => {
+    const current = currentByName.get(command.name);
+    const existing = existingByName.get(command.name);
+    if (!current) {
+      return existing ? [existing] : [];
+    }
+
+    const declaredEnvNames = new Set(command.outputs);
+    const staleOutputs =
+      existing?.outputs.filter((output) => !declaredEnvNames.has(output.env)) ?? [];
+    return [
+      {
+        name: command.name,
+        outputs: [...current.outputs, ...staleOutputs],
+      },
+    ];
+  });
+  return [
+    ...declaredStates,
+    ...existingCommands.filter((command) => !declaredNames.has(command.name)),
+  ];
 }
 
 function interpolateResourceLiteral(options: {

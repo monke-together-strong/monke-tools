@@ -78,6 +78,8 @@ function makeRepoConfig(sourceRoot: string, localPortOrder: string[]): RepoConfi
   return {
     sourceRoot,
     configPath: path.join(sourceRoot, "monke.yml"),
+    resourceValuesInOrder: [],
+    resourceCommandsInOrder: [],
     appsInOrder: [],
     appsByLabel: new Map(),
     externalInOrder: [],

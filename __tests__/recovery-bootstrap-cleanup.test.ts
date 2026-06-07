@@ -342,6 +342,52 @@ apps:
   expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow();
 });
 
+test("cleanupCommand receives resource command output env", () => {
+  const sandbox = makeTempDir("cleanup-command-resource-output");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `cleanupCommand: 'printf "%s\\n%s\\n" "$E2E_FLOW1_SYMBOL" "$MONKE_SESSION" > cleanup-resource-command.log'
+resources:
+  commands:
+    e2e-symbols:
+      command: printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'
+      outputs:
+        - E2E_FLOW1_SYMBOL
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["create", "clean-command"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktree = getExpectedWorktreePath(root, "clean-command");
+  git(root, ["worktree", "remove", worktree, "--force"]);
+
+  runMonke({
+    cwd: root,
+    args: ["cleanup"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(root, "cleanup-resource-command.log")).toBe("SOL/USDT:USDT\nclean-command\n");
+  expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow();
+});
+
 test("cleanupCommand failure keeps session state for retry", () => {
   const sandbox = makeTempDir("cleanup-command-failure");
   const binDirectory = path.join(sandbox, "bin");
