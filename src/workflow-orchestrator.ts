@@ -25,6 +25,7 @@ import {
 import type { Runtime } from "./types.ts";
 
 const REQUIRED_CLEANUP_COMMIT_PREFIX = "clean up";
+const STARTUP_CLEANUP_REASONING_EFFORT: CodexReasoningEffort = "medium";
 const MAX_RUN_LOG_DIRECTORY_ATTEMPTS = 10;
 
 type WorkflowRole = "implementer" | "reviewer";
@@ -50,7 +51,7 @@ interface WorkflowPhaseRequest extends Omit<AgentPhaseRequest, "phase"> {
 
 /** Options that apply to a full single-pass run workflow. */
 export interface WorkflowRunOptions {
-  /** Reasoning effort forwarded to every attempted agent phase. */
+  /** Reasoning effort forwarded to implementer and reviewer phases. */
   readonly effort?: CodexReasoningEffort;
 }
 
@@ -84,8 +85,6 @@ export interface StartupCleanupOptions {
   readonly runLogDirectory: string;
   /** Cleanup role instructions loaded by the calling workflow. */
   readonly cleanupInstructions: string;
-  /** Reasoning effort forwarded to the cleanup phase when it runs. */
-  readonly effort?: CodexReasoningEffort;
 }
 
 /** Coordinates the cleanup, implementer, and reviewer phases for `mt work`. */
@@ -110,7 +109,6 @@ export class WorkflowOrchestrator {
       repoRoot,
       runLogDirectory,
       cleanupInstructions: instructions.cleanupInstructions,
-      effort: options.effort,
     });
     if (startupCleanup.failureSummary) {
       return {
@@ -217,7 +215,7 @@ export async function runStartupCleanupCheckpoint(
     phase: "cleanup",
     prompt: buildCleanupPrompt(options.cleanupInstructions),
     logPath: path.join(options.runLogDirectory, "cleanup.log"),
-    reasoningEffort: options.effort,
+    reasoningEffort: STARTUP_CLEANUP_REASONING_EFFORT,
   });
   const afterCleanupCommit = getHeadCommitInfo(runtime, options.repoRoot);
   const postCleanupState = inspectCheckoutState(runtime, options.repoRoot);
