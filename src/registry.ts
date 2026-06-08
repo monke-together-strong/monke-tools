@@ -13,6 +13,7 @@ import type {
 } from "./types.ts";
 
 const GLOBAL_PORT_FLOOR = 10_000;
+// Reserve headroom so retained sessions can keep allocating ports without resizing a repo block.
 const MIN_REPO_RESERVATION_SIZE = 100;
 
 export function loadSessionState(
