@@ -372,6 +372,27 @@ apps:
   );
 });
 
+test("loadResolvedGraph rejects empty resource values sections", () => {
+  const sandbox = makeTempDir("config-empty-resource-values");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `resources:
+  values: {}
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /resources.values must declare at least one value/,
+  );
+});
+
 test("loadResolvedGraph rejects invalid resource value declarations", () => {
   const sandbox = makeTempDir("config-invalid-resources");
   const root = createRepo(path.join(sandbox, "root"), {

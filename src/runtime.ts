@@ -241,8 +241,8 @@ function tryEvictStaleLock(lockPath: string): boolean {
       isStale = metadata.acquiredAt <= staleSince;
     }
 
-    if (typeof metadata.pid === "number" && metadata.pid > 0 && !isProcessRunning(metadata.pid)) {
-      isStale = true;
+    if (typeof metadata.pid === "number" && metadata.pid > 0) {
+      isStale = !isProcessRunning(metadata.pid);
     }
   } catch {
     // Fall back to the lock file timestamp when metadata is unreadable.

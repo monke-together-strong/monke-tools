@@ -40,6 +40,8 @@ import type {
   SessionState,
 } from "./types.ts";
 
+const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
+
 export function runCreate(runtime: Runtime, session: string): void {
   if (!session) {
     throw new MonkeError("mt create requires a session name");
@@ -288,6 +290,7 @@ function materializeRepo(options: {
           sourceRoot: repoConfig.sourceRoot,
           worktreePath,
           assignedPorts: existingState?.assignedPorts ?? [],
+          cleanupCommand: repoConfig.cleanupCommand,
           resourceValues: preserveStaleResourceValues(
             existingState?.resourceValues ?? [],
             resolvedResourceValues.values,
@@ -340,6 +343,7 @@ function materializeRepo(options: {
       sourceRoot: repoConfig.sourceRoot,
       worktreePath,
       assignedPorts: localAssignedPorts,
+      cleanupCommand: repoConfig.cleanupCommand,
       resourceValues: resolvedResourceValues.values,
       resourceCommandOutputs: resolvedResourceCommands.commands,
       isComplete: true,
@@ -434,6 +438,7 @@ function buildSessionRepoState(options: {
   sourceRoot: string;
   worktreePath: string;
   assignedPorts: AssignedPort[];
+  cleanupCommand?: string;
   resourceValues: ResourceValueState[];
   resourceCommandOutputs: ResourceCommandState[];
   isComplete: boolean;
@@ -443,6 +448,10 @@ function buildSessionRepoState(options: {
     worktreePath: options.worktreePath,
     assignedPorts: options.assignedPorts,
   };
+
+  if (options.cleanupCommand) {
+    state.cleanupCommand = options.cleanupCommand;
+  }
 
   if (options.resourceValues.length > 0) {
     state.resourceValues = options.resourceValues;
@@ -477,9 +486,16 @@ function runCleanupCommands(
 ): void {
   for (const repoState of state.repos) {
     const repoConfig = reposByRoot.get(repoState.sourceRoot);
-    if (!repoConfig?.cleanupCommand) {
+    const cleanupCommand = repoState.cleanupCommand ?? repoConfig?.cleanupCommand;
+    if (!cleanupCommand) {
+      if (!repoConfig) {
+        throw new MonkeError(
+          `Missing repo config for cleanup of ${repoState.sourceRoot}; refusing to drop session state`,
+        );
+      }
       continue;
     }
+    const sourceRoot = repoConfig?.sourceRoot ?? repoState.sourceRoot;
 
     const resourceEnv = Object.fromEntries(
       (repoState.resourceValues ?? []).map((resource) => [resource.env, resource.value]),
@@ -491,20 +507,21 @@ function runCleanupCommands(
     );
 
     try {
-      runtime.exec("sh", ["-lc", repoConfig.cleanupCommand], {
-        cwd: repoConfig.sourceRoot,
+      runtime.exec("sh", ["-lc", cleanupCommand], {
+        cwd: sourceRoot,
+        timeoutSeconds: CLEANUP_COMMAND_TIMEOUT_SECONDS,
         env: {
           ...resourceEnv,
           ...resourceCommandEnv,
           MONKE_SESSION: state.session,
-          MONKE_SOURCE_ROOT: repoConfig.sourceRoot,
+          MONKE_SOURCE_ROOT: sourceRoot,
           MONKE_WORKTREE_PATH: repoState.worktreePath,
         },
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       throw new MonkeError(
-        `Cleanup command failed for ${repoConfig.sourceRoot}: ${repoConfig.cleanupCommand}\n${detail}`,
+        `Cleanup command failed for session ${state.session} repo ${sourceRoot}: ${cleanupCommand}\n${detail}`,
       );
     }
   }

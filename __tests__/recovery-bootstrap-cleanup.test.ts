@@ -388,6 +388,57 @@ apps:
   expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow();
 });
 
+test("cleanupCommand uses the command remembered in session state after config drift", () => {
+  const sandbox = makeTempDir("cleanup-command-config-drift");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `cleanupCommand: 'printf "%s\\n%s\\n" "$MONKE_SESSION" "$MONKE_SOURCE_ROOT" > cleanup-drift.log'
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["create", "drift-clean"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  write(
+    root,
+    "monke.yml",
+    `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  );
+  git(root, ["worktree", "remove", getExpectedWorktreePath(root, "drift-clean"), "--force"]);
+
+  runMonke({
+    cwd: root,
+    args: ["cleanup"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(root, "cleanup-drift.log")).toBe(`drift-clean\n${root}\n`);
+  expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow();
+});
+
 test("cleanupCommand failure keeps session state for retry", () => {
   const sandbox = makeTempDir("cleanup-command-failure");
   const binDirectory = path.join(sandbox, "bin");

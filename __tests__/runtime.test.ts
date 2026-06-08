@@ -28,3 +28,19 @@ test("withGlobalLock evicts stale locks left by dead processes", () => {
   expect(result).toBe("acquired");
   expect(existsSync(lockPath)).toBe(false);
 });
+
+test("withGlobalLock does not evict stale locks held by a live process", () => {
+  const sandbox = makeTempDir("runtime-live-stale-lock");
+  const home = path.join(sandbox, "home");
+  const lockPath = path.join(home, "lock");
+
+  mkdirSync(home, { recursive: true });
+  writeFileSync(
+    lockPath,
+    JSON.stringify({ pid: process.pid, acquiredAt: Date.now() - 86_400_000 }),
+    "utf8",
+  );
+
+  expect(() => withGlobalLock(home, () => "acquired")).toThrow(/Timed out waiting for lock/);
+  expect(existsSync(lockPath)).toBe(true);
+}, 7_000);

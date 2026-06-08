@@ -268,7 +268,7 @@ function buildResourceCommandInput(options: {
   }
 
   return Object.fromEntries(
-    options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])]]),
+    options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])].sort()]),
   );
 }
 

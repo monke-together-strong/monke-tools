@@ -150,6 +150,8 @@ export interface SessionRepoState {
   sourceRoot: string;
   worktreePath: string;
   assignedPorts: AssignedPort[];
+  /** Repo-owned teardown command captured when this session repo was materialized. */
+  cleanupCommand?: string;
   /** Deterministic Resource values remembered for this repo and session. */
   resourceValues?: ResourceValueState[];
   /** Dynamic Resource command outputs remembered for this repo and session. */
