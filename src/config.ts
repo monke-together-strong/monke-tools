@@ -217,12 +217,6 @@ function parseRepoConfigObject(
       claimedTargets.set(targetKey, portKey);
 
       const existingMappings = localMappingsByPort.get(portKey);
-      if (existingMappings && existingMappings.length > 0) {
-        throw new MonkeError(
-          `Duplicate local port key ${portKey} in ${configPath} for ${existingMappings[0]?.targetApp} and ${label}`,
-        );
-      }
-
       if (!existingMappings) {
         localPortOrder.push(portKey);
         localMappingsByPort.set(portKey, []);

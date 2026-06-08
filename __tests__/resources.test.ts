@@ -64,6 +64,7 @@ test("resource command lock covers command execution and immediate persistence",
     repoConfig,
     existingRepoState: undefined,
     worktreePath: sourceRoot,
+    resourceValues: [{ env: "E2E_CHANNEL_NAME", value: "banana" }],
     onResolvedCommandOutputs(commands) {
       persistenceSawLock = existsSync(lockPath);
       expect(commands).toEqual([
@@ -112,6 +113,7 @@ test("resource command input values are sorted for deterministic stdin", () => {
     externalTargetApps: new Set(),
   };
   let stdin: unknown;
+  let commandEnv: Record<string, string | undefined> | undefined;
 
   saveSessionState(home, {
     version: 1,
@@ -155,6 +157,7 @@ test("resource command input values are sorted for deterministic stdin", () => {
     env: {},
     exec(_command, _args, options) {
       stdin = JSON.parse(options?.stdin ?? "");
+      commandEnv = options?.env;
       return {
         stdout: '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}',
         stderr: "",
@@ -172,10 +175,12 @@ test("resource command input values are sorted for deterministic stdin", () => {
     repoConfig,
     existingRepoState: undefined,
     worktreePath: sourceRoot,
+    resourceValues: [{ env: "E2E_CHANNEL_NAME", value: "current" }],
     onResolvedCommandOutputs() {},
   });
 
   expect(stdin).toEqual({
     E2E_FLOW1_SYMBOL: ["ADA/USDT:USDT", "ZEC/USDT:USDT"],
   });
+  expect(commandEnv).toEqual({ E2E_CHANNEL_NAME: "current" });
 });

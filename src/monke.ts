@@ -284,6 +284,7 @@ function materializeRepo(options: {
     repoConfig,
     existingRepoState: existingState,
     worktreePath,
+    resourceValues: resolvedResourceValues.values,
     onResolvedCommandOutputs(resourceCommandOutputs) {
       options.persistRepoState(
         buildSessionRepoState({

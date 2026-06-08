@@ -94,6 +94,7 @@ export function resolveResourceCommands(options: {
   repoConfig: RepoConfig;
   existingRepoState: SessionRepoState | undefined;
   worktreePath: string;
+  resourceValues: ResourceValueState[];
   onResolvedCommandOutputs: (commands: ResourceCommandState[]) => void;
 }): ResolvedResourceCommands {
   const existingCommands = options.existingRepoState?.resourceCommandOutputs ?? [];
@@ -127,6 +128,7 @@ export function resolveResourceCommands(options: {
           command,
           worktreePath: options.worktreePath,
           stdin,
+          resourceValues: options.resourceValues,
         }),
       );
       options.onResolvedCommandOutputs(
@@ -184,10 +186,14 @@ function runResourceCommand(options: {
   command: ResourceCommandConfig;
   worktreePath: string;
   stdin: ResourceCommandInput;
+  resourceValues: ResourceValueState[];
 }): ResourceCommandState {
   const stdin = JSON.stringify(options.stdin);
   const result = options.runtime.exec("sh", ["-lc", options.command.command], {
     cwd: options.worktreePath,
+    env: Object.fromEntries(
+      options.resourceValues.map((resource) => [resource.env, resource.value]),
+    ),
     stdin,
     timeoutSeconds: options.command.timeoutSeconds,
     allowFailure: true,

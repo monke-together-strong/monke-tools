@@ -58,6 +58,43 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
   expect(sessionState.repos[0]?.worktreePath).toBe(worktreeRoot);
 });
 
+test("create rewrites one local port key into multiple same-repo app env files", () => {
+  const sandbox = makeTempDir("single-repo-shared-port");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "apps/web/.env.local": "API_URL=http://localhost:3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+  web:
+    path: apps/web
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: API_URL
+`,
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\n");
+  expect(read(worktreeRoot, "apps/web/.env.local")).toBe("API_URL=http://localhost:10000\n");
+  expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\n");
+});
+
 test("create and materialize resolve, reuse, write, and prune resource values", () => {
   const sandbox = makeTempDir("single-repo-resources");
   const binDirectory = path.join(sandbox, "bin");
