@@ -13,6 +13,7 @@ import type {
 } from "./types.ts";
 
 const GLOBAL_PORT_FLOOR = 10_000;
+const MIN_REPO_RESERVATION_SIZE = 100;
 
 export function loadSessionState(
   home: string,
@@ -93,7 +94,7 @@ export function getOrCreateReservation(
     version: 1,
     sourceRoot,
     blockStart: Math.max(GLOBAL_PORT_FLOOR, highestReservedPort + 1),
-    size,
+    size: Math.max(size, MIN_REPO_RESERVATION_SIZE),
   };
 
   ensureDirectory(path.dirname(filePath));
