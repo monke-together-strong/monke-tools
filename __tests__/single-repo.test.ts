@@ -1,10 +1,12 @@
 import { expect, test } from "vitest";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
 import {
   createRepo,
   installFakeWt,
+  installShShim,
   makeTempDir,
   read,
   readSingleYamlFile,
@@ -113,6 +115,7 @@ test("create and materialize run bootstrapCommand after env sync from the repo w
   const sandbox = makeTempDir("single-bootstrap");
   const binDirectory = path.join(sandbox, "bin");
   installFakeWt(binDirectory);
+  const shLogPath = installShShim(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
@@ -147,6 +150,9 @@ apps:
   });
 
   expect(read(worktreeRoot, "bootstrap-runs")).toBe(`${worktreeRoot}\n${worktreeRoot}\n`);
+  const shellArgs = readFileSync(shLogPath, "utf8").trim().split("\n");
+  expect(shellArgs.filter((arg) => arg === "-c")).toHaveLength(2);
+  expect(shellArgs).not.toContain("-lc");
 });
 
 test("create seeds configured directories and files into a new session worktree", () => {

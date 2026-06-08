@@ -37,7 +37,4 @@ jobs:
         run: bun run lint
 
       - name: Test
-        env:
-          BASH_ENV: /dev/null
-          ENV: /dev/null
         run: bun test
