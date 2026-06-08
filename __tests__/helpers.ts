@@ -81,6 +81,22 @@ export function installGitShim(binDirectory: string): void {
   );
 }
 
+export function installShShim(binDirectory: string): string {
+  const logPath = path.join(binDirectory, "sh.log");
+  writeExecutable(
+    path.join(binDirectory, "sh"),
+    `#!/bin/sh
+printf '%s\n' "$@" >> ${shellQuote(logPath)}
+if [ "\${1:-}" = "-lc" ]; then
+  echo "bootstrap commands must not use a login shell" >&2
+  exit 42
+fi
+exec /bin/sh "$@"
+`,
+  );
+  return logPath;
+}
+
 export function installFakeBrew(binDirectory: string): string {
   const logPath = path.join(binDirectory, "brew.log");
   const wtLogPath = path.join(binDirectory, "wt.log");
