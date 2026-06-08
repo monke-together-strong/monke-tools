@@ -1,5 +1,5 @@
 ---
-name: core
+name: monke-tools-core
 description: Use monke-tools for session worktrees, env rewrites, cleanup.
 ---
 
@@ -23,6 +23,7 @@ If it is missing or stale, ask the user to refresh the local install from the mo
 - `mt materialize`: run inside a session worktree to refresh env rewrites, dependency paths, resources, and bootstrap behavior.
 - `mt setup`: run from a source checkout to write dependency path env vars into the source checkout root `.env`.
 - `mt cleanup`: remove dead session-state records and run configured cleanup commands.
+- `mt skills configure`: update which Agent skill roots receive monke-tools Distributed skills.
 - `mt work --plan "..."`: run the single-pass implementer/reviewer agent workflow in the current checkout.
 - `mt work --prd "..."`: run the PRD issue loop across planned task issues.
 
