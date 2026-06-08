@@ -11,11 +11,13 @@ import {
   type CodexReasoningEffort,
 } from "./run.ts";
 import { createRuntime } from "./runtime.ts";
+import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
+  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt skills configure\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
 const RUN_USAGE = "Usage: mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
+const SKILLS_USAGE = "Usage: mt skills configure";
 
 type RunCommandOptions =
   | {
@@ -111,6 +113,29 @@ function createProgram(runtime: Runtime, onRun: (options: RunCommandOptions) => 
       runSetup(runtime);
     });
 
+  const skills = program
+    .command("skills")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .addHelpCommand(false);
+
+  skills
+    .command("configure")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .action(() => {
+      runSkillsConfigure(runtime);
+    });
+
+  skills
+    .command("local-install")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .argument("<source-checkout>")
+    .action((sourceCheckout: string) => {
+      runLocalInstallSkills(runtime, sourceCheckout);
+    });
+
   program
     .command("work")
     .helpOption(false)
@@ -173,6 +198,8 @@ function mapCliError(error: unknown, argv: string[]): Error {
       return new MonkeError("Usage: mt cleanup");
     case "setup":
       return new MonkeError("Usage: mt setup");
+    case "skills":
+      return new MonkeError(SKILLS_USAGE);
     case "work":
       return new MonkeError(RUN_USAGE);
     default:

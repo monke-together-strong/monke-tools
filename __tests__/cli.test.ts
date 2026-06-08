@@ -6,8 +6,9 @@ import { runCli } from "../src/index.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const ROOT_USAGE =
-  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
+  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt skills configure\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
 const RUN_USAGE = "Usage: mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
+const SKILLS_USAGE = "Usage: mt skills configure";
 
 test("runCli preserves top-level usage for missing and unknown commands", () => {
   expect(() => runCli([])).toThrow(ROOT_USAGE);
@@ -20,6 +21,9 @@ test("runCli preserves command-specific usage for invalid arity", () => {
   expect(() => runCli(["materialize", "extra"])).toThrow("Usage: mt materialize");
   expect(() => runCli(["cleanup", "extra"])).toThrow("Usage: mt cleanup");
   expect(() => runCli(["setup", "extra"])).toThrow("Usage: mt setup");
+  expect(() => runCli(["skills"])).toThrow(SKILLS_USAGE);
+  expect(() => runCli(["skills", "unknown"])).toThrow(SKILLS_USAGE);
+  expect(() => runCli(["skills", "configure", "extra"])).toThrow(SKILLS_USAGE);
   expect(() => runCli(["work"])).toThrow(RUN_USAGE);
   expect(() => runCli(["work", "--plan", "ship it", "--prd", "issue 22"])).toThrow(RUN_USAGE);
   expect(() => runCli(["work", "positional plan", "--plan", "ship it"])).toThrow(RUN_USAGE);
