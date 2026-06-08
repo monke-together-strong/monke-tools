@@ -35,7 +35,7 @@ mkdir -p "$INSTALL_DIR" "$ROOT_DIR/dist"
 cd "$ROOT_DIR"
 bun build --compile --outfile "$ROOT_DIR/dist/monke-tools" ./src/index.ts
 cp "$ROOT_DIR/dist/monke-tools" "$TARGET_FULL"
-cp "$ROOT_DIR/dist/monke-tools" "$TARGET_SHORT"
+printf '%s\n' '#!/bin/sh' 'exec "$(dirname "$0")/monke-tools" "$@"' > "$TARGET_SHORT"
 chmod +x "$TARGET_FULL" "$TARGET_SHORT"
 npm link --silent
 
