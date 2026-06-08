@@ -122,6 +122,10 @@ _Avoid_: Repo skill, local skill, source-only skill
 A monke-tools **Distributed skill** brought in from outside monke-tools and distributed through the same local install.
 _Avoid_: External skill, third-party skill, copied skill
 
+**Skill import**:
+The operation that brings selected **Imported skills** from an outside source into the **Skill source tree**.
+_Avoid_: Skill install, skill add, skill sync
+
 **Agent skill root**:
 An agent-readable directory where monke-tools installs a namespaced set of **Distributed skills**.
 _Avoid_: Skill discovery surface, package root, compiled executable

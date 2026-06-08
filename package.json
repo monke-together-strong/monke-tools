@@ -21,6 +21,7 @@
     "mt": "bun run src/index.ts",
     "monke-tools": "bun run src/index.ts",
     "install:local": "sh ./scripts/install-local.sh",
+    "skills:import": "bun run scripts/import-skills.ts",
     "test": "bunx --bun vitest run",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",
@@ -28,7 +29,10 @@
     "fmt:check": "oxfmt --check"
   },
   "dependencies": {
+    "@clack/core": "0.5.0",
+    "@clack/prompts": "^0.11.0",
     "commander": "^14.0.3",
+    "picocolors": "^1.1.1",
     "yaml": "^2.8.3",
     "zod": "^4.3.6"
   },
