@@ -1,8 +1,15 @@
 export interface Runtime {
+  /** Current working directory used by monke-tools operations. */
   readonly cwd: string;
+  /** Process environment used by monke-tools operations. */
   readonly env: Record<string, string | undefined>;
+  /** Run a command with the runtime environment. */
   exec(command: string, args?: string[], options?: ExecOptions): ExecResult;
+  /** Read one interactive input line after writing a prompt. */
+  readLine(prompt: string): string;
+  /** Write CLI output to stdout. */
   writeStdout(text: string): void;
+  /** Write CLI output to stderr. */
   writeStderr(text: string): void;
 }
 

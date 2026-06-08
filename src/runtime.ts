@@ -5,6 +5,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -20,14 +21,34 @@ import type { ExecOptions, ExecResult, Runtime } from "./types.ts";
 const GLOBAL_LOCK_TIMEOUT_MS = 5_000;
 const STALE_LOCK_AGE_MS = 60_000;
 
-export function createRuntime(options?: {
+/** Runtime construction options for CLI commands and integration-style tests. */
+export interface RuntimeOptions {
+  /** Current working directory used by command execution. */
   cwd?: string;
+  /** Environment overrides merged over the process environment. */
   env?: Record<string, string | undefined>;
+  /** Scripted stdin lines used by tests for interactive prompts. */
+  stdinText?: string;
+  /** Optional stdout sink used by tests and embedding callers. */
   onStdout?: (text: string) => void;
+  /** Optional stderr sink used by tests and embedding callers. */
   onStderr?: (text: string) => void;
-}): Runtime {
+}
+
+/** Create the default runtime adapter around the current process. */
+export function createRuntime(options?: RuntimeOptions): Runtime {
   const runtimeEnv = { ...process.env, ...options?.env };
   const runtimeCwd = options?.cwd ?? process.cwd();
+  const scriptedInput = options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/);
+
+  const writeStdout = (text: string): void => {
+    if (options?.onStdout) {
+      options.onStdout(text);
+      return;
+    }
+
+    process.stdout.write(text);
+  };
 
   return {
     cwd: runtimeCwd,
@@ -78,13 +99,16 @@ export function createRuntime(options?: {
 
       return { stdout, stderr, exitCode };
     },
-    writeStdout(text: string): void {
-      if (options?.onStdout) {
-        options.onStdout(text);
-        return;
+    readLine(prompt: string): string {
+      writeStdout(prompt);
+      if (scriptedInput !== null) {
+        return scriptedInput.shift() ?? "";
       }
 
-      process.stdout.write(text);
+      return readLineFromStdin();
+    },
+    writeStdout(text: string): void {
+      writeStdout(text);
     },
     writeStderr(text: string): void {
       if (options?.onStderr) {
@@ -107,6 +131,11 @@ export function formatCommand(command: string, args: string[]): string {
 
 export function getMonkeHome(runtime: Runtime): string {
   return runtime.env.MONKE_HOME ?? path.join(homedir(), ".monke");
+}
+
+/** Resolve the OS home directory used for external Agent skill roots. */
+export function getHomeDirectory(runtime: Runtime): string {
+  return runtime.env.HOME ?? homedir();
 }
 
 export function ensureDirectory(directoryPath: string): void {
@@ -218,6 +247,28 @@ export function isPortAvailable(port: number): boolean {
 
 function sleep(milliseconds: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function readLineFromStdin(): string {
+  const chunks: string[] = [];
+  const buffer = Buffer.alloc(1);
+
+  while (true) {
+    const bytesRead = readSync(0, buffer, 0, 1, null);
+    if (bytesRead === 0) {
+      break;
+    }
+
+    const character = buffer.toString("utf8", 0, bytesRead);
+    if (character === "\n") {
+      break;
+    }
+    if (character !== "\r") {
+      chunks.push(character);
+    }
+  }
+
+  return chunks.join("");
 }
 
 function tryEvictStaleLock(lockPath: string): boolean {

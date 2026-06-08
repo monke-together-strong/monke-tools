@@ -539,7 +539,7 @@ function runBootstrapCommand(
   }
 
   try {
-    runtime.exec("sh", ["-lc", repoConfig.bootstrapCommand], {
+    runtime.exec("sh", ["-c", repoConfig.bootstrapCommand], {
       cwd: worktreePath,
       env: Object.fromEntries(
         externalPathAssignments.map((assignment) => [assignment.env, assignment.value]),

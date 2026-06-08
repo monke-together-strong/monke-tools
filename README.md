@@ -20,39 +20,28 @@ bun run install:local
 mt create banana
 ```
 
-`bun run install:local` rebuilds the local `mt` executable from the current checkout, installs it to `~/.local/bin/mt` and `~/.local/bin/monke-tools`, and links this checkout into global package roots so TanStack Intent can discover this repo's package skills.
+`bun run install:local` rebuilds the local `mt` executable from the current checkout, installs it to `~/.local/bin/mt` and `~/.local/bin/monke-tools`, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots.
 
-After changing CLI source code, run `bun run install:local` again before testing from another repo. Skill changes under `skills/` are visible through the global package link without rebuilding the executable.
+On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and relink the managed `monke-tools` namespace to the current checkout.
 
-## Intent skill
+After changing CLI source code, run `bun run install:local` again before testing from another repo. Skill changes under `skills/` are visible immediately because Agent skill roots receive a symlink to the checkout's Skill source tree.
 
-Consumer repos can load monke-tools guidance with TanStack Intent:
+## Distributed Skills
 
-```bash
-bunx @tanstack/intent@latest list --global
-bunx @tanstack/intent@latest load monke-tools#core --global
-```
+Use `mt skills configure` to change which agents receive monke-tools skills. The command updates `config.yml` under the monke home directory and reconciles selected Agent skill roots immediately.
 
-If global scanning misses the local package link in a consumer repo, force Intent to scan npm's global package root:
+Built-in targets resolve against the OS home directory:
 
-```bash
-INTENT_GLOBAL_NODE_MODULES="$(npm root -g)" bunx @tanstack/intent@latest load monke-tools#core --global
-```
+- Codex: `~/.codex/skills`
+- Claude: `~/.claude/skills`
+- Cursor: `~/.cursor/skills`
 
-For persistent agent guidance, add an `intent-skills` block to the consumer repo's `AGENTS.md` that keeps global discovery explicit:
+Custom targets are Agent skill root directories. monke-tools owns only the `monke-tools` namespace inside each root and refuses to overwrite a real file or directory at that namespace path.
 
-```md
-<!-- intent-skills:start -->
+The Skill source tree is organized as:
 
-## Skill Loading
-
-Before substantial work:
-
-- Skill check: run `bunx @tanstack/intent@latest list --global`, or use skills already listed in context.
-- Skill guidance: if one local or global skill clearly matches the task, run `bunx @tanstack/intent@latest load <package>#<skill> --global` and follow the returned `SKILL.md`.
-- Multiple matches: prefer the most specific skill for the package or concern you are changing; load additional skills only when the task spans multiple packages or concerns.
-<!-- intent-skills:end -->
-```
+- `skills/internal`: monke-tools-owned Distributed skills, including `monke-tools-core`
+- `skills/imported`: Imported skills preserved from outside projects
 
 ## Commands
 
@@ -60,6 +49,7 @@ Before substantial work:
 - `mt materialize` refreshes the current session worktree in place and keeps the existing port assignments sticky.
 - `mt cleanup` removes session records whose worktrees no longer exist.
 - `mt setup` syncs external repo path env vars into the source checkout root `.env`.
+- `mt skills configure` updates the saved Skill install preference and reconciles selected Agent skill roots.
 - `mt work --plan "..."` runs Monke's single-pass Codex-backed workflow in the current Git checkout: it checkpoints dirty startup work when needed, runs the implementer and reviewer passes in sequence, streams the agent output live, and ends with a short summary.
 - `mt work --prd "..."` resolves one PRD issue plus an ordered task issue list, prints the resolved order, then executes each task issue through the PRD issue loop. Exactly one of `--plan` or `--prd` is required.
 
@@ -97,6 +87,7 @@ bun run src/index.ts create banana
 bun run src/index.ts materialize
 bun run src/index.ts cleanup
 bun run src/index.ts setup
+bun run src/index.ts skills configure
 bun run src/index.ts work --plan $'1. Update the CLI\n2. Add tests'
 bun run src/index.ts work --prd 'https://github.com/monke-together-strong/monke-tools/issues/22'
 ```
