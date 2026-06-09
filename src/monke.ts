@@ -4,6 +4,7 @@ import path from "node:path";
 import { loadResolvedGraph } from "./config.ts";
 import {
   syncRootEnvFile,
+  syncRootEnvFileWithRemovals,
   rewriteManagedEnvFiles,
   seedWorktreeFiles,
   collectBaselinePorts,
@@ -15,6 +16,7 @@ import {
   validateWorktreeForSession,
 } from "./git.ts";
 import { MonkeError } from "./errors.ts";
+import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
 import { findExecutable, getMonkeHome, withGlobalLock } from "./runtime.ts";
 import {
   allocateLocalPorts,
@@ -31,10 +33,14 @@ import type {
   AssignedPort,
   RepoConfig,
   RepoMaterializationResult,
+  ResourceCommandState,
+  ResourceValueState,
   Runtime,
   SessionRepoState,
   SessionState,
 } from "./types.ts";
+
+const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
 
 export function runCreate(runtime: Runtime, session: string): void {
   if (!session) {
@@ -103,6 +109,10 @@ export function runCreate(runtime: Runtime, session: string): void {
         worktreeCreated: worktree.created,
         existingState,
         dependencyResults: results,
+        persistRepoState(repoState) {
+          sessionState = recordRepoSuccess(sessionState, repoState);
+          saveSessionState(home, sessionState);
+        },
       });
 
       results.set(repoConfig.sourceRoot, materialized);
@@ -161,6 +171,10 @@ export function runMaterialize(runtime: Runtime): void {
         worktreeCreated: isCurrentRepo ? false : dependencyWorktree.created,
         existingState,
         dependencyResults: results,
+        persistRepoState(repoState) {
+          sessionState = recordRepoSuccess(sessionState, repoState);
+          saveSessionState(home, sessionState);
+        },
       });
 
       results.set(repoConfig.sourceRoot, materialized);
@@ -178,6 +192,12 @@ export function runCleanup(runtime: Runtime): void {
 
   let removed = 0;
   withGlobalLock(home, () => {
+    let graph: ReturnType<typeof loadResolvedGraph> | null = null;
+    const getGraph = (): ReturnType<typeof loadResolvedGraph> => {
+      graph ??= loadResolvedGraph(runtime, context.sourceRoot);
+      return graph;
+    };
+
     for (const state of listSessionStates(home)) {
       if (state.rootSourceRoot !== context.sourceRoot) {
         continue;
@@ -188,6 +208,7 @@ export function runCleanup(runtime: Runtime): void {
         continue;
       }
 
+      runCleanupCommands(runtime, getGraph().reposByRoot, state);
       removeSessionState(home, state.rootSourceRoot, state.session);
       removed += 1;
     }
@@ -229,6 +250,7 @@ function materializeRepo(options: {
   worktreeCreated: boolean;
   existingState: SessionRepoState | undefined;
   dependencyResults: Map<string, RepoMaterializationResult>;
+  persistRepoState: (repoState: SessionRepoState) => void;
 }): RepoMaterializationResult {
   const {
     home,
@@ -247,6 +269,39 @@ function materializeRepo(options: {
     });
   }
 
+  const resolvedResourceValues = resolveResourceValues({
+    home,
+    rootSourceRoot,
+    session,
+    repoConfig,
+    existingRepoState: existingState,
+    env: options.runtime.env,
+  });
+  const resolvedResourceCommands = resolveResourceCommands({
+    runtime: options.runtime,
+    home,
+    session,
+    repoConfig,
+    existingRepoState: existingState,
+    worktreePath,
+    resourceValues: resolvedResourceValues.values,
+    onResolvedCommandOutputs(resourceCommandOutputs) {
+      options.persistRepoState(
+        buildSessionRepoState({
+          sourceRoot: repoConfig.sourceRoot,
+          worktreePath,
+          assignedPorts: existingState?.assignedPorts ?? [],
+          cleanupCommand: repoConfig.cleanupCommand,
+          resourceValues: preserveStaleResourceValues(
+            existingState?.resourceValues ?? [],
+            resolvedResourceValues.values,
+          ),
+          resourceCommandOutputs,
+          isComplete: false,
+        }),
+      );
+    },
+  });
   const reservation = getOrCreateReservation(
     home,
     repoConfig.sourceRoot,
@@ -271,19 +326,29 @@ function materializeRepo(options: {
   );
   rewriteManagedEnvFiles(repoConfig, worktreePath, localAssignments, externalAssignments);
   const localAssignedPorts = toAssignedPorts(repoConfig, localAssignments);
-  syncRootEnvFile(worktreePath, [
-    ...externalPathAssignments,
-    ...toRootEnvAssignments(localAssignedPorts),
-    ...toRootEnvAssignments(dedupeAssignedPorts(externalAssignments)),
-  ]);
+  syncRootEnvFileWithRemovals(
+    worktreePath,
+    [
+      ...externalPathAssignments,
+      ...toRootEnvAssignments(localAssignedPorts),
+      ...toRootEnvAssignments(dedupeAssignedPorts(externalAssignments)),
+      ...toResourceEnvAssignments(resolvedResourceValues.values),
+      ...toResourceCommandEnvAssignments(resolvedResourceCommands.commands),
+    ],
+    [...resolvedResourceValues.removedEnvNames, ...resolvedResourceCommands.removedEnvNames],
+  );
   runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
 
   return {
-    state: {
+    state: buildSessionRepoState({
       sourceRoot: repoConfig.sourceRoot,
       worktreePath,
       assignedPorts: localAssignedPorts,
-    },
+      cleanupCommand: repoConfig.cleanupCommand,
+      resourceValues: resolvedResourceValues.values,
+      resourceCommandOutputs: resolvedResourceCommands.commands,
+      isComplete: true,
+    }),
     localAssignments,
   };
 }
@@ -350,6 +415,119 @@ function dedupeAssignedPorts(assignments: AssignedPort[]): AssignedPort[] {
   return [...deduped.values()];
 }
 
+function toResourceEnvAssignments(
+  assignments: ResourceValueState[],
+): Array<{ env: string; value: string }> {
+  return assignments.map((assignment) => ({
+    env: assignment.env,
+    value: assignment.value,
+  }));
+}
+
+function toResourceCommandEnvAssignments(
+  commands: ResourceCommandState[],
+): Array<{ env: string; value: string }> {
+  return commands.flatMap((command) =>
+    command.outputs.map((assignment) => ({
+      env: assignment.env,
+      value: assignment.value,
+    })),
+  );
+}
+
+function buildSessionRepoState(options: {
+  sourceRoot: string;
+  worktreePath: string;
+  assignedPorts: AssignedPort[];
+  cleanupCommand?: string;
+  resourceValues: ResourceValueState[];
+  resourceCommandOutputs: ResourceCommandState[];
+  isComplete: boolean;
+}): SessionRepoState {
+  const state: SessionRepoState = {
+    sourceRoot: options.sourceRoot,
+    worktreePath: options.worktreePath,
+    assignedPorts: options.assignedPorts,
+  };
+
+  if (options.cleanupCommand) {
+    state.cleanupCommand = options.cleanupCommand;
+  }
+
+  if (options.resourceValues.length > 0) {
+    state.resourceValues = options.resourceValues;
+  }
+
+  if (options.resourceCommandOutputs.length > 0) {
+    state.resourceCommandOutputs = options.resourceCommandOutputs;
+  }
+
+  if (!options.isComplete) {
+    state.materializationComplete = false;
+  }
+
+  return state;
+}
+
+function preserveStaleResourceValues(
+  existingValues: ResourceValueState[],
+  currentValues: ResourceValueState[],
+): ResourceValueState[] {
+  const currentEnvNames = new Set(currentValues.map((resource) => resource.env));
+  return [
+    ...currentValues,
+    ...existingValues.filter((resource) => !currentEnvNames.has(resource.env)),
+  ];
+}
+
+function runCleanupCommands(
+  runtime: Runtime,
+  reposByRoot: Map<string, RepoConfig>,
+  state: SessionState,
+): void {
+  for (const repoState of state.repos) {
+    const repoConfig = reposByRoot.get(repoState.sourceRoot);
+    const cleanupCommand = repoState.cleanupCommand ?? repoConfig?.cleanupCommand;
+    if (!cleanupCommand) {
+      if (!repoConfig) {
+        throw new MonkeError(
+          `Missing repo config for cleanup of ${repoState.sourceRoot}; refusing to drop session state`,
+        );
+      }
+      continue;
+    }
+    const sourceRoot = repoConfig?.sourceRoot ?? repoState.sourceRoot;
+
+    const resourceEnv = Object.fromEntries(
+      (repoState.resourceValues ?? []).map((resource) => [resource.env, resource.value]),
+    );
+    const resourceCommandEnv = Object.fromEntries(
+      (repoState.resourceCommandOutputs ?? []).flatMap((command) =>
+        command.outputs.map((resource) => [resource.env, resource.value]),
+      ),
+    );
+
+    try {
+      runtime.exec("sh", ["-c", cleanupCommand], {
+        cwd: sourceRoot,
+        timeoutSeconds: CLEANUP_COMMAND_TIMEOUT_SECONDS,
+        env: {
+          ...resourceEnv,
+          ...resourceCommandEnv,
+          MONKE_SESSION: state.session,
+          MONKE_SOURCE_ROOT: sourceRoot,
+          MONKE_WORKTREE_PATH: repoState.worktreePath,
+        },
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new MonkeError(
+        `Cleanup command failed for session ${state.session} repo ${sourceRoot}: ${cleanupCommand}\n${detail}`,
+      );
+    }
+  }
+}
+
 function runBootstrapCommand(
   runtime: Runtime,
   repoConfig: RepoConfig,
@@ -404,6 +582,10 @@ function findFirstIndexNeedingWork(
     const repoConfig = reposInOrder[index]!;
     const existing = state.repos.find((repo) => repo.sourceRoot === repoConfig.sourceRoot);
     if (!existing) {
+      return index;
+    }
+
+    if (existing.materializationComplete === false) {
       return index;
     }
 
