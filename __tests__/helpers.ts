@@ -88,7 +88,7 @@ export function installShShim(binDirectory: string): string {
     `#!/bin/sh
 printf '%s\n' "$@" >> ${shellQuote(logPath)}
 if [ "\${1:-}" = "-lc" ]; then
-  echo "bootstrap commands must not use a login shell" >&2
+  echo "repo commands must not use a login shell" >&2
   exit 42
 fi
 exec /bin/sh "$@"

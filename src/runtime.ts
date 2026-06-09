@@ -61,9 +61,21 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
           ...execOptions?.env,
         },
         encoding: "utf8",
+        input: execOptions?.stdin,
+        timeout:
+          execOptions?.timeoutSeconds === undefined ? undefined : execOptions.timeoutSeconds * 1000,
       });
 
       if (result.error) {
+        if (execOptions?.allowFailure && isTimeoutError(result.error)) {
+          return {
+            stdout: result.stdout ?? "",
+            stderr: result.stderr ?? "",
+            exitCode: -1,
+            timedOut: true,
+          };
+        }
+
         throw new MonkeError(
           `Failed to run ${formatCommand(command, args)}: ${result.error.message}`,
         );
@@ -107,6 +119,10 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       process.stderr.write(text);
     },
   };
+}
+
+function isTimeoutError(error: Error): boolean {
+  return "code" in error && error.code === "ETIMEDOUT";
 }
 
 export function formatCommand(command: string, args: string[]): string {
@@ -161,8 +177,16 @@ export function findExecutable(
 }
 
 export function withGlobalLock<T>(home: string, callback: () => T): T {
-  ensureDirectory(home);
-  const lockPath = path.join(home, "lock");
+  return withLockPath(path.join(home, "lock"), callback);
+}
+
+/** Run a synchronous callback while holding a lock scoped inside the monke home directory. */
+export function withScopedLock<T>(home: string, namespace: string, callback: () => T): T {
+  return withLockPath(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
+}
+
+function withLockPath<T>(lockPath: string, callback: () => T): T {
+  ensureDirectory(path.dirname(lockPath));
   const deadline = Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
   let fileDescriptor: number | null = null;
 
@@ -268,8 +292,8 @@ function tryEvictStaleLock(lockPath: string): boolean {
       isStale = metadata.acquiredAt <= staleSince;
     }
 
-    if (typeof metadata.pid === "number" && metadata.pid > 0 && !isProcessRunning(metadata.pid)) {
-      isStale = true;
+    if (typeof metadata.pid === "number" && metadata.pid > 0) {
+      isStale = !isProcessRunning(metadata.pid);
     }
   } catch {
     // Fall back to the lock file timestamp when metadata is unreadable.

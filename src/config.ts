@@ -10,6 +10,8 @@ import type {
   ExternalRepoConfig,
   LocalMapping,
   RepoConfig,
+  ResourceCommandConfig,
+  ResourceValueConfig,
   ResolvedGraph,
   Runtime,
 } from "./types.ts";
@@ -18,6 +20,7 @@ const LABEL_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ENV_RE = /^[A-Z][A-Z0-9_]*$/;
 const PORT_RE = /^[A-Z][A-Z0-9_]*_PORT$/;
 const DEFAULT_ENV_FILE = ".env";
+const DEFAULT_RESOURCE_COMMAND_TIMEOUT_SECONDS = 60;
 
 export function loadResolvedGraph(runtime: Runtime, rootSourceRoot: string): ResolvedGraph {
   const configCache = new Map<string, RepoConfig>();
@@ -125,12 +128,24 @@ function parseRepoConfigObject(
   rawConfig: unknown,
 ): RepoConfig {
   const config = asRecord(rawConfig, configPath);
-  assertKnownKeys(config, ["apps", "external", "bootstrapCommand", "seedPaths"], configPath);
+  assertKnownKeys(
+    config,
+    ["apps", "external", "bootstrapCommand", "cleanupCommand", "seedPaths", "resources"],
+    configPath,
+  );
   const bootstrapCommand =
     config.bootstrapCommand === undefined
       ? undefined
       : requireString(config.bootstrapCommand, `${configPath}#bootstrapCommand`);
+  const cleanupCommand =
+    config.cleanupCommand === undefined
+      ? undefined
+      : requireString(config.cleanupCommand, `${configPath}#cleanupCommand`);
   const seedPaths = parseSeedPaths(config.seedPaths, sourceRoot, configPath);
+  const { resourceValuesInOrder, resourceCommandsInOrder } = parseResources(
+    config.resources,
+    configPath,
+  );
 
   const rawApps = config.apps;
   if (!rawApps) {
@@ -202,12 +217,6 @@ function parseRepoConfigObject(
       claimedTargets.set(targetKey, portKey);
 
       const existingMappings = localMappingsByPort.get(portKey);
-      if (existingMappings && existingMappings.length > 0) {
-        throw new MonkeError(
-          `Duplicate local port key ${portKey} in ${configPath} for ${existingMappings[0]?.targetApp} and ${label}`,
-        );
-      }
-
       if (!existingMappings) {
         localPortOrder.push(portKey);
         localMappingsByPort.set(portKey, []);
@@ -341,7 +350,10 @@ function parseRepoConfigObject(
     sourceRoot,
     configPath,
     bootstrapCommand,
+    cleanupCommand,
     seedPaths,
+    resourceValuesInOrder,
+    resourceCommandsInOrder,
     appsInOrder,
     appsByLabel,
     externalInOrder,
@@ -458,4 +470,147 @@ function parseSeedPaths(rawSeedPaths: unknown, sourceRoot: string, configPath: s
   }
 
   return seedPaths;
+}
+
+function parseResources(
+  rawResources: unknown,
+  configPath: string,
+): {
+  resourceValuesInOrder: ResourceValueConfig[];
+  resourceCommandsInOrder: ResourceCommandConfig[];
+} {
+  if (rawResources === undefined) {
+    return { resourceValuesInOrder: [], resourceCommandsInOrder: [] };
+  }
+
+  const resources = asRecord(rawResources, `${configPath}#resources`);
+  if (Object.keys(resources).length === 0) {
+    throw new MonkeError(`${configPath}#resources must contain values or commands`);
+  }
+  assertKnownKeys(resources, ["values", "commands"], `${configPath}#resources`);
+
+  if (resources.values === undefined && resources.commands === undefined) {
+    throw new MonkeError(`${configPath}#resources must contain values or commands`);
+  }
+
+  const seenEnvNames = new Set<string>();
+
+  const resourceValuesInOrder: ResourceValueConfig[] = [];
+  if (resources.values !== undefined) {
+    const rawValues = asRecord(resources.values, `${configPath}#resources.values`);
+    if (Object.keys(rawValues).length === 0) {
+      throw new MonkeError(`${configPath}#resources.values must declare at least one value`);
+    }
+
+    for (const [env, rawLiteral] of Object.entries(rawValues)) {
+      requireEnvName(env, `${configPath}#resources.values`);
+      claimResourceEnvName(seenEnvNames, env, configPath);
+      resourceValuesInOrder.push({
+        env,
+        literal: requireResourceLiteral(rawLiteral, `${configPath}#resources.values.${env}`),
+      });
+    }
+  }
+
+  const resourceCommandsInOrder: ResourceCommandConfig[] = [];
+  if (resources.commands !== undefined) {
+    const rawCommands = asRecord(resources.commands, `${configPath}#resources.commands`);
+    if (Object.keys(rawCommands).length === 0) {
+      throw new MonkeError(`${configPath}#resources.commands must declare at least one command`);
+    }
+
+    for (const [name, rawCommand] of Object.entries(rawCommands)) {
+      validateLabel(name, `${configPath}#resources.commands`);
+      const commandValue = asRecord(rawCommand, `${configPath}#resources.commands.${name}`);
+      assertKnownKeys(
+        commandValue,
+        ["command", "timeoutSeconds", "outputs"],
+        `${configPath}#resources.commands.${name}`,
+      );
+
+      const outputs = requireResourceCommandOutputs(
+        commandValue.outputs,
+        `${configPath}#resources.commands.${name}.outputs`,
+        seenEnvNames,
+        configPath,
+      );
+      resourceCommandsInOrder.push({
+        name,
+        command: requireString(
+          commandValue.command,
+          `${configPath}#resources.commands.${name}.command`,
+        ),
+        timeoutSeconds: requireResourceCommandTimeout(
+          commandValue.timeoutSeconds,
+          `${configPath}#resources.commands.${name}.timeoutSeconds`,
+        ),
+        outputs,
+      });
+    }
+  }
+
+  return { resourceValuesInOrder, resourceCommandsInOrder };
+}
+
+function claimResourceEnvName(seenEnvNames: Set<string>, env: string, configPath: string): void {
+  if (seenEnvNames.has(env)) {
+    throw new MonkeError(`Duplicate resource env name ${env} in ${configPath}`);
+  }
+  seenEnvNames.add(env);
+}
+
+function requireResourceCommandOutputs(
+  value: unknown,
+  location: string,
+  seenEnvNames: Set<string>,
+  configPath: string,
+): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new MonkeError(`${location} must be a non-empty array`);
+  }
+
+  const outputs: string[] = [];
+  const seenOutputs = new Set<string>();
+  for (const [index, rawOutput] of value.entries()) {
+    const env = requireEnvName(rawOutput, `${location}[${index}]`);
+    if (seenOutputs.has(env)) {
+      throw new MonkeError(`Duplicate resource command output ${env} at ${location}`);
+    }
+    seenOutputs.add(env);
+    claimResourceEnvName(seenEnvNames, env, configPath);
+    outputs.push(env);
+  }
+  return outputs;
+}
+
+function requireResourceCommandTimeout(value: unknown, location: string): number {
+  if (value === undefined) {
+    return DEFAULT_RESOURCE_COMMAND_TIMEOUT_SECONDS;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new MonkeError(`${location} must be a positive integer`);
+  }
+
+  return value;
+}
+
+function requireResourceLiteral(value: unknown, location: string): string {
+  const literal = requireString(value, location);
+  for (const match of literal.matchAll(/\$\{([^}]*)\}/g)) {
+    const placeholder = match[1] ?? "";
+    if (placeholder !== "session" && placeholder !== "user") {
+      throw new MonkeError(
+        `${location} contains unsupported placeholder \${${placeholder}}; supported placeholders are \${session} and \${user}`,
+      );
+    }
+  }
+
+  if (literal.replace(/\$\{(?:session|user)\}/g, "").includes("${")) {
+    throw new MonkeError(
+      `${location} contains an unsupported placeholder; supported placeholders are \${session} and \${user}`,
+    );
+  }
+
+  return literal;
 }

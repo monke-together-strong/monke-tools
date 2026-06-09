@@ -104,30 +104,49 @@ export function syncRootEnvFile(
   worktreeRoot: string,
   assignments: Array<{ env: string; value: string }>,
 ): void {
-  if (assignments.length === 0) {
+  syncRootEnvFileWithRemovals(worktreeRoot, assignments, []);
+}
+
+/** Synchronize root .env assignments and remove stale root env names. */
+export function syncRootEnvFileWithRemovals(
+  worktreeRoot: string,
+  assignments: Array<{ env: string; value: string }>,
+  removedEnvNames: string[],
+): void {
+  if (assignments.length === 0 && removedEnvNames.length === 0) {
     return;
   }
 
   const envPath = path.join(worktreeRoot, ".env");
+  if (!existsSync(envPath) && assignments.length === 0) {
+    return;
+  }
+
   const requests = new Map(assignments.map((assignment) => [assignment.env, assignment.value]));
+  const removals = new Set(removedEnvNames.filter((env) => !requests.has(env)));
   const original = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
   const lines = original ? stripTrailingNewline(original).split("\n") : [];
   const touched = new Set<string>();
+  const rewritten: string[] = [];
 
-  const rewritten = lines.map((line) => {
+  for (const line of lines) {
     const parsed = parseAssignmentLine(line);
     if (!parsed) {
-      return line;
+      rewritten.push(line);
+      continue;
     }
 
     const nextValue = requests.get(parsed.key);
-    if (nextValue === undefined) {
-      return line;
+    if (nextValue !== undefined) {
+      touched.add(parsed.key);
+      rewritten.push(`${parsed.prefix}${nextValue}${parsed.comment}`);
+      continue;
     }
 
-    touched.add(parsed.key);
-    return `${parsed.prefix}${nextValue}${parsed.comment}`;
-  });
+    if (!removals.has(parsed.key)) {
+      rewritten.push(line);
+    }
+  }
 
   for (const [env, value] of requests) {
     if (!touched.has(env)) {
@@ -135,7 +154,7 @@ export function syncRootEnvFile(
     }
   }
 
-  writeFileSync(envPath, `${rewritten.join("\n")}\n`, "utf8");
+  writeFileSync(envPath, rewritten.length > 0 ? `${rewritten.join("\n")}\n` : "", "utf8");
 }
 
 export function rewriteEnvFile(filePath: string, requests: Map<string, number>): void {

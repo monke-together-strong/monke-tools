@@ -140,6 +140,26 @@ apps:
   );
 });
 
+test("loadResolvedGraph rejects invalid cleanupCommand values", () => {
+  const sandbox = makeTempDir("config-invalid-cleanup");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `cleanupCommand: ""
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+    /cleanupCommand.*non-empty string/,
+  );
+});
+
 test("loadResolvedGraph rejects non-array seedPaths", () => {
   const sandbox = makeTempDir("config-seedpaths-not-array");
   const root = createRepo(path.join(sandbox, "root"), {
@@ -548,11 +568,11 @@ external:
   expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/owned by both/);
 });
 
-test("loadResolvedGraph rejects duplicate local port keys within one repo", () => {
-  const sandbox = makeTempDir("config-duplicate-local-port");
+test("loadResolvedGraph allows one local port key to rewrite multiple same-repo app envs", () => {
+  const sandbox = makeTempDir("config-shared-local-port");
   const root = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
-    "apps/worker/.env.local": "PORT=3001\n",
+    "apps/web/.env.local": "API_URL=http://localhost:3000\n",
     "monke.yml": `apps:
   api:
     path: apps/api
@@ -560,18 +580,22 @@ test("loadResolvedGraph rejects duplicate local port keys within one repo", () =
     mappings:
       - port: SHARED_PORT
         env: PORT
-  worker:
-    path: apps/worker
+  web:
+    path: apps/web
     envFile: .env.local
     mappings:
       - port: SHARED_PORT
-        env: PORT
+        env: API_URL
 `,
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /Duplicate local port key SHARED_PORT.*api and worker/,
-  );
+  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+  const repo = graph.reposByRoot.get(root);
+  expect(repo?.localPortOrder).toEqual(["SHARED_PORT"]);
+  expect(repo?.localMappingsByPort.get("SHARED_PORT")).toEqual([
+    { targetApp: "api", targetEnv: "PORT", portKey: "SHARED_PORT" },
+    { targetApp: "web", targetEnv: "API_URL", portKey: "SHARED_PORT" },
+  ]);
 });
 
 test("loadResolvedGraph rejects dependency cycles instead of returning cached partial config", () => {

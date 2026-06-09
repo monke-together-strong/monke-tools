@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import path from "node:path";
 
-import { allocateLocalPorts, getOrCreateReservation } from "../src/registry.ts";
+import { allocateLocalPorts, getOrCreateReservation, saveSessionState } from "../src/registry.ts";
 import type { RepoConfig, RepoReservation } from "../src/types.ts";
 import { makeTempDir } from "./helpers.ts";
 
@@ -67,17 +67,62 @@ test("getOrCreateReservation fails instead of resizing an existing repo block", 
 
   const firstReservation = getOrCreateReservation(home, sourceRoot, 1);
   expect(firstReservation?.blockStart).toBe(10_000);
-  expect(firstReservation?.size).toBe(1);
+  expect(firstReservation?.size).toBe(100);
 
-  expect(() => getOrCreateReservation(home, sourceRoot, 2)).toThrow(
-    /its reservation only has room for 1/,
+  expect(() => getOrCreateReservation(home, sourceRoot, 101)).toThrow(
+    /its reservation only has room for 100/,
   );
+});
+
+test("getOrCreateReservation leaves spare ports for multiple retained sessions", () => {
+  const sandbox = makeTempDir("registry-capacity");
+  const home = path.join(sandbox, "home");
+  const sourceRoot = path.join(sandbox, "root");
+  const repoConfig = makeRepoConfig(sourceRoot, ["API_PORT"]);
+  const reservation = getOrCreateReservation(home, sourceRoot, repoConfig.localPortOrder.length);
+
+  const firstSession = allocateLocalPorts({
+    home,
+    rootSourceRoot: sourceRoot,
+    session: "one",
+    repoConfig,
+    existingRepoState: undefined,
+    reservation,
+    baselinePorts: new Set(),
+  });
+  saveSessionState(home, {
+    version: 1,
+    rootSourceRoot: sourceRoot,
+    session: "one",
+    repos: [
+      {
+        sourceRoot,
+        worktreePath: path.join(sandbox, "one"),
+        assignedPorts: [{ key: "API_PORT", value: firstSession.get("API_PORT") ?? -1 }],
+      },
+    ],
+  });
+  const secondSession = allocateLocalPorts({
+    home,
+    rootSourceRoot: sourceRoot,
+    session: "two",
+    repoConfig,
+    existingRepoState: undefined,
+    reservation,
+    baselinePorts: new Set(),
+  });
+
+  expect(firstSession.get("API_PORT")).toBe(10_000);
+  expect(secondSession.get("API_PORT")).toBe(10_001);
 });
 
 function makeRepoConfig(sourceRoot: string, localPortOrder: string[]): RepoConfig {
   return {
     sourceRoot,
     configPath: path.join(sourceRoot, "monke.yml"),
+    seedPaths: [],
+    resourceValuesInOrder: [],
+    resourceCommandsInOrder: [],
     appsInOrder: [],
     appsByLabel: new Map(),
     externalInOrder: [],
