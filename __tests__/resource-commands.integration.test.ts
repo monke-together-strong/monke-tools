@@ -6,6 +6,7 @@ import { loadSessionState, saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
   installFakeWt,
+  installShShim,
   makeTempDir,
   read,
   readSingleYamlFile,
@@ -606,6 +607,7 @@ function createResourceCommandScenario(options: {
   const sandbox = makeTempDir(options.name);
   const binDirectory = path.join(sandbox, "bin");
   installFakeWt(binDirectory);
+  installShShim(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": options.appEnv ?? "PORT=3000\n",

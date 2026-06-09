@@ -189,7 +189,7 @@ function runResourceCommand(options: {
   resourceValues: ResourceValueState[];
 }): ResourceCommandState {
   const stdin = JSON.stringify(options.stdin);
-  const result = options.runtime.exec("sh", ["-lc", options.command.command], {
+  const result = options.runtime.exec("sh", ["-c", options.command.command], {
     cwd: options.worktreePath,
     env: Object.fromEntries(
       options.resourceValues.map((resource) => [resource.env, resource.value]),

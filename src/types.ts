@@ -83,7 +83,7 @@ export interface ResourceValueConfig {
 export interface ResourceCommandConfig {
   /** Lowercase command label used as the Resource command namespace. */
   name: string;
-  /** Shell command run from the target session worktree through sh -lc. */
+  /** Shell command run from the target session worktree through sh -c. */
   command: string;
   /** Positive timeout in seconds for the Resource command. */
   timeoutSeconds: number;

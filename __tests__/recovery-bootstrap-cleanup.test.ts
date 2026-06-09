@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -11,6 +11,7 @@ import {
   installGitShim,
   installNoopBrew,
   installFakeWt,
+  installShShim,
   makeTempDir,
   read,
   readSingleYamlFile,
@@ -291,6 +292,7 @@ test("cleanupCommand runs only for dead worktrees and removes state after succes
   const sandbox = makeTempDir("cleanup-command");
   const binDirectory = path.join(sandbox, "bin");
   installFakeWt(binDirectory);
+  const shLogPath = installShShim(binDirectory);
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
@@ -339,6 +341,9 @@ apps:
   expect(read(root, "cleanup.log")).toBe(
     `${root}\nmt-ada-clean-command\nclean-command\n${root}\n${worktree}\n`,
   );
+  const shellArgs = readFileSync(shLogPath, "utf8").trim().split("\n");
+  expect(shellArgs.filter((arg) => arg === "-c")).toHaveLength(1);
+  expect(shellArgs).not.toContain("-lc");
   expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow();
 });
 

@@ -508,7 +508,7 @@ function runCleanupCommands(
     );
 
     try {
-      runtime.exec("sh", ["-lc", cleanupCommand], {
+      runtime.exec("sh", ["-c", cleanupCommand], {
         cwd: sourceRoot,
         timeoutSeconds: CLEANUP_COMMAND_TIMEOUT_SECONDS,
         env: {

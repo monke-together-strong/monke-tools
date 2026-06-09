@@ -44,7 +44,10 @@ test("resource command lock covers command execution and immediate persistence",
   const runtime: Runtime = {
     cwd: sourceRoot,
     env: {},
-    exec(_command, _args, options) {
+    exec(command, args, options) {
+      expect(command).toBe("sh");
+      expect(args).toEqual(["-c", "allocate-symbols"]);
+      expect(options?.cwd).toBe(sourceRoot);
       commandSawLock = existsSync(lockPath);
       expect(JSON.parse(options?.stdin ?? "")).toEqual({ E2E_FLOW1_SYMBOL: [] });
       return {

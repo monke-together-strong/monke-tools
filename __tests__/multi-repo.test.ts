@@ -6,6 +6,7 @@ import { saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
   installFakeWt,
+  installShShim,
   makeTempDir,
   read,
   readSingleYamlFile,
@@ -79,6 +80,7 @@ test("resource command retained inputs are scoped to the declaring repo across r
   const sandbox = makeTempDir("multi-repo-resource-command-declaring-scope");
   const binDirectory = path.join(sandbox, "bin");
   installFakeWt(binDirectory);
+  installShShim(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
