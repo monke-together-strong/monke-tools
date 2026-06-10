@@ -21,6 +21,7 @@ test("runCli preserves command-specific usage for invalid arity", () => {
   expect(() => runCli(["materialize", "extra"])).toThrow("Usage: mt materialize");
   expect(() => runCli(["cleanup", "extra"])).toThrow("Usage: mt cleanup");
   expect(() => runCli(["setup", "extra"])).toThrow("Usage: mt setup");
+  expect(() => runCli(["install-dependencies", "extra"])).toThrow("Usage: mt install-dependencies");
   expect(() => runCli(["skills"])).toThrow(SKILLS_USAGE);
   expect(() => runCli(["skills", "unknown"])).toThrow(SKILLS_USAGE);
   expect(() => runCli(["skills", "configure", "extra"])).toThrow(SKILLS_USAGE);

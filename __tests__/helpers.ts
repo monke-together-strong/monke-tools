@@ -70,8 +70,16 @@ export function read(root: string, relativePath: string): string {
   return readFileSync(path.join(root, relativePath), "utf8");
 }
 
-export function installFakeWt(binDirectory: string): void {
-  writeExecutable(path.join(binDirectory, "wt"), "#!/bin/sh\nexit 0\n");
+export function installFakeWt(binDirectory: string): string {
+  const logPath = path.join(binDirectory, "wt.log");
+  writeExecutable(
+    path.join(binDirectory, "wt"),
+    `#!/bin/sh
+echo "$@" >> "${logPath}"
+exit 0
+`,
+  );
+  return logPath;
 }
 
 export function installGitShim(binDirectory: string): void {

@@ -124,6 +124,11 @@ export function runCreate(runtime: Runtime, session: string): void {
   runtime.writeStdout(`Created or updated session ${session}\n`);
 }
 
+export function runInstallDependencies(runtime: Runtime): void {
+  ensureWorktrunkInstalled(runtime);
+  runtime.writeStdout("Verified monke-tools runtime dependencies\n");
+}
+
 export function runMaterialize(runtime: Runtime): void {
   const context = resolveRepoContext(runtime);
   if (context.isSourceCheckout) {
@@ -554,21 +559,22 @@ function runBootstrapCommand(
 }
 
 function ensureWorktrunkInstalled(runtime: Runtime): void {
-  if (findExecutable("wt", runtime.env)) {
-    return;
-  }
+  let wt = findExecutable("wt", runtime.env);
 
-  const brew = findExecutable("brew", runtime.env);
-  if (!brew) {
-    throw new MonkeError("Worktrunk is missing and Homebrew is not available");
-  }
-
-  runtime.exec(brew, ["install", "worktrunk"]);
-  const wt = findExecutable("wt", runtime.env);
   if (!wt) {
-    throw new MonkeError("Installed worktrunk with Homebrew but could not find wt on PATH");
+    const brew = findExecutable("brew", runtime.env);
+    if (!brew) {
+      throw new MonkeError("Worktrunk is missing and Homebrew is not available");
+    }
+
+    runtime.exec(brew, ["install", "worktrunk"]);
+    wt = findExecutable("wt", runtime.env);
+    if (!wt) {
+      throw new MonkeError("Installed worktrunk with Homebrew but could not find wt on PATH");
+    }
   }
-  runtime.exec(wt, ["config", "shell", "install"]);
+
+  runtime.exec(wt, ["config", "shell", "install", "--yes"]);
 }
 
 function findFirstIndexNeedingWork(

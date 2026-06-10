@@ -15,5 +15,6 @@ cp "$ROOT_DIR/dist/monke-tools" "$TARGET_FULL"
 printf '%s\n' '#!/bin/sh' 'exec "$(dirname "$0")/monke-tools" "$@"' > "$TARGET_SHORT"
 chmod +x "$TARGET_FULL" "$TARGET_SHORT"
 
+"$TARGET_FULL" install-dependencies
 printf 'Installed monke-tools to %s and %s\n' "$TARGET_FULL" "$TARGET_SHORT"
 "$TARGET_FULL" skills local-install "$ROOT_DIR"
