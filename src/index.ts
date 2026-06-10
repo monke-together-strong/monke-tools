@@ -3,7 +3,13 @@
 import { Command, CommanderError, Option } from "commander";
 
 import { MonkeError } from "./errors.ts";
-import { runCleanup, runCreate, runMaterialize, runSetup } from "./monke.ts";
+import {
+  runCleanup,
+  runCreate,
+  runInstallDependencies,
+  runMaterialize,
+  runSetup,
+} from "./monke.ts";
 import {
   CODEX_REASONING_EFFORTS,
   runPrdIssueWorkflow,
@@ -113,6 +119,15 @@ function createProgram(runtime: Runtime, onRun: (options: RunCommandOptions) => 
       runSetup(runtime);
     });
 
+  program
+    .command("install-dependencies")
+    .description("Install or verify runtime dependencies used by mt")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .action(() => {
+      runInstallDependencies(runtime);
+    });
+
   const skills = program
     .command("skills")
     .helpOption(false)
@@ -198,6 +213,8 @@ function mapCliError(error: unknown, argv: string[]): Error {
       return new MonkeError("Usage: mt cleanup");
     case "setup":
       return new MonkeError("Usage: mt setup");
+    case "install-dependencies":
+      return new MonkeError("Usage: mt install-dependencies");
     case "skills":
       return new MonkeError(SKILLS_USAGE);
     case "work":
