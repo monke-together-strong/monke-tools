@@ -1,4 +1,15 @@
-import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
@@ -14,12 +25,16 @@ import type { Runtime } from "./types.ts";
 
 /** Directory name monke-tools owns inside each selected Agent skill root. */
 export const SKILL_NAMESPACE = "monke-tools";
+const FLAT_SKILL_MANIFEST = ".monke-tools-flat-skills.json";
 
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
   codex: path.join(".codex", "skills"),
   claude: path.join(".claude", "skills"),
   cursor: path.join(".cursor", "skills"),
 };
+type SkillInstallLayout = "namespace" | "flat";
+// Flip Claude back to "namespace" to restore the original symlink layout.
+const CLAUDE_SKILL_INSTALL_LAYOUT: SkillInstallLayout = "flat";
 const TARGET_OPTIONS: { kind: SkillInstallTargetKind; label: string; selector: string }[] = [
   { kind: "codex", label: "Codex", selector: "1" },
   { kind: "claude", label: "Claude", selector: "2" },
@@ -146,20 +161,25 @@ export function reconcileSkillNamespaces(options: {
     homeDirectory: options.homeDirectory,
   });
   const nextKeys = new Set(nextTargets.map(targetKey));
+  const failures: string[] = [];
 
   for (const previousTarget of previousTargets) {
     if (nextKeys.has(targetKey(previousTarget))) {
       continue;
     }
 
-    removeManagedNamespace(previousTarget.namespacePath);
+    try {
+      removeManagedTarget(previousTarget);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`${previousTarget.agentSkillRoot}: ${message}`);
+    }
   }
 
-  const failures: string[] = [];
   for (const target of nextTargets) {
     try {
       reconcileOneTarget(target, skillSourceTree);
-      options.writeMessage(`Linked ${SKILL_NAMESPACE} skills at ${target.namespacePath}\n`);
+      options.writeMessage(`Linked ${SKILL_NAMESPACE} skills at ${managedLocation(target)}\n`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${target.agentSkillRoot}: ${message}`);
@@ -325,7 +345,22 @@ function resolveSkillSourceTree(sourceCheckout: string): string {
 }
 
 function reconcileOneTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string): void {
+  if (skillInstallLayoutForTarget(target) === "flat") {
+    reconcileFlatTarget(target, skillSourceTree);
+    return;
+  }
+
+  reconcileNamespaceTarget(target, skillSourceTree);
+}
+
+function reconcileNamespaceTarget(
+  target: ResolvedSkillInstallTarget,
+  skillSourceTree: string,
+): void {
   mkdirSync(target.agentSkillRoot, { recursive: true });
+  if (target.kind === "claude") {
+    removeFlatManagedLinks(target);
+  }
 
   const namespaceStat = lstatIfExists(target.namespacePath);
   if (namespaceStat && !namespaceStat.isSymbolicLink()) {
@@ -341,6 +376,41 @@ function reconcileOneTarget(target: ResolvedSkillInstallTarget, skillSourceTree:
   symlinkSync(skillSourceTree, target.namespacePath, "dir");
 }
 
+function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string): void {
+  mkdirSync(target.agentSkillRoot, { recursive: true });
+  removeManagedNamespace(target.namespacePath);
+
+  const links = discoverFlatSkillLinks(skillSourceTree);
+  const previousManifest = readFlatManifest(target);
+  assertFlatLinksCanBeManaged(target, links, previousManifest);
+
+  removeFlatManagedLinks(target);
+
+  const createdLinks: FlatSkillLink[] = [];
+  try {
+    for (const link of links) {
+      const linkPath = path.join(target.agentSkillRoot, link.name);
+      if (lstatIfExists(linkPath)) {
+        rmSync(linkPath);
+      }
+      symlinkSync(link.sourcePath, linkPath, "dir");
+      createdLinks.push(link);
+    }
+  } catch (error) {
+    writeFlatManifest(target, createdLinks);
+    throw error;
+  }
+
+  writeFlatManifest(target, links);
+}
+
+function removeManagedTarget(target: ResolvedSkillInstallTarget): void {
+  if (target.kind === "claude") {
+    removeFlatManagedLinks(target);
+  }
+  removeManagedNamespace(target.namespacePath);
+}
+
 function removeManagedNamespace(namespacePath: string): void {
   const namespaceStat = lstatIfExists(namespacePath);
   if (!namespaceStat?.isSymbolicLink()) {
@@ -348,6 +418,151 @@ function removeManagedNamespace(namespacePath: string): void {
   }
 
   rmSync(namespacePath);
+}
+
+interface FlatSkillLink {
+  name: string;
+  sourcePath: string;
+}
+
+interface FlatSkillManifest {
+  version: 1;
+  managedBy: "monke-tools";
+  links: FlatSkillLink[];
+}
+
+function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
+  const links = new Map<string, FlatSkillLink>();
+
+  for (const categoryName of ["internal", "imported"]) {
+    const categoryPath = path.join(skillSourceTree, categoryName);
+    if (!existsSync(categoryPath)) {
+      continue;
+    }
+
+    for (const entry of readdirSync(categoryPath, { withFileTypes: true })) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) {
+        continue;
+      }
+
+      const sourcePath = path.join(categoryPath, entry.name);
+      if (!existsSync(path.join(sourcePath, "SKILL.md"))) {
+        continue;
+      }
+      if (links.has(entry.name)) {
+        throw new MonkeError(
+          `Cannot flatten duplicate Skill name ${entry.name} from ${skillSourceTree}`,
+        );
+      }
+
+      links.set(entry.name, { name: entry.name, sourcePath });
+    }
+  }
+
+  return [...links.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function assertFlatLinksCanBeManaged(
+  target: ResolvedSkillInstallTarget,
+  links: FlatSkillLink[],
+  previousManifest: FlatSkillManifest | null,
+): void {
+  const previousLinks = new Map(
+    previousManifest?.links.map((link) => [link.name, link.sourcePath]) ?? [],
+  );
+
+  for (const link of links) {
+    const linkPath = path.join(target.agentSkillRoot, link.name);
+    const linkStat = lstatIfExists(linkPath);
+    if (!linkStat) {
+      continue;
+    }
+    if (!linkStat.isSymbolicLink()) {
+      throw new MonkeError(`Refusing to overwrite non-managed Skill at ${linkPath}`);
+    }
+
+    const currentTarget = readlinkSync(linkPath);
+    if (currentTarget !== link.sourcePath && currentTarget !== previousLinks.get(link.name)) {
+      throw new MonkeError(`Refusing to overwrite non-managed Skill at ${linkPath}`);
+    }
+  }
+}
+
+function removeFlatManagedLinks(target: ResolvedSkillInstallTarget): void {
+  const manifest = readFlatManifest(target);
+  if (!manifest) {
+    return;
+  }
+
+  for (const link of manifest.links) {
+    const linkPath = path.join(target.agentSkillRoot, link.name);
+    const linkStat = lstatIfExists(linkPath);
+    if (!linkStat?.isSymbolicLink()) {
+      continue;
+    }
+    if (readlinkSync(linkPath) === link.sourcePath) {
+      rmSync(linkPath);
+    }
+  }
+
+  rmSync(flatManifestPath(target), { force: true });
+}
+
+function readFlatManifest(target: ResolvedSkillInstallTarget): FlatSkillManifest | null {
+  const manifestPath = flatManifestPath(target);
+  if (!existsSync(manifestPath)) {
+    return null;
+  }
+
+  const rawManifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Partial<FlatSkillManifest>;
+  if (
+    rawManifest.version !== 1 ||
+    rawManifest.managedBy !== "monke-tools" ||
+    !Array.isArray(rawManifest.links)
+  ) {
+    throw new MonkeError(`Invalid monke-tools flat Skill manifest at ${manifestPath}`);
+  }
+
+  return {
+    version: 1,
+    managedBy: "monke-tools",
+    links: rawManifest.links.map((link) => ({
+      name: String(link.name),
+      sourcePath: String(link.sourcePath),
+    })),
+  };
+}
+
+function writeFlatManifest(target: ResolvedSkillInstallTarget, links: FlatSkillLink[]): void {
+  const manifest: FlatSkillManifest = {
+    version: 1,
+    managedBy: "monke-tools",
+    links,
+  };
+  const manifestPath = flatManifestPath(target);
+
+  writeFileSync(`${manifestPath}.tmp`, `${JSON.stringify(manifest, null, 2)}\n`);
+  renameSync(`${manifestPath}.tmp`, manifestPath);
+}
+
+function flatManifestPath(target: ResolvedSkillInstallTarget): string {
+  return path.join(target.agentSkillRoot, FLAT_SKILL_MANIFEST);
+}
+
+function skillInstallLayoutForTarget(target: ResolvedSkillInstallTarget): SkillInstallLayout {
+  if (target.kind === "claude") {
+    return CLAUDE_SKILL_INSTALL_LAYOUT;
+  }
+
+  return "namespace";
+}
+
+function managedLocation(target: ResolvedSkillInstallTarget): string {
+  if (skillInstallLayoutForTarget(target) === "flat") {
+    return target.agentSkillRoot;
+  }
+
+  return target.namespacePath;
 }
 
 function lstatIfExists(targetPath: string): ReturnType<typeof lstatSync> | null {
