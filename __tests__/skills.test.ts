@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, readlinkSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "vitest";
 
@@ -90,8 +90,19 @@ test("Claude skill reconciliation flattens source categories into the Agent skil
   });
 
   const claudeSkillRoot = path.join(sandbox, ".claude", "skills");
+  const manifestPath = path.join(claudeSkillRoot, ".monke-tools-flat-skills.json");
   const coreLink = path.join(claudeSkillRoot, "monke-tools-core");
   const tddLink = path.join(claudeSkillRoot, "tdd");
+  expect(JSON.parse(readFileSync(manifestPath, "utf8")).links).toEqual([
+    {
+      name: "monke-tools-core",
+      sourcePath: path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
+    },
+    {
+      name: "tdd",
+      sourcePath: path.join(sourceCheckout, "skills", "imported", "tdd"),
+    },
+  ]);
   expect(lstatSync(coreLink).isSymbolicLink()).toBe(true);
   expect(readlinkSync(coreLink)).toBe(
     path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
@@ -114,6 +125,7 @@ test("Claude skill reconciliation flattens source categories into the Agent skil
 
   expect(existsSync(coreLink)).toBe(false);
   expect(existsSync(tddLink)).toBe(false);
+  expect(existsSync(manifestPath)).toBe(false);
   expect(lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink()).toBe(
     true,
   );
@@ -145,6 +157,35 @@ test("skill namespace reconciliation attempts every selected target before faili
   const codexNamespace = path.join(sandbox, ".codex", "skills", "monke-tools");
   expect(lstatSync(codexNamespace).isSymbolicLink()).toBe(true);
   expect(lstatSync(path.join(blockedSkillRoot, "monke-tools")).isDirectory()).toBe(true);
+});
+
+test("skill namespace reconciliation continues after deselected target cleanup failures", () => {
+  const sandbox = makeTempDir("skill-reconcile-cleanup-partial");
+  const sourceCheckout = path.join(sandbox, "source");
+  write(
+    sourceCheckout,
+    "skills/internal/monke-tools-core/SKILL.md",
+    "---\nname: monke-tools-core\n---\n",
+  );
+  write(path.join(sandbox, ".claude", "skills"), ".monke-tools-flat-skills.json", "{}");
+
+  expect(() =>
+    reconcileSkillNamespaces({
+      sourceCheckout,
+      previousPreference: {
+        targets: [{ kind: "claude" }],
+      },
+      nextPreference: {
+        targets: [{ kind: "codex" }],
+      },
+      homeDirectory: sandbox,
+      writeMessage() {},
+    }),
+  ).toThrow(/Failed to reconcile 1 Skill install target/);
+
+  expect(lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink()).toBe(
+    true,
+  );
 });
 
 test("skill namespace reconciliation removes deselected managed namespaces", () => {

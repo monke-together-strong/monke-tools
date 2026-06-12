@@ -24,7 +24,7 @@ mt create banana
 
 On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and relink the managed skills to the current checkout.
 
-After changing CLI source code, run `bun run install:local` again before testing from another repo. Skill changes under `skills/` are visible immediately because Agent skill roots receive symlinks to the checkout's Skill source tree.
+After changing CLI source code, run `bun run install:local` again before testing from another repo. For linked skills, file edits are visible immediately through symlinks. If you add or remove skill directories, rerun reconciliation (`bun run install:local` or `mt skills configure`) so flat Claude links are refreshed.
 
 ## Distributed Skills
 

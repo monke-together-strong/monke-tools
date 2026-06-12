@@ -161,16 +161,21 @@ export function reconcileSkillNamespaces(options: {
     homeDirectory: options.homeDirectory,
   });
   const nextKeys = new Set(nextTargets.map(targetKey));
+  const failures: string[] = [];
 
   for (const previousTarget of previousTargets) {
     if (nextKeys.has(targetKey(previousTarget))) {
       continue;
     }
 
-    removeManagedTarget(previousTarget);
+    try {
+      removeManagedTarget(previousTarget);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`${previousTarget.agentSkillRoot}: ${message}`);
+    }
   }
 
-  const failures: string[] = [];
   for (const target of nextTargets) {
     try {
       reconcileOneTarget(target, skillSourceTree);
@@ -381,12 +386,19 @@ function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree
 
   removeFlatManagedLinks(target);
 
-  for (const link of links) {
-    const linkPath = path.join(target.agentSkillRoot, link.name);
-    if (lstatIfExists(linkPath)) {
-      rmSync(linkPath);
+  const createdLinks: FlatSkillLink[] = [];
+  try {
+    for (const link of links) {
+      const linkPath = path.join(target.agentSkillRoot, link.name);
+      if (lstatIfExists(linkPath)) {
+        rmSync(linkPath);
+      }
+      symlinkSync(link.sourcePath, linkPath, "dir");
+      createdLinks.push(link);
     }
-    symlinkSync(link.sourcePath, linkPath, "dir");
+  } catch (error) {
+    writeFlatManifest(target, createdLinks);
+    throw error;
   }
 
   writeFlatManifest(target, links);
