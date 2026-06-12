@@ -69,6 +69,56 @@ test("skill namespace reconciliation creates missing roots and links the namespa
   expect(readlinkSync(namespacePath)).toBe(path.join(sourceCheckout, "skills"));
 });
 
+test("Claude skill reconciliation flattens source categories into the Agent skill root", () => {
+  const sandbox = makeTempDir("skill-reconcile-claude-flat");
+  const sourceCheckout = path.join(sandbox, "source");
+  write(
+    sourceCheckout,
+    "skills/internal/monke-tools-core/SKILL.md",
+    "---\nname: monke-tools-core\n---\n",
+  );
+  write(sourceCheckout, "skills/imported/tdd/SKILL.md", "---\nname: tdd\n---\n");
+
+  reconcileSkillNamespaces({
+    sourceCheckout,
+    previousPreference: null,
+    nextPreference: {
+      targets: [{ kind: "claude" }],
+    },
+    homeDirectory: sandbox,
+    writeMessage() {},
+  });
+
+  const claudeSkillRoot = path.join(sandbox, ".claude", "skills");
+  const coreLink = path.join(claudeSkillRoot, "monke-tools-core");
+  const tddLink = path.join(claudeSkillRoot, "tdd");
+  expect(lstatSync(coreLink).isSymbolicLink()).toBe(true);
+  expect(readlinkSync(coreLink)).toBe(
+    path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
+  );
+  expect(lstatSync(tddLink).isSymbolicLink()).toBe(true);
+  expect(readlinkSync(tddLink)).toBe(path.join(sourceCheckout, "skills", "imported", "tdd"));
+  expect(existsSync(path.join(claudeSkillRoot, "monke-tools"))).toBe(false);
+
+  reconcileSkillNamespaces({
+    sourceCheckout,
+    previousPreference: {
+      targets: [{ kind: "claude" }],
+    },
+    nextPreference: {
+      targets: [{ kind: "codex" }],
+    },
+    homeDirectory: sandbox,
+    writeMessage() {},
+  });
+
+  expect(existsSync(coreLink)).toBe(false);
+  expect(existsSync(tddLink)).toBe(false);
+  expect(lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink()).toBe(
+    true,
+  );
+});
+
 test("skill namespace reconciliation attempts every selected target before failing on unmanaged namespaces", () => {
   const sandbox = makeTempDir("skill-reconcile-partial");
   const sourceCheckout = path.join(sandbox, "source");
