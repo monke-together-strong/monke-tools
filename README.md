@@ -22,9 +22,9 @@ mt create banana
 
 `bun run install:local` rebuilds the local `mt` executable from the current checkout, installs it to `~/.local/bin/mt` and `~/.local/bin/monke-tools`, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots.
 
-On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and relink the managed `monke-tools` namespace to the current checkout.
+On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and relink the managed skills to the current checkout.
 
-After changing CLI source code, run `bun run install:local` again before testing from another repo. Skill changes under `skills/` are visible immediately because Agent skill roots receive a symlink to the checkout's Skill source tree.
+After changing CLI source code, run `bun run install:local` again before testing from another repo. For linked skills, file edits are visible immediately through symlinks. If you add or remove skill directories, rerun reconciliation (`bun run install:local` or `mt skills configure`) so flat Claude links are refreshed.
 
 ## Distributed Skills
 
@@ -36,7 +36,7 @@ Built-in targets resolve against the OS home directory:
 - Claude: `~/.claude/skills`
 - Cursor: `~/.cursor/skills`
 
-Custom targets are Agent skill root directories. monke-tools owns only the `monke-tools` namespace inside each root and refuses to overwrite a real file or directory at that namespace path.
+Codex, Cursor, and custom targets receive one managed `monke-tools` namespace symlink inside the Agent skill root. Claude receives flat root-level symlinks for each source skill because Claude does not discover nested skill directories. monke-tools refuses to overwrite real files or directories in either layout.
 
 The Skill source tree is organized as:
 

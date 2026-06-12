@@ -91,9 +91,13 @@ test("mt skills configure can reconfigure all target kinds down to Claude and Co
   expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toEqual({
     targets: [{ kind: "claude" }, { kind: "codex" }],
   });
-  expect(lstatSync(path.join(osHome, ".claude", "skills", "monke-tools")).isSymbolicLink()).toBe(
-    true,
+  expect(
+    lstatSync(path.join(osHome, ".claude", "skills", "monke-tools-core")).isSymbolicLink(),
+  ).toBe(true);
+  expect(readlinkSync(path.join(osHome, ".claude", "skills", "monke-tools-core"))).toBe(
+    path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
   );
+  expect(existsSync(path.join(osHome, ".claude", "skills", "monke-tools"))).toBe(false);
   expect(lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink()).toBe(
     true,
   );

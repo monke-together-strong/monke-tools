@@ -4,13 +4,22 @@ monke-tools remains a Bun CLI whose local executable is rebuilt by `bun run inst
 
 ## Decision
 
-Distributed skills are installed directly into explicit Agent skill roots selected by the teammate. monke-tools owns one namespace path inside each selected root:
+Distributed skills are installed directly into explicit Agent skill roots selected by the teammate. Codex, Cursor, and custom targets receive one namespace path inside each selected root:
 
 ```text
 <agent-skill-root>/monke-tools -> <installed-source-checkout>/skills
 ```
 
 The namespace is a symlink to the whole Skill source tree. monke-tools may relink an existing symlink at that exact namespace path, but it must not overwrite a real file or directory there.
+
+Claude receives flat root-level symlinks instead because Claude does not discover nested skill directories:
+
+```text
+<claude-skill-root>/monke-tools-core -> <installed-source-checkout>/skills/internal/monke-tools-core
+<claude-skill-root>/<imported-skill> -> <installed-source-checkout>/skills/imported/<imported-skill>
+```
+
+The Claude layout is tracked with a managed manifest in the Claude skill root so later installs can refresh or remove only links that monke-tools created.
 
 Global monke config is versioned YAML at `config.yml` under monke home. It stores the Installed source checkout and one current Skill install preference:
 
@@ -35,7 +44,7 @@ Custom targets store one absolute Agent skill root path. The custom path is the 
 
 ## Skill Source Layout
 
-The installed namespace mirrors the source layout:
+The source layout remains grouped by ownership:
 
 ```text
 skills/
@@ -51,4 +60,4 @@ Internal skills are owned by monke-tools. Imported skills come from other projec
 
 Local install always includes skill installation. It installs the `mt` binary first, records the Installed source checkout, then either prompts with `mt skills configure` when no preference exists or reconciles the existing preference.
 
-Deselecting a target removes only a managed `monke-tools` symlink namespace. A failure in one selected target does not prevent other selected targets from being reconciled, but the operation fails overall so partial installation is visible.
+Deselecting a namespace target removes only a managed `monke-tools` symlink namespace. Deselecting Claude removes only flat links recorded in the managed manifest. A failure in one selected target does not prevent other selected targets from being reconciled, but the operation fails overall so partial installation is visible.
