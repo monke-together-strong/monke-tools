@@ -248,7 +248,6 @@ function runResourceCommand(options: {
       throw resourceCommandFailure({
         command: options.command,
         kind: "timeout",
-        stdout: result.stdout,
         stderr: result.stderr,
       });
     }
@@ -257,7 +256,6 @@ function runResourceCommand(options: {
       throw resourceCommandFailure({
         command: options.command,
         kind: `nonzero exit ${result.exitCode}`,
-        stdout: result.stdout,
         stderr: result.stderr,
       });
     }
@@ -468,7 +466,7 @@ function resolveResourceCommandRunPath(
 ): string {
   const resolved = path.resolve(worktreePath, command.run);
   const relative = path.relative(worktreePath, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new MonkeError(
       `Resource command ${command.name} run path must resolve inside ${worktreePath}: ${command.run}`,
     );
@@ -479,13 +477,14 @@ function resolveResourceCommandRunPath(
 function resourceCommandFailure(options: {
   command: ResourceCommandConfig;
   kind: string;
-  stdout: string;
+  stdout?: string;
   stderr: string;
 }): MonkeError {
-  const stdout = options.stdout.trim() || "<empty>";
   const stderr = options.stderr.trim() || "<empty>";
+  const stdout =
+    options.stdout === undefined ? "" : `\nstdout:\n${options.stdout.trim() || "<empty>"}`;
   return new MonkeError(
-    `Resource command ${options.command.name} failed: ${options.command.run}\nkind: ${options.kind}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+    `Resource command ${options.command.name} failed: ${options.command.run}\nkind: ${options.kind}\nstderr:\n${stderr}${stdout}`,
   );
 }
 

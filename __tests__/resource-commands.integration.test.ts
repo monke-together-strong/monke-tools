@@ -703,8 +703,7 @@ test.each([
   throw new Error("allocator boom");
 }
 `,
-    expected:
-      /kind: nonzero exit 1[\s\S]*stdout before failure[\s\S]*stderr before failure[\s\S]*allocator boom/,
+    expected: /kind: nonzero exit 1[\s\S]*stderr before failure[\s\S]*allocator boom/,
   },
   {
     name: "rejected error",
@@ -753,6 +752,23 @@ test("create accepts async default exports and ignores stdout and stderr logging
   );
 });
 
+test("create accepts resource command run paths whose first segment starts with two dots", () => {
+  const scenario = createResourceCommandScenario({
+    name: "single-repo-resource-command-dot-prefix-path",
+    run: "./..commands/resource-command.ts",
+    module: `export default function () {
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
+  });
+
+  scenario.create("banana");
+
+  expect(scenario.readWorktree("banana", ".env")).toBe(
+    "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
+  );
+});
+
 test("create imports resource modules without triggering direct execution guards", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-direct-guard",
@@ -780,7 +796,7 @@ function isDirectExecution(importMetaUrl) {
   );
 });
 
-test("create reports thrown resource command failures with captured stdout and stderr", () => {
+test("create reports thrown resource command failures with stderr and omits stdout", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-throw",
     module: `export default function () {
@@ -800,7 +816,8 @@ test("create reports thrown resource command failures with captured stdout and s
   expect(message).toMatch(
     /Resource command e2e-symbols failed[\s\S]*kind: nonzero exit 1[\s\S]*allocator stderr/,
   );
-  expect(message).toContain("secret stdout");
+  expect(message).not.toContain("stdout:");
+  expect(message).not.toContain("secret stdout");
 });
 
 test("create reports resource command timeouts", () => {
