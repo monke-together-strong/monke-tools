@@ -176,7 +176,7 @@ external:
   expect(read(betaDepWorktree, ".env")).toContain("E2E_FLOW1_SYMBOL=LINK/USDT:USDT\n");
 });
 
-test("resource command JSON pollution records an incomplete root repo and rerun heals external path env", () => {
+test("resource command return violation records an incomplete root repo and rerun heals external path env", () => {
   const sandbox = makeTempDir("multi-repo-resource-command-partial-root");
   const binDirectory = path.join(sandbox, "bin");
   installFakeWt(binDirectory);
@@ -198,12 +198,15 @@ test("resource command JSON pollution records an incomplete root repo and rerun 
   const root = createRepo(path.join(sandbox, "root"), {
     ".env": "DEP_DIR=../dep\n",
     "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+    "scripts/resource-command.ts": `export default function () {
+  console.log("install progress");
+  return "not an output record";
+}
+`,
     "monke.yml": `resources:
   commands:
     e2e-channel:
-      command: |
-        printf '%s\\n' 'install progress'
-        printf '%s' '{"E2E_CHANNEL_ID":"123"}'
+      run: ./scripts/resource-command.ts
       outputs:
         - E2E_CHANNEL_ID
 apps:
@@ -231,7 +234,7 @@ external:
       monkeHome: home,
       binDirectory,
     }),
-  ).toThrow(/kind: invalid stdout JSON/);
+  ).toThrow(/kind: return contract violation/);
 
   const rootWorktree = getExpectedWorktreePath(root, "partial");
   const depWorktree = getExpectedWorktreePath(depRoot, "partial");
@@ -252,30 +255,11 @@ external:
   });
 
   write(
-    root,
-    "monke.yml",
-    `resources:
-  commands:
-    e2e-channel:
-      command: |
-        printf '%s' '{"E2E_CHANNEL_ID":"123"}'
-      outputs:
-        - E2E_CHANNEL_ID
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-external:
-  dep:
-    path: ../dep
-    pathEnv: DEP_DIR
-    mappings:
-      - port: DEP_POSTGRES_PORT
-        app: api
-        env: DATABASE_URL
+    rootWorktree,
+    "scripts/resource-command.ts",
+    `export default function () {
+  return { E2E_CHANNEL_ID: "123" };
+}
 `,
   );
 

@@ -257,6 +257,7 @@ _Avoid_: Delete session, prune repos
 - **Session resources** for different **Session worktrees** must resolve to distinct values when they use the same resource name.
 - **Default branch create mode** resolves `main` and `master` separately for each repo participating in a **Session**.
 - **Default branch create mode** only affects missing session branches.
+- **Default branch create mode** materializes from default-branch content, not from uncommitted or branch-local source checkout changes.
 - A **Cleanup command** runs from the repo's **Source checkout** when cleanup finds a **Dead worktree**.
 - A **Cleanup command** receives **Session resources**, **Resource command outputs**, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment.
 - A **Resource command** belongs to one repo and runs for one **Session worktree**.
