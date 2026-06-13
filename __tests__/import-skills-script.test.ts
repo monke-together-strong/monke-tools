@@ -281,6 +281,41 @@ test("skill import recipe store rejects duplicate selectors in one recipe", () =
   );
 });
 
+test("skill import recipe store rejects duplicate imported skill owners", () => {
+  const sandbox = makeTempDir("skill-import-recipes-duplicate-owner");
+  write(
+    sandbox,
+    "skills/imported/.monke-imports.json",
+    JSON.stringify({
+      version: 1,
+      recipes: [
+        {
+          source: "owner/first",
+          skills: [
+            {
+              selector: "alpha",
+              slug: "alpha",
+            },
+          ],
+        },
+        {
+          source: "owner/second",
+          skills: [
+            {
+              selector: "other-alpha",
+              slug: "alpha",
+            },
+          ],
+        },
+      ],
+    }),
+  );
+
+  expect(() => readImportRecipeStore(sandbox)).toThrow(
+    /Imported skill slug alpha is owned by both owner\/first and owner\/second/,
+  );
+});
+
 test("skill import recipe recording rejects duplicate imported skill owners", () => {
   const sandbox = makeTempDir("skill-import-recipes-duplicate");
   writeImportRecipeStore(sandbox, {

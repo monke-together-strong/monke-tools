@@ -935,6 +935,7 @@ function normalizeImportRecipeStore(input: unknown): SkillImportRecipeStore {
 
   const recipes = input.recipes.map(normalizeImportRecipe);
   assertUniqueRecipeSources(recipes);
+  assertUniqueImportedSkillOwners({ version: 1, recipes });
 
   return {
     version: 1,
