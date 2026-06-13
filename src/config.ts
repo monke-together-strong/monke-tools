@@ -23,14 +23,32 @@ const RUN_MODULE_EXTENSION_RE = /\.(?:[cm]?[jt]s|jsx|tsx)$/;
 const DEFAULT_ENV_FILE = ".env";
 const DEFAULT_RESOURCE_COMMAND_TIMEOUT_SECONDS = 60;
 
-export function loadResolvedGraph(runtime: Runtime, rootSourceRoot: string): ResolvedGraph {
+/** Alternate repo-content readers used when resolving a Session graph. */
+export interface LoadResolvedGraphOptions {
+  /** Read the repo's `monke.yml` content from a source other than the working tree. */
+  readRepoConfig?: (sourceRoot: string) => string;
+  /** Check whether a repo-relative path exists in the same content source as config. */
+  pathExists?: (sourceRoot: string, relativePath: string) => boolean;
+}
+
+/** Load the resolved Session graph from repo configuration. */
+export function loadResolvedGraph(
+  runtime: Runtime,
+  rootSourceRoot: string,
+  options: LoadResolvedGraphOptions = {},
+): ResolvedGraph {
+  const readRepoConfig = options.readRepoConfig ?? readRepoConfigFromFilesystem;
+  const pathExists = options.pathExists ?? pathExistsOnFilesystem;
   const configCache = new Map<string, RepoConfig>();
   const visiting = new Set<string>();
   const reposInOrder: RepoConfig[] = [];
   const visited = new Set<string>();
 
   function visit(sourceRoot: string): RepoConfig {
-    const config = loadRepoConfig(runtime, sourceRoot, configCache, visiting);
+    const config = loadRepoConfig(runtime, sourceRoot, configCache, visiting, {
+      readRepoConfig,
+      pathExists,
+    });
 
     if (visited.has(sourceRoot)) {
       return config;
@@ -71,6 +89,7 @@ function loadRepoConfig(
   sourceRoot: string,
   cache: Map<string, RepoConfig>,
   visiting: Set<string>,
+  options: Required<LoadResolvedGraphOptions>,
 ): RepoConfig {
   if (visiting.has(sourceRoot)) {
     throw new MonkeError(`Dependency cycles are not supported: ${sourceRoot}`);
@@ -84,11 +103,9 @@ function loadRepoConfig(
   visiting.add(sourceRoot);
   try {
     const configPath = path.join(sourceRoot, "monke.yml");
-    if (!existsSync(configPath)) {
-      throw new MonkeError(`Expected monke.yml at ${configPath}`);
-    }
+    const configText = options.readRepoConfig(sourceRoot);
 
-    const document = parseDocument(readFileSync(configPath, "utf8"), {
+    const document = parseDocument(configText, {
       uniqueKeys: true,
       merge: false,
       strict: true,
@@ -100,10 +117,16 @@ function loadRepoConfig(
     }
 
     const rawConfig = document.toJS() as unknown;
-    const repoConfig = parseRepoConfigObject(runtime, sourceRoot, configPath, rawConfig);
+    const repoConfig = parseRepoConfigObject(runtime, sourceRoot, configPath, rawConfig, options);
 
     for (const externalRepo of repoConfig.externalInOrder) {
-      const dependency = loadRepoConfig(runtime, externalRepo.absoluteRepoRoot, cache, visiting);
+      const dependency = loadRepoConfig(
+        runtime,
+        externalRepo.absoluteRepoRoot,
+        cache,
+        visiting,
+        options,
+      );
       const dependencyLocalPorts = new Set(dependency.localPortOrder);
 
       for (const mapping of externalRepo.mappings) {
@@ -127,6 +150,7 @@ function parseRepoConfigObject(
   sourceRoot: string,
   configPath: string,
   rawConfig: unknown,
+  options: Required<LoadResolvedGraphOptions>,
 ): RepoConfig {
   const config = asRecord(rawConfig, configPath);
   assertKnownKeys(
@@ -189,7 +213,7 @@ function parseRepoConfigObject(
       throw new MonkeError(`App ${label} envFile must point to a file inside the app path`);
     }
 
-    if (!existsSync(absoluteAppPath)) {
+    if (!options.pathExists(sourceRoot, path.relative(sourceRoot, absoluteAppPath))) {
       throw new MonkeError(`App path does not exist: ${absoluteAppPath}`);
     }
 
@@ -275,7 +299,7 @@ function parseRepoConfigObject(
       );
     }
 
-    if (!existsSync(path.join(absoluteRepoRoot, "monke.yml"))) {
+    if (!options.pathExists(absoluteRepoRoot, "monke.yml")) {
       throw new MonkeError(
         `External dependency ${label} is missing monke.yml at ${absoluteRepoRoot}`,
       );
@@ -363,6 +387,18 @@ function parseRepoConfigObject(
     externalMappingsInOrder,
     externalTargetApps,
   };
+}
+
+function readRepoConfigFromFilesystem(sourceRoot: string): string {
+  const configPath = path.join(sourceRoot, "monke.yml");
+  if (!existsSync(configPath)) {
+    throw new MonkeError(`Expected monke.yml at ${configPath}`);
+  }
+  return readFileSync(configPath, "utf8");
+}
+
+function pathExistsOnFilesystem(sourceRoot: string, relativePath: string): boolean {
+  return existsSync(path.join(sourceRoot, relativePath));
 }
 
 function asRecord(value: unknown, location: string): Record<string, unknown> {

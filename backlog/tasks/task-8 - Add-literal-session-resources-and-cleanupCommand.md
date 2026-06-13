@@ -1,10 +1,10 @@
 ---
 id: TASK-8
 title: Add nested session resources and resource commands
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-05-10 01:14'
-updated_date: '2026-06-07 22:22'
+updated_date: '2026-06-13 15:13'
 labels:
   - ready-for-agent
 dependencies: []
@@ -141,16 +141,22 @@ The final consumer validation is intentionally heavier than the unit and integra
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 monke.yml accepts optional nested resources.values, resources.commands, and cleanupCommand, and rejects flat resources, empty resources, invalid names, invalid values, empty commands, empty outputs, and duplicate resource env names
-- [ ] #2 resources.values preserve deterministic literal behavior: ${session} and ${user} interpolation, persisted reuse, collision checks, session root .env writes, and cleanup env
-- [ ] #3 resources.commands run only when outputs are missing or incomplete, and complete remembered outputs are reused by Create and Materialize
-- [ ] #4 Command namespace is declaring repo plus command name, and the command lock covers input construction, command execution, output validation, and immediate persistence
-- [ ] #5 Command stdout must contain exactly the declared output keys with non-empty string values, and same-output collisions against stdin are rejected while cross-output uniqueness remains repo-owned
-- [ ] #6 Commands run from the session worktree via sh -lc with a default 60 second timeout and optional positive timeoutSeconds override
-- [ ] #7 Valid command outputs are persisted immediately, grouped by command name in session state, written to session root .env, passed to cleanup, and pruned when no longer declared
-- [ ] #8 Failures report command name, command string, failure kind, stderr, and stdout only for contract errors
-- [ ] #9 Cleanup runs cleanupCommand only for dead worktrees from the repo source checkout, removes state after successful cleanupCommand execution, and keeps state when cleanupCommand fails
-- [ ] #10 Focused tests cover config validation, resource interpolation, command stdin/stdout behavior, reuse, locking/input behavior, collision rejection, persistence after later failure, cleanup env, pruning, and multi-root declaring-repo scoping
-- [ ] #11 Final consumer validation refreshes the local monke-tools install, creates and wires a Winter's Echo resource command for non-conflicting Bybit E2E symbols, includes the real crypto-trading dependency graph, and passes concurrent Bybit-mode E2E runs from two Winter's Echo worktrees
-- [ ] #12 Command stdin is grouped prior values for declared outputs only; it includes every output key with an array, uses empty arrays when no values are remembered, dedupes values, excludes the current session, excludes deterministic values, and is derived from retained session state without a separate index
+- [x] #1 monke.yml accepts optional nested resources.values, resources.commands, and cleanupCommand, and rejects flat resources, empty resources, invalid names, invalid values, empty commands, empty outputs, and duplicate resource env names
+- [x] #2 resources.values preserve deterministic literal behavior: ${session} and ${user} interpolation, persisted reuse, collision checks, session root .env writes, and cleanup env
+- [x] #3 resources.commands run only when outputs are missing or incomplete, and complete remembered outputs are reused by Create and Materialize
+- [x] #4 Command namespace is declaring repo plus command name, and the command lock covers input construction, command execution, output validation, and immediate persistence
+- [x] #5 Command stdout must contain exactly the declared output keys with non-empty string values, and same-output collisions against stdin are rejected while cross-output uniqueness remains repo-owned
+- [x] #6 Commands run from the session worktree via sh -lc with a default 60 second timeout and optional positive timeoutSeconds override
+- [x] #7 Valid command outputs are persisted immediately, grouped by command name in session state, written to session root .env, passed to cleanup, and pruned when no longer declared
+- [x] #8 Failures report command name, command string, failure kind, stderr, and stdout only for contract errors
+- [x] #9 Cleanup runs cleanupCommand only for dead worktrees from the repo source checkout, removes state after successful cleanupCommand execution, and keeps state when cleanupCommand fails
+- [x] #10 Focused tests cover config validation, resource interpolation, command stdin/stdout behavior, reuse, locking/input behavior, collision rejection, persistence after later failure, cleanup env, pruning, and multi-root declaring-repo scoping
+- [x] #11 Final consumer validation refreshes the local monke-tools install, creates and wires a Winter's Echo resource command for non-conflicting Bybit E2E symbols, includes the real crypto-trading dependency graph, and passes concurrent Bybit-mode E2E runs from two Winter's Echo worktrees
+- [x] #12 Command stdin is grouped prior values for declared outputs only; it includes every output key with an array, uses empty arrays when no values are remembered, dedupes values, excludes the current session, excludes deterministic values, and is derived from retained session state without a separate index
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Validated as done based on implemented nested resources/resource command/cleanupCommand support in the repo plus user confirmation that the final Winter's Echo/Bybit consumer validation is complete. Evidence in repo includes config parsing and validation for nested resources and cleanupCommand, resource command resolution/reuse/locking/persistence/pruning, cleanupCommand env/state behavior, declaring-repo scoping, focused resource command integration tests, multi-repo tests, and cleanup tests. User confirmed TASK-8 and TASK-12 are done on 2026-06-13.
+<!-- SECTION:FINAL_SUMMARY:END -->

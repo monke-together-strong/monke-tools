@@ -18,9 +18,10 @@ import type { Runtime } from "../src/types.ts";
 
 test("inferSessionName supports slash-delimited session names", () => {
   const sourceRoot = path.join("/tmp", "monke-root");
-  const worktreeRoot = getExpectedWorktreePath(sourceRoot, "feature/foo");
+  const home = path.join("/tmp", "monke-home");
+  const worktreeRoot = getExpectedWorktreePath(home, sourceRoot, "feature/foo");
 
-  expect(inferSessionName(sourceRoot, worktreeRoot, "feature/foo")).toBe("feature/foo");
+  expect(inferSessionName(home, sourceRoot, worktreeRoot, "feature/foo")).toBe("feature/foo");
 });
 
 test("validateWorktreeForSession rejects worktrees from a different repository", () => {
@@ -47,19 +48,21 @@ test("validateWorktreeForSession rejects worktrees from a different repository",
         env: PORT
 `,
   });
-  const worktreePath = getExpectedWorktreePath(sourceRoot, "banana");
+  const home = path.join(sandbox, "home");
+  const worktreePath = getExpectedWorktreePath(home, sourceRoot, "banana");
 
   git(otherSourceRoot, ["branch", "banana"]);
   git(otherSourceRoot, ["worktree", "add", worktreePath, "banana"]);
 
   expect(() =>
     validateWorktreeForSession(
-      createRuntime({ cwd: sourceRoot }),
+      createRuntime({ cwd: sourceRoot, env: { MONKE_HOME: home } }),
+      home,
       sourceRoot,
       worktreePath,
       "banana",
     ),
-  ).toThrow(/live under|to belong to/);
+  ).toThrow(/Expected worktree .* to belong to /);
 });
 
 test("listWorktrees parses prunable entries from porcelain output", () => {
@@ -106,13 +109,14 @@ test("ensureSessionWorktree recreates missing cached worktrees", () => {
   });
   const runtime = createRuntime({ cwd: sourceRoot });
   const session = "banana";
-  const expectedPath = getExpectedWorktreePath(sourceRoot, session);
+  const home = path.join(sandbox, "home");
+  const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
 
   git(sourceRoot, ["branch", session]);
   git(sourceRoot, ["worktree", "add", expectedPath, session]);
   rmSync(expectedPath, { recursive: true, force: true });
 
-  const result = ensureSessionWorktree(runtime, sourceRoot, session);
+  const result = ensureSessionWorktree(runtime, home, sourceRoot, session);
 
   expect(result).toEqual({ path: expectedPath, created: true });
   expect(git(expectedPath, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(session);
@@ -133,7 +137,12 @@ test("ensureSessionWorktree rejects invalid session names before worktree operat
   });
 
   expect(() =>
-    ensureSessionWorktree(createRuntime({ cwd: sourceRoot }), sourceRoot, "--help"),
+    ensureSessionWorktree(
+      createRuntime({ cwd: sourceRoot }),
+      path.join(sandbox, "home"),
+      sourceRoot,
+      "--help",
+    ),
   ).toThrow(/Invalid session name "--help"/);
 });
 
