@@ -323,6 +323,7 @@ export function runMaterialize(runtime: Runtime): void {
       sessionState,
       graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot),
     );
+    const useSessionContentRoot = sessionState.graphSource === "session-branch";
 
     const currentRepoRoot = context.sourceRoot;
     const results = new Map<string, RepoMaterializationResult>();
@@ -347,7 +348,7 @@ export function runMaterialize(runtime: Runtime): void {
         session,
         repoConfig,
         worktreePath,
-        sourceContentRoot: repoConfig.sourceRoot,
+        sourceContentRoot: useSessionContentRoot ? worktreePath : repoConfig.sourceRoot,
         worktreeCreated: isCurrentRepo ? false : dependencyWorktree.created,
         existingState,
         dependencyResults: results,

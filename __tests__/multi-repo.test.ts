@@ -85,8 +85,11 @@ test("create -m discovers dependencies from default branch config", () => {
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "default-only.txt": "default dep\n",
     "services/db/.env.local": "PORT=5432\n",
-    "monke.yml": `apps:
+    "monke.yml": `seedPaths:
+  - default-only.txt
+apps:
   db:
     path: services/db
     envFile: .env.local
@@ -148,6 +151,8 @@ external:
   expect(sessionState.graphSource).toBe("session-branch");
   expect(sessionState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
 
+  write(depRoot, "default-only.txt", "dirty dep source\n");
+  git(depRoot, ["worktree", "remove", "--force", depWorktree]);
   runMonke({
     cwd: rootWorktree,
     args: ["materialize"],
@@ -157,6 +162,7 @@ external:
   expect(read(rootWorktree, ".env")).toBe(
     `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
   );
+  expect(read(depWorktree, "default-only.txt")).toBe("default dep\n");
 
   git(root, ["worktree", "remove", "--force", rootWorktree]);
   git(depRoot, ["worktree", "remove", "--force", depWorktree]);
