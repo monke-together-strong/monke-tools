@@ -1,10 +1,10 @@
 ---
 id: TASK-12
 title: 'PRD: Install distributed skills into agent roots'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-07 23:20'
-updated_date: '2026-06-07 23:25'
+updated_date: '2026-06-13 15:11'
 labels:
   - ready-for-agent
 dependencies: []
@@ -140,19 +140,25 @@ The grill-with-docs session updated the glossary and ADR around the new model. T
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Global monke config stores the Installed source checkout and a non-empty current Skill install preference as versioned YAML at config.yml under monke home.
-- [ ] #2 The skills source layout uses internal and imported categories, with the current core skill moved under internal and renamed to the monke-tools-core Agent skill name.
-- [ ] #3 mt skills configure is implemented as an interactive Commander subcommand that supports Codex, Claude, Cursor, and one Custom target.
-- [ ] #4 Skills Configure preselects existing preferences, reuses the existing custom path when custom remains selected, removes custom when deselected, saves the new preference, and reconciles selected targets immediately.
-- [ ] #5 Built-in targets resolve to ~/.codex/skills, ~/.claude/skills, and ~/.cursor/skills against the OS home directory while MONKE_HOME continues to affect only monke-tools state and config.
-- [ ] #6 Custom target input accepts home-directory shorthand, stores an absolute path, and treats the path as an Agent skill root containing the monke-tools namespace.
-- [ ] #7 Target reconciliation creates missing Agent skill roots and creates or relinks the monke-tools namespace as a symlink to the Skill source tree.
-- [ ] #8 Target reconciliation refuses to overwrite a real file or directory at the monke-tools namespace path.
-- [ ] #9 Deselecting a previously selected target removes its Managed skill namespace when the namespace is a symlink.
-- [ ] #10 Local install installs the mt binary, records the Installed source checkout, invokes Skills Configure when no preference exists, and reconciles existing preferences on later runs.
-- [ ] #11 Local install attempts every selected target and exits unsuccessfully after reconciliation if any selected target failed.
-- [ ] #12 Local install no longer requires npm, runs npm link, creates package-manager links, or references TanStack Intent.
-- [ ] #13 README, package metadata, lockfile, and ADR content describe direct Distributed skill installation and contain no Intent distribution instructions.
-- [ ] #14 Focused tests cover config handling, target resolution, symlink reconciliation, configure flow, local install behavior, partial failures, and docs/package cleanup.
-- [ ] #15 An end-to-end install/configure validation exercises Codex, Claude, Cursor, and Custom, then finishes with a configure run selecting only Claude and Codex and validates Cursor and Custom no longer have a monke-tools namespace.
+- [x] #1 Global monke config stores the Installed source checkout and a non-empty current Skill install preference as versioned YAML at config.yml under monke home.
+- [x] #2 The skills source layout uses internal and imported categories, with the current core skill moved under internal and renamed to the monke-tools-core Agent skill name.
+- [x] #3 mt skills configure is implemented as an interactive Commander subcommand that supports Codex, Claude, Cursor, and one Custom target.
+- [x] #4 Skills Configure preselects existing preferences, reuses the existing custom path when custom remains selected, removes custom when deselected, saves the new preference, and reconciles selected targets immediately.
+- [x] #5 Built-in targets resolve to ~/.codex/skills, ~/.claude/skills, and ~/.cursor/skills against the OS home directory while MONKE_HOME continues to affect only monke-tools state and config.
+- [x] #6 Custom target input accepts home-directory shorthand, stores an absolute path, and treats the path as an Agent skill root containing the monke-tools namespace.
+- [x] #7 Target reconciliation creates missing Agent skill roots and creates or relinks the monke-tools namespace as a symlink to the Skill source tree.
+- [x] #8 Target reconciliation refuses to overwrite a real file or directory at the monke-tools namespace path.
+- [x] #9 Deselecting a previously selected target removes its Managed skill namespace when the namespace is a symlink.
+- [x] #10 Local install installs the mt binary, records the Installed source checkout, invokes Skills Configure when no preference exists, and reconciles existing preferences on later runs.
+- [x] #11 Local install attempts every selected target and exits unsuccessfully after reconciliation if any selected target failed.
+- [x] #12 Local install no longer requires npm, runs npm link, creates package-manager links, or references TanStack Intent.
+- [x] #13 README, package metadata, lockfile, and ADR content describe direct Distributed skill installation and contain no Intent distribution instructions.
+- [x] #14 Focused tests cover config handling, target resolution, symlink reconciliation, configure flow, local install behavior, partial failures, and docs/package cleanup.
+- [x] #15 An end-to-end install/configure validation exercises Codex, Claude, Cursor, and Custom, then finishes with a configure run selecting only Claude and Codex and validates Cursor and Custom no longer have a monke-tools namespace.
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Validated as implemented in the current repo. Evidence: Global monke config stores installedSourceCheckout and skillInstallPreference; skills/internal and skills/imported source layout exists with monke-tools-core; mt skills configure and local install flows are implemented; built-in/custom target resolution, symlink reconciliation, deselection cleanup, partial failure behavior, package-discovery removal, docs/ADR metadata, and all-target configure validation are covered by focused tests. Verification run: bun test __tests__/global-config.test.ts __tests__/skills.test.ts __tests__/skills-cli.test.ts __tests__/distributed-skills-metadata.test.ts __tests__/cli.test.ts (19 pass, 0 fail). Note: implementation intentionally flattens Claude skill links per current README/ADR because Claude does not discover nested skill directories; Codex, Cursor, and Custom use the monke-tools namespace symlink.
+<!-- SECTION:FINAL_SUMMARY:END -->
