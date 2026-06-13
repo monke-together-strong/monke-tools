@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
-import { saveSessionState } from "../src/registry.ts";
+import { getSessionStateFilePath, saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
   git,
@@ -246,6 +246,53 @@ test("create -m falls back to local main when origin fetch fails", () => {
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "local-default");
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nLOCAL_MAIN=1\n");
+});
+
+test("create -m rolls back failed fresh attempts so they can be retried", () => {
+  const sandbox = makeTempDir("single-repo-main-rollback");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/package.json": "{}\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["create", "retryable", "-m"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/Expected managed env file to exist/);
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retryable");
+  expect(existsSync(worktreeRoot)).toBe(false);
+  expect(existsSync(getSessionStateFilePath(home, repoRoot, "retryable"))).toBe(false);
+  expect(() =>
+    git(repoRoot, ["show-ref", "--verify", "--quiet", "refs/heads/retryable"]),
+  ).toThrow();
+
+  write(repoRoot, "apps/api/.env.local", "PORT=3000\n");
+  git(repoRoot, ["add", "apps/api/.env.local"]);
+  git(repoRoot, ["commit", "-m", "add api env"]);
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "retryable", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\n");
 });
 
 test("create -m fails when session state already exists", () => {

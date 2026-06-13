@@ -336,6 +336,40 @@ export function ensureFreshSessionWorktreeFromRef(
   return { path: expectedPath, created: true };
 }
 
+/** Best-effort removal for a fresh Session worktree and branch created by this process. */
+export function removeSessionWorktreeAndBranch(
+  runtime: Runtime,
+  sourceRoot: string,
+  worktreePath: string,
+  session: string,
+  onWarning: (message: string) => void,
+): boolean {
+  let removed = true;
+  const removeWorktree = runtime.exec("git", ["worktree", "remove", "--force", worktreePath], {
+    cwd: sourceRoot,
+    allowFailure: true,
+  });
+  if (removeWorktree.exitCode !== 0 && existsSync(worktreePath)) {
+    onWarning(
+      `Failed to remove rolled-back worktree ${worktreePath}${formatCommandDetail(removeWorktree)}`,
+    );
+    removed = false;
+  }
+
+  const removeBranch = runtime.exec("git", ["branch", "-D", session], {
+    cwd: sourceRoot,
+    allowFailure: true,
+  });
+  if (removeBranch.exitCode !== 0 && branchExists(runtime, sourceRoot, session)) {
+    onWarning(
+      `Failed to remove rolled-back branch ${session} in ${sourceRoot}${formatCommandDetail(removeBranch)}`,
+    );
+    removed = false;
+  }
+
+  return removed;
+}
+
 /** Assert that default branch create mode can create a fresh Session worktree. */
 export function assertFreshSessionWorktreeAvailable(
   runtime: Runtime,
@@ -452,6 +486,11 @@ function refExists(runtime: Runtime, sourceRoot: string, ref: string): boolean {
     allowFailure: true,
   });
   return result.exitCode === 0;
+}
+
+function formatCommandDetail(result: { stdout: string; stderr: string }): string {
+  const detail = (result.stderr || result.stdout).trim();
+  return detail ? `: ${detail}` : "";
 }
 
 function normalize(targetPath: string): string {

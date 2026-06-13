@@ -14,6 +14,7 @@ import {
   ensureSessionWorktree,
   ensureFreshSessionWorktreeFromRef,
   getExpectedWorktreePath,
+  removeSessionWorktreeAndBranch,
   resolveDefaultBranchRef,
   resolveRepoContext,
   validateWorktreeForSession,
@@ -134,66 +135,113 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     }
 
     const results = new Map<string, RepoMaterializationResult>();
-    for (const [index, repoConfig] of graph.reposInMaterializationOrder.entries()) {
-      const existingState = sessionState.repos.find(
-        (repo) => repo.sourceRoot === repoConfig.sourceRoot,
-      );
-      const shouldSkip = index < firstWorkIndex && repoConfig.sourceRoot !== currentRepoRoot;
+    const createdDefaultWorktrees: Array<{ sourceRoot: string; worktreePath: string }> = [];
+    try {
+      for (const [index, repoConfig] of graph.reposInMaterializationOrder.entries()) {
+        const existingState = sessionState.repos.find(
+          (repo) => repo.sourceRoot === repoConfig.sourceRoot,
+        );
+        const shouldSkip = index < firstWorkIndex && repoConfig.sourceRoot !== currentRepoRoot;
 
-      if (shouldSkip && existingState) {
-        validateWorktreeForSession(
+        if (shouldSkip && existingState) {
+          validateWorktreeForSession(
+            runtime,
+            home,
+            repoConfig.sourceRoot,
+            existingState.worktreePath,
+            session,
+          );
+          results.set(repoConfig.sourceRoot, {
+            state: existingState,
+            localAssignments: new Map(
+              existingState.assignedPorts.map((entry) => [entry.key, entry.value]),
+            ),
+          });
+          continue;
+        }
+
+        let worktree: { path: string; created: boolean };
+        if (createFromDefaultBranch) {
+          worktree = ensureFreshSessionWorktreeFromRef(
+            runtime,
+            home,
+            repoConfig.sourceRoot,
+            session,
+            getDefaultRef(repoConfig.sourceRoot).ref,
+          );
+          createdDefaultWorktrees.push({
+            sourceRoot: repoConfig.sourceRoot,
+            worktreePath: worktree.path,
+          });
+        } else {
+          worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session);
+        }
+
+        const materialized = materializeRepo({
           runtime,
           home,
-          repoConfig.sourceRoot,
-          existingState.worktreePath,
+          rootSourceRoot: context.sourceRoot,
           session,
-        );
-        results.set(repoConfig.sourceRoot, {
-          state: existingState,
-          localAssignments: new Map(
-            existingState.assignedPorts.map((entry) => [entry.key, entry.value]),
-          ),
+          repoConfig,
+          worktreePath: worktree.path,
+          sourceContentRoot: createFromDefaultBranch ? worktree.path : repoConfig.sourceRoot,
+          worktreeCreated: worktree.created,
+          existingState,
+          dependencyResults: results,
+          persistRepoState(repoState) {
+            sessionState = recordRepoSuccess(sessionState, repoState);
+            saveSessionState(home, sessionState);
+          },
         });
-        continue;
-      }
 
-      let worktree: { path: string; created: boolean };
+        results.set(repoConfig.sourceRoot, materialized);
+        sessionState = recordRepoSuccess(sessionState, materialized.state);
+        saveSessionState(home, sessionState);
+      }
+    } catch (error) {
       if (createFromDefaultBranch) {
-        worktree = ensureFreshSessionWorktreeFromRef(
+        rollbackDefaultBranchCreate({
           runtime,
           home,
-          repoConfig.sourceRoot,
+          rootSourceRoot: context.sourceRoot,
           session,
-          getDefaultRef(repoConfig.sourceRoot).ref,
-        );
-      } else {
-        worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session);
+          createdWorktrees: createdDefaultWorktrees,
+        });
       }
-
-      const materialized = materializeRepo({
-        runtime,
-        home,
-        rootSourceRoot: context.sourceRoot,
-        session,
-        repoConfig,
-        worktreePath: worktree.path,
-        sourceContentRoot: createFromDefaultBranch ? worktree.path : repoConfig.sourceRoot,
-        worktreeCreated: worktree.created,
-        existingState,
-        dependencyResults: results,
-        persistRepoState(repoState) {
-          sessionState = recordRepoSuccess(sessionState, repoState);
-          saveSessionState(home, sessionState);
-        },
-      });
-
-      results.set(repoConfig.sourceRoot, materialized);
-      sessionState = recordRepoSuccess(sessionState, materialized.state);
-      saveSessionState(home, sessionState);
+      throw error;
     }
   });
 
   runtime.writeStdout(`Created or updated session ${session}\n`);
+}
+
+function rollbackDefaultBranchCreate(options: {
+  runtime: Runtime;
+  home: string;
+  rootSourceRoot: string;
+  session: string;
+  createdWorktrees: Array<{ sourceRoot: string; worktreePath: string }>;
+}): void {
+  let fullyRolledBack = true;
+  for (const created of [...options.createdWorktrees].reverse()) {
+    const removed = removeSessionWorktreeAndBranch(
+      options.runtime,
+      created.sourceRoot,
+      created.worktreePath,
+      options.session,
+      (message) => options.runtime.writeStderr(`${message}\n`),
+    );
+    fullyRolledBack &&= removed;
+  }
+
+  if (fullyRolledBack) {
+    removeSessionState(options.home, options.rootSourceRoot, options.session);
+    return;
+  }
+
+  options.runtime.writeStderr(
+    `Default branch create failed and rollback was incomplete for session "${options.session}"; run mt cleanup after removing leftover worktrees manually.\n`,
+  );
 }
 
 export function runInstallDependencies(runtime: Runtime): void {
