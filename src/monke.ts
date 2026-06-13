@@ -274,6 +274,18 @@ function materializeRepo(options: {
     });
   }
 
+  options.persistRepoState(
+    buildSessionRepoState({
+      sourceRoot: repoConfig.sourceRoot,
+      worktreePath,
+      assignedPorts: existingState?.assignedPorts ?? [],
+      cleanupCommand: repoConfig.cleanupCommand,
+      resourceValues: existingState?.resourceValues ?? [],
+      resourceCommandOutputs: existingState?.resourceCommandOutputs ?? [],
+      isComplete: false,
+    }),
+  );
+
   const resolvedResourceValues = resolveResourceValues({
     home,
     rootSourceRoot,

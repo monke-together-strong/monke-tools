@@ -176,6 +176,121 @@ external:
   expect(read(betaDepWorktree, ".env")).toContain("E2E_FLOW1_SYMBOL=LINK/USDT:USDT\n");
 });
 
+test("resource command JSON pollution records an incomplete root repo and rerun heals external path env", () => {
+  const sandbox = makeTempDir("multi-repo-resource-command-partial-root");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  installShShim(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    ".env": "DEP_DIR=../dep\n",
+    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `resources:
+  commands:
+    e2e-channel:
+      command: |
+        printf '%s\\n' 'install progress'
+        printf '%s' '{"E2E_CHANNEL_ID":"123"}'
+      outputs:
+        - E2E_CHANNEL_ID
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  expect(() =>
+    runMonke({
+      cwd: root,
+      args: ["create", "partial"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/kind: invalid stdout JSON/);
+
+  const rootWorktree = getExpectedWorktreePath(root, "partial");
+  const depWorktree = getExpectedWorktreePath(depRoot, "partial");
+  expect(read(rootWorktree, ".env")).toBe("DEP_DIR=../dep\n");
+
+  const partialState = readSingleYamlFile(path.join(home, "sessions")) as {
+    repos: Array<{
+      sourceRoot: string;
+      worktreePath: string;
+      materializationComplete?: boolean;
+    }>;
+  };
+  expect(partialState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
+  expect(partialState.repos[1]).toMatchObject({
+    sourceRoot: root,
+    worktreePath: rootWorktree,
+    materializationComplete: false,
+  });
+
+  write(
+    root,
+    "monke.yml",
+    `resources:
+  commands:
+    e2e-channel:
+      command: |
+        printf '%s' '{"E2E_CHANNEL_ID":"123"}'
+      outputs:
+        - E2E_CHANNEL_ID
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  );
+
+  runMonke({
+    cwd: root,
+    args: ["create", "partial"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(rootWorktree, ".env")).toBe(
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=10100\nDEP_POSTGRES_PORT=10000\nE2E_CHANNEL_ID=123\n`,
+  );
+});
+
 test("create fans out one dependency-owned port to multiple local targets", () => {
   const sandbox = makeTempDir("multi-repo-fanout");
   const binDirectory = path.join(sandbox, "bin");

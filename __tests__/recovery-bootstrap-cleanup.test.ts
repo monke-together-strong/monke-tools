@@ -70,9 +70,10 @@ external:
   const firstMtime = statSync(path.join(depWorktree, ".env")).mtimeMs;
 
   const partialState = readSingleYamlFile(path.join(home, "sessions")) as {
-    repos: Array<{ sourceRoot: string }>;
+    repos: Array<{ sourceRoot: string; materializationComplete?: boolean }>;
   };
-  expect(partialState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot]);
+  expect(partialState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
+  expect(partialState.repos[1]?.materializationComplete).toBe(false);
 
   write(root, "apps/api/.env.local", "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n");
   write(
