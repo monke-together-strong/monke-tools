@@ -494,6 +494,69 @@ test("skills import script records selected skills and merges compatible same-so
   });
 });
 
+test("skills import script resolves multiple selector slug aliases", async () => {
+  const sandbox = makeTempDir("skill-import-script-aliases");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stagedSlugBySelector: {
+      alpha: "renamed-alpha",
+      bravo: "renamed-bravo",
+    },
+  });
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await runImportSkills(["owner/repo"], {
+      async selectSkills() {
+        return ["alpha", "bravo"];
+      },
+      writeMessage() {},
+    });
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(read(sandbox, "skills/imported/renamed-alpha/SKILL.md")).toBe("new renamed-alpha");
+  expect(read(sandbox, "skills/imported/renamed-bravo/SKILL.md")).toBe("new renamed-bravo");
+  expect(readImportRecipeStore(sandbox)).toEqual({
+    version: 1,
+    recipes: [
+      {
+        source: "owner/repo",
+        skills: [
+          {
+            selector: "alpha",
+            slug: "renamed-alpha",
+          },
+          {
+            selector: "bravo",
+            slug: "renamed-bravo",
+          },
+        ],
+      },
+    ],
+  });
+
+  const skillsLog = readFileSync(skillsLogPath, "utf8");
+  expect(skillsLog).toContain(
+    "--yes skills add owner/repo --skill alpha --skill bravo --agent universal --copy --yes",
+  );
+  expect(skillsLog).toContain(
+    "--yes skills add owner/repo --skill alpha --agent universal --copy --yes",
+  );
+  expect(skillsLog).toContain(
+    "--yes skills add owner/repo --skill bravo --agent universal --copy --yes",
+  );
+});
+
 test("skills import script passes and records explicit OpenClaw risk acceptance", async () => {
   const sandbox = makeTempDir("skill-import-openclaw");
   const skillsLogPath = path.join(sandbox, "skills.log");
@@ -919,6 +982,109 @@ test("skills update can interactively accept a staged slug rename", async () => 
       },
     ],
   });
+});
+
+test("skills update can interactively accept multiple staged slug renames", async () => {
+  const sandbox = makeTempDir("skill-update-script-multiple-slug-accept");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const confirmations: Array<{ selector: string; recordedSlug: string; stagedSlug: string }> = [];
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stagedSlugBySelector: {
+      alpha: "renamed-alpha",
+      bravo: "renamed-bravo",
+    },
+  });
+  writeImportRecipeStore(sandbox, {
+    version: 1,
+    recipes: [
+      {
+        source: "owner/repo",
+        skills: [
+          {
+            selector: "alpha",
+            slug: "alpha",
+          },
+          {
+            selector: "bravo",
+            slug: "bravo",
+          },
+        ],
+      },
+    ],
+  });
+  write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+  write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await runUpdateSkills(["--interactive"], {
+      confirmSlugReplacement(request) {
+        confirmations.push({
+          selector: request.selector,
+          recordedSlug: request.recordedSlug,
+          stagedSlug: request.stagedSlug,
+        });
+        return true;
+      },
+      writeMessage() {},
+    });
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(confirmations).toEqual([
+    {
+      selector: "alpha",
+      recordedSlug: "alpha",
+      stagedSlug: "renamed-alpha",
+    },
+    {
+      selector: "bravo",
+      recordedSlug: "bravo",
+      stagedSlug: "renamed-bravo",
+    },
+  ]);
+  expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBe(false);
+  expect(existsSync(path.join(sandbox, "skills/imported/bravo"))).toBe(false);
+  expect(read(sandbox, "skills/imported/renamed-alpha/SKILL.md")).toBe("new renamed-alpha");
+  expect(read(sandbox, "skills/imported/renamed-bravo/SKILL.md")).toBe("new renamed-bravo");
+  expect(readImportRecipeStore(sandbox)).toEqual({
+    version: 1,
+    recipes: [
+      {
+        source: "owner/repo",
+        skills: [
+          {
+            selector: "alpha",
+            slug: "renamed-alpha",
+          },
+          {
+            selector: "bravo",
+            slug: "renamed-bravo",
+          },
+        ],
+      },
+    ],
+  });
+
+  const skillsLog = readFileSync(skillsLogPath, "utf8");
+  expect(skillsLog).toContain(
+    "--yes skills add owner/repo --skill alpha --skill bravo --agent universal --copy --yes",
+  );
+  expect(skillsLog).toContain(
+    "--yes skills add owner/repo --skill alpha --agent universal --copy --yes",
+  );
+  expect(skillsLog).toContain(
+    "--yes skills add owner/repo --skill bravo --agent universal --copy --yes",
+  );
 });
 
 test("skills update rejects accepted slug renames that would duplicate another recipe owner", async () => {

@@ -122,6 +122,16 @@ export interface BuildSkillsInstallArgsOptions {
   selectors: readonly string[];
 }
 
+/** Options for resolving exact selector-to-slug mappings with isolated installs. */
+export interface ResolveSkillSelectorSlugMappingsOptions {
+  /** Source string passed through to upstream `skills add`. */
+  source: string;
+  /** Whether to pass the dedicated OpenClaw risk acceptance flag. */
+  acceptOpenClawRisks: boolean;
+  /** Upstream Skill import selectors to install one at a time. */
+  selectors: readonly string[];
+}
+
 /** Options for copying staged Skill directories into the Imported skill mirror. */
 export interface CopyStagedSkillsToImportedOptions {
   /** Temporary staging directory containing `.agents/skills`. */
@@ -426,10 +436,16 @@ export async function runImportSkills(
     }
 
     const importedSkillSlugs = listStagedSkillSlugs(stagingDirectory);
+    const importedSkills = mapSelectedSkillsToImportedSlugs({
+      source: normalizedSource,
+      acceptOpenClawRisks,
+      selectors: selectedSkills,
+      importedSkillSlugs,
+    });
     const nextRecipeStore = mergeImportedSkillsIntoRecipeStore(readImportRecipeStore(repoRoot), {
       source,
       acceptOpenClawRisks,
-      skills: mapSelectedSkillsToImportedSlugs(selectedSkills, importedSkillSlugs),
+      skills: importedSkills,
     });
     copyStagedSkillsToImported({
       stagingDirectory,
@@ -1063,7 +1079,30 @@ function assertSkillCanBeOwnedByRecipe(
   }
 }
 
-function mapSelectedSkillsToImportedSlugs(
+function mapSelectedSkillsToImportedSlugs(options: {
+  source: string;
+  acceptOpenClawRisks: boolean;
+  selectors: readonly string[];
+  importedSkillSlugs: readonly string[];
+}): SkillImportRecipeSkill[] {
+  try {
+    return mapSelectedSkillsToImportedSlugsFromSet(options.selectors, options.importedSkillSlugs);
+  } catch {
+    const mappings = resolveSkillSelectorSlugMappings({
+      source: options.source,
+      acceptOpenClawRisks: options.acceptOpenClawRisks,
+      selectors: options.selectors,
+    });
+    assertSkillSelectorSlugMappingsMatchStagedSlugs(
+      options.source,
+      mappings,
+      options.importedSkillSlugs,
+    );
+    return mappings;
+  }
+}
+
+function mapSelectedSkillsToImportedSlugsFromSet(
   selectors: readonly string[],
   importedSkillSlugs: readonly string[],
 ): SkillImportRecipeSkill[] {
@@ -1109,6 +1148,65 @@ function mapSelectedSkillsToImportedSlugs(
   }
 
   return mappings;
+}
+
+/** Resolves exact selector-to-local-slug mappings by staging each selector in isolation. */
+export function resolveSkillSelectorSlugMappings(
+  options: ResolveSkillSelectorSlugMappingsOptions,
+): SkillImportRecipeSkill[] {
+  if (options.selectors.length === 0) {
+    throw new Error("At least one Skill import selector must be selected");
+  }
+
+  return options.selectors.map((selector) => {
+    const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-selector-"));
+    try {
+      runSkillsCaptured(
+        buildSkillsInstallArgs({
+          source: options.source,
+          acceptOpenClawRisks: options.acceptOpenClawRisks,
+          selectors: [selector],
+        }),
+        stagingDirectory,
+      );
+
+      const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
+      if (stagedSlugs.length !== 1) {
+        throw new Error(
+          `Expected selector ${selector} from ${options.source} to stage exactly one Skill, but staged ${stagedSlugs.join(", ")}`,
+        );
+      }
+
+      return {
+        selector,
+        slug: stagedSlugs[0]!,
+      };
+    } finally {
+      rmSync(stagingDirectory, { recursive: true, force: true });
+    }
+  });
+}
+
+/** Ensures isolated selector installs match the batched staged install result. */
+export function assertSkillSelectorSlugMappingsMatchStagedSlugs(
+  source: string,
+  mappings: readonly SkillImportRecipeSkill[],
+  stagedSlugs: readonly string[],
+): void {
+  const mappedSlugs = mappings.map((mapping) => mapping.slug).sort();
+  const sortedStagedSlugs = [...stagedSlugs].sort();
+  if (
+    mappedSlugs.length !== sortedStagedSlugs.length ||
+    mappedSlugs.some((slug, index) => slug !== sortedStagedSlugs[index])
+  ) {
+    throw new Error(
+      [
+        `Could not map selected Skill import selectors to staged Skill slugs for ${source}.`,
+        `Mapped slugs: ${mappedSlugs.join(", ")}`,
+        `Staged slugs: ${sortedStagedSlugs.join(", ")}`,
+      ].join("\n"),
+    );
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

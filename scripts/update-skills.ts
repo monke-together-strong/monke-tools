@@ -7,12 +7,14 @@ import * as p from "@clack/prompts";
 import { Command, CommanderError } from "commander";
 
 import {
+  assertSkillSelectorSlugMappingsMatchStagedSlugs,
   buildSkillsInstallArgs,
   copyStagedSkillsToImported,
   extractSecurityRiskAssessment,
   listStagedSkillSlugs,
   normalizeSourceForStaging,
   readImportRecipeStore,
+  resolveSkillSelectorSlugMappings,
   runInstallCommand,
   runSkillsCaptured,
   writeImportRecipeStore,
@@ -82,6 +84,8 @@ export async function runUpdateSkills(
 
       const slugReplacements = await resolveStagedSkillReplacements({
         recipe,
+        source: normalizedSource,
+        acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
         stagingDirectory,
         interactive,
         confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
@@ -91,7 +95,12 @@ export async function runUpdateSkills(
         stagingDirectory,
         repoRoot,
       });
-      applyAcceptedSlugReplacements(repoRoot, recipe, slugReplacements);
+      applyAcceptedSlugReplacements(
+        repoRoot,
+        recipe,
+        slugReplacements,
+        listStagedSkillSlugs(stagingDirectory),
+      );
       if (slugReplacements.length > 0) {
         writeImportRecipeStore(repoRoot, store);
       }
@@ -169,6 +178,8 @@ function validateImportedSkillOwnership(repoRoot: string, store: SkillImportReci
 
 async function resolveStagedSkillReplacements(options: {
   recipe: SkillImportRecipe;
+  source: string;
+  acceptOpenClawRisks: boolean;
   stagingDirectory: string;
   interactive: boolean;
   confirmSlugReplacement: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
@@ -183,29 +194,47 @@ async function resolveStagedSkillReplacements(options: {
     return [];
   }
 
-  if (!options.interactive || missingSlugs.length !== 1 || unexpectedSlugs.length !== 1) {
+  if (!options.interactive) {
     throw new Error(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
   }
 
-  const recordedSlug = missingSlugs[0]!;
-  const stagedSlug = unexpectedSlugs[0]!;
-  const skill = recipe.skills.find((candidate) => candidate.slug === recordedSlug);
-  if (!skill) {
+  const selectorMappings = resolveSkillSelectorSlugMappings({
+    source: options.source,
+    acceptOpenClawRisks: options.acceptOpenClawRisks,
+    selectors: recipe.skills.map((skill) => skill.selector),
+  });
+  assertSkillSelectorSlugMappingsMatchStagedSlugs(recipe.source, selectorMappings, stagedSlugs);
+  const stagedSlugBySelector = new Map(
+    selectorMappings.map((mapping) => [mapping.selector, mapping.slug]),
+  );
+  const replacements = recipe.skills.flatMap((skill): SlugReplacementRequest[] => {
+    const stagedSlug = stagedSlugBySelector.get(skill.selector);
+    if (!stagedSlug || stagedSlug === skill.slug) {
+      return [];
+    }
+
+    return [
+      {
+        source: recipe.source,
+        selector: skill.selector,
+        recordedSlug: skill.slug,
+        stagedSlug,
+      },
+    ];
+  });
+
+  if (replacements.length === 0) {
     throw new Error(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
   }
 
-  const request = {
-    source: recipe.source,
-    selector: skill.selector,
-    recordedSlug,
-    stagedSlug,
-  };
-  const accepted = await options.confirmSlugReplacement(request);
-  if (!accepted) {
-    throw new Error(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
+  for (const replacement of replacements) {
+    const accepted = await options.confirmSlugReplacement(replacement);
+    if (!accepted) {
+      throw new Error(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
+    }
   }
 
-  return [request];
+  return replacements;
 }
 
 function assertSlugReplacementsKeepUniqueOwnership(
@@ -232,7 +261,9 @@ function applyAcceptedSlugReplacements(
   repoRoot: string,
   recipe: SkillImportRecipe,
   replacements: readonly SlugReplacementRequest[],
+  stagedSlugs: readonly string[],
 ): void {
+  const stagedSlugSet = new Set(stagedSlugs);
   for (const replacement of replacements) {
     const skill = recipe.skills.find(
       (candidate) =>
@@ -242,10 +273,12 @@ function applyAcceptedSlugReplacements(
       throw new Error(`Could not update recorded Skill slug ${replacement.recordedSlug}`);
     }
 
-    rmSync(path.join(repoRoot, IMPORTED_SKILLS_ROOT, replacement.recordedSlug), {
-      recursive: true,
-      force: true,
-    });
+    if (!stagedSlugSet.has(replacement.recordedSlug)) {
+      rmSync(path.join(repoRoot, IMPORTED_SKILLS_ROOT, replacement.recordedSlug), {
+        recursive: true,
+        force: true,
+      });
+    }
     skill.slug = replacement.stagedSlug;
   }
 }
