@@ -377,6 +377,10 @@ _Avoid_: Delete session, prune repos
 - The **Core distributed skill** uses `core` as its **Skill slug** and `monke-tools-core` as its **Agent skill name**.
 - A **Distributed skill** is either an **Internal skill** or an **Imported skill**.
 - An **Imported skill** preserves its upstream **Agent skill name** by default.
+- Each **Imported skill** has exactly one **Imported skill owner**.
+- A **Skill import recipe** belongs to the **Skill import recipe store**.
+- A **Skill import recipe** records the **Skill import selector** and import metadata needed to reproduce a **Skill import**.
+- A **Skill import recipe** can be rerun to refresh the **Imported skills** it owns.
 - A **Skill namespace** contains only monke-tools **Distributed skills**.
 - A **Skill namespace** is always named `monke-tools`.
 - A **Managed skill namespace** is a symlink to the **Skill source tree**.

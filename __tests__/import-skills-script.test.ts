@@ -216,6 +216,71 @@ test("skill import recipe store writes sorted deterministic output", () => {
   });
 });
 
+test("skill import recipe store rejects duplicate recipe sources", () => {
+  const sandbox = makeTempDir("skill-import-recipes-duplicate-source");
+  write(
+    sandbox,
+    "skills/imported/.monke-imports.json",
+    JSON.stringify({
+      version: 1,
+      recipes: [
+        {
+          source: "owner/repo",
+          skills: [
+            {
+              selector: "alpha",
+              slug: "alpha",
+            },
+          ],
+        },
+        {
+          source: "owner/repo",
+          skills: [
+            {
+              selector: "bravo",
+              slug: "bravo",
+            },
+          ],
+        },
+      ],
+    }),
+  );
+
+  expect(() => readImportRecipeStore(sandbox)).toThrow(
+    /Duplicate skill import recipe source: owner\/repo/,
+  );
+});
+
+test("skill import recipe store rejects duplicate selectors in one recipe", () => {
+  const sandbox = makeTempDir("skill-import-recipes-duplicate-selector");
+  write(
+    sandbox,
+    "skills/imported/.monke-imports.json",
+    JSON.stringify({
+      version: 1,
+      recipes: [
+        {
+          source: "owner/repo",
+          skills: [
+            {
+              selector: "alpha",
+              slug: "alpha",
+            },
+            {
+              selector: "alpha",
+              slug: "alpha-v2",
+            },
+          ],
+        },
+      ],
+    }),
+  );
+
+  expect(() => readImportRecipeStore(sandbox)).toThrow(
+    /Duplicate skill selector in recipe owner\/repo: alpha/,
+  );
+});
+
 test("skill import recipe recording rejects duplicate imported skill owners", () => {
   const sandbox = makeTempDir("skill-import-recipes-duplicate");
   writeImportRecipeStore(sandbox, {

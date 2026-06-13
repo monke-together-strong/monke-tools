@@ -933,9 +933,12 @@ function normalizeImportRecipeStore(input: unknown): SkillImportRecipeStore {
     throw new Error("Skill import recipe store recipes must be an array");
   }
 
+  const recipes = input.recipes.map(normalizeImportRecipe);
+  assertUniqueRecipeSources(recipes);
+
   return {
     version: 1,
-    recipes: input.recipes.map(normalizeImportRecipe).sort((left, right) => {
+    recipes: recipes.sort((left, right) => {
       const sourceOrder = left.source.localeCompare(right.source);
       if (sourceOrder !== 0) {
         return sourceOrder;
@@ -963,10 +966,13 @@ function normalizeImportRecipe(input: unknown): SkillImportRecipe {
     throw new Error("Skill import recipe skills must be a non-empty array");
   }
 
+  const skills = input.skills.map(normalizeImportRecipeSkill);
+  assertUniqueRecipeSkillSelectors(input.source, skills);
+
   return {
     source: input.source,
     ...(input.acceptOpenClawRisks === true ? { acceptOpenClawRisks: true as const } : {}),
-    skills: input.skills.map(normalizeImportRecipeSkill).sort((left, right) => {
+    skills: skills.sort((left, right) => {
       const slugOrder = left.slug.localeCompare(right.slug);
       if (slugOrder !== 0) {
         return slugOrder;
@@ -975,6 +981,31 @@ function normalizeImportRecipe(input: unknown): SkillImportRecipe {
       return left.selector.localeCompare(right.selector);
     }),
   };
+}
+
+function assertUniqueRecipeSources(recipes: readonly SkillImportRecipe[]): void {
+  const sources = new Set<string>();
+  for (const recipe of recipes) {
+    if (sources.has(recipe.source)) {
+      throw new Error(`Duplicate skill import recipe source: ${recipe.source}`);
+    }
+
+    sources.add(recipe.source);
+  }
+}
+
+function assertUniqueRecipeSkillSelectors(
+  source: string,
+  skills: readonly SkillImportRecipeSkill[],
+): void {
+  const selectors = new Set<string>();
+  for (const skill of skills) {
+    if (selectors.has(skill.selector)) {
+      throw new Error(`Duplicate skill selector in recipe ${source}: ${skill.selector}`);
+    }
+
+    selectors.add(skill.selector);
+  }
 }
 
 function normalizeImportRecipeSkill(input: unknown): SkillImportRecipeSkill {
