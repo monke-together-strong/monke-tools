@@ -106,19 +106,16 @@ printf 'streamed stderr\\n' >&2
 
 test("runCodexProcess terminates a process when the timeout elapses", async () => {
   const sandbox = makeTempDir("codex-process-timeout");
-  const command = path.join(sandbox, "slow-codex");
-  writeExecutable(
-    command,
-    `#!/bin/sh
-set -eu
-/bin/cat >/dev/null
-sleep 5
-`,
+  const scriptPath = path.join(sandbox, "slow-codex.ts");
+  writeFileSync(
+    scriptPath,
+    "process.stdin.resume(); process.stdin.on('end', () => setInterval(() => {}, 1_000));\n",
+    "utf8",
   );
 
   const result = await runCodexProcess({
-    command,
-    args: [],
+    command: process.execPath,
+    args: [scriptPath],
     cwd: sandbox,
     env: process.env,
     stdin: "prompt",
