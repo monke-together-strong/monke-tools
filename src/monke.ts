@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { loadResolvedGraph } from "./config.ts";
@@ -107,6 +107,9 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
       graph = loadResolvedGraph(runtime, context.sourceRoot);
     }
     let sessionState = loadSessionState(home, context.sourceRoot, session);
+    if (createFromDefaultBranch) {
+      sessionState = { ...sessionState, graphSource: "session-branch" };
+    }
     ensureSessionPrefix(
       sessionState,
       graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot),
@@ -269,6 +272,32 @@ function assertNoGlobalWorktreePathStateCollisions(
   }
 }
 
+function loadResolvedGraphForSession(
+  runtime: Runtime,
+  rootSourceRoot: string,
+  sessionState: SessionState,
+): ReturnType<typeof loadResolvedGraph> {
+  if (sessionState.graphSource !== "session-branch" || sessionState.repos.length === 0) {
+    return loadResolvedGraph(runtime, rootSourceRoot);
+  }
+
+  const sessionRepoRoots = new Set(sessionState.repos.map((repo) => repo.sourceRoot));
+  return loadResolvedGraph(runtime, rootSourceRoot, {
+    readRepoConfig(sourceRoot) {
+      if (sessionRepoRoots.has(sourceRoot)) {
+        return readGitPathAtRef(runtime, sourceRoot, sessionState.session, "monke.yml");
+      }
+      return readFileSync(path.join(sourceRoot, "monke.yml"), "utf8");
+    },
+    pathExists(sourceRoot, relativePath) {
+      if (sessionRepoRoots.has(sourceRoot)) {
+        return gitPathExistsAtRef(runtime, sourceRoot, sessionState.session, relativePath);
+      }
+      return existsSync(path.join(sourceRoot, relativePath));
+    },
+  });
+}
+
 export function runInstallDependencies(runtime: Runtime): void {
   ensureWorktrunkInstalled(runtime);
   runtime.writeStdout("Verified monke-tools runtime dependencies\n");
@@ -288,8 +317,8 @@ export function runMaterialize(runtime: Runtime): void {
   const home = getMonkeHome(runtime);
 
   withGlobalLock(home, () => {
-    const graph = loadResolvedGraph(runtime, context.sourceRoot);
     let sessionState = loadSessionState(home, context.sourceRoot, session);
+    const graph = loadResolvedGraphForSession(runtime, context.sourceRoot, sessionState);
     ensureSessionPrefix(
       sessionState,
       graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot),
@@ -343,12 +372,6 @@ export function runCleanup(runtime: Runtime): void {
 
   let removed = 0;
   withGlobalLock(home, () => {
-    let graph: ReturnType<typeof loadResolvedGraph> | null = null;
-    const getGraph = (): ReturnType<typeof loadResolvedGraph> => {
-      graph ??= loadResolvedGraph(runtime, context.sourceRoot);
-      return graph;
-    };
-
     for (const state of listSessionStates(home)) {
       if (state.rootSourceRoot !== context.sourceRoot) {
         continue;
@@ -359,7 +382,11 @@ export function runCleanup(runtime: Runtime): void {
         continue;
       }
 
-      runCleanupCommands(runtime, getGraph().reposByRoot, state);
+      runCleanupCommands(
+        runtime,
+        loadResolvedGraphForSession(runtime, context.sourceRoot, state).reposByRoot,
+        state,
+      );
       removeSessionState(home, state.rootSourceRoot, state.session);
       removed += 1;
     }
@@ -662,11 +689,6 @@ function runCleanupCommands(
     const repoConfig = reposByRoot.get(repoState.sourceRoot);
     const cleanupCommand = repoState.cleanupCommand ?? repoConfig?.cleanupCommand;
     if (!cleanupCommand) {
-      if (!repoConfig) {
-        throw new MonkeError(
-          `Missing repo config for cleanup of ${repoState.sourceRoot}; refusing to drop session state`,
-        );
-      }
       continue;
     }
     const sourceRoot = repoConfig?.sourceRoot ?? repoState.sourceRoot;

@@ -142,9 +142,31 @@ external:
   );
 
   const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
+    graphSource?: string;
     repos: Array<{ sourceRoot: string }>;
   };
+  expect(sessionState.graphSource).toBe("session-branch");
   expect(sessionState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
+
+  runMonke({
+    cwd: rootWorktree,
+    args: ["materialize"],
+    monkeHome: home,
+    binDirectory,
+  });
+  expect(read(rootWorktree, ".env")).toBe(
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
+  );
+
+  git(root, ["worktree", "remove", "--force", rootWorktree]);
+  git(depRoot, ["worktree", "remove", "--force", depWorktree]);
+  const cleanupResult = runMonke({
+    cwd: root,
+    args: ["cleanup"],
+    monkeHome: home,
+    binDirectory,
+  });
+  expect(cleanupResult.stdout).toBe("Removed 1 dead session\n");
 });
 
 test("create -m materializes mixed main and master repos in one graph", () => {
