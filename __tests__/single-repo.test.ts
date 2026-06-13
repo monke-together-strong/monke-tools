@@ -62,6 +62,48 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
   expect(existsSync(path.join(sandbox, ".monke-worktrees"))).toBe(false);
 });
 
+test("create rejects stale repo-name session collisions from unrelated source roots", () => {
+  const sandbox = makeTempDir("single-repo-global-path-collision");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoFiles = {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  };
+  const firstRepo = createRepo(path.join(sandbox, "client-a", "api"), repoFiles);
+  const secondRepo = createRepo(path.join(sandbox, "client-b", "api"), repoFiles);
+
+  runMonke({
+    cwd: firstRepo,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+  git(firstRepo, [
+    "worktree",
+    "remove",
+    "--force",
+    getExpectedWorktreePath(home, firstRepo, "banana"),
+  ]);
+
+  expect(() =>
+    runMonke({
+      cwd: secondRepo,
+      args: ["create", "banana"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/Session worktree path collision.*already recorded/s);
+});
+
 test("create -m allows dirty source checkouts and materializes default branch content", () => {
   const sandbox = makeTempDir("single-repo-main-mode");
   const binDirectory = path.join(sandbox, "bin");

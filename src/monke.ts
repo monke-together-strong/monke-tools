@@ -112,6 +112,7 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
       graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot),
     );
     assertUniqueExpectedWorktreePaths(home, session, graph.reposInMaterializationOrder);
+    assertNoGlobalWorktreePathStateCollisions(home, session, graph.reposInMaterializationOrder);
     if (createFromDefaultBranch) {
       for (const repoConfig of graph.reposInMaterializationOrder) {
         assertFreshSessionWorktreeAvailable(runtime, home, repoConfig.sourceRoot, session);
@@ -242,6 +243,30 @@ function rollbackDefaultBranchCreate(options: {
   options.runtime.writeStderr(
     `Default branch create failed and rollback was incomplete for session "${options.session}"; run mt cleanup after removing leftover worktrees manually.\n`,
   );
+}
+
+function assertNoGlobalWorktreePathStateCollisions(
+  home: string,
+  session: string,
+  repoConfigs: RepoConfig[],
+): void {
+  const states = listSessionStates(home);
+  for (const repoConfig of repoConfigs) {
+    const expectedPath = getExpectedWorktreePath(home, repoConfig.sourceRoot, session);
+    const collision = states
+      .flatMap((state) => state.repos)
+      .find(
+        (repoState) =>
+          path.normalize(repoState.worktreePath) === path.normalize(expectedPath) &&
+          path.normalize(repoState.sourceRoot) !== path.normalize(repoConfig.sourceRoot),
+      );
+
+    if (collision) {
+      throw new MonkeError(
+        `Session worktree path collision at ${expectedPath}; already recorded for ${collision.sourceRoot}. Repo-name/session worktree paths must be unique within MONKE_HOME.`,
+      );
+    }
+  }
 }
 
 export function runInstallDependencies(runtime: Runtime): void {
