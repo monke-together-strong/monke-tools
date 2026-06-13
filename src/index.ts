@@ -21,7 +21,8 @@ import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session>\n  mt materialize\n  mt cleanup\n  mt setup\n  mt skills configure\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
+  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt materialize\n  mt cleanup\n  mt setup\n  mt skills configure\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
+const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
 const RUN_USAGE = "Usage: mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 
@@ -91,8 +92,12 @@ function createProgram(runtime: Runtime, onRun: (options: RunCommandOptions) => 
     .helpOption(false)
     .allowExcessArguments(false)
     .argument("<session>")
-    .action((session: string) => {
-      runCreate(runtime, session);
+    .option("-m, --main")
+    .option("--master")
+    .action((session: string, options: { main?: boolean; master?: boolean }) => {
+      runCreate(runtime, session, {
+        mode: options.main || options.master ? "default-branch" : "current-head",
+      });
     });
 
   program
@@ -206,7 +211,7 @@ function mapCliError(error: unknown, argv: string[]): Error {
 
   switch (argv[0]) {
     case "create":
-      return new MonkeError("Usage: mt create <session>");
+      return new MonkeError(CREATE_USAGE);
     case "materialize":
       return new MonkeError("Usage: mt materialize");
     case "cleanup":

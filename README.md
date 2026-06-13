@@ -18,6 +18,7 @@ bun run fmt:check
 ```bash
 bun run install:local
 mt create banana
+mt create banana -m
 ```
 
 `bun run install:local` rebuilds the local `mt` executable from the current checkout, installs it to `~/.local/bin/mt` and `~/.local/bin/monke-tools`, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots.
@@ -45,7 +46,8 @@ The Skill source tree is organized as:
 
 ## Commands
 
-- `mt create <session>` creates or updates a session from the source checkout. It materializes dependency repos first, seeds configured files, rewrites mapped env vars, and records the session state under `~/.monke` by default.
+- `mt create <session>` creates or updates a session from the source checkout. It materializes dependency repos first, seeds configured files, rewrites mapped env vars, creates worktrees under `~/.monke/worktrees/<repo-name>/<session>` by default, and records session state under `~/.monke`.
+- `mt create <session> -m` also accepts `--main` or `--master`. It creates a fresh session from each repo's default branch content, preferring fetched `origin/main` or `origin/master` before local `main` or `master`.
 - `mt materialize` refreshes the current session worktree in place and keeps the existing port assignments sticky.
 - `mt cleanup` removes session records whose worktrees no longer exist.
 - `mt setup` syncs external repo path env vars into the source checkout root `.env`.

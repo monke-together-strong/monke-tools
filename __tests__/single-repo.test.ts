@@ -1,10 +1,12 @@
 import { expect, test } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
+import { saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
+  git,
   installFakeWt,
   installShShim,
   makeTempDir,
@@ -41,7 +43,7 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
     binDirectory,
   });
 
-  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   expect(read(worktreeRoot, ".env.shared")).toBe("ROOT_ONLY=true\n");
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe(
     "PORT=10000\nDATABASE_URL=postgres://localhost:10001/app\nOTHER=keep\n",
@@ -57,6 +59,286 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
   expect(sessionState.repos).toHaveLength(1);
   expect(sessionState.repos[0]?.sourceRoot).toBe(repoRoot);
   expect(sessionState.repos[0]?.worktreePath).toBe(worktreeRoot);
+  expect(existsSync(path.join(sandbox, ".monke-worktrees"))).toBe(false);
+});
+
+test("create -m allows dirty source checkouts and materializes default branch content", () => {
+  const sandbox = makeTempDir("single-repo-main-mode");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\nDEFAULT_ONLY=1\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  git(repoRoot, ["switch", "-c", "feature"]);
+  write(repoRoot, "apps/api/.env.local", "PORT=10000\nBRANCH_DIRTY=1\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "fresh", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nDEFAULT_ONLY=1\n");
+  expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=10000\nBRANCH_DIRTY=1\n");
+});
+
+test("create -m does not seed source-only dirty checkout paths", () => {
+  const sandbox = makeTempDir("single-repo-main-seed-source");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `seedPaths:
+  - local-only.txt
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  git(repoRoot, ["switch", "-c", "feature"]);
+  write(repoRoot, "local-only.txt", "dirty source only\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "fresh", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
+  expect(existsSync(path.join(worktreeRoot, "local-only.txt"))).toBe(false);
+});
+
+test("create -m prefers fetched origin main over stale local main", () => {
+  const sandbox = makeTempDir("single-repo-origin-main");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\nLOCAL_MAIN=1\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  const origin = path.join(sandbox, "origin.git");
+  git(repoRoot, ["init", "--bare", origin]);
+  git(repoRoot, ["remote", "add", "origin", origin]);
+  git(repoRoot, ["push", "-u", "origin", "main"]);
+  const localMain = git(repoRoot, ["rev-parse", "HEAD"]);
+  write(repoRoot, "apps/api/.env.local", "PORT=4000\nORIGIN_MAIN=1\n");
+  git(repoRoot, ["add", "apps/api/.env.local"]);
+  git(repoRoot, ["commit", "-m", "origin main update"]);
+  git(repoRoot, ["push", "origin", "main"]);
+  git(repoRoot, ["reset", "--hard", localMain]);
+  git(repoRoot, ["switch", "-c", "feature"]);
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "remote-default", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "remote-default");
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nORIGIN_MAIN=1\n");
+});
+
+test("create -m prunes deleted origin main before choosing origin master", () => {
+  const sandbox = makeTempDir("single-repo-pruned-origin-main");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\nLOCAL_MAIN=1\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  const origin = path.join(sandbox, "origin.git");
+  git(repoRoot, ["init", "--bare", origin]);
+  git(repoRoot, ["remote", "add", "origin", origin]);
+  git(repoRoot, ["push", "-u", "origin", "main"]);
+  const staleOriginMain = git(repoRoot, ["rev-parse", "refs/remotes/origin/main"]);
+
+  git(repoRoot, ["switch", "-c", "master"]);
+  write(repoRoot, "apps/api/.env.local", "PORT=4000\nORIGIN_MASTER=1\n");
+  git(repoRoot, ["add", "apps/api/.env.local"]);
+  git(repoRoot, ["commit", "-m", "origin master default"]);
+  git(repoRoot, ["push", "origin", "master"]);
+  git(origin, ["symbolic-ref", "HEAD", "refs/heads/master"]);
+  git(repoRoot, ["push", "origin", "--delete", "main"]);
+  git(repoRoot, ["update-ref", "refs/remotes/origin/main", staleOriginMain]);
+  git(repoRoot, ["switch", "main"]);
+  git(repoRoot, ["switch", "-c", "feature"]);
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "remote-master", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "remote-master");
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nORIGIN_MASTER=1\n");
+});
+
+test("create -m falls back to local main when origin fetch fails", () => {
+  const sandbox = makeTempDir("single-repo-fetch-fallback");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\nLOCAL_MAIN=1\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  const origin = path.join(sandbox, "origin.git");
+  git(repoRoot, ["init", "--bare", origin]);
+  git(repoRoot, ["remote", "add", "origin", origin]);
+  git(repoRoot, ["push", "-u", "origin", "main"]);
+  const localMain = git(repoRoot, ["rev-parse", "HEAD"]);
+  write(repoRoot, "apps/api/.env.local", "PORT=4000\nSTALE_ORIGIN_MAIN=1\n");
+  git(repoRoot, ["add", "apps/api/.env.local"]);
+  git(repoRoot, ["commit", "-m", "stale origin main update"]);
+  git(repoRoot, ["push", "origin", "main"]);
+  git(repoRoot, ["reset", "--hard", localMain]);
+  git(repoRoot, ["remote", "set-url", "origin", path.join(sandbox, "missing-origin.git")]);
+  git(repoRoot, ["switch", "-c", "feature"]);
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "local-default", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "local-default");
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nLOCAL_MAIN=1\n");
+});
+
+test("create -m fails when session state already exists", () => {
+  const sandbox = makeTempDir("single-repo-main-existing-state");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  saveSessionState(home, {
+    version: 1,
+    rootSourceRoot: repoRoot,
+    session: "fresh",
+    repos: [],
+  });
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["create", "fresh", "-m"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/Session state already exists for "fresh"/);
+});
+
+test("create -m fails when the session branch already exists", () => {
+  const sandbox = makeTempDir("single-repo-main-existing-branch");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  git(repoRoot, ["branch", "fresh"]);
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["create", "fresh", "-m"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/Session branch "fresh" already exists/);
+});
+
+test("create --main and --master are aliases for default branch mode", () => {
+  const sandbox = makeTempDir("single-repo-main-aliases");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  for (const [session, flag, env] of [
+    ["main-alias", "--main", "API_PORT=10000\n"],
+    ["master-alias", "--master", "API_PORT=10001\n"],
+  ] as const) {
+    runMonke({
+      cwd: repoRoot,
+      args: ["create", session, flag],
+      monkeHome: home,
+      binDirectory,
+    });
+
+    expect(read(getExpectedWorktreePath(home, repoRoot, session), ".env")).toBe(env);
+  }
 });
 
 test("create rewrites one local port key into multiple same-repo app env files", () => {
@@ -90,7 +372,7 @@ test("create rewrites one local port key into multiple same-repo app env files",
     binDirectory,
   });
 
-  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\n");
   expect(read(worktreeRoot, "apps/web/.env.local")).toBe("API_URL=http://localhost:10000\n");
   expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\n");
@@ -125,7 +407,7 @@ apps:
     extraEnv: { USER: "ada" },
   });
 
-  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nOTHER=keep\n");
   expect(read(worktreeRoot, ".env")).toBe(
     "API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\nSTATIC_HANDLE=fixed-banana\n",
@@ -245,9 +527,11 @@ test("materialize rejects source checkout context and reuses sticky ports inside
     });
   }).toThrow(/must run inside a session worktree/);
 
-  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
-  expect(inferSessionName(repoRoot, worktreeRoot, "banana")).toBe("banana");
-  expect(() => inferSessionName(repoRoot, worktreeRoot, "wrong")).toThrow(/match current branch/);
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+  expect(inferSessionName(home, repoRoot, worktreeRoot, "banana")).toBe("banana");
+  expect(() => inferSessionName(home, repoRoot, worktreeRoot, "wrong")).toThrow(
+    /match current branch/,
+  );
 
   const before = read(worktreeRoot, ".env");
   expect(before).toBe("API_PORT=10000\nDB_PORT=10001\n");
@@ -290,7 +574,7 @@ apps:
     binDirectory,
   });
 
-  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   expect(read(worktreeRoot, "bootstrap-runs")).toBe(`${worktreeRoot}\n`);
 
   runMonke({
@@ -336,7 +620,7 @@ apps:
     binDirectory,
   });
 
-  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
     '{ "theme": "dark" }\n',
   );
@@ -376,7 +660,7 @@ apps:
     binDirectory,
   });
 
-  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/.gitkeep")).toBe("");
   expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
     '{ "theme": "dark" }\n',
@@ -413,7 +697,7 @@ apps:
     binDirectory,
   });
 
-  const worktreeRoot = getExpectedWorktreePath(repoRoot, "banana");
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   write(
     worktreeRoot,
     "apps/frostbite-crawler/data/sessions/hoangbn/Preferences",
@@ -597,7 +881,7 @@ external:
 
   expect(() =>
     runMonke({
-      cwd: getExpectedWorktreePath(root, "banana"),
+      cwd: getExpectedWorktreePath(home, root, "banana"),
       args: ["setup"],
       monkeHome: home,
       binDirectory,

@@ -15,7 +15,7 @@ The original Git checkout from which a session is created.
 _Avoid_: Main worktree, root worktree
 
 **Session worktree**:
-A linked Git worktree created for a specific repo inside a session.
+A linked Git worktree created for a specific repo inside a session, stored under the **Monke home** worktree area as `worktrees/<repo-name>/<session>`.
 _Avoid_: Checkout copy, clone
 
 **Root repo**:
@@ -123,7 +123,7 @@ The act of rebuilding the **Local tool install** from the current monke-tools so
 _Avoid_: Publish, dependency update, session refresh
 
 **Monke home**:
-The machine-local directory where monke-tools keeps state, preferences, and owned **Session worktrees** shared across **Consumer repos**.
+The machine-local directory where monke-tools keeps state, preferences, and owned **Session worktrees** shared across **Consumer repos**. Defaults to `~/.monke`; Session worktrees live under `worktrees/<repo-name>/<session>` within this directory.
 _Avoid_: OS home, repo root, source checkout
 
 **Global monke config**:
@@ -223,11 +223,11 @@ _Avoid_: Default port, existing assignment
 ### Session operations
 
 **Create**:
-The operation that creates or updates all required session worktrees from a source checkout.
+The operation that creates or updates all required session worktrees from a source checkout, using current `HEAD` unless **Default branch create mode** is requested.
 _Avoid_: Initialize, provision
 
 **Default branch create mode**:
-A **Create** mode that creates fresh session branches from each participating repo's default branch instead of the current source checkout commit.
+A **Create** mode selected by `mt create <session> -m`, `--main`, or `--master`. It creates fresh session branches from each participating repo's default branch content, prefers fetched `origin/main` then `origin/master`, falls back to local `main` then `master`, and rejects existing Session state or Session branches.
 _Avoid_: Arbitrary base branch, from branch
 
 **Materialize**:

@@ -1,10 +1,12 @@
 import { expect, test } from "vitest";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
+  git,
   installFakeWt,
   installShShim,
   makeTempDir,
@@ -59,8 +61,8 @@ external:
     binDirectory,
   });
 
-  const depWorktree = getExpectedWorktreePath(depRoot, "swing");
-  const rootWorktree = getExpectedWorktreePath(root, "swing");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "swing");
+  const rootWorktree = getExpectedWorktreePath(home, root, "swing");
 
   expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
   expect(read(rootWorktree, "apps/api/.env.local")).toBe(
@@ -74,6 +76,174 @@ external:
     repos: Array<{ sourceRoot: string }>;
   };
   expect(sessionState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
+});
+
+test("create -m discovers dependencies from default branch config", () => {
+  const sandbox = makeTempDir("multi-repo-main-config");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+  git(root, ["switch", "-c", "feature"]);
+  write(
+    root,
+    "monke.yml",
+    `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: DATABASE_URL
+`,
+  );
+
+  runMonke({
+    cwd: root,
+    args: ["create", "default-graph", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const rootWorktree = getExpectedWorktreePath(home, root, "default-graph");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "default-graph");
+  expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
+  expect(read(rootWorktree, ".env")).toBe(
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
+  );
+
+  const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
+    repos: Array<{ sourceRoot: string }>;
+  };
+  expect(sessionState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
+});
+
+test("create -m materializes mixed main and master repos in one graph", () => {
+  const sandbox = makeTempDir("multi-repo-main-master");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\nMASTER_DEFAULT=1\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+  git(depRoot, ["branch", "-m", "master"]);
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["create", "mixed-defaults", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const rootWorktree = getExpectedWorktreePath(home, root, "mixed-defaults");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "mixed-defaults");
+  expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10000\nMASTER_DEFAULT=1\n");
+  expect(read(rootWorktree, ".env")).toBe(
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
+  );
+});
+
+test("create fails clearly when two repos collide on repo-name session worktree paths", () => {
+  const sandbox = makeTempDir("multi-repo-worktree-collision");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  createRepo(path.join(sandbox, "other", "root"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../other/root
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  expect(() =>
+    runMonke({
+      cwd: root,
+      args: ["create", "collision"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/Session worktree path collision/);
+  expect(existsSync(path.join(home, "worktrees", "root", "collision"))).toBe(false);
 });
 
 test("resource command retained inputs are scoped to the declaring repo across root graphs", () => {
@@ -171,7 +341,7 @@ external:
     binDirectory,
   });
 
-  const betaDepWorktree = getExpectedWorktreePath(depRoot, "beta");
+  const betaDepWorktree = getExpectedWorktreePath(home, depRoot, "beta");
   expect(read(betaDepWorktree, "command-stdin.json")).toContain("SOL/USDT:USDT");
   expect(read(betaDepWorktree, ".env")).toContain("E2E_FLOW1_SYMBOL=LINK/USDT:USDT\n");
 });
@@ -236,8 +406,8 @@ external:
     }),
   ).toThrow(/kind: return contract violation/);
 
-  const rootWorktree = getExpectedWorktreePath(root, "partial");
-  const depWorktree = getExpectedWorktreePath(depRoot, "partial");
+  const rootWorktree = getExpectedWorktreePath(home, root, "partial");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "partial");
   expect(read(rootWorktree, ".env")).toBe("DEP_DIR=../dep\n");
 
   const partialState = readSingleYamlFile(path.join(home, "sessions")) as {
@@ -326,8 +496,8 @@ external:
     binDirectory,
   });
 
-  const rootWorktree = getExpectedWorktreePath(root, "swing");
-  const depWorktree = getExpectedWorktreePath(depRoot, "swing");
+  const rootWorktree = getExpectedWorktreePath(home, root, "swing");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "swing");
 
   expect(read(rootWorktree, "apps/api/.env.local")).toBe(
     "DATABASE_URL=postgres://localhost:10000/api\n",
@@ -386,8 +556,8 @@ external:
     binDirectory,
   });
 
-  const rootWorktree = getExpectedWorktreePath(root, "refresh-env");
-  const depWorktree = getExpectedWorktreePath(depRoot, "refresh-env");
+  const rootWorktree = getExpectedWorktreePath(home, root, "refresh-env");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "refresh-env");
   write(rootWorktree, ".env", "KEEP_ME=1\nDEP_DIR=../stale\n");
 
   runMonke({
@@ -463,8 +633,8 @@ external:
     binDirectory,
   });
 
-  const rootWorktree = getExpectedWorktreePath(root, "direct-only");
-  const depWorktree = getExpectedWorktreePath(dep, "direct-only");
+  const rootWorktree = getExpectedWorktreePath(home, root, "direct-only");
+  const depWorktree = getExpectedWorktreePath(home, dep, "direct-only");
   expect(read(rootWorktree, ".env")).toBe(
     `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_PORT=10100\n`,
   );
@@ -514,8 +684,8 @@ external:
     binDirectory,
   });
 
-  const rootWorktree = getExpectedWorktreePath(root, "bootstrap-path");
-  const depWorktree = getExpectedWorktreePath(depRoot, "bootstrap-path");
+  const rootWorktree = getExpectedWorktreePath(home, root, "bootstrap-path");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "bootstrap-path");
   expect(read(rootWorktree, ".bootstrap-path")).toBe(path.relative(rootWorktree, depWorktree));
 });
 
@@ -564,8 +734,8 @@ external:
     binDirectory,
   });
 
-  const depWorktree = getExpectedWorktreePath(depRoot, "swing");
-  const rootWorktree = getExpectedWorktreePath(root, "swing");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "swing");
+  const rootWorktree = getExpectedWorktreePath(home, root, "swing");
 
   expect(read(depWorktree, ".dep-ready")).toBe("");
   expect(read(rootWorktree, "root-saw-dep")).toBe(path.relative(rootWorktree, depWorktree));

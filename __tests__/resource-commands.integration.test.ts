@@ -878,7 +878,7 @@ function createResourceCommandScenario(options: {
     ...options.files,
   });
 
-  const worktree = (session: string): string => getExpectedWorktreePath(repoRoot, session);
+  const worktree = (session: string): string => getExpectedWorktreePath(home, repoRoot, session);
 
   return {
     sandbox,

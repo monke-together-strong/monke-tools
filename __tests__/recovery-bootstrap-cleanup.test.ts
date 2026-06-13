@@ -66,7 +66,7 @@ external:
     });
   }).toThrow(/Missing mapped env vars/);
 
-  const depWorktree = getExpectedWorktreePath(depRoot, "resume");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "resume");
   const firstMtime = statSync(path.join(depWorktree, ".env")).mtimeMs;
 
   const partialState = readSingleYamlFile(path.join(home, "sessions")) as {
@@ -77,7 +77,7 @@ external:
 
   write(root, "apps/api/.env.local", "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n");
   write(
-    getExpectedWorktreePath(root, "resume"),
+    getExpectedWorktreePath(home, root, "resume"),
     "apps/api/.env.local",
     "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
   );
@@ -91,7 +91,7 @@ external:
 
   const secondMtime = statSync(path.join(depWorktree, ".env")).mtimeMs;
   expect(secondMtime).toBe(firstMtime);
-  expect(read(getExpectedWorktreePath(root, "resume"), "apps/api/.env.local")).toBe(
+  expect(read(getExpectedWorktreePath(home, root, "resume"), "apps/api/.env.local")).toBe(
     "PORT=10100\nDATABASE_URL=postgres://localhost:10000/app\n",
   );
 });
@@ -141,12 +141,12 @@ external:
     binDirectory,
   });
 
-  const depWorktree = getExpectedWorktreePath(depRoot, "heal");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "heal");
   git(depRoot, ["worktree", "remove", depWorktree, "--force"]);
   expect(existsSync(depWorktree)).toBe(false);
 
   runMonke({
-    cwd: getExpectedWorktreePath(root, "heal"),
+    cwd: getExpectedWorktreePath(home, root, "heal"),
     args: ["materialize"],
     monkeHome: home,
     binDirectory,
@@ -201,12 +201,12 @@ external:
     binDirectory,
   });
 
-  const depWorktree = getExpectedWorktreePath(depRoot, "refresh");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "refresh");
   write(depWorktree, "services/db/.env.local", "PORT=5432\n");
   write(depWorktree, ".env", "");
 
   runMonke({
-    cwd: getExpectedWorktreePath(root, "refresh"),
+    cwd: getExpectedWorktreePath(home, root, "refresh"),
     args: ["materialize"],
     monkeHome: home,
     binDirectory,
@@ -272,7 +272,7 @@ test("cleanup removes dead session state but leaves repo reservations intact", (
     binDirectory,
   });
 
-  const worktree = getExpectedWorktreePath(root, "clean-me");
+  const worktree = getExpectedWorktreePath(home, root, "clean-me");
   git(root, ["worktree", "remove", worktree, "--force"]);
 
   runMonke({
@@ -329,7 +329,7 @@ apps:
   expect(liveCleanup.stdout).toContain("Removed 0 dead sessions");
   expect(existsSync(path.join(root, "cleanup.log"))).toBe(false);
 
-  const worktree = getExpectedWorktreePath(root, "clean-command");
+  const worktree = getExpectedWorktreePath(home, root, "clean-command");
   git(root, ["worktree", "remove", worktree, "--force"]);
 
   runMonke({
@@ -384,7 +384,7 @@ apps:
     binDirectory,
   });
 
-  const worktree = getExpectedWorktreePath(root, "clean-command");
+  const worktree = getExpectedWorktreePath(home, root, "clean-command");
   git(root, ["worktree", "remove", worktree, "--force"]);
 
   runMonke({
@@ -436,7 +436,7 @@ apps:
         env: PORT
 `,
   );
-  git(root, ["worktree", "remove", getExpectedWorktreePath(root, "drift-clean"), "--force"]);
+  git(root, ["worktree", "remove", getExpectedWorktreePath(home, root, "drift-clean"), "--force"]);
 
   runMonke({
     cwd: root,
@@ -478,7 +478,7 @@ apps:
     binDirectory,
   });
 
-  git(root, ["worktree", "remove", getExpectedWorktreePath(root, "retry-me"), "--force"]);
+  git(root, ["worktree", "remove", getExpectedWorktreePath(home, root, "retry-me"), "--force"]);
 
   expect(() =>
     runMonke({

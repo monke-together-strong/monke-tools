@@ -2,6 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
+import { getMonkeHome } from "./runtime.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 
 export interface WorktreeEntry {
@@ -18,6 +19,16 @@ export interface CheckoutState {
 export interface GitCommitInfo {
   sha: string;
   subject: string;
+}
+
+/** A resolved default branch candidate for one source repo. */
+export interface DefaultBranchRef {
+  /** Branch name selected as the repo's default branch candidate. */
+  branch: "main" | "master";
+  /** Full git ref used as the Session branch start point. */
+  ref: string;
+  /** Whether the selected ref is remote-tracking or local. */
+  source: "origin" | "local";
 }
 
 export type ReviewerTarget =
@@ -46,7 +57,7 @@ export function resolveRepoContext(runtime: Runtime, cwd: string = runtime.cwd):
   const isSourceCheckout = normalize(worktreeRoot) === normalize(sourceRoot);
   const sessionName = isSourceCheckout
     ? null
-    : inferSessionName(sourceRoot, worktreeRoot, currentBranch);
+    : inferSessionName(getMonkeHome(runtime), sourceRoot, worktreeRoot, currentBranch);
 
   return {
     cwd,
@@ -59,12 +70,14 @@ export function resolveRepoContext(runtime: Runtime, cwd: string = runtime.cwd):
   };
 }
 
-export function inferSessionName(sourceRoot: string, worktreeRoot: string, branch: string): string {
-  const expectedRoot = path.join(
-    path.dirname(sourceRoot),
-    ".monke-worktrees",
-    path.basename(sourceRoot),
-  );
+/** Infer a Session name from a linked worktree path under Monke home. */
+export function inferSessionName(
+  home: string,
+  sourceRoot: string,
+  worktreeRoot: string,
+  branch: string,
+): string {
+  const expectedRoot = path.join(home, "worktrees", path.basename(sourceRoot));
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
   const sessionName = toSessionPath(relativeSessionPath);
 
@@ -203,6 +216,35 @@ export function branchExists(runtime: Runtime, sourceRoot: string, branch: strin
   return result.exitCode === 0;
 }
 
+/** Fetch origin if available, then resolve the default branch ref for one source repo. */
+export function resolveDefaultBranchRef(runtime: Runtime, sourceRoot: string): DefaultBranchRef {
+  const fetchResult = runtime.exec("git", ["fetch", "--prune", "origin"], {
+    cwd: sourceRoot,
+    allowFailure: true,
+  });
+
+  const localCandidates: DefaultBranchRef[] = [
+    { branch: "main", ref: "refs/heads/main", source: "local" },
+    { branch: "master", ref: "refs/heads/master", source: "local" },
+  ];
+  let candidates = localCandidates;
+  if (fetchResult.exitCode === 0) {
+    candidates = [
+      { branch: "main", ref: "refs/remotes/origin/main", source: "origin" },
+      { branch: "master", ref: "refs/remotes/origin/master", source: "origin" },
+      ...localCandidates,
+    ];
+  }
+
+  for (const candidate of candidates) {
+    if (refExists(runtime, sourceRoot, candidate.ref)) {
+      return candidate;
+    }
+  }
+
+  throw new MonkeError(`Could not resolve a default branch ref for ${sourceRoot}`);
+}
+
 export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string): void {
   const status = trim(
     runGit(runtime, sourceRoot, ["status", "--porcelain", "--untracked-files=normal"]),
@@ -212,38 +254,22 @@ export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string): void 
   }
 }
 
-export function getExpectedWorktreePath(sourceRoot: string, session: string): string {
-  return path.join(
-    path.dirname(sourceRoot),
-    ".monke-worktrees",
-    path.basename(sourceRoot),
-    session,
-  );
+/** Return the canonical Session worktree path for one repo under Monke home. */
+export function getExpectedWorktreePath(home: string, sourceRoot: string, session: string): string {
+  return path.join(home, "worktrees", path.basename(sourceRoot), session);
 }
 
+/** Ensure the ordinary reusable Session worktree exists under Monke home. */
 export function ensureSessionWorktree(
   runtime: Runtime,
+  home: string,
   sourceRoot: string,
   session: string,
 ): { path: string; created: boolean } {
-  try {
-    runGit(runtime, sourceRoot, ["check-ref-format", "--branch", session]);
-  } catch {
-    throw new MonkeError(`Invalid session name "${session}": must be a valid git branch name`);
-  }
+  validateSessionBranchName(runtime, sourceRoot, session);
 
-  const expectedPath = getExpectedWorktreePath(sourceRoot, session);
-  let worktrees = listWorktrees(runtime, sourceRoot);
-
-  const shouldPruneCachedEntries = worktrees.some(
-    (entry) =>
-      (entry.branch === session || normalize(entry.path) === normalize(expectedPath)) &&
-      (entry.prunable || !existsSync(entry.path)),
-  );
-  if (shouldPruneCachedEntries) {
-    runGit(runtime, sourceRoot, ["worktree", "prune"]);
-    worktrees = listWorktrees(runtime, sourceRoot);
-  }
+  const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
+  const worktrees = listWorktreesAfterPruningSession(runtime, sourceRoot, session, expectedPath);
 
   const branchMatch = worktrees.find(
     (entry) => entry.branch === session && !entry.prunable && existsSync(entry.path),
@@ -294,13 +320,71 @@ export function ensureSessionWorktree(
   return { path: expectedPath, created: true };
 }
 
+/** Create a fresh Session worktree branch from a resolved git ref. */
+export function ensureFreshSessionWorktreeFromRef(
+  runtime: Runtime,
+  home: string,
+  sourceRoot: string,
+  session: string,
+  startRef: string,
+): { path: string; created: boolean } {
+  assertFreshSessionWorktreeAvailable(runtime, home, sourceRoot, session);
+  const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
+
+  mkdirSync(path.dirname(expectedPath), { recursive: true });
+  runGit(runtime, sourceRoot, ["worktree", "add", "-b", session, expectedPath, startRef]);
+  return { path: expectedPath, created: true };
+}
+
+/** Assert that default branch create mode can create a fresh Session worktree. */
+export function assertFreshSessionWorktreeAvailable(
+  runtime: Runtime,
+  home: string,
+  sourceRoot: string,
+  session: string,
+): void {
+  validateSessionBranchName(runtime, sourceRoot, session);
+
+  const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
+  const worktrees = listWorktreesAfterPruningSession(runtime, sourceRoot, session, expectedPath);
+
+  if (branchExists(runtime, sourceRoot, session)) {
+    throw new MonkeError(
+      `Session branch "${session}" already exists for ${sourceRoot}; default branch create mode requires a fresh Session branch`,
+    );
+  }
+
+  const branchMatch = worktrees.find(
+    (entry) => entry.branch === session && !entry.prunable && existsSync(entry.path),
+  );
+  if (branchMatch) {
+    throw new MonkeError(
+      `Session "${session}" already has a worktree at ${branchMatch.path}; default branch create mode requires a fresh Session worktree`,
+    );
+  }
+
+  const pathMatch = worktrees.find(
+    (entry) =>
+      normalize(entry.path) === normalize(expectedPath) &&
+      !entry.prunable &&
+      existsSync(entry.path),
+  );
+  if (pathMatch || existsSync(expectedPath)) {
+    throw new MonkeError(
+      `Session worktree path collision at ${expectedPath}; default branch create mode requires an unused ${path.basename(sourceRoot)}/${session} path`,
+    );
+  }
+}
+
+/** Validate that a worktree is the expected Session worktree for one repo. */
 export function validateWorktreeForSession(
   runtime: Runtime,
+  home: string,
   sourceRoot: string,
   worktreePath: string,
   session: string,
 ): void {
-  const expectedPath = getExpectedWorktreePath(sourceRoot, session);
+  const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
   if (normalize(worktreePath) !== normalize(expectedPath)) {
     throw new MonkeError(
       `Expected session "${session}" worktree at ${expectedPath}, found ${worktreePath}`,
@@ -331,6 +415,43 @@ export function validateWorktreeForSession(
 
 function runGit(runtime: Runtime, cwd: string, args: string[]): string {
   return runtime.exec("git", args, { cwd }).stdout;
+}
+
+function validateSessionBranchName(runtime: Runtime, sourceRoot: string, session: string): void {
+  try {
+    runGit(runtime, sourceRoot, ["check-ref-format", "--branch", session]);
+  } catch {
+    throw new MonkeError(`Invalid session name "${session}": must be a valid git branch name`);
+  }
+}
+
+function listWorktreesAfterPruningSession(
+  runtime: Runtime,
+  sourceRoot: string,
+  session: string,
+  expectedPath: string,
+): WorktreeEntry[] {
+  let worktrees = listWorktrees(runtime, sourceRoot);
+
+  const shouldPruneCachedEntries = worktrees.some(
+    (entry) =>
+      (entry.branch === session || normalize(entry.path) === normalize(expectedPath)) &&
+      (entry.prunable || !existsSync(entry.path)),
+  );
+  if (shouldPruneCachedEntries) {
+    runGit(runtime, sourceRoot, ["worktree", "prune"]);
+    worktrees = listWorktrees(runtime, sourceRoot);
+  }
+
+  return worktrees;
+}
+
+function refExists(runtime: Runtime, sourceRoot: string, ref: string): boolean {
+  const result = runtime.exec("git", ["show-ref", "--verify", "--quiet", ref], {
+    cwd: sourceRoot,
+    allowFailure: true,
+  });
+  return result.exitCode === 0;
 }
 
 function normalize(targetPath: string): string {

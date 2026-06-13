@@ -13,31 +13,88 @@ import path from "node:path";
 import { MonkeError } from "./errors.ts";
 import type { AssignedPort, RepoConfig } from "./types.ts";
 
+/** Options for seeding files from a concrete repo-content root. */
+export interface SeedWorktreeFilesFromRootOptions {
+  /** Parsed repo config whose relative paths are being materialized. */
+  config: RepoConfig;
+  /** Source content root to copy seed files from. */
+  sourceRoot: string;
+  /** Session worktree root that receives seeded files. */
+  worktreeRoot: string;
+  /** Receives non-fatal seed warnings. */
+  onWarning?: (message: string) => void;
+}
+
+/** Options for collecting baseline ports from a concrete repo-content root. */
+export interface CollectBaselinePortsFromRootOptions {
+  /** Parsed repo config whose app env files are inspected. */
+  config: RepoConfig;
+  /** Source content root to read app env files from. */
+  sourceRoot: string;
+}
+
+/** Seed local env files and configured seed paths from the source checkout. */
 export function seedWorktreeFiles(
   config: RepoConfig,
   worktreeRoot: string,
   onWarning?: (message: string) => void,
 ): void {
+  seedWorktreeFilesFromRoot({
+    config,
+    sourceRoot: config.sourceRoot,
+    worktreeRoot,
+    onWarning,
+  });
+}
+
+/** Seed local env files and configured seed paths from a concrete content root. */
+export function seedWorktreeFilesFromRoot(options: SeedWorktreeFilesFromRootOptions): void {
   const seededPaths = new Set<string>();
 
-  for (const relativePath of listEnvFiles(config.sourceRoot)) {
-    seedRelativePath(config.sourceRoot, worktreeRoot, relativePath, false, seededPaths, onWarning);
+  for (const relativePath of listEnvFiles(options.sourceRoot)) {
+    seedRelativePath(
+      options.sourceRoot,
+      options.worktreeRoot,
+      relativePath,
+      false,
+      seededPaths,
+      options.onWarning,
+    );
   }
 
-  for (const relativePath of config.seedPaths) {
-    seedRelativePath(config.sourceRoot, worktreeRoot, relativePath, true, seededPaths, onWarning);
+  for (const relativePath of options.config.seedPaths) {
+    seedRelativePath(
+      options.sourceRoot,
+      options.worktreeRoot,
+      relativePath,
+      true,
+      seededPaths,
+      options.onWarning,
+    );
   }
 }
 
+/** Collect source-checkout ports that local session allocations should avoid. */
 export function collectBaselinePorts(config: RepoConfig): Set<number> {
+  return collectBaselinePortsFromRoot({ config, sourceRoot: config.sourceRoot });
+}
+
+/** Collect content-root ports that local session allocations should avoid. */
+export function collectBaselinePortsFromRoot(
+  options: CollectBaselinePortsFromRootOptions,
+): Set<number> {
   const ports = new Set<number>();
 
-  for (const app of config.appsInOrder) {
+  for (const app of options.config.appsInOrder) {
     if (app.localMappings.length === 0) {
       continue;
     }
 
-    const envPath = path.join(app.absoluteAppPath, app.relativeEnvFile);
+    const envPath = path.join(
+      options.sourceRoot,
+      path.relative(options.config.sourceRoot, app.absoluteAppPath),
+      app.relativeEnvFile,
+    );
     if (!existsSync(envPath)) {
       continue;
     }
@@ -235,6 +292,10 @@ function seedRelativePath(
 
   const targetPath = path.join(worktreeRoot, normalizedRelativePath);
   const sourceIsDirectory = statSync(sourcePath).isDirectory();
+  if (path.normalize(sourcePath) === path.normalize(targetPath)) {
+    return;
+  }
+
   if (existsSync(targetPath)) {
     if (sourceIsDirectory) {
       cpSync(sourcePath, targetPath, {

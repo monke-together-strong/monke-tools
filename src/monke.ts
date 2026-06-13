@@ -6,12 +6,15 @@ import {
   syncRootEnvFile,
   syncRootEnvFileWithRemovals,
   rewriteManagedEnvFiles,
-  seedWorktreeFiles,
-  collectBaselinePorts,
+  seedWorktreeFilesFromRoot,
+  collectBaselinePortsFromRoot,
 } from "./env.ts";
 import {
+  assertFreshSessionWorktreeAvailable,
   ensureSessionWorktree,
+  ensureFreshSessionWorktreeFromRef,
   getExpectedWorktreePath,
+  resolveDefaultBranchRef,
   resolveRepoContext,
   validateWorktreeForSession,
 } from "./git.ts";
@@ -22,6 +25,7 @@ import {
   allocateLocalPorts,
   ensureSessionPrefix,
   getOrCreateReservation,
+  getSessionStateFilePath,
   listSessionStates,
   loadSessionState,
   recordRepoSuccess,
@@ -29,6 +33,7 @@ import {
   saveSessionState,
   toAssignedPorts,
 } from "./registry.ts";
+import type { DefaultBranchRef } from "./git.ts";
 import type {
   AssignedPort,
   RepoConfig,
@@ -42,7 +47,14 @@ import type {
 
 const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
 
-export function runCreate(runtime: Runtime, session: string): void {
+/** Options controlling how `mt create` chooses source content. */
+export interface CreateOptions {
+  /** Selects whether create starts from current HEAD or each repo's default branch. */
+  mode: "current-head" | "default-branch";
+}
+
+/** Create or refresh a Session from the source checkout. */
+export function runCreate(runtime: Runtime, session: string, options: CreateOptions): void {
   if (!session) {
     throw new MonkeError("mt create requires a session name");
   }
@@ -54,26 +66,72 @@ export function runCreate(runtime: Runtime, session: string): void {
 
   ensureWorktrunkInstalled(runtime);
   const home = getMonkeHome(runtime);
+  const createFromDefaultBranch = options.mode === "default-branch";
 
   withGlobalLock(home, () => {
-    const graph = loadResolvedGraph(runtime, context.sourceRoot);
+    if (
+      createFromDefaultBranch &&
+      existsSync(getSessionStateFilePath(home, context.sourceRoot, session))
+    ) {
+      throw new MonkeError(
+        `Session state already exists for "${session}"; default branch create mode requires a fresh Session`,
+      );
+    }
+
+    const defaultRefs = new Map<string, DefaultBranchRef>();
+    const getDefaultRef = (sourceRoot: string): DefaultBranchRef => {
+      let defaultRef = defaultRefs.get(sourceRoot);
+      if (!defaultRef) {
+        defaultRef = resolveDefaultBranchRef(runtime, sourceRoot);
+        defaultRefs.set(sourceRoot, defaultRef);
+      }
+      return defaultRef;
+    };
+    let graph: ReturnType<typeof loadResolvedGraph>;
+    if (createFromDefaultBranch) {
+      graph = loadResolvedGraph(runtime, context.sourceRoot, {
+        readRepoConfig(sourceRoot) {
+          return readGitPathAtRef(runtime, sourceRoot, getDefaultRef(sourceRoot).ref, "monke.yml");
+        },
+        pathExists(sourceRoot, relativePath) {
+          return gitPathExistsAtRef(
+            runtime,
+            sourceRoot,
+            getDefaultRef(sourceRoot).ref,
+            relativePath,
+          );
+        },
+      });
+    } else {
+      graph = loadResolvedGraph(runtime, context.sourceRoot);
+    }
     let sessionState = loadSessionState(home, context.sourceRoot, session);
     ensureSessionPrefix(
       sessionState,
       graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot),
     );
+    assertUniqueExpectedWorktreePaths(home, session, graph.reposInMaterializationOrder);
+    if (createFromDefaultBranch) {
+      for (const repoConfig of graph.reposInMaterializationOrder) {
+        assertFreshSessionWorktreeAvailable(runtime, home, repoConfig.sourceRoot, session);
+      }
+    }
 
     const currentRepoRoot = context.sourceRoot;
     const currentIndex = graph.reposInMaterializationOrder.findIndex(
       (repo) => repo.sourceRoot === currentRepoRoot,
     );
-    const firstWorkIndex = findFirstIndexNeedingWork(
-      runtime,
-      graph.reposInMaterializationOrder,
-      sessionState,
-      session,
-      currentIndex,
-    );
+    let firstWorkIndex = 0;
+    if (!createFromDefaultBranch) {
+      firstWorkIndex = findFirstIndexNeedingWork(
+        runtime,
+        home,
+        graph.reposInMaterializationOrder,
+        sessionState,
+        session,
+        currentIndex,
+      );
+    }
 
     const results = new Map<string, RepoMaterializationResult>();
     for (const [index, repoConfig] of graph.reposInMaterializationOrder.entries()) {
@@ -85,6 +143,7 @@ export function runCreate(runtime: Runtime, session: string): void {
       if (shouldSkip && existingState) {
         validateWorktreeForSession(
           runtime,
+          home,
           repoConfig.sourceRoot,
           existingState.worktreePath,
           session,
@@ -98,7 +157,19 @@ export function runCreate(runtime: Runtime, session: string): void {
         continue;
       }
 
-      const worktree = ensureSessionWorktree(runtime, repoConfig.sourceRoot, session);
+      let worktree: { path: string; created: boolean };
+      if (createFromDefaultBranch) {
+        worktree = ensureFreshSessionWorktreeFromRef(
+          runtime,
+          home,
+          repoConfig.sourceRoot,
+          session,
+          getDefaultRef(repoConfig.sourceRoot).ref,
+        );
+      } else {
+        worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session);
+      }
+
       const materialized = materializeRepo({
         runtime,
         home,
@@ -106,6 +177,7 @@ export function runCreate(runtime: Runtime, session: string): void {
         session,
         repoConfig,
         worktreePath: worktree.path,
+        sourceContentRoot: createFromDefaultBranch ? worktree.path : repoConfig.sourceRoot,
         worktreeCreated: worktree.created,
         existingState,
         dependencyResults: results,
@@ -159,11 +231,11 @@ export function runMaterialize(runtime: Runtime): void {
       const isCurrentRepo = repoConfig.sourceRoot === currentRepoRoot;
       const dependencyWorktree = isCurrentRepo
         ? null
-        : ensureSessionWorktree(runtime, repoConfig.sourceRoot, session);
+        : ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session);
       const worktreePath = isCurrentRepo ? context.worktreeRoot : dependencyWorktree.path;
 
       if (isCurrentRepo) {
-        validateWorktreeForSession(runtime, repoConfig.sourceRoot, worktreePath, session);
+        validateWorktreeForSession(runtime, home, repoConfig.sourceRoot, worktreePath, session);
       }
 
       const materialized = materializeRepo({
@@ -173,6 +245,7 @@ export function runMaterialize(runtime: Runtime): void {
         session,
         repoConfig,
         worktreePath,
+        sourceContentRoot: repoConfig.sourceRoot,
         worktreeCreated: isCurrentRepo ? false : dependencyWorktree.created,
         existingState,
         dependencyResults: results,
@@ -252,6 +325,7 @@ function materializeRepo(options: {
   session: string;
   repoConfig: RepoConfig;
   worktreePath: string;
+  sourceContentRoot: string;
   worktreeCreated: boolean;
   existingState: SessionRepoState | undefined;
   dependencyResults: Map<string, RepoMaterializationResult>;
@@ -263,14 +337,20 @@ function materializeRepo(options: {
     session,
     repoConfig,
     worktreePath,
+    sourceContentRoot,
     worktreeCreated,
     existingState,
     dependencyResults,
   } = options;
 
   if (worktreeCreated) {
-    seedWorktreeFiles(repoConfig, worktreePath, (message) => {
-      options.runtime.writeStderr(`${message}\n`);
+    seedWorktreeFilesFromRoot({
+      config: repoConfig,
+      sourceRoot: sourceContentRoot,
+      worktreeRoot: worktreePath,
+      onWarning(message) {
+        options.runtime.writeStderr(`${message}\n`);
+      },
     });
   }
 
@@ -324,7 +404,10 @@ function materializeRepo(options: {
     repoConfig.sourceRoot,
     repoConfig.localPortOrder.length,
   );
-  const baselinePorts = collectBaselinePorts(repoConfig);
+  const baselinePorts = collectBaselinePortsFromRoot({
+    config: repoConfig,
+    sourceRoot: sourceContentRoot,
+  });
   const localAssignments = allocateLocalPorts({
     home,
     rootSourceRoot,
@@ -570,6 +653,47 @@ function runBootstrapCommand(
   }
 }
 
+function assertUniqueExpectedWorktreePaths(
+  home: string,
+  session: string,
+  reposInOrder: RepoConfig[],
+): void {
+  const ownerByPath = new Map<string, string>();
+  for (const repoConfig of reposInOrder) {
+    const expectedPath = getExpectedWorktreePath(home, repoConfig.sourceRoot, session);
+    const normalizedPath = path.normalize(expectedPath);
+    const existingOwner = ownerByPath.get(normalizedPath);
+    if (existingOwner) {
+      throw new MonkeError(
+        `Session worktree path collision at ${expectedPath}: ${existingOwner} and ${repoConfig.sourceRoot} both resolve to ${path.basename(repoConfig.sourceRoot)}/${session}`,
+      );
+    }
+    ownerByPath.set(normalizedPath, repoConfig.sourceRoot);
+  }
+}
+
+function readGitPathAtRef(
+  runtime: Runtime,
+  sourceRoot: string,
+  ref: string,
+  relativePath: string,
+): string {
+  return runtime.exec("git", ["show", `${ref}:${relativePath}`], { cwd: sourceRoot }).stdout;
+}
+
+function gitPathExistsAtRef(
+  runtime: Runtime,
+  sourceRoot: string,
+  ref: string,
+  relativePath: string,
+): boolean {
+  const result = runtime.exec("git", ["cat-file", "-e", `${ref}:${relativePath}`], {
+    cwd: sourceRoot,
+    allowFailure: true,
+  });
+  return result.exitCode === 0;
+}
+
 function ensureWorktrunkInstalled(runtime: Runtime): void {
   let wt = findExecutable("wt", runtime.env);
 
@@ -591,6 +715,7 @@ function ensureWorktrunkInstalled(runtime: Runtime): void {
 
 function findFirstIndexNeedingWork(
   runtime: Runtime,
+  home: string,
   reposInOrder: RepoConfig[],
   state: SessionState,
   session: string,
@@ -611,14 +736,20 @@ function findFirstIndexNeedingWork(
       return index;
     }
 
-    const expectedPath = getExpectedWorktreePath(repoConfig.sourceRoot, session);
+    const expectedPath = getExpectedWorktreePath(home, repoConfig.sourceRoot, session);
     if (path.normalize(existing.worktreePath) !== path.normalize(expectedPath)) {
       throw new MonkeError(
         `Session ${session} recorded ${existing.worktreePath} for ${repoConfig.sourceRoot}, expected ${expectedPath}`,
       );
     }
 
-    validateWorktreeForSession(runtime, repoConfig.sourceRoot, existing.worktreePath, session);
+    validateWorktreeForSession(
+      runtime,
+      home,
+      repoConfig.sourceRoot,
+      existing.worktreePath,
+      session,
+    );
   }
 
   return currentRepoIndex;
