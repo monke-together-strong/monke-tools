@@ -166,6 +166,22 @@ _Avoid_: External skill, third-party skill, copied skill
 The operation that brings selected **Imported skills** from an outside source into the **Skill source tree**.
 _Avoid_: Skill install, skill add, skill sync
 
+**Skill import recipe**:
+A remembered description of one **Skill import** that can be rerun to refresh the same **Imported skills** from the same outside source.
+_Avoid_: Lock file, update config, import cache
+
+**Skill import recipe store**:
+A repo-tracked file in the **Skill source tree** that records **Skill import recipes** shared by everyone maintaining monke-tools.
+_Avoid_: Global monke config, local preference, session state
+
+**Skill import selector**:
+The upstream-facing skill identifier passed to a **Skill import** to choose one imported skill from its outside source.
+_Avoid_: Skill slug, agent skill name, folder name
+
+**Imported skill owner**:
+The one **Skill import recipe** that is allowed to refresh a particular **Imported skill** in the **Skill source tree**.
+_Avoid_: Last import wins, source hint, fallback recipe
+
 **Agent skill root**:
 An agent-readable directory where monke-tools installs a namespaced set of **Distributed skills**.
 _Avoid_: Skill discovery surface, package root, compiled executable
