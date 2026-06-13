@@ -88,14 +88,7 @@ test("resource command retained inputs are scoped to the declaring repo across r
     "monke.yml": `resources:
   commands:
     e2e-symbols:
-      command: |
-        cat > command-stdin.json
-        if grep -q 'SOL/USDT:USDT' command-stdin.json; then
-          value='LINK/USDT:USDT'
-        else
-          value='SOL/USDT:USDT'
-        fi
-        printf '{"E2E_FLOW1_SYMBOL":"%s"}' "$value"
+      run: ./scripts/e2e-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL
 apps:
@@ -105,6 +98,16 @@ apps:
     mappings:
       - port: DEP_POSTGRES_PORT
         env: PORT
+`,
+    "scripts/e2e-symbols.ts": `import { writeFileSync } from "node:fs";
+
+export default function ({ previous }) {
+  writeFileSync("command-stdin.json", JSON.stringify(previous));
+  const value = previous.E2E_FLOW1_SYMBOL.includes("SOL/USDT:USDT")
+    ? "LINK/USDT:USDT"
+    : "SOL/USDT:USDT";
+  return { E2E_FLOW1_SYMBOL: value };
+}
 `,
   });
 

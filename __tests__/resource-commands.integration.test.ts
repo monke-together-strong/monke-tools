@@ -17,9 +17,19 @@ import {
 test("create runs resource commands from the worktree and writes outputs to root env and state", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-commands",
-    command: `pwd > command-cwd.log
-cat > command-stdin.json
-printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT","E2E_FLOW2_SYMBOL":"LINK/USDT:USDT"}'`,
+    module: `import { writeFileSync } from "node:fs";
+
+export default function ({ previous }) {
+  writeFileSync("command-cwd.log", process.cwd() + "\\n");
+  writeFileSync("command-stdin.json", JSON.stringify(previous));
+  console.log("allocator progress");
+  console.error("allocator detail");
+  return {
+    E2E_FLOW1_SYMBOL: "SOL/USDT:USDT",
+    E2E_FLOW2_SYMBOL: "LINK/USDT:USDT",
+  };
+}
+`,
     outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
   });
 
@@ -59,12 +69,22 @@ test("create builds resource command stdin from retained command outputs only", 
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-retained-input",
     resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}",
-    command: `cat > command-stdin.json
-if grep -q 'SOL/USDT:USDT' command-stdin.json; then
-  printf '%s' '{"E2E_FLOW1_SYMBOL":"LINK/USDT:USDT","E2E_FLOW2_SYMBOL":"NEAR/USDT:USDT"}'
-else
-  printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT","E2E_FLOW2_SYMBOL":"ATOM/USDT:USDT"}'
-fi`,
+    module: `import { writeFileSync } from "node:fs";
+
+export default function ({ previous }) {
+  writeFileSync("command-stdin.json", JSON.stringify(previous));
+  if (previous.E2E_FLOW1_SYMBOL.includes("SOL/USDT:USDT")) {
+    return {
+      E2E_FLOW1_SYMBOL: "LINK/USDT:USDT",
+      E2E_FLOW2_SYMBOL: "NEAR/USDT:USDT",
+    };
+  }
+  return {
+    E2E_FLOW1_SYMBOL: "SOL/USDT:USDT",
+    E2E_FLOW2_SYMBOL: "ATOM/USDT:USDT",
+  };
+}
+`,
     outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
   });
   saveSessionState(scenario.home, {
@@ -107,8 +127,16 @@ fi`,
 test("create dedupes retained resource command input values", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-input-dedupe",
-    command: `cat > command-stdin.json
-printf '%s' '{"E2E_FLOW1_SYMBOL":"LINK/USDT:USDT","E2E_FLOW2_SYMBOL":"ATOM/USDT:USDT"}'`,
+    module: `import { writeFileSync } from "node:fs";
+
+export default function ({ previous }) {
+  writeFileSync("command-stdin.json", JSON.stringify(previous));
+  return {
+    E2E_FLOW1_SYMBOL: "LINK/USDT:USDT",
+    E2E_FLOW2_SYMBOL: "ATOM/USDT:USDT",
+  };
+}
+`,
     outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
   });
   saveSessionState(scenario.home, {
@@ -190,17 +218,32 @@ printf '%s' '{"E2E_FLOW1_SYMBOL":"LINK/USDT:USDT","E2E_FLOW2_SYMBOL":"ATOM/USDT:
 test("materialize excludes current-session command outputs when rerunning incomplete outputs", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-current-session-input",
-    command: "printf '%s' '{\"E2E_FLOW1_SYMBOL\":\"SOL/USDT:USDT\"}'",
+    module: `export default function () {
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
   });
 
   scenario.create("banana");
   scenario.writeRoot(
     "monke.yml",
     singleCommandMonkeYml({
-      command: `cat > command-stdin-rerun.json
-printf '%s' '{"E2E_FLOW1_SYMBOL":"LINK/USDT:USDT","E2E_FLOW2_SYMBOL":"ATOM/USDT:USDT"}'`,
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
     }),
+  );
+  scenario.writeWorktree(
+    "banana",
+    "scripts/resource-command.ts",
+    `import { writeFileSync } from "node:fs";
+
+export default function ({ previous }) {
+  writeFileSync("command-stdin-rerun.json", JSON.stringify(previous));
+  return {
+    E2E_FLOW1_SYMBOL: "LINK/USDT:USDT",
+    E2E_FLOW2_SYMBOL: "ATOM/USDT:USDT",
+  };
+}
+`,
   );
 
   scenario.materialize("banana");
@@ -214,8 +257,13 @@ printf '%s' '{"E2E_FLOW1_SYMBOL":"LINK/USDT:USDT","E2E_FLOW2_SYMBOL":"ATOM/USDT:
 test("create rejects same-output resource command collisions", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-output-collision",
-    command: `cat > command-stdin.json
-printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'`,
+    module: `import { writeFileSync } from "node:fs";
+
+export default function ({ previous }) {
+  writeFileSync("command-stdin.json", JSON.stringify(previous));
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
   });
 
   scenario.create("first");
@@ -228,12 +276,22 @@ printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'`,
 test("create leaves cross-output uniqueness to repo-owned resource commands", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-cross-output",
-    command: `cat > command-stdin.json
-if grep -q 'ALPHA/USDT:USDT' command-stdin.json; then
-  printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT","E2E_FLOW2_SYMBOL":"LINK/USDT:USDT"}'
-else
-  printf '%s' '{"E2E_FLOW1_SYMBOL":"ALPHA/USDT:USDT","E2E_FLOW2_SYMBOL":"SOL/USDT:USDT"}'
-fi`,
+    module: `import { writeFileSync } from "node:fs";
+
+export default function ({ previous }) {
+  writeFileSync("command-stdin.json", JSON.stringify(previous));
+  if (previous.E2E_FLOW1_SYMBOL.includes("ALPHA/USDT:USDT")) {
+    return {
+      E2E_FLOW1_SYMBOL: "SOL/USDT:USDT",
+      E2E_FLOW2_SYMBOL: "LINK/USDT:USDT",
+    };
+  }
+  return {
+    E2E_FLOW1_SYMBOL: "ALPHA/USDT:USDT",
+    E2E_FLOW2_SYMBOL: "SOL/USDT:USDT",
+  };
+}
+`,
     outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
   });
   saveSessionState(scenario.home, {
@@ -268,7 +326,10 @@ fi`,
 test("resource command renames create a new retained input namespace", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-rename",
-    command: "printf '%s' '{\"E2E_FLOW1_SYMBOL\":\"SOL/USDT:USDT\"}'",
+    module: `export default function () {
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
   });
 
   scenario.create("banana");
@@ -276,9 +337,18 @@ test("resource command renames create a new retained input namespace", () => {
     "monke.yml",
     singleCommandMonkeYml({
       commandName: "renamed-symbols",
-      command: `cat > command-stdin-renamed.json
-printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'`,
     }),
+  );
+  scenario.writeWorktree(
+    "banana",
+    "scripts/resource-command.ts",
+    `import { writeFileSync } from "node:fs";
+
+export default function ({ previous }) {
+  writeFileSync("command-stdin-renamed.json", JSON.stringify(previous));
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
   );
 
   scenario.materialize("banana");
@@ -294,17 +364,29 @@ test("multiple resource commands run in YAML order", () => {
     monkeYml: withDefaultApp(`resources:
   commands:
     first-symbols:
-      command: |
-        printf '%s\\n' first >> command-order.log
-        printf '%s' '{"FIRST_SYMBOL":"SOL/USDT:USDT"}'
+      run: ./scripts/first-symbols.ts
       outputs:
         - FIRST_SYMBOL
     second-symbols:
-      command: |
-        printf '%s\\n' second >> command-order.log
-        printf '%s' '{"SECOND_SYMBOL":"LINK/USDT:USDT"}'
+      run: ./scripts/second-symbols.ts
       outputs:
         - SECOND_SYMBOL`),
+    files: {
+      "scripts/first-symbols.ts": `import { appendFileSync } from "node:fs";
+
+export default function () {
+  appendFileSync("command-order.log", "first\\n");
+  return { FIRST_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
+      "scripts/second-symbols.ts": `import { appendFileSync } from "node:fs";
+
+export default function () {
+  appendFileSync("command-order.log", "second\\n");
+  return { SECOND_SYMBOL: "LINK/USDT:USDT" };
+}
+`,
+    },
   });
 
   scenario.create("banana");
@@ -315,15 +397,19 @@ test("multiple resource commands run in YAML order", () => {
 test("retained dead session states contribute until cleanup removes them", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-cleanup-boundary",
-    command: `cat > command-stdin.json
-if grep -q 'LINK/USDT:USDT' command-stdin.json; then
-  value='ATOM/USDT:USDT'
-elif grep -q 'SOL/USDT:USDT' command-stdin.json; then
-  value='LINK/USDT:USDT'
-else
-  value='SOL/USDT:USDT'
-fi
-printf '{"E2E_FLOW1_SYMBOL":"%s"}' "$value"`,
+    module: `import { writeFileSync } from "node:fs";
+
+export default function ({ previous }) {
+  writeFileSync("command-stdin.json", JSON.stringify(previous));
+  let value = "SOL/USDT:USDT";
+  if (previous.E2E_FLOW1_SYMBOL.includes("LINK/USDT:USDT")) {
+    value = "ATOM/USDT:USDT";
+  } else if (previous.E2E_FLOW1_SYMBOL.includes("SOL/USDT:USDT")) {
+    value = "LINK/USDT:USDT";
+  }
+  return { E2E_FLOW1_SYMBOL: value };
+}
+`,
   });
   saveSessionState(scenario.home, {
     version: 1,
@@ -364,11 +450,17 @@ printf '{"E2E_FLOW1_SYMBOL":"%s"}' "$value"`,
 test("create and materialize reuse complete resource command outputs and prune undeclared outputs", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-reuse",
-    command: `count=0
-if [ -f command-runs ]; then count=$(cat command-runs); fi
-count=$((count + 1))
-printf '%s' "$count" > command-runs
-printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT","E2E_FLOW2_SYMBOL":"LINK/USDT:USDT"}'`,
+    module: `import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+export default function () {
+  const count = existsSync("command-runs") ? Number(readFileSync("command-runs", "utf8")) : 0;
+  writeFileSync("command-runs", String(count + 1));
+  return {
+    E2E_FLOW1_SYMBOL: "SOL/USDT:USDT",
+    E2E_FLOW2_SYMBOL: "LINK/USDT:USDT",
+  };
+}
+`,
     outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
   });
 
@@ -396,11 +488,14 @@ printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT","E2E_FLOW2_SYMBOL":"LINK/USDT:U
 test("materialize reruns resource commands when remembered outputs are incomplete", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-incomplete",
-    command: `count=0
-if [ -f command-runs ]; then count=$(cat command-runs); fi
-count=$((count + 1))
-printf '%s' "$count" > command-runs
-printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'`,
+    module: `import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+export default function () {
+  const count = existsSync("command-runs") ? Number(readFileSync("command-runs", "utf8")) : 0;
+  writeFileSync("command-runs", String(count + 1));
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
   });
 
   scenario.create("banana");
@@ -409,13 +504,23 @@ printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'`,
   scenario.writeRoot(
     "monke.yml",
     singleCommandMonkeYml({
-      command: `count=0
-if [ -f command-runs ]; then count=$(cat command-runs); fi
-count=$((count + 1))
-printf '%s' "$count" > command-runs
-printf '%s' '{"E2E_FLOW1_SYMBOL":"LINK/USDT:USDT","E2E_FLOW2_SYMBOL":"ATOM/USDT:USDT"}'`,
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
     }),
+  );
+  scenario.writeWorktree(
+    "banana",
+    "scripts/resource-command.ts",
+    `import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+export default function () {
+  const count = existsSync("command-runs") ? Number(readFileSync("command-runs", "utf8")) : 0;
+  writeFileSync("command-runs", String(count + 1));
+  return {
+    E2E_FLOW1_SYMBOL: "LINK/USDT:USDT",
+    E2E_FLOW2_SYMBOL: "ATOM/USDT:USDT",
+  };
+}
+`,
   );
 
   scenario.materialize("banana");
@@ -430,11 +535,14 @@ test("create persists resource command outputs before later materialization fail
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-partial",
     appEnv: "OTHER=keep\n",
-    command: `count=0
-if [ -f command-runs ]; then count=$(cat command-runs); fi
-count=$((count + 1))
-printf '%s' "$count" > command-runs
-printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'`,
+    module: `import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+export default function () {
+  const count = existsSync("command-runs") ? Number(readFileSync("command-runs", "utf8")) : 0;
+  writeFileSync("command-runs", String(count + 1));
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
   });
 
   expect(() => scenario.create("banana")).toThrow(/Missing mapped env vars/);
@@ -470,8 +578,13 @@ printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'`,
 test("materialize can prune stale resource command env after a failed rerun retry", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-prune-after-failure",
-    command:
-      'printf \'%s\' \'{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT","E2E_FLOW2_SYMBOL":"LINK/USDT:USDT"}\'',
+    module: `export default function () {
+  return {
+    E2E_FLOW1_SYMBOL: "SOL/USDT:USDT",
+    E2E_FLOW2_SYMBOL: "LINK/USDT:USDT",
+  };
+}
+`,
     outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
   });
 
@@ -480,10 +593,19 @@ test("materialize can prune stale resource command env after a failed rerun retr
   scenario.writeRoot(
     "monke.yml",
     singleCommandMonkeYml({
-      command:
-        'printf \'%s\' \'{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT","E2E_FLOW3_SYMBOL":"ATOM/USDT:USDT"}\'',
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW3_SYMBOL"],
     }),
+  );
+  scenario.writeWorktree(
+    "banana",
+    "scripts/resource-command.ts",
+    `export default function () {
+  return {
+    E2E_FLOW1_SYMBOL: "SOL/USDT:USDT",
+    E2E_FLOW3_SYMBOL: "ATOM/USDT:USDT",
+  };
+}
+`,
   );
 
   expect(() => scenario.materialize("banana")).toThrow(/Missing mapped env vars/);
@@ -511,45 +633,162 @@ test("materialize can prune stale resource command env after a failed rerun retr
 
 test.each([
   {
-    name: "invalid JSON",
-    command: "printf '%s' 'not-json'",
-    expected: /kind: invalid stdout JSON[\s\S]*stdout:[\s\S]*not-json/,
+    name: "non-object return",
+    module: `export default function () {
+  console.log("returning scalar");
+  return "not-object";
+}
+`,
+    expected: /kind: return contract violation[\s\S]*stdout:[\s\S]*returning scalar/,
   },
   {
     name: "missing output",
-    command: "printf '%s' '{}'",
-    expected: /kind: stdout contract violation[\s\S]*stdout:[\s\S]*\{\}/,
+    module: `export default function () {
+  return {};
+}
+`,
+    expected: /kind: return contract violation/,
   },
   {
     name: "extra output",
-    command: 'printf \'%s\' \'{"E2E_FLOW1_SYMBOL":"SOL","EXTRA":"x"}\'',
-    expected: /kind: stdout contract violation[\s\S]*stdout:[\s\S]*EXTRA/,
+    module: `export default function () {
+  return { E2E_FLOW1_SYMBOL: "SOL", EXTRA: "x" };
+}
+`,
+    expected: /kind: return contract violation/,
   },
   {
     name: "non-string output",
-    command: "printf '%s' '{\"E2E_FLOW1_SYMBOL\":42}'",
-    expected: /kind: stdout contract violation[\s\S]*stdout:[\s\S]*42/,
+    module: `export default function () {
+  return { E2E_FLOW1_SYMBOL: 42 };
+}
+`,
+    expected: /kind: return contract violation/,
   },
   {
     name: "empty output",
-    command: "printf '%s' '{\"E2E_FLOW1_SYMBOL\":\"   \"}'",
-    expected: /kind: stdout contract violation[\s\S]*stdout:/,
+    module: `export default function () {
+  return { E2E_FLOW1_SYMBOL: "   " };
+}
+`,
+    expected: /kind: return contract violation[\s\S]*stdout:/,
   },
-])("create rejects resource command stdout with $name", ({ command, expected }) => {
+])("create rejects resource command returns with $name", ({ module, expected }) => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-contract",
-    command,
+    module,
   });
 
   expect(() => scenario.create("banana")).toThrow(expected);
 });
 
-test("create reports nonzero resource command failures without stdout", () => {
+test.each([
+  {
+    name: "missing default export",
+    module: `export const allocate = () => ({ E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" });
+`,
+    expected: /must export a default function/,
+  },
+  {
+    name: "default export not a function",
+    module: `export default { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+`,
+    expected: /default export must be a function/,
+  },
+  {
+    name: "thrown error",
+    module: `export default function () {
+  console.log("stdout before failure");
+  console.error("stderr before failure");
+  throw new Error("allocator boom");
+}
+`,
+    expected:
+      /kind: nonzero exit 1[\s\S]*stdout before failure[\s\S]*stderr before failure[\s\S]*allocator boom/,
+  },
+  {
+    name: "rejected error",
+    module: `export default async function () {
+  throw new Error("async allocator boom");
+}
+`,
+    expected: /kind: nonzero exit 1[\s\S]*async allocator boom/,
+  },
+])("create reports resource command module failures with $name", ({ module, expected }) => {
   const scenario = createResourceCommandScenario({
-    name: "single-repo-resource-command-nonzero",
-    command: `printf '%s' "$SECRET_STDOUT"
-printf '%s' 'allocator stderr' >&2
-exit 7`,
+    name: "single-repo-resource-command-module-failure",
+    module,
+  });
+
+  expect(() => scenario.create("banana")).toThrow(expected);
+});
+
+test("create reports missing resource command modules", () => {
+  const scenario = createResourceCommandScenario({
+    name: "single-repo-resource-command-missing-module",
+    monkeYml: singleCommandMonkeYml({ run: "./scripts/missing-module.ts" }),
+  });
+
+  expect(() => scenario.create("banana")).toThrow(
+    /Resource command e2e-symbols failed[\s\S]*(Cannot find module|Module not found)/,
+  );
+});
+
+test("create accepts async default exports and ignores stdout and stderr logging on success", () => {
+  const scenario = createResourceCommandScenario({
+    name: "single-repo-resource-command-async-success",
+    module: `export default async function () {
+  console.log("stdout should not affect success");
+  console.error("stderr should not affect success");
+  await Promise.resolve();
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
+  });
+
+  scenario.create("banana");
+
+  expect(scenario.readWorktree("banana", ".env")).toBe(
+    "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
+  );
+});
+
+test("create imports resource modules without triggering direct execution guards", () => {
+  const scenario = createResourceCommandScenario({
+    name: "single-repo-resource-command-direct-guard",
+    module: `import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export default function () {
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+
+if (isDirectExecution(import.meta.url)) {
+  throw new Error("direct execution path should not run during resource import");
+}
+
+function isDirectExecution(importMetaUrl) {
+  return Boolean(process.argv[1] && fileURLToPath(importMetaUrl) === resolve(process.argv[1]));
+}
+`,
+  });
+
+  scenario.create("banana");
+
+  expect(scenario.readWorktree("banana", ".env")).toBe(
+    "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
+  );
+});
+
+test("create reports thrown resource command failures with captured stdout and stderr", () => {
+  const scenario = createResourceCommandScenario({
+    name: "single-repo-resource-command-throw",
+    module: `export default function () {
+  console.log(process.env.SECRET_STDOUT);
+  console.error("allocator stderr");
+  throw new Error("allocator failed");
+}
+`,
   });
 
   let message = "";
@@ -559,15 +798,19 @@ exit 7`,
     message = error instanceof Error ? error.message : String(error);
   }
   expect(message).toMatch(
-    /Resource command e2e-symbols failed[\s\S]*kind: nonzero exit 7[\s\S]*allocator stderr/,
+    /Resource command e2e-symbols failed[\s\S]*kind: nonzero exit 1[\s\S]*allocator stderr/,
   );
-  expect(message).not.toContain("secret stdout");
+  expect(message).toContain("secret stdout");
 });
 
 test("create reports resource command timeouts", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-timeout",
-    command: "sleep 5",
+    module: `export default async function () {
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
     timeoutSeconds: 1,
   });
 
@@ -596,12 +839,13 @@ interface ResourceCommandScenario {
 function createResourceCommandScenario(options: {
   name: string;
   appEnv?: string;
-  command?: string;
   commandName?: string;
   files?: Record<string, string>;
   monkeYml?: string;
+  module?: string;
   outputs?: string[];
   resourceValuesYaml?: string;
+  run?: string;
   timeoutSeconds?: number;
 }): ResourceCommandScenario {
   const sandbox = makeTempDir(options.name);
@@ -609,9 +853,11 @@ function createResourceCommandScenario(options: {
   installFakeWt(binDirectory);
   installShShim(binDirectory);
   const home = path.join(sandbox, "home");
+  const moduleFiles = options.module ? { [moduleFilePath(options.run)]: options.module } : {};
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": options.appEnv ?? "PORT=3000\n",
     "monke.yml": options.monkeYml ?? singleCommandMonkeYml(options),
+    ...moduleFiles,
     ...options.files,
   });
 
@@ -663,16 +909,12 @@ function createResourceCommandScenario(options: {
 }
 
 function singleCommandMonkeYml(options: {
-  command?: string;
   commandName?: string;
   outputs?: string[];
   resourceValuesYaml?: string;
+  run?: string;
   timeoutSeconds?: number;
 }): string {
-  if (!options.command) {
-    throw new Error("Resource command scenario requires command or monkeYml");
-  }
-
   const resourceValues = options.resourceValuesYaml
     ? `  values:\n${indentBlock(options.resourceValuesYaml, 4)}\n`
     : "";
@@ -680,11 +922,14 @@ function singleCommandMonkeYml(options: {
   return withDefaultApp(`resources:
 ${resourceValues}  commands:
     ${options.commandName ?? "e2e-symbols"}:
-      command: |
-${indentBlock(options.command, 8)}
+      run: ${options.run ?? "./scripts/resource-command.ts"}
       timeoutSeconds: ${options.timeoutSeconds ?? 60}
       outputs:
 ${outputs.map((output) => `        - ${output}`).join("\n")}`);
+}
+
+function moduleFilePath(run = "./scripts/resource-command.ts"): string {
+  return path.normalize(run);
 }
 
 function appOnlyMonkeYml(): string {

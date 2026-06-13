@@ -359,7 +359,7 @@ test("cleanupCommand receives resource command output env", () => {
 resources:
   commands:
     e2e-symbols:
-      command: printf '%s' '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}'
+      run: ./scripts/e2e-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL
 apps:
@@ -369,6 +369,10 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
+`,
+    "scripts/e2e-symbols.ts": `export default function () {
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
 `,
   });
 

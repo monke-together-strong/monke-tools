@@ -1,3 +1,7 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import { MonkeError } from "./errors.ts";
 import { listSessionStates } from "./registry.ts";
 import { withScopedLock } from "./runtime.ts";
@@ -27,6 +31,41 @@ export interface ResolvedResourceCommands {
 }
 
 type ResourceCommandInput = Record<string, string[]>;
+
+const RESOURCE_COMMAND_RUNNER_ARGV = "monke-resource-command-runner";
+
+const RESOURCE_COMMAND_MODULE_RUNNER = [
+  'import { pathToFileURL } from "node:url";',
+  "",
+  "const runnerArgv = process.argv[1];",
+  "const modulePath = process.argv[2];",
+  "const outputPath = process.argv[3];",
+  "",
+  "function fail(message) {",
+  "  console.error(message);",
+  "  process.exit(1);",
+  "}",
+  "",
+  "try {",
+  `  if (runnerArgv !== ${JSON.stringify(RESOURCE_COMMAND_RUNNER_ARGV)} || !modulePath || !outputPath) {`,
+  '    fail("Missing resource command runner arguments");',
+  "  }",
+  "  const previousText = await Bun.stdin.text();",
+  "  const previous = previousText.trim() ? JSON.parse(previousText) : {};",
+  "  const resourceModule = await import(pathToFileURL(modulePath).href);",
+  '  if (!Object.prototype.hasOwnProperty.call(resourceModule, "default")) {',
+  "    fail(`Resource command module ${modulePath} must export a default function`);",
+  "  }",
+  '  if (typeof resourceModule.default !== "function") {',
+  "    fail(`Resource command module ${modulePath} default export must be a function`);",
+  "  }",
+  "  const value = await resourceModule.default({ previous });",
+  "  await Bun.write(outputPath, JSON.stringify({ value }));",
+  "} catch (error) {",
+  "  console.error(error instanceof Error && error.stack ? error.stack : String(error));",
+  "  process.exit(1);",
+  "}",
+].join("\n");
 
 /** Resolve, reuse, prune, and collision-check deterministic Resource values. */
 export function resolveResourceValues(options: {
@@ -189,41 +228,92 @@ function runResourceCommand(options: {
   resourceValues: ResourceValueState[];
 }): ResourceCommandState {
   const stdin = JSON.stringify(options.stdin);
-  const result = options.runtime.exec("sh", ["-c", options.command.command], {
-    cwd: options.worktreePath,
-    env: Object.fromEntries(
-      options.resourceValues.map((resource) => [resource.env, resource.value]),
-    ),
-    stdin,
-    timeoutSeconds: options.command.timeoutSeconds,
-    allowFailure: true,
-  });
+  const outputDirectory = mkdtempSync(path.join(tmpdir(), "monke-resource-command-"));
+  const outputPath = path.join(outputDirectory, "output.json");
+  const modulePath = resolveResourceCommandRunPath(options.worktreePath, options.command);
 
-  if (result.timedOut) {
-    throw resourceCommandFailure({
+  try {
+    const runner = resolveResourceCommandRunner(options.worktreePath);
+    const result = options.runtime.exec(runner.command, runner.args(modulePath, outputPath), {
+      cwd: options.worktreePath,
+      env: Object.fromEntries(
+        options.resourceValues.map((resource) => [resource.env, resource.value]),
+      ),
+      stdin,
+      timeoutSeconds: options.command.timeoutSeconds,
+      allowFailure: true,
+    });
+
+    if (result.timedOut) {
+      throw resourceCommandFailure({
+        command: options.command,
+        kind: "timeout",
+        stdout: result.stdout,
+        stderr: result.stderr,
+      });
+    }
+
+    if (result.exitCode !== 0) {
+      throw resourceCommandFailure({
+        command: options.command,
+        kind: `nonzero exit ${result.exitCode}`,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      });
+    }
+
+    const returned = readResourceCommandRunnerOutput({
       command: options.command,
-      kind: "timeout",
+      outputPath,
+      stdout: result.stdout,
       stderr: result.stderr,
     });
+    const outputs = validateResourceCommandReturn(
+      options.command,
+      returned,
+      result.stdout,
+      result.stderr,
+      options.stdin,
+    );
+    return {
+      name: options.command.name,
+      outputs,
+    };
+  } finally {
+    rmSync(outputDirectory, { recursive: true, force: true });
+  }
+}
+
+function resolveResourceCommandRunner(worktreePath: string): {
+  command: string;
+  args: (modulePath: string, outputPath: string) => string[];
+} {
+  if (existsSync(path.join(worktreePath, "pnpm-lock.yaml"))) {
+    return {
+      command: "pnpm",
+      args: (modulePath, outputPath) => [
+        "exec",
+        "bun",
+        "--eval",
+        RESOURCE_COMMAND_MODULE_RUNNER,
+        "--",
+        RESOURCE_COMMAND_RUNNER_ARGV,
+        modulePath,
+        outputPath,
+      ],
+    };
   }
 
-  if (result.exitCode !== 0) {
-    throw resourceCommandFailure({
-      command: options.command,
-      kind: `nonzero exit ${result.exitCode}`,
-      stderr: result.stderr,
-    });
-  }
-
-  const outputs = validateResourceCommandStdout(
-    options.command,
-    result.stdout,
-    result.stderr,
-    options.stdin,
-  );
   return {
-    name: options.command.name,
-    outputs,
+    command: "bun",
+    args: (modulePath, outputPath) => [
+      "--eval",
+      RESOURCE_COMMAND_MODULE_RUNNER,
+      "--",
+      RESOURCE_COMMAND_RUNNER_ARGV,
+      modulePath,
+      outputPath,
+    ],
   };
 }
 
@@ -278,34 +368,65 @@ function buildResourceCommandInput(options: {
   );
 }
 
-function validateResourceCommandStdout(
-  command: ResourceCommandConfig,
-  stdout: string,
-  stderr: string,
-  stdin: ResourceCommandInput,
-): Array<{ env: string; value: string }> {
-  let parsed: unknown;
+function readResourceCommandRunnerOutput(options: {
+  command: ResourceCommandConfig;
+  outputPath: string;
+  stdout: string;
+  stderr: string;
+}): unknown {
+  let outputText: string;
   try {
-    parsed = JSON.parse(stdout);
+    outputText = readFileSync(options.outputPath, "utf8");
   } catch {
     throw resourceCommandFailure({
-      command,
-      kind: "invalid stdout JSON",
-      stderr,
-      stdout,
+      command: options.command,
+      kind: "runner protocol violation",
+      stdout: options.stdout,
+      stderr: options.stderr,
+    });
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(outputText);
+  } catch {
+    throw resourceCommandFailure({
+      command: options.command,
+      kind: "runner protocol violation",
+      stdout: options.stdout,
+      stderr: options.stderr,
     });
   }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw resourceCommandFailure({
-      command,
-      kind: "stdout contract violation",
-      stderr,
-      stdout,
+      command: options.command,
+      kind: "runner protocol violation",
+      stdout: options.stdout,
+      stderr: options.stderr,
     });
   }
 
-  const value = parsed as Record<string, unknown>;
+  return (parsed as Record<string, unknown>).value;
+}
+
+function validateResourceCommandReturn(
+  command: ResourceCommandConfig,
+  returned: unknown,
+  stdout: string,
+  stderr: string,
+  stdin: ResourceCommandInput,
+): Array<{ env: string; value: string }> {
+  if (!returned || typeof returned !== "object" || Array.isArray(returned)) {
+    throw resourceCommandFailure({
+      command,
+      kind: "return contract violation",
+      stdout,
+      stderr,
+    });
+  }
+
+  const value = returned as Record<string, unknown>;
   const expected = new Set(command.outputs);
   const actual = Object.keys(value);
   const missing = command.outputs.filter((output) => !(output in value));
@@ -313,9 +434,9 @@ function validateResourceCommandStdout(
   if (missing.length > 0 || extra.length > 0) {
     throw resourceCommandFailure({
       command,
-      kind: "stdout contract violation",
-      stderr,
+      kind: "return contract violation",
       stdout,
+      stderr,
     });
   }
 
@@ -324,34 +445,47 @@ function validateResourceCommandStdout(
     if (typeof outputValue !== "string" || !outputValue.trim()) {
       throw resourceCommandFailure({
         command,
-        kind: "stdout contract violation",
-        stderr,
+        kind: "return contract violation",
         stdout,
+        stderr,
       });
     }
     if ((stdin[env] ?? []).includes(outputValue)) {
       throw resourceCommandFailure({
         command,
         kind: `same-output collision for ${env}`,
-        stderr,
         stdout,
+        stderr,
       });
     }
     return { env, value: outputValue };
   });
 }
 
+function resolveResourceCommandRunPath(
+  worktreePath: string,
+  command: ResourceCommandConfig,
+): string {
+  const resolved = path.resolve(worktreePath, command.run);
+  const relative = path.relative(worktreePath, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new MonkeError(
+      `Resource command ${command.name} run path must resolve inside ${worktreePath}: ${command.run}`,
+    );
+  }
+  return resolved;
+}
+
 function resourceCommandFailure(options: {
   command: ResourceCommandConfig;
   kind: string;
+  stdout: string;
   stderr: string;
-  stdout?: string;
 }): MonkeError {
+  const stdout = options.stdout.trim() || "<empty>";
   const stderr = options.stderr.trim() || "<empty>";
-  const stdout =
-    options.stdout === undefined ? "" : `\nstdout:\n${options.stdout.trim() || "<empty>"}`;
   return new MonkeError(
-    `Resource command ${options.command.name} failed: ${options.command.command}\nkind: ${options.kind}\nstderr:\n${stderr}${stdout}`,
+    `Resource command ${options.command.name} failed: ${options.command.run}\nkind: ${options.kind}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
   );
 }
 

@@ -51,7 +51,7 @@ The `monke.yml` field that configures resource cleanup for one repo.
 _Avoid_: Resource cleanup command, teardown script
 
 **Resource command**:
-A named repo-scoped command run from a session worktree to choose dynamic session values while monke-tools coordinates concurrent runs.
+A named repo-scoped default-export JS/TS module run from a session worktree to choose dynamic session values while monke-tools coordinates concurrent runs.
 _Avoid_: Provider, allocator, pool
 
 **Declaring repo**:
@@ -67,7 +67,7 @@ The remembered values from other retained session states for previous runs of th
 _Avoid_: Claim list, session history, lock state
 
 **Resource command contract**:
-The machine-readable stdin/stdout exchange for a resource command: resource command input is provided on stdin, and resource command output is returned on stdout.
+The machine-readable function contract for a resource command: remembered values are passed as the `previous` argument field, and resource command output is returned from the default-export function.
 _Avoid_: CLI log format, cleanup protocol
 
 **Command lock**:
@@ -117,6 +117,10 @@ _Avoid_: Published package, consumer dependency, package-manager link
 **Local install refresh**:
 The act of rebuilding the **Local tool install** from the current monke-tools source checkout before validating behavior in a **Consumer repo**.
 _Avoid_: Publish, dependency update, session refresh
+
+**Monke home**:
+The machine-local directory where monke-tools keeps state, preferences, and owned **Session worktrees** shared across **Consumer repos**.
+_Avoid_: OS home, repo root, source checkout
 
 **Global monke config**:
 Machine-local monke-tools preferences that apply across **Consumer repos** and are stored outside any repo checkout as versioned YAML at `config.yml` under the monke home directory.
@@ -218,6 +222,10 @@ _Avoid_: Default port, existing assignment
 The operation that creates or updates all required session worktrees from a source checkout.
 _Avoid_: Initialize, provision
 
+**Default branch create mode**:
+A **Create** mode that creates missing session branches from each participating repo's local default branch instead of the current source checkout commit.
+_Avoid_: Arbitrary base branch, from branch
+
 **Materialize**:
 The operation that refreshes the current session by reapplying seeding, path syncing, env rewrites, and bootstrap behavior.
 _Avoid_: Refresh, rebuild
@@ -247,14 +255,16 @@ _Avoid_: Delete session, prune repos
 - **Resource values** configure deterministic **Session resources**.
 - A **Resource cleanup** belongs to one repo and may use any **Session resources** and **Resource command outputs** resolved for that repo.
 - **Session resources** for different **Session worktrees** must resolve to distinct values when they use the same resource name.
+- **Default branch create mode** resolves `main` and `master` separately for each repo participating in a **Session**.
+- **Default branch create mode** only affects missing session branches.
 - A **Cleanup command** runs from the repo's **Source checkout** when cleanup finds a **Dead worktree**.
 - A **Cleanup command** receives **Session resources**, **Resource command outputs**, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment.
 - A **Resource command** belongs to one repo and runs for one **Session worktree**.
 - A **Declaring repo** owns the namespace for its **Resource commands**.
 - A **Resource command** runs from the target **Session worktree**.
 - A **Resource command** name uses the same lowercase label style as repo configuration labels.
-- A **Resource command** has a non-empty shell command and one or more declared **Resource command outputs**.
-- A **Resource command** executes as a repo-authored shell command.
+- A **Resource command** has a non-empty `run` module path and one or more declared **Resource command outputs**.
+- A **Resource command** executes as a repo-authored default-export JS/TS module.
 - A **Resource command timeout** defaults to 60 seconds unless the repo config overrides it.
 - A **Resource command output** belongs to one **Resource command** run for one **Session worktree**.
 - A **Resource command** declares one or more required **Resource command outputs**.
@@ -271,9 +281,9 @@ _Avoid_: Delete session, prune repos
 - A **Resource command** name defines the input and lock namespace; renaming a **Resource command** creates a new namespace.
 - A **Resource command input** does not include **Session resources**.
 - A **Resource command output** may not reuse a value already present for the same output name in the **Resource command input**.
-- A **Resource command contract** uses stdin for **Resource command input** and stdout for **Resource command output** as the only monke-specific command channels.
-- **Resource command** failures identify the command, the failure kind, and stderr; stdout is diagnostic only when it violates the **Resource command contract**.
-- **Resource commands** do not receive **Session resources** or other **Resource command outputs** through monke-specific environment variables.
+- A **Resource command contract** calls a repo-owned default-export module with **Resource command input** under a `previous` field and expects the returned object to contain **Resource command output**.
+- **Resource command** failures identify the command, the failure kind, stdout, and stderr; stdout and stderr are diagnostic logs, not the success protocol.
+- **Resource commands** receive deterministic **Session resources** through process env, but earlier **Resource command outputs** only through the `previous` function argument.
 - **Create** and **Materialize** reuse complete remembered **Resource command outputs** and run the **Resource command** only when outputs are missing or incomplete.
 - Persisted **Resource command outputs** are the durable boundary for reuse after a failed **Create** or **Materialize** attempt.
 - **Resource command outputs** are persisted immediately after they are validated.
@@ -298,6 +308,7 @@ _Avoid_: Delete session, prune repos
 - A **Local tool install** can make one `mt` command available to many **Consumer repos** on the same machine.
 - A **Local tool install** may also install **Distributed skills** into one or more **Agent skill roots**.
 - A **Local tool install** does not require a package-manager link.
+- **Monke home** may contain **Session worktrees** for many **Consumer repos**.
 - **Global monke config** belongs to the machine, not to a **Consumer repo** or **Session**.
 - **Global monke config** lives at `$MONKE_HOME/config.yml`, defaulting to `~/.monke/config.yml`.
 - The initial **Global monke config** format version is `1`.

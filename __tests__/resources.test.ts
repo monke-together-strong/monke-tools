@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { resolveResourceCommands } from "../src/resources.ts";
@@ -28,7 +28,7 @@ test("resource command lock covers command execution and immediate persistence",
     resourceCommandsInOrder: [
       {
         name: "e2e-symbols",
-        command: "allocate-symbols",
+        run: "scripts/allocate-symbols.ts",
         timeoutSeconds: 60,
         outputs: ["E2E_FLOW1_SYMBOL"],
       },
@@ -45,13 +45,22 @@ test("resource command lock covers command execution and immediate persistence",
     cwd: sourceRoot,
     env: {},
     exec(command, args, options) {
-      expect(command).toBe("sh");
-      expect(args).toEqual(["-c", "allocate-symbols"]);
+      expect(command).toBe("bun");
+      expect(args?.[0]).toBe("--eval");
+      expect(args?.[2]).toBe("--");
+      expect(args?.[3]).toBe("monke-resource-command-runner");
+      expect(args?.[4]).toBe(path.join(sourceRoot, "scripts/allocate-symbols.ts"));
       expect(options?.cwd).toBe(sourceRoot);
       commandSawLock = existsSync(lockPath);
       expect(JSON.parse(options?.stdin ?? "")).toEqual({ E2E_FLOW1_SYMBOL: [] });
+      expect(options?.env).toEqual({ E2E_CHANNEL_NAME: "banana" });
+      writeFileSync(
+        args?.[5] ?? "",
+        JSON.stringify({ value: { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" } }),
+        "utf8",
+      );
       return {
-        stdout: '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}',
+        stdout: "progress log\n",
         stderr: "",
         exitCode: 0,
       };
@@ -102,7 +111,7 @@ test("resource command input values are sorted for deterministic stdin", () => {
     resourceCommandsInOrder: [
       {
         name: "e2e-symbols",
-        command: "allocate-symbols",
+        run: "scripts/allocate-symbols.ts",
         timeoutSeconds: 60,
         outputs: ["E2E_FLOW1_SYMBOL"],
       },
@@ -158,11 +167,17 @@ test("resource command input values are sorted for deterministic stdin", () => {
   const runtime: Runtime = {
     cwd: sourceRoot,
     env: {},
-    exec(_command, _args, options) {
+    exec(command, args, options) {
+      expect(command).toBe("bun");
       stdin = JSON.parse(options?.stdin ?? "");
       commandEnv = options?.env;
+      writeFileSync(
+        args?.[5] ?? "",
+        JSON.stringify({ value: { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" } }),
+        "utf8",
+      );
       return {
-        stdout: '{"E2E_FLOW1_SYMBOL":"SOL/USDT:USDT"}',
+        stdout: "",
         stderr: "",
         exitCode: 0,
       };
@@ -186,4 +201,76 @@ test("resource command input values are sorted for deterministic stdin", () => {
     E2E_FLOW1_SYMBOL: ["ADA/USDT:USDT", "ZEC/USDT:USDT"],
   });
   expect(commandEnv).toEqual({ E2E_CHANNEL_NAME: "current" });
+});
+
+test("pnpm workspaces run resource modules through pnpm-mediated bun", () => {
+  const sandbox = makeTempDir("resources-command-pnpm-runner");
+  const home = path.join(sandbox, "home");
+  const sourceRoot = path.join(sandbox, "repo");
+  mkdirSync(sourceRoot, { recursive: true });
+  writeFileSync(path.join(sourceRoot, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", "utf8");
+  const repoConfig: RepoConfig = {
+    sourceRoot,
+    configPath: path.join(sourceRoot, "monke.yml"),
+    seedPaths: [],
+    resourceValuesInOrder: [],
+    resourceCommandsInOrder: [
+      {
+        name: "e2e-symbols",
+        run: "scripts/allocate-symbols.ts",
+        timeoutSeconds: 60,
+        outputs: ["E2E_FLOW1_SYMBOL"],
+      },
+    ],
+    appsInOrder: [],
+    appsByLabel: new Map(),
+    externalInOrder: [],
+    localPortOrder: [],
+    localMappingsByPort: new Map(),
+    externalMappingsInOrder: [],
+    externalTargetApps: new Set(),
+  };
+  let invocation: { command: string; args: string[] | undefined } | null = null;
+
+  const runtime: Runtime = {
+    cwd: sourceRoot,
+    env: {},
+    exec(command, args, _options) {
+      invocation = { command, args };
+      writeFileSync(
+        args?.[7] ?? "",
+        JSON.stringify({ value: { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" } }),
+        "utf8",
+      );
+      return {
+        stdout: "pnpm progress log\n",
+        stderr: "",
+        exitCode: 0,
+      };
+    },
+    writeStdout() {},
+    writeStderr() {},
+  };
+
+  resolveResourceCommands({
+    runtime,
+    home,
+    session: "current",
+    repoConfig,
+    existingRepoState: undefined,
+    worktreePath: sourceRoot,
+    resourceValues: [],
+    onResolvedCommandOutputs() {},
+  });
+
+  expect(invocation?.command).toBe("pnpm");
+  expect(invocation?.args?.slice(0, 5)).toEqual([
+    "exec",
+    "bun",
+    "--eval",
+    expect.any(String),
+    "--",
+  ]);
+  expect(invocation?.args?.[5]).toBe("monke-resource-command-runner");
+  expect(invocation?.args?.[6]).toBe(path.join(sourceRoot, "scripts/allocate-symbols.ts"));
 });
