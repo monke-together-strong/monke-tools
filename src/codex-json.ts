@@ -62,6 +62,9 @@ export async function runCodexJson<TSchema extends z.ZodTypeAny>(
     const args = buildCodexJsonArgs(options, schemaPath, outputPath);
     const startedAt = new Date();
     const processResult = await runCodexJsonProcess(options, args);
+    const capturedOutputText = await tryReadOutputFile(outputPath);
+    await writeCodexJsonLog(options, processResult, capturedOutputText, startedAt);
+
     if (processResult.timedOut) {
       throw new MonkeError(
         formatCodexProcessError(
@@ -72,9 +75,6 @@ export async function runCodexJson<TSchema extends z.ZodTypeAny>(
         ),
       );
     }
-
-    const capturedOutputText = await tryReadOutputFile(outputPath);
-    await writeCodexJsonLog(options, processResult, capturedOutputText, startedAt);
 
     if (processResult.exitCode !== 0) {
       throw new MonkeError(
@@ -181,7 +181,12 @@ function timeoutProcessResult(processResult: CodexProcessResult): CodexProcessRe
   return {
     ...processResult,
     exitCode: -1,
-    stderr: processResult.signal ? `terminated by signal ${processResult.signal}` : "timed out",
+    stderr: [
+      processResult.stderr,
+      processResult.signal ? `terminated by signal ${processResult.signal}` : "timed out",
+    ]
+      .filter(Boolean)
+      .join("\n"),
   };
 }
 

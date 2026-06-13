@@ -127,6 +127,35 @@ test("runCodexProcess terminates a process when the timeout elapses", async () =
   expect(result.timedOut).toBe(true);
 });
 
+test("runCodexProcess force terminates a timeout process that ignores SIGTERM", async () => {
+  const sandbox = makeTempDir("codex-process-force-timeout");
+  const scriptPath = path.join(sandbox, "slow-codex-ignore-term.ts");
+  writeFileSync(
+    scriptPath,
+    [
+      "process.on('SIGTERM', () => {});",
+      "process.stdin.resume();",
+      "process.stdin.on('end', () => setInterval(() => {}, 1_000));",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const result = await runCodexProcess({
+    command: process.execPath,
+    args: [scriptPath],
+    cwd: sandbox,
+    env: process.env,
+    stdin: "prompt",
+    timeoutMs: 50,
+    forceKillGraceMs: 50,
+  });
+
+  expect(result.exitCode).toBe(-1);
+  expect(result.signal).toBe("SIGKILL");
+  expect(result.timedOut).toBe(true);
+});
+
 function writeExecutable(targetPath: string, contents: string): void {
   mkdirSync(path.dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, contents, "utf8");

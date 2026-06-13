@@ -2,6 +2,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 
 import { formatCommand } from "./runtime.ts";
 
+const DEFAULT_FORCE_KILL_GRACE_MS = 1_000;
+
 /** Raw result from one Codex CLI child process invocation. */
 export interface CodexProcessResult {
   /** Process exit code, or -1 when the process ended without an exit code. */
@@ -34,6 +36,8 @@ export interface RunCodexProcessOptions {
   readonly captureOutput?: boolean;
   /** Optional timeout before the child process is terminated. */
   readonly timeoutMs?: number;
+  /** Grace period after timeout SIGTERM before SIGKILL. Defaults to 1 second. */
+  readonly forceKillGraceMs?: number;
   /** Optional hook for live stdout streaming. */
   readonly onStdout?: (chunk: Buffer) => void;
   /** Optional hook for live stderr streaming. */
@@ -65,12 +69,19 @@ export function runCodexProcess(options: RunCodexProcessOptions): Promise<CodexP
     let timedOut = false;
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | undefined;
+    let forceKillTimeout: ReturnType<typeof setTimeout> | undefined;
     let child: ChildProcessWithoutNullStreams;
+    let cleanupStdinErrorListener: () => void = () => {};
 
-    const clearProcessTimeout = (): void => {
+    const clearProcessTimeouts = (): void => {
       if (timeout !== undefined) {
         clearTimeout(timeout);
         timeout = undefined;
+      }
+
+      if (forceKillTimeout !== undefined) {
+        clearTimeout(forceKillTimeout);
+        forceKillTimeout = undefined;
       }
     };
 
@@ -80,7 +91,8 @@ export function runCodexProcess(options: RunCodexProcessOptions): Promise<CodexP
       }
 
       settled = true;
-      clearProcessTimeout();
+      clearProcessTimeouts();
+      cleanupStdinErrorListener();
       reject(error);
     };
 
@@ -90,7 +102,8 @@ export function runCodexProcess(options: RunCodexProcessOptions): Promise<CodexP
       }
 
       settled = true;
-      clearProcessTimeout();
+      clearProcessTimeouts();
+      cleanupStdinErrorListener();
       resolve(result);
     };
 
@@ -116,7 +129,10 @@ export function runCodexProcess(options: RunCodexProcessOptions): Promise<CodexP
     if (options.timeoutMs !== undefined) {
       timeout = setTimeout(() => {
         timedOut = true;
-        child.kill();
+        child.kill("SIGTERM");
+        forceKillTimeout = setTimeout(() => {
+          child.kill("SIGKILL");
+        }, options.forceKillGraceMs ?? DEFAULT_FORCE_KILL_GRACE_MS);
       }, options.timeoutMs);
     }
 
@@ -165,7 +181,15 @@ export function runCodexProcess(options: RunCodexProcessOptions): Promise<CodexP
       });
     });
 
-    child.stdin.end(options.stdin);
+    const handleStdinError = (): void => {
+      cleanupStdinErrorListener();
+    };
+    cleanupStdinErrorListener = (): void => {
+      child.stdin.off("error", handleStdinError);
+    };
+
+    child.stdin.once("error", handleStdinError);
+    child.stdin.end(options.stdin, cleanupStdinErrorListener);
   });
 }
 

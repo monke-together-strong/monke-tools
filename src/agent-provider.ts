@@ -108,10 +108,6 @@ export class CodexAgentProvider implements AgentProvider {
         );
       }
 
-      if (streamError) {
-        throw new MonkeError(`Failed to write log ${options.logPath}: ${streamError.message}`);
-      }
-
       if (processResult.signal !== null) {
         throw new MonkeError(
           `Command failed: ${formatCommand(this.#codexPath, args)}\nterminated by signal ${
