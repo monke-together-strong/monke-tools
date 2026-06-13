@@ -22,6 +22,7 @@
     "monke-tools": "bun run src/index.ts",
     "install:local": "sh ./scripts/install-local.sh",
     "skills:import": "bun run scripts/import-skills.ts",
+    "skills:update": "bun run scripts/update-skills.ts",
     "test": "bunx --bun vitest run",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",

@@ -171,6 +171,8 @@ export interface SessionState {
   version: 1;
   rootSourceRoot: string;
   session: string;
+  /** Where lifecycle commands should reload repo config for this session graph. */
+  graphSource?: "session-branch";
   repos: SessionRepoState[];
 }
 

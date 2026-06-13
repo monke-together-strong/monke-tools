@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "recipes": [
+    {
+      "source": "drogers0/gh-image",
+      "skills": [
+        {
+          "selector": "github-image-upload",
+          "slug": "github-image-upload"
+        }
+      ]
+    },
+    {
+      "source": "mattpocock/skills",
+      "skills": [
+        {
+          "selector": "diagnose",
+          "slug": "diagnose"
+        },
+        {
+          "selector": "grill-me",
+          "slug": "grill-me"
+        },
+        {
+          "selector": "grill-with-docs",
+          "slug": "grill-with-docs"
+        },
+        {
+          "selector": "handoff",
+          "slug": "handoff"
+        },
+        {
+          "selector": "improve-codebase-architecture",
+          "slug": "improve-codebase-architecture"
+        },
+        {
+          "selector": "prototype",
+          "slug": "prototype"
+        },
+        {
+          "selector": "tdd",
+          "slug": "tdd"
+        },
+        {
+          "selector": "teach",
+          "slug": "teach"
+        },
+        {
+          "selector": "to-issues",
+          "slug": "to-issues"
+        },
+        {
+          "selector": "to-prd",
+          "slug": "to-prd"
+        },
+        {
+          "selector": "zoom-out",
+          "slug": "zoom-out"
+        }
+      ]
+    },
+    {
+      "source": "openclaw/agent-skills",
+      "acceptOpenClawRisks": true,
+      "skills": [
+        {
+          "selector": "autoreview",
+          "slug": "autoreview"
+        }
+      ]
+    },
+    {
+      "source": "shadcn/improve",
+      "skills": [
+        {
+          "selector": "improve",
+          "slug": "improve"
+        }
+      ]
+    }
+  ]
+}

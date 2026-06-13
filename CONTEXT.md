@@ -15,7 +15,7 @@ The original Git checkout from which a session is created.
 _Avoid_: Main worktree, root worktree
 
 **Session worktree**:
-A linked Git worktree created for a specific repo inside a session.
+A linked Git worktree created for a specific repo inside a session, stored under the **Monke home** worktree area as `worktrees/<repo-name>/<session>`.
 _Avoid_: Checkout copy, clone
 
 **Root repo**:
@@ -29,6 +29,10 @@ _Avoid_: External repo, child repo
 **Session state**:
 The persisted record of which repos belong to a session, where their worktrees live, and which ports were assigned.
 _Avoid_: Cache, registry entry
+
+**Session state store**:
+The module that owns **Session state** for one operation: opened under the global lock, it scans retained session states once, serves cross-session queries, and persists repo checkpoints.
+_Avoid_: Registry, cache, state manager
 
 **Session resource**:
 A per-session string value resolved for a repo, persisted in session state, written to the session root `.env`, and optionally used during cleanup.
@@ -119,7 +123,7 @@ The act of rebuilding the **Local tool install** from the current monke-tools so
 _Avoid_: Publish, dependency update, session refresh
 
 **Monke home**:
-The machine-local directory where monke-tools keeps state, preferences, and owned **Session worktrees** shared across **Consumer repos**.
+The machine-local directory where monke-tools keeps state, preferences, and owned **Session worktrees** shared across **Consumer repos**. Defaults to `~/.monke`; Session worktrees live under `worktrees/<repo-name>/<session>` within this directory.
 _Avoid_: OS home, repo root, source checkout
 
 **Global monke config**:
@@ -161,6 +165,22 @@ _Avoid_: External skill, third-party skill, copied skill
 **Skill import**:
 The operation that brings selected **Imported skills** from an outside source into the **Skill source tree**.
 _Avoid_: Skill install, skill add, skill sync
+
+**Skill import recipe**:
+A remembered description of one **Skill import** that can be rerun to refresh the same **Imported skills** from the same outside source.
+_Avoid_: Lock file, update config, import cache
+
+**Skill import recipe store**:
+A repo-tracked file in the **Skill source tree** that records **Skill import recipes** shared by everyone maintaining monke-tools.
+_Avoid_: Global monke config, local preference, session state
+
+**Skill import selector**:
+The upstream-facing skill identifier passed to a **Skill import** to choose one imported skill from its outside source.
+_Avoid_: Skill slug, agent skill name, folder name
+
+**Imported skill owner**:
+The one **Skill import recipe** that is allowed to refresh a particular **Imported skill** in the **Skill source tree**.
+_Avoid_: Last import wins, source hint, fallback recipe
 
 **Agent skill root**:
 An agent-readable directory where monke-tools installs a namespaced set of **Distributed skills**.
@@ -219,11 +239,11 @@ _Avoid_: Default port, existing assignment
 ### Session operations
 
 **Create**:
-The operation that creates or updates all required session worktrees from a source checkout.
+The operation that creates or updates all required session worktrees from a source checkout, using current `HEAD` unless **Default branch create mode** is requested.
 _Avoid_: Initialize, provision
 
 **Default branch create mode**:
-A **Create** mode that creates missing session branches from each participating repo's local default branch instead of the current source checkout commit.
+A **Create** mode selected by `mt create <session> -m`, `--main`, or `--master`. It creates fresh session branches from each participating repo's default branch content, prefers fetched `origin/main` then `origin/master`, falls back to local `main` then `master`, and rejects existing Session state or Session branches.
 _Avoid_: Arbitrary base branch, from branch
 
 **Materialize**:
@@ -248,6 +268,9 @@ _Avoid_: Delete session, prune repos
 - A **Session** may include one or more **Dependency repos**.
 - Each participating repo contributes exactly one **Session worktree** per **Session**.
 - A **Session state** records one entry per participating repo in the **Session**.
+- A **Session state store** is opened once per **Create**, **Materialize**, or **Cleanup** and is the only reader and writer of **Session state** during that operation.
+- A **Session state store** serves assigned-port usage, remembered **Resource command outputs**, and **Resource value** collision queries from one scan of retained **Session states**.
+- A **Resource command** receives its remembered outputs and its checkpoint capability from the **Session state store**, not from direct session-state reads.
 - A **Session resource** belongs to exactly one repo within one **Session state**.
 - A **Session state** may remember **Resource command outputs** for a repo within one **Session**.
 - Remembered **Resource command outputs** are grouped by **Resource command** name in **Session state**.
@@ -255,7 +278,7 @@ _Avoid_: Delete session, prune repos
 - **Resource values** configure deterministic **Session resources**.
 - A **Resource cleanup** belongs to one repo and may use any **Session resources** and **Resource command outputs** resolved for that repo.
 - **Session resources** for different **Session worktrees** must resolve to distinct values when they use the same resource name.
-- **Default branch create mode** resolves `main` and `master` separately for each repo participating in a **Session**.
+- **Default branch create mode** prefers fetched remote `main` or `master` and may fall back to local `main` or `master`.
 - **Default branch create mode** requires fresh session branches.
 - **Default branch create mode** materializes from default-branch content, not from uncommitted or branch-local source checkout changes.
 - A **Cleanup command** runs from the repo's **Source checkout** when cleanup finds a **Dead worktree**.
@@ -354,6 +377,10 @@ _Avoid_: Delete session, prune repos
 - The **Core distributed skill** uses `core` as its **Skill slug** and `monke-tools-core` as its **Agent skill name**.
 - A **Distributed skill** is either an **Internal skill** or an **Imported skill**.
 - An **Imported skill** preserves its upstream **Agent skill name** by default.
+- Each **Imported skill** has exactly one **Imported skill owner**.
+- A **Skill import recipe** belongs to the **Skill import recipe store**.
+- A **Skill import recipe** records the **Skill import selector** and import metadata needed to reproduce a **Skill import**.
+- A **Skill import recipe** can be rerun to refresh the **Imported skills** it owns.
 - A **Skill namespace** contains only monke-tools **Distributed skills**.
 - A **Skill namespace** is always named `monke-tools`.
 - A **Managed skill namespace** is a symlink to the **Skill source tree**.
