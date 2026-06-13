@@ -83,11 +83,11 @@ export interface ResourceValueConfig {
 export interface ResourceCommandConfig {
   /** Lowercase command label used as the Resource command namespace. */
   name: string;
-  /** Shell command run from the target session worktree through sh -c. */
-  command: string;
+  /** Repo-relative JS/TS module path run from the target session worktree. */
+  run: string;
   /** Positive timeout in seconds for the Resource command. */
   timeoutSeconds: number;
-  /** Uppercase environment variable names the command must return in stdout JSON. */
+  /** Uppercase environment variable names the function must return. */
   outputs: string[];
 }
 

@@ -19,6 +19,7 @@ import type {
 const LABEL_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ENV_RE = /^[A-Z][A-Z0-9_]*$/;
 const PORT_RE = /^[A-Z][A-Z0-9_]*_PORT$/;
+const RUN_MODULE_EXTENSION_RE = /\.(?:[cm]?[jt]s|jsx|tsx)$/;
 const DEFAULT_ENV_FILE = ".env";
 const DEFAULT_RESOURCE_COMMAND_TIMEOUT_SECONDS = 60;
 
@@ -524,7 +525,7 @@ function parseResources(
       const commandValue = asRecord(rawCommand, `${configPath}#resources.commands.${name}`);
       assertKnownKeys(
         commandValue,
-        ["command", "timeoutSeconds", "outputs"],
+        ["run", "timeoutSeconds", "outputs"],
         `${configPath}#resources.commands.${name}`,
       );
 
@@ -536,9 +537,9 @@ function parseResources(
       );
       resourceCommandsInOrder.push({
         name,
-        command: requireString(
-          commandValue.command,
-          `${configPath}#resources.commands.${name}.command`,
+        run: requireResourceCommandRunPath(
+          commandValue.run,
+          `${configPath}#resources.commands.${name}.run`,
         ),
         timeoutSeconds: requireResourceCommandTimeout(
           commandValue.timeoutSeconds,
@@ -581,6 +582,29 @@ function requireResourceCommandOutputs(
     outputs.push(env);
   }
   return outputs;
+}
+
+function requireResourceCommandRunPath(value: unknown, location: string): string {
+  const relativePath = requireString(value, location);
+  if (path.isAbsolute(relativePath)) {
+    throw new MonkeError(`${location} must be a relative JS/TS module path`);
+  }
+
+  const normalizedPath = path.normalize(relativePath);
+  if (
+    normalizedPath === "." ||
+    normalizedPath.startsWith(`..${path.sep}`) ||
+    normalizedPath === ".." ||
+    path.isAbsolute(normalizedPath)
+  ) {
+    throw new MonkeError(`${location} must resolve inside the session worktree`);
+  }
+
+  if (!RUN_MODULE_EXTENSION_RE.test(normalizedPath)) {
+    throw new MonkeError(`${location} must be a relative JS/TS module path`);
+  }
+
+  return normalizedPath;
 }
 
 function requireResourceCommandTimeout(value: unknown, location: string): number {
