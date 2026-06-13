@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
 import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { CodexProcessSpawnError, runCodexProcess } from "./codex-process-runner.ts";
 import { MonkeError } from "./errors.ts";
 import { formatCommand } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
@@ -60,93 +60,77 @@ export class CodexAgentProvider implements AgentProvider {
   }
 
   /** Execute Codex with live stdout/stderr teeing and a self-describing phase log. */
-  run(options: AgentRunOptions): Promise<AgentRunResult> {
+  async run(options: AgentRunOptions): Promise<AgentRunResult> {
     const startedAt = new Date();
     mkdirSync(path.dirname(options.logPath), { recursive: true });
     writeFileSync(options.logPath, this.#formatLogHeader(options, startedAt), "utf8");
     const logStream = createWriteStream(options.logPath, { flags: "a" });
 
     const args = this.#buildCodexArgs(options);
-    const child = spawn(this.#codexPath, args, {
-      cwd: options.repoRoot,
-      env: this.#runtime.env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    let streamError: Error | null = null;
 
-    child.stdout.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8");
-      logStream.write(chunk);
-      this.#runtime.writeStdout(text);
-    });
-
-    child.stderr.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8");
-      logStream.write(chunk);
-      this.#runtime.writeStderr(text);
-    });
-
-    const completion = new Promise<AgentRunResult>((resolve, reject) => {
-      let settled = false;
-      let streamError: Error | null = null;
-
-      const rejectOnce = (error: Error): void => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        reject(error);
-      };
-
-      const resolveOnce = (result: AgentRunResult): void => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        resolve(result);
-      };
-
-      logStream.on("error", (error) => {
-        streamError = error;
-        child.kill();
-        rejectOnce(new MonkeError(`Failed to write log ${options.logPath}: ${error.message}`));
+    try {
+      const processResult = await runCodexProcess({
+        command: this.#codexPath,
+        args,
+        cwd: options.repoRoot,
+        env: this.#runtime.env,
+        stdin: options.prompt,
+        captureOutput: false,
+        onProcess(child) {
+          logStream.on("error", (error) => {
+            streamError = error;
+            child.kill();
+          });
+        },
+        onStdout: (chunk) => {
+          const text = chunk.toString("utf8");
+          logStream.write(chunk);
+          this.#runtime.writeStdout(text);
+        },
+        onStderr: (chunk) => {
+          const text = chunk.toString("utf8");
+          logStream.write(chunk);
+          this.#runtime.writeStderr(text);
+        },
       });
 
-      child.on("error", (error) => {
+      if (streamError) {
         logStream.destroy();
-        rejectOnce(
-          new MonkeError(`Failed to run ${formatCommand(this.#codexPath, args)}: ${error.message}`),
+        throw new MonkeError(`Failed to write log ${options.logPath}: ${streamError.message}`);
+      }
+
+      try {
+        await finishLogStream(logStream);
+      } catch (error) {
+        throw new MonkeError(
+          `Failed to write log ${options.logPath}: ${formatUnknownError(error)}`,
         );
-      });
+      }
 
-      child.on("close", (exitCode, signal) => {
-        const completedAt = new Date();
-        const durationMs = completedAt.getTime() - startedAt.getTime();
-        if (settled) {
-          return;
-        }
+      if (streamError) {
+        throw new MonkeError(`Failed to write log ${options.logPath}: ${streamError.message}`);
+      }
 
-        logStream.end(() => {
-          if (streamError) {
-            return;
-          }
+      if (processResult.signal !== null) {
+        throw new MonkeError(
+          `Command failed: ${formatCommand(this.#codexPath, args)}\nterminated by signal ${
+            processResult.signal
+          }`,
+        );
+      }
 
-          if (exitCode === null) {
-            const reason = signal ? `terminated by signal ${signal}` : "terminated by signal";
-            rejectOnce(
-              new MonkeError(`Command failed: ${formatCommand(this.#codexPath, args)}\n${reason}`),
-            );
-            return;
-          }
+      return { exitCode: processResult.exitCode, durationMs: processResult.durationMs };
+    } catch (error) {
+      logStream.destroy();
+      if (error instanceof CodexProcessSpawnError) {
+        throw new MonkeError(
+          `Failed to run ${formatCommand(this.#codexPath, args)}: ${error.message}`,
+        );
+      }
 
-          resolveOnce({ exitCode, durationMs });
-        });
-      });
-    });
-
-    child.stdin.end(options.prompt);
-    return completion;
+      throw error;
+    }
   }
 
   #buildCodexArgs(options: AgentRunOptions): string[] {
@@ -173,4 +157,26 @@ export class CodexAgentProvider implements AgentProvider {
       "",
     ].join("\n");
   }
+}
+
+function finishLogStream(logStream: ReturnType<typeof createWriteStream>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      logStream.off("error", rejectStreamError);
+    };
+    const rejectStreamError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+
+    logStream.once("error", rejectStreamError);
+    logStream.end(() => {
+      cleanup();
+      resolve();
+    });
+  });
+}
+
+function formatUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

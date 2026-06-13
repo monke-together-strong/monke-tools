@@ -1,12 +1,18 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import * as z from "zod";
 
 import type { CodexReasoningEffort } from "./agent-provider.ts";
+import {
+  CodexProcessSpawnError,
+  formatCodexProcessDetails,
+  formatCodexProcessError,
+  formatUnknownError,
+  runCodexProcess,
+  type CodexProcessResult,
+} from "./codex-process-runner.ts";
 import { MonkeError } from "./errors.ts";
-import { formatCommand } from "./runtime.ts";
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -55,13 +61,24 @@ export async function runCodexJson<TSchema extends z.ZodTypeAny>(
 
     const args = buildCodexJsonArgs(options, schemaPath, outputPath);
     const startedAt = new Date();
-    const processResult = await runCodexProcess(options, args);
+    const processResult = await runCodexJsonProcess(options, args);
+    if (processResult.timedOut) {
+      throw new MonkeError(
+        formatCodexProcessError(
+          "codex-timeout",
+          options.codexPath,
+          args,
+          timeoutProcessResult(processResult),
+        ),
+      );
+    }
+
     const capturedOutputText = await tryReadOutputFile(outputPath);
     await writeCodexJsonLog(options, processResult, capturedOutputText, startedAt);
 
     if (processResult.exitCode !== 0) {
       throw new MonkeError(
-        formatProcessError("codex-exit", options.codexPath, args, processResult),
+        formatCodexProcessError("codex-exit", options.codexPath, args, processResult),
       );
     }
 
@@ -129,105 +146,54 @@ function toJsonSchema(schema: z.ZodTypeAny): unknown {
   }
 }
 
-interface ProcessResult {
-  readonly exitCode: number;
-  readonly stdout: string;
-  readonly stderr: string;
-}
-
-function runCodexProcess<TSchema extends z.ZodTypeAny>(
+async function runCodexJsonProcess<TSchema extends z.ZodTypeAny>(
   options: RunCodexJsonOptions<TSchema>,
   args: string[],
-): Promise<ProcessResult> {
-  return new Promise((resolve, reject) => {
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    let child: ChildProcessWithoutNullStreams;
-
-    try {
-      child = spawn(options.codexPath, args, {
-        cwd: options.cwd,
-        env: {
-          ...process.env,
-          ...options.env,
-        },
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-    } catch (error) {
-      reject(
-        new MonkeError(
-          formatProcessError("codex-spawn", options.codexPath, args, {
-            exitCode: -1,
-            stdout,
-            stderr: formatUnknownError(error),
-          }),
-        ),
+): Promise<CodexProcessResult> {
+  try {
+    return await runCodexProcess({
+      command: options.codexPath,
+      args,
+      cwd: options.cwd,
+      env: {
+        ...process.env,
+        ...options.env,
+      },
+      stdin: options.prompt,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    });
+  } catch (error) {
+    if (error instanceof CodexProcessSpawnError) {
+      throw new MonkeError(
+        formatCodexProcessError("codex-spawn", options.codexPath, args, {
+          exitCode: -1,
+          stdout: error.stdout,
+          stderr: error.stderr,
+        }),
       );
-      return;
     }
 
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, DEFAULT_TIMEOUT_MS);
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
-    });
-
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
-    });
-
-    child.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(
-        new MonkeError(
-          formatProcessError("codex-spawn", options.codexPath, args, {
-            exitCode: -1,
-            stdout,
-            stderr: stderr || error.message,
-          }),
-        ),
-      );
-    });
-
-    child.on("close", (exitCode, signal) => {
-      clearTimeout(timeout);
-      if (timedOut) {
-        reject(
-          new MonkeError(
-            formatProcessError("codex-timeout", options.codexPath, args, {
-              exitCode: -1,
-              stdout,
-              stderr: signal ? `terminated by signal ${signal}` : "timed out",
-            }),
-          ),
-        );
-        return;
-      }
-
-      resolve({
-        exitCode: exitCode ?? -1,
-        stdout,
-        stderr:
-          exitCode === null && signal
-            ? [stderr, `terminated by signal ${signal}`].filter(Boolean).join("\n")
-            : stderr,
-      });
-    });
-
-    child.stdin.end(options.prompt);
-  });
+    throw error;
+  }
 }
 
-async function readOutputFile(outputPath: string, processResult: ProcessResult): Promise<string> {
+function timeoutProcessResult(processResult: CodexProcessResult): CodexProcessResult {
+  return {
+    ...processResult,
+    exitCode: -1,
+    stderr: processResult.signal ? `terminated by signal ${processResult.signal}` : "timed out",
+  };
+}
+
+async function readOutputFile(
+  outputPath: string,
+  processResult: CodexProcessResult,
+): Promise<string> {
   try {
     return await readFile(outputPath, "utf8");
   } catch (error) {
     throw new MonkeError(
-      `${formatProcessDetails("output-read", processResult)}\nreadError: ${formatUnknownError(error)}`,
+      `${formatCodexProcessDetails("output-read", processResult)}\nreadError: ${formatUnknownError(error)}`,
     );
   }
 }
@@ -242,7 +208,7 @@ async function tryReadOutputFile(outputPath: string): Promise<string | null> {
 
 async function writeCodexJsonLog<TSchema extends z.ZodTypeAny>(
   options: RunCodexJsonOptions<TSchema>,
-  processResult: ProcessResult,
+  processResult: CodexProcessResult,
   outputText: string | null,
   startedAt: Date,
 ): Promise<void> {
@@ -271,7 +237,7 @@ async function writeCodexJsonLog<TSchema extends z.ZodTypeAny>(
 function formatCodexJsonLog(
   log: CodexJsonLogOptions,
   reasoningEffort: CodexReasoningEffort | undefined,
-  processResult: ProcessResult,
+  processResult: CodexProcessResult,
   outputText: string | null,
   startedAt: Date,
 ): string {
@@ -292,12 +258,12 @@ function formatCodexJsonLog(
   ].join("\n");
 }
 
-function parseJsonOutput(outputText: string, processResult: ProcessResult): unknown {
+function parseJsonOutput(outputText: string, processResult: CodexProcessResult): unknown {
   try {
     return JSON.parse(outputText);
   } catch (error) {
     throw new MonkeError(
-      `${formatProcessDetails("json-parse", processResult)}\nparseError: ${formatUnknownError(error)}`,
+      `${formatCodexProcessDetails("json-parse", processResult)}\nparseError: ${formatUnknownError(error)}`,
     );
   }
 }
@@ -305,43 +271,13 @@ function parseJsonOutput(outputText: string, processResult: ProcessResult): unkn
 function parseSchema<TSchema extends z.ZodTypeAny>(
   schema: TSchema,
   parsed: unknown,
-  processResult: ProcessResult,
+  processResult: CodexProcessResult,
 ): z.infer<TSchema> {
   try {
     return schema.parse(parsed);
   } catch (error) {
     throw new MonkeError(
-      `${formatProcessDetails("schema-parse", processResult)}\nvalidationError: ${formatUnknownError(error)}`,
+      `${formatCodexProcessDetails("schema-parse", processResult)}\nvalidationError: ${formatUnknownError(error)}`,
     );
   }
-}
-
-function formatProcessError(
-  stage: string,
-  command: string,
-  args: string[],
-  result: ProcessResult,
-): string {
-  return `${formatProcessDetails(stage, result)}\ncommand: ${formatCommand(command, args)}`;
-}
-
-function formatProcessDetails(stage: string, result: ProcessResult): string {
-  return [
-    `${stage} failed with exit code ${result.exitCode}`,
-    `stderr: ${snippet(result.stderr)}`,
-    `stdout: ${snippet(result.stdout)}`,
-  ].join("\n");
-}
-
-function snippet(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return "(empty)";
-  }
-
-  return trimmed.length > 2_000 ? `${trimmed.slice(0, 2_000)}...` : trimmed;
-}
-
-function formatUnknownError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
