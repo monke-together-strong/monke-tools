@@ -30,6 +30,10 @@ _Avoid_: External repo, child repo
 The persisted record of which repos belong to a session, where their worktrees live, and which ports were assigned.
 _Avoid_: Cache, registry entry
 
+**Session state store**:
+The module that owns **Session state** for one operation: opened under the global lock, it scans retained session states once, serves cross-session queries, and persists repo checkpoints.
+_Avoid_: Registry, cache, state manager
+
 **Session resource**:
 A per-session string value resolved for a repo, persisted in session state, written to the session root `.env`, and optionally used during cleanup.
 _Avoid_: Provider, pool item, resolved env value
@@ -223,7 +227,7 @@ The operation that creates or updates all required session worktrees from a sour
 _Avoid_: Initialize, provision
 
 **Default branch create mode**:
-A **Create** mode that creates missing session branches from each participating repo's local default branch instead of the current source checkout commit.
+A **Create** mode that creates fresh session branches from each participating repo's default branch instead of the current source checkout commit.
 _Avoid_: Arbitrary base branch, from branch
 
 **Materialize**:
@@ -248,6 +252,9 @@ _Avoid_: Delete session, prune repos
 - A **Session** may include one or more **Dependency repos**.
 - Each participating repo contributes exactly one **Session worktree** per **Session**.
 - A **Session state** records one entry per participating repo in the **Session**.
+- A **Session state store** is opened once per **Create**, **Materialize**, or **Cleanup** and is the only reader and writer of **Session state** during that operation.
+- A **Session state store** serves assigned-port usage, remembered **Resource command outputs**, and **Resource value** collision queries from one scan of retained **Session states**.
+- A **Resource command** receives its remembered outputs and its checkpoint capability from the **Session state store**, not from direct session-state reads.
 - A **Session resource** belongs to exactly one repo within one **Session state**.
 - A **Session state** may remember **Resource command outputs** for a repo within one **Session**.
 - Remembered **Resource command outputs** are grouped by **Resource command** name in **Session state**.
@@ -255,7 +262,7 @@ _Avoid_: Delete session, prune repos
 - **Resource values** configure deterministic **Session resources**.
 - A **Resource cleanup** belongs to one repo and may use any **Session resources** and **Resource command outputs** resolved for that repo.
 - **Session resources** for different **Session worktrees** must resolve to distinct values when they use the same resource name.
-- **Default branch create mode** resolves `main` and `master` separately for each repo participating in a **Session**.
+- **Default branch create mode** prefers fetched remote `main` or `master` and may fall back to local `main` or `master`.
 - **Default branch create mode** requires fresh session branches.
 - **Default branch create mode** materializes from default-branch content, not from uncommitted or branch-local source checkout changes.
 - A **Cleanup command** runs from the repo's **Source checkout** when cleanup finds a **Dead worktree**.
