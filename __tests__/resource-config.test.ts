@@ -40,7 +40,7 @@ test("loadResolvedGraph accepts nested resource commands", () => {
     "monke.yml": `resources:
   commands:
     e2e-symbols:
-      command: pnpm e2e:allocate-symbols
+      run: ./scripts/e2e-symbols.ts
       timeoutSeconds: 45
       outputs:
         - E2E_FLOW1_SYMBOL
@@ -60,7 +60,7 @@ apps:
   expect(graph.reposByRoot.get(root)?.resourceCommandsInOrder).toEqual([
     {
       name: "e2e-symbols",
-      command: "pnpm e2e:allocate-symbols",
+      run: "scripts/e2e-symbols.ts",
       timeoutSeconds: 45,
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
     },
@@ -74,7 +74,7 @@ test("loadResolvedGraph defaults resource command timeoutSeconds to 60", () => {
     "monke.yml": `resources:
   commands:
     e2e-symbols:
-      command: pnpm e2e:allocate-symbols
+      run: ./scripts/e2e-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL
 apps:
@@ -97,25 +97,69 @@ test.each([
     name: "invalid command name",
     resources: `commands:
     Bad_Name:
-      command: pnpm e2e:allocate-symbols
+      run: ./scripts/e2e-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL`,
     expected: /resources.commands label Bad_Name/,
   },
   {
-    name: "empty command",
+    name: "old command field",
     resources: `commands:
     e2e-symbols:
-      command: "   "
+      command: pnpm e2e:allocate-symbols
       outputs:
         - E2E_FLOW1_SYMBOL`,
-    expected: /resources.commands.e2e-symbols.command.*non-empty string/,
+    expected: /Unknown key command.*resources.commands.e2e-symbols/,
+  },
+  {
+    name: "missing run",
+    resources: `commands:
+    e2e-symbols:
+      outputs:
+        - E2E_FLOW1_SYMBOL`,
+    expected: /resources.commands.e2e-symbols.run.*non-empty string/,
+  },
+  {
+    name: "empty run",
+    resources: `commands:
+    e2e-symbols:
+      run: "   "
+      outputs:
+        - E2E_FLOW1_SYMBOL`,
+    expected: /resources.commands.e2e-symbols.run.*non-empty string/,
+  },
+  {
+    name: "absolute run path",
+    resources: `commands:
+    e2e-symbols:
+      run: /tmp/e2e-symbols.ts
+      outputs:
+        - E2E_FLOW1_SYMBOL`,
+    expected: /run must be a relative JS\/TS module path/,
+  },
+  {
+    name: "escaping run path",
+    resources: `commands:
+    e2e-symbols:
+      run: ../e2e-symbols.ts
+      outputs:
+        - E2E_FLOW1_SYMBOL`,
+    expected: /run must resolve inside the session worktree/,
+  },
+  {
+    name: "bare package run specifier",
+    resources: `commands:
+    e2e-symbols:
+      run: e2e-symbols
+      outputs:
+        - E2E_FLOW1_SYMBOL`,
+    expected: /run must be a relative JS\/TS module path/,
   },
   {
     name: "invalid timeout",
     resources: `commands:
     e2e-symbols:
-      command: pnpm e2e:allocate-symbols
+      run: ./scripts/e2e-symbols.ts
       timeoutSeconds: 0
       outputs:
         - E2E_FLOW1_SYMBOL`,
@@ -125,7 +169,7 @@ test.each([
     name: "empty outputs",
     resources: `commands:
     e2e-symbols:
-      command: pnpm e2e:allocate-symbols
+      run: ./scripts/e2e-symbols.ts
       outputs: []`,
     expected: /outputs must be a non-empty array/,
   },
@@ -133,7 +177,7 @@ test.each([
     name: "invalid output name",
     resources: `commands:
     e2e-symbols:
-      command: pnpm e2e:allocate-symbols
+      run: ./scripts/e2e-symbols.ts
       outputs:
         - e2e_flow1_symbol`,
     expected: /outputs\[0\].*uppercase env name/,
@@ -142,7 +186,7 @@ test.each([
     name: "duplicate output name",
     resources: `commands:
     e2e-symbols:
-      command: pnpm e2e:allocate-symbols
+      run: ./scripts/e2e-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL
         - E2E_FLOW1_SYMBOL`,
@@ -154,7 +198,7 @@ test.each([
     E2E_FLOW1_SYMBOL: fixed
   commands:
     e2e-symbols:
-      command: pnpm e2e:allocate-symbols
+      run: ./scripts/e2e-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL`,
     expected: /Duplicate resource env name E2E_FLOW1_SYMBOL/,
@@ -163,11 +207,11 @@ test.each([
     name: "duplicate env across commands",
     resources: `commands:
     e2e-symbols:
-      command: pnpm e2e:allocate-symbols
+      run: ./scripts/e2e-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL
     other-symbols:
-      command: pnpm e2e:allocate-more-symbols
+      run: ./scripts/e2e-more-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL`,
     expected: /Duplicate resource env name E2E_FLOW1_SYMBOL/,
