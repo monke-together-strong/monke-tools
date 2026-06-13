@@ -60,13 +60,13 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     throw new MonkeError("mt create requires a session name");
   }
 
-  const context = resolveRepoContext(runtime);
+  const home = getMonkeHome(runtime);
+  const context = resolveRepoContext(runtime, runtime.cwd, home);
   if (!context.isSourceCheckout) {
     throw new MonkeError("mt create must run from the source checkout");
   }
 
   ensureWorktrunkInstalled(runtime);
-  const home = getMonkeHome(runtime);
   const createFromDefaultBranch = options.mode === "default-branch";
 
   withGlobalLock(home, () => {
@@ -109,6 +109,8 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     let sessionState = loadSessionState(home, context.sourceRoot, session);
     if (createFromDefaultBranch) {
       sessionState = { ...sessionState, graphSource: "session-branch" };
+    } else {
+      sessionState = { ...sessionState, graphSource: undefined };
     }
     ensureSessionPrefix(
       sessionState,
@@ -304,7 +306,8 @@ export function runInstallDependencies(runtime: Runtime): void {
 }
 
 export function runMaterialize(runtime: Runtime): void {
-  const context = resolveRepoContext(runtime);
+  const home = getMonkeHome(runtime);
+  const context = resolveRepoContext(runtime, runtime.cwd, home);
   if (context.isSourceCheckout) {
     throw new MonkeError("mt materialize must run inside a session worktree");
   }
@@ -314,7 +317,6 @@ export function runMaterialize(runtime: Runtime): void {
   const session = context.sessionName;
 
   ensureWorktrunkInstalled(runtime);
-  const home = getMonkeHome(runtime);
 
   withGlobalLock(home, () => {
     let sessionState = loadSessionState(home, context.sourceRoot, session);
@@ -368,8 +370,8 @@ export function runMaterialize(runtime: Runtime): void {
 }
 
 export function runCleanup(runtime: Runtime): void {
-  const context = resolveRepoContext(runtime);
   const home = getMonkeHome(runtime);
+  const context = resolveRepoContext(runtime, runtime.cwd, home);
 
   let removed = 0;
   withGlobalLock(home, () => {
@@ -397,7 +399,8 @@ export function runCleanup(runtime: Runtime): void {
 }
 
 export function runSetup(runtime: Runtime): void {
-  const context = resolveRepoContext(runtime);
+  const home = getMonkeHome(runtime);
+  const context = resolveRepoContext(runtime, runtime.cwd, home);
   if (!context.isSourceCheckout) {
     throw new MonkeError("mt setup must run from the source checkout");
   }

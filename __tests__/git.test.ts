@@ -56,13 +56,13 @@ test("validateWorktreeForSession rejects worktrees from a different repository",
 
   expect(() =>
     validateWorktreeForSession(
-      createRuntime({ cwd: sourceRoot }),
+      createRuntime({ cwd: sourceRoot, env: { MONKE_HOME: home } }),
       home,
       sourceRoot,
       worktreePath,
       "banana",
     ),
-  ).toThrow(/live under|to belong to/);
+  ).toThrow(/Expected worktree .* to belong to /);
 });
 
 test("listWorktrees parses prunable entries from porcelain output", () => {

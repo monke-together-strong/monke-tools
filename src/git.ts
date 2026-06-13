@@ -2,7 +2,6 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
-import { getMonkeHome } from "./runtime.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 
 export interface WorktreeEntry {
@@ -45,7 +44,12 @@ export type ReviewerTarget =
       headCommit: GitCommitInfo | null;
     };
 
-export function resolveRepoContext(runtime: Runtime, cwd: string = runtime.cwd): RepoContext {
+export function resolveRepoContext(
+  runtime: Runtime,
+  cwd: string = runtime.cwd,
+  home?: string | null,
+  options: { inferSessionName?: boolean } = {},
+): RepoContext {
   const worktreeRoot = trim(
     runGit(runtime, cwd, ["rev-parse", "--path-format=absolute", "--show-toplevel"]),
   );
@@ -55,9 +59,15 @@ export function resolveRepoContext(runtime: Runtime, cwd: string = runtime.cwd):
   const currentBranch = trim(runGit(runtime, cwd, ["rev-parse", "--abbrev-ref", "HEAD"]));
   const sourceRoot = path.dirname(gitCommonDir);
   const isSourceCheckout = normalize(worktreeRoot) === normalize(sourceRoot);
+  const shouldInferSessionName = options.inferSessionName ?? true;
+  if (!isSourceCheckout && shouldInferSessionName && !home) {
+    throw new MonkeError("Unable to infer the current session without a Monke home");
+  }
   const sessionName = isSourceCheckout
     ? null
-    : inferSessionName(getMonkeHome(runtime), sourceRoot, worktreeRoot, currentBranch);
+    : shouldInferSessionName
+      ? inferSessionName(home, sourceRoot, worktreeRoot, currentBranch)
+      : null;
 
   return {
     cwd,
@@ -303,7 +313,7 @@ export function ensureSessionWorktree(
     );
   }
 
-  const sourceContext = resolveRepoContext(runtime, sourceRoot);
+  const sourceContext = resolveRepoContext(runtime, sourceRoot, home);
   if (sourceContext.currentBranch === session && !branchMatch) {
     throw new MonkeError(
       `Cannot create session "${session}" because the source checkout is already on that branch`,
@@ -429,7 +439,7 @@ export function validateWorktreeForSession(
     throw new MonkeError(`Expected worktree to exist at ${worktreePath}`);
   }
 
-  const context = resolveRepoContext(runtime, worktreePath);
+  const context = resolveRepoContext(runtime, worktreePath, home, { inferSessionName: false });
   if (context.isSourceCheckout) {
     throw new MonkeError(`Expected ${worktreePath} to be a linked session worktree`);
   }
@@ -452,9 +462,11 @@ function runGit(runtime: Runtime, cwd: string, args: string[]): string {
 }
 
 function validateSessionBranchName(runtime: Runtime, sourceRoot: string, session: string): void {
-  try {
-    runGit(runtime, sourceRoot, ["check-ref-format", "--branch", session]);
-  } catch {
+  const result = runtime.exec("git", ["check-ref-format", "--branch", session], {
+    cwd: sourceRoot,
+    allowFailure: true,
+  });
+  if (result.exitCode !== 0) {
     throw new MonkeError(`Invalid session name "${session}": must be a valid git branch name`);
   }
 }
