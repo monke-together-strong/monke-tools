@@ -6,7 +6,6 @@ description: Registry of preferred external libraries by capability. Use before 
 # Preferred Libraries
 
 Before adding or proposing an external JavaScript or TypeScript library, check this registry. Default to the listed library when it fits the problem and the project does not already have a conflicting standard.
-dayjs
 Research or propose another library only when no listed library fits, the existing codebase has already standardized elsewhere, or the user asks for a fresh comparison.
 
 ## CLI And Terminal UX
@@ -30,4 +29,5 @@ Research or propose another library only when no listed library fits, the existi
 
 - `zod`: Use for runtime validation, parsing untrusted data, typed schemas, config validation, and structured API boundaries.
 - `date-fns`: Use for date arithmetic, formatting, parsing, comparison, and small date utilities.
+- `dayjs`: Use for lightweight Moment-style date/time formatting and parsing when a chainable API fits the local code better than function utilities.
 - `es-toolkit`: Use for general-purpose JavaScript utility helpers when the standard library would make the implementation noisy.

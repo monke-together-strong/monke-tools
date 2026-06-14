@@ -29,13 +29,19 @@ Codex threads.
      issues", "break into issues", "run to-issues", or similar. This is a
      routing override, not a suggestion.
    - Also use the issue path when the PRD is very obviously large.
-4. If there are completely unrelated changes on the branch create a new worktree
+4. If the current checkout has unrelated changes that are not part of the PRD
+   implementation, create and enter a clean worktree from the intended base
+   branch before continuing:
+   `git worktree add ../<repo>-<task> <base-branch> && cd ../<repo>-<task>`.
 5. Run implementation.
    - Single PRD path: run `mt work --plan "Implement the PRD at <reference>."`
    - Issue path: run `/to-issues` in the current Codex thread, then run
      `mt work --prd "<parent PRD reference>"`
 6. Run `/autoreview` on a separate Codex thread. Wait for it to finish before
    creating the PR.
+   - Pre-PR gate: record the autoreview thread/worktree and final result in
+     the current thread. Do not treat `mt work`, tests, lint, screenshots, or
+     shepherding as a substitute.
 7. Create a ready-for-review PR from the current Codex thread.
 8. Run `/shepherd-pr` on a separate Codex thread, then stop. The shepherding
    thread owns polling and follow-up until merge-ready. It must not merge.
