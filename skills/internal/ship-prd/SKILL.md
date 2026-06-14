@@ -39,9 +39,8 @@ Codex threads.
      `mt work --prd "<parent PRD reference>"`
 6. Run `/autoreview` on a separate Codex thread. Wait for it to finish before
    creating the PR.
-   - Pre-PR gate: record the autoreview thread/worktree and final result in
-     the current thread. Do not treat `mt work`, tests, lint, screenshots, or
-     shepherding as a substitute.
+   - Always run this. Do not treat `mt work`, reviews, tests, lint, or
+     screenshots from implementation as a substitute.
 7. Create a ready-for-review PR from the current Codex thread.
 8. Run `/shepherd-pr` on a separate Codex thread, then stop. The shepherding
    thread owns polling and follow-up until merge-ready. It must not merge.
