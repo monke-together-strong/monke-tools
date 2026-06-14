@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { chmodSync } from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -63,6 +64,43 @@ export default function ({ previous }) {
       ],
     },
   ]);
+});
+
+test("fresh create lets pnpm resource modules use bootstrap-provided workspace packages", () => {
+  const sandbox = makeTempDir("single-repo-resource-command-bootstrap-pnpm");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  installShShim(binDirectory);
+  installFakePnpmBootstrapper(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+    "scripts/resource-command.ts": `import { resourceValue } from "@demo/resource-lib";
+
+export default function () {
+  return { E2E_FLOW1_SYMBOL: resourceValue };
+}
+`,
+    "monke.yml": withDefaultApp(`bootstrapCommand: pnpm install
+resources:
+  commands:
+    e2e-symbols:
+      run: ./scripts/resource-command.ts
+      timeoutSeconds: 60
+      outputs:
+        - E2E_FLOW1_SYMBOL`),
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["create", "fresh"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
+  expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n");
 });
 
 test("create builds resource command stdin from retained command outputs only", () => {
@@ -975,4 +1013,34 @@ function indentBlock(value: string, spaces: number): string {
     .split("\n")
     .map((line) => `${indentation}${line}`)
     .join("\n");
+}
+
+function installFakePnpmBootstrapper(binDirectory: string): void {
+  const executablePath = path.join(binDirectory, "pnpm");
+  write(
+    binDirectory,
+    "pnpm",
+    `#!/bin/sh
+set -eu
+if [ "\${1:-}" = "install" ]; then
+  mkdir -p node_modules/@demo/resource-lib
+  cat > node_modules/@demo/resource-lib/package.json <<'EOF'
+{"name":"@demo/resource-lib","type":"module","main":"index.js"}
+EOF
+  cat > node_modules/@demo/resource-lib/index.js <<'EOF'
+export const resourceValue = "SOL/USDT:USDT";
+EOF
+  exit 0
+fi
+
+if [ "\${1:-}" = "exec" ] && [ "\${2:-}" = "bun" ]; then
+  shift 2
+  exec bun "$@"
+fi
+
+echo "unsupported pnpm invocation: $*" >&2
+exit 1
+`,
+  );
+  chmodSync(executablePath, 0o755);
 }

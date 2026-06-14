@@ -481,31 +481,40 @@ function materializeRepo(options: {
     existingRepoState: existingState,
     env: options.runtime.env,
   });
-  const resolvedResourceCommands = resolveResourceCommands({
-    runtime: options.runtime,
-    home,
-    session,
-    repoConfig,
-    existingRepoState: existingState,
-    worktreePath,
-    resourceValues: resolvedResourceValues.values,
-    onResolvedCommandOutputs(resourceCommandOutputs) {
-      options.persistRepoState(
-        buildSessionRepoState({
-          sourceRoot: repoConfig.sourceRoot,
-          worktreePath,
-          assignedPorts: existingState?.assignedPorts ?? [],
-          cleanupCommand: repoConfig.cleanupCommand,
-          resourceValues: preserveStaleResourceValues(
-            existingState?.resourceValues ?? [],
-            resolvedResourceValues.values,
-          ),
-          resourceCommandOutputs,
-          isComplete: false,
-        }),
-      );
-    },
-  });
+  const persistResolvedResourceCommands = (
+    resourceCommandOutputs: ResourceCommandState[],
+    assignedPorts: AssignedPort[],
+  ): void => {
+    options.persistRepoState(
+      buildSessionRepoState({
+        sourceRoot: repoConfig.sourceRoot,
+        worktreePath,
+        assignedPorts,
+        cleanupCommand: repoConfig.cleanupCommand,
+        resourceValues: preserveStaleResourceValues(
+          existingState?.resourceValues ?? [],
+          resolvedResourceValues.values,
+        ),
+        resourceCommandOutputs,
+        isComplete: false,
+      }),
+    );
+  };
+  let resolvedResourceCommands: ReturnType<typeof resolveResourceCommands> | undefined;
+  if (!repoConfig.bootstrapCommand) {
+    resolvedResourceCommands = resolveResourceCommands({
+      runtime: options.runtime,
+      home,
+      session,
+      repoConfig,
+      existingRepoState: existingState,
+      worktreePath,
+      resourceValues: resolvedResourceValues.values,
+      onResolvedCommandOutputs(resourceCommandOutputs) {
+        persistResolvedResourceCommands(resourceCommandOutputs, existingState?.assignedPorts ?? []);
+      },
+    });
+  }
   const reservation = getOrCreateReservation(
     home,
     repoConfig.sourceRoot,
@@ -533,18 +542,63 @@ function materializeRepo(options: {
   );
   rewriteManagedEnvFiles(repoConfig, worktreePath, localAssignments, externalAssignments);
   const localAssignedPorts = toAssignedPorts(repoConfig, localAssignments);
+  const rootEnvAssignmentsBeforeCommands = [
+    ...externalPathAssignments,
+    ...toRootEnvAssignments(localAssignedPorts),
+    ...toRootEnvAssignments(dedupeAssignedPorts(externalAssignments)),
+    ...toResourceEnvAssignments(resolvedResourceValues.values),
+  ];
+
+  if (repoConfig.bootstrapCommand) {
+    syncRootEnvFileWithRemovals(
+      worktreePath,
+      rootEnvAssignmentsBeforeCommands,
+      resolvedResourceValues.removedEnvNames,
+    );
+    options.persistRepoState(
+      buildSessionRepoState({
+        sourceRoot: repoConfig.sourceRoot,
+        worktreePath,
+        assignedPorts: localAssignedPorts,
+        cleanupCommand: repoConfig.cleanupCommand,
+        resourceValues: preserveStaleResourceValues(
+          existingState?.resourceValues ?? [],
+          resolvedResourceValues.values,
+        ),
+        resourceCommandOutputs: existingState?.resourceCommandOutputs ?? [],
+        isComplete: false,
+      }),
+    );
+    runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
+    resolvedResourceCommands = resolveResourceCommands({
+      runtime: options.runtime,
+      home,
+      session,
+      repoConfig,
+      existingRepoState: existingState,
+      worktreePath,
+      resourceValues: resolvedResourceValues.values,
+      onResolvedCommandOutputs(resourceCommandOutputs) {
+        persistResolvedResourceCommands(resourceCommandOutputs, localAssignedPorts);
+      },
+    });
+  }
+
+  if (!resolvedResourceCommands) {
+    throw new MonkeError(`Resource commands were not resolved for ${repoConfig.sourceRoot}`);
+  }
+
   syncRootEnvFileWithRemovals(
     worktreePath,
     [
-      ...externalPathAssignments,
-      ...toRootEnvAssignments(localAssignedPorts),
-      ...toRootEnvAssignments(dedupeAssignedPorts(externalAssignments)),
-      ...toResourceEnvAssignments(resolvedResourceValues.values),
+      ...rootEnvAssignmentsBeforeCommands,
       ...toResourceCommandEnvAssignments(resolvedResourceCommands.commands),
     ],
     [...resolvedResourceValues.removedEnvNames, ...resolvedResourceCommands.removedEnvNames],
   );
-  runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
+  if (!repoConfig.bootstrapCommand) {
+    runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
+  }
 
   return {
     state: buildSessionRepoState({
