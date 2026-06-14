@@ -190,7 +190,8 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
           session,
           repoConfig,
           worktreePath: worktree.path,
-          sourceContentRoot: createFromDefaultBranch ? worktree.path : repoConfig.sourceRoot,
+          seedMaterialRoot: repoConfig.sourceRoot,
+          baselinePortsRoot: repoConfig.sourceRoot,
           worktreeCreated: worktree.created,
           existingState,
           dependencyResults: results,
@@ -325,7 +326,6 @@ export function runMaterialize(runtime: Runtime): void {
       sessionState,
       graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot),
     );
-    const useSessionContentRoot = sessionState.graphSource === "session-branch";
 
     const currentRepoRoot = context.sourceRoot;
     const results = new Map<string, RepoMaterializationResult>();
@@ -350,7 +350,8 @@ export function runMaterialize(runtime: Runtime): void {
         session,
         repoConfig,
         worktreePath,
-        sourceContentRoot: useSessionContentRoot ? worktreePath : repoConfig.sourceRoot,
+        seedMaterialRoot: repoConfig.sourceRoot,
+        baselinePortsRoot: repoConfig.sourceRoot,
         worktreeCreated: isCurrentRepo ? false : dependencyWorktree.created,
         existingState,
         dependencyResults: results,
@@ -429,7 +430,8 @@ function materializeRepo(options: {
   session: string;
   repoConfig: RepoConfig;
   worktreePath: string;
-  sourceContentRoot: string;
+  seedMaterialRoot: string;
+  baselinePortsRoot: string;
   worktreeCreated: boolean;
   existingState: SessionRepoState | undefined;
   dependencyResults: Map<string, RepoMaterializationResult>;
@@ -441,7 +443,8 @@ function materializeRepo(options: {
     session,
     repoConfig,
     worktreePath,
-    sourceContentRoot,
+    seedMaterialRoot,
+    baselinePortsRoot,
     worktreeCreated,
     existingState,
     dependencyResults,
@@ -450,7 +453,7 @@ function materializeRepo(options: {
   if (worktreeCreated) {
     seedWorktreeFilesFromRoot({
       config: repoConfig,
-      sourceRoot: sourceContentRoot,
+      sourceRoot: seedMaterialRoot,
       worktreeRoot: worktreePath,
       onWarning(message) {
         options.runtime.writeStderr(`${message}\n`);
@@ -510,7 +513,7 @@ function materializeRepo(options: {
   );
   const baselinePorts = collectBaselinePortsFromRoot({
     config: repoConfig,
-    sourceRoot: sourceContentRoot,
+    sourceRoot: baselinePortsRoot,
   });
   const localAssignments = allocateLocalPorts({
     home,
