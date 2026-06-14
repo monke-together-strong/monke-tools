@@ -548,13 +548,15 @@ function materializeRepo(options: {
     ...toRootEnvAssignments(dedupeAssignedPorts(externalAssignments)),
     ...toResourceEnvAssignments(resolvedResourceValues.values),
   ];
+  const existingResourceCommandEnvNames = toResourceCommandEnvNames(
+    existingState?.resourceCommandOutputs ?? [],
+  );
 
   if (repoConfig.bootstrapCommand) {
-    syncRootEnvFileWithRemovals(
-      worktreePath,
-      rootEnvAssignmentsBeforeCommands,
-      resolvedResourceValues.removedEnvNames,
-    );
+    syncRootEnvFileWithRemovals(worktreePath, rootEnvAssignmentsBeforeCommands, [
+      ...resolvedResourceValues.removedEnvNames,
+      ...existingResourceCommandEnvNames,
+    ]);
     options.persistRepoState(
       buildSessionRepoState({
         sourceRoot: repoConfig.sourceRoot,
@@ -694,6 +696,10 @@ function toResourceCommandEnvAssignments(
       value: assignment.value,
     })),
   );
+}
+
+function toResourceCommandEnvNames(commands: ResourceCommandState[]): string[] {
+  return [...new Set(commands.flatMap((command) => command.outputs.map((output) => output.env)))];
 }
 
 function buildSessionRepoState(options: {

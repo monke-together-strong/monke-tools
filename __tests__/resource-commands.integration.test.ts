@@ -103,6 +103,40 @@ resources:
   expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n");
 });
 
+test("materialize removes stale resource command env before bootstrap", () => {
+  const scenario = createResourceCommandScenario({
+    name: "single-repo-resource-command-bootstrap-stale-env",
+    monkeYml: withDefaultApp(`bootstrapCommand: |
+  set -a && . ./.env && set +a
+  if [ "\${E2E_FLOW1_SYMBOL+x}" = x ]; then
+    printf "%s" "$E2E_FLOW1_SYMBOL" > bootstrap-saw-command-env
+  else
+    : > bootstrap-saw-command-env
+  fi
+resources:
+  commands:
+    e2e-symbols:
+      run: ./scripts/resource-command.ts
+      timeoutSeconds: 60
+      outputs:
+        - E2E_FLOW1_SYMBOL`),
+    module: `export default function () {
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
+  });
+
+  scenario.create("banana");
+  expect(scenario.readWorktree("banana", "bootstrap-saw-command-env")).toBe("");
+
+  scenario.materialize("banana");
+
+  expect(scenario.readWorktree("banana", "bootstrap-saw-command-env")).toBe("");
+  expect(scenario.readWorktree("banana", ".env")).toBe(
+    "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
+  );
+});
+
 test("create builds resource command stdin from retained command outputs only", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-retained-input",
