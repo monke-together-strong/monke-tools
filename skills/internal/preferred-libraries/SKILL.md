@@ -29,5 +29,4 @@ Research or propose another library only when no listed library fits, the existi
 
 - `zod`: Use for runtime validation, parsing untrusted data, typed schemas, config validation, and structured API boundaries.
 - `date-fns`: Use for date arithmetic, formatting, parsing, comparison, and small date utilities.
-- `dayjs`: Use for lightweight Moment-style date/time formatting and parsing when a chainable API fits the local code better than function utilities.
 - `es-toolkit`: Use for general-purpose JavaScript utility helpers when the standard library would make the implementation noisy.
