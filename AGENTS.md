@@ -10,6 +10,7 @@ monke-tools is a Bun CLI for creating and refreshing per-session repo worktrees,
 - Format check: `bun run fmt:check`
 - Follow git flow.
 - Do not create `codex/` branches.
+- Put clean source clones created for testing under `tmp/`.
 
 ## Task-Specific Guides
 
