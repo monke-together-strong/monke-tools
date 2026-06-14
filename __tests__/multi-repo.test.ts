@@ -175,6 +175,63 @@ external:
   expect(cleanupResult.stdout).toBe("Removed 1 dead session\n");
 });
 
+test("create -m seeds dependency managed env files from source checkouts", () => {
+  const sandbox = makeTempDir("multi-repo-main-local-env");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    ".gitignore": "services/db/.env.local\n",
+    "services/db/package.json": "{}\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+  write(depRoot, "services/db/.env.local", "PORT=10000\nLOCAL_ONLY=1\n");
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+  git(root, ["switch", "-c", "feature"]);
+
+  runMonke({
+    cwd: root,
+    args: ["create", "local-env", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const rootWorktree = getExpectedWorktreePath(home, root, "local-env");
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "local-env");
+  expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10001\nLOCAL_ONLY=1\n");
+  expect(read(rootWorktree, "apps/api/.env.local")).toBe(
+    "DATABASE_URL=postgres://localhost:10001/app\n",
+  );
+  expect(read(rootWorktree, ".env")).toBe(
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10001\n`,
+  );
+});
+
 test("create -m materializes mixed main and master repos in one graph", () => {
   const sandbox = makeTempDir("multi-repo-main-master");
   const binDirectory = path.join(sandbox, "bin");

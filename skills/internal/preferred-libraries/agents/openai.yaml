@@ -1,0 +1,4 @@
+interface:
+  display_name: "Preferred Libraries"
+  short_description: "Default external libraries by capability"
+  default_prompt: "Use $preferred-libraries to choose the default library for this implementation."

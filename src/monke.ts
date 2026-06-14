@@ -190,7 +190,8 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
           session,
           repoConfig,
           worktreePath: worktree.path,
-          sourceContentRoot: createFromDefaultBranch ? worktree.path : repoConfig.sourceRoot,
+          seedMaterialRoot: repoConfig.sourceRoot,
+          baselinePortsRoot: repoConfig.sourceRoot,
           worktreeCreated: worktree.created,
           existingState,
           dependencyResults: results,
@@ -325,7 +326,6 @@ export function runMaterialize(runtime: Runtime): void {
       sessionState,
       graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot),
     );
-    const useSessionContentRoot = sessionState.graphSource === "session-branch";
 
     const currentRepoRoot = context.sourceRoot;
     const results = new Map<string, RepoMaterializationResult>();
@@ -350,7 +350,8 @@ export function runMaterialize(runtime: Runtime): void {
         session,
         repoConfig,
         worktreePath,
-        sourceContentRoot: useSessionContentRoot ? worktreePath : repoConfig.sourceRoot,
+        seedMaterialRoot: repoConfig.sourceRoot,
+        baselinePortsRoot: repoConfig.sourceRoot,
         worktreeCreated: isCurrentRepo ? false : dependencyWorktree.created,
         existingState,
         dependencyResults: results,
@@ -429,7 +430,8 @@ function materializeRepo(options: {
   session: string;
   repoConfig: RepoConfig;
   worktreePath: string;
-  sourceContentRoot: string;
+  seedMaterialRoot: string;
+  baselinePortsRoot: string;
   worktreeCreated: boolean;
   existingState: SessionRepoState | undefined;
   dependencyResults: Map<string, RepoMaterializationResult>;
@@ -441,7 +443,8 @@ function materializeRepo(options: {
     session,
     repoConfig,
     worktreePath,
-    sourceContentRoot,
+    seedMaterialRoot,
+    baselinePortsRoot,
     worktreeCreated,
     existingState,
     dependencyResults,
@@ -450,7 +453,7 @@ function materializeRepo(options: {
   if (worktreeCreated) {
     seedWorktreeFilesFromRoot({
       config: repoConfig,
-      sourceRoot: sourceContentRoot,
+      sourceRoot: seedMaterialRoot,
       worktreeRoot: worktreePath,
       onWarning(message) {
         options.runtime.writeStderr(`${message}\n`);
@@ -478,31 +481,40 @@ function materializeRepo(options: {
     existingRepoState: existingState,
     env: options.runtime.env,
   });
-  const resolvedResourceCommands = resolveResourceCommands({
-    runtime: options.runtime,
-    home,
-    session,
-    repoConfig,
-    existingRepoState: existingState,
-    worktreePath,
-    resourceValues: resolvedResourceValues.values,
-    onResolvedCommandOutputs(resourceCommandOutputs) {
-      options.persistRepoState(
-        buildSessionRepoState({
-          sourceRoot: repoConfig.sourceRoot,
-          worktreePath,
-          assignedPorts: existingState?.assignedPorts ?? [],
-          cleanupCommand: repoConfig.cleanupCommand,
-          resourceValues: preserveStaleResourceValues(
-            existingState?.resourceValues ?? [],
-            resolvedResourceValues.values,
-          ),
-          resourceCommandOutputs,
-          isComplete: false,
-        }),
-      );
-    },
-  });
+  const persistResolvedResourceCommands = (
+    resourceCommandOutputs: ResourceCommandState[],
+    assignedPorts: AssignedPort[],
+  ): void => {
+    options.persistRepoState(
+      buildSessionRepoState({
+        sourceRoot: repoConfig.sourceRoot,
+        worktreePath,
+        assignedPorts,
+        cleanupCommand: repoConfig.cleanupCommand,
+        resourceValues: preserveStaleResourceValues(
+          existingState?.resourceValues ?? [],
+          resolvedResourceValues.values,
+        ),
+        resourceCommandOutputs,
+        isComplete: false,
+      }),
+    );
+  };
+  let resolvedResourceCommands: ReturnType<typeof resolveResourceCommands> | undefined;
+  if (!repoConfig.bootstrapCommand) {
+    resolvedResourceCommands = resolveResourceCommands({
+      runtime: options.runtime,
+      home,
+      session,
+      repoConfig,
+      existingRepoState: existingState,
+      worktreePath,
+      resourceValues: resolvedResourceValues.values,
+      onResolvedCommandOutputs(resourceCommandOutputs) {
+        persistResolvedResourceCommands(resourceCommandOutputs, existingState?.assignedPorts ?? []);
+      },
+    });
+  }
   const reservation = getOrCreateReservation(
     home,
     repoConfig.sourceRoot,
@@ -510,7 +522,7 @@ function materializeRepo(options: {
   );
   const baselinePorts = collectBaselinePortsFromRoot({
     config: repoConfig,
-    sourceRoot: sourceContentRoot,
+    sourceRoot: baselinePortsRoot,
   });
   const localAssignments = allocateLocalPorts({
     home,
@@ -530,18 +542,65 @@ function materializeRepo(options: {
   );
   rewriteManagedEnvFiles(repoConfig, worktreePath, localAssignments, externalAssignments);
   const localAssignedPorts = toAssignedPorts(repoConfig, localAssignments);
+  const rootEnvAssignmentsBeforeCommands = [
+    ...externalPathAssignments,
+    ...toRootEnvAssignments(localAssignedPorts),
+    ...toRootEnvAssignments(dedupeAssignedPorts(externalAssignments)),
+    ...toResourceEnvAssignments(resolvedResourceValues.values),
+  ];
+  const existingResourceCommandEnvNames = toResourceCommandEnvNames(
+    existingState?.resourceCommandOutputs ?? [],
+  );
+
+  if (repoConfig.bootstrapCommand) {
+    syncRootEnvFileWithRemovals(worktreePath, rootEnvAssignmentsBeforeCommands, [
+      ...resolvedResourceValues.removedEnvNames,
+      ...existingResourceCommandEnvNames,
+    ]);
+    options.persistRepoState(
+      buildSessionRepoState({
+        sourceRoot: repoConfig.sourceRoot,
+        worktreePath,
+        assignedPorts: localAssignedPorts,
+        cleanupCommand: repoConfig.cleanupCommand,
+        resourceValues: preserveStaleResourceValues(
+          existingState?.resourceValues ?? [],
+          resolvedResourceValues.values,
+        ),
+        resourceCommandOutputs: existingState?.resourceCommandOutputs ?? [],
+        isComplete: false,
+      }),
+    );
+    runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
+    resolvedResourceCommands = resolveResourceCommands({
+      runtime: options.runtime,
+      home,
+      session,
+      repoConfig,
+      existingRepoState: existingState,
+      worktreePath,
+      resourceValues: resolvedResourceValues.values,
+      onResolvedCommandOutputs(resourceCommandOutputs) {
+        persistResolvedResourceCommands(resourceCommandOutputs, localAssignedPorts);
+      },
+    });
+  }
+
+  if (!resolvedResourceCommands) {
+    throw new MonkeError(`Resource commands were not resolved for ${repoConfig.sourceRoot}`);
+  }
+
   syncRootEnvFileWithRemovals(
     worktreePath,
     [
-      ...externalPathAssignments,
-      ...toRootEnvAssignments(localAssignedPorts),
-      ...toRootEnvAssignments(dedupeAssignedPorts(externalAssignments)),
-      ...toResourceEnvAssignments(resolvedResourceValues.values),
+      ...rootEnvAssignmentsBeforeCommands,
       ...toResourceCommandEnvAssignments(resolvedResourceCommands.commands),
     ],
     [...resolvedResourceValues.removedEnvNames, ...resolvedResourceCommands.removedEnvNames],
   );
-  runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
+  if (!repoConfig.bootstrapCommand) {
+    runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
+  }
 
   return {
     state: buildSessionRepoState({
@@ -637,6 +696,10 @@ function toResourceCommandEnvAssignments(
       value: assignment.value,
     })),
   );
+}
+
+function toResourceCommandEnvNames(commands: ResourceCommandState[]): string[] {
+  return [...new Set(commands.flatMap((command) => command.outputs.map((output) => output.env)))];
 }
 
 function buildSessionRepoState(options: {

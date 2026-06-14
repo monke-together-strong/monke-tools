@@ -100,6 +100,10 @@ _Avoid_: Local env, app config
 A repo-relative file or directory copied into a newly created session worktree.
 _Avoid_: Template, bootstrap asset
 
+**Seed material**:
+The source-checkout files copied into a newly created session worktree before env rewrites, including discovered env files and configured Seed paths.
+_Avoid_: Default-branch content, tracked source
+
 **Bootstrap command**:
 A repo-scoped shell command run after env syncing to prepare a materialized worktree.
 _Avoid_: Setup script, install step
@@ -280,7 +284,7 @@ _Avoid_: Delete session, prune repos
 - **Session resources** for different **Session worktrees** must resolve to distinct values when they use the same resource name.
 - **Default branch create mode** prefers fetched remote `main` or `master` and may fall back to local `main` or `master`.
 - **Default branch create mode** requires fresh session branches.
-- **Default branch create mode** materializes from default-branch content, not from uncommitted or branch-local source checkout changes.
+- **Default branch create mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
 - A **Cleanup command** runs from the repo's **Source checkout** when cleanup finds a **Dead worktree**.
 - A **Cleanup command** receives **Session resources**, **Resource command outputs**, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment.
 - A **Resource command** belongs to one repo and runs for one **Session worktree**.
