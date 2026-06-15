@@ -45,6 +45,22 @@ Codex threads.
 8. Run `/shepherd-pr` on a separate Codex thread, then stop. The shepherding
    thread owns polling and follow-up until merge-ready. It must not merge.
 
+## Thread Titles
+
+Choose one short title for the current work, then reuse it in every thread
+title from this workflow.
+
+- Orchestrator: `[<short-title-of-current-work>] orchestrate`
+- Review: `[<short-title-of-current-work>] review`
+- Shepherd: `[<short-title-of-current-work>] shepherd PR #<number>`
+
+Example: `[search-hotkey] orchestrate`, `[search-hotkey] review`,
+`[search-hotkey] shepherd PR #123`.
+
+Rename the current orchestrator thread when its thread id is available or can be
+discovered unambiguously. Set delegated review and shepherding thread titles at
+creation time; do not create them with generic titles and rename later.
+
 ## Monitoring
 
 Monitor delegated work every five minutes. Let active work continue without
