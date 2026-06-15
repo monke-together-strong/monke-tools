@@ -20,6 +20,10 @@ Research or propose another library only when no listed library fits, the existi
 - `@base-ui/react`: Use as the default primitive layer for accessible React UI behavior, including shadcn-style components that need low-level primitives.
 - `tailwindcss`: Use for utility-first styling, design tokens, responsive layout, and component styling.
 
+## Keyboard Shortcuts And Interaction
+
+- `@tanstack/react-hotkeys`: Use for React keyboard shortcut systems, especially command-heavy apps that need type-safe shortcut strings, cross-platform `Mod` handling, scoped hotkeys, sequences, shortcut recording/display, or key-state tracking. For non-React code, use the relevant TanStack framework adapter or the core `@tanstack/hotkeys` package directly.
+
 ## App Data And Routing
 
 - `@tanstack/react-query`: Use for async server state, caching, request deduplication, mutations, invalidation, pagination, and background refetching in React apps.
