@@ -82,11 +82,25 @@ exit 0
   return logPath;
 }
 
-export function installGitShim(binDirectory: string): void {
+export function installGitShim(binDirectory: string): string {
+  const logPath = path.join(binDirectory, "git.log");
   writeExecutable(
     path.join(binDirectory, "git"),
-    `#!/bin/sh\nexec "${findExecutableOnPath("git")}" "$@"\n`,
+    `#!/bin/sh
+first_arg=true
+for arg in "$@"; do
+  if [ "$first_arg" = true ]; then
+    first_arg=false
+  else
+    printf ' ' >> ${shellQuote(logPath)}
+  fi
+  printf '%s' "$arg" >> ${shellQuote(logPath)}
+done
+printf '\\n' >> ${shellQuote(logPath)}
+exec "${findExecutableOnPath("git")}" "$@"
+`,
   );
+  return logPath;
 }
 
 export function installShShim(binDirectory: string): string {
@@ -375,6 +389,57 @@ ${issueCases}
 fi
 if [ "$1" = "issue" ] && [ "$2" = "close" ]; then
   exit 0
+fi
+echo "unsupported gh invocation: $*" >&2
+exit 1
+`;
+  writeExecutable(path.join(binDirectory, "gh"), script);
+  return logPath;
+}
+
+export function installFakeGhForMergedPrs(
+  binDirectory: string,
+  options: {
+    repo: string;
+    prsByHead: Record<string, unknown[]>;
+  },
+): string {
+  const logPath = path.join(binDirectory, "gh.log");
+  const cases = Object.entries(options.prsByHead)
+    .map(
+      ([head, prs]) =>
+        `    ${shellQuote(head)}) printf '%s\\n' ${shellQuote(JSON.stringify(prs))}; exit 0 ;;`,
+    )
+    .join("\n");
+  const script = `#!/bin/sh
+set -eu
+first_arg=true
+for arg in "$@"; do
+  if [ "$first_arg" = true ]; then
+    first_arg=false
+  else
+    printf ' ' >> ${shellQuote(logPath)}
+  fi
+  printf '%s' "$arg" >> ${shellQuote(logPath)}
+done
+printf '\\n' >> ${shellQuote(logPath)}
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '%s\\n' ${shellQuote(JSON.stringify({ nameWithOwner: options.repo }))}
+  exit 0
+fi
+if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
+  head=""
+  previous=""
+  for arg in "$@"; do
+    if [ "$previous" = "--head" ]; then
+      head="$arg"
+    fi
+    previous="$arg"
+  done
+  case "$head" in
+${cases}
+    *) printf '[]\\n'; exit 0 ;;
+  esac
 fi
 echo "unsupported gh invocation: $*" >&2
 exit 1

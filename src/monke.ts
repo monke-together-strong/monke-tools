@@ -3,6 +3,11 @@ import path from "node:path";
 
 import { loadResolvedGraph } from "./config.ts";
 import {
+  inspectMergedWorktreeCleanup,
+  removeMergeCleanableWorktree,
+  type MergedCleanupDecision,
+} from "./cleanup-merged.ts";
+import {
   syncRootEnvFile,
   syncRootEnvFileWithRemovals,
   rewriteManagedEnvFiles,
@@ -53,6 +58,19 @@ export interface CreateOptions {
   /** Selects whether create starts from current HEAD or each repo's default branch. */
   mode: "current-head" | "default-branch";
 }
+
+/** Options controlling `mt cleanup` lifecycle behavior. */
+export type CleanupOptions =
+  | {
+      /** Run only default dead Session state cleanup. */
+      mode: "dead-only";
+    }
+  | {
+      /** Inspect merge-cleanable Session worktrees before dead-state cleanup. */
+      mode: "merged";
+      /** Whether to report merge-cleanable decisions without removing worktrees or state. */
+      dryRun: boolean;
+    };
 
 /** Create or refresh a Session from the source checkout. */
 export function runCreate(runtime: Runtime, session: string, options: CreateOptions): void {
@@ -370,33 +388,161 @@ export function runMaterialize(runtime: Runtime): void {
   runtime.writeStdout(`Materialized session ${session}\n`);
 }
 
-export function runCleanup(runtime: Runtime): void {
+/** Clean up dead Session state and optionally remove merge-cleanable Session worktrees first. */
+export function runCleanup(runtime: Runtime, options: CleanupOptions): void {
   const home = getMonkeHome(runtime);
   const context = resolveRepoContext(runtime, runtime.cwd, home);
+  const dryRun = options.mode === "merged" && options.dryRun;
 
-  let removed = 0;
+  const mergedResults: MergedCleanupResult[] = [];
+  let removedDeadSessions = 0;
   withGlobalLock(home, () => {
-    for (const state of listSessionStates(home)) {
-      if (state.rootSourceRoot !== context.sourceRoot) {
-        continue;
-      }
-
-      const allGone = state.repos.every((repo) => !existsSync(repo.worktreePath));
-      if (!allGone) {
-        continue;
-      }
-
-      runCleanupCommands(
-        runtime,
-        loadResolvedGraphForSession(runtime, context.sourceRoot, state).reposByRoot,
-        state,
+    if (options.mode === "merged") {
+      mergedResults.push(
+        ...cleanupMergedWorktrees(runtime, home, context.sourceRoot, options.dryRun),
       );
-      removeSessionState(home, state.rootSourceRoot, state.session);
-      removed += 1;
+    }
+
+    if (!dryRun) {
+      removedDeadSessions = removeDeadSessionStates(runtime, home, context.sourceRoot);
     }
   });
 
-  runtime.writeStdout(`Removed ${removed} dead session${removed === 1 ? "" : "s"}\n`);
+  if (options.mode === "merged") {
+    writeMergedCleanupSummary(runtime, mergedResults, options.dryRun);
+  }
+
+  if (!dryRun) {
+    runtime.writeStdout(
+      `Removed ${removedDeadSessions} dead session${removedDeadSessions === 1 ? "" : "s"}\n`,
+    );
+  }
+}
+
+interface MergedCleanupResult {
+  session: string;
+  sourceRoot: string;
+  worktreePath: string;
+  decision: MergedCleanupDecision;
+  removed: boolean;
+}
+
+function cleanupMergedWorktrees(
+  runtime: Runtime,
+  home: string,
+  rootSourceRoot: string,
+  dryRun: boolean,
+): MergedCleanupResult[] {
+  const results: MergedCleanupResult[] = [];
+
+  for (const state of listSessionStates(home)) {
+    if (state.rootSourceRoot !== rootSourceRoot) {
+      continue;
+    }
+
+    for (const repoState of state.repos) {
+      const candidate = {
+        sourceRoot: repoState.sourceRoot,
+        session: state.session,
+        worktreePath: repoState.worktreePath,
+      };
+      const decision = inspectMergedWorktreeCleanup(runtime, candidate, {
+        refreshDefaultBranch: !dryRun,
+      });
+      let removed = false;
+
+      if (decision.eligible && !dryRun) {
+        removeMergeCleanableWorktree(runtime, candidate);
+        removed = true;
+      }
+
+      results.push({
+        session: state.session,
+        sourceRoot: repoState.sourceRoot,
+        worktreePath: repoState.worktreePath,
+        decision,
+        removed,
+      });
+    }
+  }
+
+  return results;
+}
+
+function removeDeadSessionStates(runtime: Runtime, home: string, rootSourceRoot: string): number {
+  let removed = 0;
+
+  for (const state of listSessionStates(home)) {
+    if (state.rootSourceRoot !== rootSourceRoot) {
+      continue;
+    }
+
+    const allGone = state.repos.every((repo) => !existsSync(repo.worktreePath));
+    if (!allGone) {
+      continue;
+    }
+
+    runCleanupCommands(
+      runtime,
+      loadResolvedGraphForSession(runtime, rootSourceRoot, state).reposByRoot,
+      state,
+    );
+    removeSessionState(home, state.rootSourceRoot, state.session);
+    removed += 1;
+  }
+
+  return removed;
+}
+
+function writeMergedCleanupSummary(
+  runtime: Runtime,
+  results: MergedCleanupResult[],
+  dryRun: boolean,
+): void {
+  let eligible = 0;
+  let skipped = 0;
+  let removed = 0;
+
+  for (const result of results) {
+    if (result.decision.eligible) {
+      eligible += 1;
+      if (result.removed) {
+        removed += 1;
+      }
+      runtime.writeStdout(
+        `${dryRun ? "Would remove" : "Removed"} merged worktree ${result.session} ${
+          result.sourceRoot
+        }: ${result.worktreePath}\n`,
+      );
+      continue;
+    }
+
+    skipped += 1;
+    runtime.writeStdout(
+      `Skipped merged worktree ${result.session} ${result.sourceRoot}: ${result.decision.reasons.join(
+        "; ",
+      )}\n`,
+    );
+  }
+
+  if (dryRun) {
+    runtime.writeStdout(
+      `Merged cleanup dry-run: would remove ${formatWorktreeCount(eligible)}, skipped ${formatWorktreeCount(
+        skipped,
+      )}\n`,
+    );
+    return;
+  }
+
+  runtime.writeStdout(
+    `Merged cleanup: removed ${formatWorktreeCount(removed)}, skipped ${formatWorktreeCount(
+      skipped,
+    )}\n`,
+  );
+}
+
+function formatWorktreeCount(count: number): string {
+  return `${count} worktree${count === 1 ? "" : "s"}`;
 }
 
 export function runSetup(runtime: Runtime): void {
