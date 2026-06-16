@@ -1,0 +1,4 @@
+interface:
+  display_name: "Merge PR"
+  short_description: "Merge a PR and clean up safely"
+  default_prompt: "Use $merge-pr to merge this pull request and clean up its local worktree."

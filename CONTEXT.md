@@ -86,6 +86,14 @@ _Avoid_: Cleanup timeout, lock lifetime
 A session worktree recorded in session state whose filesystem path no longer exists.
 _Avoid_: Inactive worktree, stale checkout
 
+**Merged PR**:
+A pull request whose branch has been merged into its repo's default branch.
+_Avoid_: Merged worktree, merged session
+
+**Merge-cleanable Session**:
+A Session whose session branch is proven by a **Merged PR** and whose recorded session worktrees are eligible for explicit cleanup.
+_Avoid_: Merged worktree, stale session
+
 ### Repo configuration
 
 **App**:

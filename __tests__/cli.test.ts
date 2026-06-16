@@ -6,8 +6,9 @@ import { runCli } from "../src/index.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const ROOT_USAGE =
-  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt materialize\n  mt cleanup\n  mt setup\n  mt skills configure\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
+  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt skills configure\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
 const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
+const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const RUN_USAGE = "Usage: mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 
@@ -20,7 +21,8 @@ test("runCli preserves command-specific usage for invalid arity", () => {
   expect(() => runCli(["create"])).toThrow(CREATE_USAGE);
   expect(() => runCli(["create", "banana", "extra"])).toThrow(CREATE_USAGE);
   expect(() => runCli(["materialize", "extra"])).toThrow("Usage: mt materialize");
-  expect(() => runCli(["cleanup", "extra"])).toThrow("Usage: mt cleanup");
+  expect(() => runCli(["cleanup", "extra"])).toThrow(CLEANUP_USAGE);
+  expect(() => runCli(["cleanup", "--dry-run"])).toThrow(CLEANUP_USAGE);
   expect(() => runCli(["setup", "extra"])).toThrow("Usage: mt setup");
   expect(() => runCli(["install-dependencies", "extra"])).toThrow("Usage: mt install-dependencies");
   expect(() => runCli(["skills"])).toThrow(SKILLS_USAGE);
@@ -40,5 +42,5 @@ test("main entrypoint writes usage errors to stderr", () => {
 
   expect(result.status).toBe(1);
   expect(result.stdout).toBe("");
-  expect(result.stderr).toBe("Usage: mt cleanup\n");
+  expect(result.stderr).toBe(`${CLEANUP_USAGE}\n`);
 });
