@@ -226,24 +226,32 @@ export function branchExists(runtime: Runtime, sourceRoot: string, branch: strin
   return result.exitCode === 0;
 }
 
-/** Fetch origin if available, then resolve the default branch ref for one source repo. */
-export function resolveDefaultBranchRef(runtime: Runtime, sourceRoot: string): DefaultBranchRef {
-  const fetchResult = runtime.exec("git", ["fetch", "--prune", "origin"], {
-    cwd: sourceRoot,
-    allowFailure: true,
-  });
-
+/** Resolve the default branch ref for one source repo, optionally refreshing origin first. */
+export function resolveDefaultBranchRef(
+  runtime: Runtime,
+  sourceRoot: string,
+  options: { refresh?: boolean } = {},
+): DefaultBranchRef {
+  const shouldRefresh = options.refresh ?? true;
   const localCandidates: DefaultBranchRef[] = [
     { branch: "main", ref: "refs/heads/main", source: "local" },
     { branch: "master", ref: "refs/heads/master", source: "local" },
   ];
+  const originCandidates: DefaultBranchRef[] = [
+    { branch: "main", ref: "refs/remotes/origin/main", source: "origin" },
+    { branch: "master", ref: "refs/remotes/origin/master", source: "origin" },
+  ];
   let candidates = localCandidates;
-  if (fetchResult.exitCode === 0) {
-    candidates = [
-      { branch: "main", ref: "refs/remotes/origin/main", source: "origin" },
-      { branch: "master", ref: "refs/remotes/origin/master", source: "origin" },
-      ...localCandidates,
-    ];
+  if (shouldRefresh) {
+    const fetchResult = runtime.exec("git", ["fetch", "--prune", "origin"], {
+      cwd: sourceRoot,
+      allowFailure: true,
+    });
+    if (fetchResult.exitCode === 0) {
+      candidates = [...originCandidates, ...localCandidates];
+    }
+  } else {
+    candidates = [...originCandidates, ...localCandidates];
   }
 
   for (const candidate of candidates) {

@@ -21,8 +21,9 @@ import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt materialize\n  mt cleanup\n  mt setup\n  mt skills configure\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
+  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt skills configure\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
 const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
+const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const RUN_USAGE = "Usage: mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 
@@ -42,6 +43,11 @@ interface RawRunCommandOptions {
   plan?: string;
   prd?: string;
   effort?: CodexReasoningEffort;
+}
+
+interface RawCleanupCommandOptions {
+  merged?: boolean;
+  dryRun?: boolean;
 }
 
 /** Run the Monke Tools CLI. Valid `mt work` invocations return a workflow promise. */
@@ -112,8 +118,19 @@ function createProgram(runtime: Runtime, onRun: (options: RunCommandOptions) => 
     .command("cleanup")
     .helpOption(false)
     .allowExcessArguments(false)
-    .action(() => {
-      runCleanup(runtime);
+    .option("--merged")
+    .option("--dry-run")
+    .action((options: RawCleanupCommandOptions) => {
+      if (options.dryRun && !options.merged) {
+        throw new MonkeError(CLEANUP_USAGE);
+      }
+
+      runCleanup(
+        runtime,
+        options.merged === true
+          ? { mode: "merged", dryRun: options.dryRun === true }
+          : { mode: "dead-only" },
+      );
     });
 
   program
@@ -215,7 +232,7 @@ function mapCliError(error: unknown, argv: string[]): Error {
     case "materialize":
       return new MonkeError("Usage: mt materialize");
     case "cleanup":
-      return new MonkeError("Usage: mt cleanup");
+      return new MonkeError(CLEANUP_USAGE);
     case "setup":
       return new MonkeError("Usage: mt setup");
     case "install-dependencies":
