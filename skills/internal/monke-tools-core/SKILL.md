@@ -1,11 +1,13 @@
 ---
 name: monke-tools-core
-description: Use monke-tools for session worktrees, env rewrites, cleanup.
+description: Use monke-tools for session worktrees, env rewrites, dependency worktrees, and cleanup. Use whenever Codex needs to create, isolate, switch to, or repair worktrees in a repo with monke.yml or mt/monke-tools support; prefer mt create over raw git worktree commands for new session worktrees.
 ---
 
 # monke-tools Core
 
-Use this skill when the current repo uses `mt` / monke-tools.
+Use this skill when the current repo uses `mt` / monke-tools. A repo uses monke-tools when it has `monke.yml`, existing `mt-*` session worktrees, or local instructions mention `mt`.
+
+When creating an isolated branch/worktree for a task in a monke-tools repo, use `mt create <session>` from the source checkout instead of `git worktree add`. Monke-tools also creates dependency worktrees, rewrites env/path values, and runs configured bootstrap behavior.
 
 ## Prerequisite
 
