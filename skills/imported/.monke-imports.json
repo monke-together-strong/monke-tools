@@ -11,11 +11,23 @@
       ]
     },
     {
-      "source": "mattpocock/skills",
+      "source": "https://github.com/mattpocock/skills",
       "skills": [
         {
-          "selector": "diagnose",
-          "slug": "diagnose"
+          "selector": "codebase-design",
+          "slug": "codebase-design"
+        },
+        {
+          "selector": "decision-mapping",
+          "slug": "decision-mapping"
+        },
+        {
+          "selector": "diagnosing-bugs",
+          "slug": "diagnosing-bugs"
+        },
+        {
+          "selector": "domain-modeling",
+          "slug": "domain-modeling"
         },
         {
           "selector": "grill-me",
@@ -26,8 +38,16 @@
           "slug": "grill-with-docs"
         },
         {
+          "selector": "grilling",
+          "slug": "grilling"
+        },
+        {
           "selector": "handoff",
           "slug": "handoff"
+        },
+        {
+          "selector": "implement",
+          "slug": "implement"
         },
         {
           "selector": "improve-codebase-architecture",
@@ -36,6 +56,18 @@
         {
           "selector": "prototype",
           "slug": "prototype"
+        },
+        {
+          "selector": "resolving-merge-conflicts",
+          "slug": "resolving-merge-conflicts"
+        },
+        {
+          "selector": "review",
+          "slug": "review"
+        },
+        {
+          "selector": "setup-matt-pocock-skills",
+          "slug": "setup-matt-pocock-skills"
         },
         {
           "selector": "tdd",
@@ -54,18 +86,12 @@
           "slug": "to-prd"
         },
         {
-          "selector": "zoom-out",
-          "slug": "zoom-out"
-        }
-      ]
-    },
-    {
-      "source": "openclaw/agent-skills",
-      "acceptOpenClawRisks": true,
-      "skills": [
+          "selector": "triage",
+          "slug": "triage"
+        },
         {
-          "selector": "autoreview",
-          "slug": "autoreview"
+          "selector": "writing-great-skills",
+          "slug": "writing-great-skills"
         }
       ]
     },
