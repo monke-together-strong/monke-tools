@@ -34,7 +34,7 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
 `,
   });
 
-  runMonke({
+  const result = runMonke({
     cwd: repoRoot,
     args: ["create", "banana"],
     monkeHome: home,
@@ -42,6 +42,7 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
   });
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+  expect(result.stdout).toBe(`Created or updated session banana\n${worktreeRoot}\n`);
   expect(read(worktreeRoot, ".env.shared")).toBe("ROOT_ONLY=true\n");
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe(
     "PORT=10000\nDATABASE_URL=postgres://localhost:10001/app\nOTHER=keep\n",
@@ -81,7 +82,7 @@ test("create without monke.yml creates an unmaterialized worktree and warns", ()
   expect(result.stderr).toContain(
     `Warning: no monke.yml found for ${repoRoot}; created session worktree without materializing it.`,
   );
-  expect(result.stdout).toContain("Created or updated session banana");
+  expect(result.stdout).toBe(`Created or updated session banana\n${worktreeRoot}\n`);
 
   const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
     graphSource?: string;

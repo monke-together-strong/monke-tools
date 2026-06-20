@@ -85,6 +85,7 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     throw new MonkeError("mt create must run from the source checkout");
   }
 
+  const rootWorktreePath = getExpectedWorktreePath(home, context.sourceRoot, session);
   const createFromDefaultBranch = options.mode === "default-branch";
 
   withGlobalLock(home, () => {
@@ -281,7 +282,7 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     }
   });
 
-  runtime.writeStdout(`Created or updated session ${session}\n`);
+  runtime.writeStdout(`Created or updated session ${session} at path: '${rootWorktreePath}'. Switch to that working directory.\n`);
 }
 
 function assertCleanCheckoutsForCurrentHeadCreate(
