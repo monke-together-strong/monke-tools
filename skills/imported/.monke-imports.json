@@ -46,10 +46,6 @@
           "slug": "handoff"
         },
         {
-          "selector": "implement",
-          "slug": "implement"
-        },
-        {
           "selector": "improve-codebase-architecture",
           "slug": "improve-codebase-architecture"
         },

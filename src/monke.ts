@@ -106,6 +106,47 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
       }
       return defaultRef;
     };
+    const rootDefaultRef = createFromDefaultBranch ? getDefaultRef(context.sourceRoot) : null;
+    const rootConfigExists = rootDefaultRef
+      ? gitPathExistsAtRef(runtime, context.sourceRoot, rootDefaultRef.ref, "monke.yml")
+      : existsSync(path.join(context.sourceRoot, "monke.yml"));
+    if (!rootConfigExists) {
+      assertNoGlobalWorktreePathStateCollisions(home, session, [
+        { sourceRoot: context.sourceRoot },
+      ]);
+      const worktree = rootDefaultRef
+        ? ensureFreshSessionWorktreeFromRef(
+            runtime,
+            home,
+            context.sourceRoot,
+            session,
+            rootDefaultRef.ref,
+          )
+        : ensureSessionWorktree(runtime, home, context.sourceRoot, session);
+      const sessionState = {
+        ...loadSessionState(home, context.sourceRoot, session),
+        graphSource: "session-branch" as const,
+      };
+      saveSessionState(
+        home,
+        recordRepoSuccess(
+          sessionState,
+          buildSessionRepoState({
+            sourceRoot: context.sourceRoot,
+            worktreePath: worktree.path,
+            assignedPorts: [],
+            resourceValues: [],
+            resourceCommandOutputs: [],
+            isComplete: false,
+          }),
+        ),
+      );
+      runtime.writeStderr(
+        `Warning: no monke.yml found for ${context.sourceRoot}; created session worktree without materializing it.\n`,
+      );
+      return;
+    }
+
     let graph: ReturnType<typeof loadResolvedGraph>;
     if (createFromDefaultBranch) {
       graph = loadResolvedGraph(runtime, context.sourceRoot, {
@@ -272,7 +313,7 @@ function rollbackDefaultBranchCreate(options: {
 function assertNoGlobalWorktreePathStateCollisions(
   home: string,
   session: string,
-  repoConfigs: RepoConfig[],
+  repoConfigs: Array<{ sourceRoot: string }>,
 ): void {
   const states = listSessionStates(home);
   for (const repoConfig of repoConfigs) {

@@ -10,8 +10,8 @@ grill-me session has already completed; do not run grill-me.
 
 This is a control-plane skill: keep the current Codex thread focused on PRD
 reference resolution, orchestration, evidence packaging, and handoff. Put
-implementation in `mt work`, and put cold review and PR shepherding in separate
-Codex threads.
+implementation in a separate Codex thread using `/implement`, and put cold
+review and PR shepherding in separate Codex threads.
 
 ## Workflow
 
@@ -23,23 +23,23 @@ Codex threads.
      before continuing if anything important is missing.
 2. Identify the durable PRD reference: issue URL/number, local file path, or
    document link. Do not start implementation from a chat-only PRD.
-3. Choose the implementation path.
-   - Default to the single PRD path.
-   - Use the issue path when the user explicitly says "with issues", "use
-     issues", "break into issues", "run to-issues", or similar. This is a
-     routing override, not a suggestion.
-   - Also use the issue path when the PRD is very obviously large.
+3. Decide whether to create task issues before implementation.
+   - If the user explicitly says "with issues", "use issues", "break into
+     issues", "run to-issues", or similar, run `/to-issues` before
+     implementation. This is a routing override, not a suggestion.
 4. If the current checkout has unrelated changes that are not part of the PRD
    implementation, create and enter a clean worktree from the intended base
-   branch before continuing:
-   `git worktree add ../<repo>-<task> <base-branch> && cd ../<repo>-<task>`.
-5. Run implementation.
-   - Single PRD path: run `mt work --plan "Implement the PRD at <reference>."`
-   - Issue path: run `/to-issues` in the current Codex thread, then run
-     `mt work --prd "<parent PRD reference>"`
-6. Run `/autoreview` on a separate Codex thread. Wait for it to finish before
-   creating the PR.
-   - Always run this. Do not treat `mt work`, reviews, tests, lint, or
+   branch before continuing. In repos that use monke-tools, use the Monke
+   worktree flow.
+5. Run implementation in a separate Codex thread with `/implement`.
+   - Pass the durable PRD reference, not the full PRD body.
+   - If `/to-issues` was run, pass the same parent PRD reference after the
+     issues are created.
+   - Let `/implement` decide whether to implement the PRD directly or
+     orchestrate attached issues.
+6. After implementation completes, run `/autoreview` on a separate Codex
+   thread. Wait for it to finish before creating the PR.
+   - Always run this. Do not treat `/implement`, `/review`, tests, lint, or
      screenshots from implementation as a substitute.
 7. Create a ready-for-review PR from the current Codex thread.
 8. Run `/shepherd-pr` on a separate Codex thread, then stop. The shepherding
@@ -51,11 +51,12 @@ Choose one short title for the current work, then reuse it in every thread
 title from this workflow.
 
 - Orchestrator: `[<short-title-of-current-work>] orchestrate`
+- Implementation: `[<short-title-of-current-work>] implement`
 - Review: `[<short-title-of-current-work>] review`
 - Shepherd: `[<short-title-of-current-work>] shepherd PR #<number>`
 
-Example: `[search-hotkey] orchestrate`, `[search-hotkey] review`,
-`[search-hotkey] shepherd PR #123`.
+Example: `[search-hotkey] orchestrate`, `[search-hotkey] implement`,
+`[search-hotkey] review`, `[search-hotkey] shepherd PR #123`.
 
 Rename the current orchestrator thread when its thread id is available or can be
 discovered unambiguously. Set delegated review and shepherding thread titles at
@@ -66,15 +67,16 @@ creation time; do not create them with generic titles and rename later.
 Monitor delegated work every five minutes. Let active work continue without
 steering; intervene only for a blocker, completion, or clear course deviation.
 
-## Issue Path
+## Task Issues
 
-"With issues" means: run `/to-issues`, then run `mt work --prd` against the
-parent PRD reference. Do not use the single PRD path when the user asks for the
-issue path.
+"With issues" means: run `/to-issues` before launching `/implement`, then run
+`/implement` against the parent PRD reference. Do not choose task ordering in
+this skill; `/implement` owns direct PRD implementation versus attached issue
+orchestration.
 
 ## Boundaries
-- Do not paste the full PRD body into `mt work`; pass the durable reference.
+- Do not paste the full PRD body into `/implement`; pass the durable reference.
 - Do not create extra code commits from this orchestration thread.
-- Let `mt work` own implementation commits.
+- Let `/implement` own implementation commits.
 - Let `/autoreview` own closeout fixes and reruns.
 - Let `/shepherd-pr` own PR polling and reviewer follow-up after the PR exists.
