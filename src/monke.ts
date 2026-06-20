@@ -15,6 +15,7 @@ import {
   collectBaselinePortsFromRoot,
 } from "./env.ts";
 import {
+  assertCleanCheckoutForSessionBranchCreation,
   assertFreshSessionWorktreeAvailable,
   ensureSessionWorktree,
   ensureFreshSessionWorktreeFromRef,
@@ -165,6 +166,9 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     } else {
       graph = loadResolvedGraph(runtime, context.sourceRoot);
     }
+    if (!createFromDefaultBranch) {
+      assertCleanCheckoutsForCurrentHeadCreate(runtime, graph.reposInMaterializationOrder, session);
+    }
     let sessionState = loadSessionState(home, context.sourceRoot, session);
     if (createFromDefaultBranch) {
       sessionState = { ...sessionState, graphSource: "session-branch" };
@@ -279,6 +283,16 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
   });
 
   runtime.writeStdout(`Created or updated session ${session}\n`);
+}
+
+function assertCleanCheckoutsForCurrentHeadCreate(
+  runtime: Runtime,
+  reposInOrder: RepoConfig[],
+  session: string,
+): void {
+  for (const repoConfig of reposInOrder) {
+    assertCleanCheckoutForSessionBranchCreation(runtime, repoConfig.sourceRoot, session);
+  }
 }
 
 function rollbackDefaultBranchCreate(options: {
