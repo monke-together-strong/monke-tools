@@ -90,4 +90,4 @@ bun run src/index.ts setup
 bun run src/index.ts skills configure
 ```
 
-Repo-specific tooling notes live in [docs/backlog-usage.md](docs/backlog-usage.md).
+Repo-specific Backlog.md guidance lives in [docs/agents/backlog.md](docs/agents/backlog.md).
