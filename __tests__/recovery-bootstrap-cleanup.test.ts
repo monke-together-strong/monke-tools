@@ -6,12 +6,8 @@ import { getExpectedWorktreePath } from "../src/git.ts";
 import {
   createRepo,
   git,
-  installFailingBrew,
-  installFakeBrew,
   installFakeGhForMergedPrs,
   installGitShim,
-  installNoopBrew,
-  installFakeWt,
   installShShim,
   makeTempDir,
   read,
@@ -42,7 +38,6 @@ function mergedPr(options: {
 test("create preserves successful dependency state after root failure and resumes from the first unfinished repo", () => {
   const sandbox = makeTempDir("recovery");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -119,7 +114,6 @@ external:
 test("materialize recreates a missing dependency worktree", () => {
   const sandbox = makeTempDir("recreate-dependency");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -179,7 +173,6 @@ external:
 test("materialize from the root worktree re-applies dependency repos", () => {
   const sandbox = makeTempDir("rematerialize-dependency");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -239,7 +232,6 @@ external:
 test("bootstrap failure is fatal for create and surfaces the repo and command", () => {
   const sandbox = makeTempDir("bootstrap-failure");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
@@ -268,7 +260,6 @@ apps:
 test("cleanup removes dead session state but leaves repo reservations intact", () => {
   const sandbox = makeTempDir("cleanup");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
@@ -313,7 +304,6 @@ test("cleanup --merged --dry-run reports eligible and skipped sessions without r
   const sandbox = makeTempDir("cleanup-merged-dry-run");
   const binDirectory = path.join(sandbox, "bin");
   const gitLog = installGitShim(binDirectory);
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
@@ -398,7 +388,6 @@ test("cleanup --merged --dry-run reports eligible and skipped sessions without r
 test("cleanup --merged removes eligible worktrees and preserves branch refs", () => {
   const sandbox = makeTempDir("cleanup-merged-remove");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
@@ -459,7 +448,6 @@ test("cleanup --merged skips safely when GitHub metadata is unavailable", () => 
   const sandbox = makeTempDir("cleanup-merged-no-gh");
   const binDirectory = path.join(sandbox, "bin");
   installGitShim(binDirectory);
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
@@ -505,7 +493,6 @@ test("cleanup --merged skips safely when GitHub metadata is unavailable", () => 
 test("cleanup --merged keeps session state when cleanupCommand fails after worktree removal", () => {
   const sandbox = makeTempDir("cleanup-merged-command-failure");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
@@ -558,7 +545,6 @@ apps:
 test("cleanupCommand runs only for dead worktrees and removes state after success", () => {
   const sandbox = makeTempDir("cleanup-command");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const shLogPath = installShShim(binDirectory);
   const home = path.join(sandbox, "home");
 
@@ -617,7 +603,6 @@ apps:
 test("cleanupCommand receives resource command output env", () => {
   const sandbox = makeTempDir("cleanup-command-resource-output");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
@@ -667,7 +652,6 @@ apps:
 test("cleanupCommand uses the command remembered in session state after config drift", () => {
   const sandbox = makeTempDir("cleanup-command-config-drift");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
@@ -718,7 +702,6 @@ apps:
 test("cleanupCommand failure keeps session state for retry", () => {
   const sandbox = makeTempDir("cleanup-command-failure");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const root = createRepo(path.join(sandbox, "root"), {
@@ -762,126 +745,4 @@ apps:
   expect(retainedState.repos[0]?.resourceValues).toEqual([
     { env: "DISCORD_CHANNEL", value: "mt-retry-me" },
   ]);
-});
-
-test("create installs worktrunk through Homebrew and configures shell integration when wt is missing", () => {
-  const sandbox = makeTempDir("bootstrap");
-  const binDirectory = path.join(sandbox, "bin");
-  installGitShim(binDirectory);
-  const brewLog = installFakeBrew(binDirectory);
-  const home = path.join(sandbox, "home");
-
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
-    "monke.yml": `apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-      - port: DB_PORT
-        env: DATABASE_URL
-`,
-  });
-
-  runMonke({
-    cwd: root,
-    args: ["create", "brew-me"],
-    monkeHome: home,
-    binDirectory,
-    extraEnv: { PATH: binDirectory },
-  });
-
-  expect(read(path.dirname(brewLog), "brew.log")).toContain("install worktrunk");
-  expect(existsSync(path.join(binDirectory, "wt"))).toBe(true);
-  expect(read(path.dirname(brewLog), "wt.log")).toContain("config shell install");
-});
-
-test("create fails when wt is missing and Homebrew is unavailable", () => {
-  const sandbox = makeTempDir("bootstrap-no-brew");
-  const binDirectory = path.join(sandbox, "empty-bin");
-  installGitShim(binDirectory);
-  const home = path.join(sandbox, "home");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`,
-  });
-
-  expect(() => {
-    runMonke({
-      cwd: root,
-      args: ["create", "no-brew"],
-      monkeHome: home,
-      binDirectory,
-      extraEnv: { PATH: binDirectory },
-    });
-  }).toThrow(/Homebrew is not available/);
-});
-
-test("create surfaces Homebrew install failures when wt bootstrap does not succeed", () => {
-  const sandbox = makeTempDir("bootstrap-brew-fails");
-  const binDirectory = path.join(sandbox, "bin");
-  installGitShim(binDirectory);
-  const brewLog = installFailingBrew(binDirectory);
-  const home = path.join(sandbox, "home");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`,
-  });
-
-  expect(() => {
-    runMonke({
-      cwd: root,
-      args: ["create", "brew-fails"],
-      monkeHome: home,
-      binDirectory,
-      extraEnv: { PATH: binDirectory },
-    });
-  }).toThrow(/Command failed: .*brew install worktrunk/);
-  expect(read(path.dirname(brewLog), "brew.log")).toContain("install worktrunk");
-});
-
-test("create fails if Homebrew finishes but wt is still missing", () => {
-  const sandbox = makeTempDir("bootstrap-no-wt");
-  const binDirectory = path.join(sandbox, "bin");
-  installGitShim(binDirectory);
-  const brewLog = installNoopBrew(binDirectory);
-  const home = path.join(sandbox, "home");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`,
-  });
-
-  expect(() => {
-    runMonke({
-      cwd: root,
-      args: ["create", "brew-no-wt"],
-      monkeHome: home,
-      binDirectory,
-      extraEnv: { PATH: binDirectory },
-    });
-  }).toThrow(/could not find wt on PATH/);
-  expect(read(path.dirname(brewLog), "brew.log")).toContain("install worktrunk");
 });

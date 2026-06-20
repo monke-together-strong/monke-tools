@@ -187,6 +187,18 @@ export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string): void 
   }
 }
 
+/** Assert current-head create can branch from this source checkout if needed. */
+export function assertCleanCheckoutForSessionBranchCreation(
+  runtime: Runtime,
+  sourceRoot: string,
+  session: string,
+): void {
+  validateSessionBranchName(runtime, sourceRoot, session);
+  if (!branchExists(runtime, sourceRoot, session)) {
+    ensureCleanCheckout(runtime, sourceRoot);
+  }
+}
+
 /** Return the canonical Session worktree path for one repo under Monke home. */
 export function getExpectedWorktreePath(home: string, sourceRoot: string, session: string): string {
   return path.join(home, "worktrees", path.basename(sourceRoot), session);

@@ -70,18 +70,6 @@ export function read(root: string, relativePath: string): string {
   return readFileSync(path.join(root, relativePath), "utf8");
 }
 
-export function installFakeWt(binDirectory: string): string {
-  const logPath = path.join(binDirectory, "wt.log");
-  writeExecutable(
-    path.join(binDirectory, "wt"),
-    `#!/bin/sh
-echo "$@" >> "${logPath}"
-exit 0
-`,
-  );
-  return logPath;
-}
-
 export function installGitShim(binDirectory: string): string {
   const logPath = path.join(binDirectory, "git.log");
   writeExecutable(
@@ -116,51 +104,6 @@ fi
 exec /bin/sh "$@"
 `,
   );
-  return logPath;
-}
-
-export function installFakeBrew(binDirectory: string): string {
-  const logPath = path.join(binDirectory, "brew.log");
-  const wtLogPath = path.join(binDirectory, "wt.log");
-  const script = `#!/bin/sh
-set -eu
-echo "$@" >> "${logPath}"
-if [ "$1" = "install" ] && [ "$2" = "worktrunk" ]; then
-  /bin/cat > "${path.join(binDirectory, "wt")}" <<'EOF'
-#!/bin/sh
-echo "$@" >> "${wtLogPath}"
-exit 0
-EOF
-  /bin/chmod +x "${path.join(binDirectory, "wt")}"
-  exit 0
-fi
-echo "unsupported brew invocation: $*" >&2
-exit 1
-`;
-  writeExecutable(path.join(binDirectory, "brew"), script);
-  return logPath;
-}
-
-export function installFailingBrew(binDirectory: string): string {
-  const logPath = path.join(binDirectory, "brew.log");
-  const script = `#!/bin/sh
-set -eu
-echo "$@" >> "${logPath}"
-echo "brew install failed" >&2
-exit 1
-`;
-  writeExecutable(path.join(binDirectory, "brew"), script);
-  return logPath;
-}
-
-export function installNoopBrew(binDirectory: string): string {
-  const logPath = path.join(binDirectory, "brew.log");
-  const script = `#!/bin/sh
-set -eu
-echo "$@" >> "${logPath}"
-exit 0
-`;
-  writeExecutable(path.join(binDirectory, "brew"), script);
   return logPath;
 }
 
