@@ -5,8 +5,9 @@ description: Registry of preferred external libraries by capability. Use before 
 
 # Preferred Libraries
 
-Before adding or proposing an external JavaScript or TypeScript library, check this registry. Default to the listed library when it fits the problem and the project does not already have a conflicting standard.
-Research or propose another library only when no listed library fits, the existing codebase has already standardized elsewhere, or the user asks for a fresh comparison.
+Before adding or proposing an external JavaScript or TypeScript library, or writing a generic utility that a listed library would cover, check this registry.
+
+Use the listed default unless an exception applies. Completion requires one of these outcomes: use the listed library, follow an existing project standard, state that no listed library fits, or run the fresh comparison the user asked for.
 
 ## CLI And Terminal UX
 

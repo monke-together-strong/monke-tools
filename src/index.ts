@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Command, CommanderError, Option } from "commander";
+import { Command, CommanderError } from "commander";
 
 import { MonkeError } from "./errors.ts";
 import {
@@ -10,76 +10,35 @@ import {
   runMaterialize,
   runSetup,
 } from "./monke.ts";
-import {
-  CODEX_REASONING_EFFORTS,
-  runPrdIssueWorkflow,
-  runSinglePassWorkflow,
-  type CodexReasoningEffort,
-} from "./run.ts";
 import { createRuntime } from "./runtime.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt skills configure\n  mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
+  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt skills configure";
 const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
-const RUN_USAGE = "Usage: mt work (<text> | --plan <text> | --prd <text>) [--effort <level>]";
 const SKILLS_USAGE = "Usage: mt skills configure";
-
-type RunCommandOptions =
-  | {
-      kind: "plan";
-      plan: string;
-      effort?: CodexReasoningEffort;
-    }
-  | {
-      kind: "prd";
-      prd: string;
-      effort?: CodexReasoningEffort;
-    };
-
-interface RawRunCommandOptions {
-  plan?: string;
-  prd?: string;
-  effort?: CodexReasoningEffort;
-}
 
 interface RawCleanupCommandOptions {
   merged?: boolean;
   dryRun?: boolean;
 }
 
-/** Run the Monke Tools CLI. Valid `mt work` invocations return a workflow promise. */
-export function runCli(argv: string[], runtime = createRuntime()): void | Promise<void> {
+/** Run the Monke Tools CLI. */
+export function runCli(argv: string[], runtime = createRuntime()): void {
   if (argv.length === 0) {
     throw new MonkeError(ROOT_USAGE);
   }
 
-  const pendingRun: { options: RunCommandOptions | null } = { options: null };
-
   try {
-    createProgram(runtime, (options) => {
-      pendingRun.options = options;
-    }).parse(argv, { from: "user" });
+    createProgram(runtime).parse(argv, { from: "user" });
   } catch (error) {
     throw mapCliError(error, argv);
   }
-
-  if (pendingRun.options) {
-    if (pendingRun.options.kind === "plan") {
-      return runSinglePassWorkflow(runtime, pendingRun.options.plan, {
-        effort: pendingRun.options.effort,
-      });
-    }
-
-    return runPrdIssueWorkflow(runtime, pendingRun.options.prd, {
-      effort: pendingRun.options.effort,
-    });
-  }
 }
 
-function createProgram(runtime: Runtime, onRun: (options: RunCommandOptions) => void): Command {
+function createProgram(runtime: Runtime): Command {
   const program = new Command()
     .name("mt")
     .helpOption(false)
@@ -173,52 +132,7 @@ function createProgram(runtime: Runtime, onRun: (options: RunCommandOptions) => 
       runLocalInstallSkills(runtime, sourceCheckout);
     });
 
-  program
-    .command("work")
-    .helpOption(false)
-    .allowExcessArguments(false)
-    .argument("[plan...]")
-    .option("--plan <text>")
-    .option("--prd <text>")
-    .addOption(new Option("--effort <level>").choices([...CODEX_REASONING_EFFORTS]))
-    .action((planParts: string[], options: RawRunCommandOptions) => {
-      onRun(parseRunCommandOptions(planParts, options));
-    });
-
   return program;
-}
-
-function parseRunCommandOptions(
-  planParts: readonly string[],
-  options: RawRunCommandOptions,
-): RunCommandOptions {
-  const positionalPlan = planParts.length > 0 ? planParts.join(" ") : undefined;
-
-  if (positionalPlan !== undefined && options.plan === undefined && options.prd === undefined) {
-    return {
-      kind: "plan",
-      plan: positionalPlan,
-      effort: options.effort,
-    };
-  }
-
-  if (options.plan !== undefined && options.prd === undefined && positionalPlan === undefined) {
-    return {
-      kind: "plan",
-      plan: options.plan,
-      effort: options.effort,
-    };
-  }
-
-  if (options.prd !== undefined && options.plan === undefined && positionalPlan === undefined) {
-    return {
-      kind: "prd",
-      prd: options.prd,
-      effort: options.effort,
-    };
-  }
-
-  throw new MonkeError(RUN_USAGE);
 }
 
 function mapCliError(error: unknown, argv: string[]): Error {
@@ -239,8 +153,6 @@ function mapCliError(error: unknown, argv: string[]): Error {
       return new MonkeError("Usage: mt install-dependencies");
     case "skills":
       return new MonkeError(SKILLS_USAGE);
-    case "work":
-      return new MonkeError(RUN_USAGE);
     default:
       return new MonkeError(ROOT_USAGE);
   }

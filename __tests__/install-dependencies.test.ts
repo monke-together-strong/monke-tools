@@ -121,6 +121,7 @@ test("install-local runs dependency installation before skill installation and s
   });
 
   expect(result.status).toBe(17);
+  expect(readFileSync(bunLog, "utf8")).toContain(`pwd:${path.join(checkout, "builds")}\n`);
   expect(readFileSync(monkeToolsLog, "utf8")).toBe("install-dependencies\n");
 });
 
@@ -157,6 +158,7 @@ test("install-local continues to skill installation after dependency installatio
   });
 
   expect(result.status).toBe(0);
+  expect(readFileSync(bunLog, "utf8")).toContain(`pwd:${path.join(checkout, "builds")}\n`);
   expect(readFileSync(monkeToolsLog, "utf8")).toBe(
     `install-dependencies\nskills local-install ${checkout}\n`,
   );
@@ -170,6 +172,7 @@ function installFakeBun(binDirectory: string): void {
     bunPath,
     `#!/bin/sh
 set -eu
+printf 'pwd:%s\\n' "$PWD" >> "$BUN_LOG"
 printf '%s\\n' "$*" >> "$BUN_LOG"
 outfile=""
 while [ "$#" -gt 0 ]; do

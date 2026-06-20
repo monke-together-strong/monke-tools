@@ -2,7 +2,7 @@
   "name": "monke-tools",
   "version": "0.0.0",
   "private": true,
-  "description": "Bun CLI for isolated per-session repo worktrees, local env rewrites, agent workflows, and distributed agent skills.",
+  "description": "Bun CLI for isolated per-session repo worktrees, local env rewrites, and distributed agent skills.",
   "keywords": [
     "agent-skills",
     "distributed-skills"
@@ -36,8 +36,7 @@
     "@clack/prompts": "0.11.0",
     "commander": "^14.0.3",
     "picocolors": "1.1.1",
-    "yaml": "^2.8.3",
-    "zod": "^4.3.6"
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.12",
