@@ -19,6 +19,7 @@ const ROOT_USAGE =
 const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const SKILLS_USAGE = "Usage: mt skills configure";
+const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
 
 interface RawCleanupCommandOptions {
   merged?: boolean;
@@ -152,6 +153,9 @@ function mapCliError(error: unknown, argv: string[]): Error {
     case "install-dependencies":
       return new MonkeError("Usage: mt install-dependencies");
     case "skills":
+      if (argv[1] === "local-install") {
+        return new MonkeError(SKILLS_LOCAL_INSTALL_USAGE);
+      }
       return new MonkeError(SKILLS_USAGE);
     default:
       return new MonkeError(ROOT_USAGE);

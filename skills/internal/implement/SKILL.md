@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 Implement the work described by the user in the PRD or issues.
 
-If the work is described by a PRD, first determine whether it has implementation issues attached. If it does, use [PRD-ORCHESTRATION.md](PRD-ORCHESTRATION.md). If it does not, implement the PRD directly in a new thread.
+If the work is described by a PRD, first determine whether it has implementation issues attached. When it does, use [PRD-ORCHESTRATION.md](PRD-ORCHESTRATION.md); otherwise, implement the PRD directly in a new thread.
 
 Use /tdd where possible, at pre-agreed seams.
 
