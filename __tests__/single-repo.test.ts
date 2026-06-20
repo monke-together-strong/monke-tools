@@ -7,7 +7,6 @@ import { getSessionStateFilePath, saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
   git,
-  installFakeWt,
   installShShim,
   makeTempDir,
   read,
@@ -19,7 +18,6 @@ import {
 test("create bootstraps a single-repo session and rewrites only mapped env vars", () => {
   const sandbox = makeTempDir("single-repo");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     ".env.shared": "ROOT_ONLY=true\n",
@@ -65,7 +63,6 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
 test("create without monke.yml creates an unmaterialized worktree and warns", () => {
   const sandbox = makeTempDir("single-repo-no-config");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "hello\n",
@@ -109,7 +106,6 @@ test("create without monke.yml creates an unmaterialized worktree and warns", ()
 test("create rejects stale repo-name session collisions from unrelated source roots", () => {
   const sandbox = makeTempDir("single-repo-global-path-collision");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoFiles = {
     "apps/api/.env.local": "PORT=3000\n",
@@ -151,7 +147,6 @@ test("create rejects stale repo-name session collisions from unrelated source ro
 test("create -m keeps default branch file content while avoiding source checkout baseline ports", () => {
   const sandbox = makeTempDir("single-repo-main-mode");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\nDEFAULT_ONLY=1\n",
@@ -183,7 +178,6 @@ test("create -m keeps default branch file content while avoiding source checkout
 test("create -m without monke.yml creates an unmaterialized default-branch worktree", () => {
   const sandbox = makeTempDir("single-repo-main-no-config");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "main\n",
@@ -220,7 +214,6 @@ test("create -m without monke.yml creates an unmaterialized default-branch workt
 test("create -m seeds configured paths from the source checkout", () => {
   const sandbox = makeTempDir("single-repo-main-seed-source");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
@@ -252,7 +245,6 @@ apps:
 test("create -m seeds ignored managed env files and avoids their baseline ports", () => {
   const sandbox = makeTempDir("single-repo-main-local-env");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     ".gitignore": "apps/api/.env.local\n",
@@ -284,7 +276,6 @@ test("create -m seeds ignored managed env files and avoids their baseline ports"
 test("create -m prefers fetched origin main over stale local main", () => {
   const sandbox = makeTempDir("single-repo-origin-main");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\nLOCAL_MAIN=1\n",
@@ -323,7 +314,6 @@ test("create -m prefers fetched origin main over stale local main", () => {
 test("create -m prunes deleted origin main before choosing origin master", () => {
   const sandbox = makeTempDir("single-repo-pruned-origin-main");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\nLOCAL_MAIN=1\n",
@@ -367,7 +357,6 @@ test("create -m prunes deleted origin main before choosing origin master", () =>
 test("create -m falls back to local main when origin fetch fails", () => {
   const sandbox = makeTempDir("single-repo-fetch-fallback");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\nLOCAL_MAIN=1\n",
@@ -407,7 +396,6 @@ test("create -m falls back to local main when origin fetch fails", () => {
 test("create -m rolls back failed fresh attempts so they can be retried", () => {
   const sandbox = makeTempDir("single-repo-main-rollback");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/package.json": "{}\n",
@@ -454,7 +442,6 @@ test("create -m rolls back failed fresh attempts so they can be retried", () => 
 test("create -m fails when session state already exists", () => {
   const sandbox = makeTempDir("single-repo-main-existing-state");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
@@ -487,7 +474,6 @@ test("create -m fails when session state already exists", () => {
 test("create -m fails when the session branch already exists", () => {
   const sandbox = makeTempDir("single-repo-main-existing-branch");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
@@ -515,7 +501,6 @@ test("create -m fails when the session branch already exists", () => {
 test("create --main and --master are aliases for default branch mode", () => {
   const sandbox = makeTempDir("single-repo-main-aliases");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
@@ -547,7 +532,6 @@ test("create --main and --master are aliases for default branch mode", () => {
 test("create rewrites one local port key into multiple same-repo app env files", () => {
   const sandbox = makeTempDir("single-repo-shared-port");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
@@ -584,7 +568,6 @@ test("create rewrites one local port key into multiple same-repo app env files",
 test("create and materialize resolve, reuse, write, and prune resource values", () => {
   const sandbox = makeTempDir("single-repo-resources");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\nOTHER=keep\n",
@@ -661,7 +644,6 @@ apps:
 test("create rejects resource value collisions with retained sessions", () => {
   const sandbox = makeTempDir("single-repo-resource-collision");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
@@ -698,7 +680,6 @@ apps:
 test("materialize rejects source checkout context and reuses sticky ports inside a valid session worktree", () => {
   const sandbox = makeTempDir("single-materialize");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
@@ -752,7 +733,6 @@ test("materialize rejects source checkout context and reuses sticky ports inside
 test("create and materialize run bootstrapCommand after env sync from the repo worktree root", () => {
   const sandbox = makeTempDir("single-bootstrap");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const shLogPath = installShShim(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
@@ -796,7 +776,6 @@ apps:
 test("create seeds configured directories and files into a new session worktree", () => {
   const sandbox = makeTempDir("single-seedpaths");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
@@ -836,7 +815,6 @@ apps:
 test("create merges seeded directories into tracked worktree directories without clobbering existing files", () => {
   const sandbox = makeTempDir("single-seedpaths-merge");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     ".gitignore": "apps/frostbite-crawler/data/sessions/hoangbn/Cookies\n",
@@ -876,7 +854,6 @@ apps:
 test("repeated create and materialize do not clobber seeded paths already changed in the worktree", () => {
   const sandbox = makeTempDir("single-seedpaths-no-clobber");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
@@ -929,7 +906,6 @@ apps:
 test("missing configured seedPaths warn and do not fail session creation", () => {
   const sandbox = makeTempDir("single-seedpaths-missing");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
@@ -1044,7 +1020,6 @@ external:
 test("setup must run from the source checkout", () => {
   const sandbox = makeTempDir("setup-source-checkout-only");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
   createRepo(path.join(sandbox, "dep"), {
     "services/db/.env.local": "PORT=5432\n",

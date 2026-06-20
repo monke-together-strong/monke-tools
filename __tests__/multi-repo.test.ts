@@ -1,13 +1,13 @@
 import { expect, test } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
-import { saveSessionState } from "../src/registry.ts";
+import { getSessionStateFilePath, saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
   git,
-  installFakeWt,
   installShShim,
   makeTempDir,
   read,
@@ -16,10 +16,17 @@ import {
   write,
 } from "./helpers.ts";
 
+const projectRoot = fileURLToPath(new URL("..", import.meta.url));
+
+function makeRepoTempDir(prefix: string): string {
+  const testTempRoot = path.join(projectRoot, "tmp", "tests");
+  mkdirSync(testTempRoot, { recursive: true });
+  return realpathSync.native(mkdtempSync(path.join(testTempRoot, `${prefix}-`)));
+}
+
 test("create materializes direct dependencies before the root repo and propagates external ports", () => {
   const sandbox = makeTempDir("multi-repo");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -78,10 +85,94 @@ external:
   expect(sessionState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
 });
 
+test("create fails dirty dependency source checkouts before creating any worktrees", () => {
+  const sandbox = makeRepoTempDir("multi-repo-dirty-preflight");
+  try {
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+
+    const cleanDepRoot = createRepo(path.join(sandbox, "clean-dep"), {
+      "services/cache/.env.local": "PORT=6379\n",
+      "monke.yml": `apps:
+  cache:
+    path: services/cache
+    envFile: .env.local
+    mappings:
+      - port: CACHE_PORT
+        env: PORT
+`,
+    });
+
+    const dirtyDepRoot = createRepo(path.join(sandbox, "dirty-dep"), {
+      "services/db/.env.local": "PORT=5432\n",
+      "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DB_PORT
+        env: PORT
+`,
+    });
+    write(dirtyDepRoot, "untracked.txt", "dirty\n");
+
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+external:
+  clean-dep:
+    path: ../clean-dep
+    pathEnv: CACHE_DIR
+    mappings:
+      - port: CACHE_PORT
+        app: api
+        env: CACHE_URL
+  dirty-dep:
+    path: ../dirty-dep
+    pathEnv: DB_DIR
+    mappings:
+      - port: DB_PORT
+        app: api
+        env: DATABASE_URL
+`,
+    });
+
+    expect(() => {
+      runMonke({
+        cwd: root,
+        args: ["create", "dirty-first"],
+        monkeHome: home,
+        binDirectory,
+      });
+    }).toThrow(`Source checkout is dirty: ${dirtyDepRoot}`);
+
+    expect(existsSync(getExpectedWorktreePath(home, cleanDepRoot, "dirty-first"))).toBe(false);
+    expect(existsSync(getExpectedWorktreePath(home, dirtyDepRoot, "dirty-first"))).toBe(false);
+    expect(existsSync(getExpectedWorktreePath(home, root, "dirty-first"))).toBe(false);
+    expect(existsSync(getSessionStateFilePath(home, root, "dirty-first"))).toBe(false);
+    expect(() =>
+      git(cleanDepRoot, ["show-ref", "--verify", "--quiet", "refs/heads/dirty-first"]),
+    ).toThrow();
+    expect(() =>
+      git(dirtyDepRoot, ["show-ref", "--verify", "--quiet", "refs/heads/dirty-first"]),
+    ).toThrow();
+    expect(() =>
+      git(root, ["show-ref", "--verify", "--quiet", "refs/heads/dirty-first"]),
+    ).toThrow();
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
 test("create -m discovers dependencies from default branch config", () => {
   const sandbox = makeTempDir("multi-repo-main-config");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -178,7 +269,6 @@ external:
 test("create -m seeds dependency managed env files from source checkouts", () => {
   const sandbox = makeTempDir("multi-repo-main-local-env");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -235,7 +325,6 @@ external:
 test("create -m materializes mixed main and master repos in one graph", () => {
   const sandbox = makeTempDir("multi-repo-main-master");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -287,7 +376,6 @@ external:
 test("create fails clearly when two repos collide on repo-name session worktree paths", () => {
   const sandbox = makeTempDir("multi-repo-worktree-collision");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   createRepo(path.join(sandbox, "other", "root"), {
@@ -334,7 +422,6 @@ external:
 test("resource command retained inputs are scoped to the declaring repo across root graphs", () => {
   const sandbox = makeTempDir("multi-repo-resource-command-declaring-scope");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   installShShim(binDirectory);
   const home = path.join(sandbox, "home");
 
@@ -434,7 +521,6 @@ external:
 test("resource command return violation records an incomplete root repo and rerun heals external path env", () => {
   const sandbox = makeTempDir("multi-repo-resource-command-partial-root");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   installShShim(binDirectory);
   const home = path.join(sandbox, "home");
 
@@ -533,7 +619,6 @@ external:
 test("create fans out one dependency-owned port to multiple local targets", () => {
   const sandbox = makeTempDir("multi-repo-fanout");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -600,7 +685,6 @@ external:
 test("materialize overwrites stale root path env values and preserves unrelated entries", () => {
   const sandbox = makeTempDir("multi-repo-pathenv-refresh");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -660,7 +744,6 @@ external:
 test("root path env file only includes direct externals", { timeout: 30_000 }, () => {
   const sandbox = makeTempDir("multi-repo-direct-pathenvs");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   createRepo(path.join(sandbox, "leaf"), {
@@ -728,7 +811,6 @@ external:
 test("bootstrap commands receive direct external path env bindings", () => {
   const sandbox = makeTempDir("multi-repo-bootstrap-pathenv");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -777,7 +859,6 @@ external:
 test("dependency bootstrap runs before root bootstrap and root can rely on synced dependency paths", () => {
   const sandbox = makeTempDir("multi-repo-bootstrap");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
