@@ -1,5 +1,6 @@
 node_modules
 dist
+builds
 coverage
 .DS_Store
 *.bun-build

@@ -10,16 +10,6 @@ export interface WorktreeEntry {
   prunable: boolean;
 }
 
-export interface CheckoutState {
-  isDirty: boolean;
-  statusLines: string[];
-}
-
-export interface GitCommitInfo {
-  sha: string;
-  subject: string;
-}
-
 /** A resolved default branch candidate for one source repo. */
 export interface DefaultBranchRef {
   /** Branch name selected as the repo's default branch candidate. */
@@ -29,20 +19,6 @@ export interface DefaultBranchRef {
   /** Whether the selected ref is remote-tracking or local. */
   source: "origin" | "local";
 }
-
-export type ReviewerTarget =
-  | {
-      kind: "working-tree-diff";
-      statusLines: string[];
-    }
-  | {
-      kind: "last-commit";
-      commit: GitCommitInfo;
-    }
-  | {
-      kind: "no-implementation-diff";
-      headCommit: GitCommitInfo | null;
-    };
 
 export function resolveRepoContext(
   runtime: Runtime,
@@ -111,67 +87,6 @@ export function resolveGitRepoRoot(runtime: Runtime, checkoutPath: string): stri
   return trim(
     runGit(runtime, checkoutPath, ["rev-parse", "--path-format=absolute", "--show-toplevel"]),
   );
-}
-
-export function inspectCheckoutState(runtime: Runtime, checkoutPath: string): CheckoutState {
-  const output = runGit(runtime, checkoutPath, [
-    "status",
-    "--porcelain",
-    "--untracked-files=normal",
-  ]);
-  const statusLines = output
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .filter(Boolean);
-
-  return {
-    isDirty: statusLines.length > 0,
-    statusLines,
-  };
-}
-
-export function getHeadCommitInfo(runtime: Runtime, checkoutPath: string): GitCommitInfo | null {
-  const verifyHead = runtime.exec("git", ["rev-parse", "--verify", "HEAD"], {
-    cwd: checkoutPath,
-    allowFailure: true,
-  });
-  if (verifyHead.exitCode !== 0) {
-    return null;
-  }
-
-  const output = runGit(runtime, checkoutPath, ["show", "-s", "--format=%H%n%s", "HEAD"]);
-  const [sha = "", subject = ""] = output.split("\n");
-  return {
-    sha: sha.trim(),
-    subject: subject.trim(),
-  };
-}
-
-export function determineReviewerTarget(
-  runtime: Runtime,
-  checkoutPath: string,
-  preImplementerHead: GitCommitInfo | null,
-): ReviewerTarget {
-  const checkoutState = inspectCheckoutState(runtime, checkoutPath);
-  if (checkoutState.isDirty) {
-    return {
-      kind: "working-tree-diff",
-      statusLines: checkoutState.statusLines,
-    };
-  }
-
-  const headCommit = getHeadCommitInfo(runtime, checkoutPath);
-  if (headCommit && headCommit.sha !== preImplementerHead?.sha) {
-    return {
-      kind: "last-commit",
-      commit: headCommit,
-    };
-  }
-
-  return {
-    kind: "no-implementation-diff",
-    headCommit,
-  };
 }
 
 export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEntry[] {

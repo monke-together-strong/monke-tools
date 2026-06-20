@@ -62,6 +62,50 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
   expect(existsSync(path.join(sandbox, ".monke-worktrees"))).toBe(false);
 });
 
+test("create without monke.yml creates an unmaterialized worktree and warns", () => {
+  const sandbox = makeTempDir("single-repo-no-config");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+
+  const result = runMonke({
+    cwd: repoRoot,
+    args: ["create", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+  expect(read(worktreeRoot, "README.md")).toBe("hello\n");
+  expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("banana");
+  expect(result.stderr).toContain(
+    `Warning: no monke.yml found for ${repoRoot}; created session worktree without materializing it.`,
+  );
+  expect(result.stdout).toContain("Created or updated session banana");
+
+  const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
+    graphSource?: string;
+    repos: Array<{
+      sourceRoot: string;
+      worktreePath: string;
+      assignedPorts: unknown[];
+      materializationComplete?: boolean;
+    }>;
+  };
+  expect(sessionState.graphSource).toBe("session-branch");
+  expect(sessionState.repos).toEqual([
+    {
+      sourceRoot: repoRoot,
+      worktreePath: worktreeRoot,
+      assignedPorts: [],
+      materializationComplete: false,
+    },
+  ]);
+});
+
 test("create rejects stale repo-name session collisions from unrelated source roots", () => {
   const sandbox = makeTempDir("single-repo-global-path-collision");
   const binDirectory = path.join(sandbox, "bin");
@@ -134,6 +178,43 @@ test("create -m keeps default branch file content while avoiding source checkout
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
   expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
   expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=10000\nBRANCH_DIRTY=1\n");
+});
+
+test("create -m without monke.yml creates an unmaterialized default-branch worktree", () => {
+  const sandbox = makeTempDir("single-repo-main-no-config");
+  const binDirectory = path.join(sandbox, "bin");
+  installFakeWt(binDirectory);
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "main\n",
+  });
+  git(repoRoot, ["switch", "-c", "feature"]);
+  write(repoRoot, "README.md", "feature\n");
+
+  const result = runMonke({
+    cwd: repoRoot,
+    args: ["create", "fresh", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
+  expect(read(worktreeRoot, "README.md")).toBe("main\n");
+  expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("fresh");
+  expect(result.stderr).toContain(
+    `Warning: no monke.yml found for ${repoRoot}; created session worktree without materializing it.`,
+  );
+
+  const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
+    graphSource?: string;
+    repos: Array<{ sourceRoot: string; worktreePath: string; materializationComplete?: boolean }>;
+  };
+  expect(sessionState.graphSource).toBe("session-branch");
+  expect(sessionState.repos[0]).toMatchObject({
+    sourceRoot: repoRoot,
+    worktreePath: worktreeRoot,
+    materializationComplete: false,
+  });
 });
 
 test("create -m seeds configured paths from the source checkout", () => {

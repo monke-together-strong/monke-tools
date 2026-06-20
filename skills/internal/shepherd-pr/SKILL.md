@@ -7,7 +7,7 @@ description: 'Shepherd a GitHub pull request all the way to merge-ready by relen
 
 Your job is to shepherd this PR all the way to **merge-ready** - reviewed, addressed, verified, and CI green. **Not merged.** Merging is a human decision.
 
-Create the PR (or pick up the one just created), mark as ready for review if not yet the case, then relentlessly poll its status in a loop. Do not stop polling until all automatic reviewers (e.g., Bugbot, Cubic, etc) have fully completed their review.
+Create the PR (or pick up the one just created), mark as ready for review if not yet the case, then relentlessly poll its status in a loop. Do not stop polling until all automatic reviewers have fully completed their review on the latest commit.
 
 1. **Wait for reviewers:** Keep polling `gh pr view` / `gh pr checks` / review comments until ALL reviewers have finished. Do not act on partial feedback. If one is still running, keep waiting.
 
@@ -35,4 +35,4 @@ Nitpick is a severity label, not a dismissal. Prefer fixing consistency polish; 
 
 **Do not stop early. Do not merge on your own.**
 
-Done is when you've looped through a clean review cycle, double-checked it, reported merge-ready, and the human has explicitly approved the merge.
+Done is when you've looped through a clean review cycle, double-checked it, reported merge-ready, and stopped for human handoff.

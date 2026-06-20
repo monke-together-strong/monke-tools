@@ -163,7 +163,7 @@ The name declared inside a **Distributed skill** for agent-facing selection and 
 _Avoid_: Skill slug, folder name, package skill name
 
 **Core distributed skill**:
-The first monke-tools **Distributed skill**, covering the local install, consumer setup, session operations, repo configuration, and `mt work` workflow together.
+The monke-tools-owned **Distributed skill** covering the local install, consumer setup, session operations, and repo configuration.
 _Avoid_: Skill family, split skill set, command reference
 
 **Internal skill**:

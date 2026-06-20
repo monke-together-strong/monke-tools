@@ -7,7 +7,7 @@ description: Use monke-tools for session worktrees, env rewrites, dependency wor
 
 Use this skill when the current repo uses `mt` / monke-tools. A repo uses monke-tools when it has `monke.yml`, existing `mt-*` session worktrees, or local instructions mention `mt`.
 
-When creating an isolated branch/worktree for a task in a monke-tools repo, use `mt create <session>` from the source checkout instead of `git worktree add`. Monke-tools also creates dependency worktrees, rewrites env/path values, and runs configured bootstrap behavior.
+When creating an isolated branch/worktree for a task in a monke-tools repo, use `mt create <session>` from the source checkout instead of `git worktree add`. The session worktree is ready when dependency worktrees exist, env/path values are rewritten, and configured bootstrap behavior has completed or reported a clear failure.
 
 ## Prerequisite
 
@@ -26,47 +26,14 @@ If it is missing or stale, ask the user to refresh the local install from the mo
 - `mt setup`: run from a source checkout to write dependency path env vars into the source checkout root `.env`.
 - `mt cleanup`: remove dead session-state records and run configured cleanup commands.
 - `mt skills configure`: update which Agent skill roots receive monke-tools Distributed skills.
-- `mt work --plan "..."`: run the single-pass implementer/reviewer agent workflow in the current checkout.
-- `mt work --prd "..."`: run the PRD issue loop across planned task issues.
 
-## Config
+## Core Flows
 
-Each participating repo declares its session behavior in `monke.yml`.
-
-```yaml
-apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-external:
-  dep:
-    path: ../dep
-    pathEnv: DEP_DIR
-    mappings:
-      - port: DEP_POSTGRES_PORT
-        app: api
-        env: DATABASE_URL
-seedPaths:
-  - scripts/bootstrap.sh
-bootstrapCommand: pnpm install
-resources:
-  DISCORD_CHANNEL: mt-${user}-${session}
-cleanupCommand: bun run cleanup:e2e
-```
-
-Key fields:
-
-- `apps`: app env files whose mapped variables monke-tools rewrites.
-- `external`: dependency repos, dependency path env vars, and dependency-owned port mappings.
-- `seedPaths`: files or directories copied into newly created session worktrees.
-- `bootstrapCommand`: repo setup command run after env/path/Resource value writes; dynamic Resource commands run afterward when bootstrap exists.
-- `resources`: literal per-session values; supports `${session}` and `${user}`.
-- `cleanupCommand`: teardown command used by `mt cleanup`.
-
-Bootstrap commands run inside the session worktree after monke-tools writes env files, dependency paths, and deterministic Resource values. Dynamic Resource command outputs are resolved after bootstrap when a bootstrap command exists, so resource modules can import packages installed or linked by bootstrap. Prefer commands whose outputs are valid for that exact worktree. If a generator writes absolute paths into generated files, configure that generator task so caches cannot restore outputs from another worktree. For example, Prisma clients generated through Turbo should use a non-cached `generate` task (`"cache": false`) so `bootstrapCommand: pnpm install && pnpm generate` stays safe.
+- Create a session worktree from the source checkout with `mt create <session>`; use the created session worktree for task work.
+- Refresh an existing session from inside the session worktree with `mt materialize`; completion requires env rewrites, dependency paths, resources, and bootstrap behavior to finish or report a clear failure.
+- Update source checkout dependency path env vars with `mt setup`; do not use it as a replacement for session materialization.
+- Clean stale monke-tools state with `mt cleanup`; report cleanup failures instead of deleting state by hand.
+- When editing or diagnosing `monke.yml`, read [MONKE-YML-REFERENCE.md](MONKE-YML-REFERENCE.md).
 
 ## Rules
 
