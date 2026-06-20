@@ -1,6 +1,13 @@
 import { expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -164,6 +171,60 @@ test("install-local continues to skill installation after dependency installatio
   );
   expect(result.stdout).toContain("Installed monke-tools");
 });
+
+test("install-local prunes old bun build artifacts after a successful build", () => {
+  const sandbox = makeTempDir("install-local-build-retention");
+  const checkout = path.join(sandbox, "checkout");
+  const buildDirectory = path.join(checkout, "builds");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const bunLog = path.join(sandbox, "bun.log");
+  const monkeToolsLog = path.join(sandbox, "monke-tools.log");
+
+  mkdirSync(path.join(checkout, "scripts"), { recursive: true });
+  mkdirSync(path.join(checkout, "src"), { recursive: true });
+  mkdirSync(buildDirectory, { recursive: true });
+  writeFileSync(
+    path.join(checkout, "scripts", "install-local.sh"),
+    readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf8"),
+    "utf8",
+  );
+  chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
+  writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf8");
+  writeFileSync(path.join(buildDirectory, ".oldest.bun-build"), "oldest", "utf8");
+  writeFileSync(path.join(buildDirectory, ".older.bun-build"), "older", "utf8");
+  writeFileSync(path.join(buildDirectory, ".newer.bun-build"), "newer", "utf8");
+  writeFileSync(path.join(buildDirectory, ".newest.bun-build"), "newest", "utf8");
+  writeFileSync(path.join(buildDirectory, "manual.txt"), "keep me", "utf8");
+  utimesSync(path.join(buildDirectory, ".oldest.bun-build"), new Date(0), new Date(0));
+  utimesSync(path.join(buildDirectory, ".older.bun-build"), new Date(1_000), new Date(1_000));
+  utimesSync(path.join(buildDirectory, ".newer.bun-build"), new Date(2_000), new Date(2_000));
+  utimesSync(path.join(buildDirectory, ".newest.bun-build"), new Date(3_000), new Date(3_000));
+  installFakeBun(binDirectory);
+
+  const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
+    cwd: checkout,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      HOME: home,
+      PATH: `${binDirectory}:/usr/bin:/bin`,
+      BUN_LOG: bunLog,
+      MONKE_TOOLS_LOG: monkeToolsLog,
+      INSTALL_DEPENDENCIES_EXIT: "0",
+    },
+  });
+
+  expect(result.status).toBe(0);
+  expect(listBuildArtifacts(buildDirectory)).toEqual([".newer.bun-build", ".newest.bun-build"]);
+  expect(readFileSync(path.join(buildDirectory, "manual.txt"), "utf8")).toBe("keep me");
+});
+
+function listBuildArtifacts(buildDirectory: string): string[] {
+  return readdirSync(buildDirectory)
+    .filter((entry) => entry.startsWith(".") && entry.endsWith(".bun-build"))
+    .sort();
+}
 
 function installFakeBun(binDirectory: string): void {
   mkdirSync(binDirectory, { recursive: true });
