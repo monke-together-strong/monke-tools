@@ -6,7 +6,6 @@ import { getExpectedWorktreePath } from "../src/git.ts";
 import { loadSessionState, saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
-  installFakeWt,
   installShShim,
   makeTempDir,
   read,
@@ -69,7 +68,6 @@ export default function ({ previous }) {
 test("fresh create lets pnpm resource modules use bootstrap-provided workspace packages", () => {
   const sandbox = makeTempDir("single-repo-resource-command-bootstrap-pnpm");
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   installShShim(binDirectory);
   installFakePnpmBootstrapper(binDirectory);
   const home = path.join(sandbox, "home");
@@ -939,7 +937,6 @@ function createResourceCommandScenario(options: {
 }): ResourceCommandScenario {
   const sandbox = makeTempDir(options.name);
   const binDirectory = path.join(sandbox, "bin");
-  installFakeWt(binDirectory);
   installShShim(binDirectory);
   const home = path.join(sandbox, "home");
   const moduleFiles = options.module ? { [moduleFilePath(options.run)]: options.module } : {};

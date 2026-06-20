@@ -11,14 +11,14 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { installFakeBrew, installFakeWt, makeTempDir, read, runMonke } from "./helpers.ts";
+import { makeTempDir, runMonke } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
-test("install-dependencies configures shell integration when wt is already available", () => {
-  const sandbox = makeTempDir("install-dependencies-existing-wt");
+test("install-dependencies remains a compatibility no-op", () => {
+  const sandbox = makeTempDir("install-dependencies-noop");
   const binDirectory = path.join(sandbox, "bin");
-  const wtLog = installFakeWt(binDirectory);
+  mkdirSync(binDirectory, { recursive: true });
   const home = path.join(sandbox, "home");
 
   const result = runMonke({
@@ -30,69 +30,6 @@ test("install-dependencies configures shell integration when wt is already avail
   });
 
   expect(result.stdout).toBe("Verified monke-tools runtime dependencies\n");
-  expect(readFileSync(wtLog, "utf8")).toContain("config shell install --yes");
-});
-
-test("install-dependencies fails when existing wt shell integration setup fails", () => {
-  const sandbox = makeTempDir("install-dependencies-existing-wt-config-fails");
-  const binDirectory = path.join(sandbox, "bin");
-  mkdirSync(binDirectory, { recursive: true });
-  writeFileSync(
-    path.join(binDirectory, "wt"),
-    `#!/bin/sh
-printf '%s\n' "$@" >&2
-exit 42
-`,
-    "utf8",
-  );
-  chmodSync(path.join(binDirectory, "wt"), 0o755);
-  const home = path.join(sandbox, "home");
-
-  expect(() => {
-    runMonke({
-      cwd: sandbox,
-      args: ["install-dependencies"],
-      monkeHome: home,
-      binDirectory,
-      extraEnv: { PATH: binDirectory },
-    });
-  }).toThrow(/config shell install --yes/);
-});
-
-test("install-dependencies installs worktrunk through Homebrew and configures shell integration when wt is missing", () => {
-  const sandbox = makeTempDir("install-dependencies-brew");
-  const binDirectory = path.join(sandbox, "bin");
-  const brewLog = installFakeBrew(binDirectory);
-  const home = path.join(sandbox, "home");
-
-  const result = runMonke({
-    cwd: sandbox,
-    args: ["install-dependencies"],
-    monkeHome: home,
-    binDirectory,
-    extraEnv: { PATH: binDirectory },
-  });
-
-  expect(result.stdout).toBe("Verified monke-tools runtime dependencies\n");
-  expect(read(path.dirname(brewLog), "brew.log")).toContain("install worktrunk");
-  expect(read(path.dirname(brewLog), "wt.log")).toContain("config shell install --yes");
-});
-
-test("install-dependencies fails when wt is missing and Homebrew is unavailable", () => {
-  const sandbox = makeTempDir("install-dependencies-no-brew");
-  const binDirectory = path.join(sandbox, "empty-bin");
-  mkdirSync(binDirectory, { recursive: true });
-  const home = path.join(sandbox, "home");
-
-  expect(() => {
-    runMonke({
-      cwd: sandbox,
-      args: ["install-dependencies"],
-      monkeHome: home,
-      binDirectory,
-      extraEnv: { PATH: binDirectory },
-    });
-  }).toThrow(/Homebrew is not available/);
 });
 
 test("install-local runs dependency installation before skill installation and stops on dependency failure", () => {

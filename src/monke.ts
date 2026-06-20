@@ -27,7 +27,7 @@ import {
 } from "./git.ts";
 import { MonkeError } from "./errors.ts";
 import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
-import { findExecutable, getMonkeHome, withGlobalLock } from "./runtime.ts";
+import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import {
   allocateLocalPorts,
   ensureSessionPrefix,
@@ -85,7 +85,6 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     throw new MonkeError("mt create must run from the source checkout");
   }
 
-  ensureWorktrunkInstalled(runtime);
   const createFromDefaultBranch = options.mode === "default-branch";
 
   withGlobalLock(home, () => {
@@ -375,7 +374,6 @@ function loadResolvedGraphForSession(
 }
 
 export function runInstallDependencies(runtime: Runtime): void {
-  ensureWorktrunkInstalled(runtime);
   runtime.writeStdout("Verified monke-tools runtime dependencies\n");
 }
 
@@ -389,8 +387,6 @@ export function runMaterialize(runtime: Runtime): void {
     throw new MonkeError("Unable to infer the current session");
   }
   const session = context.sessionName;
-
-  ensureWorktrunkInstalled(runtime);
 
   withGlobalLock(home, () => {
     let sessionState = loadSessionState(home, context.sourceRoot, session);
@@ -1055,25 +1051,6 @@ function gitPathExistsAtRef(
     allowFailure: true,
   });
   return result.exitCode === 0;
-}
-
-function ensureWorktrunkInstalled(runtime: Runtime): void {
-  let wt = findExecutable("wt", runtime.env);
-
-  if (!wt) {
-    const brew = findExecutable("brew", runtime.env);
-    if (!brew) {
-      throw new MonkeError("Worktrunk is missing and Homebrew is not available");
-    }
-
-    runtime.exec(brew, ["install", "worktrunk"]);
-    wt = findExecutable("wt", runtime.env);
-    if (!wt) {
-      throw new MonkeError("Installed worktrunk with Homebrew but could not find wt on PATH");
-    }
-  }
-
-  runtime.exec(wt, ["config", "shell", "install", "--yes"]);
 }
 
 function findFirstIndexNeedingWork(
