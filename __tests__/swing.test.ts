@@ -122,6 +122,14 @@ test("swing rejects unsupported PR and target forms clearly", () => {
   expect(() =>
     runMonke({ cwd: repoRoot, args: ["swing", "pr:124"], monkeHome: home, binDirectory }),
   ).toThrow(/Fork PR targets are not supported/);
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["swing", "https://github.com/other/root/pull/124"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/Cross-repo PR URLs are not supported/);
   expect(() => runMonke({ cwd: repoRoot, args: ["swing", "mr:12"], monkeHome: home })).toThrow(
     /Merge request Swing targets are out of scope/,
   );

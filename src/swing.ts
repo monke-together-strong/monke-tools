@@ -28,6 +28,14 @@ interface ResolvedSwingTarget {
   path: string;
 }
 
+interface PullRequestSwingTarget {
+  number: number;
+  repo?: {
+    owner: string;
+    name: string;
+  };
+}
+
 /** Navigate to an existing Source checkout or Session worktree. */
 export function runSwing(runtime: Runtime, rawTarget: string): void {
   const home = getMonkeHome(runtime);
@@ -74,11 +82,11 @@ function resolveSwingTarget(
     throw new MonkeError("@ Swing targets are not supported");
   }
 
-  const pullRequestNumber = parsePullRequestTarget(rawTarget);
-  if (pullRequestNumber !== null) {
+  const pullRequestTarget = parsePullRequestTarget(rawTarget);
+  if (pullRequestTarget !== null) {
     return resolveStoredTarget(runtime, home, rootSourceRoot, {
       kind: "session",
-      session: resolvePullRequestSession(runtime, rootSourceRoot, pullRequestNumber),
+      session: resolvePullRequestSession(runtime, rootSourceRoot, pullRequestTarget),
     });
   }
 
@@ -114,9 +122,16 @@ function resolveStoredTarget(
 function resolvePullRequestSession(
   runtime: Runtime,
   rootSourceRoot: string,
-  pullRequestNumber: number,
+  pullRequestTarget: PullRequestSwingTarget,
 ): string {
   const currentRepo = resolveCurrentGithubRepo(runtime, rootSourceRoot);
+  if (pullRequestTarget.repo && !isSameGithubRepo(pullRequestTarget.repo, currentRepo)) {
+    throw new MonkeError(
+      `Cross-repo PR URLs are not supported: target ${pullRequestTarget.repo.owner}/${pullRequestTarget.repo.name} does not match current repo ${currentRepo.owner}/${currentRepo.name}`,
+    );
+  }
+
+  const pullRequestNumber = pullRequestTarget.number;
   const output = runtime.exec(
     "gh",
     [
@@ -184,10 +199,10 @@ function resolveCurrentGithubRepo(
   return { owner, name };
 }
 
-function parsePullRequestTarget(rawTarget: string): number | null {
+function parsePullRequestTarget(rawTarget: string): PullRequestSwingTarget | null {
   const prMatch = rawTarget.match(/^pr:(\d+)$/);
   if (prMatch) {
-    return Number.parseInt(prMatch[1]!, 10);
+    return { number: Number.parseInt(prMatch[1]!, 10) };
   }
 
   try {
@@ -195,11 +210,29 @@ function parsePullRequestTarget(rawTarget: string): number | null {
     if (url.hostname !== "github.com") {
       return null;
     }
-    const match = url.pathname.match(/^\/[^/]+\/[^/]+\/pull\/(\d+)\/?$/);
-    return match ? Number.parseInt(match[1]!, 10) : null;
+    const match = url.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/);
+    return match
+      ? {
+          number: Number.parseInt(match[3]!, 10),
+          repo: {
+            owner: match[1]!,
+            name: match[2]!,
+          },
+        }
+      : null;
   } catch {
     return null;
   }
+}
+
+function isSameGithubRepo(
+  left: { owner: string; name: string },
+  right: { owner: string; name: string },
+): boolean {
+  return (
+    left.owner.toLowerCase() === right.owner.toLowerCase() &&
+    left.name.toLowerCase() === right.name.toLowerCase()
+  );
 }
 
 function getCurrentSwingTarget(context: RepoContext): SwingHistoryTarget {
