@@ -1,21 +1,50 @@
-# Use shell integration for create and swing navigation
+# Use shell integration for Create and Swing navigation
 
-monke-tools creates and manages **Session worktrees**, but a normal CLI subprocess cannot change the parent interactive shell's current directory. Navigation after `mt create` and `mt swing` therefore needs an explicit Shell adapter instead of pretending that the binary can `cd` for the caller.
+monke-tools uses a shell adapter to make successful **Create** and **Swing** operations move the user's interactive shell to the target **Session worktree**. A normal CLI subprocess cannot change its parent shell's working directory, so monke-tools uses a file-backed **Shell directory directive**: the shell adapter invokes the real `mt` binary with a directive-file environment variable, `mt` writes the target path to that file, and the adapter runs `cd` after the binary exits.
 
 ## Decision
 
-`mt` uses a file-backed **Shell directory directive**. The bash and zsh Shell adapter wraps the real monke-tools binary, creates a temporary directive file, invokes the binary with `MONKE_SHELL_DIR_DIRECTIVE` pointing at that file, and changes directory only after the binary exits successfully and the file contains a target path.
+`mt create <session>` always emits a **Shell directory request** for the root repo's **Session worktree** after it succeeds. `mt swing <target>` does the same for an existing root repo **Session worktree**.
 
-The binary treats Shell integration as active only when it can write the requested directory to the directive file. When the directive is accepted, navigation commands report `Switched to <path>` on stderr. When no active adapter accepts the request, they report `Switch to <path>` on stderr and write the path itself to stdout so subprocess callers and agents can use the target explicitly.
+`Swing` follows Worktrunk's navigation model rather than Git's branch-switching model. It navigates to existing Session worktrees only. It does not create Session worktrees and does not change which branch an existing worktree has checked out. Users continue to create sessions with `mt create`.
 
-Shell integration install is explicit and idempotent. `mt shell install` refreshes managed blocks in `~/.zshrc` and `~/.bashrc`; `mt shell init zsh` and `mt shell init bash` print the generated adapter for inspection. The local install refresh runs `mt shell install` after rebuilding the binary, so the adapter points at the current local executable.
+The first Shell integration supports bash and zsh only. `bun run install:local` installs it idempotently as part of the **Local install refresh**, and explicit commands are available to repair or inspect it without reinstalling skills or rebuilding the binary:
 
-`mt swing` is navigation-only. It resolves existing targets for the current Root repo: a Session name, `^` for the Source checkout, `-` for the Previous Swing target, and same-repo GitHub PR targets (`pr:<number>` or a GitHub pull request URL) whose head branch matches an existing Session. It does not create worktrees or change branches. Previous Swing target history is stored under Monke home and scoped by Root repo.
+```sh
+mt shell install
+mt shell init bash
+mt shell init zsh
+```
+
+The directive protocol supports only directory changes. It does not include Worktrunk's arbitrary shell execution directive.
+
+CLI output for these operations goes through a semantic `mt` logger built on `picocolors`. The logger exposes intent-level methods such as `success`, `warning`, `hint`, `info`, and `error`, inspired by Worktrunk's styling layer. It routes all output through `Runtime.writeStdout` and `Runtime.writeStderr`, never through `console.log`.
+
+Status messages go to stderr. Primary data and parseable command output stay on stdout. This keeps CLI output testable through `createRuntime({ onStdout, onStderr })`, avoids global console monkeypatching in tests, preserves stdout for machine-readable data and paths, centralizes color and no-color behavior, keeps shell-integration messages predictable, and avoids accidental extra newlines or mixed status/data output.
+
+monke-tools reports navigation honestly:
+
+- When an **Active shell adapter** accepts the request, it reports that it switched to the target worktree.
+- When shell integration is configured but inactive for the current invocation, it reports the target path and explains that the shell must be restarted or `mt` must be invoked through the shell adapter.
+- When shell integration is not configured, it reports the target path and explains how to configure automatic switching.
+
+`Swing` accepts Session names, the source-checkout shortcut `^`, the previous target shortcut `-`, same-repo pull request shortcuts such as `pr:123`, and pull request URLs. The `^` shortcut navigates to the root repo's Source checkout without materializing, setting up, creating, or changing branches. Pull request targets resolve through the pull request's same-repo head branch name and then navigate to the existing Session with that name. Fork pull request targets and merge request targets are outside the first contract.
+
+## Considered Options
+
+- Print the path only: rejected because the intended human workflow is immediate navigation after creating or choosing a Session.
+- Try to `cd` directly from the binary: impossible for the parent shell in the normal subprocess model.
+- Add an arbitrary shell execution directive now: rejected because there is no first-version Monke workflow requiring it, and it expands the trust boundary.
+- Support all Worktrunk shells: rejected for the first version because bash and zsh cover the current local workflow while keeping the install surface small.
+- Make `Swing` create missing worktrees: rejected because monke-tools already has a dedicated `Create` operation with materialization, resource, and state behavior.
+- Use ad hoc `console.log` or free-form color helpers: rejected because shell integration needs predictable stdout/stderr separation and tests need to capture output through the runtime abstraction.
 
 ## Consequences
 
-Create and Swing status text goes to stderr through the semantic logger. Parseable payloads stay on stdout: shell init adapter text and fallback target paths when the shell cannot move the caller.
+Human users get `mt create` and `mt swing` behavior that matches the workflow expectation: after success, the shell lands in the relevant Session worktree when integration is active.
 
-Configured-but-inactive shells can be distinguished from unconfigured shells by checking the managed startup-file block. This gives users a repair hint without implying that a subprocess changed their working directory.
+Automation that invokes the binary without shell integration will receive an explicit target path and guidance instead of a misleading "switched" message.
 
-The first Swing target set deliberately excludes `@`, merge request targets, fork PR mapping, and create-on-demand behavior. Unsupported targets fail clearly so a future version can add them behind explicit behavior rather than accidental branch or worktree mutation.
+Agents and non-interactive subprocess callers cannot rely on shell integration to mutate their host process working directory. They should read the target path from command output or run follow-up work with an explicit working directory.
+
+Tests can assert status and data output separately through `Runtime` sinks, and future commands have one place to enforce color, no-color, newline, and stdout/stderr policy.
