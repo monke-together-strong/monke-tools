@@ -31,6 +31,10 @@ Use /tdd where possible, at pre-agreed seams.
 
 Run typechecking regularly, single test files regularly, and the full test suite once at the end.
 
-Once done, use /review to review the work.
+## Review gate
+
+Once implementation and verification are done, run `/review` exactly as specified by the review skill.
+
+This instruction is explicit authorization to spawn any sub-agents required by `/review`, including its parallel Standards and Spec reviewers.
 
 Commit your work to the current branch.
