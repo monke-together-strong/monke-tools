@@ -84,6 +84,35 @@ test("swing picker can select the Source checkout from a Session worktree", () =
   expect(result.stderr).toContain(repoRoot);
 });
 
+test("swing picker selecting the current target preserves Previous Swing target history", () => {
+  const sandbox = makeTempDir("swing-picker-current-history");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["create", "cherry"], monkeHome: home });
+  const bananaWorktree = getExpectedWorktreePath(home, repoRoot, "banana");
+  const cherryWorktree = getExpectedWorktreePath(home, repoRoot, "cherry");
+  runMonke({ cwd: repoRoot, args: ["swing", "banana"], monkeHome: home });
+  runMonke({ cwd: bananaWorktree, args: ["swing", "cherry"], monkeHome: home });
+
+  const noOpResult = runMonke({
+    cwd: cherryWorktree,
+    args: ["swing"],
+    monkeHome: home,
+    stdinText: "3\n",
+  });
+  const previousResult = runMonke({
+    cwd: cherryWorktree,
+    args: ["swing", "-"],
+    monkeHome: home,
+  });
+
+  expect(noOpResult.stdout.endsWith(`${cherryWorktree}\n`)).toBe(true);
+  expect(previousResult.stdout).toBe(`${bananaWorktree}\n`);
+});
+
 test("swing picker rejects empty and unknown selections", () => {
   const sandbox = makeTempDir("swing-picker-invalid");
   const home = path.join(sandbox, "home");

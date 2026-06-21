@@ -78,11 +78,13 @@ function navigateToSwingTarget(
 
   withGlobalLock(home, () => {
     const resolved = resolveSwingTarget(runtime, home, rootSourceRoot, selectedTarget);
-    saveSwingHistory(home, rootSourceRoot, {
-      version: 1,
-      current: resolved.target,
-      previous: currentTarget,
-    });
+    if (!isSameSwingTarget(resolved.target, currentTarget)) {
+      saveSwingHistory(home, rootSourceRoot, {
+        version: 1,
+        current: resolved.target,
+        previous: currentTarget,
+      });
+    }
     targetPath = resolved.path;
   });
 
