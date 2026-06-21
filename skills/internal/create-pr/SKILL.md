@@ -41,6 +41,7 @@ after the PR exists.
    ```
 
    Omit `Proof` only when the work has no user-visible frontend behavior.
+   Link the PRD if available (github issues)
 
 4. Create the PR.
    - Push with `git push -u origin HEAD` if the branch has no upstream.

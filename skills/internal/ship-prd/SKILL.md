@@ -5,20 +5,20 @@ description: Ship a completed post-grill PRD through implementation, mandatory a
 
 # Ship PRD
 
-Use the current Codex thread as the orchestrator. This workflow starts after a
+Use the current thread as the orchestrator. This workflow starts after a
 grill-me session has already completed; do not run grill-me.
 
-This is a control-plane skill: keep the current Codex thread focused on PRD
+This is a control-plane skill: keep the current thread focused on PRD
 reference resolution, orchestration, evidence packaging, and handoff. Put
-implementation in a separate Codex thread using `/implement`, and put cold
-review and PR shepherding in separate Codex threads.
+implementation in a separate thread using `/implement`, and put cold
+review and PR shepherding in separate threads.
 
 ## Workflow
 
 1. Resolve the PRD reference.
    - If the user explicitly passed a PRD issue, path, or link, use it. Do not
      run `/to-prd`.
-   - Otherwise, run `/to-prd` in the current Codex thread, then make sure all
+   - Otherwise, run `/to-prd` in the current thread, then make sure all
      decisions from the grill-me session have been captured. Update the PRD
      before continuing if anything important is missing.
 2. Identify the durable PRD reference: issue URL/number, local file path, or
@@ -31,7 +31,7 @@ review and PR shepherding in separate Codex threads.
    implementation, create and enter a clean worktree from the intended base
    branch before continuing. In repos that use monke-tools, use the Monke
    worktree flow.
-5. Run implementation in a separate Codex thread with only:
+5. Run implementation in a separate thread with only:
    `/implement <durable PRD reference>`
    - Do not restate repo, branch, test, or completion instructions already
      owned by `/implement`, repo docs, or the PRD.
@@ -42,12 +42,12 @@ review and PR shepherding in separate Codex threads.
    - If `/implement` stops after setup, planning, or branch creation without
      commits and verification, treat it as incomplete and resume or report the
      blocker.
-6. After implementation completes, run `/autoreview` on a separate Codex
-   thread. Wait for it to finish before creating the PR.
+6. After implementation completes, commit if needed then run `/autoreview` on a separate
+   thread, pass it the PRD. Wait for it to finish before creating the PR.
    - Always run this. Do not treat `/implement`, `/review`, tests, lint, or
      screenshots from implementation as a substitute.
-7. Create a ready-for-review PR from the current Codex thread.
-8. Run `/shepherd-pr` on a separate Codex thread, then stop. The shepherding
+7. Create a ready-for-review PR from the current thread.
+8. Run `/shepherd-pr` on a separate thread, then stop. The shepherding
    thread owns polling and follow-up until merge-ready. It must not merge.
 
 ## Thread Titles
