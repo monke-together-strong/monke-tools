@@ -109,7 +109,10 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     },
     async select(prompt): Promise<string> {
       if (scriptedSelectValues !== null) {
-        const selected = scriptedSelectValues.shift() ?? "";
+        const selected = scriptedSelectValues.shift();
+        if (selected === undefined) {
+          throw new MonkeError("No scripted select values remain");
+        }
         if (!prompt.options.some((option) => option.value === selected)) {
           throw new MonkeError(`Unknown selection: ${selected}`);
         }
