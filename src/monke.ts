@@ -26,8 +26,10 @@ import {
   validateWorktreeForSession,
 } from "./git.ts";
 import { MonkeError } from "./errors.ts";
+import { createLogger } from "./logger.ts";
 import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
+import { requestShellDirectory } from "./shell.ts";
 import {
   allocateLocalPorts,
   ensureSessionPrefix,
@@ -282,7 +284,8 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     }
   });
 
-  runtime.writeStdout(`Created or updated session ${session} at path: '${rootWorktreePath}'. Switch to that working directory.\n`);
+  createLogger(runtime).success(`Created or updated session ${session}`);
+  requestShellDirectory(runtime, rootWorktreePath);
 }
 
 function assertCleanCheckoutsForCurrentHeadCreate(
@@ -375,7 +378,7 @@ function loadResolvedGraphForSession(
 }
 
 export function runInstallDependencies(runtime: Runtime): void {
-  runtime.writeStdout("Verified monke-tools runtime dependencies\n");
+  createLogger(runtime).success("Verified monke-tools runtime dependencies");
 }
 
 export function runMaterialize(runtime: Runtime): void {
@@ -437,7 +440,7 @@ export function runMaterialize(runtime: Runtime): void {
     }
   });
 
-  runtime.writeStdout(`Materialized session ${session}\n`);
+  createLogger(runtime).success(`Materialized session ${session}`);
 }
 
 /** Clean up dead Session state and optionally remove merge-cleanable Session worktrees first. */
@@ -465,8 +468,8 @@ export function runCleanup(runtime: Runtime, options: CleanupOptions): void {
   }
 
   if (!dryRun) {
-    runtime.writeStdout(
-      `Removed ${removedDeadSessions} dead session${removedDeadSessions === 1 ? "" : "s"}\n`,
+    createLogger(runtime).success(
+      `Removed ${removedDeadSessions} dead session${removedDeadSessions === 1 ? "" : "s"}`,
     );
   }
 }
@@ -551,6 +554,7 @@ function writeMergedCleanupSummary(
   results: MergedCleanupResult[],
   dryRun: boolean,
 ): void {
+  const logger = createLogger(runtime);
   let eligible = 0;
   let skipped = 0;
   let removed = 0;
@@ -561,35 +565,35 @@ function writeMergedCleanupSummary(
       if (result.removed) {
         removed += 1;
       }
-      runtime.writeStdout(
+      logger.info(
         `${dryRun ? "Would remove" : "Removed"} merged worktree ${result.session} ${
           result.sourceRoot
-        }: ${result.worktreePath}\n`,
+        }: ${result.worktreePath}`,
       );
       continue;
     }
 
     skipped += 1;
-    runtime.writeStdout(
+    logger.info(
       `Skipped merged worktree ${result.session} ${result.sourceRoot}: ${result.decision.reasons.join(
         "; ",
-      )}\n`,
+      )}`,
     );
   }
 
   if (dryRun) {
-    runtime.writeStdout(
+    logger.info(
       `Merged cleanup dry-run: would remove ${formatWorktreeCount(eligible)}, skipped ${formatWorktreeCount(
         skipped,
-      )}\n`,
+      )}`,
     );
     return;
   }
 
-  runtime.writeStdout(
+  logger.info(
     `Merged cleanup: removed ${formatWorktreeCount(removed)}, skipped ${formatWorktreeCount(
       skipped,
-    )}\n`,
+    )}`,
   );
 }
 
@@ -618,7 +622,7 @@ export function runSetup(runtime: Runtime): void {
     })),
   );
 
-  runtime.writeStdout(`Updated root .env for ${path.basename(context.sourceRoot)}\n`);
+  createLogger(runtime).success(`Updated root .env for ${path.basename(context.sourceRoot)}`);
 }
 
 function materializeRepo(options: {

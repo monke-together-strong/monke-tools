@@ -366,13 +366,13 @@ test("cleanup --merged --dry-run reports eligible and skipped sessions without r
     binDirectory,
   });
 
-  expect(result.stdout).toContain(
+  expect(result.stderr).toContain(
     `Would remove merged worktree clean-merged ${root}: ${cleanWorktree}`,
   );
-  expect(result.stdout).toContain(
+  expect(result.stderr).toContain(
     `Skipped merged worktree dirty-untracked ${root}: worktree has 1 dirty/untracked status line(s)`,
   );
-  expect(result.stdout).toContain(
+  expect(result.stderr).toContain(
     "Merged cleanup dry-run: would remove 1 worktree, skipped 1 worktree",
   );
   expect(existsSync(cleanWorktree)).toBe(true);
@@ -433,9 +433,9 @@ apps:
     binDirectory,
   });
 
-  expect(result.stdout).toContain(`Removed merged worktree clean-merged ${root}: ${worktree}`);
-  expect(result.stdout).toContain("Merged cleanup: removed 1 worktree, skipped 0 worktrees");
-  expect(result.stdout).toContain("Removed 1 dead session");
+  expect(result.stderr).toContain(`Removed merged worktree clean-merged ${root}: ${worktree}`);
+  expect(result.stderr).toContain("Merged cleanup: removed 1 worktree, skipped 0 worktrees");
+  expect(result.stderr).toContain("Removed 1 dead session");
   expect(existsSync(worktree)).toBe(false);
   expect(read(root, "cleanup-merged.log")).toBe(`clean-merged\n${worktree}\n`);
   expect(() =>
@@ -481,11 +481,11 @@ test("cleanup --merged skips safely when GitHub metadata is unavailable", () => 
     extraEnv: { PATH: binDirectory },
   });
 
-  expect(result.stdout).toContain(
+  expect(result.stderr).toContain(
     `Skipped merged worktree clean-merged ${root}: GitHub repository lookup failed`,
   );
-  expect(result.stdout).toContain("Merged cleanup: removed 0 worktrees, skipped 1 worktree");
-  expect(result.stdout).toContain("Removed 0 dead sessions");
+  expect(result.stderr).toContain("Merged cleanup: removed 0 worktrees, skipped 1 worktree");
+  expect(result.stderr).toContain("Removed 0 dead sessions");
   expect(existsSync(worktree)).toBe(true);
   expect(readSingleYamlFile(path.join(home, "sessions"))).toBeDefined();
 });
@@ -578,7 +578,7 @@ apps:
     monkeHome: home,
     binDirectory,
   });
-  expect(liveCleanup.stdout).toContain("Removed 0 dead sessions");
+  expect(liveCleanup.stderr).toContain("Removed 0 dead sessions");
   expect(existsSync(path.join(root, "cleanup.log"))).toBe(false);
 
   const worktree = getExpectedWorktreePath(home, root, "clean-command");

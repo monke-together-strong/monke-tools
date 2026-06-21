@@ -263,7 +263,8 @@ external:
     monkeHome: home,
     binDirectory,
   });
-  expect(cleanupResult.stdout).toBe("Removed 1 dead session\n");
+  expect(cleanupResult.stdout).toBe("");
+  expect(cleanupResult.stderr).toBe("Removed 1 dead session\n");
 });
 
 test("create -m seeds dependency managed env files from source checkouts", () => {

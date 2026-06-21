@@ -11,15 +11,19 @@ import {
   runSetup,
 } from "./monke.ts";
 import { createRuntime } from "./runtime.ts";
+import { runShellInit, runShellInstall } from "./shell.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
+import { runSwing } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt skills configure";
+  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt swing <target>\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
 const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
+const SHELL_USAGE = "Usage:\n  mt shell install\n  mt shell init <bash|zsh>";
+const SWING_USAGE = "Usage: mt swing <target>";
 
 interface RawCleanupCommandOptions {
   merged?: boolean;
@@ -67,6 +71,15 @@ function createProgram(runtime: Runtime): Command {
     });
 
   program
+    .command("swing")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .argument("<target>")
+    .action((target: string) => {
+      runSwing(runtime, target);
+    });
+
+  program
     .command("materialize")
     .helpOption(false)
     .allowExcessArguments(false)
@@ -110,6 +123,31 @@ function createProgram(runtime: Runtime): Command {
       runInstallDependencies(runtime);
     });
 
+  const shell = program
+    .command("shell")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .addHelpCommand(false);
+
+  shell
+    .command("install")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .option("--binary <path>")
+    .action((options: { binary?: string }) => {
+      runShellInstall(runtime, options);
+    });
+
+  shell
+    .command("init")
+    .helpOption(false)
+    .allowExcessArguments(false)
+    .argument("<shell>")
+    .option("--binary <path>")
+    .action((shellName: string, options: { binary?: string }) => {
+      runShellInit(runtime, shellName, options);
+    });
+
   const skills = program
     .command("skills")
     .helpOption(false)
@@ -144,6 +182,8 @@ function mapCliError(error: unknown, argv: string[]): Error {
   switch (argv[0]) {
     case "create":
       return new MonkeError(CREATE_USAGE);
+    case "swing":
+      return new MonkeError(SWING_USAGE);
     case "materialize":
       return new MonkeError("Usage: mt materialize");
     case "cleanup":
@@ -152,6 +192,8 @@ function mapCliError(error: unknown, argv: string[]): Error {
       return new MonkeError("Usage: mt setup");
     case "install-dependencies":
       return new MonkeError("Usage: mt install-dependencies");
+    case "shell":
+      return new MonkeError(SHELL_USAGE);
     case "skills":
       if (argv[1] === "local-install") {
         return new MonkeError(SKILLS_LOCAL_INSTALL_USAGE);

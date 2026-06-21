@@ -29,7 +29,8 @@ test("install-dependencies remains a compatibility no-op", () => {
     extraEnv: { PATH: binDirectory },
   });
 
-  expect(result.stdout).toBe("Verified monke-tools runtime dependencies\n");
+  expect(result.stdout).toBe("");
+  expect(result.stderr).toBe("Verified monke-tools runtime dependencies\n");
 });
 
 test("install-local runs dependency installation before skill installation and stops on dependency failure", () => {
@@ -104,7 +105,7 @@ test("install-local continues to skill installation after dependency installatio
   expect(result.status).toBe(0);
   expect(readFileSync(bunLog, "utf8")).toContain(`pwd:${path.join(checkout, "builds")}\n`);
   expect(readFileSync(monkeToolsLog, "utf8")).toBe(
-    `install-dependencies\nskills local-install ${checkout}\n`,
+    `install-dependencies\nshell install\nskills local-install ${checkout}\n`,
   );
   expect(result.stdout).toContain("Installed monke-tools");
 });
