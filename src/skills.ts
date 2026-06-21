@@ -14,6 +14,7 @@ import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
+import { createLogger } from "./logger.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import type {
   BuiltInSkillInstallTargetKind,
@@ -104,10 +105,10 @@ export function runSkillsConfigure(runtime: Runtime): void {
     nextPreference,
     homeDirectory,
     writeMessage(message) {
-      runtime.writeStdout(message);
+      runtime.writeStderr(message);
     },
   });
-  runtime.writeStdout("Configured monke-tools skills\n");
+  createLogger(runtime).success("Configured monke-tools skills");
 }
 
 /** Record the Installed source checkout and refresh or configure Distributed skill targets. */
@@ -134,10 +135,10 @@ export function runLocalInstallSkills(runtime: Runtime, sourceCheckout: string):
     nextPreference: config.skillInstallPreference,
     homeDirectory,
     writeMessage(message) {
-      runtime.writeStdout(message);
+      runtime.writeStderr(message);
     },
   });
-  runtime.writeStdout("Refreshed monke-tools skills\n");
+  createLogger(runtime).success("Refreshed monke-tools skills");
 }
 
 /** Reconcile selected Agent skill roots with the monke-tools Skill source tree. */

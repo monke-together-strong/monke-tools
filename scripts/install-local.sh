@@ -28,4 +28,5 @@ cleanup_old_bun_builds
 
 "$TARGET_FULL" install-dependencies
 printf 'Installed monke-tools to %s and %s\n' "$TARGET_FULL" "$TARGET_SHORT"
+MONKE_TOOLS_BINARY="$TARGET_FULL" "$TARGET_FULL" shell install
 "$TARGET_FULL" skills local-install "$ROOT_DIR"
