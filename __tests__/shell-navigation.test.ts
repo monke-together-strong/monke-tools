@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -63,6 +63,38 @@ test("create distinguishes configured but inactive shell integration", () => {
   expect(result.stderr).toContain(
     "Shell integration is configured but not active; restart your shell or invoke mt through the shell adapter.",
   );
+});
+
+test("create treats unreadable shell startup files as inactive integration", () => {
+  const sandbox = makeTempDir("shell-create-unreadable-startup");
+  const monkeHome = path.join(sandbox, "monke-home");
+  const shellHome = path.join(sandbox, "shell-home");
+  const startupFile = path.join(shellHome, ".zshrc");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  mkdirSync(shellHome, { recursive: true });
+  writeFileSync(startupFile, "# >>> monke-tools shell integration >>>\n", "utf8");
+  chmodSync(startupFile, 0o000);
+
+  try {
+    const result = runMonke({
+      cwd: repoRoot,
+      args: ["create", "banana"],
+      monkeHome,
+      extraEnv: {
+        HOME: shellHome,
+        SHELL: "/bin/zsh",
+      },
+    });
+
+    const worktreeRoot = getExpectedWorktreePath(monkeHome, repoRoot, "banana");
+    expect(result.stdout).toBe(`${worktreeRoot}\n`);
+    expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
+    expect(result.stderr).toContain("Enable automatic switching with: mt shell install");
+  } finally {
+    chmodSync(startupFile, 0o600);
+  }
 });
 
 test("repo commands cannot write an active shell directory directive", () => {

@@ -170,7 +170,7 @@ function resolvePullRequestSession(
     `GitHub PR #${pullRequestNumber} headRepositoryOwner`,
   );
 
-  if (headOwnerLogin !== currentRepo.owner || headRepoName !== currentRepo.name) {
+  if (!isSameGithubRepo({ owner: headOwnerLogin, name: headRepoName }, currentRepo)) {
     throw new MonkeError(
       `Fork PR targets are not supported: PR #${pullRequestNumber} comes from ${headOwnerLogin}/${headRepoName}`,
     );

@@ -121,7 +121,11 @@ function isShellIntegrationConfigured(runtime: Runtime): boolean {
     if (!existsSync(startupFile)) {
       return false;
     }
-    return readFileSync(startupFile, "utf8").includes(INTEGRATION_START);
+    try {
+      return readFileSync(startupFile, "utf8").includes(INTEGRATION_START);
+    } catch {
+      return false;
+    }
   });
 }
 

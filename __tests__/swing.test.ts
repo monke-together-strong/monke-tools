@@ -98,9 +98,16 @@ test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions",
       headRepositoryOwner: { login: "owner" },
       headRepository: { name: "root" },
     },
+    "125": {
+      headRefName: "feature/pr-125",
+      headRepositoryOwner: { login: "OWNER" },
+      headRepository: { name: "ROOT" },
+    },
   });
   runMonke({ cwd: repoRoot, args: ["create", "feature/pr-123"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["create", "feature/pr-125"], monkeHome: home });
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-123");
+  const caseFoldedWorktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-125");
 
   const byNumber = runMonke({
     cwd: repoRoot,
@@ -114,9 +121,16 @@ test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions",
     monkeHome: home,
     binDirectory,
   });
+  const byCaseFoldedNumber = runMonke({
+    cwd: repoRoot,
+    args: ["swing", "pr:125"],
+    monkeHome: home,
+    binDirectory,
+  });
 
   expect(byNumber.stdout).toBe(`${worktreeRoot}\n`);
   expect(byUrl.stdout).toBe(`${worktreeRoot}\n`);
+  expect(byCaseFoldedNumber.stdout).toBe(`${caseFoldedWorktreeRoot}\n`);
 });
 
 test("swing rejects unsupported PR and target forms clearly", () => {
