@@ -39,6 +39,7 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
     args: ["create", "banana"],
     monkeHome: home,
     binDirectory,
+    extraEnv: { HOME: path.join(sandbox, "os-home") },
   });
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
