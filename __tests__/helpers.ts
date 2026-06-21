@@ -211,6 +211,7 @@ export function runMonke(options: {
   monkeHome: string;
   binDirectory?: string;
   extraEnv?: Record<string, string | undefined>;
+  stdinText?: string;
 }): { stdout: string; stderr: string } {
   let stdout = "";
   let stderr = "";
@@ -223,6 +224,7 @@ export function runMonke(options: {
       PATH: pathSegments.join(path.delimiter),
       ...options.extraEnv,
     },
+    stdinText: options.stdinText,
     onStdout(text) {
       stdout += text;
     },

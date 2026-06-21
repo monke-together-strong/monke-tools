@@ -1,9 +1,11 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { isCancel, select } from "@clack/prompts";
 import { parse, stringify } from "yaml";
 
 import { MonkeError } from "./errors.ts";
 import { getExpectedWorktreePath, resolveRepoContext, validateWorktreeForSession } from "./git.ts";
+import { listSessionStates } from "./registry.ts";
 import { ensureDirectory, getMonkeHome, hashKey, withGlobalLock } from "./runtime.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
@@ -28,6 +30,15 @@ interface ResolvedSwingTarget {
   path: string;
 }
 
+interface SwingPickerOption {
+  selector: string;
+  rawTarget: string;
+  target: SwingHistoryTarget;
+  label: string;
+  path: string;
+  markers: string[];
+}
+
 interface PullRequestSwingTarget {
   number: number;
   repo?: {
@@ -37,15 +48,37 @@ interface PullRequestSwingTarget {
 }
 
 /** Navigate to an existing Source checkout or Session worktree. */
-export function runSwing(runtime: Runtime, rawTarget: string): void {
+export function runSwing(runtime: Runtime, rawTarget?: string): void {
   const home = getMonkeHome(runtime);
   const context = resolveRepoContext(runtime, runtime.cwd, home);
   const currentTarget = getCurrentSwingTarget(context);
+  const selectedTarget =
+    rawTarget ?? promptForSwingTarget(runtime, home, context.sourceRoot, currentTarget);
+  navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, selectedTarget);
+}
+
+/** Navigate with the Clack-backed interactive Swing picker used by the real CLI. */
+export async function runSwingInteractive(runtime: Runtime, rawTarget?: string): Promise<void> {
+  const home = getMonkeHome(runtime);
+  const context = resolveRepoContext(runtime, runtime.cwd, home);
+  const currentTarget = getCurrentSwingTarget(context);
+  const selectedTarget =
+    rawTarget ?? (await selectSwingTarget(home, context.sourceRoot, currentTarget));
+  navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, selectedTarget);
+}
+
+function navigateToSwingTarget(
+  runtime: Runtime,
+  home: string,
+  rootSourceRoot: string,
+  currentTarget: SwingHistoryTarget,
+  selectedTarget: string,
+): void {
   let targetPath = "";
 
   withGlobalLock(home, () => {
-    const resolved = resolveSwingTarget(runtime, home, context.sourceRoot, rawTarget);
-    saveSwingHistory(home, context.sourceRoot, {
+    const resolved = resolveSwingTarget(runtime, home, rootSourceRoot, selectedTarget);
+    saveSwingHistory(home, rootSourceRoot, {
       version: 1,
       current: resolved.target,
       previous: currentTarget,
@@ -54,6 +87,152 @@ export function runSwing(runtime: Runtime, rawTarget: string): void {
   });
 
   requestShellDirectory(runtime, targetPath);
+}
+
+function promptForSwingTarget(
+  runtime: Runtime,
+  home: string,
+  rootSourceRoot: string,
+  currentTarget: SwingHistoryTarget,
+): string {
+  const options = listSwingPickerOptions(home, rootSourceRoot, currentTarget);
+  const answer = runtime.readLine(formatSwingPickerPrompt(options)).trim();
+  return parseSwingPickerAnswer(answer, options);
+}
+
+async function selectSwingTarget(
+  home: string,
+  rootSourceRoot: string,
+  currentTarget: SwingHistoryTarget,
+): Promise<string> {
+  const options = listSwingPickerOptions(home, rootSourceRoot, currentTarget);
+  const initialValue = options.find((option) => option.markers.includes("current"))?.rawTarget;
+  const selected = await select({
+    message: "Swing target",
+    initialValue,
+    maxItems: Math.min(options.length, 10),
+    options: options.map((option) => ({
+      value: option.rawTarget,
+      label: formatSwingPickerLabel(option),
+      hint: option.path,
+    })),
+  });
+
+  if (isCancel(selected)) {
+    throw new MonkeError("Swing picker cancelled");
+  }
+
+  return selected;
+}
+
+function listSwingPickerOptions(
+  home: string,
+  rootSourceRoot: string,
+  currentTarget: SwingHistoryTarget,
+): SwingPickerOption[] {
+  const previousTarget = loadSwingHistory(home, rootSourceRoot).previous;
+  const options: SwingPickerOption[] = [];
+
+  if (existsSync(rootSourceRoot)) {
+    options.push({
+      selector: "1",
+      rawTarget: "^",
+      target: { kind: "source" },
+      label: "Source checkout",
+      path: rootSourceRoot,
+      markers: formatTargetMarkers({ kind: "source" }, currentTarget, previousTarget),
+    });
+  }
+
+  const sessionStates = listSessionStates(home)
+    .filter((state) => state.rootSourceRoot === rootSourceRoot)
+    .toSorted((left, right) => left.session.localeCompare(right.session));
+  const seenSessions = new Set<string>();
+
+  for (const state of sessionStates) {
+    if (seenSessions.has(state.session)) {
+      continue;
+    }
+    seenSessions.add(state.session);
+
+    const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, state.session);
+    if (!existsSync(worktreePath)) {
+      continue;
+    }
+
+    const target: SwingHistoryTarget = { kind: "session", session: state.session };
+    options.push({
+      selector: String(options.length + 1),
+      rawTarget: state.session,
+      target,
+      label: `Session ${state.session}`,
+      path: worktreePath,
+      markers: formatTargetMarkers(target, currentTarget, previousTarget),
+    });
+  }
+
+  if (options.length === 0) {
+    throw new MonkeError(`No Swing targets found for ${rootSourceRoot}`);
+  }
+
+  return options;
+}
+
+function formatSwingPickerPrompt(options: SwingPickerOption[]): string {
+  const lines = ["Swing targets:"];
+
+  for (const option of options) {
+    const markers = option.markers.length > 0 ? ` [${option.markers.join(", ")}]` : "";
+    lines.push(`  ${option.selector}. ${option.rawTarget} ${option.label}${markers}`);
+    lines.push(`     ${option.path}`);
+  }
+
+  lines.push("Select target by number, session name, or ^: ");
+  return lines.join("\n");
+}
+
+function formatSwingPickerLabel(option: SwingPickerOption): string {
+  const markers = option.markers.length > 0 ? ` [${option.markers.join(", ")}]` : "";
+  return `${option.rawTarget} ${option.label}${markers}`;
+}
+
+function parseSwingPickerAnswer(answer: string, options: SwingPickerOption[]): string {
+  if (answer === "") {
+    throw new MonkeError("Select a Swing target");
+  }
+
+  const numbered = options.find((option) => option.selector === answer);
+  if (numbered) {
+    return numbered.rawTarget;
+  }
+
+  const named = options.find((option) => option.rawTarget === answer);
+  if (named) {
+    return named.rawTarget;
+  }
+
+  const lowered = answer.toLowerCase();
+  const source = options.find((option) => option.target.kind === "source");
+  if (lowered === "source" && source) {
+    return source.rawTarget;
+  }
+
+  throw new MonkeError(`Unknown Swing target selection: ${answer}`);
+}
+
+function formatTargetMarkers(
+  target: SwingHistoryTarget,
+  currentTarget: SwingHistoryTarget,
+  previousTarget: SwingHistoryTarget | undefined,
+): string[] {
+  const markers: string[] = [];
+  if (isSameSwingTarget(target, currentTarget)) {
+    markers.push("current");
+  }
+  if (previousTarget && isSameSwingTarget(target, previousTarget)) {
+    markers.push("previous");
+  }
+  return markers;
 }
 
 function resolveSwingTarget(
@@ -248,6 +427,13 @@ function getCurrentSwingTarget(context: RepoContext): SwingHistoryTarget {
     kind: "session",
     session: context.sessionName,
   };
+}
+
+function isSameSwingTarget(left: SwingHistoryTarget, right: SwingHistoryTarget): boolean {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  return left.kind === "source" || left.session === right.session;
 }
 
 function loadSwingHistory(home: string, rootSourceRoot: string): SwingHistory {
