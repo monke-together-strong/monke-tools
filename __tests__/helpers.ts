@@ -14,7 +14,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { parse } from "yaml";
 
-import { runCli } from "../src/index.ts";
+import { runCli, runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
 
 const tempDirectories: string[] = [];
@@ -211,7 +211,6 @@ export function runMonke(options: {
   monkeHome: string;
   binDirectory?: string;
   extraEnv?: Record<string, string | undefined>;
-  stdinText?: string;
 }): { stdout: string; stderr: string } {
   let stdout = "";
   let stderr = "";
@@ -224,7 +223,6 @@ export function runMonke(options: {
       PATH: pathSegments.join(path.delimiter),
       ...options.extraEnv,
     },
-    stdinText: options.stdinText,
     onStdout(text) {
       stdout += text;
     },
@@ -234,6 +232,38 @@ export function runMonke(options: {
   });
 
   runCli(options.args, runtime);
+  return { stdout, stderr };
+}
+
+export async function runMonkeAsync(options: {
+  cwd: string;
+  args: string[];
+  monkeHome: string;
+  binDirectory?: string;
+  extraEnv?: Record<string, string | undefined>;
+  selectValues?: string[];
+}): Promise<{ stdout: string; stderr: string }> {
+  let stdout = "";
+  let stderr = "";
+  const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
+
+  const runtime = createRuntime({
+    cwd: options.cwd,
+    env: {
+      MONKE_HOME: options.monkeHome,
+      PATH: pathSegments.join(path.delimiter),
+      ...options.extraEnv,
+    },
+    selectValues: options.selectValues,
+    onStdout(text) {
+      stdout += text;
+    },
+    onStderr(text) {
+      stderr += text;
+    },
+  });
+
+  await runCliAsync(options.args, runtime);
   return { stdout, stderr };
 }
 

@@ -14,6 +14,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { isCancel, select as clackSelect } from "@clack/prompts";
 
 import { MonkeError } from "./errors.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
@@ -30,6 +31,8 @@ export interface RuntimeOptions {
   env?: Record<string, string | undefined>;
   /** Scripted stdin lines used by tests for interactive prompts. */
   stdinText?: string;
+  /** Scripted selected values used by tests for Clack-style select prompts. */
+  selectValues?: string[];
   /** Optional stdout sink used by tests and embedding callers. */
   onStdout?: (text: string) => void;
   /** Optional stderr sink used by tests and embedding callers. */
@@ -41,6 +44,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
   const runtimeEnv = { ...process.env, ...options?.env };
   const runtimeCwd = options?.cwd ?? process.cwd();
   const scriptedInput = options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/);
+  const scriptedSelectValues = options?.selectValues ? [...options.selectValues] : null;
 
   const writeStdout = (text: string): void => {
     if (options?.onStdout) {
@@ -102,6 +106,21 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
 
       return { stdout, stderr, exitCode };
+    },
+    async select(prompt): Promise<string> {
+      if (scriptedSelectValues !== null) {
+        const selected = scriptedSelectValues.shift() ?? "";
+        if (!prompt.options.some((option) => option.value === selected)) {
+          throw new MonkeError(`Unknown selection: ${selected}`);
+        }
+        return selected;
+      }
+
+      const selected = await clackSelect(prompt);
+      if (isCancel(selected)) {
+        throw new MonkeError(`${prompt.message} cancelled`);
+      }
+      return selected;
     },
     readLine(prompt: string): string {
       writeStdout(prompt);

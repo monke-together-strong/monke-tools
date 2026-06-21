@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { isCancel, select } from "@clack/prompts";
 import { parse, stringify } from "yaml";
 
 import { MonkeError } from "./errors.ts";
@@ -31,7 +30,6 @@ interface ResolvedSwingTarget {
 }
 
 interface SwingPickerOption {
-  selector: string;
   rawTarget: string;
   target: SwingHistoryTarget;
   label: string;
@@ -49,12 +47,14 @@ interface PullRequestSwingTarget {
 
 /** Navigate to an existing Source checkout or Session worktree. */
 export function runSwing(runtime: Runtime, rawTarget?: string): void {
+  if (rawTarget === undefined) {
+    throw new MonkeError("Interactive Swing picker requires the async CLI runner");
+  }
+
   const home = getMonkeHome(runtime);
   const context = resolveRepoContext(runtime, runtime.cwd, home);
   const currentTarget = getCurrentSwingTarget(context);
-  const selectedTarget =
-    rawTarget ?? promptForSwingTarget(runtime, home, context.sourceRoot, currentTarget);
-  navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, selectedTarget);
+  navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, rawTarget);
 }
 
 /** Navigate with the Clack-backed interactive Swing picker used by the real CLI. */
@@ -63,7 +63,7 @@ export async function runSwingInteractive(runtime: Runtime, rawTarget?: string):
   const context = resolveRepoContext(runtime, runtime.cwd, home);
   const currentTarget = getCurrentSwingTarget(context);
   const selectedTarget =
-    rawTarget ?? (await selectSwingTarget(home, context.sourceRoot, currentTarget));
+    rawTarget ?? (await selectSwingTarget(runtime, home, context.sourceRoot, currentTarget));
   navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, selectedTarget);
 }
 
@@ -91,25 +91,15 @@ function navigateToSwingTarget(
   requestShellDirectory(runtime, targetPath);
 }
 
-function promptForSwingTarget(
-  runtime: Runtime,
-  home: string,
-  rootSourceRoot: string,
-  currentTarget: SwingHistoryTarget,
-): string {
-  const options = listSwingPickerOptions(home, rootSourceRoot, currentTarget);
-  const answer = runtime.readLine(formatSwingPickerPrompt(options)).trim();
-  return parseSwingPickerAnswer(answer, options);
-}
-
 async function selectSwingTarget(
+  runtime: Runtime,
   home: string,
   rootSourceRoot: string,
   currentTarget: SwingHistoryTarget,
 ): Promise<string> {
   const options = listSwingPickerOptions(home, rootSourceRoot, currentTarget);
   const initialValue = options.find((option) => option.markers.includes("current"))?.rawTarget;
-  const selected = await select({
+  return runtime.select({
     message: "Swing target",
     initialValue,
     maxItems: Math.min(options.length, 10),
@@ -119,12 +109,6 @@ async function selectSwingTarget(
       hint: option.path,
     })),
   });
-
-  if (isCancel(selected)) {
-    throw new MonkeError("Swing picker cancelled");
-  }
-
-  return selected;
 }
 
 function listSwingPickerOptions(
@@ -137,7 +121,6 @@ function listSwingPickerOptions(
 
   if (existsSync(rootSourceRoot)) {
     options.push({
-      selector: "1",
       rawTarget: "^",
       target: { kind: "source" },
       label: "Source checkout",
@@ -164,7 +147,6 @@ function listSwingPickerOptions(
 
     const target: SwingHistoryTarget = { kind: "session", session: state.session };
     options.push({
-      selector: String(options.length + 1),
       rawTarget: state.session,
       target,
       label: `Session ${state.session}`,
@@ -180,46 +162,9 @@ function listSwingPickerOptions(
   return options;
 }
 
-function formatSwingPickerPrompt(options: SwingPickerOption[]): string {
-  const lines = ["Swing targets:"];
-
-  for (const option of options) {
-    const markers = option.markers.length > 0 ? ` [${option.markers.join(", ")}]` : "";
-    lines.push(`  ${option.selector}. ${option.rawTarget} ${option.label}${markers}`);
-    lines.push(`     ${option.path}`);
-  }
-
-  lines.push("Select target by number, session name, or ^: ");
-  return lines.join("\n");
-}
-
 function formatSwingPickerLabel(option: SwingPickerOption): string {
   const markers = option.markers.length > 0 ? ` [${option.markers.join(", ")}]` : "";
   return `${option.rawTarget} ${option.label}${markers}`;
-}
-
-function parseSwingPickerAnswer(answer: string, options: SwingPickerOption[]): string {
-  if (answer === "") {
-    throw new MonkeError("Select a Swing target");
-  }
-
-  const numbered = options.find((option) => option.selector === answer);
-  if (numbered) {
-    return numbered.rawTarget;
-  }
-
-  const named = options.find((option) => option.rawTarget === answer);
-  if (named) {
-    return named.rawTarget;
-  }
-
-  const lowered = answer.toLowerCase();
-  const source = options.find((option) => option.target.kind === "source");
-  if (lowered === "source" && source) {
-    return source.rawTarget;
-  }
-
-  throw new MonkeError(`Unknown Swing target selection: ${answer}`);
 }
 
 function formatTargetMarkers(

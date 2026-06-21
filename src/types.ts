@@ -5,6 +5,8 @@ export interface Runtime {
   readonly env: Record<string, string | undefined>;
   /** Run a command with the runtime environment. */
   exec(command: string, args?: string[], options?: ExecOptions): ExecResult;
+  /** Select one value from an interactive terminal picker. */
+  select(prompt: SelectPrompt): Promise<string>;
   /** Read one interactive input line after writing a prompt. */
   readLine(prompt: string): string;
   /** Write CLI output to stdout. */
@@ -29,6 +31,19 @@ export interface ExecResult {
   exitCode: number;
   /** True when the process was terminated because its timeout elapsed. */
   timedOut?: boolean;
+}
+
+export interface SelectPrompt {
+  message: string;
+  options: SelectOption[];
+  initialValue?: string;
+  maxItems?: number;
+}
+
+export interface SelectOption {
+  value: string;
+  label: string;
+  hint?: string;
 }
 
 export interface RepoContext {
