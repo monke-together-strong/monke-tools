@@ -8,17 +8,13 @@ description: Ship a completed post-grill PRD through implementation, mandatory a
 Use the current thread as the orchestrator. This workflow starts after a
 grill-me session has already completed; do not run grill-me.
 
-This is a control-plane skill: keep the current thread focused on PRD
-reference resolution, orchestration, evidence packaging, and handoff. Put
-implementation in a separate thread using `/implement`, and put cold
-review and PR shepherding in separate threads.
 
 ## Workflow
 
 1. Resolve the PRD reference.
    - If the user explicitly passed a PRD issue, path, or link, use it. Do not
      run `/to-prd`.
-   - Otherwise, run `/to-prd` in the current thread, then make sure all
+   - Otherwise, run `/to-prd` in the current thread. Then make sure all
      decisions from the grill-me session have been captured. Update the PRD
      before continuing if anything important is missing.
 2. Identify the durable PRD reference: issue URL/number, local file path, or
@@ -27,18 +23,14 @@ review and PR shepherding in separate threads.
    - If the user explicitly says "with issues", "use issues", "break into
      issues", "run to-issues", or similar, run `/to-issues` before
      implementation. This is a routing override, not a suggestion.
-4. If the current checkout has unrelated changes that are not part of the PRD
-   implementation, create and enter a clean worktree from the intended base
-   branch before continuing. In repos that use monke-tools, use the Monke
-   worktree flow.
-5. Run implementation in a separate thread with only:
+4. Create the implementation checkout worktree with monke tools:
+   `mt create <session-name>`
+5. Create a codex thread with path set to that new worktree, with the following message:
    `/implement <durable PRD reference>`
    - Do not restate repo, branch, test, or completion instructions already
      owned by `/implement`, repo docs, or the PRD.
    - If `/to-issues` was run, pass the same parent PRD reference after the
      issues are created.
-   - Let `/implement` decide whether to implement the PRD directly or
-     orchestrate attached issues.
    - If `/implement` stops after setup, planning, or branch creation without
      commits and verification, treat it as incomplete and resume or report the
      blocker.

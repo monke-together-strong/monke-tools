@@ -262,9 +262,45 @@ _Avoid_: Arbitrary base branch, from branch
 The operation that refreshes the current session by reapplying seeding, path syncing, env rewrites, and bootstrap behavior.
 _Avoid_: Refresh, rebuild
 
+**Swing**:
+The operation that navigates the user's current shell to an existing **Session worktree** for the current **Root repo** scope.
+_Avoid_: Switch, git switch, create
+
+**Swing target**:
+A user-provided **Session**, navigation shortcut, or pull request identifier that **Swing** resolves to a local checkout path.
+_Avoid_: Branch selector, create target, git ref
+
+**Previous Swing target**:
+The last different **Swing target** remembered for one **Root repo**, used by `mt swing -` to return to a previous source or session checkout.
+_Avoid_: Global previous branch, shell history, last cwd
+
 **Setup**:
 The operation that updates the source checkout root `.env` with dependency path env values.
 _Avoid_: Materialize, bootstrap
+
+**Shell directory request**:
+A CLI-side request for an active shell adapter to move the user's current shell into a **Session worktree** after a session operation succeeds.
+_Avoid_: cd output, directory switch, shell cd
+
+**Shell adapter**:
+The human-shell function installed by monke-tools that can honor **Shell directory requests** after an `mt` command exits.
+_Avoid_: Alias, subprocess, terminal state
+
+**Active shell adapter**:
+A **Shell adapter** that is intercepting the current `mt` invocation and has provided a writable **Shell directory directive**.
+_Avoid_: Configured shell, installed shell integration, detected shell
+
+**Shell directory directive**:
+The file-backed path handoff from the `mt` process to an active **Shell adapter** for one **Shell directory request**.
+_Avoid_: Exec directive, shell command, printed cd
+
+**Shell integration install**:
+The operation that installs the shell adapter needed to honor **Shell directory requests** for supported human interactive shells.
+_Avoid_: rc patch, shell setup, cd enablement
+
+**Shell integration init**:
+The operation that emits the shell adapter source for one supported shell.
+_Avoid_: Shell integration install, generated profile
 
 **Skills Configure**:
 The interactive operation that lets a user choose one or more **Skill install targets** and saves the resulting **Skill install preference** in **Global monke config**.
@@ -293,6 +329,26 @@ _Avoid_: Delete session, prune repos
 - **Default branch create mode** prefers fetched remote `main` or `master` and may fall back to local `main` or `master`.
 - **Default branch create mode** requires fresh session branches.
 - **Default branch create mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
+- **Create** always emits a **Shell directory request** for the root repo's **Session worktree** after the operation succeeds.
+- **Swing** always emits a **Shell directory request** for an existing root repo **Session worktree**.
+- **Swing** does not create **Session worktrees** or change which branch an existing worktree has checked out.
+- A **Swing target** may be a **Session** name, the `^` source-checkout shortcut, the `-` previous-target shortcut, a `pr:<number>` pull request shortcut, or a pull request URL.
+- The `^` **Swing target** resolves to the current **Root repo** **Source checkout** without materializing, setting up, creating, or changing branches.
+- The `-` **Swing target** resolves to the **Previous Swing target** for the current **Root repo**.
+- The `^` **Swing target** participates in **Previous Swing target** history.
+- **Previous Swing target** is scoped to one **Root repo**.
+- A pull request **Swing target** resolves through the pull request's same-repo head branch name, then navigates to the existing **Session** with that name.
+- **Swing** does not support merge request targets.
+- Fork pull request targets are outside the first **Swing** contract.
+- A **Shell directory request** uses only a **Shell directory directive**; it does not support arbitrary shell execution.
+- When a **Shell directory request** is accepted by an **Active shell adapter**, monke-tools reports that it switched to the target **Session worktree**.
+- When no active **Shell adapter** can accept the **Shell directory request**, monke-tools reports the target path the user should switch to manually.
+- When **Shell integration install** has configured the user's shell but no **Active shell adapter** can accept the current **Shell directory request**, monke-tools reports the target path and explains that the shell integration is configured but inactive.
+- When **Shell integration install** has not configured the user's shell, monke-tools reports the target path and explains how to configure automatic switching.
+- **Shell integration install** supports bash and zsh.
+- **Shell integration install** is idempotent and runs during **Local install refresh**.
+- **Shell integration install** can be rerun explicitly without refreshing skills or reinstalling the binary.
+- **Shell integration init** supports bash and zsh.
 - A **Cleanup command** runs from the repo's **Source checkout** when cleanup finds a **Dead worktree**.
 - A **Cleanup command** receives **Session resources**, **Resource command outputs**, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment.
 - A **Resource command** belongs to one repo and runs for one **Session worktree**.
