@@ -11,6 +11,17 @@ test("createRuntime surfaces signal-terminated commands as failures", () => {
   expect(() => runtime.exec("sh", ["-c", "kill -TERM $$"])).toThrow(/terminated by signal SIGTERM/);
 });
 
+test("createRuntime reports exhausted scripted select values clearly", async () => {
+  const runtime = createRuntime({ selectValues: [] });
+
+  await expect(
+    runtime.select({
+      message: "Choose one",
+      options: [{ value: "one", label: "One" }],
+    }),
+  ).rejects.toThrow(/No scripted select values remain/);
+});
+
 test("withGlobalLock evicts stale locks left by dead processes", () => {
   const sandbox = makeTempDir("runtime-stale-lock");
   const home = path.join(sandbox, "home");

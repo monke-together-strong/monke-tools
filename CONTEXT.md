@@ -270,6 +270,10 @@ _Avoid_: Switch, git switch, create
 A user-provided **Session**, navigation shortcut, or pull request identifier that **Swing** resolves to a local checkout path.
 _Avoid_: Branch selector, create target, git ref
 
+**Swing picker**:
+The interactive **Swing** mode used when `mt swing` is run without a **Swing target**, letting a user choose from the current **Root repo**'s existing local **Swing targets**.
+_Avoid_: Branch picker, create picker, worktree creator
+
 **Previous Swing target**:
 The last different **Swing target** remembered for one **Root repo**, used by `mt swing -` to return to a previous source or session checkout.
 _Avoid_: Global previous branch, shell history, last cwd

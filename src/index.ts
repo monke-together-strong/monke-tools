@@ -13,17 +13,17 @@ import {
 import { createRuntime } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
-import { runSwing } from "./swing.ts";
+import { runSwing, runSwingInteractive } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt swing <target>\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
+  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt swing [target]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
 const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
 const SHELL_USAGE = "Usage:\n  mt shell install\n  mt shell init <bash|zsh>";
-const SWING_USAGE = "Usage: mt swing <target>";
+const SWING_USAGE = "Usage: mt swing [target]";
 
 interface RawCleanupCommandOptions {
   merged?: boolean;
@@ -37,13 +37,29 @@ export function runCli(argv: string[], runtime = createRuntime()): void {
   }
 
   try {
-    createProgram(runtime).parse(argv, { from: "user" });
+    createProgram(runtime, runSwing).parse(argv, { from: "user" });
   } catch (error) {
     throw mapCliError(error, argv);
   }
 }
 
-function createProgram(runtime: Runtime): Command {
+/** Run the Monke Tools CLI with async interactive prompts enabled. */
+export async function runCliAsync(argv: string[], runtime = createRuntime()): Promise<void> {
+  if (argv.length === 0) {
+    throw new MonkeError(ROOT_USAGE);
+  }
+
+  try {
+    await createProgram(runtime, runSwingInteractive).parseAsync(argv, { from: "user" });
+  } catch (error) {
+    throw mapCliError(error, argv);
+  }
+}
+
+function createProgram(
+  runtime: Runtime,
+  swingAction: (runtime: Runtime, target: string | undefined) => void | Promise<void>,
+): Command {
   const program = new Command()
     .name("mt")
     .helpOption(false)
@@ -74,9 +90,9 @@ function createProgram(runtime: Runtime): Command {
     .command("swing")
     .helpOption(false)
     .allowExcessArguments(false)
-    .argument("<target>")
-    .action((target: string) => {
-      runSwing(runtime, target);
+    .argument("[target]")
+    .action((target: string | undefined) => {
+      return swingAction(runtime, target);
     });
 
   program
@@ -206,7 +222,7 @@ function mapCliError(error: unknown, argv: string[]): Error {
 
 if (import.meta.main) {
   try {
-    await runCli(Bun.argv.slice(2));
+    await runCliAsync(Bun.argv.slice(2));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`${message}\n`);
