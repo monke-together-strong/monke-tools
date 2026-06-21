@@ -78,7 +78,7 @@ function resolveSwingTarget(
     throw new MonkeError("Merge request Swing targets are out of scope");
   }
 
-  if (rawTarget.includes("@")) {
+  if (rawTarget === "@") {
     throw new MonkeError("@ Swing targets are not supported");
   }
 

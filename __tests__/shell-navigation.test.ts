@@ -65,6 +65,40 @@ test("create distinguishes configured but inactive shell integration", () => {
   );
 });
 
+test("repo commands cannot write an active shell directory directive", () => {
+  const sandbox = makeTempDir("shell-directive-child-env");
+  const home = path.join(sandbox, "home");
+  const directivePath = path.join(sandbox, "directive");
+  writeFileSync(directivePath, "", "utf8");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env": "PORT=3000\n",
+    "monke.yml": `bootstrapCommand: |
+  if [ -n "\${MONKE_SHELL_DIR_DIRECTIVE:-}" ]; then
+    printf '%s' /tmp/hijacked > "$MONKE_SHELL_DIR_DIRECTIVE"
+  fi
+apps:
+  api:
+    path: apps/api
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+
+  runMonke({
+    cwd: worktreeRoot,
+    args: ["materialize"],
+    monkeHome: home,
+    extraEnv: {
+      [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath,
+    },
+  });
+
+  expect(readFileSync(directivePath, "utf8")).toBe("");
+});
+
 test("shell init emits bash and zsh adapters", () => {
   const sandbox = makeTempDir("shell-init");
   const monkeHome = path.join(sandbox, "monke-home");

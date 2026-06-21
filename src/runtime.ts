@@ -16,6 +16,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 
 import { MonkeError } from "./errors.ts";
+import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
 import type { ExecOptions, ExecResult, Runtime } from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5_000;
@@ -54,12 +55,15 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     cwd: runtimeCwd,
     env: runtimeEnv,
     exec(command: string, args: string[] = [], execOptions?: ExecOptions): ExecResult {
+      const childEnv = {
+        ...runtimeEnv,
+        ...execOptions?.env,
+      };
+      delete childEnv[SHELL_DIRECTORY_DIRECTIVE_ENV];
+
       const result = spawnSync(command, args, {
         cwd: execOptions?.cwd ?? runtimeCwd,
-        env: {
-          ...runtimeEnv,
-          ...execOptions?.env,
-        },
+        env: childEnv,
         encoding: "utf8",
         input: execOptions?.stdin,
         timeout:

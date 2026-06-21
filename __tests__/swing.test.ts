@@ -32,6 +32,21 @@ test("swing fails clearly when the Session does not exist", () => {
   );
 });
 
+test("swing treats @ inside Session names as ordinary branch text", () => {
+  const sandbox = makeTempDir("swing-at-session");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  runMonke({ cwd: repoRoot, args: ["create", "feature@alice"], monkeHome: home });
+
+  const result = runMonke({ cwd: repoRoot, args: ["swing", "feature@alice"], monkeHome: home });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature@alice");
+  expect(result.stdout).toBe(`${worktreeRoot}\n`);
+  expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
+});
+
 test("swing caret returns from a Session worktree to the Source checkout", () => {
   const sandbox = makeTempDir("swing-source");
   const home = path.join(sandbox, "home");

@@ -4,9 +4,10 @@ import path from "node:path";
 import { MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
 import { ensureDirectory, findExecutable, getHomeDirectory } from "./runtime.ts";
+import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
 import type { Runtime } from "./types.ts";
 
-export const SHELL_DIRECTORY_DIRECTIVE_ENV = "MONKE_SHELL_DIR_DIRECTIVE";
+export { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
 
 const INTEGRATION_START = "# >>> monke-tools shell integration >>>";
 const INTEGRATION_END = "# <<< monke-tools shell integration <<<";
