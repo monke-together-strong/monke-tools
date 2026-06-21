@@ -23,6 +23,7 @@ test("mt skills configure saves selected targets and reconciles them", () => {
   });
 
   let stdout = "";
+  let stderr = "";
   const runtime = createRuntime({
     cwd: sandbox,
     env: {
@@ -32,6 +33,9 @@ test("mt skills configure saves selected targets and reconciles them", () => {
     stdinText: "codex,custom\n~/team-skills\n",
     onStdout(text) {
       stdout += text;
+    },
+    onStderr(text) {
+      stderr += text;
     },
   });
 
@@ -44,7 +48,8 @@ test("mt skills configure saves selected targets and reconciles them", () => {
     true,
   );
   expect(lstatSync(path.join(osHome, "team-skills", "monke-tools")).isSymbolicLink()).toBe(true);
-  expect(stdout).toContain("Configured monke-tools skills");
+  expect(stdout).toContain("Skill install targets:");
+  expect(stderr).toContain("Configured monke-tools skills");
 });
 
 test("mt skills configure can reconfigure all target kinds down to Claude and Codex", () => {
@@ -73,6 +78,7 @@ test("mt skills configure can reconfigure all target kinds down to Claude and Co
       },
       stdinText: "codex,claude,cursor,custom\n~/custom-skills\n",
       onStdout() {},
+      onStderr() {},
     }),
   );
   runCli(
@@ -85,6 +91,7 @@ test("mt skills configure can reconfigure all target kinds down to Claude and Co
       },
       stdinText: "claude,codex\n",
       onStdout() {},
+      onStderr() {},
     }),
   );
 
@@ -126,6 +133,7 @@ test("mt skills local-install records the source checkout and configures skills 
       },
       stdinText: "codex\n",
       onStdout() {},
+      onStderr() {},
     }),
   );
 
@@ -177,6 +185,7 @@ test("mt skills local-install reuses an existing preference and relinks after a 
         MONKE_HOME: monkeHome,
       },
       onStdout() {},
+      onStderr() {},
     }),
   );
 
@@ -205,6 +214,7 @@ test("mt skills configure fails clearly when the installed source checkout is mi
         },
         stdinText: "codex\n",
         onStdout() {},
+        onStderr() {},
       }),
     ),
   ).toThrow(`Installed source checkout is missing: ${missingCheckout}`);

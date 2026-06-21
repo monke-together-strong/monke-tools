@@ -21,7 +21,7 @@ mt create banana
 mt create banana -m
 ```
 
-`bun run install:local` rebuilds the local `mt` executable from the current checkout, installs it to `~/.local/bin/mt` and `~/.local/bin/monke-tools`, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots.
+`bun run install:local` rebuilds the local `mt` executable from the current checkout, installs it to `~/.local/bin/mt` and `~/.local/bin/monke-tools`, installs shell integration for bash and zsh, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots.
 
 On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and relink the managed skills to the current checkout.
 
@@ -48,9 +48,11 @@ The Skill source tree is organized as:
 
 - `mt create <session>` creates or updates a session from the source checkout. It materializes dependency repos first, seeds configured files, rewrites mapped env vars, creates worktrees under `~/.monke/worktrees/<repo-name>/<session>` by default, and records session state under `~/.monke`.
 - `mt create <session> -m` also accepts `--main` or `--master`. It creates a fresh session from each repo's default branch content, preferring fetched `origin/main` or `origin/master` before local `main` or `master`.
+- `mt swing <target>` switches to an existing Session worktree, `^` for the Source checkout, `-` for the Previous Swing target, or a same-repo GitHub pull request target such as `pr:123`.
 - `mt materialize` refreshes the current session worktree in place and keeps the existing port assignments sticky.
 - `mt cleanup` removes session records whose worktrees no longer exist.
 - `mt setup` syncs external repo path env vars into the source checkout root `.env`.
+- `mt shell install` refreshes the bash/zsh Shell adapter; `mt shell init bash` and `mt shell init zsh` print the adapter for inspection.
 - `mt skills configure` updates the saved Skill install preference and reconciles selected Agent skill roots.
 
 ## `monke.yml`
@@ -84,9 +86,11 @@ external:
 
 ```bash
 bun run src/index.ts create banana
+bun run src/index.ts swing banana
 bun run src/index.ts materialize
 bun run src/index.ts cleanup
 bun run src/index.ts setup
+bun run src/index.ts shell install
 bun run src/index.ts skills configure
 ```
 

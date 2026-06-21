@@ -42,7 +42,10 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
   });
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-  expect(result.stdout).toBe(`Created or updated session banana\n${worktreeRoot}\n`);
+  expect(result.stdout).toBe(`${worktreeRoot}\n`);
+  expect(result.stderr).toBe(
+    `Created or updated session banana\nSwitch to ${worktreeRoot}\nEnable automatic switching with: mt shell install\n`,
+  );
   expect(read(worktreeRoot, ".env.shared")).toBe("ROOT_ONLY=true\n");
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe(
     "PORT=10000\nDATABASE_URL=postgres://localhost:10001/app\nOTHER=keep\n",
@@ -82,7 +85,8 @@ test("create without monke.yml creates an unmaterialized worktree and warns", ()
   expect(result.stderr).toContain(
     `Warning: no monke.yml found for ${repoRoot}; created session worktree without materializing it.`,
   );
-  expect(result.stdout).toBe(`Created or updated session banana\n${worktreeRoot}\n`);
+  expect(result.stderr).toContain(`Created or updated session banana\nSwitch to ${worktreeRoot}`);
+  expect(result.stdout).toBe(`${worktreeRoot}\n`);
 
   const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
     graphSource?: string;
@@ -932,7 +936,7 @@ apps:
   expect(result.stderr).toContain(
     "Warning: seedPath apps/frostbite-crawler/data/sessions is missing",
   );
-  expect(result.stdout).toContain("Created or updated session banana");
+  expect(result.stderr).toContain("Created or updated session banana");
 });
 
 test("setup creates the root .env with direct external path env defaults", () => {

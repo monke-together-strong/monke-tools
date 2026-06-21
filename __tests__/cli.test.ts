@@ -6,11 +6,13 @@ import { runCli } from "../src/index.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const ROOT_USAGE =
-  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt skills configure";
+  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt swing <target>\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
 const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
+const SWING_USAGE = "Usage: mt swing <target>";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
+const SHELL_USAGE = "Usage:\n  mt shell install\n  mt shell init <bash|zsh>";
 
 test("runCli preserves top-level usage for missing and unknown commands", () => {
   expect(() => runCli([])).toThrow(ROOT_USAGE);
@@ -20,11 +22,18 @@ test("runCli preserves top-level usage for missing and unknown commands", () => 
 test("runCli preserves command-specific usage for invalid arity", () => {
   expect(() => runCli(["create"])).toThrow(CREATE_USAGE);
   expect(() => runCli(["create", "banana", "extra"])).toThrow(CREATE_USAGE);
+  expect(() => runCli(["swing"])).toThrow(SWING_USAGE);
+  expect(() => runCli(["swing", "banana", "extra"])).toThrow(SWING_USAGE);
   expect(() => runCli(["materialize", "extra"])).toThrow("Usage: mt materialize");
   expect(() => runCli(["cleanup", "extra"])).toThrow(CLEANUP_USAGE);
   expect(() => runCli(["cleanup", "--dry-run"])).toThrow(CLEANUP_USAGE);
   expect(() => runCli(["setup", "extra"])).toThrow("Usage: mt setup");
   expect(() => runCli(["install-dependencies", "extra"])).toThrow("Usage: mt install-dependencies");
+  expect(() => runCli(["shell"])).toThrow(SHELL_USAGE);
+  expect(() => runCli(["shell", "unknown"])).toThrow(SHELL_USAGE);
+  expect(() => runCli(["shell", "install", "extra"])).toThrow(SHELL_USAGE);
+  expect(() => runCli(["shell", "init"])).toThrow(SHELL_USAGE);
+  expect(() => runCli(["shell", "init", "fish"])).toThrow("Usage: mt shell init <bash|zsh>");
   expect(() => runCli(["skills"])).toThrow(SKILLS_USAGE);
   expect(() => runCli(["skills", "unknown"])).toThrow(SKILLS_USAGE);
   expect(() => runCli(["skills", "configure", "extra"])).toThrow(SKILLS_USAGE);
