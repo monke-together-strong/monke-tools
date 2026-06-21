@@ -31,12 +31,17 @@ review and PR shepherding in separate Codex threads.
    implementation, create and enter a clean worktree from the intended base
    branch before continuing. In repos that use monke-tools, use the Monke
    worktree flow.
-5. Run implementation in a separate Codex thread with `/implement`.
-   - Pass the durable PRD reference, not the full PRD body.
+5. Run implementation in a separate Codex thread with only:
+   `/implement <durable PRD reference>`
+   - Do not restate repo, branch, test, or completion instructions already
+     owned by `/implement`, repo docs, or the PRD.
    - If `/to-issues` was run, pass the same parent PRD reference after the
      issues are created.
    - Let `/implement` decide whether to implement the PRD directly or
      orchestrate attached issues.
+   - If `/implement` stops after setup, planning, or branch creation without
+     commits and verification, treat it as incomplete and resume or report the
+     blocker.
 6. After implementation completes, run `/autoreview` on a separate Codex
    thread. Wait for it to finish before creating the PR.
    - Always run this. Do not treat `/implement`, `/review`, tests, lint, or
@@ -64,8 +69,10 @@ creation time; do not create them with generic titles and rename later.
 
 ## Monitoring
 
-Monitor delegated work every five minutes. Let active work continue without
-steering; intervene only for a blocker, completion, or clear course deviation.
+Monitor delegated work every three minutes. Be patient: after confirming a
+worker is active, wait about 180 seconds between polls; do not short-poll with
+60-second sleeps. Let active work continue without steering; intervene only for
+a blocker, completion, or clear course deviation.
 
 ## Task Issues
 
@@ -75,7 +82,8 @@ this skill; `/implement` owns direct PRD implementation versus attached issue
 orchestration.
 
 ## Boundaries
-- Do not paste the full PRD body into `/implement`; pass the durable reference.
+- Do not paste the full PRD body or extra constraints into `/implement`; use
+  the slash command with the durable reference.
 - Do not create extra code commits from this orchestration thread.
 - Let `/implement` own implementation commits.
 - Let `/autoreview` own closeout fixes and reruns.
