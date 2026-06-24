@@ -457,7 +457,10 @@ function isSameSwingTarget(left: SwingHistoryTarget, right: SwingHistoryTarget):
   if (left.kind !== right.kind) {
     return false;
   }
-  return left.kind === "source" || left.session === right.session;
+  if (left.kind === "source") {
+    return true;
+  }
+  return right.kind === "session" && left.session === right.session;
 }
 
 function loadSwingHistory(home: string, rootSourceRoot: string): SwingHistory {
