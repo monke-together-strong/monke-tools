@@ -1,14 +1,17 @@
 ---
 name: agent-session-retrospective
-description: Study local Codex + Claude agent transcripts for recurring friction and repeated user asks, then emit report-only durable-fix proposals. Use when the user wants a retrospective on their agent sessions, asks what keeps going wrong or getting redone across sessions, or wants durable fixes (skill/AGENTS.md/CLAUDE.md/hook) grounded in transcript evidence.
+description: Study local Codex + Claude agent transcripts for recurring friction and repeated user asks, then emit report-only, evidence-grounded proposals for the highest-value durable fixes, wherever they land. Use when the user wants a retrospective on their agent sessions, asks what keeps going wrong or getting redone across sessions, or wants durable fixes grounded in transcript evidence.
 ---
 
 # Agent session retrospective
 
 Find where agents hit **friction** — an agent hit an issue, then had to do something
-else — and where the same user ask recurs across sessions, then propose **durable fixes**
-a human executes. Evidence → friction pattern → durable workflow fix. Report-only: never
-auto-edit, never draft artifacts.
+else — and where the same user ask recurs across sessions, then propose the
+highest-value **durable fixes** a human executes, ranked by **value × recurrence**.
+Evidence → recurring friction → durable fix, **wherever it lives**: a missing `mt create`
+step the agent works around every run, a flaky query, or a broken setup is as valuable as
+a skill or AGENTS.md change — value, not where the fix lands, decides what leads. Report-only:
+never auto-edit, never draft artifacts.
 
 The work splits into a deterministic script (two brackets that own all disk I/O) and one
 fuzzy middle (per-repo subagents that read transcripts and find friction). Run the brackets;
@@ -48,13 +51,23 @@ Spawn one subagent per bundle, concurrently. Give each subagent its bundle path 
 **Done when** every bundle has a sibling `.findings.json` file. A subagent that finds nothing
 still writes a findings file with empty arrays.
 
-## 3. Global synthesis
+## 3. Synthesis — this run plus prior reports
 
-Read every per-repo findings file. Synthesize the **cross-repo** durable fixes — patterns that
-recur across repos (e.g. "stop minting `codex/` branches everywhere"), ranked by recurrence ×
-confidence. Write them as Markdown to a synthesis file (e.g. in the run directory). Lead each
-proposal with a `Target:` line (skill / AGENTS.md / CLAUDE.md / hook / preflight / Linear / none)
-and a `Confidence:` line. **Done when** the synthesis file is written.
+Read every per-repo findings file and synthesize the **cross-repo** durable fixes — patterns that
+recur across repos (e.g. "stop minting `codex/` branches everywhere").
+
+Then read the **newest few reports** under `reports/` (cap ~6) — they are this skill's memory of
+patterns already named. **Cross-reference, don't copy forward**: match this run's findings against
+those reports and **promote** any thread recurring across them — a pattern corroborated across
+reports outranks a fresh one-off, even when each prior sighting was low-signal on its own.
+Recurrence spans both this window and prior reports.
+
+Write the result as Markdown to a synthesis file (e.g. in the run directory), ranked by **value ×
+recurrence**. Lead each proposal with a `Target:` line — *where the fix lands*: `code` / `tooling`
+/ `setup` / `infra` / `deps` / `docs` / `agent-skill` / `AGENTS.md` / `CLAUDE.md` / `hook` /
+`preflight`, or `already-tracked:<ref>` / `none` only when there is genuinely no new fix to make —
+and a `Confidence:` line. **Done when** the synthesis file is written and any cross-report
+recurrence is promoted into it.
 
 ## 4. Commit
 

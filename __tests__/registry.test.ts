@@ -67,10 +67,10 @@ test("getOrCreateReservation fails instead of resizing an existing repo block", 
 
   const firstReservation = getOrCreateReservation(home, sourceRoot, 1);
   expect(firstReservation?.blockStart).toBe(10_000);
-  expect(firstReservation?.size).toBe(100);
+  expect(firstReservation?.size).toBe(1000);
 
-  expect(() => getOrCreateReservation(home, sourceRoot, 101)).toThrow(
-    /its reservation only has room for 100/,
+  expect(() => getOrCreateReservation(home, sourceRoot, 1001)).toThrow(
+    /its reservation only has room for 1000/,
   );
 });
 

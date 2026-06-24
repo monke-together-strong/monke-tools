@@ -36,14 +36,13 @@ export function resolveRepoContext(
   const sourceRoot = path.dirname(gitCommonDir);
   const isSourceCheckout = normalize(worktreeRoot) === normalize(sourceRoot);
   const shouldInferSessionName = options.inferSessionName ?? true;
-  if (!isSourceCheckout && shouldInferSessionName && !home) {
-    throw new MonkeError("Unable to infer the current session without a Monke home");
+  let sessionName: string | null = null;
+  if (!isSourceCheckout && shouldInferSessionName) {
+    if (!home) {
+      throw new MonkeError("Unable to infer the current session without a Monke home");
+    }
+    sessionName = inferSessionName(home, sourceRoot, worktreeRoot, currentBranch);
   }
-  const sessionName = isSourceCheckout
-    ? null
-    : shouldInferSessionName
-      ? inferSessionName(home, sourceRoot, worktreeRoot, currentBranch)
-      : null;
 
   return {
     cwd,

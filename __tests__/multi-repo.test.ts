@@ -73,10 +73,10 @@ external:
 
   expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
   expect(read(rootWorktree, "apps/api/.env.local")).toBe(
-    "PORT=10100\nDATABASE_URL=postgres://localhost:10000/app\n",
+    "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n",
   );
   expect(read(rootWorktree, ".env")).toBe(
-    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=10100\nDEP_POSTGRES_PORT=10000\n`,
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\n`,
   );
 
   const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
@@ -613,7 +613,7 @@ external:
   });
 
   expect(read(rootWorktree, ".env")).toBe(
-    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=10100\nDEP_POSTGRES_PORT=10000\nE2E_CHANNEL_ID=123\n`,
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\nE2E_CHANNEL_ID=123\n`,
   );
 });
 
@@ -805,7 +805,7 @@ external:
   const rootWorktree = getExpectedWorktreePath(home, root, "direct-only");
   const depWorktree = getExpectedWorktreePath(home, dep, "direct-only");
   expect(read(rootWorktree, ".env")).toBe(
-    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_PORT=10100\n`,
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_PORT=11000\n`,
   );
 });
 

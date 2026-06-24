@@ -107,7 +107,7 @@ external:
   const secondMtime = statSync(path.join(depWorktree, ".env")).mtimeMs;
   expect(secondMtime).toBe(firstMtime);
   expect(read(getExpectedWorktreePath(home, root, "resume"), "apps/api/.env.local")).toBe(
-    "PORT=10100\nDATABASE_URL=postgres://localhost:10000/app\n",
+    "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n",
   );
 });
 
