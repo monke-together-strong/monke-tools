@@ -11,7 +11,7 @@ A named local workspace instance that spans one source repo and any dependency r
 _Avoid_: Branch, environment, sandbox
 
 **Source checkout**:
-The original Git checkout from which a session is created.
+The original Git checkout that any working directory resolves to: the canonical non-worktree root and parent of all the repo's linked worktrees. A **Session** is created from one.
 _Avoid_: Main worktree, root worktree
 
 **Session worktree**:
@@ -318,6 +318,36 @@ _Avoid_: Skill install, setup, non-interactive config
 The operation that runs registered per-session teardown and removes session-state records whose worktrees no longer exist.
 _Avoid_: Delete session, prune repos
 
+### Agent retrospective
+
+**Retrospective**:
+One read-only analysis pass over recent **Agent transcripts** that detects **Friction episodes** and **Repeated asks** and reports **Durable fix proposals**, grouped by **Source checkout**.
+_Avoid_: Audit, review, trace, session review
+
+**Agent transcript**:
+One recorded Codex or Claude agent conversation, identified by its native agent session id. A resumed conversation is the same transcript; a subagent run is a distinct child transcript linked to its parent.
+_Avoid_: Session, chat, thread, conversation
+
+**Primary repo**:
+The **Source checkout** an **Agent transcript**'s working directory resolves to — the repo it was mainly working in.
+_Avoid_: Root repo, working repo
+
+**Secondary repo**:
+A different **Source checkout** whose files an **Agent transcript** touched without it being the working directory.
+_Avoid_: Dependency repo, external repo
+
+**Friction episode**:
+An observed moment in an **Agent transcript** where the agent hit an issue and changed course — a neutral record of what it was attempting, the blocker, and the pivot. Not a judgment that any rule was broken.
+_Avoid_: Detour, violation, agent sin, mistake, error
+
+**Durable fix proposal**:
+A recommended lasting change to the agent working environment — a skill, `AGENTS.md`/`CLAUDE.md`, a hook, a preflight, or a Linear issue — inferred from a cluster of related **Friction episodes** and/or **Repeated asks**, for a human to execute. The retrospective proposes it; it never applies it.
+_Avoid_: Auto-fix, patch, remediation, action item
+
+**Repeated ask**:
+A fix/revert/change request the user makes to agents that recurs across multiple **Agent transcripts** — the signal that the same correction keeps being needed.
+_Avoid_: Nag, recurring prompt, recurring instruction
+
 ## Relationships
 
 - A **Session** belongs to exactly one **Root repo**.
@@ -469,6 +499,23 @@ _Avoid_: Delete session, prune repos
 - **Skills Configure** may remove **Managed skill namespaces** from previously selected **Skill install targets** that are no longer selected.
 - A **Distributed skill** is available to **Consumer repos** through installed global agent skills.
 - The initial monke-tools skill set contains one **Core distributed skill**.
+- An **Agent transcript** is identified by its native agent session id, not by its file path or length.
+- A resumed conversation appends to the same **Agent transcript**.
+- A subagent run is a distinct child **Agent transcript** linked to its parent by parent transcript id.
+- A child **Agent transcript** inherits its parent's repo membership by default.
+- A retrospective groups **Agent transcripts** by **Source checkout**.
+- An **Agent transcript** resolves to a **Source checkout** by resolving its working directory through the same `--git-common-dir` rule monke uses, so a **Session worktree** transcript resolves to its **Source checkout**.
+- An **Agent transcript** has exactly one **Primary repo** and zero or more **Secondary repos**.
+- A **Secondary repo** is observed from an **Agent transcript**'s tool activity, not declared by `monke.yml`, so it need not be a **Dependency repo** of the **Primary repo**.
+- A **Friction episode** belongs to exactly one **Agent transcript** and, once recorded, is never recomputed.
+- A **Friction episode** states a neutral observation; interpretive claims belong to a **Durable fix proposal**, not the episode.
+- A **Durable fix proposal** is synthesized from one cluster of related **Friction episodes** and/or **Repeated asks**, carries its supporting evidence and a confidence, and is regenerated each run rather than frozen.
+- The retrospective only emits a **Durable fix proposal**; it never edits a repo, skill, or config.
+- A **Durable fix proposal** may conclude that no durable fix is worth making.
+- A **Repeated ask** is found by classifying raw user messages as fix/revert/change requests and clustering similar ones across **Agent transcripts**; the messages are extracted deterministically, while the classification and clustering are regenerated each run, not frozen.
+- A **Repeated ask** may correlate within one **Primary repo** or, in global synthesis, across repos.
+- A **Retrospective** is read-only: it reports **Durable fix proposals** but never edits a repo, skill, or config.
+- Every **Friction episode** and **Durable fix proposal** cites verifiable locations in **Agent transcripts**; a citation that cannot be matched to a real transcript location is rejected.
 
 ## Example dialogue
 
@@ -508,3 +555,6 @@ _Avoid_: Delete session, prune repos
 - "skill discovery surface" describes the old Intent package-scanning model. Use **Agent skill root** because monke-tools installs skills directly.
 - "external skill" collides with `external` repo configuration. Use **Imported skill** for skills brought in from outside monke-tools.
 - "default skill target" hides user intent. Use **Skill install preference** for the remembered multi-target selection in **Global monke config**.
+- "session" is overloaded across the retrospective. Use **Session** only for a monke workspace instance; use **Agent transcript** for a recorded Codex/Claude conversation. The native `session_id` field is just the **Agent transcript** identity — it does not make a transcript a **Session**.
+- "repo_key" is not a domain term. The retrospective's logical-repo identity is the **Source checkout** path; `hashKey(<Source checkout path>)` is only the on-disk filename, mirroring the existing `repo-reservations` convention.
+- "primary/secondary repo" describe one **Agent transcript**'s observed activity; "root/dependency repo" describe a **Session**'s declared graph. Do not reuse **Root repo** or **Dependency repo** for transcript membership.
