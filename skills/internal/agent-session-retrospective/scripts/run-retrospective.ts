@@ -51,6 +51,17 @@ function parseDateMs(value: string | undefined): number | undefined {
   return parsed;
 }
 
+function parseIdleMinutes(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    throw new Error(`Invalid --idle-minutes: ${value}`);
+  }
+  return minutes;
+}
+
 function main(): void {
   const [command, ...rest] = process.argv.slice(2);
   const flags = parseFlags(rest);
@@ -64,7 +75,7 @@ function main(): void {
         runTs,
         sinceMs: parseDateMs(flags.since),
         untilMs: parseDateMs(flags.until),
-        idleMinutes: flags["idle-minutes"] ? Number(flags["idle-minutes"]) : undefined,
+        idleMinutes: parseIdleMinutes(flags["idle-minutes"]),
       }),
     );
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -92,4 +103,9 @@ function main(): void {
   process.exit(1);
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(1);
+}

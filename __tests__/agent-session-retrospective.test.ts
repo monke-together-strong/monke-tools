@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -409,6 +409,9 @@ describe("runCollect dedupe", () => {
     const sessions = result.bundles.reduce((sum, bundle) => sum + bundle.sessionCount, 0);
     expect(sessions).toBe(1);
     expect(result.skipped["duplicate-file"]).toBe(1);
+    // The most-complete copy (long.jsonl, 5 turns) must be the one retained.
+    const bundle = JSON.parse(readFileSync(result.bundles[0].path, "utf8")) as RepoBundle;
+    expect(bundle.sessions[0].turns).toHaveLength(5);
   });
 });
 

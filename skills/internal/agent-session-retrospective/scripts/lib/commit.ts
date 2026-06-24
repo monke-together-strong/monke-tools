@@ -53,7 +53,8 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle): Va
   let droppedEpisodes = 0;
   for (const episode of findings.frictionEpisodes ?? []) {
     const refs = refsByPrimarySession.get(episode.sessionId);
-    const refsValid = refs && episode.citedTurnRefs.every((ref) => refs.has(ref));
+    const citedTurnRefs = episode.citedTurnRefs ?? [];
+    const refsValid = refs && citedTurnRefs.every((ref) => refs.has(ref));
     if (!episode.id || seenIds.has(episode.id) || !refsValid) {
       droppedEpisodes += 1;
       continue;
@@ -65,7 +66,8 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle): Va
   const fixes: DurableFixProposal[] = [];
   let droppedFixes = 0;
   for (const fix of findings.durableFixProposals ?? []) {
-    if (fix.citedEpisodeRefs.length > 0 && fix.citedEpisodeRefs.every((ref) => seenIds.has(ref))) {
+    const citedEpisodeRefs = fix.citedEpisodeRefs ?? [];
+    if (citedEpisodeRefs.length > 0 && citedEpisodeRefs.every((ref) => seenIds.has(ref))) {
       fixes.push(fix);
     } else {
       droppedFixes += 1;
@@ -75,7 +77,7 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle): Va
   const bundleSessionIds = new Set(bundle.sessions.map((session) => session.sessionId));
   const repeatedAsks = (findings.repeatedAsks ?? []).map((cluster) => ({
     ...cluster,
-    exampleSessionIds: cluster.exampleSessionIds.filter((id) => bundleSessionIds.has(id)),
+    exampleSessionIds: (cluster.exampleSessionIds ?? []).filter((id) => bundleSessionIds.has(id)),
   }));
 
   return {

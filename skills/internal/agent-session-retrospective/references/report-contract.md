@@ -26,4 +26,4 @@ proposal.
 
 The frozen `sessions/` records are the durable corpus. Determinism lives at the corpus layer
 (a session id is analyzed once), not the analysis layer (the LLM may find different friction as
-models improve — that only ever appends).
+models improve — and those new findings only ever append).
