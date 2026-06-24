@@ -6,9 +6,9 @@ import { runCli } from "../src/index.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const ROOT_USAGE =
-  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt swing [target]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
+  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
 const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
-const SWING_USAGE = "Usage: mt swing [target]";
+const SWING_USAGE = "Usage: mt swing [target] [--codex]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
