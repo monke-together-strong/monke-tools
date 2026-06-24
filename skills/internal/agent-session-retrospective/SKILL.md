@@ -1,6 +1,6 @@
 ---
 name: agent-session-retrospective
-description: Study local Codex + Claude agent transcripts for recurring friction and repeated user asks, then emit report-only, evidence-grounded proposals for the highest-value durable fixes — wherever they land (code, tooling/setup, infra, deps, docs, or the agent harness). Use when the user wants a retrospective on their agent sessions, asks what keeps going wrong or getting redone across sessions, or wants durable fixes grounded in transcript evidence.
+description: Study local Codex + Claude agent transcripts for recurring friction and repeated user asks, then emit report-only, evidence-grounded proposals for the highest-value durable fixes, wherever they land. Use when the user wants a retrospective on their agent sessions, asks what keeps going wrong or getting redone across sessions, or wants durable fixes grounded in transcript evidence.
 ---
 
 # Agent session retrospective
@@ -59,8 +59,7 @@ recurrence**. Write them as Markdown to a synthesis file (e.g. in the run direct
 proposal with a `Target:` line — *where the fix lands*: `code` / `tooling` / `setup` / `infra` /
 `deps` / `docs` / `agent-skill` / `AGENTS.md` / `CLAUDE.md` / `hook` / `preflight`, or
 `already-tracked:<ref>` / `none` only when there is genuinely no new fix to make — and a
-`Confidence:` line. Rank by value, not by whether the fix touches the agent harness; a code or
-tooling fix can be the highest-value item in the report. **Done when** the synthesis file is written.
+`Confidence:` line. **Done when** the synthesis file is written.
 
 ## 4. Commit
 
