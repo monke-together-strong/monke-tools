@@ -51,15 +51,23 @@ Spawn one subagent per bundle, concurrently. Give each subagent its bundle path 
 **Done when** every bundle has a sibling `.findings.json` file. A subagent that finds nothing
 still writes a findings file with empty arrays.
 
-## 3. Global synthesis
+## 3. Synthesis — this run plus prior reports
 
-Read every per-repo findings file. Synthesize the **cross-repo** durable fixes — patterns that
-recur across repos (e.g. "stop minting `codex/` branches everywhere"), ranked by **value ×
-recurrence**. Write them as Markdown to a synthesis file (e.g. in the run directory). Lead each
-proposal with a `Target:` line — *where the fix lands*: `code` / `tooling` / `setup` / `infra` /
-`deps` / `docs` / `agent-skill` / `AGENTS.md` / `CLAUDE.md` / `hook` / `preflight`, or
-`already-tracked:<ref>` / `none` only when there is genuinely no new fix to make — and a
-`Confidence:` line. **Done when** the synthesis file is written.
+Read every per-repo findings file and synthesize the **cross-repo** durable fixes — patterns that
+recur across repos (e.g. "stop minting `codex/` branches everywhere").
+
+Then read the **newest few reports** under `reports/` (cap ~6) — they are this skill's memory of
+patterns already named. **Cross-reference, don't copy forward**: match this run's findings against
+those reports and **promote** any thread recurring across them — a pattern corroborated across
+reports outranks a fresh one-off, even when each prior sighting was low-signal on its own.
+Recurrence spans both this window and prior reports.
+
+Write the result as Markdown to a synthesis file (e.g. in the run directory), ranked by **value ×
+recurrence**. Lead each proposal with a `Target:` line — *where the fix lands*: `code` / `tooling`
+/ `setup` / `infra` / `deps` / `docs` / `agent-skill` / `AGENTS.md` / `CLAUDE.md` / `hook` /
+`preflight`, or `already-tracked:<ref>` / `none` only when there is genuinely no new fix to make —
+and a `Confidence:` line. **Done when** the synthesis file is written and any cross-report
+recurrence is promoted into it.
 
 ## 4. Commit
 
