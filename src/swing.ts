@@ -4,8 +4,15 @@ import { parse, stringify } from "yaml";
 
 import { MonkeError } from "./errors.ts";
 import { getExpectedWorktreePath, resolveRepoContext, validateWorktreeForSession } from "./git.ts";
+import { createLogger } from "./logger.ts";
 import { listSessionStates } from "./registry.ts";
-import { ensureDirectory, getMonkeHome, hashKey, withGlobalLock } from "./runtime.ts";
+import {
+  ensureDirectory,
+  findExecutable,
+  getMonkeHome,
+  hashKey,
+  withGlobalLock,
+} from "./runtime.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 
@@ -45,8 +52,12 @@ interface PullRequestSwingTarget {
   };
 }
 
+export interface SwingOptions {
+  codex?: boolean;
+}
+
 /** Navigate to an existing Source checkout or Session worktree. */
-export function runSwing(runtime: Runtime, rawTarget?: string): void {
+export function runSwing(runtime: Runtime, rawTarget?: string, options: SwingOptions = {}): void {
   if (rawTarget === undefined) {
     throw new MonkeError("Interactive Swing picker requires the async CLI runner");
   }
@@ -54,17 +65,21 @@ export function runSwing(runtime: Runtime, rawTarget?: string): void {
   const home = getMonkeHome(runtime);
   const context = resolveRepoContext(runtime, runtime.cwd, home);
   const currentTarget = getCurrentSwingTarget(context);
-  navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, rawTarget);
+  navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, rawTarget, options);
 }
 
 /** Navigate with the Clack-backed interactive Swing picker used by the real CLI. */
-export async function runSwingInteractive(runtime: Runtime, rawTarget?: string): Promise<void> {
+export async function runSwingInteractive(
+  runtime: Runtime,
+  rawTarget?: string,
+  options: SwingOptions = {},
+): Promise<void> {
   const home = getMonkeHome(runtime);
   const context = resolveRepoContext(runtime, runtime.cwd, home);
   const currentTarget = getCurrentSwingTarget(context);
   const selectedTarget =
     rawTarget ?? (await selectSwingTarget(runtime, home, context.sourceRoot, currentTarget));
-  navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, selectedTarget);
+  navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, selectedTarget, options);
 }
 
 function navigateToSwingTarget(
@@ -73,6 +88,7 @@ function navigateToSwingTarget(
   rootSourceRoot: string,
   currentTarget: SwingHistoryTarget,
   selectedTarget: string,
+  options: SwingOptions,
 ): void {
   let targetPath = "";
 
@@ -89,6 +105,62 @@ function navigateToSwingTarget(
   });
 
   requestShellDirectory(runtime, targetPath);
+  if (options.codex) {
+    openCodexThread(runtime, targetPath);
+  }
+}
+
+function openCodexThread(runtime: Runtime, targetPath: string): void {
+  const logger = createLogger(runtime);
+  const url = formatCodexNewThreadUrl(targetPath);
+  const opener = getUrlOpener(url);
+  if (!canRunUrlOpener(runtime, opener.command)) {
+    logger.warning(`Could not open Codex thread: ${opener.command} was not found`);
+    return;
+  }
+
+  const result = runtime.exec(opener.command, opener.args, { allowFailure: true });
+  if (result.exitCode !== 0 || result.timedOut) {
+    logger.warning(`Could not open Codex thread: ${formatOpenFailure(result)}`);
+    return;
+  }
+
+  logger.success(`Opened Codex thread for ${targetPath}`);
+}
+
+function formatCodexNewThreadUrl(targetPath: string): string {
+  return `codex://threads/new?path=${encodeURIComponent(targetPath)}`;
+}
+
+function getUrlOpener(url: string): { command: string; args: string[] } {
+  if (process.platform === "darwin") {
+    return { command: "open", args: [url] };
+  }
+
+  if (process.platform === "win32") {
+    return { command: "cmd", args: ["/c", "start", "", url] };
+  }
+
+  return { command: "xdg-open", args: [url] };
+}
+
+function canRunUrlOpener(runtime: Runtime, command: string): boolean {
+  return process.platform === "win32" && command === "cmd"
+    ? true
+    : findExecutable(command, runtime.env) !== null;
+}
+
+function formatOpenFailure(result: {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut?: boolean;
+}): string {
+  if (result.timedOut) {
+    return "timed out";
+  }
+
+  return result.stderr.trim() || result.stdout.trim() || `exit code ${result.exitCode}`;
 }
 
 async function selectSwingTarget(

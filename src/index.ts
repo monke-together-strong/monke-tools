@@ -14,16 +14,17 @@ import { createRuntime } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
 import { runSwing, runSwingInteractive } from "./swing.ts";
+import type { SwingOptions } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt swing [target]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
+  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
 const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
 const SHELL_USAGE = "Usage:\n  mt shell install\n  mt shell init <bash|zsh>";
-const SWING_USAGE = "Usage: mt swing [target]";
+const SWING_USAGE = "Usage: mt swing [target] [--codex]";
 
 interface RawCleanupCommandOptions {
   merged?: boolean;
@@ -58,7 +59,11 @@ export async function runCliAsync(argv: string[], runtime = createRuntime()): Pr
 
 function createProgram(
   runtime: Runtime,
-  swingAction: (runtime: Runtime, target: string | undefined) => void | Promise<void>,
+  swingAction: (
+    runtime: Runtime,
+    target: string | undefined,
+    options: SwingOptions,
+  ) => void | Promise<void>,
 ): Command {
   const program = new Command()
     .name("mt")
@@ -91,8 +96,9 @@ function createProgram(
     .helpOption(false)
     .allowExcessArguments(false)
     .argument("[target]")
-    .action((target: string | undefined) => {
-      return swingAction(runtime, target);
+    .option("--codex")
+    .action((target: string | undefined, options: SwingOptions) => {
+      return swingAction(runtime, target, options);
     });
 
   program
