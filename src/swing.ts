@@ -138,10 +138,15 @@ function getUrlOpener(url: string): { command: string; args: string[] } {
   }
 
   if (process.platform === "win32") {
-    return { command: "cmd", args: ["/c", "start", "", url] };
+    return { command: "cmd", args: ["/c", "start", "", escapeWindowsCmdUrl(url)] };
   }
 
   return { command: "xdg-open", args: [url] };
+}
+
+function escapeWindowsCmdUrl(url: string): string {
+  // cmd expands %NAME% before start sees the URL; preserve percent-encoded paths.
+  return url.replaceAll("%", "^%");
 }
 
 function canRunUrlOpener(runtime: Runtime, command: string): boolean {

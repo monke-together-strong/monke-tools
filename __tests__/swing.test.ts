@@ -231,6 +231,34 @@ test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions",
   expect(readFileSync(openLogPath, "utf8")).toBe(`${codexThreadUrl}\n`);
 });
 
+test("swing --codex escapes percent-encoded URLs for the Windows launcher", () => {
+  const sandbox = makeTempDir("swing-codex-windows");
+  const home = path.join(sandbox, "home");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  const cmdLogPath = installWindowsCmdShim(binDirectory);
+  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+  const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
+
+  const result = withPlatform("win32", () =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["swing", "banana", "--codex"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  );
+
+  expect(result.stdout).toBe(`${worktreeRoot}\n`);
+  expect(result.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
+  expect(readFileSync(cmdLogPath, "utf8")).toBe(
+    `/c\nstart\n\n${codexThreadUrl.replaceAll("%", "^%")}\n`,
+  );
+});
+
 test("swing rejects unsupported PR and target forms clearly", () => {
   const sandbox = makeTempDir("swing-unsupported");
   const home = path.join(sandbox, "home");
@@ -311,4 +339,29 @@ printf '%s\\n' "$@" >> '${logPath.replaceAll("'", `'\\''`)}'
   writeFileSync(targetPath, script, "utf8");
   chmodSync(targetPath, 0o755);
   return logPath;
+}
+
+function installWindowsCmdShim(binDirectory: string): string {
+  mkdirSync(binDirectory, { recursive: true });
+  const logPath = path.join(binDirectory, "cmd.log");
+  const script = `#!/bin/sh
+set -eu
+printf '%s\\n' "$@" >> '${logPath.replaceAll("'", `'\\''`)}'
+`;
+  const targetPath = path.join(binDirectory, "cmd");
+  writeFileSync(targetPath, script, "utf8");
+  chmodSync(targetPath, 0o755);
+  return logPath;
+}
+
+function withPlatform<T>(platform: NodeJS.Platform, callback: () => T): T {
+  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: platform });
+  try {
+    return callback();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(process, "platform", descriptor);
+    }
+  }
 }
