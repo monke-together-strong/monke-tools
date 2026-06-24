@@ -56,7 +56,7 @@ episode sources.
   "durableFixProposals": [
     {
       "citedEpisodeRefs": ["e1"],     // must name episodes above; empty/invalid → dropped
-      "body": "Target: skill | AGENTS.md | CLAUDE.md | hook | preflight | Linear | none\nConfidence: high | medium | low\n\nThe inferred root cause and the concrete durable fix."
+      "body": "Target: <where the fix lands — code | tooling | setup | infra | deps | docs | agent-skill | AGENTS.md | CLAUDE.md | hook | preflight | already-tracked:<ref> | none>\nConfidence: high | medium | low\n\nThe inferred root cause and the concrete durable fix."
     }
   ],
   "repeatedAsks": [
@@ -75,6 +75,11 @@ episode sources.
   Not "the agent could have been faster" — that cites nothing.
 - Lead every `durableFixProposal.body` with `Target:` and `Confidence:` lines. The body is prose;
   there are no other required fields.
+- **Value the fix by impact × recurrence, not by where it lands.** A code, tooling, or setup fix is
+  first-class — e.g. "`mt create` doesn't install deps / generate clients, so the agent runs the
+  same workaround every session" is a high-value proposal, not a footnote. Reserve `Target: none`
+  (and `already-tracked:<ref>`) for cases where there is genuinely no new fix to make; never use it
+  to sideline a real fix just because it isn't an agent-harness change.
 - Cite only refs that exist in the bundle. The commit step drops episodes with bad turn refs and
   fixes with bad episode refs, so a hallucinated citation silently loses the whole finding.
   `repeatedAsks.exampleSessionIds` are also validated — unknown ids are stripped.
