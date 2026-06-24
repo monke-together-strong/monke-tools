@@ -274,6 +274,10 @@ _Avoid_: Branch selector, create target, git ref
 The interactive **Swing** mode used when `mt swing` is run without a **Swing target**, letting a user choose from the current **Root repo**'s existing local **Swing targets**.
 _Avoid_: Branch picker, create picker, worktree creator
 
+**Codex Swing launch**:
+An optional **Swing** behavior selected with `--codex` that opens a new Codex app thread in the resolved local checkout.
+_Avoid_: Codex create, Codex worktree materialization, remote agent launch
+
 **Previous Swing target**:
 The last different **Swing target** remembered for one **Root repo**, used by `mt swing -` to return to a previous source or session checkout.
 _Avoid_: Global previous branch, shell history, last cwd
@@ -335,6 +339,7 @@ _Avoid_: Delete session, prune repos
 - **Default branch create mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
 - **Create** always emits a **Shell directory request** for the root repo's **Session worktree** after the operation succeeds.
 - **Swing** always emits a **Shell directory request** for an existing root repo **Session worktree**.
+- A **Codex Swing launch** preserves the normal **Swing** navigation behavior and additionally opens `codex://threads/new` with the resolved absolute checkout path.
 - **Swing** does not create **Session worktrees** or change which branch an existing worktree has checked out.
 - A **Swing target** may be a **Session** name, the `^` source-checkout shortcut, the `-` previous-target shortcut, a `pr:<number>` pull request shortcut, or a pull request URL.
 - The `^` **Swing target** resolves to the current **Root repo** **Source checkout** without materializing, setting up, creating, or changing branches.
