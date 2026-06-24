@@ -410,7 +410,8 @@ export function runMaterialize(runtime: Runtime): void {
       const dependencyWorktree = isCurrentRepo
         ? null
         : ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session);
-      const worktreePath = isCurrentRepo ? context.worktreeRoot : dependencyWorktree.path;
+      const worktreePath = dependencyWorktree?.path ?? context.worktreeRoot;
+      const worktreeCreated = dependencyWorktree?.created ?? false;
 
       if (isCurrentRepo) {
         validateWorktreeForSession(runtime, home, repoConfig.sourceRoot, worktreePath, session);
@@ -425,7 +426,7 @@ export function runMaterialize(runtime: Runtime): void {
         worktreePath,
         seedMaterialRoot: repoConfig.sourceRoot,
         baselinePortsRoot: repoConfig.sourceRoot,
-        worktreeCreated: isCurrentRepo ? false : dependencyWorktree.created,
+        worktreeCreated,
         existingState,
         dependencyResults: results,
         persistRepoState(repoState) {
