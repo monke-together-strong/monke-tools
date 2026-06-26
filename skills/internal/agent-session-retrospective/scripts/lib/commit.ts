@@ -5,13 +5,16 @@ import {
   listBundleHashes,
   loadFrozenSession,
   loadRepoMeta,
+  readPrAnalysis,
   readBundle,
   readFindings,
+  readRunWindow,
   retroHome,
   saveFrozenSession,
   saveRepoMeta,
   writeReport,
 } from "./store.ts";
+import { readPrManifest, type PrAnalysisManifest, type PrWorkItemSummary } from "./pr-analysis.ts";
 import type {
   BundleSession,
   CanonicalTurn,
@@ -21,6 +24,7 @@ import type {
   RepeatedAskCluster,
   RepoBundle,
   RepoFindings,
+  RetrospectiveWindow,
 } from "./types.ts";
 
 export interface ValidatedFindings {
@@ -107,6 +111,7 @@ export interface CommitResult {
   frozenSessions: number;
   appendedSessions: number;
   dropped: { episodes: number; fixes: number };
+  prAnalysis: { present: boolean; warnings: string[] };
 }
 
 export function runCommit(options: RunCommitOptions): CommitResult {
@@ -126,6 +131,12 @@ export function runCommit(options: RunCommitOptions): CommitResult {
     dropped.episodes += slice.validated.dropped.episodes;
     dropped.fixes += slice.validated.dropped.fixes;
   }
+
+  const prAnalysis = readPrAnalysis(root, options.runTs);
+  if (!prAnalysis?.trim()) {
+    throw new Error(`commit requires runs/${options.runTs}/pr-analysis.md from the required PR analysis lane`);
+  }
+  const prAnalysisValidation = validatePrAnalysis(prAnalysis, readPrManifest(root, options.runTs));
 
   // Freeze each session from its PRIMARY repo's analysis (analyze-once).
   let frozenSessions = 0;
@@ -175,11 +186,24 @@ export function runCommit(options: RunCommitOptions): CommitResult {
     options.synthesisPath && existsSync(options.synthesisPath)
       ? readFileSync(options.synthesisPath, "utf8").trim()
       : "";
-  const report = buildReport(options.runTs, synthesis, slices);
+  const report = buildReport(options.runTs, synthesis, slices, {
+    window: readRunWindow(root, options.runTs),
+    prAnalysis,
+    prAnalysisWarnings: prAnalysisValidation.warnings,
+  });
   const reportPath = writeReport(root, options.runTs, report);
   cleanRunDir(root, options.runTs);
 
-  return { reportPath, frozenSessions, appendedSessions, dropped };
+  return {
+    reportPath,
+    frozenSessions,
+    appendedSessions,
+    dropped,
+    prAnalysis: {
+      present: Boolean(prAnalysis?.trim()),
+      warnings: prAnalysisValidation.warnings,
+    },
+  };
 }
 
 function secondaryRootsOf(session: BundleSession, slices: RepoSlice[]): string[] {
@@ -198,15 +222,49 @@ function secondaryRootsOf(session: BundleSession, slices: RepoSlice[]): string[]
 
 // --- report (action-first, design decision 16) -------------------------------
 
-export function buildReport(runTs: string, synthesis: string, slices: RepoSlice[]): string {
+interface ReportContext {
+  window?: RetrospectiveWindow | null;
+  prAnalysis?: string | null;
+  prAnalysisWarnings?: string[];
+}
+
+export function buildReport(
+  runTs: string,
+  synthesis: string,
+  slices: RepoSlice[],
+  context: ReportContext = {},
+): string {
   const out: string[] = [];
   out.push(`# Agent session retrospective — ${runTs}`);
+  out.push("");
+  out.push(formatWindowLine(context.window, runTs));
   out.push("");
 
   out.push("## Global cross-repo proposals");
   out.push("");
   out.push(synthesis || "_No cross-repo synthesis provided for this run._");
   out.push("");
+
+  out.push("## PR trajectory analysis");
+  out.push("");
+  const prAnalysis = context.prAnalysis?.trim();
+  if (prAnalysis) {
+    out.push(prAnalysis);
+    out.push("");
+    const warnings = context.prAnalysisWarnings ?? [];
+    if (warnings.length > 0) {
+      out.push("**Validation warnings**");
+      for (const warning of warnings) {
+        out.push(`- ${warning}`);
+      }
+      out.push("");
+    }
+  } else {
+    out.push(
+      `_PR analysis missing: no \`runs/${runTs}/pr-analysis.md\` was available at commit time. Transcript-only synthesis is degraded._`,
+    );
+    out.push("");
+  }
 
   out.push("## Per-repo proposals");
   out.push("");
@@ -263,6 +321,125 @@ export function buildReport(runTs: string, synthesis: string, slices: RepoSlice[
   out.push("");
 
   return out.join("\n");
+}
+
+const REQUIRED_PR_HEADINGS = [
+  "Opening Snapshot",
+  "Post-Opening Delta",
+  "Corrective Patterns",
+  "Ignored Feature Scope",
+  "Commit Message Reference",
+];
+
+export function validatePrAnalysis(
+  content: string | null | undefined,
+  manifest?: PrAnalysisManifest | null,
+): { warnings: string[] } {
+  const text = content?.trim();
+  if (!text) {
+    return { warnings: [] };
+  }
+
+  if (manifest) {
+    return validateManifestBackedPrAnalysis(text, manifest);
+  }
+
+  const counts = REQUIRED_PR_HEADINGS.map((heading) => ({
+    heading,
+    count: countHeading(text, heading),
+  }));
+  const perPrHeadingSeen = counts.some((entry) => entry.count > 0);
+  if (!perPrHeadingSeen) {
+    return { warnings: [] };
+  }
+
+  const expectedCount = Math.max(...counts.map((entry) => entry.count));
+  const warnings = counts
+    .filter((entry) => entry.count !== expectedCount)
+    .map(
+      (entry) =>
+        `PR analysis heading \`## ${entry.heading}\` appears ${entry.count} time(s), expected ${expectedCount}.`,
+    );
+  return { warnings };
+}
+
+function validateManifestBackedPrAnalysis(
+  text: string,
+  manifest: PrAnalysisManifest,
+): { warnings: string[] } {
+  const warnings: string[] = [];
+  for (const item of manifest.workItems) {
+    const section = findPrAnalysisSection(text, item);
+    const gap = text.includes(`\`${item.repo}#${item.number}\``);
+    if (!section) {
+      if (!gap) {
+        warnings.push(`Expected PR \`${item.repo}#${item.number}\` is missing from PR analysis.`);
+      }
+      continue;
+    }
+
+    for (const heading of REQUIRED_PR_HEADINGS) {
+      if (countHeading(section, heading) === 0) {
+        warnings.push(`PR \`${item.repo}#${item.number}\` is missing \`## ${heading}\`.`);
+      }
+    }
+
+    if (item.openingSnapshot.ref && !containsRef(section, item.openingSnapshot.ref)) {
+      warnings.push(`PR \`${item.repo}#${item.number}\` omits known opening ref ${item.openingSnapshot.ref}.`);
+    }
+    if (item.finalHeadSha && !containsRef(section, item.finalHeadSha)) {
+      warnings.push(`PR \`${item.repo}#${item.number}\` omits known final head ${item.finalHeadSha}.`);
+    }
+
+    const allowedShas = new Set(
+      [item.openingSnapshot.ref, item.finalHeadSha, item.mergeCommitSha, ...item.commitShas].filter(
+        (sha): sha is string => Boolean(sha),
+      ),
+    );
+    for (const citedSha of citedShas(section)) {
+      if (![...allowedShas].some((allowed) => allowed.startsWith(citedSha) || citedSha.startsWith(allowed))) {
+        warnings.push(`PR \`${item.repo}#${item.number}\` cites unknown commit SHA ${citedSha}.`);
+      }
+    }
+  }
+  return { warnings };
+}
+
+function findPrAnalysisSection(text: string, item: PrWorkItemSummary): string | null {
+  const heading = `### ${item.repo}#${item.number}`;
+  const start = text.indexOf(heading);
+  if (start === -1) {
+    return null;
+  }
+  const rest = text.slice(start);
+  const next = rest.slice(heading.length).search(/^###\s+/m);
+  return next === -1 ? rest : rest.slice(0, heading.length + next);
+}
+
+function countHeading(text: string, heading: string): number {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return [...text.matchAll(new RegExp(`^##\\s+${escaped}\\s*$`, "gm"))].length;
+}
+
+function containsRef(text: string, ref: string): boolean {
+  return text.includes(ref) || text.includes(ref.slice(0, 12));
+}
+
+function citedShas(text: string): string[] {
+  const out = new Set<string>();
+  for (const match of text.matchAll(/\b([0-9a-f]{7,40})\b/gi)) {
+    if (match[1]) {
+      out.add(match[1]);
+    }
+  }
+  return [...out];
+}
+
+function formatWindowLine(window: RetrospectiveWindow | null | undefined, runTs: string): string {
+  if (!window) {
+    return `Window: _missing \`runs/${runTs}/window.json\`_`;
+  }
+  return `Window: ${window.since} to ${window.until} (${window.sinceSource} to ${window.untilSource})`;
 }
 
 /** Pull the leading `Target:` / `Confidence:` lines out of a free-form fix body. */

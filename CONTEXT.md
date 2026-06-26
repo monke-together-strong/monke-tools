@@ -87,7 +87,7 @@ A session worktree recorded in session state whose filesystem path no longer exi
 _Avoid_: Inactive worktree, stale checkout
 
 **Merged PR**:
-A pull request whose branch has been merged into its repo's default branch.
+A pull request whose GitHub `mergedAt` value is set.
 _Avoid_: Merged worktree, merged session
 
 **Merge-cleanable Session**:
@@ -321,8 +321,64 @@ _Avoid_: Delete session, prune repos
 ### Agent retrospective
 
 **Retrospective**:
-One read-only analysis pass over recent **Agent transcripts** that detects **Friction episodes** and **Repeated asks** and reports **Durable fix proposals**, grouped by **Source checkout**.
+One read-only analysis pass that combines recent **Agent transcript** evidence with required **PR analysis**, then reports **Durable fix proposals**. The transcript lane detects **Friction episodes** and **Repeated asks** grouped by **Source checkout**; the PR lane studies **Implementation trajectories** in the same **Retrospective window**.
 _Avoid_: Audit, review, trace, session review
+
+**Implementation trajectory**:
+A pull request lifecycle analyzed from the state when the PR was opened to the merged outcome.
+_Avoid_: Session, transcript, friction episode
+
+**Trajectory window**:
+The retrospective time window interpreted by **Merged PR** merge time, not by transcript idle time.
+_Avoid_: Idle window, session window
+
+**Retrospective window**:
+The time span analyzed by one agent retrospective run, defaulting from the previous completed retrospective run to now unless explicitly overridden; the first run defaults to the previous two weeks.
+_Avoid_: Unbounded scan, manual date range
+
+**PR opening snapshot**:
+The deterministic repository state represented by a pull request when it was first opened, including all commits already present on the PR branch at creation time.
+_Avoid_: First draft, first attempt, initial candidate
+
+**Opening snapshot confidence**:
+The evidence level for a **PR opening snapshot**, recorded as exact when GitHub exposes a reliable creation-time head ref, inferred when reconstructed from commit times, and unknown when no opening ref can be identified.
+_Avoid_: Snapshot certainty, confidence score
+
+**Merged outcome**:
+The deterministic repository state represented by a **Merged PR** at merge time.
+_Avoid_: Final draft, final patch, merged session
+
+**Post-opening change**:
+A change added to a pull request after the **PR opening snapshot** and before the **Merged outcome**.
+_Avoid_: Follow-up, correction turn, later commit
+
+**Post-opening delta**:
+The diff between a **PR opening snapshot** and the **Merged outcome**, used as the primary evidence for **PR analysis**.
+_Avoid_: Follow-up commits, later patch
+
+**Corrective change**:
+A **Post-opening change** that fixes, tightens, refactors, verifies, cleans up, or removes something from the **PR opening snapshot**, rather than adding unrelated feature scope.
+_Avoid_: New feature commit, extra work
+
+**PR analysis**:
+An evidence-grounded analysis of one **Implementation trajectory**, focused on the **Post-opening delta** and recurring **Corrective change** patterns.
+_Avoid_: Session analysis, transcript analysis
+
+**PR analysis scope**:
+The GitHub repository set included in required **PR analysis**, currently every accessible non-archived repository under the `monke-together-strong` organization rather than only repositories with eligible **Agent transcripts**.
+_Avoid_: Bundle repos, known repos
+
+**PR author scope**:
+The pull request author filter for required **PR analysis**, currently merged pull requests authored by the authenticated GitHub user running the skill.
+_Avoid_: Agent-authored PRs, all org PRs
+
+**PR analysis report**:
+An aggregate Markdown report that combines per-PR **PR analysis** findings for one **Trajectory window** before final retrospective synthesis.
+_Avoid_: Per-PR notes, trajectory hints
+
+**PR analysis gap**:
+An explicit report entry for a repository whose **PR analysis** could not be completed for a **Trajectory window**, including the reason and the impact on final retrospective synthesis.
+_Avoid_: Silent fallback, skipped PRs
 
 **Agent transcript**:
 One recorded Codex or Claude agent conversation, identified by its native agent session id. A resumed conversation is the same transcript; a subagent run is a distinct child transcript linked to its parent.
@@ -341,7 +397,7 @@ An observed moment in an **Agent transcript** where the agent hit an issue and c
 _Avoid_: Detour, violation, agent sin, mistake, error
 
 **Durable fix proposal**:
-A recommended lasting change to the agent working environment — a skill, `AGENTS.md`/`CLAUDE.md`, a hook, a preflight, or a Linear issue — inferred from a cluster of related **Friction episodes** and/or **Repeated asks**, for a human to execute. The retrospective proposes it; it never applies it.
+A recommended lasting change to the agent working environment — a skill, `AGENTS.md`/`CLAUDE.md`, a hook, a preflight, or a Linear issue — inferred from related **Friction episodes**, **Repeated asks**, and/or recurring **Corrective change** patterns from **PR analysis**, for a human to execute. The retrospective proposes it; it never applies it.
 _Avoid_: Auto-fix, patch, remediation, action item
 
 **Repeated ask**:
@@ -509,13 +565,13 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 - A **Secondary repo** is observed from an **Agent transcript**'s tool activity, not declared by `monke.yml`, so it need not be a **Dependency repo** of the **Primary repo**.
 - A **Friction episode** belongs to exactly one **Agent transcript** and, once recorded, is never recomputed.
 - A **Friction episode** states a neutral observation; interpretive claims belong to a **Durable fix proposal**, not the episode.
-- A **Durable fix proposal** is synthesized from one cluster of related **Friction episodes** and/or **Repeated asks**, carries its supporting evidence and a confidence, and is regenerated each run rather than frozen.
+- A **Durable fix proposal** is synthesized from one cluster of related **Friction episodes**, **Repeated asks**, and/or recurring **Corrective change** patterns from **PR analysis**, carries its supporting evidence and a confidence, and is regenerated each run rather than frozen.
 - The retrospective only emits a **Durable fix proposal**; it never edits a repo, skill, or config.
 - A **Durable fix proposal** may conclude that no durable fix is worth making.
 - A **Repeated ask** is found by classifying raw user messages as fix/revert/change requests and clustering similar ones across **Agent transcripts**; the messages are extracted deterministically, while the classification and clustering are regenerated each run, not frozen.
 - A **Repeated ask** may correlate within one **Primary repo** or, in global synthesis, across repos.
 - A **Retrospective** is read-only: it reports **Durable fix proposals** but never edits a repo, skill, or config.
-- Every **Friction episode** and **Durable fix proposal** cites verifiable locations in **Agent transcripts**; a citation that cannot be matched to a real transcript location is rejected.
+- Every **Friction episode** cites verifiable locations in **Agent transcripts**; every **Durable fix proposal** cites verifiable supporting evidence from **Agent transcripts** and/or **PR analysis**; a citation that cannot be matched to its evidence source is rejected.
 
 ## Example dialogue
 

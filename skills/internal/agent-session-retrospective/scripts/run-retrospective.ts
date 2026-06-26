@@ -4,14 +4,19 @@
  *
  *   bun run-retrospective.ts collect [--since DATE] [--until DATE]
  *                                    [--idle-minutes N] [--run-ts TS]
+ *   bun run-retrospective.ts pr-collect --run-ts TS [--repo-cache DIR]
+ *   bun run-retrospective.ts pr-aggregate --run-ts TS
  *   bun run-retrospective.ts commit  --run-ts TS [--synthesis FILE]
  *
- * The middle (per-repo subagent fan-out) is fuzzy and host-native; everything
- * here is deterministic and bun-testable. The script owns all disk I/O.
+ * The middle (per-repo and per-PR subagent fan-out) is fuzzy and host-native;
+ * everything here is deterministic and bun-testable. The script owns disk I/O.
  */
+
+import path from "node:path";
 
 import { runCollect } from "./lib/collect.ts";
 import { runCommit } from "./lib/commit.ts";
+import { runPrAggregate, runPrCollect } from "./lib/pr-analysis.ts";
 import { retroHome, withRetroLock } from "./lib/store.ts";
 
 interface Flags {
@@ -99,7 +104,38 @@ function main(): void {
     return;
   }
 
-  process.stderr.write("Usage: run-retrospective.ts <collect|commit> [flags]\n");
+  if (command === "pr-collect") {
+    const runTs = flags["run-ts"];
+    if (!runTs) {
+      throw new Error("pr-collect requires --run-ts");
+    }
+    const result = withRetroLock(root, () =>
+      runPrCollect({
+        retroRoot: root,
+        runTs,
+        repoCacheRoot: flags["repo-cache"] ?? path.join(process.cwd(), "tmp", "agent-retrospective-pr-analysis"),
+      }),
+    );
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  if (command === "pr-aggregate") {
+    const runTs = flags["run-ts"];
+    if (!runTs) {
+      throw new Error("pr-aggregate requires --run-ts");
+    }
+    const result = withRetroLock(root, () =>
+      runPrAggregate({
+        retroRoot: root,
+        runTs,
+      }),
+    );
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  process.stderr.write("Usage: run-retrospective.ts <collect|pr-collect|pr-aggregate|commit> [flags]\n");
   process.exit(1);
 }
 

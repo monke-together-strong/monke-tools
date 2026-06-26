@@ -1,21 +1,27 @@
 # Report contract + disk layout
 
+The PR lane's operational details live in [pr-analysis.md](pr-analysis.md). This file owns only the
+final report shape and disk layout.
+
 ## Report shape (action-first)
 
-`commit` writes `reports/<runTs>-retrospective.md` with three sections, in this order:
+`commit` writes `reports/<runTs>-retrospective.md` with a report title, a `Window:` line showing
+the resolved retrospective window, and four sections, in this order:
 
 1. **Global cross-repo proposals** — the synthesis you passed via `--synthesis`. Leads the report
    because cross-repo patterns (ranked by **value × recurrence**) are the highest-leverage fixes.
-2. **Per-repo proposals** — for each repo with signal, its durable fixes, each expandable to the
+2. **PR trajectory analysis** — recurring corrective-change patterns from the required PR analysis
+   lane, plus explicit PR analysis gaps when GitHub or local diff evidence was unavailable.
+3. **Per-repo proposals** — for each repo with signal, its durable fixes, each expandable to the
    grounded evidence behind it (the cited turns, rendered inline). Repeated-ask clusters follow.
-3. **Audit appendix** — every frozen friction episode this run, one line each, for traceability.
+4. **Audit appendix** — every frozen friction episode this run, one line each, for traceability.
 
 A reader should be able to act from section 1 alone and drill into evidence only when they doubt a
 proposal.
 
 ## Reports are the cross-run memory
 
-The synthesis step (SKILL.md step 3) reads the newest few reports and promotes patterns recurring
+The synthesis step reads the newest few reports and promotes patterns recurring
 across them, so the report is both an output and the next run's input. Two rules keep that read
 worth doing:
 
@@ -31,8 +37,18 @@ Keep the section order above stable so cross-referencing prior reports stays che
   appended on resume, never recomputed. Holds `lastTurnIndex` (the turn cursor for delta), `contentHash`,
   `repoKey`, `secondary[]`, `friction[]`, `rawUserMessages[]`.
 - `repos/<hash(repoKey)>.yml` — repo meta (first seen, last analyzed).
+- `runs/<runTs>/window.json` — resolved retrospective window with `since`, `until`, `sinceSource`,
+  and `untilSource` (transient; embedded in the final report).
 - `runs/<runTs>/<repoHash>.json` — per-repo bundle (transient; removed by commit).
 - `runs/<runTs>/<repoHash>.findings.json` — subagent findings (transient; removed by commit).
+- `runs/<runTs>/pr-analysis/manifest.json` — PR lane manifest with expected PRs, work-item paths,
+  analysis paths, opening refs, final refs, commit SHAs, and PR analysis gaps.
+- `runs/<runTs>/pr-analysis/prs/*.json` — one per-PR work item handed to a subagent.
+- `runs/<runTs>/pr-analysis/prs/*.analysis.md` — one per-PR Markdown analysis written by a
+  subagent.
+- `runs/<runTs>/pr-analysis.md` — aggregate PR analysis report for the trajectory window
+  (transient; embedded or summarized in the final report; content contract in
+  [pr-analysis.md](pr-analysis.md)).
 - `reports/<runTs>-retrospective.md` — the report.
 - `run.lock` — one run at a time.
 

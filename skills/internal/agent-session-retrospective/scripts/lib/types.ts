@@ -101,6 +101,17 @@ export interface RepoFindings {
   repeatedAsks: RepeatedAskCluster[];
 }
 
+export type RetrospectiveSinceSource = "explicit" | "previous-report" | "first-run-default";
+export type RetrospectiveUntilSource = "explicit" | "now";
+
+/** Resolved once by collect, then read by PR analysis and commit. */
+export interface RetrospectiveWindow {
+  since: string;
+  until: string;
+  sinceSource: RetrospectiveSinceSource;
+  untilSource: RetrospectiveUntilSource;
+}
+
 /** FROZEN per-session record — written once, appended on resume, never recomputed. */
 export interface FrozenSessionRecord {
   version: 1;

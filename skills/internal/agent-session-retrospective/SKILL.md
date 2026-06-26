@@ -14,12 +14,24 @@ step the agent works around every run, a flaky query, or a broken setup is as va
 a skill or AGENTS.md change — value, not where the fix lands, decides what leads. Report-only:
 never auto-edit, never draft artifacts.
 
-The work splits into a deterministic script (two brackets that own all disk I/O) and one
-fuzzy middle (per-repo subagents that read transcripts and find friction). Run the brackets;
-fan out the middle host-natively.
+The work has two required evidence lanes:
+
+1. **Agent transcript analysis** — deterministic collect/commit brackets around per-repo subagents
+   that read transcripts and find friction.
+2. **PR analysis** — a host-native orchestrator that analyzes merged **Implementation
+   trajectories** from PR opening snapshot to merged outcome.
+
+Run both lanes before synthesis. The final report combines Agent transcript findings and PR
+trajectory patterns; transcript-only synthesis is a degraded result and must say what PR analysis
+was missing.
+The PR lane's operational contract lives in
+[references/pr-analysis.md](references/pr-analysis.md); load it when you reach step 3.
 
 This skill needs `bun` and runs its script from this skill's own directory. The script lives
 at `scripts/run-retrospective.ts`; all state lives under `~/.monke/agent-retrospectives/`.
+By default, a retrospective run analyzes the window from the previous completed retrospective run
+to now. The first run defaults to the previous two weeks. Use explicit `--since` / `--until` only
+for backfills or bounded replays.
 
 ## 1. Collect
 
@@ -29,21 +41,29 @@ Run the collect bracket from this skill's directory:
 bun scripts/run-retrospective.ts collect [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--idle-minutes N]
 ```
 
-It normalizes every eligible transcript, groups sessions by repo (one **primary** repo per
-session plus any **secondary** repos its tool calls touched), and writes one bundle per repo.
-A session is eligible once it has been idle past the cutoff (default 45 min) and is either new
-or has grown since it was last frozen — **analyze-once-and-freeze** means frozen friction is
-never recomputed, only appended to on resume.
+If `--since` is omitted, resolve it to the previous completed retrospective run, or the previous
+two weeks when no completed run exists. If `--until` is omitted, use now.
+Use the newest committed report under `reports/` as the previous completed run cursor.
 
-Collect prints a JSON `runTs` and a `bundles` list. **Done when** you have the `runTs` and the
-per-repo bundle paths. If `bundles` is empty, stop and report that nothing was eligible.
+It normalizes every eligible Agent transcript, groups Agent transcripts by **Source checkout** (one
+**Primary repo** per transcript plus any **Secondary repos** its tool calls touched), and writes one
+bundle per Source checkout. An Agent transcript is eligible once it has been idle past the cutoff
+(default 45 min) and is either new or has grown since it was last frozen —
+**analyze-once-and-freeze** means frozen friction is never recomputed, only appended to on resume.
+
+Collect prints JSON with `runTs`, `window: { since, until, sinceSource, untilSource }`, and a
+`bundles` list. `sinceSource` is `explicit`, `previous-report`, or `first-run-default`;
+`untilSource` is `explicit` or `now`. **Done when** you have the `runTs`, resolved window, and
+per-repo bundle paths. It also writes the resolved window to `runs/<runTs>/window.json` so PR
+analysis and commit use the same boundary. If `bundles` is empty and no repository set is available
+for PR analysis, stop and report that nothing was eligible.
 
 ## 2. Fan out — one subagent per bundle
 
 Spawn one subagent per bundle, concurrently. Give each subagent its bundle path and
 [references/finding-schema.md](references/finding-schema.md). Each subagent:
 
-- reads its bundle JSON (normalized sessions with citable `t<n>` turn refs),
+- reads its bundle JSON (normalized Agent transcripts with citable `t<n>` turn refs),
 - analyzes only turns at or past each session's `firstNewTurnIndex`,
 - finds **friction episodes** and clusters **repeated asks** freely from the prose,
 - writes its findings JSON to the bundle's sibling path: replace `<repoHash>.json` with
@@ -52,10 +72,45 @@ Spawn one subagent per bundle, concurrently. Give each subagent its bundle path 
 **Done when** every bundle has a sibling `.findings.json` file. A subagent that finds nothing
 still writes a findings file with empty arrays.
 
-## 3. Synthesis — this run plus prior reports
+## 3. PR trajectory analysis — required
 
-Read every per-repo findings file and synthesize the **cross-repo** durable fixes — patterns that
-recur across repos (e.g. "stop minting `codex/` branches everywhere").
+Load [references/pr-analysis.md](references/pr-analysis.md), then run the required PR analysis lane
+for the same resolved retrospective window. The PR lane is organization-scoped and independent of
+which repositories had eligible Agent transcript bundles. Use the reference as the single source of truth
+for repository scope, author scope, opening snapshots, post-opening deltas, per-PR headings, gap
+reporting, aggregate report shape, and validation boundary.
+
+Start the PR lane from this skill's directory:
+
+```bash
+bun scripts/run-retrospective.ts pr-collect --run-ts <runTs> [--repo-cache tmp/agent-retrospective-pr-analysis]
+```
+
+`pr-collect` reads `runs/<runTs>/window.json`, resolves the GitHub user, enumerates in-scope
+repositories and merged PRs, uses a `tmp/agent-retrospective-pr-analysis` repo cache for local git
+diffs unless `--repo-cache` overrides it, writes `runs/<runTs>/pr-analysis/manifest.json`, and
+writes one `runs/<runTs>/pr-analysis/prs/*.json` work item per PR. Each work item includes the path
+where its per-PR agent must write Markdown: `analysisPath`.
+
+Spawn one subagent per work item, concurrently. Give each subagent the work item JSON path and
+[references/pr-analysis.md](references/pr-analysis.md). Each subagent writes Markdown to the
+work item's `analysisPath` with the exact headings required by the reference.
+
+After every per-PR subagent has written its analysis, aggregate the lane:
+
+```bash
+bun scripts/run-retrospective.ts pr-aggregate --run-ts <runTs>
+```
+
+**Done when** `runs/<runTs>/pr-analysis.md` exists and every in-scope merged PR is represented by
+either a per-PR analysis entry or an explicit PR analysis gap.
+
+## 4. Synthesis — this run plus prior reports
+
+Read every per-repo findings file and `runs/<runTs>/pr-analysis.md`, then synthesize the
+**cross-repo** durable fixes — patterns that recur across repos (e.g. "stop minting `codex/`
+branches everywhere"). Agent transcript findings and PR trajectory patterns are both first-class
+evidence; rank the combined result by **value × recurrence**.
 
 Then read the **newest few reports** under `reports/` (cap ~6) — they are this skill's memory of
 patterns already named. **Cross-reference, don't copy forward**: match this run's findings against
@@ -70,7 +125,7 @@ recurrence**. Lead each proposal with a `Target:` line — *where the fix lands*
 and a `Confidence:` line. **Done when** the synthesis file is written and any cross-report
 recurrence is promoted into it.
 
-## 4. Commit
+## 5. Commit
 
 Run the commit bracket:
 
@@ -79,12 +134,13 @@ bun scripts/run-retrospective.ts commit --run-ts <runTs> --synthesis <synthesisF
 ```
 
 It validates every cited turn ref and episode ref against the bundle (hallucinated citations are
-dropped and counted), freezes each session's friction, and writes the action-first report. See
+dropped and counted), lightly validates PR analysis mechanics when available, freezes each Agent
+transcript's friction, and writes the action-first report. See
 [references/report-contract.md](references/report-contract.md) for the report shape. **Done when**
 commit prints the report path; surface the `dropped` counts — a high drop count means the
 subagents are citing turns that do not exist.
 
-## 5. Hand back
+## 6. Hand back
 
 Read the report and surface the lead proposals to the user. Every proposal is a named, evidenced,
 confidence-tagged thing a human decides on — propose, never apply.

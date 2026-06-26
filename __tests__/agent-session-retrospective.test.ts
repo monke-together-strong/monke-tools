@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -16,8 +16,16 @@ import {
 import {
   buildReport,
   parseFixHeader,
+  runCommit,
+  validatePrAnalysis,
   validateFindings,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/commit.ts";
+import {
+  runPrAggregate,
+  runPrCollect,
+  type CommandRunner,
+  type PrAnalysisManifest,
+} from "../skills/internal/agent-session-retrospective/scripts/lib/pr-analysis.ts";
 import {
   loadFrozenSession,
   saveFrozenSession,
@@ -260,6 +268,62 @@ function bundleWith(refs: string[]): RepoBundle {
   };
 }
 
+describe("runCollect window", () => {
+  test("resolves the first-run default window and writes it to the run directory", () => {
+    const root = path.join(dir, "store");
+    const result = runCollect({
+      retroRoot: root,
+      runTs: "ts",
+      codexRoot: path.join(dir, "no-codex"),
+      claudeRoot: path.join(dir, "no-claude"),
+      idleMinutes: 0,
+      nowMs: Date.parse("2026-06-01T00:00:00Z"),
+    });
+
+    expect(result.window).toEqual({
+      since: "2026-05-18T00:00:00.000Z",
+      until: "2026-06-01T00:00:00.000Z",
+      sinceSource: "first-run-default",
+      untilSource: "now",
+    });
+    expect(JSON.parse(readFileSync(path.join(root, "runs", "ts", "window.json"), "utf8"))).toEqual(
+      result.window,
+    );
+  });
+
+  test("uses the newest completed report as the default since cursor", () => {
+    const root = path.join(dir, "store");
+    const reportsDir = path.join(root, "reports");
+    mkdirSync(reportsDir, { recursive: true });
+    writeFileSync(
+      path.join(reportsDir, "2026-05-01T00-00-00-000Z-retrospective.md"),
+      "Window: 2026-04-17T00:00:00.000Z to 2026-05-01T00:00:00.000Z (first-run-default to now)\n",
+      "utf8",
+    );
+    writeFileSync(
+      path.join(reportsDir, "2026-05-20T00-00-00-000Z-retrospective.md"),
+      "Window: 2026-05-01T00:00:00.000Z to 2026-05-20T12:00:00.000Z (previous-report to now)\n",
+      "utf8",
+    );
+
+    const result = runCollect({
+      retroRoot: root,
+      runTs: "ts",
+      codexRoot: path.join(dir, "no-codex"),
+      claudeRoot: path.join(dir, "no-claude"),
+      idleMinutes: 0,
+      nowMs: Date.parse("2026-06-01T00:00:00Z"),
+    });
+
+    expect(result.window).toEqual({
+      since: "2026-05-20T12:00:00.000Z",
+      until: "2026-06-01T00:00:00.000Z",
+      sinceSource: "previous-report",
+      untilSource: "now",
+    });
+  });
+});
+
 describe("validateFindings", () => {
   test("drops episodes citing missing turns and fixes citing missing episodes", () => {
     const bundle = bundleWith(["t0", "t1"]);
@@ -348,6 +412,129 @@ describe("buildReport", () => {
     expect(report).not.toContain("(missing)");
   });
 
+  test("commit embeds the resolved window and PR trajectory analysis before per-repo proposals", () => {
+    const root = path.join(dir, "store");
+    const runTs = "2026-06-01T00-00-00-000Z";
+    const runDir = path.join(root, "runs", runTs);
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(
+      path.join(runDir, "window.json"),
+      JSON.stringify(
+        {
+          since: "2026-05-18T00:00:00.000Z",
+          until: "2026-06-01T00:00:00.000Z",
+          sinceSource: "first-run-default",
+          untilSource: "now",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    writeFileSync(
+      path.join(runDir, "pr-analysis.md"),
+      "Recurring corrective pattern: PRs often needed verification commits after opening.\n",
+      "utf8",
+    );
+    const bundle = bundleWith(["t0"]);
+    bundle.runTs = runTs;
+    writeFileSync(
+      path.join(runDir, `${bundle.repoHash}.json`),
+      JSON.stringify(bundle, null, 2),
+      "utf8",
+    );
+    const findings: RepoFindings = {
+      repoKey: "/repo",
+      frictionEpisodes: [
+        { id: "e1", sessionId: "s1", citedTurnRefs: ["t0"], body: "episode body" },
+      ],
+      durableFixProposals: [
+        { citedEpisodeRefs: ["e1"], body: "Target: hook\nConfidence: high\nfix body" },
+      ],
+      repeatedAsks: [],
+    };
+    writeFileSync(
+      path.join(runDir, `${bundle.repoHash}.findings.json`),
+      JSON.stringify(findings, null, 2),
+      "utf8",
+    );
+    const synthesisPath = path.join(dir, "synthesis.md");
+    writeFileSync(synthesisPath, "Target: preflight\nConfidence: medium\nGLOBAL", "utf8");
+
+    const result = runCommit({
+      retroRoot: root,
+      runTs,
+      synthesisPath,
+      nowIso: "2026-06-01T00:00:00.000Z",
+    });
+    const report = readFileSync(result.reportPath, "utf8");
+
+    expect(report).toContain(
+      "Window: 2026-05-18T00:00:00.000Z to 2026-06-01T00:00:00.000Z (first-run-default to now)",
+    );
+    const globalAt = report.indexOf("## Global cross-repo proposals");
+    const prAt = report.indexOf("## PR trajectory analysis");
+    const perRepoAt = report.indexOf("## Per-repo proposals");
+    expect(globalAt).toBeGreaterThan(-1);
+    expect(globalAt).toBeLessThan(prAt);
+    expect(prAt).toBeLessThan(perRepoAt);
+    expect(report).toContain("Recurring corrective pattern");
+    expect(existsSync(runDir)).toBe(false);
+  });
+
+  test("commit requires PR trajectory analysis before freezing and cleaning the run", () => {
+    const root = path.join(dir, "store");
+    const runTs = "2026-06-01T00-00-00-000Z";
+    const runDir = path.join(root, "runs", runTs);
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(
+      path.join(runDir, "window.json"),
+      JSON.stringify(
+        {
+          since: "2026-05-18T00:00:00.000Z",
+          until: "2026-06-01T00:00:00.000Z",
+          sinceSource: "first-run-default",
+          untilSource: "now",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    const bundle = bundleWith(["t0"]);
+    bundle.runTs = runTs;
+    writeFileSync(
+      path.join(runDir, `${bundle.repoHash}.json`),
+      JSON.stringify(bundle, null, 2),
+      "utf8",
+    );
+    const findings: RepoFindings = {
+      repoKey: "/repo",
+      frictionEpisodes: [
+        { id: "e1", sessionId: "s1", citedTurnRefs: ["t0"], body: "episode body" },
+      ],
+      durableFixProposals: [
+        { citedEpisodeRefs: ["e1"], body: "Target: hook\nConfidence: high\nfix body" },
+      ],
+      repeatedAsks: [],
+    };
+    writeFileSync(
+      path.join(runDir, `${bundle.repoHash}.findings.json`),
+      JSON.stringify(findings, null, 2),
+      "utf8",
+    );
+
+    expect(() =>
+      runCommit({
+        retroRoot: root,
+        runTs,
+        nowIso: "2026-06-01T00:00:00.000Z",
+      }),
+    ).toThrow("commit requires runs/2026-06-01T00-00-00-000Z/pr-analysis.md");
+    expect(existsSync(runDir)).toBe(true);
+    expect(loadFrozenSession(root, "codex", "s1")).toBeNull();
+  });
+
   test("renders Target/Confidence header and a single merged evidence block", () => {
     const bundle = bundleWith(["t0", "t1"]);
     const report = buildReport("ts", "", [
@@ -369,6 +556,273 @@ describe("buildReport", () => {
     ]);
     expect(report).toContain("**skill** · _medium_ — merge me");
     expect(report.match(/<summary>evidence<\/summary>/g)).toHaveLength(1);
+  });
+});
+
+describe("PR trajectory analysis", () => {
+  function writeWindow(root: string, runTs = "ts"): void {
+    const runDir = path.join(root, "runs", runTs);
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(
+      path.join(runDir, "window.json"),
+      JSON.stringify(
+        {
+          since: "2026-05-18T00:00:00.000Z",
+          until: "2026-06-01T00:00:00.000Z",
+          sinceSource: "first-run-default",
+          untilSource: "now",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+  }
+
+  test("collect writes PR work items from the resolved window and aggregate writes pr-analysis.md", () => {
+    const root = path.join(dir, "store");
+    writeWindow(root);
+    const exec: CommandRunner = (command, args) => {
+      if (command === "gh" && args.join(" ") === "api user --jq .login") {
+        return { status: 0, stdout: "hoangbn\n", stderr: "" };
+      }
+      if (command === "gh" && args.slice(0, 3).join(" ") === "repo list monke-together-strong") {
+        return {
+          status: 0,
+          stdout: JSON.stringify([
+            { nameWithOwner: "monke-together-strong/alpha", isArchived: false, isPrivate: true },
+            { nameWithOwner: "monke-together-strong/old", isArchived: true, isPrivate: false },
+          ]),
+          stderr: "",
+        };
+      }
+      if (command === "gh" && args[0] === "pr" && args[1] === "list") {
+        return {
+          status: 0,
+          stdout: JSON.stringify([
+            {
+              number: 7,
+              url: "https://github.com/monke-together-strong/alpha/pull/7",
+              title: "Tighten setup",
+              createdAt: "2026-05-20T10:00:00Z",
+              mergedAt: "2026-05-21T10:00:00Z",
+              baseRefName: "main",
+              headRefName: "feature/setup",
+              headRefOid: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              mergeCommit: { oid: "cccccccccccccccccccccccccccccccccccccccc" },
+              commits: [
+                {
+                  oid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  committedDate: "2026-05-20T09:00:00Z",
+                  messageHeadline: "Initial implementation",
+                },
+                {
+                  oid: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  committedDate: "2026-05-20T11:00:00Z",
+                  messageHeadline: "Add verification",
+                },
+              ],
+              files: [{ path: "setup.ts" }],
+            },
+            {
+              number: 8,
+              url: "https://github.com/monke-together-strong/alpha/pull/8",
+              title: "Too late",
+              createdAt: "2026-06-02T10:00:00Z",
+              mergedAt: "2026-06-02T11:00:00Z",
+              commits: [],
+              files: [],
+            },
+            {
+              number: 9,
+              url: "https://github.com/monke-together-strong/alpha/pull/9",
+              title: "Missing refs",
+              createdAt: "2026-05-22T10:00:00Z",
+              mergedAt: "2026-05-22T11:00:00Z",
+              commits: [],
+              files: [],
+            },
+            {
+              number: 10,
+              url: "https://github.com/monke-together-strong/alpha/pull/10",
+              title: "Tighten docs",
+              createdAt: "2026-05-23T10:00:00Z",
+              mergedAt: "2026-05-23T11:00:00Z",
+              openingSnapshotOid: "dddddddddddddddddddddddddddddddddddddddd",
+              baseRefName: "main",
+              headRefName: "feature/docs",
+              headRefOid: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              mergeCommit: { oid: "ffffffffffffffffffffffffffffffffffffffff" },
+              commits: [
+                {
+                  oid: "dddddddddddddddddddddddddddddddddddddddd",
+                  committedDate: "2026-05-23T09:00:00Z",
+                  messageHeadline: "Initial docs",
+                },
+                {
+                  oid: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  committedDate: "2026-05-23T10:30:00Z",
+                  messageHeadline: "Add verification",
+                },
+              ],
+              files: [{ path: "docs.md" }],
+            },
+          ]),
+          stderr: "",
+        };
+      }
+      if (command === "gh" && args[0] === "pr" && args[1] === "diff") {
+        return { status: 0, stdout: "diff --git a/setup.ts b/setup.ts\n", stderr: "" };
+      }
+      return { status: 1, stdout: "", stderr: `unexpected command: ${command} ${args.join(" ")}` };
+    };
+
+    const manifest = runPrCollect({ retroRoot: root, runTs: "ts", exec });
+    expect(manifest.author).toBe("hoangbn");
+    expect(manifest.workItems).toHaveLength(3);
+    const analyzedItem = manifest.workItems.find((item) => item.number === 7)!;
+    const gappedItem = manifest.workItems.find((item) => item.number === 9)!;
+    const secondAnalyzedItem = manifest.workItems.find((item) => item.number === 10)!;
+    expect(analyzedItem.openingSnapshot).toEqual({
+      confidence: "inferred",
+      ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      reason: "Latest PR commit whose commit date is at or before the PR creation time.",
+    });
+    expect(
+      JSON.parse(readFileSync(analyzedItem.workItemPath, "utf8")).postOpeningDelta,
+    ).toMatchObject({
+      source: "github-pr-diff-fallback",
+      confidence: "lower",
+    });
+    expect(
+      JSON.parse(readFileSync(gappedItem.workItemPath, "utf8")).postOpeningDelta,
+    ).toMatchObject({
+      source: "unavailable",
+      confidence: "none",
+    });
+    expect(secondAnalyzedItem.openingSnapshot).toEqual({
+      confidence: "exact",
+      ref: "dddddddddddddddddddddddddddddddddddddddd",
+      reason: "GitHub provided a creation-time PR head ref.",
+    });
+    expect(manifest.gaps).toEqual([
+      {
+        repo: "monke-together-strong/alpha",
+        number: 9,
+        reason:
+          "post-opening delta unavailable: Opening or final ref was unavailable, so no post-opening delta could be materialized.",
+        impact:
+          "Primary post-opening delta evidence is missing, so PR trajectory analysis for this PR is degraded.",
+      },
+    ]);
+
+    writeFileSync(
+      analyzedItem.analysisPath,
+      [
+        "## Opening Snapshot",
+        "Opened with `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`.",
+        "## Post-Opening Delta",
+        "Final head `bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb` added verification.",
+        "## Corrective Patterns",
+        "- Added missing verification before merge.",
+        "## Ignored Feature Scope",
+        "_None._",
+        "## Commit Message Reference",
+        "`bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb` Add verification.",
+      ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
+      secondAnalyzedItem.analysisPath,
+      [
+        "## Opening Snapshot",
+        "Opened with `dddddddddddddddddddddddddddddddddddddddd`.",
+        "## Post-Opening Delta",
+        "Final head `eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee` added verification.",
+        "## Corrective Patterns",
+        "- Added missing verification before merge.",
+        "## Ignored Feature Scope",
+        "_None._",
+        "## Commit Message Reference",
+        "`eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee` Add verification.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const aggregate = runPrAggregate({ retroRoot: root, runTs: "ts" });
+    const report = readFileSync(aggregate.path, "utf8");
+    expect(report).toContain("## Recurring Corrective Patterns");
+    expect(report).toContain(
+      "Added missing verification before merge. (2 PRs: monke-together-strong/alpha#7, monke-together-strong/alpha#10)",
+    );
+    expect(report).toContain("post-opening delta unavailable");
+    expect(report).toContain("### monke-together-strong/alpha#7");
+  });
+
+  test("manifest-backed PR validation checks headings, refs, and cited SHAs", () => {
+    const manifest: PrAnalysisManifest = {
+      version: 1,
+      runTs: "ts",
+      window: {
+        since: "2026-05-18T00:00:00.000Z",
+        until: "2026-06-01T00:00:00.000Z",
+        sinceSource: "first-run-default",
+        untilSource: "now",
+      },
+      org: "monke-together-strong",
+      author: "hoangbn",
+      generatedAt: "2026-06-01T00:00:00.000Z",
+      gaps: [],
+      workItems: [
+        {
+          repo: "monke-together-strong/alpha",
+          number: 7,
+          url: "https://github.com/monke-together-strong/alpha/pull/7",
+          title: "Tighten setup",
+          createdAt: "2026-05-20T10:00:00Z",
+          mergedAt: "2026-05-21T10:00:00Z",
+          workItemPath: "/tmp/work.json",
+          analysisPath: "/tmp/work.analysis.md",
+          openingSnapshot: {
+            confidence: "inferred",
+            ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            reason: "test",
+          },
+          finalHeadSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          mergeCommitSha: "cccccccccccccccccccccccccccccccccccccccc",
+          commitShas: [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          ],
+        },
+      ],
+    };
+
+    const result = validatePrAnalysis(
+      [
+        "### monke-together-strong/alpha#7",
+        "Opening snapshot: inferred aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "## Opening Snapshot",
+        "ok aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "## Post-Opening Delta",
+        "mentions ddddddd",
+        "## Corrective Patterns",
+        "fix",
+        "## Ignored Feature Scope",
+        "none",
+      ].join("\n"),
+      manifest,
+    );
+
+    expect(result.warnings).toContain(
+      "PR `monke-together-strong/alpha#7` is missing `## Commit Message Reference`.",
+    );
+    expect(result.warnings).toContain(
+      "PR `monke-together-strong/alpha#7` omits known final head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.",
+    );
+    expect(result.warnings).toContain(
+      "PR `monke-together-strong/alpha#7` cites unknown commit SHA ddddddd.",
+    );
   });
 });
 
