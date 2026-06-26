@@ -21,9 +21,9 @@ The work has two required evidence lanes:
 2. **PR analysis** — a host-native orchestrator that analyzes merged **Implementation
    trajectories** from PR opening snapshot to merged outcome.
 
-Run both lanes before synthesis. The final report combines Agent transcript findings and PR
-trajectory patterns; transcript-only synthesis is a degraded result and must say what PR analysis
-was missing.
+Run both lanes before synthesis. The final report set keeps Agent transcript actions and PR
+trajectory patterns in separate lanes; transcript-only synthesis is a degraded result and must say
+what PR analysis was missing.
 The PR lane's operational contract lives in
 [references/pr-analysis.md](references/pr-analysis.md); load it when you reach step 3.
 
@@ -107,16 +107,22 @@ either a per-PR analysis entry or an explicit PR analysis gap.
 
 ## 4. Synthesis — this run plus prior reports
 
-Read every per-repo findings file and `runs/<runTs>/pr-analysis.md`, then synthesize the
-**cross-repo** durable fixes — patterns that recur across repos (e.g. "stop minting `codex/`
-branches everywhere"). Agent transcript findings and PR trajectory patterns are both first-class
-evidence; rank the combined result by **value × recurrence**.
+Read every per-repo findings file, then synthesize the **Session Actions**: transcript-derived
+cross-repo durable fixes and repeated-ask fixes that recur across repos (e.g. "stop minting
+`codex/` branches everywhere"). Rank them by **value × recurrence**. Also read
+`runs/<runTs>/pr-analysis.md` so you understand the PR lane, but do not fold one-off PR trajectory
+observations into Session Actions. The compact report surfaces recurring PR corrective patterns
+separately from `pr-analysis.md`, and the full PR lane remains available in PR sources.
 
-Then read the **newest few reports** under `reports/` (cap ~6) — they are this skill's memory of
-patterns already named. **Cross-reference, don't copy forward**: match this run's findings against
-those reports and **promote** any thread recurring across them — a pattern corroborated across
-reports outranks a fresh one-off, even when each prior sighting was low-signal on its own.
-Recurrence spans both this window and prior reports.
+Then read the **newest few report sets** under `reports/` (cap ~6): each
+`<runTs>-retrospective.md` compact report plus sibling `<runTs>-session-sources.md` and
+`<runTs>-pr-sources.md` files when present. Together they are this skill's memory of patterns
+already named. **Cross-reference, don't copy forward**: match this run's transcript findings
+against session-action threads in those report sets and **promote** any thread recurring across
+them — a pattern corroborated across report sets outranks a fresh one-off, even when each prior
+sighting was low-signal on its own. Keep PR-only recurrence in the PR repeated-corrective-patterns
+lane unless the same issue also appears in transcript/session findings. Recurrence spans both this
+window and prior report sets.
 
 Write the result as Markdown to a synthesis file (e.g. in the run directory), ranked by **value ×
 recurrence**. Lead each proposal with a `Target:` line — *where the fix lands*: `code` / `tooling`

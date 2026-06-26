@@ -167,6 +167,14 @@ export function writeReport(root: string, runTs: string, content: string): strin
   return filePath;
 }
 
+export function writeReportArtifact(root: string, runTs: string, suffix: string, content: string): string {
+  const dir = path.join(root, "reports");
+  ensureDir(dir);
+  const filePath = path.join(dir, `${runTs}-${suffix}.md`);
+  writeFileSync(filePath, content, "utf8");
+  return filePath;
+}
+
 export function listReportPaths(root: string): string[] {
   const dir = path.join(root, "reports");
   if (!existsSync(dir)) {

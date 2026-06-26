@@ -35,8 +35,12 @@ inaccessible PR evidence is reported as PR analysis gaps rather than silently fa
 transcript-only synthesis.
 
 PR analysis produces observations and recurring corrective-change patterns, not final durable-fix
-proposals. Final synthesis owns durable-fix proposal wording and ranking after combining PR
-trajectory patterns with Agent transcript findings.
+proposals. Session-action synthesis owns transcript-derived durable-fix proposal wording and
+ranking; recurring PR corrective patterns stay in the PR repeated-patterns lane unless the same
+issue is also evidenced in Agent transcript findings.
 
-Final reports include a dedicated `PR trajectory analysis` section after global cross-repo proposals
-and before Agent transcript-derived per-repo proposals.
+Final report sets include a compact action report plus linked source files. The compact report keeps
+session-derived durable-fix actions first and includes a dedicated PR repeated-corrective-patterns
+section. The linked PR source file preserves the full PR trajectory analysis, including per-PR
+analyses and gaps, and the linked session source file preserves transcript-derived per-repo
+proposals, repeated asks, evidence, and audit detail.

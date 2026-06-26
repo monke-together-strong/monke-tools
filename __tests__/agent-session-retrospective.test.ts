@@ -14,7 +14,7 @@ import {
   type EligibleSession,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/collect.ts";
 import {
-  buildReport,
+  buildReportArtifacts,
   parseFixHeader,
   runCommit,
   validatePrAnalysis,
@@ -386,33 +386,53 @@ describe("parseFixHeader", () => {
 });
 
 describe("buildReport", () => {
-  test("leads with global synthesis, then per-repo proposals, then audit", () => {
+  test("keeps the main report action-focused and moves evidence to session sources", () => {
     const bundle = bundleWith(["t0"]);
-    const report = buildReport("ts", "GLOBAL-SYNTHESIS", [
-      {
-        bundle,
-        validated: {
-          repoKey: "/repo",
-          episodes: [{ id: "e1", sessionId: "s1", citedTurnRefs: ["t0"], body: "episode body" }],
-          fixes: [{ citedEpisodeRefs: ["e1"], body: "Target: hook\nConfidence: high\nfix body" }],
-          repeatedAsks: [],
-          dropped: { episodes: 0, fixes: 0 },
+    const artifacts = buildReportArtifacts(
+      "ts",
+      "GLOBAL-SYNTHESIS",
+      [
+        {
+          bundle,
+          validated: {
+            repoKey: "/repo",
+            episodes: [{ id: "e1", sessionId: "s1", citedTurnRefs: ["t0"], body: "episode body" }],
+            fixes: [{ citedEpisodeRefs: ["e1"], body: "Target: hook\nConfidence: high\nfix body" }],
+            repeatedAsks: [],
+            dropped: { episodes: 0, fixes: 0 },
+          },
         },
+      ],
+      {
+        prAnalysis:
+          "## Recurring Corrective Patterns\n\n- Tightened verification before merge.\n\n## PR Analysis Gaps\n\n- `repo#1` — missing diff. Impact: degraded.",
+        prAnalysisWarnings: ["PR `repo#1` omits known final head abc123."],
       },
-    ]);
+    );
+    const report = artifacts.report;
 
     const globalAt = report.indexOf("GLOBAL-SYNTHESIS");
-    const perRepoAt = report.indexOf("Per-repo proposals");
-    const auditAt = report.indexOf("Audit appendix");
+    const prAt = report.indexOf("PR Repeated Corrective Patterns");
     expect(globalAt).toBeGreaterThan(-1);
-    expect(globalAt).toBeLessThan(perRepoAt);
-    expect(perRepoAt).toBeLessThan(auditAt);
-    expect(report).toContain("fix body");
-    // A surviving episode's evidence must always resolve to real turns.
-    expect(report).not.toContain("(missing)");
+    expect(globalAt).toBeLessThan(prAt);
+    expect(report).toContain("[session sources](ts-session-sources.md)");
+    expect(report).toContain("[PR sources](ts-pr-sources.md)");
+    expect(report).not.toContain("Per-repo proposals");
+    expect(report).not.toContain("Audit appendix");
+    expect(report).not.toContain("evidence");
+    expect(report).not.toContain("PR validation recorded");
+    expect(report).not.toContain("PR analysis recorded");
+    expect(report).not.toContain("missing diff");
+    expect(report).not.toContain("omits known final head");
+    expect(artifacts.sessionSources).toContain("## Per-repo proposals");
+    expect(artifacts.sessionSources).toContain("## Audit appendix");
+    expect(artifacts.prSources).toContain("omits known final head");
+    expect(artifacts.sessionSources).toContain("fix body");
+    // A surviving episode's evidence must always resolve to real turns in the source file.
+    expect(artifacts.sessionSources).not.toContain("(missing)");
   });
 
-  test("commit embeds the resolved window and PR trajectory analysis before per-repo proposals", () => {
+  test("commit writes compact report plus linked PR and session source files", () => {
     const root = path.join(dir, "store");
     const runTs = "2026-06-01T00-00-00-000Z";
     const runDir = path.join(root, "runs", runTs);
@@ -433,7 +453,23 @@ describe("buildReport", () => {
     );
     writeFileSync(
       path.join(runDir, "pr-analysis.md"),
-      "Recurring corrective pattern: PRs often needed verification commits after opening.\n",
+      [
+        "# PR trajectory analysis",
+        "",
+        "## Recurring Corrective Patterns",
+        "",
+        "- PRs often needed verification commits after opening. (2 PRs: repo#1, repo#2)",
+        "",
+        "## PR Analysis Gaps",
+        "",
+        "_No PR analysis gaps._",
+        "",
+        "## Per-PR Analyses",
+        "",
+        "### repo#1",
+        "",
+        "body",
+      ].join("\n"),
       "utf8",
     );
     const bundle = bundleWith(["t0"]);
@@ -468,17 +504,22 @@ describe("buildReport", () => {
       nowIso: "2026-06-01T00:00:00.000Z",
     });
     const report = readFileSync(result.reportPath, "utf8");
+    const sessionSources = readFileSync(result.sourcePaths.session, "utf8");
+    const prSources = readFileSync(result.sourcePaths.pr, "utf8");
 
     expect(report).toContain(
       "Window: 2026-05-18T00:00:00.000Z to 2026-06-01T00:00:00.000Z (first-run-default to now)",
     );
-    const globalAt = report.indexOf("## Global cross-repo proposals");
-    const prAt = report.indexOf("## PR trajectory analysis");
-    const perRepoAt = report.indexOf("## Per-repo proposals");
+    const globalAt = report.indexOf("## Session Actions");
+    const prAt = report.indexOf("## PR Repeated Corrective Patterns");
     expect(globalAt).toBeGreaterThan(-1);
     expect(globalAt).toBeLessThan(prAt);
-    expect(prAt).toBeLessThan(perRepoAt);
-    expect(report).toContain("Recurring corrective pattern");
+    expect(report).toContain("PRs often needed verification commits after opening.");
+    expect(report).not.toContain("### repo#1");
+    expect(sessionSources).toContain("## Per-repo proposals");
+    expect(sessionSources).toContain("fix body");
+    expect(prSources).toContain("## Per-PR Analyses");
+    expect(prSources).toContain("### repo#1");
     expect(existsSync(runDir)).toBe(false);
   });
 
@@ -535,9 +576,9 @@ describe("buildReport", () => {
     expect(loadFrozenSession(root, "codex", "s1")).toBeNull();
   });
 
-  test("renders Target/Confidence header and a single merged evidence block", () => {
+  test("renders Target/Confidence header and a single merged evidence block in session sources", () => {
     const bundle = bundleWith(["t0", "t1"]);
-    const report = buildReport("ts", "", [
+    const artifacts = buildReportArtifacts("ts", "", [
       {
         bundle,
         validated: {
@@ -554,8 +595,9 @@ describe("buildReport", () => {
         },
       },
     ]);
-    expect(report).toContain("**skill** · _medium_ — merge me");
-    expect(report.match(/<summary>evidence<\/summary>/g)).toHaveLength(1);
+    expect(artifacts.sessionSources).toContain("Target: skill; Confidence: medium — merge me");
+    expect(artifacts.sessionSources.match(/<summary>evidence<\/summary>/g)).toHaveLength(1);
+    expect(artifacts.report).not.toContain("<summary>evidence</summary>");
   });
 });
 
