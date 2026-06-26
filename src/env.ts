@@ -258,12 +258,16 @@ function listEnvFiles(root: string, relativeRoot: string = ""): string[] {
       continue;
     }
 
-    if (entry.isFile() && entry.name.startsWith(".env")) {
+    if (entry.isFile() && isEnvSeedFile(entry.name)) {
       results.push(nextRelativePath);
     }
   }
 
   return results;
+}
+
+function isEnvSeedFile(fileName: string): boolean {
+  return fileName === ".env" || fileName.startsWith(".env.");
 }
 
 function seedRelativePath(
