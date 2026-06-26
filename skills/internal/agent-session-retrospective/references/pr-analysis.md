@@ -38,6 +38,12 @@ Include merged PRs whose `mergedAt` lands inside that window.
   repositories the authenticated user can access.
 - Skip archived repositories.
 - Query merged PRs authored by the authenticated GitHub user running the skill.
+- Enumerate PRs with bounded, date-bucketed list queries that return only PR identity and
+  timestamps. Hydrate commits, refs, merge metadata, and changed files in separate per-PR calls.
+  Do not fetch `commits` or `files` from the repository-wide PR list query; that shape can exceed
+  GitHub GraphQL traversal limits before returning any PRs.
+- If a date bucket reaches the list cap or an individual per-PR hydration fails, write a PR analysis
+  gap and continue.
 - Do not infer authorship from Agent transcript activity; mixed human, agent, co-author, review,
   and shepherding history makes the GitHub author the boundary.
 - If a repository or PR lookup is inaccessible or fails, write a PR analysis gap and continue.

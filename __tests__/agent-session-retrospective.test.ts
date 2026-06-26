@@ -582,7 +582,9 @@ describe("PR trajectory analysis", () => {
   test("collect writes PR work items from the resolved window and aggregate writes pr-analysis.md", () => {
     const root = path.join(dir, "store");
     writeWindow(root);
+    const calls: string[] = [];
     const exec: CommandRunner = (command, args) => {
+      calls.push(`${command} ${args.join(" ")}`);
       if (command === "gh" && args.join(" ") === "api user --jq .login") {
         return { status: 0, stdout: "hoangbn\n", stderr: "" };
       }
@@ -597,82 +599,127 @@ describe("PR trajectory analysis", () => {
         };
       }
       if (command === "gh" && args[0] === "pr" && args[1] === "list") {
-        return {
-          status: 0,
-          stdout: JSON.stringify([
+        expect(args.at(-1)).toBe("number,url,title,createdAt,mergedAt");
+        const search = args[args.indexOf("--search") + 1];
+        const byDay: Record<string, unknown[]> = {
+          "merged:2026-05-21..2026-05-21": [
             {
               number: 7,
               url: "https://github.com/monke-together-strong/alpha/pull/7",
               title: "Tighten setup",
               createdAt: "2026-05-20T10:00:00Z",
               mergedAt: "2026-05-21T10:00:00Z",
-              baseRefName: "main",
-              headRefName: "feature/setup",
-              headRefOid: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              mergeCommit: { oid: "cccccccccccccccccccccccccccccccccccccccc" },
-              commits: [
-                {
-                  oid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                  committedDate: "2026-05-20T09:00:00Z",
-                  messageHeadline: "Initial implementation",
-                },
-                {
-                  oid: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                  committedDate: "2026-05-20T11:00:00Z",
-                  messageHeadline: "Add verification",
-                },
-              ],
-              files: [{ path: "setup.ts" }],
             },
-            {
-              number: 8,
-              url: "https://github.com/monke-together-strong/alpha/pull/8",
-              title: "Too late",
-              createdAt: "2026-06-02T10:00:00Z",
-              mergedAt: "2026-06-02T11:00:00Z",
-              commits: [],
-              files: [],
-            },
+          ],
+          "merged:2026-05-22..2026-05-22": [
             {
               number: 9,
               url: "https://github.com/monke-together-strong/alpha/pull/9",
               title: "Missing refs",
               createdAt: "2026-05-22T10:00:00Z",
               mergedAt: "2026-05-22T11:00:00Z",
-              commits: [],
-              files: [],
             },
+          ],
+          "merged:2026-05-23..2026-05-23": [
             {
               number: 10,
               url: "https://github.com/monke-together-strong/alpha/pull/10",
               title: "Tighten docs",
               createdAt: "2026-05-23T10:00:00Z",
               mergedAt: "2026-05-23T11:00:00Z",
-              openingSnapshotOid: "dddddddddddddddddddddddddddddddddddddddd",
-              baseRefName: "main",
-              headRefName: "feature/docs",
-              headRefOid: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-              mergeCommit: { oid: "ffffffffffffffffffffffffffffffffffffffff" },
-              commits: [
-                {
-                  oid: "dddddddddddddddddddddddddddddddddddddddd",
-                  committedDate: "2026-05-23T09:00:00Z",
-                  messageHeadline: "Initial docs",
-                },
-                {
-                  oid: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-                  committedDate: "2026-05-23T10:30:00Z",
-                  messageHeadline: "Add verification",
-                },
-              ],
-              files: [{ path: "docs.md" }],
             },
-          ]),
-          stderr: "",
+          ],
+          "merged:2026-05-24..2026-05-24": [
+            {
+              number: 8,
+              url: "https://github.com/monke-together-strong/alpha/pull/8",
+              title: "Too late",
+              createdAt: "2026-06-02T10:00:00Z",
+              mergedAt: "2026-06-02T11:00:00Z",
+            },
+          ],
         };
+        return { status: 0, stdout: JSON.stringify(byDay[search] ?? []), stderr: "" };
+      }
+      if (command === "gh" && args[0] === "pr" && args[1] === "view") {
+        const number = args[2];
+        const fields = args.at(-1);
+        if (fields === "files") {
+          const filesByNumber: Record<string, unknown> = {
+            "7": { files: [{ path: "setup.ts" }] },
+            "9": { files: [] },
+            "10": { files: [{ path: "docs.md" }] },
+          };
+          return { status: 0, stdout: JSON.stringify(filesByNumber[number]), stderr: "" };
+        }
+        expect(fields).toBe(
+          "number,url,title,createdAt,mergedAt,baseRefName,headRefName,headRefOid,mergeCommit,commits",
+        );
+        const detailsByNumber: Record<string, unknown> = {
+          "7": {
+            number: 7,
+            url: "https://github.com/monke-together-strong/alpha/pull/7",
+            title: "Tighten setup",
+            createdAt: "2026-05-20T10:00:00Z",
+            mergedAt: "2026-05-21T10:00:00Z",
+            baseRefName: "main",
+            headRefName: "feature/setup",
+            headRefOid: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            mergeCommit: { oid: "cccccccccccccccccccccccccccccccccccccccc" },
+            commits: [
+              {
+                oid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                committedDate: "2026-05-20T09:00:00Z",
+                messageHeadline: "Initial implementation",
+              },
+              {
+                oid: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                committedDate: "2026-05-20T11:00:00Z",
+                messageHeadline: "Add verification",
+              },
+            ],
+          },
+          "9": {
+            number: 9,
+            url: "https://github.com/monke-together-strong/alpha/pull/9",
+            title: "Missing refs",
+            createdAt: "2026-05-22T10:00:00Z",
+            mergedAt: "2026-05-22T11:00:00Z",
+            commits: [],
+          },
+          "10": {
+            number: 10,
+            url: "https://github.com/monke-together-strong/alpha/pull/10",
+            title: "Tighten docs",
+            createdAt: "2026-05-23T10:00:00Z",
+            mergedAt: "2026-05-23T11:00:00Z",
+            openingSnapshotOid: "dddddddddddddddddddddddddddddddddddddddd",
+            baseRefName: "main",
+            headRefName: "feature/docs",
+            headRefOid: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            mergeCommit: { oid: "ffffffffffffffffffffffffffffffffffffffff" },
+            commits: [
+              {
+                oid: "dddddddddddddddddddddddddddddddddddddddd",
+                committedDate: "2026-05-23T09:00:00Z",
+                messageHeadline: "Initial docs",
+              },
+              {
+                oid: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                committedDate: "2026-05-23T10:30:00Z",
+                messageHeadline: "Add verification",
+              },
+            ],
+          },
+        };
+        return { status: 0, stdout: JSON.stringify(detailsByNumber[number]), stderr: "" };
       }
       if (command === "gh" && args[0] === "pr" && args[1] === "diff") {
-        return { status: 0, stdout: "diff --git a/setup.ts b/setup.ts\n", stderr: "" };
+        return {
+          status: 0,
+          stdout: "diff --git a/setup.ts b/setup.ts\n",
+          stderr: "",
+        };
       }
       return { status: 1, stdout: "", stderr: `unexpected command: ${command} ${args.join(" ")}` };
     };
@@ -680,6 +727,12 @@ describe("PR trajectory analysis", () => {
     const manifest = runPrCollect({ retroRoot: root, runTs: "ts", exec });
     expect(manifest.author).toBe("hoangbn");
     expect(manifest.workItems).toHaveLength(3);
+    expect(calls.some((call) => call.includes("pr list") && call.includes("commits"))).toBe(false);
+    expect(calls.some((call) => call.includes("pr list") && call.includes("files"))).toBe(false);
+    expect(calls).toContain(
+      "gh pr view 7 --repo monke-together-strong/alpha --json number,url,title,createdAt,mergedAt,baseRefName,headRefName,headRefOid,mergeCommit,commits",
+    );
+    expect(calls).toContain("gh pr view 7 --repo monke-together-strong/alpha --json files");
     const analyzedItem = manifest.workItems.find((item) => item.number === 7)!;
     const gappedItem = manifest.workItems.find((item) => item.number === 9)!;
     const secondAnalyzedItem = manifest.workItems.find((item) => item.number === 10)!;

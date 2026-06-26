@@ -115,7 +115,9 @@ interface GhPr {
 }
 
 const DEFAULT_ORG = "monke-together-strong";
-const PR_FIELDS = [
+const PR_LIST_LIMIT = 100;
+const PR_LIST_FIELDS = ["number", "url", "title", "createdAt", "mergedAt"].join(",");
+const PR_DETAIL_FIELDS = [
   "number",
   "url",
   "title",
@@ -126,7 +128,6 @@ const PR_FIELDS = [
   "headRefOid",
   "mergeCommit",
   "commits",
-  "files",
 ].join(",");
 
 export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
@@ -172,36 +173,10 @@ export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
       continue;
     }
 
-    let prs: GhPr[];
-    try {
-      prs = JSON.parse(
-        runText(exec, "gh", [
-          "pr",
-          "list",
-          "--repo",
-          repo.nameWithOwner,
-          "--author",
-          author,
-          "--state",
-          "merged",
-          "--search",
-          `merged:${dateOnly(window.since)}..${dateOnly(window.until)}`,
-          "--limit",
-          "1000",
-          "--json",
-          PR_FIELDS,
-        ]),
-      ) as GhPr[];
-    } catch (error) {
-      gaps.push({
-        repo: repo.nameWithOwner,
-        reason: `PR lookup failed: ${errorMessage(error)}`,
-        impact: "Merged PRs from this repo are absent from PR trajectory analysis.",
-      });
-      continue;
-    }
+    const repoResult = collectRepoPrs(repo.nameWithOwner, author, window, exec);
+    gaps.push(...repoResult.gaps);
 
-    for (const pr of prs.filter((candidate) => prInWindow(candidate, window))) {
+    for (const pr of repoResult.prs) {
       const item = buildWorkItem(root, options.runTs, repo.nameWithOwner, pr, exec, options.repoCacheRoot);
       writeWorkItem(item);
       workItems.push(summaryOf(item));
@@ -228,6 +203,109 @@ export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
   };
   writePrManifest(root, options.runTs, manifest);
   return manifest;
+}
+
+function collectRepoPrs(
+  repo: string,
+  author: string,
+  window: RetrospectiveWindow,
+  exec: CommandRunner,
+): { prs: GhPr[]; gaps: PrAnalysisGap[] } {
+  const gaps: PrAnalysisGap[] = [];
+  const summariesByNumber = new Map<number, GhPr>();
+
+  for (const day of eachDateOnly(window.since, window.until)) {
+    let summaries: GhPr[];
+    try {
+      summaries = JSON.parse(
+        runText(exec, "gh", [
+          "pr",
+          "list",
+          "--repo",
+          repo,
+          "--author",
+          author,
+          "--state",
+          "merged",
+          "--search",
+          `merged:${day}..${day}`,
+          "--limit",
+          String(PR_LIST_LIMIT),
+          "--json",
+          PR_LIST_FIELDS,
+        ]),
+      ) as GhPr[];
+    } catch (error) {
+      gaps.push({
+        repo,
+        reason: `PR lookup failed for ${day}: ${errorMessage(error)}`,
+        impact: "Merged PRs from this date bucket are absent from PR trajectory analysis.",
+      });
+      continue;
+    }
+
+    if (summaries.length >= PR_LIST_LIMIT) {
+      gaps.push({
+        repo,
+        reason: `PR lookup for ${day} returned ${summaries.length} entries, hitting the per-day limit of ${PR_LIST_LIMIT}.`,
+        impact: "That date bucket may be incomplete if additional merged PRs exist beyond the limit.",
+      });
+    }
+
+    for (const summary of summaries.filter((candidate) => prInWindow(candidate, window))) {
+      summariesByNumber.set(summary.number, summary);
+    }
+  }
+
+  const prs: GhPr[] = [];
+  for (const summary of [...summariesByNumber.values()].sort((a, b) => a.number - b.number)) {
+    try {
+      prs.push(hydratePr(repo, summary, exec, gaps));
+    } catch (error) {
+      gaps.push({
+        repo,
+        number: summary.number,
+        reason: `PR metadata lookup failed: ${errorMessage(error)}`,
+        impact: "This PR is absent from PR trajectory analysis.",
+      });
+    }
+  }
+
+  return { prs, gaps };
+}
+
+function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAnalysisGap[]): GhPr {
+  const detail = JSON.parse(
+    runText(exec, "gh", [
+      "pr",
+      "view",
+      String(summary.number),
+      "--repo",
+      repo,
+      "--json",
+      PR_DETAIL_FIELDS,
+    ]),
+  ) as GhPr;
+  let files: unknown[] = [];
+  try {
+    files = normalizePrFilesResponse(
+      JSON.parse(
+        runText(exec, "gh", ["pr", "view", String(summary.number), "--repo", repo, "--json", "files"]),
+      ),
+    );
+  } catch (error) {
+    gaps.push({
+      repo,
+      number: summary.number,
+      reason: `PR files lookup failed: ${errorMessage(error)}`,
+      impact: "Changed-file context is missing, but post-opening delta analysis can still proceed.",
+    });
+  }
+  return {
+    ...summary,
+    ...detail,
+    files,
+  };
 }
 
 export function runPrAggregate(options: RunPrAggregateOptions): { path: string; gaps: PrAnalysisGap[] } {
@@ -544,6 +622,15 @@ function normalizeFiles(value: unknown): string[] {
     .sort();
 }
 
+function normalizePrFilesResponse(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  const record = asRecord(value);
+  const files = record?.files;
+  return Array.isArray(files) ? files : [];
+}
+
 function normalizeMergeCommit(value: unknown): string | undefined {
   const record = asRecord(value);
   return asString(record?.oid) ?? asString(record?.sha);
@@ -637,6 +724,17 @@ function workItemId(repo: string, number: number): string {
 
 function dateOnly(value: string): string {
   return value.slice(0, 10);
+}
+
+function eachDateOnly(since: string, until: string): string[] {
+  const days: string[] = [];
+  const cursor = new Date(`${dateOnly(since)}T00:00:00.000Z`);
+  const end = new Date(`${dateOnly(until)}T00:00:00.000Z`);
+  while (cursor.getTime() <= end.getTime()) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
 }
 
 function clipDelta(value: string): string {
