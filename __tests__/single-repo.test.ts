@@ -253,7 +253,7 @@ test("create -m seeds ignored managed env files and avoids their baseline ports"
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
-    ".gitignore": "apps/api/.env.local\n",
+    ".gitignore": ".env.*\n.envrc\napps/api/.env.*\n",
     "apps/api/package.json": "{}\n",
     "monke.yml": `apps:
   api:
@@ -265,7 +265,10 @@ test("create -m seeds ignored managed env files and avoids their baseline ports"
 `,
   });
   git(repoRoot, ["switch", "-c", "feature"]);
+  write(repoRoot, ".env.demo", "DEMO=true\n");
+  write(repoRoot, ".envrc", "dotenv\n");
   write(repoRoot, "apps/api/.env.local", "PORT=10000\nLOCAL_ONLY=1\n");
+  write(repoRoot, "apps/api/.env.demo", "API_DEMO=true\n");
 
   runMonke({
     cwd: repoRoot,
@@ -275,7 +278,10 @@ test("create -m seeds ignored managed env files and avoids their baseline ports"
   });
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
+  expect(read(worktreeRoot, ".env.demo")).toBe("DEMO=true\n");
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nLOCAL_ONLY=1\n");
+  expect(read(worktreeRoot, "apps/api/.env.demo")).toBe("API_DEMO=true\n");
+  expect(existsSync(path.join(worktreeRoot, ".envrc"))).toBe(false);
   expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
 });
 
