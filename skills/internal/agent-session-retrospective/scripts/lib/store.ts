@@ -13,7 +13,14 @@ import path from "node:path";
 import { parse, stringify } from "yaml";
 
 import { hashKey, sessionHashKey } from "./identity.ts";
-import type { AgentKind, FrozenSessionRecord, RepoBundle, RepoFindings, RepoMeta } from "./types.ts";
+import type {
+  AgentKind,
+  FrozenSessionRecord,
+  RepoBundle,
+  RepoFindings,
+  RepoMeta,
+  RetrospectiveWindow,
+} from "./types.ts";
 
 const LOCK_TIMEOUT_MS = 5_000;
 
@@ -101,8 +108,25 @@ export function listBundleHashes(root: string, runTs: string): string[] {
     return [];
   }
   return readdirSync(dir)
-    .filter((entry) => entry.endsWith(".json") && !entry.endsWith(".findings.json"))
+    .filter(
+      (entry) => entry.endsWith(".json") && entry !== "window.json" && !entry.endsWith(".findings.json"),
+    )
     .map((entry) => entry.slice(0, -".json".length));
+}
+
+export function writeRunWindow(root: string, runTs: string, window: RetrospectiveWindow): string {
+  const filePath = path.join(runDir(root, runTs), "window.json");
+  ensureDir(path.dirname(filePath));
+  writeFileSync(filePath, JSON.stringify(window, null, 2), "utf8");
+  return filePath;
+}
+
+export function readRunWindow(root: string, runTs: string): RetrospectiveWindow | null {
+  const filePath = path.join(runDir(root, runTs), "window.json");
+  if (!existsSync(filePath)) {
+    return null;
+  }
+  return JSON.parse(readFileSync(filePath, "utf8")) as RetrospectiveWindow;
 }
 
 export function findingsPath(root: string, runTs: string, repoHash: string): string {
@@ -117,6 +141,18 @@ export function readFindings(root: string, runTs: string, repoHash: string): Rep
   return JSON.parse(readFileSync(filePath, "utf8")) as RepoFindings;
 }
 
+export function prAnalysisPath(root: string, runTs: string): string {
+  return path.join(runDir(root, runTs), "pr-analysis.md");
+}
+
+export function readPrAnalysis(root: string, runTs: string): string | null {
+  const filePath = prAnalysisPath(root, runTs);
+  if (!existsSync(filePath)) {
+    return null;
+  }
+  return readFileSync(filePath, "utf8");
+}
+
 export function cleanRunDir(root: string, runTs: string): void {
   rmSync(runDir(root, runTs), { recursive: true, force: true });
 }
@@ -129,6 +165,25 @@ export function writeReport(root: string, runTs: string, content: string): strin
   const filePath = path.join(dir, `${runTs}-retrospective.md`);
   writeFileSync(filePath, content, "utf8");
   return filePath;
+}
+
+export function writeReportArtifact(root: string, runTs: string, suffix: string, content: string): string {
+  const dir = path.join(root, "reports");
+  ensureDir(dir);
+  const filePath = path.join(dir, `${runTs}-${suffix}.md`);
+  writeFileSync(filePath, content, "utf8");
+  return filePath;
+}
+
+export function listReportPaths(root: string): string[] {
+  const dir = path.join(root, "reports");
+  if (!existsSync(dir)) {
+    return [];
+  }
+  return readdirSync(dir)
+    .filter((entry) => entry.endsWith("-retrospective.md"))
+    .map((entry) => path.join(dir, entry))
+    .sort();
 }
 
 // --- lock (one run at a time) ------------------------------------------------
