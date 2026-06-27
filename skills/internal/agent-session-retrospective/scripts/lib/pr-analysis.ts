@@ -15,6 +15,7 @@ export interface CommandResult {
   status: number | null;
   stdout: string;
   stderr: string;
+  error?: string;
 }
 
 export type CommandRunner = (command: string, args: string[], options?: { cwd?: string }) => CommandResult;
@@ -116,6 +117,7 @@ interface GhPr {
 
 const DEFAULT_ORG = "monke-together-strong";
 const PR_LIST_LIMIT = 100;
+const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const PR_LIST_FIELDS = ["number", "url", "title", "createdAt", "mergedAt"].join(",");
 const PR_DETAIL_FIELDS = [
   "number",
@@ -532,17 +534,13 @@ function materializeDelta(
   exec: CommandRunner,
   repoCacheRoot?: string,
 ): PrWorkItem["postOpeningDelta"] {
-  if (!openingRef || !finalHeadSha) {
-    return {
-      source: "unavailable",
-      confidence: "none",
-      body: "",
-      note: "Opening or final ref was unavailable, so no post-opening delta could be materialized.",
-    };
-  }
+  const missingRefNote =
+    !openingRef || !finalHeadSha
+      ? "Opening or final ref was unavailable, so no post-opening delta could be materialized."
+      : undefined;
 
   const repoDir = repoCacheRoot ? path.join(repoCacheRoot, repo.replaceAll("/", "__")) : null;
-  if (repoDir) {
+  if (!missingRefNote && repoDir) {
     try {
       ensureRepoCache(repo, repoDir, exec);
       runText(exec, "git", ["fetch", "origin", `pull/${number}/head:refs/remotes/pr/${number}`, "--force"], {
@@ -574,7 +572,9 @@ function materializeDelta(
       source: "unavailable",
       confidence: "none",
       body: "",
-      note: `Diff materialization failed: ${errorMessage(error)}`,
+      note: missingRefNote
+        ? `${missingRefNote} GitHub PR diff fallback failed: ${errorMessage(error)}`
+        : `Diff materialization failed: ${errorMessage(error)}`,
     };
   }
 }
@@ -747,11 +747,16 @@ function clipDelta(value: string): string {
 }
 
 function defaultRunner(command: string, args: string[], options: { cwd?: string } = {}): CommandResult {
-  const result = spawnSync(command, args, { cwd: options.cwd, encoding: "utf8" });
+  const result = spawnSync(command, args, {
+    cwd: options.cwd,
+    encoding: "utf8",
+    timeout: DEFAULT_COMMAND_TIMEOUT_MS,
+  });
   return {
     status: result.status,
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
+    error: result.error ? errorMessage(result.error) : undefined,
   };
 }
 
@@ -763,7 +768,7 @@ function runText(
 ): string {
   const result = exec(command, args, options);
   if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
+    throw new Error(`${command} ${args.join(" ")} failed: ${result.stderr || result.stdout || result.error}`);
   }
   return result.stdout;
 }

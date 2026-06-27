@@ -471,14 +471,15 @@ function validateManifestBackedPrAnalysis(
 }
 
 function findPrAnalysisSection(text: string, item: PrWorkItemSummary): string | null {
-  const heading = `### ${item.repo}#${item.number}`;
-  const start = text.indexOf(heading);
-  if (start === -1) {
+  const heading = `${item.repo}#${item.number}`;
+  const match = new RegExp(`^###\\s+${escapeRegExp(heading)}\\s*$`, "m").exec(text);
+  if (!match || match.index === undefined) {
     return null;
   }
+  const start = match.index;
   const rest = text.slice(start);
-  const next = rest.slice(heading.length).search(/^###\s+/m);
-  return next === -1 ? rest : rest.slice(0, heading.length + next);
+  const next = rest.slice(match[0].length).search(/^###\s+/m);
+  return next === -1 ? rest : rest.slice(0, match[0].length + next);
 }
 
 function countHeading(text: string, heading: string): number {
@@ -487,7 +488,15 @@ function countHeading(text: string, heading: string): number {
 }
 
 function containsRef(text: string, ref: string): boolean {
-  return text.includes(ref) || text.includes(ref.slice(0, 12));
+  if (text.includes(ref)) {
+    return true;
+  }
+  for (let length = Math.min(ref.length, 40); length >= 7; length -= 1) {
+    if (text.includes(ref.slice(0, length))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function citedShas(text: string): string[] {

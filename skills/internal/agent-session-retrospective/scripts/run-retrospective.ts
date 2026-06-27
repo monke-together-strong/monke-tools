@@ -113,7 +113,7 @@ function main(): void {
       runPrCollect({
         retroRoot: root,
         runTs,
-        repoCacheRoot: flags["repo-cache"] ?? path.join(process.cwd(), "tmp", "agent-retrospective-pr-analysis"),
+        repoCacheRoot: flags["repo-cache"] ?? path.join(root, "tmp", "agent-retrospective-pr-analysis"),
       }),
     );
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

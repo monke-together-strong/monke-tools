@@ -735,7 +735,6 @@ describe("PR trajectory analysis", () => {
             title: "Tighten docs",
             createdAt: "2026-05-23T10:00:00Z",
             mergedAt: "2026-05-23T11:00:00Z",
-            openingSnapshotOid: "dddddddddddddddddddddddddddddddddddddddd",
             baseRefName: "main",
             headRefName: "feature/docs",
             headRefOid: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
@@ -775,8 +774,9 @@ describe("PR trajectory analysis", () => {
       "gh pr view 7 --repo monke-together-strong/alpha --json number,url,title,createdAt,mergedAt,baseRefName,headRefName,headRefOid,mergeCommit,commits",
     );
     expect(calls).toContain("gh pr view 7 --repo monke-together-strong/alpha --json files");
+    expect(calls).toContain("gh pr diff 9 --repo monke-together-strong/alpha --patch");
     const analyzedItem = manifest.workItems.find((item) => item.number === 7)!;
-    const gappedItem = manifest.workItems.find((item) => item.number === 9)!;
+    const missingRefItem = manifest.workItems.find((item) => item.number === 9)!;
     const secondAnalyzedItem = manifest.workItems.find((item) => item.number === 10)!;
     expect(analyzedItem.openingSnapshot).toEqual({
       confidence: "inferred",
@@ -790,26 +790,17 @@ describe("PR trajectory analysis", () => {
       confidence: "lower",
     });
     expect(
-      JSON.parse(readFileSync(gappedItem.workItemPath, "utf8")).postOpeningDelta,
+      JSON.parse(readFileSync(missingRefItem.workItemPath, "utf8")).postOpeningDelta,
     ).toMatchObject({
-      source: "unavailable",
-      confidence: "none",
+      source: "github-pr-diff-fallback",
+      confidence: "lower",
     });
     expect(secondAnalyzedItem.openingSnapshot).toEqual({
-      confidence: "exact",
+      confidence: "inferred",
       ref: "dddddddddddddddddddddddddddddddddddddddd",
-      reason: "GitHub provided a creation-time PR head ref.",
+      reason: "Latest PR commit whose commit date is at or before the PR creation time.",
     });
-    expect(manifest.gaps).toEqual([
-      {
-        repo: "monke-together-strong/alpha",
-        number: 9,
-        reason:
-          "post-opening delta unavailable: Opening or final ref was unavailable, so no post-opening delta could be materialized.",
-        impact:
-          "Primary post-opening delta evidence is missing, so PR trajectory analysis for this PR is degraded.",
-      },
-    ]);
+    expect(manifest.gaps).toEqual([]);
 
     writeFileSync(
       analyzedItem.analysisPath,
@@ -850,7 +841,7 @@ describe("PR trajectory analysis", () => {
     expect(report).toContain(
       "Added missing verification before merge. (2 PRs: monke-together-strong/alpha#7, monke-together-strong/alpha#10)",
     );
-    expect(report).toContain("post-opening delta unavailable");
+    expect(report).not.toContain("post-opening delta unavailable");
     expect(report).toContain("### monke-together-strong/alpha#7");
   });
 
@@ -917,6 +908,90 @@ describe("PR trajectory analysis", () => {
     );
     expect(result.warnings).toContain(
       "PR `monke-together-strong/alpha#7` cites unknown commit SHA ddddddd.",
+    );
+  });
+
+  test("manifest-backed PR validation uses exact PR headings and accepts short SHA prefixes", () => {
+    const manifest: PrAnalysisManifest = {
+      version: 1,
+      runTs: "ts",
+      window: {
+        since: "2026-05-18T00:00:00.000Z",
+        until: "2026-06-01T00:00:00.000Z",
+        sinceSource: "first-run-default",
+        untilSource: "now",
+      },
+      org: "monke-together-strong",
+      author: "hoangbn",
+      generatedAt: "2026-06-01T00:00:00.000Z",
+      gaps: [],
+      workItems: [
+        {
+          repo: "repo",
+          number: 1,
+          url: "https://github.com/repo/pull/1",
+          title: "One",
+          createdAt: "2026-05-20T10:00:00Z",
+          mergedAt: "2026-05-21T10:00:00Z",
+          workItemPath: "/tmp/work-1.json",
+          analysisPath: "/tmp/work-1.analysis.md",
+          openingSnapshot: {
+            confidence: "inferred",
+            ref: "1111111111111111111111111111111111111111",
+            reason: "test",
+          },
+          finalHeadSha: "2222222222222222222222222222222222222222",
+          commitShas: [
+            "1111111111111111111111111111111111111111",
+            "2222222222222222222222222222222222222222",
+          ],
+        },
+        {
+          repo: "repo",
+          number: 10,
+          url: "https://github.com/repo/pull/10",
+          title: "Ten",
+          createdAt: "2026-05-20T10:00:00Z",
+          mergedAt: "2026-05-21T10:00:00Z",
+          workItemPath: "/tmp/work-10.json",
+          analysisPath: "/tmp/work-10.analysis.md",
+          openingSnapshot: {
+            confidence: "inferred",
+            ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            reason: "test",
+          },
+          finalHeadSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          commitShas: [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          ],
+        },
+      ],
+    };
+
+    const result = validatePrAnalysis(
+      [
+        "### repo#10",
+        "## Opening Snapshot",
+        "Opened with `aaaaaaa`.",
+        "## Post-Opening Delta",
+        "Final head `bbbbbbb` added verification.",
+        "## Corrective Patterns",
+        "fix",
+        "## Ignored Feature Scope",
+        "none",
+        "## Commit Message Reference",
+        "`bbbbbbb` Add verification.",
+      ].join("\n"),
+      manifest,
+    );
+
+    expect(result.warnings).toContain("Expected PR `repo#1` is missing from PR analysis.");
+    expect(result.warnings).not.toContain(
+      "PR `repo#10` omits known opening ref aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+    );
+    expect(result.warnings).not.toContain(
+      "PR `repo#10` omits known final head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.",
     );
   });
 });
