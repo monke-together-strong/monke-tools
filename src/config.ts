@@ -205,10 +205,6 @@ function parseRepoConfigObject(
       `${configPath}#apps.${label}.envFile`,
     );
 
-    if (normalize(absoluteAppPath) === normalize(sourceRoot)) {
-      throw new MonkeError(`App ${label} cannot point at the repo root`);
-    }
-
     if (normalize(absoluteEnvFilePath) === normalize(absoluteAppPath)) {
       throw new MonkeError(`App ${label} envFile must point to a file inside the app path`);
     }

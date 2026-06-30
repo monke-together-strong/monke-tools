@@ -11,7 +11,7 @@ test("swing navigates to an existing root repo Session worktree without creating
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "hello\n",
   });
-  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
 
   const result = runMonke({ cwd: repoRoot, args: ["swing", "banana"], monkeHome: home });
 
@@ -26,7 +26,7 @@ test("swing without a target opens a Swing picker and selects a Session", async 
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "hello\n",
   });
-  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
 
   const result = await runMonkeAsync({
     cwd: repoRoot,
@@ -46,7 +46,7 @@ test("swing picker can select the Source checkout from a Session worktree", asyn
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "hello\n",
   });
-  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
 
   const result = await runMonkeAsync({
@@ -66,8 +66,8 @@ test("swing picker selecting the current target preserves Previous Swing target 
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "hello\n",
   });
-  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
-  runMonke({ cwd: repoRoot, args: ["create", "cherry"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "cherry"], monkeHome: home });
   const bananaWorktree = getExpectedWorktreePath(home, repoRoot, "banana");
   const cherryWorktree = getExpectedWorktreePath(home, repoRoot, "cherry");
   runMonke({ cwd: repoRoot, args: ["swing", "banana"], monkeHome: home });
@@ -95,7 +95,7 @@ test("swing picker rejects unknown selections", async () => {
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "hello\n",
   });
-  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
 
   await expect(
     runMonkeAsync({
@@ -125,7 +125,7 @@ test("swing treats @ inside Session names as ordinary branch text", () => {
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "hello\n",
   });
-  runMonke({ cwd: repoRoot, args: ["create", "feature@alice"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "feature@alice"], monkeHome: home });
 
   const result = runMonke({ cwd: repoRoot, args: ["swing", "feature@alice"], monkeHome: home });
 
@@ -140,7 +140,7 @@ test("swing caret returns from a Session worktree to the Source checkout", () =>
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "hello\n",
   });
-  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
 
   const result = runMonke({ cwd: worktreeRoot, args: ["swing", "^"], monkeHome: home });
@@ -158,7 +158,7 @@ test("swing dash toggles to the Previous Swing target scoped by Root repo", () =
   const secondRepo = createRepo(path.join(sandbox, "second"), {
     "README.md": "second\n",
   });
-  runMonke({ cwd: firstRepo, args: ["create", "banana"], monkeHome: home });
+  runMonke({ cwd: firstRepo, args: ["spawn", "banana"], monkeHome: home });
   const worktreeRoot = getExpectedWorktreePath(home, firstRepo, "banana");
   runMonke({ cwd: firstRepo, args: ["swing", "banana"], monkeHome: home });
 
@@ -192,8 +192,8 @@ test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions",
     },
   });
   const openLogPath = installCodexUrlOpenShim(binDirectory);
-  runMonke({ cwd: repoRoot, args: ["create", "feature/pr-123"], monkeHome: home });
-  runMonke({ cwd: repoRoot, args: ["create", "feature/pr-125"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "feature/pr-123"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "feature/pr-125"], monkeHome: home });
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-123");
   const caseFoldedWorktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-125");
   const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
@@ -239,7 +239,7 @@ test("swing --codex escapes percent-encoded URLs for the Windows launcher", () =
     "README.md": "hello\n",
   });
   const cmdLogPath = installWindowsCmdShim(binDirectory);
-  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
 

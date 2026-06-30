@@ -3,13 +3,7 @@
 import { Command, CommanderError } from "commander";
 
 import { MonkeError } from "./errors.ts";
-import {
-  runCleanup,
-  runCreate,
-  runInstallDependencies,
-  runMaterialize,
-  runSetup,
-} from "./monke.ts";
+import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
@@ -18,8 +12,8 @@ import type { SwingOptions } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
-const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
+  "Usage:\n  mt spawn <session> [-m|--main|--master]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
+const SPAWN_USAGE = "Usage: mt spawn <session> [-m|--main|--master]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
@@ -79,14 +73,14 @@ function createProgram(
   program.exitOverride();
 
   program
-    .command("create")
+    .command("spawn")
     .helpOption(false)
     .allowExcessArguments(false)
     .argument("<session>")
     .option("-m, --main")
     .option("--master")
     .action((session: string, options: { main?: boolean; master?: boolean }) => {
-      runCreate(runtime, session, {
+      runSpawn(runtime, session, {
         mode: options.main || options.master ? "default-branch" : "current-head",
       });
     });
@@ -202,8 +196,8 @@ function mapCliError(error: unknown, argv: string[]): Error {
   }
 
   switch (argv[0]) {
-    case "create":
-      return new MonkeError(CREATE_USAGE);
+    case "spawn":
+      return new MonkeError(SPAWN_USAGE);
     case "swing":
       return new MonkeError(SWING_USAGE);
     case "materialize":

@@ -24,7 +24,7 @@ function makeRepoTempDir(prefix: string): string {
   return realpathSync.native(mkdtempSync(path.join(testTempRoot, `${prefix}-`)));
 }
 
-test("create materializes direct dependencies before the root repo and propagates external ports", () => {
+test("spawn materializes direct dependencies before the root repo and propagates external ports", () => {
   const sandbox = makeTempDir("multi-repo");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -63,7 +63,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "swing"],
+    args: ["spawn", "swing"],
     monkeHome: home,
     binDirectory,
   });
@@ -85,7 +85,7 @@ external:
   expect(sessionState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
 });
 
-test("create fails dirty dependency source checkouts before creating any worktrees", () => {
+test("spawn fails dirty dependency source checkouts before creating any worktrees", () => {
   const sandbox = makeRepoTempDir("multi-repo-dirty-preflight");
   try {
     const binDirectory = path.join(sandbox, "bin");
@@ -146,7 +146,7 @@ external:
     expect(() => {
       runMonke({
         cwd: root,
-        args: ["create", "dirty-first"],
+        args: ["spawn", "dirty-first"],
         monkeHome: home,
         binDirectory,
       });
@@ -170,7 +170,7 @@ external:
   }
 });
 
-test("create -m discovers dependencies from default branch config", () => {
+test("spawn -m discovers dependencies from default branch config", () => {
   const sandbox = makeTempDir("multi-repo-main-config");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -223,7 +223,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "default-graph", "-m"],
+    args: ["spawn", "default-graph", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -267,7 +267,7 @@ external:
   expect(cleanupResult.stderr).toBe("Removed 1 dead session\n");
 });
 
-test("create -m seeds dependency managed env files from source checkouts", () => {
+test("spawn -m seeds dependency managed env files from source checkouts", () => {
   const sandbox = makeTempDir("multi-repo-main-local-env");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -307,7 +307,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "local-env", "-m"],
+    args: ["spawn", "local-env", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -323,7 +323,7 @@ external:
   );
 });
 
-test("create -m materializes mixed main and master repos in one graph", () => {
+test("spawn -m materializes mixed main and master repos in one graph", () => {
   const sandbox = makeTempDir("multi-repo-main-master");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -361,7 +361,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "mixed-defaults", "-m"],
+    args: ["spawn", "mixed-defaults", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -374,7 +374,7 @@ external:
   );
 });
 
-test("create fails clearly when two repos collide on repo-name session worktree paths", () => {
+test("spawn fails clearly when two repos collide on repo-name session worktree paths", () => {
   const sandbox = makeTempDir("multi-repo-worktree-collision");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -412,7 +412,7 @@ external:
   expect(() =>
     runMonke({
       cwd: root,
-      args: ["create", "collision"],
+      args: ["spawn", "collision"],
       monkeHome: home,
       binDirectory,
     }),
@@ -509,7 +509,7 @@ external:
   });
   runMonke({
     cwd: rootB,
-    args: ["create", "beta"],
+    args: ["spawn", "beta"],
     monkeHome: home,
     binDirectory,
   });
@@ -572,7 +572,7 @@ external:
   expect(() =>
     runMonke({
       cwd: root,
-      args: ["create", "partial"],
+      args: ["spawn", "partial"],
       monkeHome: home,
       binDirectory,
     }),
@@ -607,7 +607,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "partial"],
+    args: ["spawn", "partial"],
     monkeHome: home,
     binDirectory,
   });
@@ -617,7 +617,7 @@ external:
   );
 });
 
-test("create fans out one dependency-owned port to multiple local targets", () => {
+test("spawn fans out one dependency-owned port to multiple local targets", () => {
   const sandbox = makeTempDir("multi-repo-fanout");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -662,7 +662,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "swing"],
+    args: ["spawn", "swing"],
     monkeHome: home,
     binDirectory,
   });
@@ -721,7 +721,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "refresh-env"],
+    args: ["spawn", "refresh-env"],
     monkeHome: home,
     binDirectory,
   });
@@ -797,7 +797,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "direct-only"],
+    args: ["spawn", "direct-only"],
     monkeHome: home,
     binDirectory,
   });
@@ -847,7 +847,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "bootstrap-path"],
+    args: ["spawn", "bootstrap-path"],
     monkeHome: home,
     binDirectory,
   });
@@ -896,7 +896,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "swing"],
+    args: ["spawn", "swing"],
     monkeHome: home,
     binDirectory,
   });

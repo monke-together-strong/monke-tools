@@ -9,7 +9,7 @@ disable-model-invocation: true
 Find where agents hit **friction** — an agent hit an issue, then had to do something
 else — and where the same user ask recurs across sessions, then propose the
 highest-value **durable fixes** a human executes, ranked by **value × recurrence**.
-Evidence → recurring friction → durable fix, **wherever it lives**: a missing `mt create`
+Evidence → recurring friction → durable fix, **wherever it lives**: a missing `mt spawn`
 step the agent works around every run, a flaky query, or a broken setup is as valuable as
 a skill or AGENTS.md change — value, not where the fix lands, decides what leads. Report-only:
 never auto-edit, never draft artifacts.

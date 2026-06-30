@@ -76,7 +76,7 @@ episode sources.
 - Lead every `durableFixProposal.body` with `Target:` and `Confidence:` lines. The body is prose;
   there are no other required fields.
 - **Rank the fix by value × recurrence, not by where it lands.** A code, tooling, or setup fix is
-  first-class — e.g. "`mt create` doesn't install deps / generate clients, so the agent runs the
+  first-class — e.g. "`mt spawn` doesn't install deps / generate clients, so the agent runs the
   same workaround every session" is a high-value proposal, not a footnote. Reserve `Target: none`
   (and `already-tracked:<ref>`) for cases where there is genuinely no new fix to make; never use it
   to sideline a real fix just because it isn't an agent-harness change.

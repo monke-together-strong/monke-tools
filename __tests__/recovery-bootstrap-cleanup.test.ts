@@ -35,7 +35,7 @@ function mergedPr(options: {
   };
 }
 
-test("create preserves successful dependency state after root failure and resumes from the first unfinished repo", () => {
+test("spawn preserves successful dependency state after root failure and resumes from the first unfinished repo", () => {
   const sandbox = makeTempDir("recovery");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -75,7 +75,7 @@ external:
   expect(() => {
     runMonke({
       cwd: root,
-      args: ["create", "resume"],
+      args: ["spawn", "resume"],
       monkeHome: home,
       binDirectory,
     });
@@ -99,7 +99,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "resume"],
+    args: ["spawn", "resume"],
     monkeHome: home,
     binDirectory,
   });
@@ -150,7 +150,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "heal"],
+    args: ["spawn", "heal"],
     monkeHome: home,
     binDirectory,
   });
@@ -209,7 +209,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "refresh"],
+    args: ["spawn", "refresh"],
     monkeHome: home,
     binDirectory,
   });
@@ -229,7 +229,7 @@ external:
   expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
 });
 
-test("bootstrap failure is fatal for create and surfaces the repo and command", () => {
+test("bootstrap failure is fatal for spawn and surfaces the repo and command", () => {
   const sandbox = makeTempDir("bootstrap-failure");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -250,7 +250,7 @@ apps:
   expect(() => {
     runMonke({
       cwd: root,
-      args: ["create", "boom"],
+      args: ["spawn", "boom"],
       monkeHome: home,
       binDirectory,
     });
@@ -278,7 +278,7 @@ test("cleanup removes dead session state but leaves repo reservations intact", (
 
   runMonke({
     cwd: root,
-    args: ["create", "clean-me"],
+    args: ["spawn", "clean-me"],
     monkeHome: home,
     binDirectory,
   });
@@ -320,7 +320,7 @@ test("cleanup --merged --dry-run reports eligible and skipped sessions without r
 
   runMonke({
     cwd: root,
-    args: ["create", "clean-merged"],
+    args: ["spawn", "clean-merged"],
     monkeHome: home,
     binDirectory,
   });
@@ -331,7 +331,7 @@ test("cleanup --merged --dry-run reports eligible and skipped sessions without r
 
   runMonke({
     cwd: root,
-    args: ["create", "dirty-untracked"],
+    args: ["spawn", "dirty-untracked"],
     monkeHome: home,
     binDirectory,
   });
@@ -406,7 +406,7 @@ apps:
 
   runMonke({
     cwd: root,
-    args: ["create", "clean-merged"],
+    args: ["spawn", "clean-merged"],
     monkeHome: home,
     binDirectory,
   });
@@ -464,7 +464,7 @@ test("cleanup --merged skips safely when GitHub metadata is unavailable", () => 
 
   runMonke({
     cwd: root,
-    args: ["create", "clean-merged"],
+    args: ["spawn", "clean-merged"],
     monkeHome: home,
     binDirectory,
     extraEnv: { PATH: binDirectory },
@@ -510,7 +510,7 @@ apps:
 
   runMonke({
     cwd: root,
-    args: ["create", "clean-merged"],
+    args: ["spawn", "clean-merged"],
     monkeHome: home,
     binDirectory,
   });
@@ -566,7 +566,7 @@ apps:
 
   runMonke({
     cwd: root,
-    args: ["create", "clean-command"],
+    args: ["spawn", "clean-command"],
     monkeHome: home,
     binDirectory,
     extraEnv: { USER: "ada" },
@@ -630,7 +630,7 @@ apps:
 
   runMonke({
     cwd: root,
-    args: ["create", "clean-command"],
+    args: ["spawn", "clean-command"],
     monkeHome: home,
     binDirectory,
   });
@@ -669,7 +669,7 @@ apps:
 
   runMonke({
     cwd: root,
-    args: ["create", "drift-clean"],
+    args: ["spawn", "drift-clean"],
     monkeHome: home,
     binDirectory,
   });
@@ -722,7 +722,7 @@ apps:
 
   runMonke({
     cwd: root,
-    args: ["create", "retry-me"],
+    args: ["spawn", "retry-me"],
     monkeHome: home,
     binDirectory,
   });
