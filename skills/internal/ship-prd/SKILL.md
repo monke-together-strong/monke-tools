@@ -23,8 +23,8 @@ grill-me session has already completed; do not run grill-me.
    - If the user explicitly says "with issues", "use issues", "break into
      issues", "run to-issues", or similar, run `/to-issues` before
      implementation. This is a routing override, not a suggestion.
-4. Create the implementation checkout worktree with monke tools:
-   `mt create <session-name>`
+4. Spawn the implementation checkout worktree with monke tools:
+   `mt spawn <session-name>`
 5. Create a codex thread with path set to that new worktree, with the following message:
    `/implement <durable PRD reference>`
    - Do not restate repo, branch, test, or completion instructions already

@@ -56,9 +56,9 @@ import type {
 
 const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
 
-/** Options controlling how `mt create` chooses source content. */
-export interface CreateOptions {
-  /** Selects whether create starts from current HEAD or each repo's default branch. */
+/** Options controlling how `mt spawn` chooses source content. */
+export interface SpawnOptions {
+  /** Selects whether spawn starts from current HEAD or each repo's default branch. */
   mode: "current-head" | "default-branch";
 }
 
@@ -75,28 +75,28 @@ export type CleanupOptions =
       dryRun: boolean;
     };
 
-/** Create or refresh a Session from the source checkout. */
-export function runCreate(runtime: Runtime, session: string, options: CreateOptions): void {
+/** Spawn or refresh a Session from the source checkout. */
+export function runSpawn(runtime: Runtime, session: string, options: SpawnOptions): void {
   if (!session) {
-    throw new MonkeError("mt create requires a session name");
+    throw new MonkeError("mt spawn requires a session name");
   }
 
   const home = getMonkeHome(runtime);
   const context = resolveRepoContext(runtime, runtime.cwd, home);
   if (!context.isSourceCheckout) {
-    throw new MonkeError("mt create must run from the source checkout");
+    throw new MonkeError("mt spawn must run from the source checkout");
   }
 
   const rootWorktreePath = getExpectedWorktreePath(home, context.sourceRoot, session);
-  const createFromDefaultBranch = options.mode === "default-branch";
+  const spawnFromDefaultBranch = options.mode === "default-branch";
 
   withGlobalLock(home, () => {
     if (
-      createFromDefaultBranch &&
+      spawnFromDefaultBranch &&
       existsSync(getSessionStateFilePath(home, context.sourceRoot, session))
     ) {
       throw new MonkeError(
-        `Session state already exists for "${session}"; default branch create mode requires a fresh Session`,
+        `Session state already exists for "${session}"; default branch spawn mode requires a fresh Session`,
       );
     }
 
@@ -109,7 +109,7 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
       }
       return defaultRef;
     };
-    const rootDefaultRef = createFromDefaultBranch ? getDefaultRef(context.sourceRoot) : null;
+    const rootDefaultRef = spawnFromDefaultBranch ? getDefaultRef(context.sourceRoot) : null;
     const rootConfigExists = rootDefaultRef
       ? gitPathExistsAtRef(runtime, context.sourceRoot, rootDefaultRef.ref, "monke.yml")
       : existsSync(path.join(context.sourceRoot, "monke.yml"));
@@ -128,7 +128,7 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
         : ensureSessionWorktree(runtime, home, context.sourceRoot, session);
       const sessionState = {
         ...loadSessionState(home, context.sourceRoot, session),
-        graphSource: "session-branch" as const,
+        graphSource: spawnFromDefaultBranch ? ("session-branch" as const) : undefined,
       };
       saveSessionState(
         home,
@@ -145,13 +145,13 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
         ),
       );
       runtime.writeStderr(
-        `Warning: no monke.yml found for ${context.sourceRoot}; created session worktree without materializing it.\n`,
+        `Warning: no monke.yml found for ${context.sourceRoot}; spawned session worktree without materializing it.\n`,
       );
       return;
     }
 
     let graph: ReturnType<typeof loadResolvedGraph>;
-    if (createFromDefaultBranch) {
+    if (spawnFromDefaultBranch) {
       graph = loadResolvedGraph(runtime, context.sourceRoot, {
         readRepoConfig(sourceRoot) {
           return readGitPathAtRef(runtime, sourceRoot, getDefaultRef(sourceRoot).ref, "monke.yml");
@@ -168,11 +168,11 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     } else {
       graph = loadResolvedGraph(runtime, context.sourceRoot);
     }
-    if (!createFromDefaultBranch) {
-      assertCleanCheckoutsForCurrentHeadCreate(runtime, graph.reposInMaterializationOrder, session);
+    if (!spawnFromDefaultBranch) {
+      assertCleanCheckoutsForCurrentHeadSpawn(runtime, graph.reposInMaterializationOrder, session);
     }
     let sessionState = loadSessionState(home, context.sourceRoot, session);
-    if (createFromDefaultBranch) {
+    if (spawnFromDefaultBranch) {
       sessionState = { ...sessionState, graphSource: "session-branch" };
     } else {
       sessionState = { ...sessionState, graphSource: undefined };
@@ -183,7 +183,7 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     );
     assertUniqueExpectedWorktreePaths(home, session, graph.reposInMaterializationOrder);
     assertNoGlobalWorktreePathStateCollisions(home, session, graph.reposInMaterializationOrder);
-    if (createFromDefaultBranch) {
+    if (spawnFromDefaultBranch) {
       for (const repoConfig of graph.reposInMaterializationOrder) {
         assertFreshSessionWorktreeAvailable(runtime, home, repoConfig.sourceRoot, session);
       }
@@ -194,7 +194,7 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
       (repo) => repo.sourceRoot === currentRepoRoot,
     );
     let firstWorkIndex = 0;
-    if (!createFromDefaultBranch) {
+    if (!spawnFromDefaultBranch) {
       firstWorkIndex = findFirstIndexNeedingWork(
         runtime,
         home,
@@ -232,7 +232,7 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
         }
 
         let worktree: { path: string; created: boolean };
-        if (createFromDefaultBranch) {
+        if (spawnFromDefaultBranch) {
           worktree = ensureFreshSessionWorktreeFromRef(
             runtime,
             home,
@@ -271,8 +271,8 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
         saveSessionState(home, sessionState);
       }
     } catch (error) {
-      if (createFromDefaultBranch) {
-        rollbackDefaultBranchCreate({
+      if (spawnFromDefaultBranch) {
+        rollbackDefaultBranchSpawn({
           runtime,
           home,
           rootSourceRoot: context.sourceRoot,
@@ -284,11 +284,11 @@ export function runCreate(runtime: Runtime, session: string, options: CreateOpti
     }
   });
 
-  createLogger(runtime).success(`Created or updated session ${session}`);
+  createLogger(runtime).success(`Spawned or updated session ${session}`);
   requestShellDirectory(runtime, rootWorktreePath);
 }
 
-function assertCleanCheckoutsForCurrentHeadCreate(
+function assertCleanCheckoutsForCurrentHeadSpawn(
   runtime: Runtime,
   reposInOrder: RepoConfig[],
   session: string,
@@ -298,7 +298,7 @@ function assertCleanCheckoutsForCurrentHeadCreate(
   }
 }
 
-function rollbackDefaultBranchCreate(options: {
+function rollbackDefaultBranchSpawn(options: {
   runtime: Runtime;
   home: string;
   rootSourceRoot: string;
@@ -323,7 +323,7 @@ function rollbackDefaultBranchCreate(options: {
   }
 
   options.runtime.writeStderr(
-    `Default branch create failed and rollback was incomplete for session "${options.session}"; run mt cleanup after removing leftover worktrees manually.\n`,
+    `Default branch spawn failed and rollback was incomplete for session "${options.session}"; run mt cleanup after removing leftover worktrees manually.\n`,
   );
 }
 

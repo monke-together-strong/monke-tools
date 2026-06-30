@@ -6,8 +6,8 @@ import { runCli } from "../src/index.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const ROOT_USAGE =
-  "Usage:\n  mt create <session> [-m|--main|--master]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
-const CREATE_USAGE = "Usage: mt create <session> [-m|--main|--master]";
+  "Usage:\n  mt spawn <session> [-m|--main|--master]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
+const SPAWN_USAGE = "Usage: mt spawn <session> [-m|--main|--master]";
 const SWING_USAGE = "Usage: mt swing [target] [--codex]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const SKILLS_USAGE = "Usage: mt skills configure";
@@ -17,11 +17,12 @@ const SHELL_USAGE = "Usage:\n  mt shell install\n  mt shell init <bash|zsh>";
 test("runCli preserves top-level usage for missing and unknown commands", () => {
   expect(() => runCli([])).toThrow(ROOT_USAGE);
   expect(() => runCli(["unknown"])).toThrow(ROOT_USAGE);
+  expect(() => runCli(["create", "banana"])).toThrow(ROOT_USAGE);
 });
 
 test("runCli preserves command-specific usage for invalid arity", () => {
-  expect(() => runCli(["create"])).toThrow(CREATE_USAGE);
-  expect(() => runCli(["create", "banana", "extra"])).toThrow(CREATE_USAGE);
+  expect(() => runCli(["spawn"])).toThrow(SPAWN_USAGE);
+  expect(() => runCli(["spawn", "banana", "extra"])).toThrow(SPAWN_USAGE);
   expect(() => runCli(["swing", "banana", "extra"])).toThrow(SWING_USAGE);
   expect(() => runCli(["materialize", "extra"])).toThrow("Usage: mt materialize");
   expect(() => runCli(["cleanup", "extra"])).toThrow(CLEANUP_USAGE);

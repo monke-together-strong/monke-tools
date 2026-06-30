@@ -15,7 +15,7 @@ import {
   write,
 } from "./helpers.ts";
 
-test("create bootstraps a single-repo session and rewrites only mapped env vars", () => {
+test("spawn bootstraps a single-repo session and rewrites only mapped env vars", () => {
   const sandbox = makeTempDir("single-repo");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -36,7 +36,7 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
 
   const result = runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
     extraEnv: { HOME: path.join(sandbox, "os-home") },
@@ -45,7 +45,7 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   expect(result.stdout).toBe(`${worktreeRoot}\n`);
   expect(result.stderr).toBe(
-    `Created or updated session banana\nSwitch to ${worktreeRoot}\nEnable automatic switching with: mt shell install\n`,
+    `Spawned or updated session banana\nSwitch to ${worktreeRoot}\nEnable automatic switching with: mt shell install\n`,
   );
   expect(read(worktreeRoot, ".env.shared")).toBe("ROOT_ONLY=true\n");
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe(
@@ -65,7 +65,37 @@ test("create bootstraps a single-repo session and rewrites only mapped env vars"
   expect(existsSync(path.join(sandbox, ".monke-worktrees"))).toBe(false);
 });
 
-test("create without monke.yml creates an unmaterialized worktree and warns", () => {
+test("spawn supports an app whose path is the repo root", () => {
+  const sandbox = makeTempDir("single-repo-root-app");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    ".env": "PORT=3000\nOTHER=keep\n",
+    "monke.yml": `apps:
+  web:
+    path: .
+    envFile: .env
+    mappings:
+      - port: WEB_PORT
+        env: PORT
+`,
+  });
+
+  const result = runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "root-app"],
+    monkeHome: home,
+    binDirectory,
+    extraEnv: { HOME: path.join(sandbox, "os-home") },
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "root-app");
+  expect(result.stdout).toBe(`${worktreeRoot}\n`);
+  expect(read(worktreeRoot, ".env")).toBe("PORT=10000\nOTHER=keep\nWEB_PORT=10000\n");
+  expect(read(repoRoot, ".env")).toBe("PORT=3000\nOTHER=keep\n");
+});
+
+test("spawn without monke.yml creates an unmaterialized worktree and warns", () => {
   const sandbox = makeTempDir("single-repo-no-config");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -75,7 +105,7 @@ test("create without monke.yml creates an unmaterialized worktree and warns", ()
 
   const result = runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });
@@ -84,9 +114,9 @@ test("create without monke.yml creates an unmaterialized worktree and warns", ()
   expect(read(worktreeRoot, "README.md")).toBe("hello\n");
   expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("banana");
   expect(result.stderr).toContain(
-    `Warning: no monke.yml found for ${repoRoot}; created session worktree without materializing it.`,
+    `Warning: no monke.yml found for ${repoRoot}; spawned session worktree without materializing it.`,
   );
-  expect(result.stderr).toContain(`Created or updated session banana\nSwitch to ${worktreeRoot}`);
+  expect(result.stderr).toContain(`Spawned or updated session banana\nSwitch to ${worktreeRoot}`);
   expect(result.stdout).toBe(`${worktreeRoot}\n`);
 
   const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
@@ -98,7 +128,7 @@ test("create without monke.yml creates an unmaterialized worktree and warns", ()
       materializationComplete?: boolean;
     }>;
   };
-  expect(sessionState.graphSource).toBe("session-branch");
+  expect(sessionState.graphSource).toBeUndefined();
   expect(sessionState.repos).toEqual([
     {
       sourceRoot: repoRoot,
@@ -109,7 +139,7 @@ test("create without monke.yml creates an unmaterialized worktree and warns", ()
   ]);
 });
 
-test("create rejects stale repo-name session collisions from unrelated source roots", () => {
+test("spawn rejects stale repo-name session collisions from unrelated source roots", () => {
   const sandbox = makeTempDir("single-repo-global-path-collision");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -129,7 +159,7 @@ test("create rejects stale repo-name session collisions from unrelated source ro
 
   runMonke({
     cwd: firstRepo,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });
@@ -143,14 +173,14 @@ test("create rejects stale repo-name session collisions from unrelated source ro
   expect(() =>
     runMonke({
       cwd: secondRepo,
-      args: ["create", "banana"],
+      args: ["spawn", "banana"],
       monkeHome: home,
       binDirectory,
     }),
   ).toThrow(/Session worktree path collision.*already recorded/s);
 });
 
-test("create -m keeps default branch file content while avoiding source checkout baseline ports", () => {
+test("spawn -m keeps default branch file content while avoiding source checkout baseline ports", () => {
   const sandbox = makeTempDir("single-repo-main-mode");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -170,7 +200,7 @@ test("create -m keeps default branch file content while avoiding source checkout
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "fresh", "-m"],
+    args: ["spawn", "fresh", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -181,7 +211,7 @@ test("create -m keeps default branch file content while avoiding source checkout
   expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=10000\nBRANCH_DIRTY=1\n");
 });
 
-test("create -m without monke.yml creates an unmaterialized default-branch worktree", () => {
+test("spawn -m without monke.yml creates an unmaterialized default-branch worktree", () => {
   const sandbox = makeTempDir("single-repo-main-no-config");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -193,7 +223,7 @@ test("create -m without monke.yml creates an unmaterialized default-branch workt
 
   const result = runMonke({
     cwd: repoRoot,
-    args: ["create", "fresh", "-m"],
+    args: ["spawn", "fresh", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -202,7 +232,7 @@ test("create -m without monke.yml creates an unmaterialized default-branch workt
   expect(read(worktreeRoot, "README.md")).toBe("main\n");
   expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("fresh");
   expect(result.stderr).toContain(
-    `Warning: no monke.yml found for ${repoRoot}; created session worktree without materializing it.`,
+    `Warning: no monke.yml found for ${repoRoot}; spawned session worktree without materializing it.`,
   );
 
   const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
@@ -217,7 +247,7 @@ test("create -m without monke.yml creates an unmaterialized default-branch workt
   });
 });
 
-test("create -m seeds configured paths from the source checkout", () => {
+test("spawn -m seeds configured paths from the source checkout", () => {
   const sandbox = makeTempDir("single-repo-main-seed-source");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -239,7 +269,7 @@ apps:
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "fresh", "-m"],
+    args: ["spawn", "fresh", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -248,7 +278,7 @@ apps:
   expect(read(worktreeRoot, "local-only.txt")).toBe("dirty source only\n");
 });
 
-test("create -m seeds ignored managed env files and avoids their baseline ports", () => {
+test("spawn -m seeds ignored managed env files and avoids their baseline ports", () => {
   const sandbox = makeTempDir("single-repo-main-local-env");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -272,7 +302,7 @@ test("create -m seeds ignored managed env files and avoids their baseline ports"
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "fresh", "-m"],
+    args: ["spawn", "fresh", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -285,7 +315,7 @@ test("create -m seeds ignored managed env files and avoids their baseline ports"
   expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
 });
 
-test("create -m prefers fetched origin main over stale local main", () => {
+test("spawn -m prefers fetched origin main over stale local main", () => {
   const sandbox = makeTempDir("single-repo-origin-main");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -314,7 +344,7 @@ test("create -m prefers fetched origin main over stale local main", () => {
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "remote-default", "-m"],
+    args: ["spawn", "remote-default", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -323,7 +353,7 @@ test("create -m prefers fetched origin main over stale local main", () => {
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nORIGIN_MAIN=1\n");
 });
 
-test("create -m prunes deleted origin main before choosing origin master", () => {
+test("spawn -m prunes deleted origin main before choosing origin master", () => {
   const sandbox = makeTempDir("single-repo-pruned-origin-main");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -357,7 +387,7 @@ test("create -m prunes deleted origin main before choosing origin master", () =>
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "remote-master", "-m"],
+    args: ["spawn", "remote-master", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -366,7 +396,7 @@ test("create -m prunes deleted origin main before choosing origin master", () =>
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nORIGIN_MASTER=1\n");
 });
 
-test("create -m falls back to local main when origin fetch fails", () => {
+test("spawn -m falls back to local main when origin fetch fails", () => {
   const sandbox = makeTempDir("single-repo-fetch-fallback");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -396,7 +426,7 @@ test("create -m falls back to local main when origin fetch fails", () => {
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "local-default", "-m"],
+    args: ["spawn", "local-default", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -405,7 +435,7 @@ test("create -m falls back to local main when origin fetch fails", () => {
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nLOCAL_MAIN=1\n");
 });
 
-test("create -m rolls back failed fresh attempts so they can be retried", () => {
+test("spawn -m rolls back failed fresh attempts so they can be retried", () => {
   const sandbox = makeTempDir("single-repo-main-rollback");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -424,7 +454,7 @@ test("create -m rolls back failed fresh attempts so they can be retried", () => 
   expect(() =>
     runMonke({
       cwd: repoRoot,
-      args: ["create", "retryable", "-m"],
+      args: ["spawn", "retryable", "-m"],
       monkeHome: home,
       binDirectory,
     }),
@@ -443,7 +473,7 @@ test("create -m rolls back failed fresh attempts so they can be retried", () => 
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "retryable", "-m"],
+    args: ["spawn", "retryable", "-m"],
     monkeHome: home,
     binDirectory,
   });
@@ -451,7 +481,7 @@ test("create -m rolls back failed fresh attempts so they can be retried", () => 
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\n");
 });
 
-test("create -m fails when session state already exists", () => {
+test("spawn -m fails when session state already exists", () => {
   const sandbox = makeTempDir("single-repo-main-existing-state");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -476,14 +506,14 @@ test("create -m fails when session state already exists", () => {
   expect(() =>
     runMonke({
       cwd: repoRoot,
-      args: ["create", "fresh", "-m"],
+      args: ["spawn", "fresh", "-m"],
       monkeHome: home,
       binDirectory,
     }),
   ).toThrow(/Session state already exists for "fresh"/);
 });
 
-test("create -m fails when the session branch already exists", () => {
+test("spawn -m fails when the session branch already exists", () => {
   const sandbox = makeTempDir("single-repo-main-existing-branch");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -503,14 +533,14 @@ test("create -m fails when the session branch already exists", () => {
   expect(() =>
     runMonke({
       cwd: repoRoot,
-      args: ["create", "fresh", "-m"],
+      args: ["spawn", "fresh", "-m"],
       monkeHome: home,
       binDirectory,
     }),
   ).toThrow(/Session branch "fresh" already exists/);
 });
 
-test("create --main and --master are aliases for default branch mode", () => {
+test("spawn --main and --master are aliases for default branch mode", () => {
   const sandbox = makeTempDir("single-repo-main-aliases");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -532,7 +562,7 @@ test("create --main and --master are aliases for default branch mode", () => {
   ] as const) {
     runMonke({
       cwd: repoRoot,
-      args: ["create", session, flag],
+      args: ["spawn", session, flag],
       monkeHome: home,
       binDirectory,
     });
@@ -541,7 +571,7 @@ test("create --main and --master are aliases for default branch mode", () => {
   }
 });
 
-test("create rewrites one local port key into multiple same-repo app env files", () => {
+test("spawn rewrites one local port key into multiple same-repo app env files", () => {
   const sandbox = makeTempDir("single-repo-shared-port");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -566,7 +596,7 @@ test("create rewrites one local port key into multiple same-repo app env files",
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });
@@ -577,7 +607,7 @@ test("create rewrites one local port key into multiple same-repo app env files",
   expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\n");
 });
 
-test("create and materialize resolve, reuse, write, and prune resource values", () => {
+test("spawn and materialize resolve, reuse, write, and prune resource values", () => {
   const sandbox = makeTempDir("single-repo-resources");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -599,7 +629,7 @@ apps:
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
     extraEnv: { USER: "ada" },
@@ -653,7 +683,7 @@ apps:
   ]);
 });
 
-test("create rejects resource value collisions with retained sessions", () => {
+test("spawn rejects resource value collisions with retained sessions", () => {
   const sandbox = makeTempDir("single-repo-resource-collision");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -674,7 +704,7 @@ apps:
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "first"],
+    args: ["spawn", "first"],
     monkeHome: home,
     binDirectory,
   });
@@ -682,7 +712,7 @@ apps:
   expect(() =>
     runMonke({
       cwd: repoRoot,
-      args: ["create", "second"],
+      args: ["spawn", "second"],
       monkeHome: home,
       binDirectory,
     }),
@@ -709,7 +739,7 @@ test("materialize rejects source checkout context and reuses sticky ports inside
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });
@@ -742,7 +772,7 @@ test("materialize rejects source checkout context and reuses sticky ports inside
   expect(read(worktreeRoot, ".env")).toBe(before);
 });
 
-test("create and materialize run bootstrapCommand after env sync from the repo worktree root", () => {
+test("spawn and materialize run bootstrapCommand after env sync from the repo worktree root", () => {
   const sandbox = makeTempDir("single-bootstrap");
   const binDirectory = path.join(sandbox, "bin");
   const shLogPath = installShShim(binDirectory);
@@ -764,7 +794,7 @@ apps:
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });
@@ -785,7 +815,7 @@ apps:
   expect(shellArgs).not.toContain("-lc");
 });
 
-test("create seeds configured directories and files into a new session worktree", () => {
+test("spawn seeds configured directories and files into a new session worktree", () => {
   const sandbox = makeTempDir("single-seedpaths");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -809,7 +839,7 @@ apps:
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });
@@ -824,7 +854,7 @@ apps:
   expect(read(worktreeRoot, "scripts/bootstrap.sh")).toBe("#!/bin/sh\necho seeded\n");
 });
 
-test("create merges seeded directories into tracked worktree directories without clobbering existing files", () => {
+test("spawn merges seeded directories into tracked worktree directories without clobbering existing files", () => {
   const sandbox = makeTempDir("single-seedpaths-merge");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -848,7 +878,7 @@ apps:
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });
@@ -863,7 +893,7 @@ apps:
   );
 });
 
-test("repeated create and materialize do not clobber seeded paths already changed in the worktree", () => {
+test("repeated spawn and materialize do not clobber seeded paths already changed in the worktree", () => {
   const sandbox = makeTempDir("single-seedpaths-no-clobber");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -884,7 +914,7 @@ apps:
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });
@@ -905,7 +935,7 @@ apps:
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });
@@ -935,7 +965,7 @@ apps:
 
   const result = runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });
@@ -943,7 +973,7 @@ apps:
   expect(result.stderr).toContain(
     "Warning: seedPath apps/frostbite-crawler/data/sessions is missing",
   );
-  expect(result.stderr).toContain("Created or updated session banana");
+  expect(result.stderr).toContain("Spawned or updated session banana");
 });
 
 test("setup creates the root .env with direct external path env defaults", () => {
@@ -1064,7 +1094,7 @@ external:
 
   runMonke({
     cwd: root,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     binDirectory,
   });

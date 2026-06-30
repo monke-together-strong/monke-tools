@@ -14,7 +14,7 @@ import {
   write,
 } from "./helpers.ts";
 
-test("create runs resource commands from the worktree and writes outputs to root env and state", () => {
+test("spawn runs resource commands from the worktree and writes outputs to root env and state", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-commands",
     module: `import { writeFileSync } from "node:fs";
@@ -33,7 +33,7 @@ export default function ({ previous }) {
     outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
 
   const worktreeRoot = scenario.worktree("banana");
   expect(scenario.readWorktree("banana", "command-cwd.log")).toBe(`${worktreeRoot}\n`);
@@ -65,7 +65,7 @@ export default function ({ previous }) {
   ]);
 });
 
-test("fresh create lets pnpm resource modules use bootstrap-provided workspace packages", () => {
+test("fresh spawn lets pnpm resource modules use bootstrap-provided workspace packages", () => {
   const sandbox = makeTempDir("single-repo-resource-command-bootstrap-pnpm");
   const binDirectory = path.join(sandbox, "bin");
   installShShim(binDirectory);
@@ -92,7 +92,7 @@ resources:
 
   runMonke({
     cwd: repoRoot,
-    args: ["create", "fresh"],
+    args: ["spawn", "fresh"],
     monkeHome: home,
     binDirectory,
   });
@@ -124,7 +124,7 @@ resources:
 `,
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
   expect(scenario.readWorktree("banana", "bootstrap-saw-command-env")).toBe("");
 
   scenario.materialize("banana");
@@ -135,7 +135,7 @@ resources:
   );
 });
 
-test("create builds resource command stdin from retained command outputs only", () => {
+test("spawn builds resource command stdin from retained command outputs only", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-retained-input",
     resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}",
@@ -180,7 +180,7 @@ export default function ({ previous }) {
     ],
   });
 
-  scenario.create("second");
+  scenario.spawn("second");
 
   const secondInput = JSON.parse(scenario.readWorktree("second", "command-stdin.json")) as Record<
     string,
@@ -194,7 +194,7 @@ export default function ({ previous }) {
   expect(JSON.stringify(secondInput)).not.toContain("discord-first");
 });
 
-test("create dedupes retained resource command input values", () => {
+test("spawn dedupes retained resource command input values", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-input-dedupe",
     module: `import { writeFileSync } from "node:fs";
@@ -272,7 +272,7 @@ export default function ({ previous }) {
     ],
   });
 
-  scenario.create("current");
+  scenario.spawn("current");
 
   const input = JSON.parse(scenario.readWorktree("current", "command-stdin.json")) as Record<
     string,
@@ -294,7 +294,7 @@ test("materialize excludes current-session command outputs when rerunning incomp
 `,
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
   scenario.writeRoot(
     "monke.yml",
     singleCommandMonkeYml({
@@ -324,7 +324,7 @@ export default function ({ previous }) {
   });
 });
 
-test("create rejects same-output resource command collisions", () => {
+test("spawn rejects same-output resource command collisions", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-output-collision",
     module: `import { writeFileSync } from "node:fs";
@@ -336,14 +336,14 @@ export default function ({ previous }) {
 `,
   });
 
-  scenario.create("first");
+  scenario.spawn("first");
 
-  expect(() => scenario.create("second")).toThrow(
+  expect(() => scenario.spawn("second")).toThrow(
     /kind: same-output collision for E2E_FLOW1_SYMBOL[\s\S]*stdout:/,
   );
 });
 
-test("create leaves cross-output uniqueness to repo-owned resource commands", () => {
+test("spawn leaves cross-output uniqueness to repo-owned resource commands", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-cross-output",
     module: `import { writeFileSync } from "node:fs";
@@ -386,14 +386,14 @@ export default function ({ previous }) {
     ],
   });
 
-  scenario.create("second");
+  scenario.spawn("second");
 
   expect(scenario.readWorktree("second", ".env")).toBe(
     "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n",
   );
 });
 
-test("resource command renames create a new retained input namespace", () => {
+test("resource command renames establish a new retained input namespace", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-rename",
     module: `export default function () {
@@ -402,7 +402,7 @@ test("resource command renames create a new retained input namespace", () => {
 `,
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
   scenario.writeRoot(
     "monke.yml",
     singleCommandMonkeYml({
@@ -459,7 +459,7 @@ export default function () {
     },
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
 
   expect(scenario.readWorktree("banana", "command-order.log")).toBe("first\nsecond\n");
 });
@@ -500,7 +500,7 @@ export default function ({ previous }) {
     ],
   });
 
-  scenario.create("second");
+  scenario.spawn("second");
   expect(scenario.readWorktree("second", "command-stdin.json")).toContain("SOL/USDT:USDT");
 
   const secondState = loadSessionState(scenario.home, scenario.repoRoot, "second");
@@ -510,14 +510,14 @@ export default function ({ previous }) {
   });
 
   scenario.cleanup();
-  scenario.create("third");
+  scenario.spawn("third");
 
   const thirdInput = scenario.readWorktree("third", "command-stdin.json");
   expect(thirdInput).not.toContain("SOL/USDT:USDT");
   expect(thirdInput).toContain("LINK/USDT:USDT");
 });
 
-test("create and materialize reuse complete resource command outputs and prune undeclared outputs", () => {
+test("spawn and materialize reuse complete resource command outputs and prune undeclared outputs", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-reuse",
     module: `import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -534,10 +534,10 @@ export default function () {
     outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
   expect(scenario.readWorktree("banana", "command-runs")).toBe("1");
 
-  scenario.create("banana");
+  scenario.spawn("banana");
   scenario.materialize("banana");
 
   expect(scenario.readWorktree("banana", "command-runs")).toBe("1");
@@ -568,7 +568,7 @@ export default function () {
 `,
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
   expect(scenario.readWorktree("banana", "command-runs")).toBe("1");
 
   scenario.writeRoot(
@@ -601,7 +601,7 @@ export default function () {
   );
 });
 
-test("create persists resource command outputs before later materialization failures", () => {
+test("spawn persists resource command outputs before later materialization failures", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-partial",
     appEnv: "OTHER=keep\n",
@@ -615,7 +615,7 @@ export default function () {
 `,
   });
 
-  expect(() => scenario.create("banana")).toThrow(/Missing mapped env vars/);
+  expect(() => scenario.spawn("banana")).toThrow(/Missing mapped env vars/);
 
   const partialState = scenario.readSessionState<{
     repos: Array<{
@@ -637,7 +637,7 @@ export default function () {
   scenario.writeRoot("apps/api/.env.local", "PORT=3000\nOTHER=keep\n");
   scenario.writeWorktree("banana", "apps/api/.env.local", "PORT=3000\nOTHER=keep\n");
 
-  scenario.create("banana");
+  scenario.spawn("banana");
 
   expect(scenario.readWorktree("banana", "command-runs")).toBe("1");
   expect(scenario.readWorktree("banana", ".env")).toBe(
@@ -658,7 +658,7 @@ test("materialize can prune stale resource command env after a failed rerun retr
     outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
   scenario.writeWorktree("banana", "apps/api/.env.local", "OTHER=keep\n");
   scenario.writeRoot(
     "monke.yml",
@@ -743,13 +743,13 @@ test.each([
 `,
     expected: /kind: return contract violation[\s\S]*stdout:/,
   },
-])("create rejects resource command returns with $name", ({ module, expected }) => {
+])("spawn rejects resource command returns with $name", ({ module, expected }) => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-contract",
     module,
   });
 
-  expect(() => scenario.create("banana")).toThrow(expected);
+  expect(() => scenario.spawn("banana")).toThrow(expected);
 });
 
 test.each([
@@ -783,27 +783,27 @@ test.each([
 `,
     expected: /kind: nonzero exit 1[\s\S]*async allocator boom/,
   },
-])("create reports resource command module failures with $name", ({ module, expected }) => {
+])("spawn reports resource command module failures with $name", ({ module, expected }) => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-module-failure",
     module,
   });
 
-  expect(() => scenario.create("banana")).toThrow(expected);
+  expect(() => scenario.spawn("banana")).toThrow(expected);
 });
 
-test("create reports missing resource command modules", () => {
+test("spawn reports missing resource command modules", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-missing-module",
     monkeYml: singleCommandMonkeYml({ run: "./scripts/missing-module.ts" }),
   });
 
-  expect(() => scenario.create("banana")).toThrow(
+  expect(() => scenario.spawn("banana")).toThrow(
     /Resource command e2e-symbols failed[\s\S]*(Cannot find module|Module not found)/,
   );
 });
 
-test("create accepts async default exports and ignores stdout and stderr logging on success", () => {
+test("spawn accepts async default exports and ignores stdout and stderr logging on success", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-async-success",
     module: `export default async function () {
@@ -815,14 +815,14 @@ test("create accepts async default exports and ignores stdout and stderr logging
 `,
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
 
   expect(scenario.readWorktree("banana", ".env")).toBe(
     "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
   );
 });
 
-test("create accepts resource command run paths whose first segment starts with two dots", () => {
+test("spawn accepts resource command run paths whose first segment starts with two dots", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-dot-prefix-path",
     run: "./..commands/resource-command.ts",
@@ -832,14 +832,14 @@ test("create accepts resource command run paths whose first segment starts with 
 `,
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
 
   expect(scenario.readWorktree("banana", ".env")).toBe(
     "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
   );
 });
 
-test("create imports resource modules without triggering direct execution guards", () => {
+test("spawn imports resource modules without triggering direct execution guards", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-direct-guard",
     module: `import { resolve } from "node:path";
@@ -859,14 +859,14 @@ function isDirectExecution(importMetaUrl) {
 `,
   });
 
-  scenario.create("banana");
+  scenario.spawn("banana");
 
   expect(scenario.readWorktree("banana", ".env")).toBe(
     "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
   );
 });
 
-test("create reports thrown resource command failures with stderr and omits stdout", () => {
+test("spawn reports thrown resource command failures with stderr and omits stdout", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-throw",
     module: `export default function () {
@@ -879,7 +879,7 @@ test("create reports thrown resource command failures with stderr and omits stdo
 
   let message = "";
   try {
-    scenario.create("banana", { SECRET_STDOUT: "secret stdout" });
+    scenario.spawn("banana", { SECRET_STDOUT: "secret stdout" });
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
   }
@@ -890,7 +890,7 @@ test("create reports thrown resource command failures with stderr and omits stdo
   expect(message).not.toContain("secret stdout");
 });
 
-test("create reports resource command timeouts", () => {
+test("spawn reports resource command timeouts", () => {
   const scenario = createResourceCommandScenario({
     name: "single-repo-resource-command-timeout",
     module: `export default async function () {
@@ -901,7 +901,7 @@ test("create reports resource command timeouts", () => {
     timeoutSeconds: 1,
   });
 
-  expect(() => scenario.create("banana")).toThrow(
+  expect(() => scenario.spawn("banana")).toThrow(
     /Resource command e2e-symbols failed[\s\S]*kind: timeout[\s\S]*stderr:[\s\S]*<empty>/,
   );
 });
@@ -910,7 +910,7 @@ interface ResourceCommandScenario {
   sandbox: string;
   home: string;
   repoRoot: string;
-  create(
+  spawn(
     session: string,
     extraEnv?: Record<string, string | undefined>,
   ): { stdout: string; stderr: string };
@@ -953,10 +953,10 @@ function createResourceCommandScenario(options: {
     sandbox,
     home,
     repoRoot,
-    create(session, extraEnv) {
+    spawn(session, extraEnv) {
       return runMonke({
         cwd: repoRoot,
-        args: ["create", session],
+        args: ["spawn", session],
         monkeHome: home,
         binDirectory,
         extraEnv,

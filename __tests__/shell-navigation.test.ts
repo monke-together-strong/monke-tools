@@ -6,8 +6,8 @@ import { getExpectedWorktreePath } from "../src/git.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "../src/shell.ts";
 import { createRepo, makeTempDir, read, runMonke } from "./helpers.ts";
 
-test("create writes an active shell directory directive", () => {
-  const sandbox = makeTempDir("shell-create-active");
+test("spawn writes an active shell directory directive", () => {
+  const sandbox = makeTempDir("shell-spawn-active");
   const home = path.join(sandbox, "home");
   const directivePath = path.join(sandbox, "directive");
   writeFileSync(directivePath, "", "utf8");
@@ -17,7 +17,7 @@ test("create writes an active shell directory directive", () => {
 
   const result = runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome: home,
     extraEnv: {
       [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath,
@@ -27,11 +27,11 @@ test("create writes an active shell directory directive", () => {
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   expect(readFileSync(directivePath, "utf8")).toBe(worktreeRoot);
   expect(result.stdout).toBe("");
-  expect(result.stderr).toContain(`Created or updated session banana\nSwitched to ${worktreeRoot}`);
+  expect(result.stderr).toContain(`Spawned or updated session banana\nSwitched to ${worktreeRoot}`);
 });
 
-test("create distinguishes configured but inactive shell integration", () => {
-  const sandbox = makeTempDir("shell-create-configured-inactive");
+test("spawn distinguishes configured but inactive shell integration", () => {
+  const sandbox = makeTempDir("shell-spawn-configured-inactive");
   const monkeHome = path.join(sandbox, "monke-home");
   const shellHome = path.join(sandbox, "shell-home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
@@ -49,7 +49,7 @@ test("create distinguishes configured but inactive shell integration", () => {
 
   const result = runMonke({
     cwd: repoRoot,
-    args: ["create", "banana"],
+    args: ["spawn", "banana"],
     monkeHome,
     extraEnv: {
       HOME: shellHome,
@@ -65,8 +65,8 @@ test("create distinguishes configured but inactive shell integration", () => {
   );
 });
 
-test("create treats unreadable shell startup files as inactive integration", () => {
-  const sandbox = makeTempDir("shell-create-unreadable-startup");
+test("spawn treats unreadable shell startup files as inactive integration", () => {
+  const sandbox = makeTempDir("shell-spawn-unreadable-startup");
   const monkeHome = path.join(sandbox, "monke-home");
   const shellHome = path.join(sandbox, "shell-home");
   const startupFile = path.join(shellHome, ".zshrc");
@@ -80,7 +80,7 @@ test("create treats unreadable shell startup files as inactive integration", () 
   try {
     const result = runMonke({
       cwd: repoRoot,
-      args: ["create", "banana"],
+      args: ["spawn", "banana"],
       monkeHome,
       extraEnv: {
         HOME: shellHome,
@@ -116,7 +116,7 @@ apps:
         env: PORT
 `,
   });
-  runMonke({ cwd: repoRoot, args: ["create", "banana"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
 
   runMonke({
