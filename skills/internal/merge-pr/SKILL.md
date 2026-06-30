@@ -15,6 +15,12 @@ or "can this merge?", use `shepherd-pr` and stop before merging.
 3. Merge the PR. Completion requires the merge command to succeed and `gh pr view <number> --json state` to report `MERGED`.
 4. Clean up only proven candidates: `git worktree remove <path>` for separate clean PR worktrees; delete the local PR branch only when unused and still at `headRefOid`. If the current checkout is the PR branch, keep it as the surviving checkout and switch it to `baseRefName`.
 5. Update the surviving checkout: use the checkout that remains open for the user after cleanup; run `git fetch origin`, `git switch <baseRefName>` if needed, then `git pull --ff-only origin <baseRefName>`.
-6. Run `mt cleanup` when `mt` is available; report if it is unavailable or fails.
+6. Execute the post-merge contract from the merged PR body.
+   - Read only `## Post-Merge Verification` from `gh pr view <number> --json body`. Do not read `POST_MERGE.md`.
+   - If the section says `Not required: <reason>`, report that reason and skip verification.
+   - If the section is missing or lacks the environment, deployment gate, or checks, pause and ask the user for the missing contract.
+   - Wait for the deployment gate when the section gives a discoverable signal; otherwise ask before testing.
+   - Run the listed checks and record pass/fail evidence for each one.
+7. Run `mt cleanup` when `mt` is available; report if it is unavailable or fails.
 
-Never delete dirty work, trust git ancestry alone for squash merges, assume the base is `main`, or use `git reset --hard`, `git clean`, or forced worktree removal. Report the PR URL, merge method, base update, removals, and any skipped cleanup.
+Never delete dirty work, trust git ancestry alone for squash merges, assume the base is `main`, read `POST_MERGE.md`, or use `git reset --hard`, `git clean`, or forced worktree removal. Report the PR URL, merge method, base update, removals, post-merge verification, and any skipped cleanup.

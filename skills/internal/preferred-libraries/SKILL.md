@@ -30,6 +30,11 @@ Use the listed default unless an exception applies. Completion requires one of t
 - `@tanstack/react-query`: Use for async server state, caching, request deduplication, mutations, invalidation, pagination, and background refetching in React apps.
 - `@tanstack/react-router`: Use for typed React routing, route loaders, search params, nested routes, and route-centric app structure.
 
+## Database Access
+
+- `drizzle-orm`: Use as the default ORM/query builder when the project needs lightweight typed database access, SQL visibility, migrations, edge/serverless friendliness, or a small dependency footprint. Use `drizzle-kit` alongside it when schema migrations or introspection are needed.
+- `prisma`: Use when the project benefits from a generated client, Prisma schema workflow, broad database tooling, introspection, or a more batteries-included ORM experience.
+
 ## Data And Utilities
 
 - `zod`: Use for runtime validation, parsing untrusted data, typed schemas, config validation, and structured API boundaries.
