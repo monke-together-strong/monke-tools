@@ -2,11 +2,12 @@
   "version": 1,
   "recipes": [
     {
-      "source": "drogers0/gh-image",
+      "source": "openclaw/agent-skills",
+      "acceptOpenClawRisks": true,
       "skills": [
         {
-          "selector": "github-image-upload",
-          "slug": "github-image-upload"
+          "selector": "autoreview",
+          "slug": "autoreview"
         }
       ]
     },
@@ -28,10 +29,6 @@
         {
           "selector": "domain-modeling",
           "slug": "domain-modeling"
-        },
-        {
-          "selector": "grill-me",
-          "slug": "grill-me"
         },
         {
           "selector": "grill-with-docs",
@@ -84,6 +81,10 @@
         {
           "selector": "triage",
           "slug": "triage"
+        },
+        {
+          "selector": "wizard",
+          "slug": "wizard"
         },
         {
           "selector": "writing-great-skills",
