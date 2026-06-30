@@ -128,7 +128,7 @@ test("spawn without monke.yml creates an unmaterialized worktree and warns", () 
       materializationComplete?: boolean;
     }>;
   };
-  expect(sessionState.graphSource).toBe("session-branch");
+  expect(sessionState.graphSource).toBeUndefined();
   expect(sessionState.repos).toEqual([
     {
       sourceRoot: repoRoot,

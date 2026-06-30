@@ -128,7 +128,7 @@ export function runSpawn(runtime: Runtime, session: string, options: SpawnOption
         : ensureSessionWorktree(runtime, home, context.sourceRoot, session);
       const sessionState = {
         ...loadSessionState(home, context.sourceRoot, session),
-        graphSource: "session-branch" as const,
+        graphSource: spawnFromDefaultBranch ? ("session-branch" as const) : undefined,
       };
       saveSessionState(
         home,
