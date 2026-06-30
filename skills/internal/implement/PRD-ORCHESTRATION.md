@@ -24,7 +24,8 @@ inline in the PRD thread.
 7. When a worker or slice review reports a finding deferred to a later slice or
    final integration, add it to a PRD closeout list in the orchestrator thread.
    Include the source slice, the finding, and the expected later slice or gate.
-8. After all issues are complete, run the closeout gates from `SKILL.md`.
+8. After all issues are complete, delegate closeout as described in `SKILL.md`;
+   the closeout procedure lives in `CLOSEOUT-GATES.md`.
 
 ## Delegation prompt
 
