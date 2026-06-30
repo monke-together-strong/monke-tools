@@ -39,6 +39,10 @@ the final review. Every deferred finding must have one of these dispositions:
 - covered by a final review finding that is then fixed
 - explicitly accepted as out of scope with the reason recorded
 
+Post the final-review fixed point, review command, and deferred-finding
+dispositions as a parent PRD comment. The orchestration is incomplete until the
+comment is posted or tracker write access is reported blocked.
+
 ## Delegation prompt
 
 When creating a thread for an implementation slice, use this template and do
