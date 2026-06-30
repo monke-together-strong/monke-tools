@@ -186,7 +186,7 @@ export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string): void 
   }
 }
 
-/** Assert current-head create can branch from this source checkout if needed. */
+/** Assert current-head spawn can branch from this source checkout if needed. */
 export function assertCleanCheckoutForSessionBranchCreation(
   runtime: Runtime,
   sourceRoot: string,
@@ -250,7 +250,7 @@ export function ensureSessionWorktree(
   const sourceContext = resolveRepoContext(runtime, sourceRoot, home);
   if (sourceContext.currentBranch === session && !branchMatch) {
     throw new MonkeError(
-      `Cannot create session "${session}" because the source checkout is already on that branch`,
+      `Cannot spawn session "${session}" because the source checkout is already on that branch`,
     );
   }
 
@@ -264,7 +264,7 @@ export function ensureSessionWorktree(
   return { path: expectedPath, created: true };
 }
 
-/** Create a fresh Session worktree branch from a resolved git ref. */
+/** Spawn a fresh Session worktree branch from a resolved git ref. */
 export function ensureFreshSessionWorktreeFromRef(
   runtime: Runtime,
   home: string,
@@ -314,7 +314,7 @@ export function removeSessionWorktreeAndBranch(
   return removed;
 }
 
-/** Assert that default branch create mode can create a fresh Session worktree. */
+/** Assert that default branch spawn mode can spawn a fresh Session worktree. */
 export function assertFreshSessionWorktreeAvailable(
   runtime: Runtime,
   home: string,
@@ -328,7 +328,7 @@ export function assertFreshSessionWorktreeAvailable(
 
   if (branchExists(runtime, sourceRoot, session)) {
     throw new MonkeError(
-      `Session branch "${session}" already exists for ${sourceRoot}; default branch create mode requires a fresh Session branch`,
+      `Session branch "${session}" already exists for ${sourceRoot}; default branch spawn mode requires a fresh Session branch`,
     );
   }
 
@@ -337,7 +337,7 @@ export function assertFreshSessionWorktreeAvailable(
   );
   if (branchMatch) {
     throw new MonkeError(
-      `Session "${session}" already has a worktree at ${branchMatch.path}; default branch create mode requires a fresh Session worktree`,
+      `Session "${session}" already has a worktree at ${branchMatch.path}; default branch spawn mode requires a fresh Session worktree`,
     );
   }
 
@@ -349,7 +349,7 @@ export function assertFreshSessionWorktreeAvailable(
   );
   if (pathMatch || existsSync(expectedPath)) {
     throw new MonkeError(
-      `Session worktree path collision at ${expectedPath}; default branch create mode requires an unused ${path.basename(sourceRoot)}/${session} path`,
+      `Session worktree path collision at ${expectedPath}; default branch spawn mode requires an unused ${path.basename(sourceRoot)}/${session} path`,
     );
   }
 }

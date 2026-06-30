@@ -24,24 +24,8 @@ inline in the PRD thread.
 7. When a worker or slice review reports a finding deferred to a later slice or
    final integration, add it to a PRD closeout list in the orchestrator thread.
    Include the source slice, the finding, and the expected later slice or gate.
-8. After all issues are complete, run the final PRD closeout gate below. The
-   orchestration is not complete until every material closeout finding is fixed
-   or explicitly accepted as out of scope.
-
-## Final PRD Closeout
-
-Run `/review <final-review fixed point> <parent PRD URL>`.
-
-Before closing the orchestration thread, reconcile the PRD closeout list against
-the final review. Every deferred finding must have one of these dispositions:
-
-- fixed in the accumulated branch
-- covered by a final review finding that is then fixed
-- explicitly accepted as out of scope with the reason recorded
-
-Post the final-review fixed point, review command, and deferred-finding
-dispositions as a parent PRD comment. The orchestration is incomplete until the
-comment is posted or tracker write access is reported blocked.
+8. After all issues are complete, delegate closeout as described in `SKILL.md`;
+   the closeout procedure lives in `CLOSEOUT-GATES.md`.
 
 ## Delegation prompt
 

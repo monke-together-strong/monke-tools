@@ -35,6 +35,8 @@ Key fields:
 - `resources`: literal per-session values; supports `${session}` and `${user}`.
 - `cleanupCommand`: teardown command used by `mt cleanup`.
 
+An app `path` may be `.` when the app lives at the repo root; `envFile` is resolved relative to that app path.
+
 Bootstrap commands run inside the session worktree after monke-tools writes env files, dependency paths, and deterministic Resource values. Dynamic Resource command outputs are resolved after bootstrap when a bootstrap command exists, so resource modules can import packages installed or linked by bootstrap.
 
 Prefer commands whose outputs are valid for that exact worktree. If a generator writes absolute paths into generated files, configure that generator task so caches cannot restore outputs from another worktree. For example, Prisma clients generated through Turbo should use a non-cached `generate` task (`"cache": false`) so `bootstrapCommand: pnpm install && pnpm generate` stays safe.

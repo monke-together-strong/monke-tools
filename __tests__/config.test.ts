@@ -668,6 +668,29 @@ test("loadResolvedGraph rejects envFile paths that escape the app directory", ()
   );
 });
 
+test("loadResolvedGraph accepts an app at the repo root", () => {
+  const sandbox = makeTempDir("config-root-app");
+  const root = createRepo(path.join(sandbox, "root"), {
+    ".env": "PORT=3000\n",
+    "monke.yml": `apps:
+  web:
+    path: .
+    envFile: .env
+    mappings:
+      - port: WEB_PORT
+        env: PORT
+`,
+  });
+
+  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+  const app = graph.reposByRoot.get(root)?.appsByLabel.get("web");
+
+  expect(app?.relativePath).toBe(".");
+  expect(app?.relativeEnvFile).toBe(".env");
+  expect(app?.absoluteAppPath).toBe(root);
+  expect(graph.reposByRoot.get(root)?.localPortOrder).toEqual(["WEB_PORT"]);
+});
+
 test("loadResolvedGraph defaults envFile to .env when omitted", () => {
   const sandbox = makeTempDir("config-default-envfile");
   const root = createRepo(path.join(sandbox, "root"), {

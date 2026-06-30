@@ -105,11 +105,11 @@ The env file inside an app whose mapped variables monke-tools rewrites.
 _Avoid_: Local env, app config
 
 **Seed path**:
-A repo-relative file or directory copied into a newly created session worktree.
+A repo-relative file or directory copied into a newly spawned session worktree.
 _Avoid_: Template, bootstrap asset
 
 **Seed material**:
-The source-checkout files copied into a newly created session worktree before env rewrites, including discovered env files and configured Seed paths.
+The source-checkout files copied into a newly spawned session worktree before env rewrites, including discovered env files and configured Seed paths.
 _Avoid_: Default-branch content, tracked source
 
 **Bootstrap command**:
@@ -250,12 +250,12 @@ _Avoid_: Default port, existing assignment
 
 ### Session operations
 
-**Create**:
-The operation that creates or updates all required session worktrees from a source checkout, using current `HEAD` unless **Default branch create mode** is requested.
+**Spawn**:
+The operation that creates or updates all required session worktrees from a source checkout, using current `HEAD` unless **Default branch spawn mode** is requested.
 _Avoid_: Initialize, provision
 
-**Default branch create mode**:
-A **Create** mode selected by `mt create <session> -m`, `--main`, or `--master`. It creates fresh session branches from each participating repo's default branch content, prefers fetched `origin/main` then `origin/master`, falls back to local `main` then `master`, and rejects existing Session state or Session branches.
+**Default branch spawn mode**:
+A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates fresh session branches from each participating repo's default branch content, prefers fetched `origin/main` then `origin/master`, falls back to local `main` then `master`, and rejects existing Session state or Session branches.
 _Avoid_: Arbitrary base branch, from branch
 
 **Materialize**:
@@ -410,7 +410,7 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 - A **Session** may include one or more **Dependency repos**.
 - Each participating repo contributes exactly one **Session worktree** per **Session**.
 - A **Session state** records one entry per participating repo in the **Session**.
-- A **Session state store** is opened once per **Create**, **Materialize**, or **Cleanup** and is the only reader and writer of **Session state** during that operation.
+- A **Session state store** is opened once per **Spawn**, **Materialize**, or **Cleanup** and is the only reader and writer of **Session state** during that operation.
 - A **Session state store** serves assigned-port usage, remembered **Resource command outputs**, and **Resource value** collision queries from one scan of retained **Session states**.
 - A **Resource command** receives its remembered outputs and its checkpoint capability from the **Session state store**, not from direct session-state reads.
 - A **Session resource** belongs to exactly one repo within one **Session state**.
@@ -420,10 +420,10 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 - **Resource values** configure deterministic **Session resources**.
 - A **Resource cleanup** belongs to one repo and may use any **Session resources** and **Resource command outputs** resolved for that repo.
 - **Session resources** for different **Session worktrees** must resolve to distinct values when they use the same resource name.
-- **Default branch create mode** prefers fetched remote `main` or `master` and may fall back to local `main` or `master`.
-- **Default branch create mode** requires fresh session branches.
-- **Default branch create mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
-- **Create** always emits a **Shell directory request** for the root repo's **Session worktree** after the operation succeeds.
+- **Default branch spawn mode** prefers fetched remote `main` or `master` and may fall back to local `main` or `master`.
+- **Default branch spawn mode** requires fresh session branches.
+- **Default branch spawn mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
+- **Spawn** always emits a **Shell directory request** for the root repo's **Session worktree** after the operation succeeds.
 - **Swing** always emits a **Shell directory request** for an existing root repo **Session worktree**.
 - A **Codex Swing launch** preserves the normal **Swing** navigation behavior and additionally opens `codex://threads/new` with the resolved absolute checkout path.
 - **Swing** does not create **Session worktrees** or change which branch an existing worktree has checked out.
@@ -471,10 +471,10 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 - A **Resource command contract** calls a repo-owned default-export module with **Resource command input** under a `previous` field and expects the returned object to contain **Resource command output**.
 - **Resource command** failures identify the command, the failure kind, stdout, and stderr; stdout and stderr are diagnostic logs, not the success protocol.
 - **Resource commands** receive deterministic **Session resources** through process env, but earlier **Resource command outputs** only through the `previous` function argument.
-- **Create** and **Materialize** reuse complete remembered **Resource command outputs** and run the **Resource command** only when outputs are missing or incomplete.
-- Persisted **Resource command outputs** are the durable boundary for reuse after a failed **Create** or **Materialize** attempt.
+- **Spawn** and **Materialize** reuse complete remembered **Resource command outputs** and run the **Resource command** only when outputs are missing or incomplete.
+- Persisted **Resource command outputs** are the durable boundary for reuse after a failed **Spawn** or **Materialize** attempt.
 - **Resource command outputs** are persisted immediately after they are validated.
-- **Create** and **Materialize** prune remembered **Resource command outputs** for the current repo and **Session** when they are no longer declared by repo configuration.
+- **Spawn** and **Materialize** prune remembered **Resource command outputs** for the current repo and **Session** when they are no longer declared by repo configuration.
 - A **Command lock** belongs to exactly one **Declaring repo** and one **Resource command** name.
 - A **Command lock** serializes matching **Resource commands** across multiple **Session worktrees** for the same **Declaring repo**.
 - A **Command lock** covers reading remembered **Resource command outputs**, running the **Resource command**, validating its output, and persisting the new output.
@@ -486,8 +486,8 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 - An **External mapping** consumes a **Port key** owned by a **Dependency repo**.
 - A **Port reservation** belongs to exactly one repo and may back many **Sessions** over time.
 - An **Assigned port** belongs to exactly one **Port key** within one repo's **Session state**.
-- **Create** and **Materialize** both update **Assigned ports**, **Managed env files**, **Path env** values, **Session resources**, and **Resource command outputs**.
-- **Create** and **Materialize** both resolve missing **Session resources** and reuse existing **Session resources** from **Session state**.
+- **Spawn** and **Materialize** both update **Assigned ports**, **Managed env files**, **Path env** values, **Session resources**, and **Resource command outputs**.
+- **Spawn** and **Materialize** both resolve missing **Session resources** and reuse existing **Session resources** from **Session state**.
 - **Setup** updates **Path env** values in the **Source checkout** but does not create a **Session worktree**.
 - **Cleanup** runs **Cleanup commands** for **Dead worktrees** before removing eligible **Session state**.
 - **Cleanup** keeps **Session state** when a **Cleanup command** fails so teardown can be retried with the same **Session resources** and **Resource command outputs**.
@@ -575,7 +575,7 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 
 ## Example dialogue
 
-> **Dev:** "When I run **Create** for `banana`, is the **Session** just the branch name?"
+> **Dev:** "When I run **Spawn** for `banana`, is the **Session** just the branch name?"
 >
 > **Domain expert:** "No. The **Session** uses the same name as the branch, but it is the whole workspace instance across the **Root repo** and any **Dependency repos**."
 >
@@ -587,7 +587,7 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 >
 > **Domain expert:** "Right. **Cleanup** can remove dead **Session state**, but the **Port reservation** stays so future sessions stay stable."
 
-> **Dev:** "Should **Create** write monke-tools instructions into every repo it touches?"
+> **Dev:** "Should **Spawn** write monke-tools instructions into every repo it touches?"
 >
 > **Domain expert:** "No. **Distributed skills** are installed through the **Local tool install**, so **Consumer repos** do not need per-repo skill loading instructions."
 

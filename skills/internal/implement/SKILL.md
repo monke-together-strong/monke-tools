@@ -31,10 +31,32 @@ Use /tdd where possible, at pre-agreed seams.
 
 Run typechecking regularly, single test files regularly, and the full test suite once at the end.
 
-## Review gate
+## Closeout
 
-Once implementation and verification are done, run `/review` exactly as specified by the review skill.
+After implementation and verification are done, create a separate closeout
+thread in the same checkout. The closeout procedure lives in
+[CLOSEOUT-GATES.md](./CLOSEOUT-GATES.md).
 
-This instruction is explicit authorization to spawn any sub-agents required by `/review`, including its parallel Standards and Spec reviewers.
+The implementation thread owns fixes and the final commit. Do not commit until
+the closeout thread reports that all gates are complete.
+
+Use this closeout-thread prompt:
+
+```text
+Run the implement closeout procedure in this checkout.
+
+Procedure: skills/internal/implement/CLOSEOUT-GATES.md
+Work reference: <work reference>
+Review fixed point: <fixed point or "ask if needed">
+PRD: <parent PRD URL/path or "none">
+Orchestrated PRD: <yes/no>
+
+Read the procedure file and follow it exactly. Report missing evidence, review
+findings, and the final gate result back to the implementation thread.
+```
+
+If closeout reports a missing-evidence blocker or a review finding that requires
+code changes, fix it in this implementation thread, then ask the closeout thread
+to rerun the affected gate.
 
 Commit your work to the current branch.

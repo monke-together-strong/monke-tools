@@ -17,8 +17,8 @@ bun run fmt:check
 
 ```bash
 bun run install:local
-mt create banana
-mt create banana -m
+mt spawn banana
+mt spawn banana -m
 ```
 
 `bun run install:local` rebuilds the local `mt` executable from the current checkout, installs it to `~/.local/bin/mt` and `~/.local/bin/monke-tools`, installs shell integration for bash and zsh, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots.
@@ -46,8 +46,8 @@ The Skill source tree is organized as:
 
 ## Commands
 
-- `mt create <session>` creates or updates a session from the source checkout. It materializes dependency repos first, seeds configured files, rewrites mapped env vars, creates worktrees under `~/.monke/worktrees/<repo-name>/<session>` by default, and records session state under `~/.monke`.
-- `mt create <session> -m` also accepts `--main` or `--master`. It creates a fresh session from each repo's default branch content, preferring fetched `origin/main` or `origin/master` before local `main` or `master`.
+- `mt spawn <session>` creates or updates a session from the source checkout. It materializes dependency repos first, seeds configured files, rewrites mapped env vars, creates worktrees under `~/.monke/worktrees/<repo-name>/<session>` by default, and records session state under `~/.monke`.
+- `mt spawn <session> -m` also accepts `--main` or `--master`. It creates a fresh session from each repo's default branch content, preferring fetched `origin/main` or `origin/master` before local `main` or `master`.
 - `mt swing [target] [--codex]` navigates to an existing Session worktree, `^` for the Source checkout, `-` for the Previous Swing target, or a same-repo GitHub pull request target such as `pr:123`. Omit `target` to choose from an interactive Swing picker. Add `--codex` to open a new Codex app thread in the resolved checkout.
 - `mt materialize` refreshes the current session worktree in place and keeps the existing port assignments sticky.
 - `mt cleanup` removes session records whose worktrees no longer exist.
@@ -58,6 +58,7 @@ The Skill source tree is organized as:
 ## `monke.yml`
 
 Each repo that participates in a session graph declares its apps, env rewrites, optional dependency repos, and optional bootstrap or seed behavior in `monke.yml`.
+An app `path` may be `.` when the app lives at the repo root; `envFile` is resolved relative to that app path.
 
 ```yaml
 seedPaths:
@@ -85,7 +86,7 @@ external:
 ## Development
 
 ```bash
-bun run src/index.ts create banana
+bun run src/index.ts spawn banana
 bun run src/index.ts swing banana
 bun run src/index.ts materialize
 bun run src/index.ts cleanup
