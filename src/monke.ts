@@ -580,6 +580,8 @@ export function runMaterialize(runtime: Runtime): void {
         validateWorktreeForSession(runtime, home, repoConfig.sourceRoot, worktreePath, session);
       }
 
+      const sessionMaterialRoot =
+        sessionState.graphSource === "session-branch" ? worktreePath : repoConfig.sourceRoot;
       const materialized = materializeRepo({
         runtime,
         home,
@@ -587,9 +589,8 @@ export function runMaterialize(runtime: Runtime): void {
         session,
         repoConfig,
         worktreePath,
-        seedMaterialRoot:
-          sessionState.graphSource === "session-branch" ? worktreePath : repoConfig.sourceRoot,
-        baselinePortsRoot: repoConfig.sourceRoot,
+        seedMaterialRoot: sessionMaterialRoot,
+        baselinePortsRoot: sessionMaterialRoot,
         worktreeCreated,
         existingState,
         dependencyResults: results,

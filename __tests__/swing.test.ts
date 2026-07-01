@@ -160,8 +160,10 @@ test("swing allows the current Session worktree to live outside Monke home with 
   git(repoRoot, ["worktree", "add", worktreeRoot, "winters-echo"]);
 
   const result = runMonke({ cwd: worktreeRoot, args: ["swing", "^"], monkeHome: home });
+  const backToExternal = runMonke({ cwd: repoRoot, args: ["swing", "-"], monkeHome: home });
 
   expect(result.stdout).toBe(`${repoRoot}\n`);
+  expect(backToExternal.stdout).toBe(`${worktreeRoot}\n`);
   expect(result.stderr).toContain(
     `Linked worktree ${worktreeRoot} is outside ${path.join(home, "worktrees", "root")}`,
   );

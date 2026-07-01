@@ -24,6 +24,11 @@ type SwingHistoryTarget =
   | {
       kind: "session";
       session: string;
+    }
+  | {
+      kind: "external-session";
+      session: string;
+      path: string;
     };
 
 interface SwingHistory {
@@ -77,7 +82,7 @@ export function runSwing(runtime: Runtime, rawTarget?: string, options: SwingOpt
   const context = resolveRepoContext(runtime, runtime.cwd, home, {
     allowExternalSessionWorktree: true,
   });
-  const currentTarget = getCurrentSwingTarget(context);
+  const currentTarget = getCurrentSwingTarget(home, context);
   navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, rawTarget, options);
 }
 
@@ -91,7 +96,7 @@ export async function runSwingInteractive(
   const context = resolveRepoContext(runtime, runtime.cwd, home, {
     allowExternalSessionWorktree: true,
   });
-  const currentTarget = getCurrentSwingTarget(context);
+  const currentTarget = getCurrentSwingTarget(home, context);
   const selectedTarget =
     rawTarget ?? (await selectSwingTarget(runtime, home, context.sourceRoot, currentTarget));
   navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, selectedTarget, options);
@@ -349,6 +354,11 @@ function resolveStoredTarget(
     return { target, path: rootSourceRoot };
   }
 
+  if (target.kind === "external-session") {
+    validateExternalSessionTarget(runtime, rootSourceRoot, target);
+    return { target, path: target.path };
+  }
+
   const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, target.session);
   if (!existsSync(worktreePath)) {
     if (options.createIfMissing) {
@@ -498,7 +508,7 @@ function isSameGithubRepo(
   );
 }
 
-function getCurrentSwingTarget(context: RepoContext): SwingHistoryTarget {
+function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistoryTarget {
   if (context.isSourceCheckout) {
     return { kind: "source" };
   }
@@ -507,10 +517,17 @@ function getCurrentSwingTarget(context: RepoContext): SwingHistoryTarget {
     throw new MonkeError("Unable to infer the current Session for Previous Swing target history");
   }
 
-  return {
-    kind: "session",
-    session: context.sessionName,
-  };
+  const expectedPath = getExpectedWorktreePath(home, context.sourceRoot, context.sessionName);
+  return path.normalize(context.worktreeRoot) === path.normalize(expectedPath)
+    ? {
+        kind: "session",
+        session: context.sessionName,
+      }
+    : {
+        kind: "external-session",
+        session: context.sessionName,
+        path: context.worktreeRoot,
+      };
 }
 
 function isSameSwingTarget(left: SwingHistoryTarget, right: SwingHistoryTarget): boolean {
@@ -520,7 +537,39 @@ function isSameSwingTarget(left: SwingHistoryTarget, right: SwingHistoryTarget):
   if (left.kind === "source") {
     return true;
   }
-  return right.kind === "session" && left.session === right.session;
+  if (left.kind === "session") {
+    return right.kind === "session" && left.session === right.session;
+  }
+  return (
+    right.kind === "external-session" &&
+    left.session === right.session &&
+    path.normalize(left.path) === path.normalize(right.path)
+  );
+}
+
+function validateExternalSessionTarget(
+  runtime: Runtime,
+  rootSourceRoot: string,
+  target: Extract<SwingHistoryTarget, { kind: "external-session" }>,
+): void {
+  if (!existsSync(target.path)) {
+    throw new MonkeError(`External Session worktree does not exist at ${target.path}`);
+  }
+
+  const context = resolveRepoContext(runtime, target.path, null, { inferSessionName: false });
+  if (context.isSourceCheckout) {
+    throw new MonkeError(`Expected ${target.path} to be a linked session worktree`);
+  }
+  if (path.normalize(context.sourceRoot) !== path.normalize(rootSourceRoot)) {
+    throw new MonkeError(
+      `Expected worktree ${target.path} to belong to ${rootSourceRoot}, found ${context.sourceRoot}`,
+    );
+  }
+  if (context.currentBranch !== target.session) {
+    throw new MonkeError(
+      `Expected worktree ${target.path} to be on branch ${target.session}, found ${context.currentBranch}`,
+    );
+  }
 }
 
 function loadSwingHistory(home: string, rootSourceRoot: string): SwingHistory {
