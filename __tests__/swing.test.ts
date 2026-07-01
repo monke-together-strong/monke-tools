@@ -284,6 +284,7 @@ test("swing creates a missing same-repo GitHub PR Session", () => {
   git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/82/head`]);
   git(repoRoot, ["switch", "main"]);
   git(repoRoot, ["branch", "-D", prBranch]);
+  git(repoRoot, ["branch", prBranch, "main"]);
   installSwingGhShim(binDirectory, {
     "82": {
       headRefName: prBranch,

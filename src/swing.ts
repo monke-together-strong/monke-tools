@@ -3,12 +3,7 @@ import path from "node:path";
 import { parse, stringify } from "yaml";
 
 import { MonkeError } from "./errors.ts";
-import {
-  branchExists,
-  getExpectedWorktreePath,
-  resolveRepoContext,
-  validateWorktreeForSession,
-} from "./git.ts";
+import { getExpectedWorktreePath, resolveRepoContext, validateWorktreeForSession } from "./git.ts";
 import { createLogger } from "./logger.ts";
 import { spawnSessionFromSourceRootLocked } from "./monke.ts";
 import { listSessionStates } from "./registry.ts";
@@ -44,6 +39,7 @@ interface ResolvedSwingTarget {
 
 interface ResolveStoredTargetOptions {
   createIfMissing?: boolean;
+  prepareCreate?: () => void;
 }
 
 interface SwingPickerOption {
@@ -60,6 +56,11 @@ interface PullRequestSwingTarget {
     owner: string;
     name: string;
   };
+}
+
+interface ResolvedPullRequestSession {
+  number: number;
+  session: string;
 }
 
 export interface SwingOptions {
@@ -301,16 +302,29 @@ function resolveSwingTarget(
 
   const pullRequestTarget = parsePullRequestTarget(rawTarget);
   if (pullRequestTarget !== null) {
+    const pullRequestSession = resolvePullRequestSession(
+      runtime,
+      rootSourceRoot,
+      pullRequestTarget,
+    );
     return resolveStoredTarget(
       runtime,
       home,
       rootSourceRoot,
       {
         kind: "session",
-        session: resolvePullRequestSession(runtime, rootSourceRoot, pullRequestTarget),
+        session: pullRequestSession.session,
       },
       {
         createIfMissing: true,
+        prepareCreate() {
+          ensurePullRequestSessionBranch(
+            runtime,
+            rootSourceRoot,
+            pullRequestSession.number,
+            pullRequestSession.session,
+          );
+        },
       },
     );
   }
@@ -338,6 +352,7 @@ function resolveStoredTarget(
   const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, target.session);
   if (!existsSync(worktreePath)) {
     if (options.createIfMissing) {
+      options.prepareCreate?.();
       spawnSessionFromSourceRootLocked(runtime, home, rootSourceRoot, target.session, {
         mode: "session-branch",
       });
@@ -356,7 +371,7 @@ function resolvePullRequestSession(
   runtime: Runtime,
   rootSourceRoot: string,
   pullRequestTarget: PullRequestSwingTarget,
-): string {
+): ResolvedPullRequestSession {
   const currentRepo = resolveCurrentGithubRepo(runtime, rootSourceRoot);
   if (pullRequestTarget.repo && !isSameGithubRepo(pullRequestTarget.repo, currentRepo)) {
     throw new MonkeError(
@@ -409,8 +424,7 @@ function resolvePullRequestSession(
     );
   }
 
-  ensurePullRequestSessionBranch(runtime, rootSourceRoot, pullRequestNumber, headRefName);
-  return headRefName;
+  return { number: pullRequestNumber, session: headRefName };
 }
 
 function ensurePullRequestSessionBranch(
@@ -419,13 +433,13 @@ function ensurePullRequestSessionBranch(
   pullRequestNumber: number,
   session: string,
 ): void {
-  if (branchExists(runtime, rootSourceRoot, session)) {
-    return;
-  }
-
-  runtime.exec("git", ["fetch", "origin", `pull/${pullRequestNumber}/head:refs/heads/${session}`], {
-    cwd: rootSourceRoot,
-  });
+  runtime.exec(
+    "git",
+    ["fetch", "origin", `+pull/${pullRequestNumber}/head:refs/heads/${session}`],
+    {
+      cwd: rootSourceRoot,
+    },
+  );
 }
 
 function resolveCurrentGithubRepo(
