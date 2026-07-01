@@ -209,6 +209,7 @@ export function ensureSessionWorktree(
   home: string,
   sourceRoot: string,
   session: string,
+  options: { skipCleanCheck?: boolean } = {},
 ): { path: string; created: boolean } {
   validateSessionBranchName(runtime, sourceRoot, session);
 
@@ -255,7 +256,9 @@ export function ensureSessionWorktree(
   }
 
   if (!branchExists(runtime, sourceRoot, session)) {
-    ensureCleanCheckout(runtime, sourceRoot);
+    if (!options.skipCleanCheck) {
+      ensureCleanCheckout(runtime, sourceRoot);
+    }
     runGit(runtime, sourceRoot, ["branch", session, "HEAD"]);
   }
 

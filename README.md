@@ -18,6 +18,7 @@ bun run fmt:check
 ```bash
 bun run install:local
 mt spawn banana
+mt spawn banana --no-dirty
 mt spawn banana -m
 ```
 
@@ -46,8 +47,9 @@ The Skill source tree is organized as:
 
 ## Commands
 
-- `mt spawn <session>` creates or updates a session from the source checkout. It materializes dependency repos first, seeds configured files, rewrites mapped env vars, creates worktrees under `~/.monke/worktrees/<repo-name>/<session>` by default, and records session state under `~/.monke`.
-- `mt spawn <session> -m` also accepts `--main` or `--master`. It creates a fresh session from each repo's default branch content, preferring fetched `origin/main` or `origin/master` before local `main` or `master`.
+- `mt spawn <session>` creates or updates a session from the source checkout's current HEAD. It carries dirty source changes into newly created Session worktrees by default, materializes dependency repos first, seeds configured files, rewrites mapped env vars, creates worktrees under `~/.monke/worktrees/<repo-name>/<session>`, and records session state under `~/.monke`.
+- `mt spawn <session> --no-dirty` preserves the old strict behavior and rejects dirty source checkouts.
+- `mt spawn <session> -m` also accepts `--main` or `--master`. It creates a fresh session from each repo's default branch content, preferring fetched `origin/main` or `origin/master` before local `main` or `master`, and does not carry dirty source changes.
 - `mt swing [target] [--codex]` navigates to an existing Session worktree, `^` for the Source checkout, `-` for the Previous Swing target, or a same-repo GitHub pull request target such as `pr:123`. Omit `target` to choose from an interactive Swing picker. Add `--codex` to open a new Codex app thread in the resolved checkout.
 - `mt materialize` refreshes the current session worktree in place and keeps the existing port assignments sticky.
 - `mt cleanup` removes session records whose worktrees no longer exist.

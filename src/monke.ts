@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { loadResolvedGraph } from "./config.ts";
@@ -57,9 +57,22 @@ import type {
 const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
 
 /** Options controlling how `mt spawn` chooses source content. */
-export interface SpawnOptions {
-  /** Selects whether spawn starts from current HEAD or each repo's default branch. */
-  mode: "current-head" | "default-branch";
+export type SpawnOptions =
+  | {
+      /** Spawn from the source checkout's current HEAD. */
+      mode: "current-head";
+      /** Whether dirty source state is copied into newly created Session worktrees. */
+      copyDirty: boolean;
+    }
+  | {
+      /** Spawn from each repo's default branch content. */
+      mode: "default-branch";
+    };
+
+interface DirtySnapshot {
+  stagedPatch: string;
+  unstagedPatch: string;
+  untrackedPaths: string[];
 }
 
 /** Options controlling `mt cleanup` lifecycle behavior. */
@@ -134,6 +147,9 @@ export function spawnSessionFromSourceRootLocked(
     : existsSync(path.join(rootSourceRoot, "monke.yml"));
   if (!rootConfigExists) {
     assertNoGlobalWorktreePathStateCollisions(home, session, [{ sourceRoot: rootSourceRoot }]);
+    const dirtySnapshot = shouldCopyDirty(options)
+      ? captureDirtySnapshot(runtime, rootSourceRoot)
+      : null;
     const worktree = rootDefaultRef
       ? ensureFreshSessionWorktreeFromRef(
           runtime,
@@ -142,7 +158,12 @@ export function spawnSessionFromSourceRootLocked(
           session,
           rootDefaultRef.ref,
         )
-      : ensureSessionWorktree(runtime, home, rootSourceRoot, session);
+      : ensureSessionWorktree(runtime, home, rootSourceRoot, session, {
+          skipCleanCheck: shouldCopyDirty(options),
+        });
+    if (dirtySnapshot && worktree.created) {
+      applyDirtySnapshot(runtime, rootSourceRoot, worktree.path, dirtySnapshot);
+    }
     const sessionState = {
       ...loadSessionState(home, rootSourceRoot, session),
       graphSource: spawnFromDefaultBranch ? ("session-branch" as const) : undefined,
@@ -180,9 +201,12 @@ export function spawnSessionFromSourceRootLocked(
   } else {
     graph = loadResolvedGraph(runtime, rootSourceRoot);
   }
-  if (!spawnFromDefaultBranch) {
+  if (options.mode === "current-head" && !options.copyDirty) {
     assertCleanCheckoutsForCurrentHeadSpawn(runtime, graph.reposInMaterializationOrder, session);
   }
+  const dirtySnapshots = shouldCopyDirty(options)
+    ? captureDirtySnapshots(runtime, graph.reposInMaterializationOrder)
+    : new Map<string, DirtySnapshot>();
   let sessionState = loadSessionState(home, rootSourceRoot, session);
   if (spawnFromDefaultBranch) {
     sessionState = { ...sessionState, graphSource: "session-branch" };
@@ -257,7 +281,13 @@ export function spawnSessionFromSourceRootLocked(
           worktreePath: worktree.path,
         });
       } else {
-        worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session);
+        worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session, {
+          skipCleanCheck: shouldCopyDirty(options),
+        });
+        const dirtySnapshot = dirtySnapshots.get(repoConfig.sourceRoot);
+        if (dirtySnapshot && worktree.created) {
+          applyDirtySnapshot(runtime, repoConfig.sourceRoot, worktree.path, dirtySnapshot);
+        }
       }
 
       const materialized = materializeRepo({
@@ -298,6 +328,10 @@ export function spawnSessionFromSourceRootLocked(
   return rootWorktreePath;
 }
 
+function shouldCopyDirty(options: SpawnOptions): boolean {
+  return options.mode === "current-head" && options.copyDirty;
+}
+
 function assertCleanCheckoutsForCurrentHeadSpawn(
   runtime: Runtime,
   reposInOrder: RepoConfig[],
@@ -305,6 +339,75 @@ function assertCleanCheckoutsForCurrentHeadSpawn(
 ): void {
   for (const repoConfig of reposInOrder) {
     assertCleanCheckoutForSessionBranchCreation(runtime, repoConfig.sourceRoot, session);
+  }
+}
+
+function captureDirtySnapshots(
+  runtime: Runtime,
+  reposInOrder: RepoConfig[],
+): Map<string, DirtySnapshot> {
+  return new Map(
+    reposInOrder.map((repoConfig) => [
+      repoConfig.sourceRoot,
+      captureDirtySnapshot(runtime, repoConfig.sourceRoot),
+    ]),
+  );
+}
+
+function captureDirtySnapshot(runtime: Runtime, sourceRoot: string): DirtySnapshot {
+  const untrackedOutput = runGit(runtime, sourceRoot, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z",
+  ]);
+
+  return {
+    stagedPatch: runGit(runtime, sourceRoot, ["diff", "--cached", "--binary", "--no-ext-diff"]),
+    unstagedPatch: runGit(runtime, sourceRoot, ["diff", "--binary", "--no-ext-diff"]),
+    untrackedPaths: untrackedOutput.split("\0").filter((entry) => entry.length > 0),
+  };
+}
+
+function applyDirtySnapshot(
+  runtime: Runtime,
+  sourceRoot: string,
+  worktreePath: string,
+  snapshot: DirtySnapshot,
+): void {
+  applyPatch(runtime, worktreePath, snapshot.stagedPatch);
+  applyPatch(runtime, worktreePath, snapshot.unstagedPatch);
+  copyUntrackedPaths(sourceRoot, worktreePath, snapshot.untrackedPaths);
+}
+
+function applyPatch(runtime: Runtime, worktreePath: string, patch: string): void {
+  if (!patch) {
+    return;
+  }
+
+  runtime.exec("git", ["apply", "--3way"], { cwd: worktreePath, stdin: patch });
+}
+
+function copyUntrackedPaths(
+  sourceRoot: string,
+  worktreePath: string,
+  untrackedPaths: string[],
+): void {
+  for (const relativePath of untrackedPaths) {
+    const sourcePath = path.join(sourceRoot, relativePath);
+    if (!existsSync(sourcePath)) {
+      throw new MonkeError(`Untracked source path disappeared before copy: ${sourcePath}`);
+    }
+
+    const targetPath = path.join(worktreePath, relativePath);
+    mkdirSync(path.dirname(targetPath), { recursive: true });
+    const sourceStat = statSync(sourcePath);
+    if (sourceStat.isDirectory()) {
+      cpSync(sourcePath, targetPath, { recursive: true });
+      continue;
+    }
+
+    copyFileSync(sourcePath, targetPath);
   }
 }
 
@@ -1054,6 +1157,10 @@ function readGitPathAtRef(
   relativePath: string,
 ): string {
   return runtime.exec("git", ["show", `${ref}:${relativePath}`], { cwd: sourceRoot }).stdout;
+}
+
+function runGit(runtime: Runtime, cwd: string, args: string[]): string {
+  return runtime.exec("git", args, { cwd }).stdout;
 }
 
 function gitPathExistsAtRef(

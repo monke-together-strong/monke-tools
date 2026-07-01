@@ -85,7 +85,7 @@ external:
   expect(sessionState.repos.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
 });
 
-test("spawn fails dirty dependency source checkouts before creating any worktrees", () => {
+test("spawn --no-dirty fails dirty dependency source checkouts before creating any worktrees", () => {
   const sandbox = makeRepoTempDir("multi-repo-dirty-preflight");
   try {
     const binDirectory = path.join(sandbox, "bin");
@@ -146,7 +146,7 @@ external:
     expect(() => {
       runMonke({
         cwd: root,
-        args: ["spawn", "dirty-first"],
+        args: ["spawn", "dirty-first", "--no-dirty"],
         monkeHome: home,
         binDirectory,
       });
@@ -168,6 +168,58 @@ external:
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
   }
+});
+
+test("spawn carries dirty state across multi-repo graph by default", () => {
+  const sandbox = makeTempDir("multi-repo-dirty-carry");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "dep.txt": "clean dep\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_PORT
+        env: PORT
+`,
+  });
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "root.txt": "clean root\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+  write(depRoot, "dep.txt", "dirty dep\n");
+  write(root, "root.txt", "dirty root\n");
+
+  runMonke({
+    cwd: root,
+    args: ["spawn", "dirty-graph"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(getExpectedWorktreePath(home, depRoot, "dirty-graph"), "dep.txt")).toBe(
+    "dirty dep\n",
+  );
+  expect(read(getExpectedWorktreePath(home, root, "dirty-graph"), "root.txt")).toBe("dirty root\n");
 });
 
 test("spawn -m discovers dependencies from default branch config", () => {

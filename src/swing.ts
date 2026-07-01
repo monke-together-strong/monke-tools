@@ -331,6 +331,7 @@ function resolveStoredTarget(
     if (options.createIfMissing) {
       spawnSessionFromSourceRootLocked(runtime, home, rootSourceRoot, target.session, {
         mode: "current-head",
+        copyDirty: false,
       });
       createLogger(runtime).success(`Spawned or updated session ${target.session}`);
     } else {

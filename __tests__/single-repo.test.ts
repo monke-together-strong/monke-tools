@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
@@ -139,6 +139,207 @@ test("spawn without monke.yml creates an unmaterialized worktree and warns", () 
   ]);
 });
 
+test("spawn without monke.yml carries dirty state by default", () => {
+  const sandbox = makeTempDir("single-repo-no-config-dirty");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+  });
+  write(repoRoot, "README.md", "dirty\n");
+  write(repoRoot, "notes.txt", "untracked\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "dirty-no-config"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "dirty-no-config");
+  expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
+  expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
+});
+
+test("spawn carries tracked modifications by default", () => {
+  const sandbox = makeTempDir("single-repo-dirty-modified");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+    "monke.yml": "apps: {}\n",
+  });
+  write(repoRoot, "README.md", "dirty\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "dirty-copy"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-copy"), "README.md")).toBe("dirty\n");
+});
+
+test("spawn carries staged changes by default", () => {
+  const sandbox = makeTempDir("single-repo-dirty-staged");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+    "monke.yml": "apps: {}\n",
+  });
+  write(repoRoot, "README.md", "staged\n");
+  git(repoRoot, ["add", "README.md"]);
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "dirty-staged"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-staged"), "README.md")).toBe(
+    "staged\n",
+  );
+});
+
+test("spawn carries staged and unstaged edits to the same file", () => {
+  const sandbox = makeTempDir("single-repo-dirty-layered");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "a\n",
+    "monke.yml": "apps: {}\n",
+  });
+  write(repoRoot, "README.md", "b\n");
+  git(repoRoot, ["add", "README.md"]);
+  write(repoRoot, "README.md", "c\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "dirty-layered"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-layered"), "README.md")).toBe("c\n");
+});
+
+test("spawn carries tracked deletions by default", () => {
+  const sandbox = makeTempDir("single-repo-dirty-delete");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+    "monke.yml": "apps: {}\n",
+  });
+  rmSync(path.join(repoRoot, "README.md"));
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "dirty-delete"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(
+    existsSync(path.join(getExpectedWorktreePath(home, repoRoot, "dirty-delete"), "README.md")),
+  ).toBe(false);
+});
+
+test("spawn carries untracked non-ignored files by default", () => {
+  const sandbox = makeTempDir("single-repo-dirty-untracked");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+    "monke.yml": "apps: {}\n",
+  });
+  write(repoRoot, "notes/nested.txt", "carry me\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "dirty-untracked"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-untracked"), "notes/nested.txt")).toBe(
+    "carry me\n",
+  );
+});
+
+test("spawn does not carry ignored files", () => {
+  const sandbox = makeTempDir("single-repo-dirty-ignored");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    ".gitignore": "ignored.txt\n",
+    "README.md": "clean\n",
+    "monke.yml": "apps: {}\n",
+  });
+  write(repoRoot, "ignored.txt", "leave behind\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "dirty-ignored"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(
+    existsSync(path.join(getExpectedWorktreePath(home, repoRoot, "dirty-ignored"), "ignored.txt")),
+  ).toBe(false);
+});
+
+test("spawn --no-dirty rejects dirty source checkouts", () => {
+  const sandbox = makeTempDir("single-repo-no-dirty");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+    "monke.yml": "apps: {}\n",
+  });
+  write(repoRoot, "README.md", "dirty\n");
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["spawn", "reject-dirty", "--no-dirty"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(`Source checkout is dirty: ${repoRoot}`);
+  expect(existsSync(getExpectedWorktreePath(home, repoRoot, "reject-dirty"))).toBe(false);
+});
+
+test("spawn does not carry source dirt into existing Session worktrees", () => {
+  const sandbox = makeTempDir("single-repo-existing-dirty");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+    "monke.yml": "apps: {}\n",
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "existing"],
+    monkeHome: home,
+    binDirectory,
+  });
+  write(repoRoot, "README.md", "dirty\n");
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "existing"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(getExpectedWorktreePath(home, repoRoot, "existing"), "README.md")).toBe("clean\n");
+});
+
 test("spawn rejects stale repo-name session collisions from unrelated source roots", () => {
   const sandbox = makeTempDir("single-repo-global-path-collision");
   const binDirectory = path.join(sandbox, "bin");
@@ -209,6 +410,53 @@ test("spawn -m keeps default branch file content while avoiding source checkout 
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
   expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
   expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=10000\nBRANCH_DIRTY=1\n");
+});
+
+test("spawn -m ignores dirty source content", () => {
+  const sandbox = makeTempDir("single-repo-main-ignores-dirty");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "main\n",
+    "monke.yml": "apps: {}\n",
+  });
+  git(repoRoot, ["switch", "-c", "feature"]);
+  write(repoRoot, "README.md", "dirty feature\n");
+  write(repoRoot, "notes.txt", "untracked\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "fresh-main", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh-main");
+  expect(read(worktreeRoot, "README.md")).toBe("main\n");
+  expect(existsSync(path.join(worktreeRoot, "notes.txt"))).toBe(false);
+});
+
+test("spawn --no-dirty -m is accepted and behaves like default branch spawn", () => {
+  const sandbox = makeTempDir("single-repo-main-no-dirty");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "main\n",
+    "monke.yml": "apps: {}\n",
+  });
+  git(repoRoot, ["switch", "-c", "feature"]);
+  write(repoRoot, "README.md", "dirty feature\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "fresh-main-no-dirty", "--no-dirty", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(getExpectedWorktreePath(home, repoRoot, "fresh-main-no-dirty"), "README.md")).toBe(
+    "main\n",
+  );
 });
 
 test("spawn -m without monke.yml creates an unmaterialized default-branch worktree", () => {
