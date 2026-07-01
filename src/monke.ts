@@ -1,4 +1,13 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  symlinkSync,
+} from "node:fs";
 import path from "node:path";
 
 import { loadResolvedGraph } from "./config.ts";
@@ -17,6 +26,7 @@ import {
 import {
   assertCleanCheckoutForSessionBranchCreation,
   assertFreshSessionWorktreeAvailable,
+  branchExists,
   ensureCleanCheckout,
   ensureSessionWorktree,
   ensureFreshSessionWorktreeFromRef,
@@ -64,6 +74,10 @@ export type SpawnOptions =
       mode: "current-head";
       /** Whether dirty source state is copied into newly created Session worktrees. */
       copyDirty: boolean;
+    }
+  | {
+      /** Spawn from an existing branch named after the Session. */
+      mode: "session-branch";
     }
   | {
       /** Spawn from each repo's resolved default branch ref. */
@@ -123,6 +137,7 @@ export function spawnSessionFromSourceRootLocked(
 
   const rootWorktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
   const spawnFromDefaultBranch = options.mode === "default-branch";
+  const spawnFromSessionBranch = options.mode === "session-branch";
 
   if (
     spawnFromDefaultBranch &&
@@ -130,6 +145,11 @@ export function spawnSessionFromSourceRootLocked(
   ) {
     throw new MonkeError(
       `Session state already exists for "${session}"; default branch spawn mode requires a fresh Session`,
+    );
+  }
+  if (spawnFromSessionBranch && !branchExists(runtime, rootSourceRoot, session)) {
+    throw new MonkeError(
+      `Session branch "${session}" does not exist for ${rootSourceRoot}; cannot spawn from it`,
     );
   }
 
@@ -145,7 +165,9 @@ export function spawnSessionFromSourceRootLocked(
   const rootDefaultRef = spawnFromDefaultBranch ? getDefaultRef(rootSourceRoot) : null;
   const rootConfigExists = rootDefaultRef
     ? gitPathExistsAtRef(runtime, rootSourceRoot, rootDefaultRef.ref, "monke.yml")
-    : existsSync(path.join(rootSourceRoot, "monke.yml"));
+    : spawnFromSessionBranch
+      ? gitPathExistsAtRef(runtime, rootSourceRoot, session, "monke.yml")
+      : existsSync(path.join(rootSourceRoot, "monke.yml"));
   if (!rootConfigExists) {
     assertNoGlobalWorktreePathStateCollisions(home, session, [{ sourceRoot: rootSourceRoot }]);
     if (options.mode === "current-head" && !options.copyDirty) {
@@ -170,7 +192,8 @@ export function spawnSessionFromSourceRootLocked(
     }
     const sessionState = {
       ...loadSessionState(home, rootSourceRoot, session),
-      graphSource: spawnFromDefaultBranch ? ("session-branch" as const) : undefined,
+      graphSource:
+        spawnFromDefaultBranch || spawnFromSessionBranch ? ("session-branch" as const) : undefined,
     };
     saveSessionState(
       home,
@@ -202,6 +225,21 @@ export function spawnSessionFromSourceRootLocked(
         return gitPathExistsAtRef(runtime, sourceRoot, getDefaultRef(sourceRoot).ref, relativePath);
       },
     });
+  } else if (spawnFromSessionBranch) {
+    graph = loadResolvedGraph(runtime, rootSourceRoot, {
+      readRepoConfig(sourceRoot) {
+        if (sourceRoot === rootSourceRoot) {
+          return readGitPathAtRef(runtime, sourceRoot, session, "monke.yml");
+        }
+        return readFileSync(path.join(sourceRoot, "monke.yml"), "utf8");
+      },
+      pathExists(sourceRoot, relativePath) {
+        if (sourceRoot === rootSourceRoot) {
+          return gitPathExistsAtRef(runtime, sourceRoot, session, relativePath);
+        }
+        return existsSync(path.join(sourceRoot, relativePath));
+      },
+    });
   } else {
     graph = loadResolvedGraph(runtime, rootSourceRoot);
   }
@@ -212,7 +250,7 @@ export function spawnSessionFromSourceRootLocked(
     ? captureDirtySnapshots(runtime, graph.reposInMaterializationOrder)
     : new Map<string, DirtySnapshot>();
   let sessionState = loadSessionState(home, rootSourceRoot, session);
-  if (spawnFromDefaultBranch) {
+  if (spawnFromDefaultBranch || spawnFromSessionBranch) {
     sessionState = { ...sessionState, graphSource: "session-branch" };
   } else {
     sessionState = { ...sessionState, graphSource: undefined };
@@ -272,6 +310,8 @@ export function spawnSessionFromSourceRootLocked(
       }
 
       let worktree: { path: string; created: boolean };
+      const isSessionBranchRoot =
+        spawnFromSessionBranch && repoConfig.sourceRoot === rootSourceRoot;
       if (spawnFromDefaultBranch) {
         worktree = ensureFreshSessionWorktreeFromRef(
           runtime,
@@ -301,8 +341,9 @@ export function spawnSessionFromSourceRootLocked(
         session,
         repoConfig,
         worktreePath: worktree.path,
-        seedMaterialRoot: spawnFromDefaultBranch ? worktree.path : repoConfig.sourceRoot,
-        baselinePortsRoot: repoConfig.sourceRoot,
+        seedMaterialRoot:
+          spawnFromDefaultBranch || isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
+        baselinePortsRoot: isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
         worktreeCreated: worktree.created,
         existingState,
         dependencyResults: results,
@@ -399,15 +440,20 @@ function copyUntrackedPaths(
 ): void {
   for (const relativePath of untrackedPaths) {
     const sourcePath = path.join(sourceRoot, relativePath);
-    if (!existsSync(sourcePath)) {
+    const sourceStat = lstatSync(sourcePath, { throwIfNoEntry: false });
+    if (!sourceStat) {
       throw new MonkeError(`Untracked source path disappeared before copy: ${sourcePath}`);
     }
 
     const targetPath = path.join(worktreePath, relativePath);
     mkdirSync(path.dirname(targetPath), { recursive: true });
-    const sourceStat = statSync(sourcePath);
+    if (sourceStat.isSymbolicLink()) {
+      symlinkSync(readlinkSync(sourcePath), targetPath);
+      continue;
+    }
+
     if (sourceStat.isDirectory()) {
-      cpSync(sourcePath, targetPath, { recursive: true });
+      cpSync(sourcePath, targetPath, { recursive: true, dereference: false });
       continue;
     }
 

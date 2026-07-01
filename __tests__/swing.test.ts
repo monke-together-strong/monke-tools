@@ -254,23 +254,44 @@ test("swing creates a missing same-repo GitHub PR Session", () => {
   const sandbox = makeTempDir("swing-pr-create");
   const home = path.join(sandbox, "home");
   const binDirectory = path.join(sandbox, "bin");
+  const prBranch = "feature/issue-81-flow-market-unit";
   const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
+    "README.md": "main\n",
   });
+  const originRoot = path.join(sandbox, "origin.git");
+  mkdirSync(originRoot, { recursive: true });
+  git(originRoot, ["init", "--bare"]);
+  git(repoRoot, ["remote", "add", "origin", originRoot]);
+  git(repoRoot, ["switch", "-c", prBranch]);
+  writeFileSync(path.join(repoRoot, "README.md"), "pr head\n", "utf8");
+  mkdirSync(path.join(repoRoot, "apps/api"), { recursive: true });
+  writeFileSync(path.join(repoRoot, "apps/api/.env.local"), "PORT=3000\n", "utf8");
+  writeFileSync(
+    path.join(repoRoot, "monke.yml"),
+    `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+    "utf8",
+  );
+  git(repoRoot, ["add", "README.md"]);
+  git(repoRoot, ["add", "apps/api/.env.local", "monke.yml"]);
+  git(repoRoot, ["commit", "-m", "pr head"]);
+  git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/82/head`]);
+  git(repoRoot, ["switch", "main"]);
+  git(repoRoot, ["branch", "-D", prBranch]);
   installSwingGhShim(binDirectory, {
     "82": {
-      headRefName: "feature/issue-81-flow-market-unit",
+      headRefName: prBranch,
       headRepositoryOwner: { login: "owner" },
       headRepository: { name: "root" },
     },
   });
-  runMonke({
-    cwd: repoRoot,
-    args: ["spawn", "feature/issue-81-flow-market-unit"],
-    monkeHome: home,
-  });
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/issue-81-flow-market-unit");
-  git(repoRoot, ["worktree", "remove", worktreeRoot, "--force"]);
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
 
   const result = runMonke({
     cwd: repoRoot,
@@ -280,7 +301,10 @@ test("swing creates a missing same-repo GitHub PR Session", () => {
   });
 
   expect(result.stdout).toBe(`${worktreeRoot}\n`);
-  expect(result.stderr).toContain(`Spawned or updated session feature/issue-81-flow-market-unit`);
+  expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf8")).toBe("pr head\n");
+  expect(readFileSync(path.join(worktreeRoot, "apps/api/.env.local"), "utf8")).toBe("PORT=10000\n");
+  expect(readFileSync(path.join(worktreeRoot, ".env"), "utf8")).toBe("API_PORT=10000\n");
+  expect(result.stderr).toContain(`Spawned or updated session ${prBranch}`);
   expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
 });
 

@@ -3,7 +3,12 @@ import path from "node:path";
 import { parse, stringify } from "yaml";
 
 import { MonkeError } from "./errors.ts";
-import { getExpectedWorktreePath, resolveRepoContext, validateWorktreeForSession } from "./git.ts";
+import {
+  branchExists,
+  getExpectedWorktreePath,
+  resolveRepoContext,
+  validateWorktreeForSession,
+} from "./git.ts";
 import { createLogger } from "./logger.ts";
 import { spawnSessionFromSourceRootLocked } from "./monke.ts";
 import { listSessionStates } from "./registry.ts";
@@ -334,8 +339,7 @@ function resolveStoredTarget(
   if (!existsSync(worktreePath)) {
     if (options.createIfMissing) {
       spawnSessionFromSourceRootLocked(runtime, home, rootSourceRoot, target.session, {
-        mode: "current-head",
-        copyDirty: false,
+        mode: "session-branch",
       });
       createLogger(runtime).success(`Spawned or updated session ${target.session}`);
     } else {
@@ -405,7 +409,23 @@ function resolvePullRequestSession(
     );
   }
 
+  ensurePullRequestSessionBranch(runtime, rootSourceRoot, pullRequestNumber, headRefName);
   return headRefName;
+}
+
+function ensurePullRequestSessionBranch(
+  runtime: Runtime,
+  rootSourceRoot: string,
+  pullRequestNumber: number,
+  session: string,
+): void {
+  if (branchExists(runtime, rootSourceRoot, session)) {
+    return;
+  }
+
+  runtime.exec("git", ["fetch", "origin", `pull/${pullRequestNumber}/head:refs/heads/${session}`], {
+    cwd: rootSourceRoot,
+  });
 }
 
 function resolveCurrentGithubRepo(

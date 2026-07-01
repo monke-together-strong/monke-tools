@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
@@ -294,6 +294,34 @@ test("spawn carries untracked non-ignored files by default", () => {
   expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-untracked"), "notes/nested.txt")).toBe(
     "carry me\n",
   );
+});
+
+test("spawn preserves untracked symlinks without copying linked contents", () => {
+  const sandbox = makeTempDir("single-repo-dirty-untracked-symlink");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+    "monke.yml": "apps: {}\n",
+  });
+  const outsideFile = path.join(sandbox, "outside-secret.txt");
+  write(sandbox, "outside-secret.txt", "do not copy\n");
+  symlinkSync(outsideFile, path.join(repoRoot, "secret-link"));
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "dirty-untracked-link"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const copiedLink = path.join(
+    getExpectedWorktreePath(home, repoRoot, "dirty-untracked-link"),
+    "secret-link",
+  );
+  expect(lstatSync(copiedLink).isSymbolicLink()).toBe(true);
+  expect(readlinkSync(copiedLink)).toBe(outsideFile);
+  expect(readFileSync(copiedLink, "utf8")).toBe("do not copy\n");
 });
 
 test("spawn does not carry ignored files", () => {
