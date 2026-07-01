@@ -495,12 +495,13 @@ test("spawn -m without monke.yml creates an unmaterialized default-branch worktr
   });
 });
 
-test("spawn -m seeds configured paths from the source checkout", () => {
-  const sandbox = makeTempDir("single-repo-main-seed-source");
+test("spawn -m seeds configured paths from resolved default branch refs", () => {
+  const sandbox = makeTempDir("single-repo-main-seed-default");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": "PORT=3000\n",
+    "local-only.txt": "default seed\n",
     "monke.yml": `seedPaths:
   - local-only.txt
 apps:
@@ -523,16 +524,16 @@ apps:
   });
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
-  expect(read(worktreeRoot, "local-only.txt")).toBe("dirty source only\n");
+  expect(read(worktreeRoot, "local-only.txt")).toBe("default seed\n");
 });
 
-test("spawn -m seeds ignored managed env files and avoids their baseline ports", () => {
+test("spawn -m uses resolved default branch env files while avoiding source baseline ports", () => {
   const sandbox = makeTempDir("single-repo-main-local-env");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
   const repoRoot = createRepo(path.join(sandbox, "root"), {
-    ".gitignore": ".env.*\n.envrc\napps/api/.env.*\n",
-    "apps/api/package.json": "{}\n",
+    ".gitignore": ".env.demo\n.envrc\napps/api/.env.demo\n",
+    "apps/api/.env.local": "PORT=3000\nDEFAULT_ONLY=1\n",
     "monke.yml": `apps:
   api:
     path: apps/api
@@ -556,9 +557,9 @@ test("spawn -m seeds ignored managed env files and avoids their baseline ports",
   });
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
-  expect(read(worktreeRoot, ".env.demo")).toBe("DEMO=true\n");
-  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nLOCAL_ONLY=1\n");
-  expect(read(worktreeRoot, "apps/api/.env.demo")).toBe("API_DEMO=true\n");
+  expect(existsSync(path.join(worktreeRoot, ".env.demo"))).toBe(false);
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
+  expect(existsSync(path.join(worktreeRoot, "apps/api/.env.demo"))).toBe(false);
   expect(existsSync(path.join(worktreeRoot, ".envrc"))).toBe(false);
   expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
 });

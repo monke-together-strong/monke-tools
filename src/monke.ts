@@ -65,7 +65,7 @@ export type SpawnOptions =
       copyDirty: boolean;
     }
   | {
-      /** Spawn from each repo's default branch content. */
+      /** Spawn from each repo's resolved default branch ref. */
       mode: "default-branch";
     };
 
@@ -297,7 +297,7 @@ export function spawnSessionFromSourceRootLocked(
         session,
         repoConfig,
         worktreePath: worktree.path,
-        seedMaterialRoot: repoConfig.sourceRoot,
+        seedMaterialRoot: spawnFromDefaultBranch ? worktree.path : repoConfig.sourceRoot,
         baselinePortsRoot: repoConfig.sourceRoot,
         worktreeCreated: worktree.created,
         existingState,
@@ -537,7 +537,8 @@ export function runMaterialize(runtime: Runtime): void {
         session,
         repoConfig,
         worktreePath,
-        seedMaterialRoot: repoConfig.sourceRoot,
+        seedMaterialRoot:
+          sessionState.graphSource === "session-branch" ? worktreePath : repoConfig.sourceRoot,
         baselinePortsRoot: repoConfig.sourceRoot,
         worktreeCreated,
         existingState,

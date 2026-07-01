@@ -319,14 +319,13 @@ external:
   expect(cleanupResult.stderr).toBe("Removed 1 dead session\n");
 });
 
-test("spawn -m seeds dependency managed env files from source checkouts", () => {
+test("spawn -m uses dependency resolved default branch env files", () => {
   const sandbox = makeTempDir("multi-repo-main-local-env");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
 
   const depRoot = createRepo(path.join(sandbox, "dep"), {
-    ".gitignore": "services/db/.env.local\n",
-    "services/db/package.json": "{}\n",
+    "services/db/.env.local": "PORT=5432\nDEFAULT_ONLY=1\n",
     "monke.yml": `apps:
   db:
     path: services/db
@@ -366,7 +365,7 @@ external:
 
   const rootWorktree = getExpectedWorktreePath(home, root, "local-env");
   const depWorktree = getExpectedWorktreePath(home, depRoot, "local-env");
-  expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10001\nLOCAL_ONLY=1\n");
+  expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
   expect(read(rootWorktree, "apps/api/.env.local")).toBe(
     "DATABASE_URL=postgres://localhost:10001/app\n",
   );
