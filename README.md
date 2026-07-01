@@ -21,7 +21,7 @@ mt spawn banana
 mt spawn banana -m
 ```
 
-`bun run install:local` rebuilds the local `mt` executable from the current checkout, installs it to `~/.local/bin/mt` and `~/.local/bin/monke-tools`, installs shell integration for bash and zsh, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots.
+`bun run install:local` rebuilds the local executable from the current checkout, installs it to `~/.local/bin/monke-tools`, and installs `~/.local/bin/mt` plus `~/.local/bin/monke` wrappers that invoke it. It also installs shell integration for bash and zsh, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots.
 
 On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and relink the managed skills to the current checkout.
 

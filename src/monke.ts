@@ -87,205 +87,215 @@ export function runSpawn(runtime: Runtime, session: string, options: SpawnOption
     throw new MonkeError("mt spawn must run from the source checkout");
   }
 
-  const rootWorktreePath = getExpectedWorktreePath(home, context.sourceRoot, session);
-  const spawnFromDefaultBranch = options.mode === "default-branch";
-
-  withGlobalLock(home, () => {
-    if (
-      spawnFromDefaultBranch &&
-      existsSync(getSessionStateFilePath(home, context.sourceRoot, session))
-    ) {
-      throw new MonkeError(
-        `Session state already exists for "${session}"; default branch spawn mode requires a fresh Session`,
-      );
-    }
-
-    const defaultRefs = new Map<string, DefaultBranchRef>();
-    const getDefaultRef = (sourceRoot: string): DefaultBranchRef => {
-      let defaultRef = defaultRefs.get(sourceRoot);
-      if (!defaultRef) {
-        defaultRef = resolveDefaultBranchRef(runtime, sourceRoot);
-        defaultRefs.set(sourceRoot, defaultRef);
-      }
-      return defaultRef;
-    };
-    const rootDefaultRef = spawnFromDefaultBranch ? getDefaultRef(context.sourceRoot) : null;
-    const rootConfigExists = rootDefaultRef
-      ? gitPathExistsAtRef(runtime, context.sourceRoot, rootDefaultRef.ref, "monke.yml")
-      : existsSync(path.join(context.sourceRoot, "monke.yml"));
-    if (!rootConfigExists) {
-      assertNoGlobalWorktreePathStateCollisions(home, session, [
-        { sourceRoot: context.sourceRoot },
-      ]);
-      const worktree = rootDefaultRef
-        ? ensureFreshSessionWorktreeFromRef(
-            runtime,
-            home,
-            context.sourceRoot,
-            session,
-            rootDefaultRef.ref,
-          )
-        : ensureSessionWorktree(runtime, home, context.sourceRoot, session);
-      const sessionState = {
-        ...loadSessionState(home, context.sourceRoot, session),
-        graphSource: spawnFromDefaultBranch ? ("session-branch" as const) : undefined,
-      };
-      saveSessionState(
-        home,
-        recordRepoSuccess(
-          sessionState,
-          buildSessionRepoState({
-            sourceRoot: context.sourceRoot,
-            worktreePath: worktree.path,
-            assignedPorts: [],
-            resourceValues: [],
-            resourceCommandOutputs: [],
-            isComplete: false,
-          }),
-        ),
-      );
-      runtime.writeStderr(
-        `Warning: no monke.yml found for ${context.sourceRoot}; spawned session worktree without materializing it.\n`,
-      );
-      return;
-    }
-
-    let graph: ReturnType<typeof loadResolvedGraph>;
-    if (spawnFromDefaultBranch) {
-      graph = loadResolvedGraph(runtime, context.sourceRoot, {
-        readRepoConfig(sourceRoot) {
-          return readGitPathAtRef(runtime, sourceRoot, getDefaultRef(sourceRoot).ref, "monke.yml");
-        },
-        pathExists(sourceRoot, relativePath) {
-          return gitPathExistsAtRef(
-            runtime,
-            sourceRoot,
-            getDefaultRef(sourceRoot).ref,
-            relativePath,
-          );
-        },
-      });
-    } else {
-      graph = loadResolvedGraph(runtime, context.sourceRoot);
-    }
-    if (!spawnFromDefaultBranch) {
-      assertCleanCheckoutsForCurrentHeadSpawn(runtime, graph.reposInMaterializationOrder, session);
-    }
-    let sessionState = loadSessionState(home, context.sourceRoot, session);
-    if (spawnFromDefaultBranch) {
-      sessionState = { ...sessionState, graphSource: "session-branch" };
-    } else {
-      sessionState = { ...sessionState, graphSource: undefined };
-    }
-    ensureSessionPrefix(
-      sessionState,
-      graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot),
-    );
-    assertUniqueExpectedWorktreePaths(home, session, graph.reposInMaterializationOrder);
-    assertNoGlobalWorktreePathStateCollisions(home, session, graph.reposInMaterializationOrder);
-    if (spawnFromDefaultBranch) {
-      for (const repoConfig of graph.reposInMaterializationOrder) {
-        assertFreshSessionWorktreeAvailable(runtime, home, repoConfig.sourceRoot, session);
-      }
-    }
-
-    const currentRepoRoot = context.sourceRoot;
-    const currentIndex = graph.reposInMaterializationOrder.findIndex(
-      (repo) => repo.sourceRoot === currentRepoRoot,
-    );
-    let firstWorkIndex = 0;
-    if (!spawnFromDefaultBranch) {
-      firstWorkIndex = findFirstIndexNeedingWork(
-        runtime,
-        home,
-        graph.reposInMaterializationOrder,
-        sessionState,
-        session,
-        currentIndex,
-      );
-    }
-
-    const results = new Map<string, RepoMaterializationResult>();
-    const createdDefaultWorktrees: Array<{ sourceRoot: string; worktreePath: string }> = [];
-    try {
-      for (const [index, repoConfig] of graph.reposInMaterializationOrder.entries()) {
-        const existingState = sessionState.repos.find(
-          (repo) => repo.sourceRoot === repoConfig.sourceRoot,
-        );
-        const shouldSkip = index < firstWorkIndex && repoConfig.sourceRoot !== currentRepoRoot;
-
-        if (shouldSkip && existingState) {
-          validateWorktreeForSession(
-            runtime,
-            home,
-            repoConfig.sourceRoot,
-            existingState.worktreePath,
-            session,
-          );
-          results.set(repoConfig.sourceRoot, {
-            state: existingState,
-            localAssignments: new Map(
-              existingState.assignedPorts.map((entry) => [entry.key, entry.value]),
-            ),
-          });
-          continue;
-        }
-
-        let worktree: { path: string; created: boolean };
-        if (spawnFromDefaultBranch) {
-          worktree = ensureFreshSessionWorktreeFromRef(
-            runtime,
-            home,
-            repoConfig.sourceRoot,
-            session,
-            getDefaultRef(repoConfig.sourceRoot).ref,
-          );
-          createdDefaultWorktrees.push({
-            sourceRoot: repoConfig.sourceRoot,
-            worktreePath: worktree.path,
-          });
-        } else {
-          worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session);
-        }
-
-        const materialized = materializeRepo({
-          runtime,
-          home,
-          rootSourceRoot: context.sourceRoot,
-          session,
-          repoConfig,
-          worktreePath: worktree.path,
-          seedMaterialRoot: repoConfig.sourceRoot,
-          baselinePortsRoot: repoConfig.sourceRoot,
-          worktreeCreated: worktree.created,
-          existingState,
-          dependencyResults: results,
-          persistRepoState(repoState) {
-            sessionState = recordRepoSuccess(sessionState, repoState);
-            saveSessionState(home, sessionState);
-          },
-        });
-
-        results.set(repoConfig.sourceRoot, materialized);
-        sessionState = recordRepoSuccess(sessionState, materialized.state);
-        saveSessionState(home, sessionState);
-      }
-    } catch (error) {
-      if (spawnFromDefaultBranch) {
-        rollbackDefaultBranchSpawn({
-          runtime,
-          home,
-          rootSourceRoot: context.sourceRoot,
-          session,
-          createdWorktrees: createdDefaultWorktrees,
-        });
-      }
-      throw error;
-    }
-  });
+  const rootWorktreePath = withGlobalLock(home, () =>
+    spawnSessionFromSourceRootLocked(runtime, home, context.sourceRoot, session, options),
+  );
 
   createLogger(runtime).success(`Spawned or updated session ${session}`);
   requestShellDirectory(runtime, rootWorktreePath);
+}
+
+/** Create or refresh a Session while the caller holds the Monke global lock. */
+export function spawnSessionFromSourceRootLocked(
+  runtime: Runtime,
+  home: string,
+  rootSourceRoot: string,
+  session: string,
+  options: SpawnOptions,
+): string {
+  if (!session) {
+    throw new MonkeError("mt spawn requires a session name");
+  }
+
+  const rootWorktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
+  const spawnFromDefaultBranch = options.mode === "default-branch";
+
+  if (
+    spawnFromDefaultBranch &&
+    existsSync(getSessionStateFilePath(home, rootSourceRoot, session))
+  ) {
+    throw new MonkeError(
+      `Session state already exists for "${session}"; default branch spawn mode requires a fresh Session`,
+    );
+  }
+
+  const defaultRefs = new Map<string, DefaultBranchRef>();
+  const getDefaultRef = (sourceRoot: string): DefaultBranchRef => {
+    let defaultRef = defaultRefs.get(sourceRoot);
+    if (!defaultRef) {
+      defaultRef = resolveDefaultBranchRef(runtime, sourceRoot);
+      defaultRefs.set(sourceRoot, defaultRef);
+    }
+    return defaultRef;
+  };
+  const rootDefaultRef = spawnFromDefaultBranch ? getDefaultRef(rootSourceRoot) : null;
+  const rootConfigExists = rootDefaultRef
+    ? gitPathExistsAtRef(runtime, rootSourceRoot, rootDefaultRef.ref, "monke.yml")
+    : existsSync(path.join(rootSourceRoot, "monke.yml"));
+  if (!rootConfigExists) {
+    assertNoGlobalWorktreePathStateCollisions(home, session, [{ sourceRoot: rootSourceRoot }]);
+    const worktree = rootDefaultRef
+      ? ensureFreshSessionWorktreeFromRef(
+          runtime,
+          home,
+          rootSourceRoot,
+          session,
+          rootDefaultRef.ref,
+        )
+      : ensureSessionWorktree(runtime, home, rootSourceRoot, session);
+    const sessionState = {
+      ...loadSessionState(home, rootSourceRoot, session),
+      graphSource: spawnFromDefaultBranch ? ("session-branch" as const) : undefined,
+    };
+    saveSessionState(
+      home,
+      recordRepoSuccess(
+        sessionState,
+        buildSessionRepoState({
+          sourceRoot: rootSourceRoot,
+          worktreePath: worktree.path,
+          assignedPorts: [],
+          resourceValues: [],
+          resourceCommandOutputs: [],
+          isComplete: false,
+        }),
+      ),
+    );
+    runtime.writeStderr(
+      `Warning: no monke.yml found for ${rootSourceRoot}; spawned session worktree without materializing it.\n`,
+    );
+    return rootWorktreePath;
+  }
+
+  let graph: ReturnType<typeof loadResolvedGraph>;
+  if (spawnFromDefaultBranch) {
+    graph = loadResolvedGraph(runtime, rootSourceRoot, {
+      readRepoConfig(sourceRoot) {
+        return readGitPathAtRef(runtime, sourceRoot, getDefaultRef(sourceRoot).ref, "monke.yml");
+      },
+      pathExists(sourceRoot, relativePath) {
+        return gitPathExistsAtRef(runtime, sourceRoot, getDefaultRef(sourceRoot).ref, relativePath);
+      },
+    });
+  } else {
+    graph = loadResolvedGraph(runtime, rootSourceRoot);
+  }
+  if (!spawnFromDefaultBranch) {
+    assertCleanCheckoutsForCurrentHeadSpawn(runtime, graph.reposInMaterializationOrder, session);
+  }
+  let sessionState = loadSessionState(home, rootSourceRoot, session);
+  if (spawnFromDefaultBranch) {
+    sessionState = { ...sessionState, graphSource: "session-branch" };
+  } else {
+    sessionState = { ...sessionState, graphSource: undefined };
+  }
+  ensureSessionPrefix(
+    sessionState,
+    graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot),
+  );
+  assertUniqueExpectedWorktreePaths(home, session, graph.reposInMaterializationOrder);
+  assertNoGlobalWorktreePathStateCollisions(home, session, graph.reposInMaterializationOrder);
+  if (spawnFromDefaultBranch) {
+    for (const repoConfig of graph.reposInMaterializationOrder) {
+      assertFreshSessionWorktreeAvailable(runtime, home, repoConfig.sourceRoot, session);
+    }
+  }
+
+  const currentRepoRoot = rootSourceRoot;
+  const currentIndex = graph.reposInMaterializationOrder.findIndex(
+    (repo) => repo.sourceRoot === currentRepoRoot,
+  );
+  let firstWorkIndex = 0;
+  if (!spawnFromDefaultBranch) {
+    firstWorkIndex = findFirstIndexNeedingWork(
+      runtime,
+      home,
+      graph.reposInMaterializationOrder,
+      sessionState,
+      session,
+      currentIndex,
+    );
+  }
+
+  const results = new Map<string, RepoMaterializationResult>();
+  const createdDefaultWorktrees: Array<{ sourceRoot: string; worktreePath: string }> = [];
+  try {
+    for (const [index, repoConfig] of graph.reposInMaterializationOrder.entries()) {
+      const existingState = sessionState.repos.find(
+        (repo) => repo.sourceRoot === repoConfig.sourceRoot,
+      );
+      const shouldSkip = index < firstWorkIndex && repoConfig.sourceRoot !== currentRepoRoot;
+
+      if (shouldSkip && existingState) {
+        validateWorktreeForSession(
+          runtime,
+          home,
+          repoConfig.sourceRoot,
+          existingState.worktreePath,
+          session,
+        );
+        results.set(repoConfig.sourceRoot, {
+          state: existingState,
+          localAssignments: new Map(
+            existingState.assignedPorts.map((entry) => [entry.key, entry.value]),
+          ),
+        });
+        continue;
+      }
+
+      let worktree: { path: string; created: boolean };
+      if (spawnFromDefaultBranch) {
+        worktree = ensureFreshSessionWorktreeFromRef(
+          runtime,
+          home,
+          repoConfig.sourceRoot,
+          session,
+          getDefaultRef(repoConfig.sourceRoot).ref,
+        );
+        createdDefaultWorktrees.push({
+          sourceRoot: repoConfig.sourceRoot,
+          worktreePath: worktree.path,
+        });
+      } else {
+        worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session);
+      }
+
+      const materialized = materializeRepo({
+        runtime,
+        home,
+        rootSourceRoot,
+        session,
+        repoConfig,
+        worktreePath: worktree.path,
+        seedMaterialRoot: repoConfig.sourceRoot,
+        baselinePortsRoot: repoConfig.sourceRoot,
+        worktreeCreated: worktree.created,
+        existingState,
+        dependencyResults: results,
+        persistRepoState(repoState) {
+          sessionState = recordRepoSuccess(sessionState, repoState);
+          saveSessionState(home, sessionState);
+        },
+      });
+
+      results.set(repoConfig.sourceRoot, materialized);
+      sessionState = recordRepoSuccess(sessionState, materialized.state);
+      saveSessionState(home, sessionState);
+    }
+  } catch (error) {
+    if (spawnFromDefaultBranch) {
+      rollbackDefaultBranchSpawn({
+        runtime,
+        home,
+        rootSourceRoot,
+        session,
+        createdWorktrees: createdDefaultWorktrees,
+      });
+    }
+    throw error;
+  }
+
+  return rootWorktreePath;
 }
 
 function assertCleanCheckoutsForCurrentHeadSpawn(

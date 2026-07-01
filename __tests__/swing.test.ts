@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
-import { createRepo, makeTempDir, runMonke, runMonkeAsync } from "./helpers.ts";
+import { createRepo, git, makeTempDir, runMonke, runMonkeAsync } from "./helpers.ts";
 
 test("swing navigates to an existing root repo Session worktree without creating one", () => {
   const sandbox = makeTempDir("swing-session");
@@ -229,6 +229,40 @@ test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions",
   expect(byCodexPr.stdout).toBe(`${worktreeRoot}\n`);
   expect(byCodexPr.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
   expect(readFileSync(openLogPath, "utf8")).toBe(`${codexThreadUrl}\n`);
+});
+
+test("swing creates a missing same-repo GitHub PR Session", () => {
+  const sandbox = makeTempDir("swing-pr-create");
+  const home = path.join(sandbox, "home");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  installSwingGhShim(binDirectory, {
+    "82": {
+      headRefName: "feature/issue-81-flow-market-unit",
+      headRepositoryOwner: { login: "owner" },
+      headRepository: { name: "root" },
+    },
+  });
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "feature/issue-81-flow-market-unit"],
+    monkeHome: home,
+  });
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/issue-81-flow-market-unit");
+  git(repoRoot, ["worktree", "remove", worktreeRoot, "--force"]);
+
+  const result = runMonke({
+    cwd: repoRoot,
+    args: ["swing", "pr:82"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(result.stdout).toBe(`${worktreeRoot}\n`);
+  expect(result.stderr).toContain(`Spawned or updated session feature/issue-81-flow-market-unit`);
+  expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
 });
 
 test("swing --codex escapes percent-encoded URLs for the Windows launcher", () => {

@@ -5,6 +5,7 @@ import { parse, stringify } from "yaml";
 import { MonkeError } from "./errors.ts";
 import { getExpectedWorktreePath, resolveRepoContext, validateWorktreeForSession } from "./git.ts";
 import { createLogger } from "./logger.ts";
+import { spawnSessionFromSourceRootLocked } from "./monke.ts";
 import { listSessionStates } from "./registry.ts";
 import {
   ensureDirectory,
@@ -34,6 +35,10 @@ interface SwingHistory {
 interface ResolvedSwingTarget {
   target: SwingHistoryTarget;
   path: string;
+}
+
+interface ResolveStoredTargetOptions {
+  createIfMissing?: boolean;
 }
 
 interface SwingPickerOption {
@@ -287,10 +292,18 @@ function resolveSwingTarget(
 
   const pullRequestTarget = parsePullRequestTarget(rawTarget);
   if (pullRequestTarget !== null) {
-    return resolveStoredTarget(runtime, home, rootSourceRoot, {
-      kind: "session",
-      session: resolvePullRequestSession(runtime, rootSourceRoot, pullRequestTarget),
-    });
+    return resolveStoredTarget(
+      runtime,
+      home,
+      rootSourceRoot,
+      {
+        kind: "session",
+        session: resolvePullRequestSession(runtime, rootSourceRoot, pullRequestTarget),
+      },
+      {
+        createIfMissing: true,
+      },
+    );
   }
 
   return resolveStoredTarget(runtime, home, rootSourceRoot, {
@@ -304,6 +317,7 @@ function resolveStoredTarget(
   home: string,
   rootSourceRoot: string,
   target: SwingHistoryTarget,
+  options: ResolveStoredTargetOptions = {},
 ): ResolvedSwingTarget {
   if (target.kind === "source") {
     if (!existsSync(rootSourceRoot)) {
@@ -314,9 +328,16 @@ function resolveStoredTarget(
 
   const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, target.session);
   if (!existsSync(worktreePath)) {
-    throw new MonkeError(
-      `Session "${target.session}" does not exist for ${rootSourceRoot}; mt swing never creates worktrees`,
-    );
+    if (options.createIfMissing) {
+      spawnSessionFromSourceRootLocked(runtime, home, rootSourceRoot, target.session, {
+        mode: "current-head",
+      });
+      createLogger(runtime).success(`Spawned or updated session ${target.session}`);
+    } else {
+      throw new MonkeError(
+        `Session "${target.session}" does not exist for ${rootSourceRoot}; mt swing never creates worktrees`,
+      );
+    }
   }
   validateWorktreeForSession(runtime, home, rootSourceRoot, worktreePath, target.session);
   return { target, path: worktreePath };
