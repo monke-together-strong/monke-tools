@@ -2,6 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
+import { createLogger } from "./logger.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 
 export interface WorktreeEntry {
@@ -20,11 +21,16 @@ export interface DefaultBranchRef {
   source: "origin" | "local";
 }
 
+interface ResolveRepoContextOptions {
+  inferSessionName?: boolean;
+  allowExternalSessionWorktree?: boolean;
+}
+
 export function resolveRepoContext(
   runtime: Runtime,
   cwd: string = runtime.cwd,
   home?: string | null,
-  options: { inferSessionName?: boolean } = {},
+  options: ResolveRepoContextOptions = {},
 ): RepoContext {
   const worktreeRoot = trim(
     runGit(runtime, cwd, ["rev-parse", "--path-format=absolute", "--show-toplevel"]),
@@ -41,7 +47,16 @@ export function resolveRepoContext(
     if (!home) {
       throw new MonkeError("Unable to infer the current session without a Monke home");
     }
-    sessionName = inferSessionName(home, sourceRoot, worktreeRoot, currentBranch);
+    sessionName = inferSessionNameForContext(
+      runtime,
+      home,
+      sourceRoot,
+      worktreeRoot,
+      currentBranch,
+      {
+        allowExternalSessionWorktree: options.allowExternalSessionWorktree ?? false,
+      },
+    );
   }
 
   return {
@@ -55,6 +70,33 @@ export function resolveRepoContext(
   };
 }
 
+function inferSessionNameForContext(
+  runtime: Runtime,
+  home: string,
+  sourceRoot: string,
+  worktreeRoot: string,
+  branch: string,
+  options: { allowExternalSessionWorktree: boolean },
+): string {
+  const expectedRoot = getExpectedSessionRoot(home, sourceRoot);
+  const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
+
+  if (isOutsideExpectedRoot(relativeSessionPath)) {
+    if (!options.allowExternalSessionWorktree) {
+      throw new MonkeError(
+        `Expected linked worktree ${worktreeRoot} to live under ${expectedRoot}`,
+      );
+    }
+
+    createLogger(runtime).warning(
+      `Linked worktree ${worktreeRoot} is outside ${expectedRoot}; using current branch "${branch}" as the Session name`,
+    );
+    return branch;
+  }
+
+  return inferSessionName(home, sourceRoot, worktreeRoot, branch);
+}
+
 /** Infer a Session name from a linked worktree path under Monke home. */
 export function inferSessionName(
   home: string,
@@ -62,15 +104,11 @@ export function inferSessionName(
   worktreeRoot: string,
   branch: string,
 ): string {
-  const expectedRoot = path.join(home, "worktrees", path.basename(sourceRoot));
+  const expectedRoot = getExpectedSessionRoot(home, sourceRoot);
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
   const sessionName = toSessionPath(relativeSessionPath);
 
-  if (
-    !relativeSessionPath ||
-    relativeSessionPath.startsWith("..") ||
-    path.isAbsolute(relativeSessionPath)
-  ) {
+  if (isOutsideExpectedRoot(relativeSessionPath)) {
     throw new MonkeError(`Expected linked worktree ${worktreeRoot} to live under ${expectedRoot}`);
   }
 
@@ -80,6 +118,18 @@ export function inferSessionName(
     );
   }
   return sessionName;
+}
+
+function getExpectedSessionRoot(home: string, sourceRoot: string): string {
+  return path.join(home, "worktrees", path.basename(sourceRoot));
+}
+
+function isOutsideExpectedRoot(relativeSessionPath: string): boolean {
+  return (
+    !relativeSessionPath ||
+    relativeSessionPath.startsWith("..") ||
+    path.isAbsolute(relativeSessionPath)
+  );
 }
 
 export function resolveGitRepoRoot(runtime: Runtime, checkoutPath: string): string {

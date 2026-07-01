@@ -17,6 +17,7 @@ import {
 import {
   assertCleanCheckoutForSessionBranchCreation,
   assertFreshSessionWorktreeAvailable,
+  ensureCleanCheckout,
   ensureSessionWorktree,
   ensureFreshSessionWorktreeFromRef,
   getExpectedWorktreePath,
@@ -147,6 +148,9 @@ export function spawnSessionFromSourceRootLocked(
     : existsSync(path.join(rootSourceRoot, "monke.yml"));
   if (!rootConfigExists) {
     assertNoGlobalWorktreePathStateCollisions(home, session, [{ sourceRoot: rootSourceRoot }]);
+    if (options.mode === "current-head" && !options.copyDirty) {
+      ensureCleanCheckout(runtime, rootSourceRoot);
+    }
     const dirtySnapshot = shouldCopyDirty(options)
       ? captureDirtySnapshot(runtime, rootSourceRoot)
       : null;

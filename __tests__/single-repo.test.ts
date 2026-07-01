@@ -161,6 +161,32 @@ test("spawn without monke.yml carries dirty state by default", () => {
   expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
 });
 
+test("spawn --no-dirty without monke.yml rejects dirty source when worktree exists", () => {
+  const sandbox = makeTempDir("single-repo-no-config-existing-no-dirty");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "existing-no-config"],
+    monkeHome: home,
+    binDirectory,
+  });
+  write(repoRoot, "README.md", "dirty\n");
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["spawn", "existing-no-config", "--no-dirty"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(`Source checkout is dirty: ${repoRoot}`);
+});
+
 test("spawn carries tracked modifications by default", () => {
   const sandbox = makeTempDir("single-repo-dirty-modified");
   const binDirectory = path.join(sandbox, "bin");

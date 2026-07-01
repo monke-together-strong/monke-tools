@@ -149,6 +149,25 @@ test("swing caret returns from a Session worktree to the Source checkout", () =>
   expect(result.stderr).toContain(`Switch to ${repoRoot}`);
 });
 
+test("swing allows the current Session worktree to live outside Monke home with a warning", () => {
+  const sandbox = makeTempDir("swing-external-worktree");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  const worktreeRoot = path.join(sandbox, "codex", "winters-echo");
+  git(repoRoot, ["branch", "winters-echo"]);
+  git(repoRoot, ["worktree", "add", worktreeRoot, "winters-echo"]);
+
+  const result = runMonke({ cwd: worktreeRoot, args: ["swing", "^"], monkeHome: home });
+
+  expect(result.stdout).toBe(`${repoRoot}\n`);
+  expect(result.stderr).toContain(
+    `Linked worktree ${worktreeRoot} is outside ${path.join(home, "worktrees", "root")}`,
+  );
+  expect(result.stderr).toContain(`Switch to ${repoRoot}`);
+});
+
 test("swing dash toggles to the Previous Swing target scoped by Root repo", () => {
   const sandbox = makeTempDir("swing-previous");
   const home = path.join(sandbox, "home");

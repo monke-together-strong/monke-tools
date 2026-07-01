@@ -68,7 +68,9 @@ export function runSwing(runtime: Runtime, rawTarget?: string, options: SwingOpt
   }
 
   const home = getMonkeHome(runtime);
-  const context = resolveRepoContext(runtime, runtime.cwd, home);
+  const context = resolveRepoContext(runtime, runtime.cwd, home, {
+    allowExternalSessionWorktree: true,
+  });
   const currentTarget = getCurrentSwingTarget(context);
   navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, rawTarget, options);
 }
@@ -80,7 +82,9 @@ export async function runSwingInteractive(
   options: SwingOptions = {},
 ): Promise<void> {
   const home = getMonkeHome(runtime);
-  const context = resolveRepoContext(runtime, runtime.cwd, home);
+  const context = resolveRepoContext(runtime, runtime.cwd, home, {
+    allowExternalSessionWorktree: true,
+  });
   const currentTarget = getCurrentSwingTarget(context);
   const selectedTarget =
     rawTarget ?? (await selectSwingTarget(runtime, home, context.sourceRoot, currentTarget));
