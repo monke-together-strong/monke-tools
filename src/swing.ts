@@ -3,7 +3,12 @@ import path from "node:path";
 import { parse, stringify } from "yaml";
 
 import { MonkeError } from "./errors.ts";
-import { getExpectedWorktreePath, resolveRepoContext, validateWorktreeForSession } from "./git.ts";
+import {
+  branchExists,
+  getExpectedWorktreePath,
+  resolveRepoContext,
+  validateWorktreeForSession,
+} from "./git.ts";
 import { createLogger } from "./logger.ts";
 import { spawnSessionFromSourceRootLocked } from "./monke.ts";
 import { listSessionStates } from "./registry.ts";
@@ -443,13 +448,38 @@ function ensurePullRequestSessionBranch(
   pullRequestNumber: number,
   session: string,
 ): void {
-  runtime.exec(
-    "git",
-    ["fetch", "origin", `+pull/${pullRequestNumber}/head:refs/heads/${session}`],
-    {
+  const temporaryRef = `refs/monke/pr-heads/${pullRequestNumber}`;
+  try {
+    runtime.exec("git", ["fetch", "origin", `+pull/${pullRequestNumber}/head:${temporaryRef}`], {
       cwd: rootSourceRoot,
-    },
-  );
+    });
+    const pullRequestHead = runtime
+      .exec("git", ["rev-parse", temporaryRef], {
+        cwd: rootSourceRoot,
+      })
+      .stdout.trim();
+
+    if (branchExists(runtime, rootSourceRoot, session)) {
+      const localHead = runtime
+        .exec("git", ["rev-parse", `refs/heads/${session}`], {
+          cwd: rootSourceRoot,
+        })
+        .stdout.trim();
+      if (localHead !== pullRequestHead) {
+        throw new MonkeError(
+          `Local branch "${session}" differs from PR #${pullRequestNumber} head; update or rename it before creating this Swing target.`,
+        );
+      }
+      return;
+    }
+
+    runtime.exec("git", ["branch", session, temporaryRef], { cwd: rootSourceRoot });
+  } finally {
+    runtime.exec("git", ["update-ref", "-d", temporaryRef], {
+      cwd: rootSourceRoot,
+      allowFailure: true,
+    });
+  }
 }
 
 function resolveCurrentGithubRepo(

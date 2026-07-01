@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -286,7 +286,6 @@ test("swing creates a missing same-repo GitHub PR Session", () => {
   git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/82/head`]);
   git(repoRoot, ["switch", "main"]);
   git(repoRoot, ["branch", "-D", prBranch]);
-  git(repoRoot, ["branch", prBranch, "main"]);
   installSwingGhShim(binDirectory, {
     "82": {
       headRefName: prBranch,
@@ -309,6 +308,45 @@ test("swing creates a missing same-repo GitHub PR Session", () => {
   expect(readFileSync(path.join(worktreeRoot, ".env"), "utf8")).toBe("API_PORT=10000\n");
   expect(result.stderr).toContain(`Spawned or updated session ${prBranch}`);
   expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
+});
+
+test("swing rejects missing PR Session when a local PR branch diverges", () => {
+  const sandbox = makeTempDir("swing-pr-stale-local");
+  const home = path.join(sandbox, "home");
+  const binDirectory = path.join(sandbox, "bin");
+  const prBranch = "feature/stale-local";
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "main\n",
+  });
+  const originRoot = path.join(sandbox, "origin.git");
+  mkdirSync(originRoot, { recursive: true });
+  git(originRoot, ["init", "--bare"]);
+  git(repoRoot, ["remote", "add", "origin", originRoot]);
+  git(repoRoot, ["switch", "-c", prBranch]);
+  writeFileSync(path.join(repoRoot, "README.md"), "pr head\n", "utf8");
+  git(repoRoot, ["add", "README.md"]);
+  git(repoRoot, ["commit", "-m", "pr head"]);
+  git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/83/head`]);
+  git(repoRoot, ["switch", "main"]);
+  git(repoRoot, ["branch", "-D", prBranch]);
+  git(repoRoot, ["branch", prBranch, "main"]);
+  installSwingGhShim(binDirectory, {
+    "83": {
+      headRefName: prBranch,
+      headRepositoryOwner: { login: "owner" },
+      headRepository: { name: "root" },
+    },
+  });
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["swing", "pr:83"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(`Local branch "${prBranch}" differs from PR #83 head`);
+  expect(existsSync(getExpectedWorktreePath(home, repoRoot, prBranch))).toBe(false);
 });
 
 test("swing --codex escapes percent-encoded URLs for the Windows launcher", () => {
