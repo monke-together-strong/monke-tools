@@ -65,6 +65,12 @@ test("resource command lock covers command execution and immediate persistence",
         exitCode: 0,
       };
     },
+    async select() {
+      throw new Error("unexpected select");
+    },
+    readLine() {
+      throw new Error("unexpected readLine");
+    },
     writeStdout() {},
     writeStderr() {},
   };
@@ -182,6 +188,12 @@ test("resource command input values are sorted for deterministic stdin", () => {
         exitCode: 0,
       };
     },
+    async select() {
+      throw new Error("unexpected select");
+    },
+    readLine() {
+      throw new Error("unexpected readLine");
+    },
     writeStdout() {},
     writeStderr() {},
   };
@@ -230,13 +242,13 @@ test("pnpm workspaces run resource modules through pnpm-mediated bun", () => {
     externalMappingsInOrder: [],
     externalTargetApps: new Set(),
   };
-  let invocation: { command: string; args: string[] | undefined } | null = null;
+  const invocations: { command: string; args: string[] | undefined }[] = [];
 
   const runtime: Runtime = {
     cwd: sourceRoot,
     env: {},
     exec(command, args, _options) {
-      invocation = { command, args };
+      invocations.push({ command, args });
       writeFileSync(
         args?.[7] ?? "",
         JSON.stringify({ value: { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" } }),
@@ -247,6 +259,12 @@ test("pnpm workspaces run resource modules through pnpm-mediated bun", () => {
         stderr: "",
         exitCode: 0,
       };
+    },
+    async select() {
+      throw new Error("unexpected select");
+    },
+    readLine() {
+      throw new Error("unexpected readLine");
     },
     writeStdout() {},
     writeStderr() {},
@@ -263,6 +281,7 @@ test("pnpm workspaces run resource modules through pnpm-mediated bun", () => {
     onResolvedCommandOutputs() {},
   });
 
+  const invocation = invocations[0];
   expect(invocation?.command).toBe("pnpm");
   expect(invocation?.args?.slice(0, 5)).toEqual([
     "exec",

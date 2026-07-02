@@ -115,11 +115,13 @@ function navigateToSwingTarget(
   selectedTarget: string,
   options: SwingOptions,
 ): void {
+  let moved = false;
   let targetPath = "";
 
   withGlobalLock(home, () => {
     const resolved = resolveSwingTarget(runtime, home, rootSourceRoot, selectedTarget);
-    if (!isSameSwingTarget(resolved.target, currentTarget)) {
+    moved = !isSameSwingTarget(resolved.target, currentTarget);
+    if (moved) {
       saveSwingHistory(home, rootSourceRoot, {
         version: 1,
         current: resolved.target,
@@ -129,6 +131,9 @@ function navigateToSwingTarget(
     targetPath = resolved.path;
   });
 
+  if (moved) {
+    createLogger(runtime).info(`Moved Swing target to ${targetPath}`);
+  }
   requestShellDirectory(runtime, targetPath);
   if (options.codex) {
     openCodexThread(runtime, targetPath);

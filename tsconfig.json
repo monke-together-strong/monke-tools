@@ -19,5 +19,11 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "scripts/**/*.ts",
+    "__tests__/**/*.ts",
+    "skills/internal/agent-session-retrospective/scripts/**/*.ts",
+    "vitest.config.ts"
+  ]
 }

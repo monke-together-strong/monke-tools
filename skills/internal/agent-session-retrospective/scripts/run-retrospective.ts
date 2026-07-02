@@ -27,7 +27,7 @@ function parseFlags(argv: string[]): Flags {
   const flags: Flags = {};
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
-    if (token.startsWith("--")) {
+    if (token?.startsWith("--")) {
       const key = token.slice(2);
       const next = argv[i + 1];
       if (next && !next.startsWith("--")) {

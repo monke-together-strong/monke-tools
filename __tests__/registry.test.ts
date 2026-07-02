@@ -9,21 +9,18 @@ test("allocateLocalPorts skips ports that are already taken inside the reserved 
   const sandbox = makeTempDir("registry-taken");
   const repoConfig = makeRepoConfig(path.join(sandbox, "root"), ["API_PORT"]);
 
-  const listener = Bun.listen({
+  const listener = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    socket: {
-      data() {},
-      open() {},
-      close() {},
-      drain() {},
-      error() {},
-    },
     fetch() {
       return new Response("ok");
     },
   });
-  const reservation = makeReservation(repoConfig.sourceRoot, listener.port, 2);
+  const occupiedPort = listener.port;
+  if (occupiedPort === undefined) {
+    throw new Error("expected Bun.serve to bind a TCP port");
+  }
+  const reservation = makeReservation(repoConfig.sourceRoot, occupiedPort, 2);
 
   try {
     const assignments = allocateLocalPorts({
@@ -36,7 +33,7 @@ test("allocateLocalPorts skips ports that are already taken inside the reserved 
       baselinePorts: new Set(),
     });
 
-    expect(assignments.get("API_PORT")).toBe(listener.port + 1);
+    expect(assignments.get("API_PORT")).toBe(occupiedPort + 1);
   } finally {
     listener.stop(true);
   }
