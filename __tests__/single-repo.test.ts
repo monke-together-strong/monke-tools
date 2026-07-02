@@ -461,8 +461,8 @@ test("spawn -m keeps default branch file content while avoiding source checkout 
   });
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
-  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nDEFAULT_ONLY=1\n");
-  expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\n");
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
+  expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
   expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=10000\nBRANCH_DIRTY=1\n");
 });
 
@@ -612,10 +612,10 @@ test("spawn -m uses resolved default branch env files while avoiding source base
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
   expect(existsSync(path.join(worktreeRoot, ".env.demo"))).toBe(false);
-  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nDEFAULT_ONLY=1\n");
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
   expect(existsSync(path.join(worktreeRoot, "apps/api/.env.demo"))).toBe(false);
   expect(existsSync(path.join(worktreeRoot, ".envrc"))).toBe(false);
-  expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\n");
+  expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
 });
 
 test("spawn -m prefers fetched origin main over stale local main", () => {
