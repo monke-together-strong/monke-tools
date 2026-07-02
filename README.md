@@ -9,7 +9,7 @@ This repo is initialized as a Bun project with Oxlint and Oxfmt wired in as the 
 ```bash
 bun install
 bun test
-bun run lint
+bun run lint:check
 bun run fmt:check
 ```
 

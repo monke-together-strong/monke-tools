@@ -545,9 +545,9 @@ export function parseFixHeader(body: string): { target: string; confidence: stri
   for (const line of body.trim().split("\n")) {
     const targetMatch = line.match(/^\s*Target:\s*(.+)$/i);
     const confidenceMatch = line.match(/^\s*Confidence:\s*(.+)$/i);
-    if (targetMatch) {
+    if (targetMatch?.[1]) {
       target = targetMatch[1].trim();
-    } else if (confidenceMatch) {
+    } else if (confidenceMatch?.[1]) {
       confidence = confidenceMatch[1].trim();
     } else if (line.trim()) {
       kept.push(line.trim());

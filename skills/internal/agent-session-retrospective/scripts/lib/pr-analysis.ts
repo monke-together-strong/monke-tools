@@ -65,6 +65,7 @@ export interface PrAnalysisManifest {
 
 export interface PrWorkItem extends PrWorkItemSummary {
   version: 1;
+  runTs: string;
   baseBranch?: string;
   headBranch?: string;
   changedFiles: string[];
@@ -540,7 +541,7 @@ function materializeDelta(
       : undefined;
 
   const repoDir = repoCacheRoot ? path.join(repoCacheRoot, repo.replaceAll("/", "__")) : null;
-  if (!missingRefNote && repoDir) {
+  if (!missingRefNote && repoDir && openingRef && finalHeadSha) {
     try {
       ensureRepoCache(repo, repoDir, exec);
       runText(exec, "git", ["fetch", "origin", `pull/${number}/head:refs/remotes/pr/${number}`, "--force"], {
@@ -600,11 +601,15 @@ function normalizeCommits(value: unknown): PrCommitReference[] {
       }
       const headline = asString(record?.messageHeadline) ?? asString(record?.message) ?? "";
       const body = asString(record?.messageBody);
-      return {
+      const committedDate = asString(record?.committedDate);
+      const commit: PrCommitReference = {
         sha,
-        committedDate: asString(record?.committedDate),
         message: body ? `${headline}\n\n${body}` : headline,
       };
+      if (committedDate) {
+        commit.committedDate = committedDate;
+      }
+      return commit;
     })
     .filter((entry): entry is PrCommitReference => entry !== null);
 }

@@ -7,12 +7,12 @@ export default defineConfig({
       name: "markdown-as-text",
       enforce: "pre",
       async load(id) {
-        const [path] = id.split("?", 1);
-        if (!path.endsWith(".md")) {
+        const filePath = id.split("?")[0] ?? "";
+        if (!filePath.endsWith(".md")) {
           return null;
         }
 
-        const source = await readFile(path, "utf8");
+        const source = await readFile(filePath, "utf8");
         return `export default ${JSON.stringify(source)};`;
       },
     },

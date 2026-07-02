@@ -343,7 +343,8 @@ export function spawnSessionFromSourceRootLocked(
         worktreePath: worktree.path,
         seedMaterialRoot:
           spawnFromDefaultBranch || isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
-        baselinePortsRoot: isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
+        baselinePortsRoot:
+          spawnFromDefaultBranch || isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
         worktreeCreated: worktree.created,
         existingState,
         dependencyResults: results,
@@ -1168,6 +1169,7 @@ function runBootstrapCommand(
     return;
   }
 
+  createLogger(runtime).info(`Bootstrapping ${repoConfig.sourceRoot} in ${worktreePath}`);
   try {
     runtime.exec("sh", ["-c", repoConfig.bootstrapCommand], {
       cwd: worktreePath,

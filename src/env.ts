@@ -396,6 +396,10 @@ function splitValueAndComment(value: string): { value: string; comment: string }
   return { value, comment: "" };
 }
 
+function describeRedactedValue(value: string): string {
+  return `<redacted length=${value.length}>`;
+}
+
 function replacePortInValue(rawValue: string, newPort: number, location: string): string {
   const leadingWhitespace = rawValue.match(/^\s*/)?.[0] ?? "";
   const trailingWhitespace = rawValue.match(/\s*$/)?.[0] ?? "";
@@ -421,7 +425,9 @@ function replacePortInValue(rawValue: string, newPort: number, location: string)
   } else if (innerValue.includes("://")) {
     nextInnerValue = replaceUrlPort(innerValue, newPort, location);
   } else {
-    throw new MonkeError(`Unsupported env value at ${location}: ${innerValue}`);
+    throw new MonkeError(
+      `Unsupported env value at ${location}: ${describeRedactedValue(innerValue)}`,
+    );
   }
 
   const nextCore = quote ? `${quote}${nextInnerValue}${quote}` : nextInnerValue;
@@ -433,11 +439,11 @@ function replaceUrlPort(value: string, newPort: number, location: string): strin
   try {
     parsed = new URL(value);
   } catch {
-    throw new MonkeError(`Malformed URL or DSN at ${location}: ${value}`);
+    throw new MonkeError(`Malformed URL or DSN at ${location}: ${describeRedactedValue(value)}`);
   }
 
   if (!parsed.port) {
-    throw new MonkeError(`Expected explicit port at ${location}: ${value}`);
+    throw new MonkeError(`Expected explicit port at ${location}: ${describeRedactedValue(value)}`);
   }
 
   const schemeIndex = value.indexOf("://");
@@ -458,21 +464,25 @@ function replaceUrlPort(value: string, newPort: number, location: string): strin
   if (hostPort.startsWith("[")) {
     const bracketIndex = hostPort.indexOf("]");
     if (bracketIndex < 0 || hostPort[bracketIndex + 1] !== ":") {
-      throw new MonkeError(`Expected explicit port at ${location}: ${value}`);
+      throw new MonkeError(
+        `Expected explicit port at ${location}: ${describeRedactedValue(value)}`,
+      );
     }
     portStartInHostPort = bracketIndex + 2;
     currentPort = hostPort.slice(portStartInHostPort);
   } else {
     const colonIndex = hostPort.lastIndexOf(":");
     if (colonIndex < 0) {
-      throw new MonkeError(`Expected explicit port at ${location}: ${value}`);
+      throw new MonkeError(
+        `Expected explicit port at ${location}: ${describeRedactedValue(value)}`,
+      );
     }
     portStartInHostPort = colonIndex + 1;
     currentPort = hostPort.slice(portStartInHostPort);
   }
 
   if (!/^\d+$/.test(currentPort)) {
-    throw new MonkeError(`Malformed explicit port at ${location}: ${value}`);
+    throw new MonkeError(`Malformed explicit port at ${location}: ${describeRedactedValue(value)}`);
   }
 
   const absolutePortStart = authorityStart + (lastAt >= 0 ? lastAt + 1 : 0) + portStartInHostPort;
@@ -497,18 +507,24 @@ function extractPort(rawValue: string, location: string): number {
   }
 
   if (!unwrapped.includes("://")) {
-    throw new MonkeError(`Unsupported env value at ${location}: ${unwrapped}`);
+    throw new MonkeError(
+      `Unsupported env value at ${location}: ${describeRedactedValue(unwrapped)}`,
+    );
   }
 
   let parsed: URL;
   try {
     parsed = new URL(unwrapped);
   } catch {
-    throw new MonkeError(`Malformed URL or DSN at ${location}: ${unwrapped}`);
+    throw new MonkeError(
+      `Malformed URL or DSN at ${location}: ${describeRedactedValue(unwrapped)}`,
+    );
   }
 
   if (!parsed.port) {
-    throw new MonkeError(`Expected explicit port at ${location}: ${unwrapped}`);
+    throw new MonkeError(
+      `Expected explicit port at ${location}: ${describeRedactedValue(unwrapped)}`,
+    );
   }
 
   return Number(parsed.port);

@@ -4,7 +4,7 @@ Check [./CONTEXT.md](./CONTEXT.md) for terminology questions.
 
 - Package manager: `bun`
 - Test: `bun test`
-- Lint: `bun run lint`
+- Lint: `bun run lint:check`
 - Format check: `bun run fmt:check`
 - Follow git flow, don't create `codex/` branches
 - Put clean source clones created for testing under `tmp/`.
