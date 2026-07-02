@@ -60,7 +60,7 @@ The Skill source tree is organized as:
 ## `monke.yml`
 
 Each repo that participates in a session graph declares its apps, env rewrites, optional dependency repos, and optional bootstrap or seed behavior in `monke.yml`.
-An app `path` may be `.` when the app lives at the repo root; `envFile` is resolved relative to that app path.
+An app `path` may be `.` when the app lives at the repo root; `envFile` is resolved relative to that app path. `envFile` defaults to `.env`, so omit it for apps that use `.env` and set it only for non-default files like `.env.local`.
 
 ```yaml
 seedPaths:
@@ -69,7 +69,6 @@ bootstrapCommand: pnpm install && pnpm generate
 apps:
   api:
     path: apps/api
-    envFile: .env.local
     mappings:
       - port: API_PORT
         env: PORT

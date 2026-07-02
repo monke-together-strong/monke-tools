@@ -6,7 +6,6 @@ Each participating repo declares its session behavior in `monke.yml`.
 apps:
   api:
     path: apps/api
-    envFile: .env.local
     mappings:
       - port: API_PORT
         env: PORT
@@ -35,7 +34,7 @@ Key fields:
 - `resources`: literal per-session values; supports `${session}` and `${user}`.
 - `cleanupCommand`: teardown command used by `mt cleanup`.
 
-An app `path` may be `.` when the app lives at the repo root; `envFile` is resolved relative to that app path.
+An app `path` may be `.` when the app lives at the repo root; `envFile` is resolved relative to that app path. `envFile` defaults to `.env`, so omit it for apps that use `.env` and set it only for non-default files like `.env.local`.
 
 Bootstrap commands run inside the session worktree after monke-tools writes env files, dependency paths, and deterministic Resource values. Dynamic Resource command outputs are resolved after bootstrap when a bootstrap command exists, so resource modules can import packages installed or linked by bootstrap.
 
