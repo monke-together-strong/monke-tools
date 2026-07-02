@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
-import { createRepo, makeTempDir, runMonke, runMonkeAsync } from "./helpers.ts";
+import { createRepo, git, makeTempDir, runMonke, runMonkeAsync } from "./helpers.ts";
 
 test("swing navigates to an existing root repo Session worktree without creating one", () => {
   const sandbox = makeTempDir("swing-session");
@@ -149,6 +149,27 @@ test("swing caret returns from a Session worktree to the Source checkout", () =>
   expect(result.stderr).toContain(`Switch to ${repoRoot}`);
 });
 
+test("swing allows the current Session worktree to live outside Monke home with a warning", () => {
+  const sandbox = makeTempDir("swing-external-worktree");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  const worktreeRoot = path.join(sandbox, "codex", "winters-echo");
+  git(repoRoot, ["branch", "winters-echo"]);
+  git(repoRoot, ["worktree", "add", worktreeRoot, "winters-echo"]);
+
+  const result = runMonke({ cwd: worktreeRoot, args: ["swing", "^"], monkeHome: home });
+  const backToExternal = runMonke({ cwd: repoRoot, args: ["swing", "-"], monkeHome: home });
+
+  expect(result.stdout).toBe(`${repoRoot}\n`);
+  expect(backToExternal.stdout).toBe(`${worktreeRoot}\n`);
+  expect(result.stderr).toContain(
+    `Linked worktree ${worktreeRoot} is outside ${path.join(home, "worktrees", "root")}`,
+  );
+  expect(result.stderr).toContain(`Switch to ${repoRoot}`);
+});
+
 test("swing dash toggles to the Previous Swing target scoped by Root repo", () => {
   const sandbox = makeTempDir("swing-previous");
   const home = path.join(sandbox, "home");
@@ -229,6 +250,103 @@ test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions",
   expect(byCodexPr.stdout).toBe(`${worktreeRoot}\n`);
   expect(byCodexPr.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
   expect(readFileSync(openLogPath, "utf8")).toBe(`${codexThreadUrl}\n`);
+});
+
+test("swing creates a missing same-repo GitHub PR Session", () => {
+  const sandbox = makeTempDir("swing-pr-create");
+  const home = path.join(sandbox, "home");
+  const binDirectory = path.join(sandbox, "bin");
+  const prBranch = "feature/issue-81-flow-market-unit";
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "main\n",
+  });
+  const originRoot = path.join(sandbox, "origin.git");
+  mkdirSync(originRoot, { recursive: true });
+  git(originRoot, ["init", "--bare"]);
+  git(repoRoot, ["remote", "add", "origin", originRoot]);
+  git(repoRoot, ["switch", "-c", prBranch]);
+  writeFileSync(path.join(repoRoot, "README.md"), "pr head\n", "utf8");
+  mkdirSync(path.join(repoRoot, "apps/api"), { recursive: true });
+  writeFileSync(path.join(repoRoot, "apps/api/.env.local"), "PORT=3000\n", "utf8");
+  writeFileSync(
+    path.join(repoRoot, "monke.yml"),
+    `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+    "utf8",
+  );
+  git(repoRoot, ["add", "README.md"]);
+  git(repoRoot, ["add", "apps/api/.env.local", "monke.yml"]);
+  git(repoRoot, ["commit", "-m", "pr head"]);
+  git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/82/head`]);
+  git(repoRoot, ["switch", "main"]);
+  git(repoRoot, ["branch", "-D", prBranch]);
+  installSwingGhShim(binDirectory, {
+    "82": {
+      headRefName: prBranch,
+      headRepositoryOwner: { login: "owner" },
+      headRepository: { name: "root" },
+    },
+  });
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
+
+  const result = runMonke({
+    cwd: repoRoot,
+    args: ["swing", "pr:82"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(result.stdout).toBe(`${worktreeRoot}\n`);
+  expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf8")).toBe("pr head\n");
+  expect(readFileSync(path.join(worktreeRoot, "apps/api/.env.local"), "utf8")).toBe("PORT=10000\n");
+  expect(readFileSync(path.join(worktreeRoot, ".env"), "utf8")).toBe("API_PORT=10000\n");
+  expect(result.stderr).toContain(`Spawned or updated session ${prBranch}`);
+  expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
+});
+
+test("swing rejects missing PR Session when a local PR branch diverges", () => {
+  const sandbox = makeTempDir("swing-pr-stale-local");
+  const home = path.join(sandbox, "home");
+  const binDirectory = path.join(sandbox, "bin");
+  const prBranch = "feature/stale-local";
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "main\n",
+  });
+  const originRoot = path.join(sandbox, "origin.git");
+  mkdirSync(originRoot, { recursive: true });
+  git(originRoot, ["init", "--bare"]);
+  git(repoRoot, ["remote", "add", "origin", originRoot]);
+  git(repoRoot, ["switch", "-c", prBranch]);
+  writeFileSync(path.join(repoRoot, "README.md"), "pr head\n", "utf8");
+  git(repoRoot, ["add", "README.md"]);
+  git(repoRoot, ["commit", "-m", "pr head"]);
+  git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/83/head`]);
+  git(repoRoot, ["switch", "main"]);
+  git(repoRoot, ["branch", "-D", prBranch]);
+  git(repoRoot, ["branch", prBranch, "main"]);
+  installSwingGhShim(binDirectory, {
+    "83": {
+      headRefName: prBranch,
+      headRepositoryOwner: { login: "owner" },
+      headRepository: { name: "root" },
+    },
+  });
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["swing", "pr:83"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(`Local branch "${prBranch}" differs from PR #83 head`);
+  expect(existsSync(getExpectedWorktreePath(home, repoRoot, prBranch))).toBe(false);
 });
 
 test("swing --codex escapes percent-encoded URLs for the Windows launcher", () => {

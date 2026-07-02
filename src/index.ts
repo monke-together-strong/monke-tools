@@ -12,8 +12,8 @@ import type { SwingOptions } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt spawn <session> [-m|--main|--master]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
-const SPAWN_USAGE = "Usage: mt spawn <session> [-m|--main|--master]";
+  "Usage:\n  mt spawn <session> [--no-dirty] [-m|--main|--master]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
+const SPAWN_USAGE = "Usage: mt spawn <session> [--no-dirty] [-m|--main|--master]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
@@ -23,6 +23,12 @@ const SWING_USAGE = "Usage: mt swing [target] [--codex]";
 interface RawCleanupCommandOptions {
   merged?: boolean;
   dryRun?: boolean;
+}
+
+interface RawSpawnCommandOptions {
+  main?: boolean;
+  master?: boolean;
+  dirty?: boolean;
 }
 
 /** Run the Monke Tools CLI. */
@@ -77,12 +83,17 @@ function createProgram(
     .helpOption(false)
     .allowExcessArguments(false)
     .argument("<session>")
+    .option("--no-dirty")
     .option("-m, --main")
     .option("--master")
-    .action((session: string, options: { main?: boolean; master?: boolean }) => {
-      runSpawn(runtime, session, {
-        mode: options.main || options.master ? "default-branch" : "current-head",
-      });
+    .action((session: string, options: RawSpawnCommandOptions) => {
+      runSpawn(
+        runtime,
+        session,
+        options.main || options.master
+          ? { mode: "default-branch" }
+          : { mode: "current-head", copyDirty: options.dirty !== false },
+      );
     });
 
   program

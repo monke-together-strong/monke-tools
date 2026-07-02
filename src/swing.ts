@@ -3,8 +3,14 @@ import path from "node:path";
 import { parse, stringify } from "yaml";
 
 import { MonkeError } from "./errors.ts";
-import { getExpectedWorktreePath, resolveRepoContext, validateWorktreeForSession } from "./git.ts";
+import {
+  branchExists,
+  getExpectedWorktreePath,
+  resolveRepoContext,
+  validateWorktreeForSession,
+} from "./git.ts";
 import { createLogger } from "./logger.ts";
+import { spawnSessionFromSourceRootLocked } from "./monke.ts";
 import { listSessionStates } from "./registry.ts";
 import {
   ensureDirectory,
@@ -23,6 +29,11 @@ type SwingHistoryTarget =
   | {
       kind: "session";
       session: string;
+    }
+  | {
+      kind: "external-session";
+      session: string;
+      path: string;
     };
 
 interface SwingHistory {
@@ -34,6 +45,11 @@ interface SwingHistory {
 interface ResolvedSwingTarget {
   target: SwingHistoryTarget;
   path: string;
+}
+
+interface ResolveStoredTargetOptions {
+  createIfMissing?: boolean;
+  prepareCreate?: () => void;
 }
 
 interface SwingPickerOption {
@@ -52,6 +68,11 @@ interface PullRequestSwingTarget {
   };
 }
 
+interface ResolvedPullRequestSession {
+  number: number;
+  session: string;
+}
+
 export interface SwingOptions {
   codex?: boolean;
 }
@@ -63,8 +84,10 @@ export function runSwing(runtime: Runtime, rawTarget?: string, options: SwingOpt
   }
 
   const home = getMonkeHome(runtime);
-  const context = resolveRepoContext(runtime, runtime.cwd, home);
-  const currentTarget = getCurrentSwingTarget(context);
+  const context = resolveRepoContext(runtime, runtime.cwd, home, {
+    allowExternalSessionWorktree: true,
+  });
+  const currentTarget = getCurrentSwingTarget(home, context);
   navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, rawTarget, options);
 }
 
@@ -75,8 +98,10 @@ export async function runSwingInteractive(
   options: SwingOptions = {},
 ): Promise<void> {
   const home = getMonkeHome(runtime);
-  const context = resolveRepoContext(runtime, runtime.cwd, home);
-  const currentTarget = getCurrentSwingTarget(context);
+  const context = resolveRepoContext(runtime, runtime.cwd, home, {
+    allowExternalSessionWorktree: true,
+  });
+  const currentTarget = getCurrentSwingTarget(home, context);
   const selectedTarget =
     rawTarget ?? (await selectSwingTarget(runtime, home, context.sourceRoot, currentTarget));
   navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, selectedTarget, options);
@@ -287,10 +312,31 @@ function resolveSwingTarget(
 
   const pullRequestTarget = parsePullRequestTarget(rawTarget);
   if (pullRequestTarget !== null) {
-    return resolveStoredTarget(runtime, home, rootSourceRoot, {
-      kind: "session",
-      session: resolvePullRequestSession(runtime, rootSourceRoot, pullRequestTarget),
-    });
+    const pullRequestSession = resolvePullRequestSession(
+      runtime,
+      rootSourceRoot,
+      pullRequestTarget,
+    );
+    return resolveStoredTarget(
+      runtime,
+      home,
+      rootSourceRoot,
+      {
+        kind: "session",
+        session: pullRequestSession.session,
+      },
+      {
+        createIfMissing: true,
+        prepareCreate() {
+          ensurePullRequestSessionBranch(
+            runtime,
+            rootSourceRoot,
+            pullRequestSession.number,
+            pullRequestSession.session,
+          );
+        },
+      },
+    );
   }
 
   return resolveStoredTarget(runtime, home, rootSourceRoot, {
@@ -304,6 +350,7 @@ function resolveStoredTarget(
   home: string,
   rootSourceRoot: string,
   target: SwingHistoryTarget,
+  options: ResolveStoredTargetOptions = {},
 ): ResolvedSwingTarget {
   if (target.kind === "source") {
     if (!existsSync(rootSourceRoot)) {
@@ -312,11 +359,24 @@ function resolveStoredTarget(
     return { target, path: rootSourceRoot };
   }
 
+  if (target.kind === "external-session") {
+    validateExternalSessionTarget(runtime, rootSourceRoot, target);
+    return { target, path: target.path };
+  }
+
   const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, target.session);
   if (!existsSync(worktreePath)) {
-    throw new MonkeError(
-      `Session "${target.session}" does not exist for ${rootSourceRoot}; mt swing never creates worktrees`,
-    );
+    if (options.createIfMissing) {
+      options.prepareCreate?.();
+      spawnSessionFromSourceRootLocked(runtime, home, rootSourceRoot, target.session, {
+        mode: "session-branch",
+      });
+      createLogger(runtime).success(`Spawned or updated session ${target.session}`);
+    } else {
+      throw new MonkeError(
+        `Session "${target.session}" does not exist for ${rootSourceRoot}; mt swing never creates worktrees`,
+      );
+    }
   }
   validateWorktreeForSession(runtime, home, rootSourceRoot, worktreePath, target.session);
   return { target, path: worktreePath };
@@ -326,7 +386,7 @@ function resolvePullRequestSession(
   runtime: Runtime,
   rootSourceRoot: string,
   pullRequestTarget: PullRequestSwingTarget,
-): string {
+): ResolvedPullRequestSession {
   const currentRepo = resolveCurrentGithubRepo(runtime, rootSourceRoot);
   if (pullRequestTarget.repo && !isSameGithubRepo(pullRequestTarget.repo, currentRepo)) {
     throw new MonkeError(
@@ -379,7 +439,47 @@ function resolvePullRequestSession(
     );
   }
 
-  return headRefName;
+  return { number: pullRequestNumber, session: headRefName };
+}
+
+function ensurePullRequestSessionBranch(
+  runtime: Runtime,
+  rootSourceRoot: string,
+  pullRequestNumber: number,
+  session: string,
+): void {
+  const temporaryRef = `refs/monke/pr-heads/${pullRequestNumber}`;
+  try {
+    runtime.exec("git", ["fetch", "origin", `+pull/${pullRequestNumber}/head:${temporaryRef}`], {
+      cwd: rootSourceRoot,
+    });
+    const pullRequestHead = runtime
+      .exec("git", ["rev-parse", temporaryRef], {
+        cwd: rootSourceRoot,
+      })
+      .stdout.trim();
+
+    if (branchExists(runtime, rootSourceRoot, session)) {
+      const localHead = runtime
+        .exec("git", ["rev-parse", `refs/heads/${session}`], {
+          cwd: rootSourceRoot,
+        })
+        .stdout.trim();
+      if (localHead !== pullRequestHead) {
+        throw new MonkeError(
+          `Local branch "${session}" differs from PR #${pullRequestNumber} head; update or rename it before creating this Swing target.`,
+        );
+      }
+      return;
+    }
+
+    runtime.exec("git", ["branch", session, temporaryRef], { cwd: rootSourceRoot });
+  } finally {
+    runtime.exec("git", ["update-ref", "-d", temporaryRef], {
+      cwd: rootSourceRoot,
+      allowFailure: true,
+    });
+  }
 }
 
 function resolveCurrentGithubRepo(
@@ -438,7 +538,7 @@ function isSameGithubRepo(
   );
 }
 
-function getCurrentSwingTarget(context: RepoContext): SwingHistoryTarget {
+function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistoryTarget {
   if (context.isSourceCheckout) {
     return { kind: "source" };
   }
@@ -447,10 +547,17 @@ function getCurrentSwingTarget(context: RepoContext): SwingHistoryTarget {
     throw new MonkeError("Unable to infer the current Session for Previous Swing target history");
   }
 
-  return {
-    kind: "session",
-    session: context.sessionName,
-  };
+  const expectedPath = getExpectedWorktreePath(home, context.sourceRoot, context.sessionName);
+  return path.normalize(context.worktreeRoot) === path.normalize(expectedPath)
+    ? {
+        kind: "session",
+        session: context.sessionName,
+      }
+    : {
+        kind: "external-session",
+        session: context.sessionName,
+        path: context.worktreeRoot,
+      };
 }
 
 function isSameSwingTarget(left: SwingHistoryTarget, right: SwingHistoryTarget): boolean {
@@ -460,7 +567,39 @@ function isSameSwingTarget(left: SwingHistoryTarget, right: SwingHistoryTarget):
   if (left.kind === "source") {
     return true;
   }
-  return right.kind === "session" && left.session === right.session;
+  if (left.kind === "session") {
+    return right.kind === "session" && left.session === right.session;
+  }
+  return (
+    right.kind === "external-session" &&
+    left.session === right.session &&
+    path.normalize(left.path) === path.normalize(right.path)
+  );
+}
+
+function validateExternalSessionTarget(
+  runtime: Runtime,
+  rootSourceRoot: string,
+  target: Extract<SwingHistoryTarget, { kind: "external-session" }>,
+): void {
+  if (!existsSync(target.path)) {
+    throw new MonkeError(`External Session worktree does not exist at ${target.path}`);
+  }
+
+  const context = resolveRepoContext(runtime, target.path, null, { inferSessionName: false });
+  if (context.isSourceCheckout) {
+    throw new MonkeError(`Expected ${target.path} to be a linked session worktree`);
+  }
+  if (path.normalize(context.sourceRoot) !== path.normalize(rootSourceRoot)) {
+    throw new MonkeError(
+      `Expected worktree ${target.path} to belong to ${rootSourceRoot}, found ${context.sourceRoot}`,
+    );
+  }
+  if (context.currentBranch !== target.session) {
+    throw new MonkeError(
+      `Expected worktree ${target.path} to be on branch ${target.session}, found ${context.currentBranch}`,
+    );
+  }
 }
 
 function loadSwingHistory(home: string, rootSourceRoot: string): SwingHistory {

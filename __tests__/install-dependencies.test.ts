@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -107,7 +108,15 @@ test("install-local continues to skill installation after dependency installatio
   expect(readFileSync(monkeToolsLog, "utf8")).toBe(
     `install-dependencies\nshell install\nskills local-install ${checkout}\n`,
   );
+  expect(readFileSync(path.join(home, ".local", "bin", "mt"), "utf8")).toBe(
+    '#!/bin/sh\nexec "$(dirname "$0")/monke-tools" "$@"\n',
+  );
+  expect(readFileSync(path.join(home, ".local", "bin", "monke"), "utf8")).toBe(
+    '#!/bin/sh\nexec "$(dirname "$0")/monke-tools" "$@"\n',
+  );
+  expect(existsSync(path.join(home, ".local", "bin", "monke-tools"))).toBe(true);
   expect(result.stdout).toContain("Installed monke-tools");
+  expect(result.stdout).toContain(path.join(home, ".local", "bin", "monke"));
 });
 
 test("install-local prunes old bun build artifacts after a successful build", () => {
