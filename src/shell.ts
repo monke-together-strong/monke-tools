@@ -92,6 +92,10 @@ mt() {
 
   return "$__monke_mt_status"
 }
+
+monke() {
+  mt "$@"
+}
 `;
 }
 

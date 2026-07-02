@@ -152,6 +152,7 @@ test("shell init emits bash and zsh adapters", () => {
   );
   expect(zsh.stdout).toContain("# monke-tools shell integration for zsh");
   expect(zsh.stdout).toContain('cd -- "$__monke_mt_target"');
+  expect(zsh.stdout).toContain('monke() {\n  mt "$@"\n}');
   expect(bash.stderr).toBe("");
   expect(zsh.stderr).toBe("");
 });
