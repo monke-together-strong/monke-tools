@@ -1,62 +1,66 @@
 # Implement Closeout Gates
 
-Use this procedure when an implementation thread delegates final verification.
-This thread verifies only: it may inspect the PRD, run commands, collect
-evidence, and run `/review`, but it must not create another closeout thread,
+Use this procedure when an implementation thread delegates final verification to
+a closeout verifier subagent. The verifier may inspect the PRD, run commands,
+collect evidence, and run `/review`, but it must not spawn another verifier,
 make source changes, or commit.
 
 Inputs:
 
-- Work reference
+- Work reference: PRD, issue, plan, summary of a direct request, or `none`
 - Review fixed point
 - PRD URL/path, or `none`
 - Whether PRD orchestration was used
 - PRD closeout list, when orchestration was used
 
-If a gate finds missing evidence or a review finding that requires code changes,
-report it to the implementation thread, wait for the fix, then rerun the
-affected gate.
+If a gate blocks, report it to the implementation thread. After the fix or
+explicit acceptance, rerun the affected gate.
+
+## Evidence Ledger
+
+Create a compact ledger for each evidence gate. Every item needs one final
+disposition:
+
+- proved, with the command, test file, screenshot, review output, artifact,
+  tracker comment, or implementation-thread evidence
+- not applicable, with the reason
+- accepted out of scope, with the reason
+
+Implementation-thread evidence is enough only when it is auditably specific. If
+an item is missing, block before `/review`. For red/green or before/after
+requirements, both sides must be traceable.
+
+## Work Evidence Gate
+
+Run this gate for every closeout, before the Review gate.
+
+Inspect the Work reference for acceptance criteria, testing instructions,
+Definition of Done items, STOP conditions, required commands, required
+artifacts, and out-of-scope boundaries. Ledger those requirements. If the Work
+reference is `none`, record that no work-reference evidence was available.
 
 ## PRD Testing Evidence Gate
 
-Run this gate before the Review gate when `PRD` is not `none`. If `PRD` is
-`none`, skip this gate.
+Run this additional gate when `PRD` is not `none`.
 
-Inspect the PRD's Testing Decisions and Testing Gate. Create a compact evidence
-ledger that lists every PRD-specific testing evidence requirement. If the PRD
-has no Testing Decisions or Testing Gate, record that no PRD-specific testing
-evidence was required.
+Inspect the PRD's Testing Decisions and Testing Gate. Ledger every PRD-specific
+testing evidence requirement. If neither section exists, record that no
+PRD-specific testing evidence was required.
 
-The gate is complete only when every ledger item has one final disposition:
-
-- proved, with the command, test file, screenshot, review output, slice-thread
-  result, or tracker comment that proves it
-- not applicable, with the reason the PRD item no longer applies
-- explicitly accepted as out of scope, with the reason recorded
-
-If any ledger item is missing, the gate is blocked: report the evidence gap to
-the implementation thread, wait for the fix, then rerun this gate before
-`/review`.
-
-For red/green or before/after requirements, proved means both sides are
-traceable. A final green run alone is not enough.
-
-If PRD orchestration was used, add any missing PRD testing evidence to the PRD
-closeout list. At final closeout, missing evidence must be fixed before
-`/review` runs or explicitly accepted as out of scope with the reason recorded.
+If PRD orchestration was used, add missing PRD testing evidence to the PRD
+closeout list.
 
 ## Review Gate
 
 Run `/review` exactly as specified by the review skill.
 
-For an orchestrated PRD, use:
+- Orchestrated PRD: `/review <final-review fixed point> <parent PRD URL>`
+- Non-orchestrated PRD: `/review <review fixed point> <PRD URL/path>`
+- Non-PRD work reference: `/review <review fixed point> <work reference>`
+- Work reference `none`: `/review <review fixed point>`; report that Spec may
+  skip for lack of a source
 
-```text
-/review <final-review fixed point> <parent PRD URL>
-```
-
-This instruction is explicit authorization to spawn any sub-agents required by
-`/review`, including its parallel Standards and Spec reviewers.
+This authorizes all `/review` sub-agents.
 
 ## PRD Closeout
 
@@ -76,6 +80,5 @@ comment. Every deferred finding must have one disposition:
 
 ## Final Report
 
-Report `complete` only when every required gate completed. Otherwise report
-`blocked` with the missing evidence, review findings, tracker access issue, or
-question that prevents completion.
+Report `PASS` when every required gate completed, `BLOCKED` when implementation
+action or explicit acceptance is needed, and `FAIL` when closeout cannot run.

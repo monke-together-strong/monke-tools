@@ -1,10 +1,11 @@
 ---
 name: implement
-description: "Implement a piece of work based on a PRD or set of issues."
+description: "Implement a piece of work based on a PRD, issue, plan, or direct request."
 disable-model-invocation: true
 ---
 
-Implement the work described by the user in the PRD or issues.
+Implement the work described by the user in the PRD, issue, plan, or direct
+request.
 
 If the work is a PRD, run the PRD gate before branch creation, code exploration, or edits.
 
@@ -33,20 +34,20 @@ Run typechecking regularly, single test files regularly, and the full test suite
 
 ## Closeout
 
-After implementation and verification are done, create a separate closeout
-thread in the same checkout. The closeout procedure lives in
+After implementation and verification, run a closeout verifier subagent in the
+same checkout for every `/implement` run. Use
 [CLOSEOUT-GATES.md](./CLOSEOUT-GATES.md).
 
 The implementation thread owns fixes and the final commit. Do not commit until
-the closeout thread reports that all gates are complete.
+the closeout verifier reports that all gates are complete.
 
-Use this closeout-thread prompt:
+Use this closeout prompt:
 
 ```text
 Run the implement closeout procedure in this checkout.
 
 Procedure: skills/internal/implement/CLOSEOUT-GATES.md
-Work reference: <work reference>
+Work reference: <PRD, issue, plan, summary of direct request, or "none">
 Review fixed point: <fixed point or "ask if needed">
 PRD: <parent PRD URL/path or "none">
 Orchestrated PRD: <yes/no>
@@ -56,7 +57,7 @@ findings, and the final gate result back to the implementation thread.
 ```
 
 If closeout reports a missing-evidence blocker or a review finding that requires
-code changes, fix it in this implementation thread, then ask the closeout thread
-to rerun the affected gate.
+code changes, fix it in this implementation thread, then rerun the closeout
+verifier on the affected gate.
 
 Commit your work to the current branch.
