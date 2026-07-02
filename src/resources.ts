@@ -559,6 +559,10 @@ function resolveResourceUser(env: Record<string, string | undefined>): string {
   return env.USER?.trim() || env.LOGNAME?.trim() || env.USERNAME?.trim() || "unknown";
 }
 
+function describeRedactedValue(value: string): string {
+  return `<redacted length=${value.length}>`;
+}
+
 function rejectResourceValueCollisions(options: {
   home: string;
   rootSourceRoot: string;
@@ -585,7 +589,7 @@ function rejectResourceValueCollisions(options: {
         }
 
         throw new MonkeError(
-          `Resource value collision for ${value.env}=${value.value} in ${options.sourceRoot}; retained session ${state.session} already owns that value`,
+          `Resource value collision for ${value.env}=${describeRedactedValue(value.value)} in ${options.sourceRoot}; retained session ${state.session} already owns that value`,
         );
       }
     }

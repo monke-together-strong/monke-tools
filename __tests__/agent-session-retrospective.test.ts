@@ -241,8 +241,8 @@ describe("buildBundles", () => {
     };
     const bundles = buildBundles("ts", [eligible], []);
     const byRepo = Object.fromEntries(bundles.map((bundle) => [bundle.repoKey, bundle]));
-    expect(byRepo["/repo"].sessions[0].role).toBe("primary");
-    expect(byRepo["/other"].sessions[0].role).toBe("secondary");
+    expect(byRepo["/repo"]?.sessions[0]?.role).toBe("primary");
+    expect(byRepo["/other"]?.sessions[0]?.role).toBe("secondary");
   });
 });
 
@@ -350,7 +350,11 @@ describe("validateFindings", () => {
 
   test("drops episodes authored for a secondary session (friction is primary-only)", () => {
     const bundle = bundleWith(["t0"]);
-    bundle.sessions[0].role = "secondary";
+    const session = bundle.sessions[0];
+    if (!session) {
+      throw new Error("expected bundleWith to create one session");
+    }
+    session.role = "secondary";
     const findings: RepoFindings = {
       repoKey: "/repo",
       frictionEpisodes: [{ id: "e1", sessionId: "s1", citedTurnRefs: ["t0"], body: "secondary" }],
@@ -371,7 +375,7 @@ describe("validateFindings", () => {
       repeatedAsks: [{ label: "x", exampleSessionIds: ["s1", "ghost"], body: "b" }],
     };
     const result = validateFindings(findings, bundle);
-    expect(result.repeatedAsks[0].exampleSessionIds).toEqual(["s1"]);
+    expect(result.repeatedAsks[0]?.exampleSessionIds).toEqual(["s1"]);
   });
 });
 
@@ -642,7 +646,7 @@ describe("PR trajectory analysis", () => {
       }
       if (command === "gh" && args[0] === "pr" && args[1] === "list") {
         expect(args.at(-1)).toBe("number,url,title,createdAt,mergedAt");
-        const search = args[args.indexOf("--search") + 1];
+        const search = args[args.indexOf("--search") + 1] ?? "";
         const byDay: Record<string, unknown[]> = {
           "merged:2026-05-21..2026-05-21": [
             {
@@ -684,7 +688,7 @@ describe("PR trajectory analysis", () => {
         return { status: 0, stdout: JSON.stringify(byDay[search] ?? []), stderr: "" };
       }
       if (command === "gh" && args[0] === "pr" && args[1] === "view") {
-        const number = args[2];
+        const number = args[2] ?? "";
         const fields = args.at(-1);
         if (fields === "files") {
           const filesByNumber: Record<string, unknown> = {
@@ -1034,8 +1038,12 @@ describe("runCollect dedupe", () => {
     expect(sessions).toBe(1);
     expect(result.skipped["duplicate-file"]).toBe(1);
     // The most-complete copy (long.jsonl, 5 turns) must be the one retained.
-    const bundle = JSON.parse(readFileSync(result.bundles[0].path, "utf8")) as RepoBundle;
-    expect(bundle.sessions[0].turns).toHaveLength(5);
+    const bundlePath = result.bundles[0]?.path;
+    if (!bundlePath) {
+      throw new Error("expected one bundle to be written");
+    }
+    const bundle = JSON.parse(readFileSync(bundlePath, "utf8")) as RepoBundle;
+    expect(bundle.sessions[0]?.turns).toHaveLength(5);
   });
 });
 

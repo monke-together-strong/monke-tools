@@ -365,12 +365,12 @@ external:
 
   const rootWorktree = getExpectedWorktreePath(home, root, "local-env");
   const depWorktree = getExpectedWorktreePath(home, depRoot, "local-env");
-  expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
+  expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10000\nDEFAULT_ONLY=1\n");
   expect(read(rootWorktree, "apps/api/.env.local")).toBe(
-    "DATABASE_URL=postgres://localhost:10001/app\n",
+    "DATABASE_URL=postgres://localhost:10000/app\n",
   );
   expect(read(rootWorktree, ".env")).toBe(
-    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10001\n`,
+    `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
   );
 });
 

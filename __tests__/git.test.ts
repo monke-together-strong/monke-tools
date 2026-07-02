@@ -81,6 +81,12 @@ prunable gitdir file points to non-existent location
         exitCode: 0,
       };
     },
+    async select() {
+      throw new Error("unexpected select");
+    },
+    readLine() {
+      throw new Error("unexpected readLine");
+    },
     writeStdout() {},
     writeStderr() {},
   };

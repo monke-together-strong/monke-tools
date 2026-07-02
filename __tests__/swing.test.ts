@@ -17,6 +17,7 @@ test("swing navigates to an existing root repo Session worktree without creating
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   expect(result.stdout).toBe(`${worktreeRoot}\n`);
+  expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
   expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
 });
 
@@ -270,7 +271,8 @@ test("swing creates a missing same-repo GitHub PR Session", () => {
   writeFileSync(path.join(repoRoot, "apps/api/.env.local"), "PORT=3000\n", "utf8");
   writeFileSync(
     path.join(repoRoot, "monke.yml"),
-    `apps:
+    `bootstrapCommand: printf 'bootstrapped\\n' > bootstrap.log
+apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -304,9 +306,12 @@ test("swing creates a missing same-repo GitHub PR Session", () => {
 
   expect(result.stdout).toBe(`${worktreeRoot}\n`);
   expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf8")).toBe("pr head\n");
+  expect(readFileSync(path.join(worktreeRoot, "bootstrap.log"), "utf8")).toBe("bootstrapped\n");
   expect(readFileSync(path.join(worktreeRoot, "apps/api/.env.local"), "utf8")).toBe("PORT=10000\n");
   expect(readFileSync(path.join(worktreeRoot, ".env"), "utf8")).toBe("API_PORT=10000\n");
+  expect(result.stderr).toContain(`Bootstrapping ${repoRoot} in ${worktreeRoot}`);
   expect(result.stderr).toContain(`Spawned or updated session ${prBranch}`);
+  expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
   expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
 });
 

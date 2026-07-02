@@ -232,7 +232,11 @@ function parseReportWindowUntilMs(reportPath: string): number | undefined {
   if (!match) {
     return undefined;
   }
-  const parsed = Date.parse(match[1]);
+  const until = match[1];
+  if (!until) {
+    return undefined;
+  }
+  const parsed = Date.parse(until);
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
