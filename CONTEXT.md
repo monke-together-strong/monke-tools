@@ -287,7 +287,7 @@ The operation that updates the source checkout root `.env` with dependency path 
 _Avoid_: Materialize, bootstrap
 
 **Shell directory request**:
-A CLI-side request for an active shell adapter to move the user's current shell into a **Session worktree** after a session operation succeeds.
+A CLI-side request for an active shell adapter to move the user's current shell into a resolved **Source checkout** or **Session worktree** after a session operation succeeds.
 _Avoid_: cd output, directory switch, shell cd
 
 **Shell adapter**:
@@ -437,7 +437,7 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 - **Swing** does not support merge request targets.
 - Fork pull request targets are outside the first **Swing** contract.
 - A **Shell directory request** uses only a **Shell directory directive**; it does not support arbitrary shell execution.
-- When a **Shell directory request** is accepted by an **Active shell adapter**, monke-tools reports that it switched to the target **Session worktree**.
+- When a **Shell directory request** is accepted by an **Active shell adapter**, monke-tools reports that it switched to the target checkout.
 - When no active **Shell adapter** can accept the **Shell directory request**, monke-tools reports the target path the user should switch to manually.
 - When **Shell integration install** has configured the user's shell but no **Active shell adapter** can accept the current **Shell directory request**, monke-tools reports the target path and explains that the shell integration is configured but inactive.
 - When **Shell integration install** has not configured the user's shell, monke-tools reports the target path and explains how to configure automatic switching.

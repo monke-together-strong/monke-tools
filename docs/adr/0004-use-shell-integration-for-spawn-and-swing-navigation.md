@@ -1,6 +1,6 @@
 # Use shell integration for Spawn and Swing navigation
 
-monke-tools uses a shell adapter to make successful **Spawn** and **Swing** operations move the user's interactive shell to the target **Session worktree**. A normal CLI subprocess cannot change its parent shell's working directory, so monke-tools uses a file-backed **Shell directory directive**: the shell adapter invokes the real `mt` binary with a directive-file environment variable, `mt` writes the target path to that file, and the adapter runs `cd` after the binary exits.
+monke-tools uses a shell adapter to make successful **Spawn** and **Swing** operations move the user's interactive shell to the target checkout. A normal CLI subprocess cannot change its parent shell's working directory, so monke-tools uses a file-backed **Shell directory directive**: the shell adapter invokes the real `mt` binary with a directive-file environment variable, `mt` writes the target path to that file, and the adapter runs `cd` after the binary exits.
 
 ## Decision
 
@@ -24,7 +24,7 @@ Status messages go to stderr. Primary data and parseable command output stay on 
 
 monke-tools reports navigation honestly:
 
-- When an **Active shell adapter** accepts the request, it reports that it switched to the target worktree.
+- When an **Active shell adapter** accepts the request, it reports that it switched to the target checkout.
 - When shell integration is configured but inactive for the current invocation, it reports the target path and explains that the shell must be restarted or `mt` must be invoked through the shell adapter.
 - When shell integration is not configured, it reports the target path and explains how to configure automatic switching.
 
@@ -44,7 +44,7 @@ monke-tools reports navigation honestly:
 
 ## Consequences
 
-Human users get `mt spawn` and `mt swing` behavior that matches the workflow expectation: after success, the shell lands in the relevant Session worktree when integration is active.
+Human users get `mt spawn` and `mt swing` behavior that matches the workflow expectation: after success, the shell lands in the relevant Session worktree for `mt spawn` and in the resolved Source checkout or Session worktree for `mt swing` when integration is active.
 
 Automation that invokes the binary without shell integration will receive an explicit target path and guidance instead of a misleading "switched" message.
 
