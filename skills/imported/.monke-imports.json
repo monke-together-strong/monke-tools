@@ -8,6 +8,10 @@
         {
           "selector": "autoreview",
           "slug": "autoreview"
+        },
+        {
+          "selector": "behavior-validator",
+          "slug": "behavior-validator"
         }
       ]
     },
@@ -19,8 +23,8 @@
           "slug": "codebase-design"
         },
         {
-          "selector": "decision-mapping",
-          "slug": "decision-mapping"
+          "selector": "code-review",
+          "slug": "code-review"
         },
         {
           "selector": "diagnosing-bugs",
@@ -55,8 +59,8 @@
           "slug": "resolving-merge-conflicts"
         },
         {
-          "selector": "review",
-          "slug": "review"
+          "selector": "wayfinder",
+          "slug": "wayfinder"
         },
         {
           "selector": "setup-matt-pocock-skills",

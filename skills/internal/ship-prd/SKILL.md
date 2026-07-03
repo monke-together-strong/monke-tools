@@ -35,8 +35,11 @@ grill-me session has already completed; do not run grill-me.
      commits and verification, treat it as incomplete and resume or report the
      blocker.
 6. After implementation completes, commit if needed then run `/autoreview` on a separate
-   thread, pass it the PRD. Wait for it to finish before creating the PR.
-   - Always run this. Do not treat `/implement`, `/review`, tests, lint, or
+   thread, pass it the PRD. When the change has a user-visible surface (UI,
+   CLI, API, generated artifact), the same thread pairs it with
+   `behavior-validator`, using the PRD as the behavior contract. Wait for the
+   thread to finish before creating the PR.
+   - Always run this. Do not treat `/implement`, `/code-review`, tests, lint, or
      screenshots from implementation as a substitute.
 7. Create a ready-for-review PR from the current thread.
 8. Run `/shepherd-pr` on a separate thread, then stop. The shepherding
@@ -49,11 +52,11 @@ title from this workflow.
 
 - Orchestrator: `[<short-title-of-current-work>] orchestrate`
 - Implementation: `[<short-title-of-current-work>] implement`
-- Review: `[<short-title-of-current-work>] review`
+- Code review: `[<short-title-of-current-work>] code-review`
 - Shepherd: `[<short-title-of-current-work>] shepherd PR #<number>`
 
 Example: `[search-hotkey] orchestrate`, `[search-hotkey] implement`,
-`[search-hotkey] review`, `[search-hotkey] shepherd PR #123`.
+`[search-hotkey] code-review`, `[search-hotkey] shepherd PR #123`.
 
 Rename the current orchestrator thread when its thread id is available or can be
 discovered unambiguously. Set delegated review and shepherding thread titles at
@@ -78,5 +81,6 @@ orchestration.
   the slash command with the durable reference.
 - Do not create extra code commits from this orchestration thread.
 - Let `/implement` own implementation commits.
-- Let `/autoreview` own closeout fixes and reruns.
+- Let the review thread own closeout fixes and reruns for `/autoreview` and
+  `behavior-validator` findings.
 - Let `/shepherd-pr` own PR polling and reviewer follow-up after the PR exists.
