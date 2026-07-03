@@ -222,6 +222,65 @@ external:
   expect(read(getExpectedWorktreePath(home, root, "dirty-graph"), "root.txt")).toBe("dirty root\n");
 });
 
+test("dirty spawn fails before creating any graph worktrees when a dependency session branch diverged", () => {
+  const sandbox = makeTempDir("multi-repo-dirty-diverged-dep");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    "services/db/.env.local": "PORT=5432\n",
+    "dep.txt": "clean dep\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_PORT
+        env: PORT
+`,
+  });
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+    "root.txt": "clean root\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  git(depRoot, ["branch", "banana", "HEAD"]);
+  git(depRoot, ["switch", "banana"]);
+  write(depRoot, "dep.txt", "session branch dep\n");
+  git(depRoot, ["add", "dep.txt"]);
+  git(depRoot, ["commit", "-m", "diverge banana"]);
+  git(depRoot, ["switch", "main"]);
+  write(depRoot, "dep.txt", "dirty dep\n");
+
+  expect(() =>
+    runMonke({
+      cwd: root,
+      args: ["spawn", "banana"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/Session branch "banana" already exists.*diverged branch is unsafe/s);
+
+  expect(existsSync(getExpectedWorktreePath(home, depRoot, "banana"))).toBe(false);
+  expect(existsSync(getExpectedWorktreePath(home, root, "banana"))).toBe(false);
+  expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBe(false);
+});
+
 test("spawn -m discovers dependencies from default branch config", () => {
   const sandbox = makeTempDir("multi-repo-main-config");
   const binDirectory = path.join(sandbox, "bin");

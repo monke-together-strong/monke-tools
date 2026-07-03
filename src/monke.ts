@@ -177,6 +177,9 @@ export function spawnSessionFromSourceRootLocked(
     const dirtySnapshot = shouldCopyDirty(options)
       ? captureDirtySnapshot(runtime, rootSourceRoot)
       : null;
+    if (dirtySnapshot) {
+      assertDirtyCarryBoundary(runtime, home, rootSourceRoot, session, dirtySnapshot);
+    }
     const worktree = rootDefaultRef
       ? ensureFreshSessionWorktreeFromRef(
           runtime,
@@ -190,6 +193,8 @@ export function spawnSessionFromSourceRootLocked(
         });
     if (dirtySnapshot && worktree.created) {
       applyDirtySnapshot(runtime, rootSourceRoot, worktree.path, dirtySnapshot);
+    } else if (dirtySnapshot && dirtySnapshotHasContent(dirtySnapshot)) {
+      warnDirtyStateNotCarried(runtime, rootSourceRoot, session);
     }
     const sessionState = {
       ...loadSessionState(home, rootSourceRoot, session),
@@ -250,6 +255,9 @@ export function spawnSessionFromSourceRootLocked(
   const dirtySnapshots = shouldCopyDirty(options)
     ? captureDirtySnapshots(runtime, graph.reposInMaterializationOrder)
     : new Map<string, DirtySnapshot>();
+  for (const [sourceRoot, dirtySnapshot] of dirtySnapshots) {
+    assertDirtyCarryBoundary(runtime, home, sourceRoot, session, dirtySnapshot);
+  }
   let sessionState = loadSessionState(home, rootSourceRoot, session);
   if (spawnFromDefaultBranch || spawnFromSessionBranch) {
     sessionState = { ...sessionState, graphSource: "session-branch" };
@@ -332,6 +340,8 @@ export function spawnSessionFromSourceRootLocked(
         const dirtySnapshot = dirtySnapshots.get(repoConfig.sourceRoot);
         if (dirtySnapshot && worktree.created) {
           applyDirtySnapshot(runtime, repoConfig.sourceRoot, worktree.path, dirtySnapshot);
+        } else if (dirtySnapshot && dirtySnapshotHasContent(dirtySnapshot)) {
+          warnDirtyStateNotCarried(runtime, repoConfig.sourceRoot, session);
         }
       }
 
@@ -415,6 +425,45 @@ function captureDirtySnapshot(runtime: Runtime, sourceRoot: string): DirtySnapsh
   };
 }
 
+function dirtySnapshotHasContent(snapshot: DirtySnapshot): boolean {
+  return (
+    snapshot.stagedPatch.length > 0 ||
+    snapshot.unstagedPatch.length > 0 ||
+    snapshot.untrackedPaths.length > 0
+  );
+}
+
+/** Refuse dirty carry when it would apply HEAD-relative patches onto a diverged Session branch. */
+function assertDirtyCarryBoundary(
+  runtime: Runtime,
+  home: string,
+  sourceRoot: string,
+  session: string,
+  snapshot: DirtySnapshot,
+): void {
+  if (!dirtySnapshotHasContent(snapshot) || !branchExists(runtime, sourceRoot, session)) {
+    return;
+  }
+
+  if (existsSync(getExpectedWorktreePath(home, sourceRoot, session))) {
+    return;
+  }
+
+  const branchTip = runGit(runtime, sourceRoot, ["rev-parse", `refs/heads/${session}`]).trim();
+  const headTip = runGit(runtime, sourceRoot, ["rev-parse", "HEAD"]).trim();
+  if (branchTip !== headTip) {
+    throw new MonkeError(
+      `Session branch "${session}" already exists at ${branchTip.slice(0, 8)} but the Source checkout HEAD is ${headTip.slice(0, 8)}; carrying dirty changes onto a diverged branch is unsafe. Re-run with --no-dirty, or align the branch with HEAD first.`,
+    );
+  }
+}
+
+function warnDirtyStateNotCarried(runtime: Runtime, sourceRoot: string, session: string): void {
+  runtime.writeStderr(
+    `Warning: Session worktree for ${session} at ${sourceRoot} already exists; dirty Source checkout changes were not carried into it.\n`,
+  );
+}
+
 function applyDirtySnapshot(
   runtime: Runtime,
   sourceRoot: string,
@@ -448,6 +497,12 @@ function copyUntrackedPaths(
 
     const targetPath = path.join(worktreePath, relativePath);
     mkdirSync(path.dirname(targetPath), { recursive: true });
+    if (lstatSync(targetPath, { throwIfNoEntry: false })) {
+      throw new MonkeError(
+        `Refusing to overwrite existing path in new Session worktree: ${targetPath} (source untracked file ${relativePath}). The Session branch already contains this path.`,
+      );
+    }
+
     if (sourceStat.isSymbolicLink()) {
       symlinkSync(readlinkSync(sourcePath), targetPath);
       continue;
@@ -980,7 +1035,13 @@ function materializeRepo(options: {
         isComplete: false,
       }),
     );
-    runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
+    runBootstrapCommand(
+      options.runtime,
+      repoConfig,
+      worktreePath,
+      externalPathAssignments,
+      session,
+    );
     resolvedResourceCommands = resolveResourceCommands({
       runtime: options.runtime,
       home,
@@ -1008,7 +1069,13 @@ function materializeRepo(options: {
     [...resolvedResourceValues.removedEnvNames, ...resolvedResourceCommands.removedEnvNames],
   );
   if (!repoConfig.bootstrapCommand) {
-    runBootstrapCommand(options.runtime, repoConfig, worktreePath, externalPathAssignments);
+    runBootstrapCommand(
+      options.runtime,
+      repoConfig,
+      worktreePath,
+      externalPathAssignments,
+      session,
+    );
   }
 
   return {
@@ -1204,6 +1271,7 @@ function runBootstrapCommand(
   repoConfig: RepoConfig,
   worktreePath: string,
   externalPathAssignments: Array<{ env: string; value: string }>,
+  session: string,
 ): void {
   if (!repoConfig.bootstrapCommand) {
     return;
@@ -1220,7 +1288,7 @@ function runBootstrapCommand(
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new MonkeError(
-      `Bootstrap command failed for ${repoConfig.sourceRoot}: ${repoConfig.bootstrapCommand}\n${detail}`,
+      `Bootstrap command failed for ${repoConfig.sourceRoot}: ${repoConfig.bootstrapCommand}\n${detail}\nPartial Session state was kept; fix the command and re-run mt spawn ${session} to resume from this repo.`,
     );
   }
 }
