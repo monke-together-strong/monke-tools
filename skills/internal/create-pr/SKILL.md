@@ -19,10 +19,12 @@ self-contained post-merge contract, and stop after the PR exists.
 2. Collect proof.
    - Record the verification commands already run, or run the smallest
      relevant checks before creating the PR.
-   - For frontend-visible work, attach proof: screenshots for static states and
-     short videos for interactions, animations, responsive behavior, or bugs
-     that only show over time.
-   - Upload local images/videos with `$github-image-upload`; embed the returned
+   - For frontend-visible work, attach proof. Use screenshots when one final
+     state proves the change; use
+     [browser video proof](references/browser-video-proof.md) when the behavior
+     is workflow-shaped, timing-sensitive, or hard to trust from screenshots
+     alone.
+   - Upload local media with `$github-image-upload`; embed the returned
      GitHub attachment markdown or bare video URLs in the PR body. Do not leave
      local file paths as proof.
 
