@@ -25,7 +25,7 @@ If it is missing or stale, ask the user to refresh the local install from the mo
 - `mt swing [target]`: navigate to an existing session worktree, source checkout, previous Swing target, or same-repo pull request target; omit `target` for the interactive Swing picker.
 - `mt materialize`: run inside a session worktree to refresh env rewrites, dependency paths, resources, and bootstrap behavior.
 - `mt setup`: run from a source checkout to write dependency path env vars into the source checkout root `.env`.
-- `mt cleanup`: remove dead session-state records and run configured cleanup commands.
+- `mt cleanup`: remove Session state records whose Dead worktrees no longer exist and run configured Cleanup commands; `mt cleanup --merged` additionally removes Session worktrees for Merge-cleanable Sessions whose branch is proven by a Merged PR (`--dry-run` to preview without removing).
 - `mt skills configure`: update which Agent skill roots receive monke-tools Distributed skills.
 
 ## Core Flows
