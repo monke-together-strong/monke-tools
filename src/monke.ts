@@ -302,6 +302,10 @@ export function spawnSessionFromSourceRootLocked(
       const shouldSkip = index < firstWorkIndex && repoConfig.sourceRoot !== currentRepoRoot;
 
       if (shouldSkip && existingState) {
+        const dirtySnapshot = dirtySnapshots.get(repoConfig.sourceRoot);
+        if (dirtySnapshot && dirtySnapshotHasContent(dirtySnapshot)) {
+          warnDirtyStateNotCarried(runtime, repoConfig.sourceRoot, session);
+        }
         validateWorktreeForSession(
           runtime,
           home,
