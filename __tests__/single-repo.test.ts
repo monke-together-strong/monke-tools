@@ -207,6 +207,64 @@ test("spawn carries tracked modifications by default", () => {
   expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-copy"), "README.md")).toBe("dirty\n");
 });
 
+test("dirty spawn onto an existing diverged session branch fails before creating the worktree", () => {
+  const sandbox = makeTempDir("single-repo-dirty-diverged-branch");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+    "monke.yml": "apps: {}\n",
+  });
+
+  git(repoRoot, ["branch", "banana", "HEAD"]);
+  git(repoRoot, ["switch", "banana"]);
+  write(repoRoot, "README.md", "session branch\n");
+  git(repoRoot, ["add", "README.md"]);
+  git(repoRoot, ["commit", "-m", "diverge banana"]);
+  const branchTip = git(repoRoot, ["rev-parse", "banana"]);
+  git(repoRoot, ["switch", "main"]);
+  write(repoRoot, "README.md", "dirty source\n");
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["spawn", "banana"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(
+    /Session branch "banana" already exists.*carrying dirty changes onto a diverged branch is unsafe.*--no-dirty.*align the branch/s,
+  );
+
+  expect(existsSync(getExpectedWorktreePath(home, repoRoot, "banana"))).toBe(false);
+  expect(existsSync(getSessionStateFilePath(home, repoRoot, "banana"))).toBe(false);
+  expect(git(repoRoot, ["rev-parse", "banana"])).toBe(branchTip);
+});
+
+test("dirty spawn onto an existing session branch at HEAD carries dirty state", () => {
+  const sandbox = makeTempDir("single-repo-dirty-same-tip-branch");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "clean\n",
+    "monke.yml": "apps: {}\n",
+  });
+
+  git(repoRoot, ["branch", "banana", "HEAD"]);
+  write(repoRoot, "README.md", "dirty source\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(read(getExpectedWorktreePath(home, repoRoot, "banana"), "README.md")).toBe(
+    "dirty source\n",
+  );
+});
+
 test("spawn carries staged changes by default", () => {
   const sandbox = makeTempDir("single-repo-dirty-staged");
   const binDirectory = path.join(sandbox, "bin");
@@ -384,7 +442,7 @@ test("spawn does not carry source dirt into existing Session worktrees", () => {
     binDirectory,
   });
   write(repoRoot, "README.md", "dirty\n");
-  runMonke({
+  const result = runMonke({
     cwd: repoRoot,
     args: ["spawn", "existing"],
     monkeHome: home,
@@ -392,6 +450,9 @@ test("spawn does not carry source dirt into existing Session worktrees", () => {
   });
 
   expect(read(getExpectedWorktreePath(home, repoRoot, "existing"), "README.md")).toBe("clean\n");
+  expect(result.stderr).toContain(
+    `Warning: Session worktree for existing at ${repoRoot} already exists; dirty Source checkout changes were not carried into it.`,
+  );
 });
 
 test("spawn rejects stale repo-name session collisions from unrelated source roots", () => {

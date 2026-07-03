@@ -232,7 +232,9 @@ export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string): void 
     runGit(runtime, sourceRoot, ["status", "--porcelain", "--untracked-files=normal"]),
   );
   if (status) {
-    throw new MonkeError(`Source checkout is dirty: ${sourceRoot}`);
+    throw new MonkeError(
+      `Source checkout is dirty: ${sourceRoot}. Commit or stash the changes, or drop --no-dirty to carry them into the new Session worktree.`,
+    );
   }
 }
 
@@ -294,7 +296,7 @@ export function ensureSessionWorktree(
 
   if (existsSync(expectedPath) && !pathMatch) {
     throw new MonkeError(
-      `Expected worktree path ${expectedPath} already exists and is not registered`,
+      `Expected worktree path ${expectedPath} already exists and is not registered. Remove or move that directory (a previous spawn may have left it behind), then re-run mt spawn.`,
     );
   }
 
