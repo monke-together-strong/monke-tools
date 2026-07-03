@@ -122,7 +122,7 @@ function createProgram(
     .option("--dry-run")
     .action((options: RawCleanupCommandOptions) => {
       if (options.dryRun && !options.merged) {
-        throw new MonkeError(CLEANUP_USAGE);
+        throw new MonkeError(`--dry-run requires --merged\n${CLEANUP_USAGE}`);
       }
 
       runCleanup(

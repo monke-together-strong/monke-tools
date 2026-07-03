@@ -1,8 +1,9 @@
 import { expect, test } from "vitest";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
+import { getSessionStateFilePath } from "../src/registry.ts";
 import {
   createRepo,
   git,
@@ -298,6 +299,35 @@ test("cleanup removes dead session state but leaves repo reservations intact", (
     sourceRoot: string;
   };
   expect(reservationState.sourceRoot).toBe(root);
+});
+
+test("cleanup removes dead no-config session state", () => {
+  const sandbox = makeTempDir("cleanup-no-config");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "README.md": "# root\n",
+  });
+
+  const spawn = runMonke({
+    cwd: root,
+    args: ["spawn", "banana"],
+    monkeHome: home,
+    binDirectory,
+  });
+  expect(spawn.stderr).toContain("Warning:");
+
+  rmSync(getExpectedWorktreePath(home, root, "banana"), { recursive: true, force: true });
+
+  runMonke({
+    cwd: root,
+    args: ["cleanup"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow();
 });
 
 test("cleanup --merged --dry-run reports eligible and skipped sessions without removing state", () => {
@@ -697,6 +727,63 @@ apps:
 
   expect(read(root, "cleanup-drift.log")).toBe(`drift-clean\n${root}\n`);
   expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow();
+});
+
+test("one failing cleanupCommand does not block other dead sessions", () => {
+  const sandbox = makeTempDir("cleanup-command-failure-isolation");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `cleanupCommand: 'printf "%s\\n" "$MONKE_SESSION" >> cleanup-attempts.log; echo cleanup failed >&2; exit 1'
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["spawn", "retry-one"],
+    monkeHome: home,
+    binDirectory,
+  });
+  runMonke({
+    cwd: root,
+    args: ["spawn", "retry-two"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  rmSync(getExpectedWorktreePath(home, root, "retry-one"), { recursive: true, force: true });
+  rmSync(getExpectedWorktreePath(home, root, "retry-two"), { recursive: true, force: true });
+
+  let thrown: unknown;
+  try {
+    runMonke({
+      cwd: root,
+      args: ["cleanup"],
+      monkeHome: home,
+      binDirectory,
+    });
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(thrown).toBeInstanceOf(Error);
+  expect((thrown as Error).message).toContain("retry-one");
+  expect((thrown as Error).message).toContain("retry-two");
+  expect(read(root, "cleanup-attempts.log").trim().split("\n").sort()).toEqual([
+    "retry-one",
+    "retry-two",
+  ]);
+  expect(existsSync(getSessionStateFilePath(home, root, "retry-one"))).toBe(true);
+  expect(existsSync(getSessionStateFilePath(home, root, "retry-two"))).toBe(true);
 });
 
 test("cleanupCommand failure keeps session state for retry", () => {
