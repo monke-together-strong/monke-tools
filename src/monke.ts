@@ -12,6 +12,7 @@ import path from "node:path";
 
 import { loadResolvedGraph } from "./config.ts";
 import {
+  createMergedCleanupLookupCache,
   inspectMergedWorktreeCleanup,
   removeMergeCleanableWorktree,
   type MergedCleanupDecision,
@@ -676,6 +677,7 @@ function cleanupMergedWorktrees(
   dryRun: boolean,
 ): MergedCleanupResult[] {
   const results: MergedCleanupResult[] = [];
+  const cache = createMergedCleanupLookupCache();
 
   for (const state of listSessionStates(home)) {
     if (state.rootSourceRoot !== rootSourceRoot) {
@@ -689,6 +691,7 @@ function cleanupMergedWorktrees(
         worktreePath: repoState.worktreePath,
       };
       const decision = inspectMergedWorktreeCleanup(runtime, candidate, {
+        cache,
         refreshDefaultBranch: !dryRun,
       });
       let removed = false;
