@@ -87,15 +87,34 @@ export interface MergedCleanupDecision {
   evidence: string[];
 }
 
+type LookupResult = { ok: true; value: string } | { ok: false; error: string };
+
+/** Per-run cache for repo-scoped merged-cleanup lookups. */
+export interface MergedCleanupLookupCache {
+  defaultBranchBySourceRoot: Map<string, LookupResult>;
+  repositoryBySourceRoot: Map<string, LookupResult>;
+}
+
+export function createMergedCleanupLookupCache(): MergedCleanupLookupCache {
+  return {
+    defaultBranchBySourceRoot: new Map(),
+    repositoryBySourceRoot: new Map(),
+  };
+}
+
 /** Inspect one recorded Session worktree and decide whether merged cleanup may remove it. */
 export function inspectMergedWorktreeCleanup(
   runtime: Runtime,
   candidate: MergedCleanupCandidate,
-  options: { refreshDefaultBranch?: boolean } = {},
+  options: { refreshDefaultBranch?: boolean; cache?: MergedCleanupLookupCache } = {},
 ): MergedCleanupDecision {
-  const defaultBranch = getDefaultBranch(runtime, candidate.sourceRoot, {
-    refresh: options.refreshDefaultBranch ?? true,
-  });
+  let defaultBranch = options.cache?.defaultBranchBySourceRoot.get(candidate.sourceRoot);
+  if (!defaultBranch) {
+    defaultBranch = getDefaultBranch(runtime, candidate.sourceRoot, {
+      refresh: options.refreshDefaultBranch ?? true,
+    });
+    options.cache?.defaultBranchBySourceRoot.set(candidate.sourceRoot, defaultBranch);
+  }
   if (!defaultBranch.ok) {
     return {
       eligible: false,
@@ -104,7 +123,11 @@ export function inspectMergedWorktreeCleanup(
     };
   }
 
-  const repository = getGithubRepositoryFullName(runtime, candidate.sourceRoot);
+  let repository = options.cache?.repositoryBySourceRoot.get(candidate.sourceRoot);
+  if (!repository) {
+    repository = getGithubRepositoryFullName(runtime, candidate.sourceRoot);
+    options.cache?.repositoryBySourceRoot.set(candidate.sourceRoot, repository);
+  }
   const matchingMergedPrs = repository.ok
     ? queryMergedPrs(runtime, {
         sourceRoot: candidate.sourceRoot,
