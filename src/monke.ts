@@ -540,6 +540,27 @@ function loadResolvedGraphForSession(
   });
 }
 
+/** Load the session graph for cleanup, tolerating missing repo config. */
+function loadReposByRootForCleanup(
+  runtime: Runtime,
+  rootSourceRoot: string,
+  state: SessionState,
+): Map<string, RepoConfig> {
+  try {
+    return loadResolvedGraphForSession(runtime, rootSourceRoot, state).reposByRoot;
+  } catch (error) {
+    const detail = formatErrorDetail(error);
+    runtime.writeStderr(
+      `Warning: could not load repo config for session ${state.session} (${detail}); using Cleanup commands recorded in Session state.\n`,
+    );
+    return new Map();
+  }
+}
+
+function formatErrorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function runInstallDependencies(runtime: Runtime): void {
   createLogger(runtime).success("Verified monke-tools runtime dependencies");
 }
@@ -692,6 +713,7 @@ function cleanupMergedWorktrees(
 
 function removeDeadSessionStates(runtime: Runtime, home: string, rootSourceRoot: string): number {
   let removed = 0;
+  const failures: Array<{ session: string; detail: string; stateFile: string }> = [];
 
   for (const state of listSessionStates(home)) {
     if (state.rootSourceRoot !== rootSourceRoot) {
@@ -703,13 +725,29 @@ function removeDeadSessionStates(runtime: Runtime, home: string, rootSourceRoot:
       continue;
     }
 
-    runCleanupCommands(
-      runtime,
-      loadResolvedGraphForSession(runtime, rootSourceRoot, state).reposByRoot,
-      state,
+    try {
+      runCleanupCommands(runtime, loadReposByRootForCleanup(runtime, rootSourceRoot, state), state);
+      removeSessionState(home, state.rootSourceRoot, state.session);
+      removed += 1;
+    } catch (error) {
+      failures.push({
+        session: state.session,
+        detail: formatErrorDetail(error),
+        stateFile: getSessionStateFilePath(home, state.rootSourceRoot, state.session),
+      });
+    }
+  }
+
+  if (failures.length > 0) {
+    const failureDetails = failures
+      .map(
+        (failure) =>
+          `- ${failure.session}: ${failure.detail}\n  Session state: ${failure.stateFile}`,
+      )
+      .join("\n");
+    throw new MonkeError(
+      `Removed ${removed} Session state record${removed === 1 ? "" : "s"} for Dead worktrees; ${failures.length} failed:\n${failureDetails}\nFix the failing Cleanup command (or remove the listed Session state file) and re-run mt cleanup; successfully cleaned sessions were already removed.`,
     );
-    removeSessionState(home, state.rootSourceRoot, state.session);
-    removed += 1;
   }
 
   return removed;
