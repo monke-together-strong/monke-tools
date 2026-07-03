@@ -322,6 +322,13 @@ function resolveSwingTarget(
       rootSourceRoot,
       pullRequestTarget,
     );
+    ensurePullRequestSessionBranch(
+      runtime,
+      rootSourceRoot,
+      pullRequestSession.number,
+      pullRequestSession.session,
+      { createIfMissing: false },
+    );
     return resolveStoredTarget(
       runtime,
       home,
@@ -338,6 +345,7 @@ function resolveSwingTarget(
             rootSourceRoot,
             pullRequestSession.number,
             pullRequestSession.session,
+            { createIfMissing: true },
           );
         },
       },
@@ -379,7 +387,7 @@ function resolveStoredTarget(
       createLogger(runtime).success(`Spawned or updated session ${target.session}`);
     } else {
       throw new MonkeError(
-        `Session "${target.session}" does not exist for ${rootSourceRoot}; mt swing never creates worktrees`,
+        `Session "${target.session}" does not exist for ${rootSourceRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn ${target.session} instead.`,
       );
     }
   }
@@ -452,6 +460,7 @@ function ensurePullRequestSessionBranch(
   rootSourceRoot: string,
   pullRequestNumber: number,
   session: string,
+  options: { createIfMissing: boolean },
 ): void {
   const temporaryRef = `refs/monke/pr-heads/${pullRequestNumber}`;
   try {
@@ -472,13 +481,15 @@ function ensurePullRequestSessionBranch(
         .stdout.trim();
       if (localHead !== pullRequestHead) {
         throw new MonkeError(
-          `Local branch "${session}" differs from PR #${pullRequestNumber} head; update or rename it before creating this Swing target.`,
+          `Local branch "${session}" differs from PR #${pullRequestNumber} head; update or rename it before swinging to this PR target.`,
         );
       }
       return;
     }
 
-    runtime.exec("git", ["branch", session, temporaryRef], { cwd: rootSourceRoot });
+    if (options.createIfMissing) {
+      runtime.exec("git", ["branch", session, temporaryRef], { cwd: rootSourceRoot });
+    }
   } finally {
     runtime.exec("git", ["update-ref", "-d", temporaryRef], {
       cwd: rootSourceRoot,
