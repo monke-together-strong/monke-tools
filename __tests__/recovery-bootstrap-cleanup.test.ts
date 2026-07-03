@@ -474,6 +474,83 @@ apps:
   expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow();
 });
 
+test("cleanup --merged resolves repo metadata once per source repo", () => {
+  const sandbox = makeTempDir("cleanup-merged-lookup-cache");
+  const binDirectory = path.join(sandbox, "bin");
+  const gitLog = installGitShim(binDirectory);
+  const home = path.join(sandbox, "home");
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["spawn", "clean-one"],
+    monkeHome: home,
+    binDirectory,
+  });
+  const firstWorktree = getExpectedWorktreePath(home, root, "clean-one");
+  git(firstWorktree, ["add", "-A"]);
+  git(firstWorktree, ["commit", "-m", "session clean one"]);
+  const firstHead = git(firstWorktree, ["rev-parse", "HEAD"]);
+
+  runMonke({
+    cwd: root,
+    args: ["spawn", "clean-two"],
+    monkeHome: home,
+    binDirectory,
+  });
+  const secondWorktree = getExpectedWorktreePath(home, root, "clean-two");
+  git(secondWorktree, ["add", "-A"]);
+  git(secondWorktree, ["commit", "-m", "session clean two"]);
+  const secondHead = git(secondWorktree, ["rev-parse", "HEAD"]);
+
+  const ghLog = installFakeGhForMergedPrs(binDirectory, {
+    repo: "owner/repo",
+    prsByHead: {
+      "clean-one": [
+        mergedPr({ number: 20, head: "clean-one", base: "main", headRefOid: firstHead }),
+      ],
+      "clean-two": [
+        mergedPr({ number: 21, head: "clean-two", base: "main", headRefOid: secondHead }),
+      ],
+    },
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["cleanup", "--merged", "--dry-run"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const dryRunGhCalls = readFileSync(ghLog, "utf8").trim().split("\n");
+  expect(dryRunGhCalls.filter((call) => call.startsWith("repo view "))).toHaveLength(1);
+  expect(dryRunGhCalls.filter((call) => call.startsWith("pr list "))).toHaveLength(2);
+
+  const gitLogBeforeCleanup = readFileSync(gitLog, "utf8");
+  runMonke({
+    cwd: root,
+    args: ["cleanup", "--merged"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const cleanupGitCalls = readFileSync(gitLog, "utf8").slice(gitLogBeforeCleanup.length);
+  expect(
+    cleanupGitCalls.split("\n").filter((call) => call === "fetch --prune origin"),
+  ).toHaveLength(1);
+});
+
 test("cleanup --merged skips safely when GitHub metadata is unavailable", () => {
   const sandbox = makeTempDir("cleanup-merged-no-gh");
   const binDirectory = path.join(sandbox, "bin");
