@@ -116,7 +116,7 @@ test("swing fails clearly when the Session does not exist", () => {
   });
 
   expect(() => runMonke({ cwd: repoRoot, args: ["swing", "missing"], monkeHome: home })).toThrow(
-    /Session "missing" does not exist/,
+    `Session "missing" does not exist for ${repoRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn missing instead.`,
   );
 });
 
@@ -201,6 +201,7 @@ test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions",
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "hello\n",
   });
+  installBareOrigin(sandbox, repoRoot);
   installSwingGhShim(binDirectory, {
     "123": {
       headRefName: "feature/pr-123",
@@ -216,6 +217,8 @@ test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions",
   const openLogPath = installCodexUrlOpenShim(binDirectory);
   runMonke({ cwd: repoRoot, args: ["spawn", "feature/pr-123"], monkeHome: home });
   runMonke({ cwd: repoRoot, args: ["spawn", "feature/pr-125"], monkeHome: home });
+  git(repoRoot, ["push", "origin", "refs/heads/feature/pr-123:refs/pull/123/head"]);
+  git(repoRoot, ["push", "origin", "refs/heads/feature/pr-125:refs/pull/125/head"]);
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-123");
   const caseFoldedWorktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-125");
   const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
@@ -261,10 +264,7 @@ test("swing creates a missing same-repo GitHub PR Session", () => {
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "main\n",
   });
-  const originRoot = path.join(sandbox, "origin.git");
-  mkdirSync(originRoot, { recursive: true });
-  git(originRoot, ["init", "--bare"]);
-  git(repoRoot, ["remote", "add", "origin", originRoot]);
+  installBareOrigin(sandbox, repoRoot);
   git(repoRoot, ["switch", "-c", prBranch]);
   writeFileSync(path.join(repoRoot, "README.md"), "pr head\n", "utf8");
   mkdirSync(path.join(repoRoot, "apps/api"), { recursive: true });
@@ -315,6 +315,133 @@ apps:
   expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
 });
 
+test("swing rejects an invalid existing PR Session path without creating the PR branch", () => {
+  const sandbox = makeTempDir("swing-pr-invalid-path");
+  const home = path.join(sandbox, "home");
+  const binDirectory = path.join(sandbox, "bin");
+  const prBranch = "feature/invalid-path";
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "main\n",
+  });
+  installBareOrigin(sandbox, repoRoot);
+  pushReadmePullRequestHead(repoRoot, {
+    branch: prBranch,
+    number: 86,
+    contents: "pr head\n",
+    message: "pr head",
+  });
+  installSwingGhShim(binDirectory, {
+    "86": {
+      headRefName: prBranch,
+      headRepositoryOwner: { login: "owner" },
+      headRepository: { name: "root" },
+    },
+  });
+  mkdirSync(getExpectedWorktreePath(home, repoRoot, prBranch), { recursive: true });
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["swing", "pr:86"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow();
+  expect(localBranchExists(repoRoot, prBranch)).toBe(false);
+});
+
+test("swing rejects an existing PR Session whose branch diverged from the PR head", () => {
+  const sandbox = makeTempDir("swing-pr-stale-existing");
+  const home = path.join(sandbox, "home");
+  const binDirectory = path.join(sandbox, "bin");
+  const prBranch = "feature/stale-existing";
+  const upstreamBranch = "feature/stale-existing-upstream";
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "main\n",
+  });
+  installBareOrigin(sandbox, repoRoot);
+  pushReadmePullRequestHead(repoRoot, {
+    branch: prBranch,
+    number: 84,
+    contents: "pr head\n",
+    message: "pr head",
+  });
+  installSwingGhShim(binDirectory, {
+    "84": {
+      headRefName: prBranch,
+      headRepositoryOwner: { login: "owner" },
+      headRepository: { name: "root" },
+    },
+  });
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["swing", "pr:84"],
+    monkeHome: home,
+    binDirectory,
+  });
+  const originalHead = git(worktreeRoot, ["rev-parse", "HEAD"]);
+  git(repoRoot, ["switch", "-c", upstreamBranch, prBranch]);
+  writeFileSync(path.join(repoRoot, "README.md"), "updated pr head\n", "utf8");
+  git(repoRoot, ["add", "README.md"]);
+  git(repoRoot, ["commit", "-m", "advance pr head"]);
+  git(repoRoot, ["push", "origin", `${upstreamBranch}:refs/pull/84/head`]);
+  git(repoRoot, ["switch", "main"]);
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["swing", "pr:84"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(`Local branch "${prBranch}" differs from PR #84 head`);
+  expect(git(worktreeRoot, ["rev-parse", "HEAD"])).toBe(originalHead);
+  expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf8")).toBe("pr head\n");
+});
+
+test("swing navigates to an existing in-sync PR Session after re-fetching", () => {
+  const sandbox = makeTempDir("swing-pr-existing-in-sync");
+  const home = path.join(sandbox, "home");
+  const binDirectory = path.join(sandbox, "bin");
+  const prBranch = "feature/in-sync-pr";
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "main\n",
+  });
+  installBareOrigin(sandbox, repoRoot);
+  pushReadmePullRequestHead(repoRoot, {
+    branch: prBranch,
+    number: 85,
+    contents: "pr head\n",
+    message: "pr head",
+  });
+  installSwingGhShim(binDirectory, {
+    "85": {
+      headRefName: prBranch,
+      headRepositoryOwner: { login: "owner" },
+      headRepository: { name: "root" },
+    },
+  });
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["swing", "pr:85"],
+    monkeHome: home,
+    binDirectory,
+  });
+  const secondSwing = runMonke({
+    cwd: repoRoot,
+    args: ["swing", "pr:85"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(secondSwing.stdout).toBe(`${worktreeRoot}\n`);
+  expect(secondSwing.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
+});
+
 test("swing rejects missing PR Session when a local PR branch diverges", () => {
   const sandbox = makeTempDir("swing-pr-stale-local");
   const home = path.join(sandbox, "home");
@@ -323,17 +450,13 @@ test("swing rejects missing PR Session when a local PR branch diverges", () => {
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "README.md": "main\n",
   });
-  const originRoot = path.join(sandbox, "origin.git");
-  mkdirSync(originRoot, { recursive: true });
-  git(originRoot, ["init", "--bare"]);
-  git(repoRoot, ["remote", "add", "origin", originRoot]);
-  git(repoRoot, ["switch", "-c", prBranch]);
-  writeFileSync(path.join(repoRoot, "README.md"), "pr head\n", "utf8");
-  git(repoRoot, ["add", "README.md"]);
-  git(repoRoot, ["commit", "-m", "pr head"]);
-  git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/83/head`]);
-  git(repoRoot, ["switch", "main"]);
-  git(repoRoot, ["branch", "-D", prBranch]);
+  installBareOrigin(sandbox, repoRoot);
+  pushReadmePullRequestHead(repoRoot, {
+    branch: prBranch,
+    number: 83,
+    contents: "pr head\n",
+    message: "pr head",
+  });
   git(repoRoot, ["branch", prBranch, "main"]);
   installSwingGhShim(binDirectory, {
     "83": {
@@ -415,6 +538,40 @@ test("swing rejects unsupported PR and target forms clearly", () => {
     /@ Swing targets are not supported/,
   );
 });
+
+function installBareOrigin(sandbox: string, repoRoot: string): void {
+  const originRoot = path.join(sandbox, "origin.git");
+  mkdirSync(originRoot, { recursive: true });
+  git(originRoot, ["init", "--bare"]);
+  git(repoRoot, ["remote", "add", "origin", originRoot]);
+}
+
+function pushReadmePullRequestHead(
+  repoRoot: string,
+  options: {
+    branch: string;
+    number: number;
+    contents: string;
+    message: string;
+  },
+): void {
+  git(repoRoot, ["switch", "-c", options.branch]);
+  writeFileSync(path.join(repoRoot, "README.md"), options.contents, "utf8");
+  git(repoRoot, ["add", "README.md"]);
+  git(repoRoot, ["commit", "-m", options.message]);
+  git(repoRoot, ["push", "origin", `${options.branch}:refs/pull/${options.number}/head`]);
+  git(repoRoot, ["switch", "main"]);
+  git(repoRoot, ["branch", "-D", options.branch]);
+}
+
+function localBranchExists(repoRoot: string, branch: string): boolean {
+  try {
+    git(repoRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function installSwingGhShim(
   binDirectory: string,

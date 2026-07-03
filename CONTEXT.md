@@ -263,7 +263,7 @@ The operation that refreshes the current session by reapplying seeding, path syn
 _Avoid_: Refresh, rebuild
 
 **Swing**:
-The operation that navigates the user's current shell to an existing **Session worktree** for the current **Root repo** scope.
+The operation that navigates the user's current shell to a **Source checkout** or **Session worktree** for the current **Root repo** scope. Ordinary targets must already exist; explicit pull request targets may materialize the matching **Session worktree** after validating the PR head.
 _Avoid_: Switch, git switch, create
 
 **Swing target**:
@@ -424,15 +424,16 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 - **Default branch spawn mode** requires fresh session branches.
 - **Default branch spawn mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
 - **Spawn** always emits a **Shell directory request** for the root repo's **Session worktree** after the operation succeeds.
-- **Swing** always emits a **Shell directory request** for an existing root repo **Session worktree**.
+- **Swing** always emits a **Shell directory request** for a resolved root repo **Source checkout** or **Session worktree**.
 - A **Codex Swing launch** preserves the normal **Swing** navigation behavior and additionally opens `codex://threads/new` with the resolved absolute checkout path.
-- **Swing** does not create **Session worktrees** or change which branch an existing worktree has checked out.
+- **Swing** does not create **Session worktrees** for ordinary **Session** targets or change which branch an existing worktree has checked out.
 - A **Swing target** may be a **Session** name, the `^` source-checkout shortcut, the `-` previous-target shortcut, a `pr:<number>` pull request shortcut, or a pull request URL.
 - The `^` **Swing target** resolves to the current **Root repo** **Source checkout** without materializing, setting up, creating, or changing branches.
 - The `-` **Swing target** resolves to the **Previous Swing target** for the current **Root repo**.
 - The `^` **Swing target** participates in **Previous Swing target** history.
 - **Previous Swing target** is scoped to one **Root repo**.
-- A pull request **Swing target** resolves through the pull request's same-repo head branch name, then navigates to the existing **Session** with that name.
+- A pull request **Swing target** resolves through the pull request's same-repo head branch name, fetches the PR head, creates the **Session** if missing, and refuses to navigate when the local Session branch diverged from the PR head.
+- Stored **Session** navigation (`mt swing <session>`, picker selections, and `-`) remains ordinary **Session** navigation and does not revalidate a pull request head.
 - **Swing** does not support merge request targets.
 - Fork pull request targets are outside the first **Swing** contract.
 - A **Shell directory request** uses only a **Shell directory directive**; it does not support arbitrary shell execution.

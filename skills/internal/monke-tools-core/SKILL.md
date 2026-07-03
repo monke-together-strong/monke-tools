@@ -22,7 +22,7 @@ If it is missing or stale, ask the user to refresh the local install from the mo
 ## Commands
 
 - `mt spawn <session>`: run from a source checkout to create or update a session worktree and its dependency worktrees.
-- `mt swing [target]`: navigate to an existing session worktree, source checkout, previous Swing target, or same-repo pull request target; omit `target` for the interactive Swing picker.
+- `mt swing [target]`: navigate to an existing session worktree, source checkout, previous Swing target, or same-repo pull request target; explicit pull request targets fetch the PR head, create the session if missing, and reject diverged local session branches; omit `target` for the interactive Swing picker.
 - `mt materialize`: run inside a session worktree to refresh env rewrites, dependency paths, resources, and bootstrap behavior.
 - `mt setup`: run from a source checkout to write dependency path env vars into the source checkout root `.env`.
 - `mt cleanup`: remove Session state records whose Dead worktrees no longer exist and run configured Cleanup commands; `mt cleanup --merged` additionally removes Session worktrees for Merge-cleanable Sessions whose branch is proven by a Merged PR (`--dry-run` to preview without removing).
