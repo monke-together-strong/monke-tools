@@ -18,6 +18,7 @@ bun run fmt:check
 ```bash
 bun run install:local
 mt spawn banana
+mt spawn banana --codex
 mt spawn banana --no-dirty
 mt spawn banana -m
 ```
@@ -47,7 +48,7 @@ The Skill source tree is organized as:
 
 ## Commands
 
-- `mt spawn <session>` creates a Session branch from the source checkout's current HEAD when one does not already exist, reuses an existing Session branch at its current tip, creates or updates the corresponding Session worktrees under `~/.monke/worktrees/<repo-name>/<session>`, and materializes dependency repos first. Dirty source changes are carried into newly created worktrees by default only when that Session branch tip equals source `HEAD`; existing Session worktrees are reused as-is and dirty source changes are not copied into them (a warning says so).
+- `mt spawn <session> [--codex]` creates a Session branch from the source checkout's current HEAD when one does not already exist, reuses an existing Session branch at its current tip, creates or updates the corresponding Session worktrees under `~/.monke/worktrees/<repo-name>/<session>`, and materializes dependency repos first. Dirty source changes are carried into newly created worktrees by default only when that Session branch tip equals source `HEAD`; existing Session worktrees are reused as-is and dirty source changes are not copied into them (a warning says so). Add `--codex` to open a new Codex app thread in the spawned root Session worktree after Spawn succeeds.
 - `mt spawn <session> --no-dirty` preserves the old strict behavior and rejects dirty source checkouts.
 - `mt spawn <session> -m` also accepts `--main` or `--master`. It creates a fresh session from each repo's resolved default branch ref, preferring fetched `origin/main` or `origin/master` before local `main` or `master`, and does not carry dirty source changes.
 - `mt swing [target] [--codex]` navigates to an existing Session worktree, `^` for the Source checkout, `-` for the Previous Swing target, or a same-repo GitHub pull request target such as `pr:123`. Explicit PR targets (`pr:123` or a PR URL) fetch the PR head, create the Session if missing, and refuse to navigate if the local Session branch diverged from the PR head. Omit `target` to choose from an interactive Swing picker. Add `--codex` to open a new Codex app thread in the resolved checkout.
