@@ -7,11 +7,14 @@ import { getSessionStateFilePath, saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
   git,
+  installCodexUrlOpenShim,
   installShShim,
+  installWindowsCmdShim,
   makeTempDir,
   read,
   readSingleYamlFile,
   runMonke,
+  withPlatform,
   write,
 } from "./helpers.ts";
 
@@ -63,6 +66,58 @@ test("spawn bootstraps a single-repo session and rewrites only mapped env vars",
   expect(sessionState.repos[0]?.sourceRoot).toBe(repoRoot);
   expect(sessionState.repos[0]?.worktreePath).toBe(worktreeRoot);
   expect(existsSync(path.join(sandbox, ".monke-worktrees"))).toBe(false);
+});
+
+test("spawn --codex opens a Codex thread for the root Session worktree", () => {
+  const sandbox = makeTempDir("single-repo-codex");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  const openLogPath = installCodexUrlOpenShim(binDirectory);
+
+  const result = runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "banana", "--codex"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+  const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
+  expect(result.stdout).toBe(`${worktreeRoot}\n`);
+  expect(result.stderr).toContain(`Spawned or updated session banana`);
+  expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
+  expect(result.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
+  expect(readFileSync(openLogPath, "utf8")).toBe(`${codexThreadUrl}\n`);
+});
+
+test("spawn --codex escapes percent-encoded URLs for the Windows launcher", () => {
+  const sandbox = makeTempDir("single-repo-codex-windows");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  const cmdLogPath = installWindowsCmdShim(binDirectory);
+
+  const result = withPlatform("win32", () =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["spawn", "banana", "--codex"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  );
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+  const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
+  expect(result.stdout).toBe(`${worktreeRoot}\n`);
+  expect(result.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
+  expect(readFileSync(cmdLogPath, "utf8")).toBe(
+    `/c\nstart\n\n${codexThreadUrl.replaceAll("%", "^%")}\n`,
+  );
 });
 
 test("spawn supports an app whose path is the repo root", () => {

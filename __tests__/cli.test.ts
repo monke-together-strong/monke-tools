@@ -6,8 +6,8 @@ import { runCli } from "../src/index.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const ROOT_USAGE =
-  "Usage:\n  mt spawn <session> [--no-dirty] [-m|--main|--master]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
-const SPAWN_USAGE = "Usage: mt spawn <session> [--no-dirty] [-m|--main|--master]";
+  "Usage:\n  mt spawn <session> [--no-dirty] [-m|--main|--master] [--codex]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
+const SPAWN_USAGE = "Usage: mt spawn <session> [--no-dirty] [-m|--main|--master] [--codex]";
 const SWING_USAGE = "Usage: mt swing [target] [--codex]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const CLEANUP_DRY_RUN_USAGE = `--dry-run requires --merged\n${CLEANUP_USAGE}`;

@@ -3,7 +3,16 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
-import { createRepo, git, makeTempDir, runMonke, runMonkeAsync } from "./helpers.ts";
+import {
+  createRepo,
+  git,
+  installCodexUrlOpenShim,
+  installWindowsCmdShim,
+  makeTempDir,
+  runMonke,
+  runMonkeAsync,
+  withPlatform,
+} from "./helpers.ts";
 
 test("swing navigates to an existing root repo Session worktree without creating one", () => {
   const sandbox = makeTempDir("swing-session");
@@ -605,43 +614,4 @@ exit 1
   const targetPath = path.join(binDirectory, "gh");
   writeFileSync(targetPath, script, "utf8");
   chmodSync(targetPath, 0o755);
-}
-
-function installCodexUrlOpenShim(binDirectory: string): string {
-  mkdirSync(binDirectory, { recursive: true });
-  const logPath = path.join(binDirectory, "open-url.log");
-  const command = process.platform === "darwin" ? "open" : "xdg-open";
-  const script = `#!/bin/sh
-set -eu
-printf '%s\\n' "$@" >> '${logPath.replaceAll("'", `'\\''`)}'
-`;
-  const targetPath = path.join(binDirectory, command);
-  writeFileSync(targetPath, script, "utf8");
-  chmodSync(targetPath, 0o755);
-  return logPath;
-}
-
-function installWindowsCmdShim(binDirectory: string): string {
-  mkdirSync(binDirectory, { recursive: true });
-  const logPath = path.join(binDirectory, "cmd.log");
-  const script = `#!/bin/sh
-set -eu
-printf '%s\\n' "$@" >> '${logPath.replaceAll("'", `'\\''`)}'
-`;
-  const targetPath = path.join(binDirectory, "cmd");
-  writeFileSync(targetPath, script, "utf8");
-  chmodSync(targetPath, 0o755);
-  return logPath;
-}
-
-function withPlatform<T>(platform: NodeJS.Platform, callback: () => T): T {
-  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
-  Object.defineProperty(process, "platform", { value: platform });
-  try {
-    return callback();
-  } finally {
-    if (descriptor) {
-      Object.defineProperty(process, "platform", descriptor);
-    }
-  }
 }
