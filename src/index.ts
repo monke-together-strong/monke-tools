@@ -12,8 +12,8 @@ import type { SwingOptions } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
-  "Usage:\n  mt spawn <session> [--no-dirty] [-m|--main|--master]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
-const SPAWN_USAGE = "Usage: mt spawn <session> [--no-dirty] [-m|--main|--master]";
+  "Usage:\n  mt spawn <session> [--no-dirty] [-m|--main|--master] [--codex]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
+const SPAWN_USAGE = "Usage: mt spawn <session> [--no-dirty] [-m|--main|--master] [--codex]";
 const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
 const SKILLS_USAGE = "Usage: mt skills configure";
 const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
@@ -29,6 +29,7 @@ interface RawSpawnCommandOptions {
   main?: boolean;
   master?: boolean;
   dirty?: boolean;
+  codex?: boolean;
 }
 
 /** Run the Monke Tools CLI. */
@@ -86,6 +87,7 @@ function createProgram(
     .option("--no-dirty")
     .option("-m, --main")
     .option("--master")
+    .option("--codex")
     .action((session: string, options: RawSpawnCommandOptions) => {
       runSpawn(
         runtime,
@@ -93,6 +95,7 @@ function createProgram(
         options.main || options.master
           ? { mode: "default-branch" }
           : { mode: "current-head", copyDirty: options.dirty !== false },
+        { codex: options.codex },
       );
     });
 

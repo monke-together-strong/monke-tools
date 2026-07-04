@@ -24,6 +24,7 @@ import {
   seedWorktreeFilesFromRoot,
   collectBaselinePortsFromRoot,
 } from "./env.ts";
+import { openCodexThread } from "./codex.ts";
 import {
   assertCleanCheckoutForSessionBranchCreation,
   assertFreshSessionWorktreeAvailable,
@@ -85,6 +86,11 @@ export type SpawnOptions =
       mode: "default-branch";
     };
 
+export interface SpawnRunOptions {
+  /** Open a new Codex Desktop thread after the root Session worktree is ready. */
+  codex?: boolean;
+}
+
 interface DirtySnapshot {
   stagedPatch: string;
   unstagedPatch: string;
@@ -105,7 +111,12 @@ export type CleanupOptions =
     };
 
 /** Spawn or refresh a Session from the source checkout. */
-export function runSpawn(runtime: Runtime, session: string, options: SpawnOptions): void {
+export function runSpawn(
+  runtime: Runtime,
+  session: string,
+  options: SpawnOptions,
+  runOptions: SpawnRunOptions = {},
+): void {
   if (!session) {
     throw new MonkeError("mt spawn requires a session name");
   }
@@ -122,6 +133,9 @@ export function runSpawn(runtime: Runtime, session: string, options: SpawnOption
 
   createLogger(runtime).success(`Spawned or updated session ${session}`);
   requestShellDirectory(runtime, rootWorktreePath);
+  if (runOptions.codex) {
+    openCodexThread(runtime, rootWorktreePath);
+  }
 }
 
 /** Create or refresh a Session while the caller holds the Monke global lock. */

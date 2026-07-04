@@ -107,6 +107,31 @@ exec /bin/sh "$@"
   return logPath;
 }
 
+export function installCodexUrlOpenShim(binDirectory: string): string {
+  const logPath = path.join(binDirectory, "open-url.log");
+  const command = process.platform === "darwin" ? "open" : "xdg-open";
+  writeExecutable(
+    path.join(binDirectory, command),
+    `#!/bin/sh
+set -eu
+printf '%s\\n' "$@" >> ${shellQuote(logPath)}
+`,
+  );
+  return logPath;
+}
+
+export function installWindowsCmdShim(binDirectory: string): string {
+  const logPath = path.join(binDirectory, "cmd.log");
+  writeExecutable(
+    path.join(binDirectory, "cmd"),
+    `#!/bin/sh
+set -eu
+printf '%s\\n' "$@" >> ${shellQuote(logPath)}
+`,
+  );
+  return logPath;
+}
+
 export function installFakeGh(
   binDirectory: string,
   issues: Record<number, { title: string; body: string; comments?: readonly string[] }>,
@@ -265,6 +290,18 @@ export async function runMonkeAsync(options: {
 
   await runCliAsync(options.args, runtime);
   return { stdout, stderr };
+}
+
+export function withPlatform<T>(platform: NodeJS.Platform, callback: () => T): T {
+  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: platform });
+  try {
+    return callback();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(process, "platform", descriptor);
+    }
+  }
 }
 
 export function readSingleYamlFile(directoryPath: string): unknown {
