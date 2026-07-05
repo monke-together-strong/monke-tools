@@ -14,8 +14,8 @@ inline in the PRD thread.
    review base, use that. Verify it with `git rev-parse <fixed point>` and stop
    to ask if no stable fixed point can be identified.
 4. Order the issues by their `Blocked by` relationships.
-5. For each issue, create a separate thread using the delegation prompt
-   template below.
+5. For each issue, create a fresh separate thread, not a fork, using the
+   delegation prompt template below.
 6. Monitor the current issue implementation every three minutes. Be patient:
    after confirming the worker is active, wait about 180 seconds between
    polls; do not short-poll with 60-second sleeps. Let active work continue
