@@ -13,15 +13,15 @@ grill-me session has already completed; do not run grill-me.
 
 1. Resolve the PRD reference.
    - If the user explicitly passed a PRD issue, path, or link, use it. Do not
-     run `/to-prd`.
-   - Otherwise, run `/to-prd` in the current thread. Then make sure all
+     run `/to-spec`.
+   - Otherwise, run `/to-spec` in the current thread. Then make sure all
      decisions from the grill-me session have been captured. Update the PRD
      before continuing if anything important is missing.
 2. Identify the durable PRD reference: issue URL/number, local file path, or
    document link. Do not start implementation from a chat-only PRD.
 3. Decide whether to create task issues before implementation.
    - If the user explicitly says "with issues", "use issues", "break into
-     issues", "run to-issues", or similar, run `/to-issues` before
+     issues", "run to-tickets", or similar, run `/to-tickets` before
      implementation. This is a routing override, not a suggestion.
 4. Spawn the implementation checkout worktree with monke tools:
    `mt spawn <session-name>`
@@ -29,7 +29,7 @@ grill-me session has already completed; do not run grill-me.
    `/implement <durable PRD reference>`
    - Do not restate repo, branch, test, or completion instructions already
      owned by `/implement`, repo docs, or the PRD.
-   - If `/to-issues` was run, pass the same parent PRD reference after the
+   - If `/to-tickets` was run, pass the same parent PRD reference after the
      issues are created.
    - If `/implement` stops after setup, planning, or branch creation without
      commits and verification, treat it as incomplete and resume or report the
@@ -71,7 +71,7 @@ a blocker, completion, or clear course deviation.
 
 ## Task Issues
 
-"With issues" means: run `/to-issues` before launching `/implement`, then run
+"With issues" means: run `/to-tickets` before launching `/implement`, then run
 `/implement` against the parent PRD reference. Do not choose task ordering in
 this skill; `/implement` owns direct PRD implementation versus attached issue
 orchestration.

@@ -2,29 +2,15 @@
   "version": 1,
   "recipes": [
     {
-      "source": "openclaw/agent-skills",
-      "acceptOpenClawRisks": true,
-      "skills": [
-        {
-          "selector": "autoreview",
-          "slug": "autoreview"
-        },
-        {
-          "selector": "behavior-validator",
-          "slug": "behavior-validator"
-        }
-      ]
-    },
-    {
       "source": "https://github.com/mattpocock/skills",
       "skills": [
         {
-          "selector": "codebase-design",
-          "slug": "codebase-design"
-        },
-        {
           "selector": "code-review",
           "slug": "code-review"
+        },
+        {
+          "selector": "codebase-design",
+          "slug": "codebase-design"
         },
         {
           "selector": "diagnosing-bugs",
@@ -59,10 +45,6 @@
           "slug": "resolving-merge-conflicts"
         },
         {
-          "selector": "wayfinder",
-          "slug": "wayfinder"
-        },
-        {
           "selector": "setup-matt-pocock-skills",
           "slug": "setup-matt-pocock-skills"
         },
@@ -75,16 +57,20 @@
           "slug": "teach"
         },
         {
-          "selector": "to-issues",
-          "slug": "to-issues"
+          "selector": "to-spec",
+          "slug": "to-spec"
         },
         {
-          "selector": "to-prd",
-          "slug": "to-prd"
+          "selector": "to-tickets",
+          "slug": "to-tickets"
         },
         {
           "selector": "triage",
           "slug": "triage"
+        },
+        {
+          "selector": "wayfinder",
+          "slug": "wayfinder"
         },
         {
           "selector": "wizard",
@@ -93,6 +79,20 @@
         {
           "selector": "writing-great-skills",
           "slug": "writing-great-skills"
+        }
+      ]
+    },
+    {
+      "source": "openclaw/agent-skills",
+      "acceptOpenClawRisks": true,
+      "skills": [
+        {
+          "selector": "autoreview",
+          "slug": "autoreview"
+        },
+        {
+          "selector": "behavior-validator",
+          "slug": "behavior-validator"
         }
       ]
     },
