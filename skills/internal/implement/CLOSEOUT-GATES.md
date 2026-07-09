@@ -1,17 +1,23 @@
 # Implement Closeout Gates
 
 Use this procedure when an implementation thread delegates final verification to
-a closeout verifier subagent. The verifier may inspect the PRD, run commands,
-collect evidence, and run `/code-review`, but it must not spawn another verifier,
-make source changes, or commit.
+a closeout verifier subagent. The verifier may inspect the work target, run
+commands, collect evidence, and run `/code-review`, but it must not spawn
+another verifier, make source changes, or commit.
 
 Inputs:
 
-- Work reference: PRD, issue, plan, summary of a direct request, or `none`
+- Work target: primary PRD, issue, plan, summary of a direct request, or `none`
 - Review fixed point
-- PRD URL/path, or `none`
+- Background context: parent PRD, supporting docs, or `none`
 - Whether PRD orchestration was used
 - PRD closeout list, when orchestration was used
+
+The work target is the single closeout target. Background context is read-only
+intent and constraint material; it never changes the review target or comment
+target. If the work target is a tracker issue, including a PRD issue, post
+closeout evidence on that same issue. If the work target is a subissue of a PRD,
+the parent PRD remains background unless this is an orchestrated PRD closeout.
 
 If a gate blocks, report it to the implementation thread. After the fix or
 explicit acceptance, rerun the affected gate.
@@ -34,18 +40,18 @@ requirements, both sides must be traceable.
 
 Run this gate for every closeout, before the Review gate.
 
-Inspect the Work reference for acceptance criteria, testing instructions,
+Inspect the Work target for acceptance criteria, testing instructions,
 Definition of Done items, STOP conditions, required commands, required
 artifacts, and out-of-scope boundaries. Ledger those requirements. If the Work
-reference is `none`, record that no work-reference evidence was available.
+target is `none`, record that no work-target evidence was available.
 
 ## PRD Testing Evidence Gate
 
-Run this additional gate when `PRD` is not `none`.
+Run this additional gate when the Work target is itself a PRD.
 
-Inspect the PRD's Testing Decisions and Testing Gate. Ledger every PRD-specific
-testing evidence requirement. If neither section exists, record that no
-PRD-specific testing evidence was required.
+Inspect the Work target's Testing Decisions and Testing Gate. Ledger every
+PRD-specific testing evidence requirement. If neither section exists, record
+that no PRD-specific testing evidence was required.
 
 If PRD orchestration was used, add missing PRD testing evidence to the PRD
 closeout list.
@@ -54,24 +60,24 @@ closeout list.
 
 Run `/code-review` exactly as specified by the code-review skill.
 
-- Orchestrated PRD: `/code-review <final-review fixed point> <parent PRD URL>`
-- Non-orchestrated PRD: `/code-review <review fixed point> <PRD URL/path>`
-- Non-PRD work reference: `/code-review <review fixed point> <work reference>`
-- Work reference `none`: `/code-review <review fixed point>`; report that Spec may
+- Work target present: `/code-review <review fixed point> <work target>`
+- Work target `none`: `/code-review <review fixed point>`; report that Spec may
   skip for lack of a source
 
 This authorizes all `/code-review` sub-agents.
 
-## PRD Closeout
+## Tracker Closeout
 
-Run this gate when `PRD` is not `none`. If `PRD` is `none`, skip this gate.
+Run this gate when the Work target is a tracker issue. If the Work target is not
+a tracker issue, skip this gate unless the implementation thread gave an
+explicit comment target.
 
-Post the final-review fixed point, testing evidence ledger, and review command
-as a parent PRD comment. The PRD work is incomplete until the comment is posted
-or tracker write access is reported blocked.
+Post the review fixed point, testing evidence ledger, and review command as a
+Work target comment. The work is incomplete until the comment is posted or
+tracker write access is reported blocked.
 
 If PRD orchestration was used, reconcile the PRD closeout list against the final
-review before posting. Add the deferred-finding dispositions to the parent PRD
+review before posting. Add the deferred-finding dispositions to the Work target
 comment. Every deferred finding must have one disposition:
 
 - fixed in the accumulated branch
