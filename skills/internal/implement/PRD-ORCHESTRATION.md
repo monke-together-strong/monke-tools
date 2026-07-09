@@ -24,8 +24,9 @@ inline in the PRD thread.
 7. When a worker or slice review reports a finding deferred to a later slice or
    final integration, add it to a PRD closeout list in the orchestrator thread.
    Include the source slice, the finding, and the expected later slice or gate.
-8. After all issues are complete, delegate closeout as described in `SKILL.md`;
-   the closeout procedure lives in `CLOSEOUT-GATES.md`.
+8. After all issues are complete, delegate closeout for the parent PRD as the
+   Work target described in `SKILL.md`; the closeout procedure lives in
+   `CLOSEOUT-GATES.md`.
 
 ## Delegation prompt
 
@@ -37,3 +38,6 @@ not add generic repo/process reminders.
 
 Parent PRD: <parent PRD URL>. Use it as background context for product intent and constraints only, do not implement the entire PRD.
 ```
+
+This template intentionally leaves the slice issue as the Work target and the
+parent PRD as Background context; slice closeout follows `CLOSEOUT-GATES.md`.
