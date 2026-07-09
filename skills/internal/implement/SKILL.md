@@ -41,15 +41,18 @@ same checkout for every `/implement` run. Use
 The implementation thread owns fixes and the final commit. Do not commit until
 the closeout verifier reports that all gates are complete.
 
+When filling the prompt, set `Work target` to the primary `/implement` request.
+Put parent PRDs and supporting docs only in `Background context`.
+
 Use this closeout prompt:
 
 ```text
 Run the implement closeout procedure in this checkout.
 
 Procedure: skills/internal/implement/CLOSEOUT-GATES.md
-Work reference: <PRD, issue, plan, summary of direct request, or "none">
+Work target: <primary PRD, issue, plan, summary of direct request, or "none">
 Review fixed point: <fixed point or "ask if needed">
-PRD: <parent PRD URL/path or "none">
+Background context: <parent PRD URL/path, supporting docs, or "none">
 Orchestrated PRD: <yes/no>
 
 Read the procedure file and follow it exactly. Report missing evidence, review
