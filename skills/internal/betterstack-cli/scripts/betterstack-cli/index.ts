@@ -75,50 +75,56 @@ Notes:
     );
 
   const source = program.command("source").description("Inspect Better Stack sources.");
-  source
-    .command("list")
-    .description("List Better Stack sources.")
-    .option("--page <number>", "Page number.", parseIntegerOption)
-    .option("--per-page <number>", "Results per page.", parseIntegerOption)
-    .option("--token <token>", "Better Stack source API token.")
-    .option("--env-file <path>", "Env file to load before resolving credentials.")
-    .action(handleSourceList);
-  source
-    .command("get")
-    .description("Fetch one Better Stack source.")
-    .requiredOption("--id <number>", "Better Stack source id.", parseIntegerOption)
-    .option("--token <token>", "Better Stack source API token.")
-    .option("--env-file <path>", "Env file to load before resolving credentials.")
-    .action(handleSourceGet);
+  addCredentialOptions(
+    source
+      .command("list")
+      .description("List Better Stack sources.")
+      .option("--page <number>", "Page number.", parseIntegerOption)
+      .option("--per-page <number>", "Results per page.", parseIntegerOption)
+  ).action(handleSourceList);
+  addCredentialOptions(
+    source
+      .command("get")
+      .description("Fetch one Better Stack source.")
+      .requiredOption("--id <number>", "Better Stack source id.", parseIntegerOption)
+  ).action(handleSourceGet);
 
   const connection = program.command("connection").description("Inspect Better Stack connections.");
-  connection
-    .command("list")
-    .description("List Better Stack connections.")
-    .option("--page <number>", "Page number.", parseIntegerOption)
-    .option("--per-page <number>", "Results per page.", parseIntegerOption)
-    .option("--token <token>", "Better Stack source API token.")
-    .option("--env-file <path>", "Env file to load before resolving credentials.")
-    .action(handleConnectionList);
+  addCredentialOptions(
+    connection
+      .command("list")
+      .description("List Better Stack connections.")
+      .option("--page <number>", "Page number.", parseIntegerOption)
+      .option("--per-page <number>", "Results per page.", parseIntegerOption)
+  ).action(handleConnectionList);
 
   const query = program.command("query").description("Run Better Stack SQL queries.");
-  query
-    .command("run")
-    .description("Run SQL against a Better Stack source.")
-    .requiredOption("--source-id <number>", "Better Stack source id.", parseIntegerOption)
-    .requiredOption("--table <name>", "Better Stack SQL table name.")
-    .option("--sql <query>", "Inline SQL text.")
-    .option("--sql-file <path>", "Path to a file containing SQL text.")
-    .option("--stdin", "Read SQL text from stdin.")
-    .option("--url <url>", "Better Stack query endpoint URL.")
-    .option("--host <host>", "Better Stack query endpoint host.")
-    .option("--username <username>", "Better Stack query username.")
-    .option("--password <password>", "Better Stack query password.")
-    .option("--token <token>", "Better Stack source API token for metadata validation.")
-    .option("--env-file <path>", "Env file to load before resolving credentials.")
-    .action(handleQueryRun);
+  addCredentialOptions(
+    query
+      .command("run")
+      .description("Run SQL against a Better Stack source.")
+      .requiredOption("--source-id <number>", "Better Stack source id.", parseIntegerOption)
+      .requiredOption("--table <name>", "Better Stack SQL table name.")
+      .option("--sql <query>", "Inline SQL text.")
+      .option("--sql-file <path>", "Path to a file containing SQL text.")
+      .option("--stdin", "Read SQL text from stdin.")
+      .option("--url <url>", "Better Stack query endpoint URL.")
+      .option("--host <host>", "Better Stack query endpoint host.")
+      .option("--username <username>", "Better Stack query username.")
+      .option("--password <password>", "Better Stack query password."),
+    "Better Stack source API token for metadata validation."
+  ).action(handleQueryRun);
 
   return program;
+}
+
+function addCredentialOptions(
+  command: Command,
+  tokenDescription = "Better Stack source API token."
+): Command {
+  return command
+    .option("--token <token>", tokenDescription)
+    .option("--env-file <path>", "Env file to load before resolving credentials.");
 }
 
 function parseIntegerOption(value: string): number {
@@ -219,6 +225,13 @@ type BetterStackConnectionMetadata = {
   username: string;
 };
 
+class BetterStackResponseShapeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BetterStackResponseShapeError";
+  }
+}
+
 async function resolveQueryCredentials(
   options: QueryRunOptions,
   context: ResolvedQueryContext
@@ -243,7 +256,7 @@ async function resolveQueryCredentials(
       "BETTERSTACK_QUERY_HOST",
       "BETTERSTACK_SQL_HOST"
     ]) ??
-    matchingConnection?.host;
+    (matchingConnection ? formatConnectionEndpoint(matchingConnection) : undefined);
   const username =
     options.username ??
     getFirstEnvValue(["BETTERSTACK_QUERY_USERNAME", "BETTERSTACK_SQL_USERNAME"]) ??
@@ -285,6 +298,8 @@ async function resolveQueryCredentials(
 
   if (sourceMetadata) {
     validateQueryEndpointMatchesSource(normalizedUrl, sourceMetadata, matchingConnection);
+  } else {
+    validateQueryEndpointIsAllowed(normalizedUrl);
   }
 
   return {
@@ -300,7 +315,11 @@ async function loadSourceMetadata(
 ): Promise<BetterStackSourceMetadata> {
   const client = createMetadataClient(token);
   const raw = await client.getSource(sourceId);
-  const parsed = JSON.parse(raw) as BetterStackSourceResponse;
+  const parsed: unknown = JSON.parse(raw);
+
+  if (!isBetterStackSourceResponse(parsed)) {
+    invalidResponse("Invalid Better Stack source response shape: expected data.attributes.");
+  }
 
   return {
     dataRegion: parsed.data.attributes.data_region,
@@ -315,7 +334,11 @@ async function loadSourceMetadata(
 async function loadConnections(token: string): Promise<BetterStackConnectionMetadata[]> {
   const client = createMetadataClient(token);
   const raw = await client.listConnections(1, 100);
-  const parsed = JSON.parse(raw) as BetterStackConnectionsResponse;
+  const parsed: unknown = JSON.parse(raw);
+
+  if (!isBetterStackConnectionsResponse(parsed)) {
+    invalidResponse("Invalid Better Stack connections response shape: expected data[].attributes.");
+  }
 
   return parsed.data.map((connection) => ({
     dataRegion: connection.attributes.data_region,
@@ -333,7 +356,11 @@ async function tryLoadSourceMetadata(
 ): Promise<BetterStackSourceMetadata | null> {
   try {
     return await loadSourceMetadata(token, sourceId);
-  } catch {
+  } catch (error) {
+    if (error instanceof BetterStackResponseShapeError) {
+      throw error;
+    }
+
     return null;
   }
 }
@@ -341,7 +368,11 @@ async function tryLoadSourceMetadata(
 async function tryLoadConnections(token: string): Promise<BetterStackConnectionMetadata[]> {
   try {
     return await loadConnections(token);
-  } catch {
+  } catch (error) {
+    if (error instanceof BetterStackResponseShapeError) {
+      throw error;
+    }
+
     return [];
   }
 }
@@ -351,12 +382,18 @@ function validateQueryEndpointMatchesSource(
   sourceMetadata: BetterStackSourceMetadata,
   matchingConnection: BetterStackConnectionMetadata | null
 ): void {
-  const endpointHost = new URL(normalizedUrl).host;
+  const endpoint = new URL(normalizedUrl);
+  const endpointHost = endpoint.hostname;
+  const endpointPort = getEffectiveUrlPort(endpoint);
   const expectedHost =
     matchingConnection?.host ?? `${sourceMetadata.dataRegion}-connect.betterstackdata.com`;
+  const expectedPort = matchingConnection?.port ?? 443;
   const matchingRegionHost = `${sourceMetadata.dataRegion}-connect.betterstackdata.com`;
 
-  if (endpointHost === expectedHost || endpointHost === matchingRegionHost) {
+  if (
+    (endpointHost === expectedHost && endpointPort === expectedPort) ||
+    (endpointHost === matchingRegionHost && endpointPort === 443)
+  ) {
     return;
   }
 
@@ -365,8 +402,92 @@ function validateQueryEndpointMatchesSource(
     : `No connection was found for team ${sourceMetadata.teamName} in region ${sourceMetadata.dataRegion}.`;
 
   fail(
-    `Query endpoint host ${endpointHost} does not match source ${sourceMetadata.sourceId} (${sourceMetadata.teamName}/${sourceMetadata.sourceName}) in region ${sourceMetadata.dataRegion}. ${connectionContext}`
+    `Query endpoint ${formatHostAndPort(endpointHost, endpointPort)} does not match source ${sourceMetadata.sourceId} (${sourceMetadata.teamName}/${sourceMetadata.sourceName}) in region ${sourceMetadata.dataRegion}. ${connectionContext}`
   );
+}
+
+function validateQueryEndpointIsAllowed(normalizedUrl: string): void {
+  const endpoint = new URL(normalizedUrl);
+
+  if (isAllowedBetterStackQueryHost(endpoint.hostname)) {
+    return;
+  }
+
+  fail(
+    `Query endpoint host ${endpoint.hostname} is not allowed. Expected a Better Stack query host ending in -connect.betterstackdata.com.`
+  );
+}
+
+function isAllowedBetterStackQueryHost(hostname: string): boolean {
+  return hostname.endsWith("-connect.betterstackdata.com");
+}
+
+function formatConnectionEndpoint(connection: BetterStackConnectionMetadata): string {
+  if (connection.host.match(/:\d+$/)) {
+    return connection.host;
+  }
+
+  return `${connection.host}:${connection.port}`;
+}
+
+function getEffectiveUrlPort(url: URL): number {
+  if (url.port) {
+    return Number(url.port);
+  }
+
+  return 443;
+}
+
+function formatHostAndPort(host: string, port: number): string {
+  return port === 443 ? host : `${host}:${port}`;
+}
+
+function isBetterStackSourceResponse(value: unknown): value is BetterStackSourceResponse {
+  if (!isRecord(value) || !isRecord(value["data"])) {
+    return false;
+  }
+
+  const data = value["data"];
+  const attributes = data["attributes"];
+
+  return (
+    isRecord(attributes) &&
+    typeof data["id"] === "string" &&
+    typeof attributes["team_id"] === "number" &&
+    typeof attributes["team_name"] === "string" &&
+    typeof attributes["table_name"] === "string" &&
+    typeof attributes["data_region"] === "string" &&
+    typeof attributes["name"] === "string"
+  );
+}
+
+function isBetterStackConnectionsResponse(value: unknown): value is BetterStackConnectionsResponse {
+  if (!isRecord(value) || !Array.isArray(value["data"])) {
+    return false;
+  }
+
+  return value["data"].every((connection) => {
+    if (!isRecord(connection) || !isRecord(connection["attributes"])) {
+      return false;
+    }
+
+    const attributes = connection["attributes"];
+
+    return (
+      typeof attributes["data_region"] === "string" &&
+      typeof attributes["host"] === "string" &&
+      typeof attributes["port"] === "number" &&
+      Array.isArray(attributes["team_ids"]) &&
+      attributes["team_ids"].every((teamId) => typeof teamId === "number") &&
+      Array.isArray(attributes["team_names"]) &&
+      attributes["team_names"].every((teamName) => typeof teamName === "string") &&
+      typeof attributes["username"] === "string"
+    );
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function createMetadataClient(tokenOverride?: string): BetterStackClient {
@@ -416,6 +537,10 @@ async function resolveSql(options: QueryRunOptions): Promise<string> {
 
 function fail(message: string): never {
   throw new Error(message);
+}
+
+function invalidResponse(message: string): never {
+  throw new BetterStackResponseShapeError(message);
 }
 
 function writeStdout(text: string): void {

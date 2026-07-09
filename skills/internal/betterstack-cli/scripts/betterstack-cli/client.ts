@@ -4,6 +4,8 @@ type QueryCredentials = {
   username: string;
 };
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 export type BetterStackSourceResponse = {
   data: {
     id: string;
@@ -92,6 +94,7 @@ export class BetterStackClient {
   async runQuery(credentials: QueryCredentials, query: string): Promise<string> {
     const response = await fetch(credentials.url, {
       method: "POST",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         Authorization: `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64")}`,
         "Content-Type": "text/plain"
@@ -104,6 +107,7 @@ export class BetterStackClient {
 
   async #requestJsonText(url: string): Promise<string> {
     const response = await fetch(url, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${this.#token}`
       }
@@ -124,9 +128,16 @@ export class BetterStackClient {
 }
 
 export function normalizeQueryUrl(input: string): string {
-  if (input.startsWith("http://") || input.startsWith("https://")) {
+  const schemeMatch = input.match(/^([a-z][a-z\d+.-]*):\/\//i);
+
+  if (schemeMatch) {
+    if (schemeMatch[1]?.toLowerCase() !== "https") {
+      throw new Error("Better Stack query URL must use HTTPS.");
+    }
+
     return input;
   }
 
-  return `https://${input}?output_format_pretty_row_numbers=0`;
+  const separator = input.includes("?") ? "&" : "?";
+  return `https://${input}${separator}output_format_pretty_row_numbers=0`;
 }

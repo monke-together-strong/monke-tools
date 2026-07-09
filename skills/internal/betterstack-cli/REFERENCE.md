@@ -7,7 +7,7 @@ This is the shared Better Stack query workflow. Repo-local wrapper skills own so
 Use a repo-local wrapper such as `pnpm betterstack` when available. Otherwise run the bundled CLI directly:
 
 ```bash
-bun /Users/hoangbn/Documents/projects/monke-tools/skills/internal/betterstack-cli/scripts/betterstack-cli/index.ts --help
+bun skills/internal/betterstack-cli/scripts/betterstack-cli/index.ts --help
 ```
 
 Supported commands:

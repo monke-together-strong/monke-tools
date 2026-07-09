@@ -12,9 +12,10 @@ Use the bundled CLI for Better Stack metadata and SQL queries. Read repo-local w
 Run the CLI with Bun:
 
 ```bash
-bun /Users/hoangbn/Documents/projects/monke-tools/skills/internal/betterstack-cli/scripts/betterstack-cli/index.ts --help
-bun /Users/hoangbn/Documents/projects/monke-tools/skills/internal/betterstack-cli/scripts/betterstack-cli/index.ts source get --id <source-id>
-bun /Users/hoangbn/Documents/projects/monke-tools/skills/internal/betterstack-cli/scripts/betterstack-cli/index.ts query run --source-id <source-id> --table <table> --sql "SELECT 1 FORMAT JSONEachRow"
+cd skills/internal/betterstack-cli
+bun ./scripts/betterstack-cli/index.ts --help
+bun ./scripts/betterstack-cli/index.ts source get --id <source-id>
+bun ./scripts/betterstack-cli/index.ts query run --source-id <source-id> --table <table> --sql "SELECT 1 FORMAT JSONEachRow"
 ```
 
 Prefer a repo-local script such as `pnpm betterstack` when the wrapper skill or `package.json` provides one.
