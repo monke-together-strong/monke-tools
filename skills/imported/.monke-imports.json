@@ -41,6 +41,10 @@
           "slug": "prototype"
         },
         {
+          "selector": "research",
+          "slug": "research"
+        },
+        {
           "selector": "resolving-merge-conflicts",
           "slug": "resolving-merge-conflicts"
         },
