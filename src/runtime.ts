@@ -18,7 +18,7 @@ import { isCancel, select as clackSelect } from "@clack/prompts";
 
 import { MonkeError } from "./errors.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
-import type { ExecOptions, ExecResult, Runtime } from "./types.ts";
+import type { ExecOptions, ExecResult, Runtime, SelectPrompt } from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5_000;
 const STALE_LOCK_AGE_MS = 60_000;
@@ -33,6 +33,8 @@ export interface RuntimeOptions {
   stdinText?: string;
   /** Scripted selected values used by tests for Clack-style select prompts. */
   selectValues?: string[];
+  /** Optional observer used by tests and embedding callers to inspect select prompts. */
+  onSelect?: (prompt: SelectPrompt) => void;
   /** Optional stdout sink used by tests and embedding callers. */
   onStdout?: (text: string) => void;
   /** Optional stderr sink used by tests and embedding callers. */
@@ -108,6 +110,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       return { stdout, stderr, exitCode };
     },
     async select(prompt): Promise<string> {
+      options?.onSelect?.(prompt);
       if (scriptedSelectValues !== null) {
         const selected = scriptedSelectValues.shift();
         if (selected === undefined) {

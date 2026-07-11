@@ -1,8 +1,10 @@
 import { expect, test } from "vitest";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
+import { getSessionStateFilePath } from "../src/registry.ts";
+import type { SelectPrompt } from "../src/types.ts";
 import {
   createRepo,
   git,
@@ -48,6 +50,42 @@ test("swing without a target opens a Swing picker and selects a Session", async 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
   expect(result.stdout.endsWith(`${worktreeRoot}\n`)).toBe(true);
   expect(result.stderr).toContain(worktreeRoot);
+});
+
+test("swing picker hides paths and lists recently updated Sessions first", async () => {
+  const sandbox = makeTempDir("swing-picker-recency");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  runMonke({ cwd: repoRoot, args: ["spawn", "z-newer"], monkeHome: home });
+  runMonke({ cwd: repoRoot, args: ["spawn", "a-older"], monkeHome: home });
+  git(
+    getExpectedWorktreePath(home, repoRoot, "z-newer"),
+    ["commit", "--allow-empty", "-m", "newer"],
+    {
+      GIT_AUTHOR_DATE: "2035-01-02T00:00:00Z",
+      GIT_COMMITTER_DATE: "2035-01-02T00:00:00Z",
+    },
+  );
+  git(repoRoot, ["tag", "z-newer"]);
+  const stateTime = new Date("2025-01-01T00:00:00Z");
+  utimesSync(getSessionStateFilePath(home, repoRoot, "a-older"), stateTime, stateTime);
+  utimesSync(getSessionStateFilePath(home, repoRoot, "z-newer"), stateTime, stateTime);
+  let prompt: SelectPrompt | undefined;
+
+  await runMonkeAsync({
+    cwd: repoRoot,
+    args: ["swing"],
+    monkeHome: home,
+    selectValues: ["a-older"],
+    onSelect(value) {
+      prompt = value;
+    },
+  });
+
+  expect(prompt?.options.map((option) => option.value)).toEqual(["^", "z-newer", "a-older"]);
+  expect(prompt?.options.every((option) => option.hint === undefined)).toBe(true);
 });
 
 test("swing picker can select the Source checkout from a Session worktree", async () => {
