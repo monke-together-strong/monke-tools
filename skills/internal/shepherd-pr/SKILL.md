@@ -7,9 +7,9 @@ description: 'Shepherd a GitHub pull request all the way to merge-ready by relen
 
 Your job is to shepherd this PR all the way to **merge-ready** - reviewed, addressed, verified, and CI green. **Not merged.** Merging is a human decision.
 
-Create the PR (or pick up the one just created), mark as ready for review if not yet the case, then relentlessly poll its status in a loop. Do not stop polling until all automatic reviewers have fully completed their review on the latest commit.
+Create the PR (or pick up the one just created), then mark it as ready for review if needed.
 
-1. **Wait for reviewers:** Keep polling `gh pr view` / `gh pr checks` / review comments until ALL reviewers have finished. Do not act on partial feedback. If one is still running, keep waiting.
+1. **Wait for reviewers:** Follow [the polling reference](references/polling.md) until all automatic reviewers have finished reviewing the latest commit. Do not act on partial feedback.
 
 2. **Triage their feedback:** Once all reviewers are done, verify each finding against the real code path before acting. Fix everything medium severity and beyond. For low-severity suggestions, fix small local comments that improve repository consistency, naming, style, readability, cleanup, typing, or DRY, especially when they touch code changed by this PR. Reject or skip low-severity suggestions only when they are speculative, depend on an unrealistic/nonexistent scenario, require broad rewrites or extra abstraction, add defensive complexity without a real caller, or address repo-wide/out-of-scope issues not introduced by this PR. When skipping, briefly explain the concrete reason and continue autonomously.
 
