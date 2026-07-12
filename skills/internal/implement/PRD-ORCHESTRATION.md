@@ -21,11 +21,9 @@ the user explicitly asks for filesystem isolation.
 4. Order the issues by their `Blocked by` relationships.
 5. For each attached issue, create a fresh separate thread, not a fork, using
    the delegation prompt template below.
-6. Monitor the current issue implementation every three minutes. Be patient:
-   after confirming the worker is active, wait about 180 seconds between
-   polls; do not short-poll with 60-second sleeps. Let active work continue
-   without steering; intervene only for a blocker, completion, or clear course
-   deviation.
+6. Monitor the current issue implementation with `/polling` using an
+   eight-minute heartbeat. A blocker or clear course deviation is work to do;
+   completion ends that issue's polling loop; otherwise keep waiting.
 7. When a worker or review reports a finding deferred to a later attached issue
    or final integration, add it to a PRD closeout list in the orchestrator
    thread. Include the source issue, the finding, and the expected later issue

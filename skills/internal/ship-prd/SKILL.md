@@ -64,10 +64,9 @@ creation time; do not create them with generic titles and rename later.
 
 ## Monitoring
 
-Monitor delegated work every five minutes. Be patient: after confirming a
-worker is active, wait about 300 seconds between polls; do not short-poll with
-60-second sleeps. Let active work continue without steering; intervene only for
-a blocker, completion, or clear course deviation.
+Monitor the implementation and review threads with `/polling` using an
+eight-minute heartbeat. A blocker or clear course deviation is work to do;
+completion ends that thread's polling loop; otherwise keep waiting.
 
 ## Task Issues
 
