@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parse, stringify } from "yaml";
 
@@ -12,7 +12,7 @@ import {
 } from "./git.ts";
 import { createLogger } from "./logger.ts";
 import { spawnSessionFromSourceRootLocked } from "./monke.ts";
-import { listSessionStates } from "./registry.ts";
+import { getSessionStateFilePath, listSessionStates } from "./registry.ts";
 import { ensureDirectory, getMonkeHome, hashKey, withGlobalLock } from "./runtime.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
@@ -51,7 +51,6 @@ interface SwingPickerOption {
   rawTarget: string;
   target: SwingHistoryTarget;
   label: string;
-  path: string;
   markers: string[];
 }
 
@@ -141,7 +140,7 @@ async function selectSwingTarget(
   rootSourceRoot: string,
   currentTarget: SwingHistoryTarget,
 ): Promise<string> {
-  const options = listSwingPickerOptions(home, rootSourceRoot, currentTarget);
+  const options = listSwingPickerOptions(runtime, home, rootSourceRoot, currentTarget);
   const initialValue = options.find((option) => option.markers.includes("current"))?.rawTarget;
   return runtime.select({
     message: "Swing target",
@@ -150,12 +149,12 @@ async function selectSwingTarget(
     options: options.map((option) => ({
       value: option.rawTarget,
       label: formatSwingPickerLabel(option),
-      hint: option.path,
     })),
   });
 }
 
 function listSwingPickerOptions(
+  runtime: Runtime,
   home: string,
   rootSourceRoot: string,
   currentTarget: SwingHistoryTarget,
@@ -168,17 +167,27 @@ function listSwingPickerOptions(
       rawTarget: "^",
       target: { kind: "source" },
       label: "Source checkout",
-      path: rootSourceRoot,
       markers: formatTargetMarkers({ kind: "source" }, currentTarget, previousTarget),
     });
   }
 
+  const branchCommitTimes = listBranchCommitTimes(runtime, rootSourceRoot);
   const sessionStates = listSessionStates(home)
     .filter((state) => state.rootSourceRoot === rootSourceRoot)
-    .toSorted((left, right) => left.session.localeCompare(right.session));
+    .map((state) => ({
+      state,
+      updatedAt: Math.max(
+        branchCommitTimes.get(state.session) ?? 0,
+        statSync(getSessionStateFilePath(home, rootSourceRoot, state.session)).mtimeMs,
+      ),
+    }))
+    .toSorted(
+      (left, right) =>
+        right.updatedAt - left.updatedAt || left.state.session.localeCompare(right.state.session),
+    );
   const seenSessions = new Set<string>();
 
-  for (const state of sessionStates) {
+  for (const { state } of sessionStates) {
     if (seenSessions.has(state.session)) {
       continue;
     }
@@ -194,7 +203,6 @@ function listSwingPickerOptions(
       rawTarget: state.session,
       target,
       label: `Session ${state.session}`,
-      path: worktreePath,
       markers: formatTargetMarkers(target, currentTarget, previousTarget),
     });
   }
@@ -204,6 +212,28 @@ function listSwingPickerOptions(
   }
 
   return options;
+}
+
+function listBranchCommitTimes(runtime: Runtime, rootSourceRoot: string): Map<string, number> {
+  const result = runtime.exec(
+    "git",
+    ["for-each-ref", "--format=%(refname:lstrip=2)\t%(committerdate:unix)", "refs/heads"],
+    { cwd: rootSourceRoot, allowFailure: true },
+  );
+  if (result.exitCode !== 0) {
+    return new Map();
+  }
+
+  return new Map(
+    result.stdout
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [branch, seconds] = line.split("\t");
+        return [branch!, Number(seconds) * 1000];
+      }),
+  );
 }
 
 function formatSwingPickerLabel(option: SwingPickerOption): string {
