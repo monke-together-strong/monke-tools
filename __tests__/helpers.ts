@@ -16,6 +16,7 @@ import { parse } from "yaml";
 
 import { runCli, runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
+import type { SelectPrompt } from "../src/types.ts";
 
 const tempDirectories: string[] = [];
 
@@ -49,10 +50,11 @@ export function createRepo(root: string, files: Record<string, string>): string 
   return realpathSync.native(root);
 }
 
-export function git(cwd: string, args: string[]): string {
+export function git(cwd: string, args: string[], env?: Record<string, string>): string {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf8",
+    env: { ...process.env, ...env },
   });
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || `git ${args.join(" ")} failed`);
@@ -267,6 +269,7 @@ export async function runMonkeAsync(options: {
   binDirectory?: string;
   extraEnv?: Record<string, string | undefined>;
   selectValues?: string[];
+  onSelect?: (prompt: SelectPrompt) => void;
 }): Promise<{ stdout: string; stderr: string }> {
   let stdout = "";
   let stderr = "";
@@ -280,6 +283,7 @@ export async function runMonkeAsync(options: {
       ...options.extraEnv,
     },
     selectValues: options.selectValues,
+    onSelect: options.onSelect,
     onStdout(text) {
       stdout += text;
     },
