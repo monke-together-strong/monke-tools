@@ -1,10 +1,10 @@
 ---
 id: TASK-14
 title: 'PRD: Add mt cleanup --merged for merge-cleanable sessions'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-16 17:19'
-updated_date: '2026-06-16 17:19'
+updated_date: '2026-07-12 22:38'
 labels:
   - ready-for-agent
 dependencies: []
@@ -132,15 +132,15 @@ eligible only if:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 mt cleanup without --merged keeps the existing Dead worktree cleanup behavior.
-- [ ] #2 mt cleanup --merged --dry-run reports eligible and skipped Merge-cleanable Sessions without removing worktrees or Session state.
-- [ ] #3 mt cleanup --merged removes only eligible Session worktree directories and preserves local branch refs.
-- [ ] #4 Eligible cleanup requires exactly one same-repository Merged PR for the session branch/default branch and local HEAD equal to that PR headRefOid.
-- [ ] #5 Dirty tracked files, untracked files, local commit drift, branch mismatch, detached worktrees, wrong repo paths, missing PRs, and multiple matching PRs all skip with explicit reasons.
-- [ ] #6 Ignored files inside an otherwise eligible Session worktree are removed with the whole worktree.
-- [ ] #7 After eligible worktree removal, existing Cleanup commands and Session state retry semantics are preserved.
-- [ ] #8 Automated tests cover the user-facing CLI behavior and the cleanup decision matrix without requiring live GitHub access.
-- [ ] #9 Merged PR proof verifies the PR head repository matches the local source repository; forked or cross-repository PR matches skip.
+- [x] #1 mt cleanup without --merged keeps the existing Dead worktree cleanup behavior.
+- [x] #2 mt cleanup --merged --dry-run reports eligible and skipped Merge-cleanable Sessions without removing worktrees or Session state.
+- [x] #3 mt cleanup --merged removes only eligible Session worktree directories and preserves local branch refs.
+- [x] #4 Eligible cleanup requires exactly one same-repository Merged PR for the session branch/default branch and local HEAD equal to that PR headRefOid.
+- [x] #5 Dirty tracked files, untracked files, local commit drift, branch mismatch, detached worktrees, wrong repo paths, missing PRs, and multiple matching PRs all skip with explicit reasons.
+- [x] #6 Ignored files inside an otherwise eligible Session worktree are removed with the whole worktree.
+- [x] #7 After eligible worktree removal, existing Cleanup commands and Session state retry semantics are preserved.
+- [x] #8 Automated tests cover the user-facing CLI behavior and the cleanup decision matrix without requiring live GitHub access.
+- [x] #9 Merged PR proof verifies the PR head repository matches the local source repository; forked or cross-repository PR matches skip.
 <!-- AC:END -->
 
 ## Comments
@@ -150,4 +150,16 @@ created: 2026-06-16 17:19
 ---
 Validation follow-up: same-repository matching was already captured in the PRD/ADR, and this acceptance criterion makes the required head-repository verification explicit so branch-name lookup is not treated as sufficient by itself.
 ---
+
+author: @codex
+created: 2026-07-12 22:38
+---
+Backlog reconciliation: marking complete after verifying the implementation shipped independently.
+---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Completed by the shipped mt cleanup --merged implementation. The command preserves default Dead-worktree cleanup, supports dry-run, requires conservative same-repository merged-PR and exact-head proof, skips all dirty or ambiguous cases with reasons, preserves local branches, composes with Cleanup command retry semantics, and has focused CLI/decision-matrix tests. Verified against current README, ADR, implementation, tests, and shipped PR #49 / commit cfa8c14.
+<!-- SECTION:FINAL_SUMMARY:END -->
