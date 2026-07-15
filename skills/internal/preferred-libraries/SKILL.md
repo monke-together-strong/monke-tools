@@ -35,6 +35,10 @@ Use the listed default unless an exception applies. Completion requires one of t
 - `drizzle-orm`: Use as the default ORM/query builder when the project needs lightweight typed database access, SQL visibility, migrations, edge/serverless friendliness, or a small dependency footprint. Use `drizzle-kit` alongside it when schema migrations or introspection are needed.
 - `prisma`: Use when the project benefits from a generated client, Prisma schema workflow, broad database tooling, introspection, or a more batteries-included ORM experience.
 
+## File Storage
+
+- [`files-sdk`](https://files-sdk.dev/): Use as the default interface when storing files in an external object or blob store and the application benefits from one API across providers.
+
 ## Data And Utilities
 
 - `zod`: Use for runtime validation, parsing untrusted data, typed schemas, config validation, and structured API boundaries.
