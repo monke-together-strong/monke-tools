@@ -3,6 +3,8 @@ import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync 
 import path from "node:path";
 
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
+import { spawnSessionFromSourceRootLocked } from "../src/monke.ts";
+import { createRuntime } from "../src/runtime.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/registry.ts";
 import {
   createRepo,
@@ -697,7 +699,7 @@ apps:
   expect(read(worktreeRoot, "local-only.txt")).toBe("default seed\n");
 });
 
-test("spawn -m uses resolved default branch env files while avoiding source baseline ports", () => {
+test("spawn -m seeds untracked env files, keeps tracked default branch env content, and avoids source baseline ports", () => {
   const sandbox = makeTempDir("single-repo-main-local-env");
   const binDirectory = path.join(sandbox, "bin");
   const home = path.join(sandbox, "home");
@@ -727,9 +729,9 @@ test("spawn -m uses resolved default branch env files while avoiding source base
   });
 
   const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
-  expect(existsSync(path.join(worktreeRoot, ".env.demo"))).toBe(false);
+  expect(read(worktreeRoot, ".env.demo")).toBe("DEMO=true\n");
   expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
-  expect(existsSync(path.join(worktreeRoot, "apps/api/.env.demo"))).toBe(false);
+  expect(read(worktreeRoot, "apps/api/.env.demo")).toBe("API_DEMO=true\n");
   expect(existsSync(path.join(worktreeRoot, ".envrc"))).toBe(false);
   expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
 });
@@ -1530,6 +1532,90 @@ external:
       binDirectory,
     }),
   ).toThrow(/must run from the source checkout/);
+});
+
+test("spawn -m seeds untracked env files and seedPaths from the source checkout", () => {
+  const sandbox = makeTempDir("single-repo-main-untracked-seeds");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    ".gitignore": ".env\n.env.local\nseed-data/\n",
+    "tracked.txt": "committed\n",
+    "apps/api/index.js": "// api\n",
+    "apps/api/.env.local": "PORT=3000\n",
+    "seed-data/fixture.txt": "fixture\n",
+    "monke.yml": `seedPaths:
+  - seed-data
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+  write(repoRoot, "tracked.txt", "dirty\n");
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "fresh-seeds", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh-seeds");
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\n");
+  expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\n");
+  expect(read(worktreeRoot, "seed-data/fixture.txt")).toBe("fixture\n");
+  expect(read(worktreeRoot, "tracked.txt")).toBe("committed\n");
+  expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=3000\n");
+});
+
+test("session-branch respawn seeds untracked env files from the source checkout", () => {
+  const sandbox = makeTempDir("single-repo-session-branch-seeds");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    ".gitignore": ".env\n.env.local\nseed-data/\n",
+    "apps/api/index.js": "// api\n",
+    "apps/api/.env.local": "PORT=3000\n",
+    "seed-data/fixture.txt": "fixture\n",
+    "monke.yml": `seedPaths:
+  - seed-data
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: repoRoot,
+    args: ["spawn", "respawned", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "respawned");
+  git(repoRoot, ["worktree", "remove", "--force", worktreeRoot]);
+
+  const runtime = createRuntime({
+    cwd: repoRoot,
+    env: { MONKE_HOME: home, PATH: process.env.PATH ?? "" },
+    onStdout() {},
+    onStderr() {},
+  });
+  spawnSessionFromSourceRootLocked(runtime, home, repoRoot, "respawned", {
+    mode: "session-branch",
+  });
+
+  expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\n");
+  expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\n");
+  expect(read(worktreeRoot, "seed-data/fixture.txt")).toBe("fixture\n");
 });
 
 function captureThrowMessage(action: () => void): string {

@@ -1076,3 +1076,60 @@ external:
   expect(read(depWorktree, ".dep-ready")).toBe("");
   expect(read(rootWorktree, "root-saw-dep")).toBe(path.relative(rootWorktree, depWorktree));
 });
+
+test("spawn -m seeds untracked dependency env files from the dependency source checkout", () => {
+  const sandbox = makeTempDir("multi-repo-main-untracked-seeds");
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+
+  const depRoot = createRepo(path.join(sandbox, "dep"), {
+    ".gitignore": ".env\n.env.local\n",
+    "services/db/index.js": "// db\n",
+    "services/db/.env.local": "PORT=5432\n",
+    "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+  });
+
+  const root = createRepo(path.join(sandbox, "root"), {
+    ".gitignore": ".env\n.env.local\n",
+    "apps/api/index.js": "// api\n",
+    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["spawn", "fresh-dep-seeds", "-m"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  const depWorktree = getExpectedWorktreePath(home, depRoot, "fresh-dep-seeds");
+  const rootWorktree = getExpectedWorktreePath(home, root, "fresh-dep-seeds");
+  expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10000\n");
+  expect(read(rootWorktree, "apps/api/.env.local")).toBe(
+    "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n",
+  );
+  expect(read(depRoot, "services/db/.env.local")).toBe("PORT=5432\n");
+});
