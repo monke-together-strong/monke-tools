@@ -21,7 +21,7 @@ import {
   syncRootEnvFile,
   syncRootEnvFileWithRemovals,
   rewriteManagedEnvFiles,
-  seedWorktreeFilesFromRoot,
+  seedWorktreeFiles,
   collectBaselinePortsFromRoot,
 } from "./env.ts";
 import { openCodexThread } from "./codex.ts";
@@ -370,8 +370,6 @@ export function spawnSessionFromSourceRootLocked(
         session,
         repoConfig,
         worktreePath: worktree.path,
-        seedMaterialRoot:
-          spawnFromDefaultBranch || isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
         baselinePortsRoot: isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
         worktreeCreated: worktree.created,
         existingState,
@@ -675,8 +673,6 @@ export function runMaterialize(runtime: Runtime): void {
         validateWorktreeForSession(runtime, home, repoConfig.sourceRoot, worktreePath, session);
       }
 
-      const sessionMaterialRoot =
-        sessionState.graphSource === "session-branch" ? worktreePath : repoConfig.sourceRoot;
       const materialized = materializeRepo({
         runtime,
         home,
@@ -684,8 +680,8 @@ export function runMaterialize(runtime: Runtime): void {
         session,
         repoConfig,
         worktreePath,
-        seedMaterialRoot: sessionMaterialRoot,
-        baselinePortsRoot: sessionMaterialRoot,
+        baselinePortsRoot:
+          sessionState.graphSource === "session-branch" ? worktreePath : repoConfig.sourceRoot,
         worktreeCreated,
         existingState,
         dependencyResults: results,
@@ -912,7 +908,6 @@ function materializeRepo(options: {
   session: string;
   repoConfig: RepoConfig;
   worktreePath: string;
-  seedMaterialRoot: string;
   baselinePortsRoot: string;
   worktreeCreated: boolean;
   existingState: SessionRepoState | undefined;
@@ -925,7 +920,6 @@ function materializeRepo(options: {
     session,
     repoConfig,
     worktreePath,
-    seedMaterialRoot,
     baselinePortsRoot,
     worktreeCreated,
     existingState,
@@ -933,13 +927,8 @@ function materializeRepo(options: {
   } = options;
 
   if (worktreeCreated) {
-    seedWorktreeFilesFromRoot({
-      config: repoConfig,
-      sourceRoot: seedMaterialRoot,
-      worktreeRoot: worktreePath,
-      onWarning(message) {
-        options.runtime.writeStderr(`${message}\n`);
-      },
+    seedWorktreeFiles(repoConfig, worktreePath, (message) => {
+      options.runtime.writeStderr(`${message}\n`);
     });
   }
 

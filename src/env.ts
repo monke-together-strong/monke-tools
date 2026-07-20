@@ -13,18 +13,6 @@ import path from "node:path";
 import { MonkeError } from "./errors.ts";
 import type { AssignedPort, RepoConfig } from "./types.ts";
 
-/** Options for seeding files from a concrete repo-content root. */
-export interface SeedWorktreeFilesFromRootOptions {
-  /** Parsed repo config whose relative paths are being materialized. */
-  config: RepoConfig;
-  /** Source content root to copy seed files from. */
-  sourceRoot: string;
-  /** Session worktree root that receives seeded files. */
-  worktreeRoot: string;
-  /** Receives non-fatal seed warnings. */
-  onWarning?: (message: string) => void;
-}
-
 /** Options for collecting baseline ports from a concrete repo-content root. */
 export interface CollectBaselinePortsFromRootOptions {
   /** Parsed repo config whose app env files are inspected. */
@@ -39,38 +27,14 @@ export function seedWorktreeFiles(
   worktreeRoot: string,
   onWarning?: (message: string) => void,
 ): void {
-  seedWorktreeFilesFromRoot({
-    config,
-    sourceRoot: config.sourceRoot,
-    worktreeRoot,
-    onWarning,
-  });
-}
-
-/** Seed local env files and configured seed paths from a concrete content root. */
-export function seedWorktreeFilesFromRoot(options: SeedWorktreeFilesFromRootOptions): void {
   const seededPaths = new Set<string>();
 
-  for (const relativePath of listEnvFiles(options.sourceRoot)) {
-    seedRelativePath(
-      options.sourceRoot,
-      options.worktreeRoot,
-      relativePath,
-      false,
-      seededPaths,
-      options.onWarning,
-    );
+  for (const relativePath of listEnvFiles(config.sourceRoot)) {
+    seedRelativePath(config.sourceRoot, worktreeRoot, relativePath, false, seededPaths, onWarning);
   }
 
-  for (const relativePath of options.config.seedPaths) {
-    seedRelativePath(
-      options.sourceRoot,
-      options.worktreeRoot,
-      relativePath,
-      true,
-      seededPaths,
-      options.onWarning,
-    );
+  for (const relativePath of config.seedPaths) {
+    seedRelativePath(config.sourceRoot, worktreeRoot, relativePath, true, seededPaths, onWarning);
   }
 }
 
