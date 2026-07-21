@@ -1,6 +1,6 @@
 ---
 name: implement
-description: "Implement a piece of work based on a PRD, issue, plan"
+description: "Heavyweight implementation workflow with mandatory closeout. Use only when explicitly requested or for work already scoped by a PRD, issue, or plan; do not use for small direct edits or review feedback."
 disable-model-invocation: true
 ---
 
