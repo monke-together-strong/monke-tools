@@ -10,13 +10,24 @@ self-contained post-merge contract, and stop after the PR exists.
 
 ## Workflow
 
-1. Inspect the branch.
-   - Check `git status --short`, the current branch, its upstream, and the
-     commits/diff against the intended base.
+1. Rebase onto the latest intended base.
+   - Determine the intended base from an existing PR when one exists;
+     otherwise use the repository default branch unless the task names a
+     different base.
+   - Check `git status --short` and the current branch before rebasing. Never
+     rebase the base branch itself.
    - If there are uncommitted changes that look relevant, commit them before
-     creating the PR. If they look unrelated, ask before touching them.
+     rebasing. If they look unrelated, ask before touching them.
+   - Run `git fetch origin <base>` and `git rebase origin/<base>` before any PR
+     analysis or verification.
+   - If the rebase conflicts, follow `$resolving-merge-conflicts`; do not push
+     until the rebase is complete and verified.
 
-2. Collect proof.
+2. Inspect the rebased branch.
+   - Check the branch upstream and the commits/diff against the intended base.
+   - Confirm the latest intended base is an ancestor of `HEAD`.
+
+3. Collect proof.
    - Record the verification commands already run, or run the smallest
      relevant checks before creating the PR.
    - For frontend-visible work, attach proof. Use screenshots when one final
@@ -28,7 +39,7 @@ self-contained post-merge contract, and stop after the PR exists.
      GitHub attachment markdown or bare video URLs in the PR body. Do not leave
      local file paths as proof.
 
-3. Draft the post-merge contract.
+4. Draft the post-merge contract.
    - If root `POST_MERGE.md` exists, read it as repo-specific authoring context
      for environments, deployment signals, verification norms, and evidence.
    - Combine that context, the PRD/issue, and the diff into concise checks for
@@ -37,7 +48,7 @@ self-contained post-merge contract, and stop after the PR exists.
      `Environment`, `Deployment gate`, and `Checks`. Mark unknown details
      explicitly, such as `Environment: ask user`.
 
-4. Write the PR body.
+5. Write the PR body.
    Use this shape unless the repo has a stronger convention:
 
    ```markdown
@@ -65,14 +76,14 @@ self-contained post-merge contract, and stop after the PR exists.
    complete when the PR body lets a reader open the source PRD.
    Omit `Proof` only when the work has no user-visible frontend behavior.
 
-5. Create the PR.
+6. Create the PR.
    - Push with `git push -u origin HEAD` if the branch has no upstream.
    - Create a ready PR by default with `gh pr create --title ... --body-file
      ...`; use draft only when the user asks.
    - If a PR already exists for the branch, update it instead of creating a
      duplicate.
 
-6. Verify and report.
+7. Verify and report.
    - Run `gh pr view --json url,title,body` and confirm the PR contains the
      intended PRD attachment, proof links, and post-merge contract.
    - Report the PR URL, PRD attachment, verification checks, proof, and
