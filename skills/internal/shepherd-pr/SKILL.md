@@ -9,6 +9,16 @@ Your job is to shepherd this PR all the way to **merge-ready** - reviewed, addre
 
 Create the PR (or pick up the one just created), then mark it as ready for review if needed.
 
+## Check terminal state first
+
+On initial pickup and every heartbeat or re-entry, check PR state before CI or reviews:
+
+```bash
+gh pr view https://github.com/OWNER/REPO/pull/NUMBER --json state,mergedAt,closedAt,mergeCommit
+```
+
+If `state` is `MERGED` or `CLOSED`, delete the heartbeat, report the terminal state (including merge time and commit when available), and stop—even if jobs remain active. Only `OPEN` continues.
+
 1. **Wait for reviewers:** Run `/polling` with an eight-minute heartbeat until all automatic reviewers have finished reviewing the latest commit. Do not act on partial feedback.
 
 2. **Triage their feedback:** Once all reviewers are done, verify each finding against the real code path before acting. Fix everything medium severity and beyond. For low-severity suggestions, fix small local comments that improve repository consistency, naming, style, readability, cleanup, typing, or DRY, especially when they touch code changed by this PR. Reject or skip low-severity suggestions only when they are speculative, depend on an unrealistic/nonexistent scenario, require broad rewrites or extra abstraction, add defensive complexity without a real caller, or address repo-wide/out-of-scope issues not introduced by this PR. When skipping, briefly explain the concrete reason and continue autonomously.
@@ -33,6 +43,6 @@ Nitpick is a severity label, not a dismissal. Prefer fixing consistency polish; 
 
 "Pushed a fix" is not done. "All green" is not done either - it's the handoff point.
 
-**Do not stop early. Do not merge on your own.**
+**Do not stop early while the PR remains open. Do not merge on your own.**
 
-Done is when you've looped through a clean review cycle, double-checked it, reported merge-ready, and stopped for human handoff.
+Done means the PR is externally terminal (monitor removed and state reported) or open and merge-ready (double-checked and handed off).
