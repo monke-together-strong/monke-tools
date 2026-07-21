@@ -1,6 +1,6 @@
 ---
 name: learn
-description: Learn from agent incidents. Use when the user asks to compare intended behavior with actual behavior in a thread, session, or workflow, or to improve a skill, prompt, tool workflow, process, or instruction from evidence.
+description: Learn from evidence. Use when the user wants an incident explained or a behavior, skill, prompt, tool workflow, process, or instruction improved.
 ---
 
 # Learn
@@ -26,17 +26,10 @@ been asked for the missing target.
 
 ## 2. Rebuild The Incident
 
-Use primary artifacts before diagnosing:
-
-- conversation messages and tool calls available in the current thread
-- referenced threads or sessions, when the user points to them and inspection
-  tools are available
-- local files, skill instructions, prompts, docs, diffs, commits, issue comments,
-  command output, logs, or test output mentioned by the incident
-- exact user wording that could have been interpreted in more than one way
-
-Prefer raw artifacts over memory. Do not claim a cause until the evidence shows
-where the behavior came from.
+Read every available primary artifact the user points to: thread messages and
+tool calls, referenced sessions, local files, diffs, commits, logs, test output,
+and exact user wording. Prefer raw evidence over memory; do not diagnose before
+it supports the cause.
 
 Completion criterion: every available artifact the user pointed at has been read
 or explicitly marked unavailable.
@@ -67,12 +60,8 @@ usage rule, or process change.
 If the user only asks what happened, report the diagnosis and recommend the fix
 without editing.
 
-When editing a skill or instruction:
-
-- keep one source of truth for the changed behavior
-- distinguish primary targets from background context
-- make completion criteria checkable
-- prune duplicate wording after the behavior is clear
+When creating or updating a skill, invoke `/writing-great-skills` before editing
+and verify the finished skill against it.
 
 Completion criterion: either the fix is implemented and verified when practical,
 or the recommended fix is concrete enough for another agent to apply.
