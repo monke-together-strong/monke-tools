@@ -1,6 +1,6 @@
 ---
 name: agent-session-retrospective
-description: Study local Codex + Claude agent transcripts for recurring friction and repeated user asks, then emit report-only, evidence-grounded proposals for the highest-value durable fixes.
+description: Use only when the user explicitly asks for an agent or session retrospective. Study local Codex + Claude agent transcripts for recurring friction and repeated user asks, then emit report-only, evidence-grounded proposals for the highest-value durable fixes. Never invoke proactively.
 disable-model-invocation: true
 ---
 
