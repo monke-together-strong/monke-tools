@@ -2,6 +2,15 @@
   "version": 1,
   "recipes": [
     {
+      "source": "git@github.com:petergyang/no-ai-slop.git",
+      "skills": [
+        {
+          "selector": "no-ai-slop",
+          "slug": "no-ai-slop"
+        }
+      ]
+    },
+    {
       "source": "https://github.com/cursor/plugins/tree/main/cursor-team-kit/skills",
       "skills": [
         {
