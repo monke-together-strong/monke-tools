@@ -30,11 +30,14 @@ self-contained post-merge contract, and stop after the PR exists.
 3. Collect proof.
    - Record the verification commands already run, or run the smallest
      relevant checks before creating the PR.
+   - For work with a locally runnable user-visible surface, prepare a
+     [manual-test handoff](references/manual-test-handoff.md) and reuse its
+     target for proof.
    - For frontend-visible work, attach proof. Use screenshots when one final
      state proves the change; use
      [browser video proof](references/browser-video-proof.md) when the behavior
      is workflow-shaped, timing-sensitive, or hard to trust from screenshots
-     alone.
+     alone. There can be more than 1 screenshot or video.
    - Upload local media with `$github-image-upload`; embed the returned
      GitHub attachment markdown or bare video URLs in the PR body. Do not leave
      local file paths as proof.
@@ -85,6 +88,6 @@ self-contained post-merge contract, and stop after the PR exists.
 
 7. Verify and report.
    - Run `gh pr view --json url,title,body` and confirm the PR contains the
-     intended PRD attachment, proof links, and post-merge contract.
-   - Report the PR URL, PRD attachment, verification checks, proof, and
-     post-merge contract.
+     intended PRD attachment, proof, and post-merge contract.
+   - Report the PR URL and those same artifacts. Include the manual-test
+     handoff when one was prepared.
