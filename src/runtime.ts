@@ -24,9 +24,11 @@ import type { ExecOptions, ExecResult, Runtime, SelectPrompt } from "./types.ts"
 const GLOBAL_LOCK_TIMEOUT_MS = 5_000;
 const STALE_LOCK_AGE_MS = 60_000;
 const LockMetadataSchema = z.object({
-  pid: z.number().int().positive().optional(),
-  acquiredAt: z.number().finite().optional(),
+  pid: z.unknown().optional(),
+  acquiredAt: z.unknown().optional(),
 });
+const LockPidSchema = z.number().int().positive();
+const LockTimestampSchema = z.number().finite();
 
 /** Runtime construction options for CLI commands and integration-style tests. */
 export interface RuntimeOptions {
@@ -320,13 +322,15 @@ function tryEvictStaleLock(lockPath: string): boolean {
     const parsed = LockMetadataSchema.safeParse(JSON.parse(readFileSync(lockPath, "utf8")));
     if (parsed.success) {
       const metadata = parsed.data;
+      const acquiredAt = LockTimestampSchema.safeParse(metadata.acquiredAt);
+      const pid = LockPidSchema.safeParse(metadata.pid);
 
-      if (metadata.acquiredAt !== undefined) {
-        isStale = metadata.acquiredAt <= staleSince;
+      if (acquiredAt.success) {
+        isStale = acquiredAt.data <= staleSince;
       }
 
-      if (metadata.pid !== undefined) {
-        isStale = !isProcessRunning(metadata.pid);
+      if (pid.success) {
+        isStale = !isProcessRunning(pid.data);
       }
     }
   } catch {
