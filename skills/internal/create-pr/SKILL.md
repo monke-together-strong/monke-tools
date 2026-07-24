@@ -26,6 +26,9 @@ self-contained post-merge contract, and stop after the PR exists.
 2. Inspect the rebased branch.
    - Check the branch upstream and the commits/diff against the intended base.
    - Confirm the latest intended base is an ancestor of `HEAD`.
+   - Exclude research notes and artifacts, including `docs/research/`, unless
+     the user explicitly asks to publish them. Research may inform the PR, but
+     it is not part of the deliverable by default.
 
 3. Collect proof.
    - Record the verification commands already run, or run the smallest
