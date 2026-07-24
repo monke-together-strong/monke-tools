@@ -2,9 +2,12 @@ import * as z from "zod";
 
 const NonEmptyStringSchema = z.string().min(1);
 const PortSchema = z.number().int().min(1).max(65_535);
+const PortKeySchema = z
+  .string()
+  .regex(/^[A-Z][A-Z0-9_]*_PORT$/, { error: "must be an uppercase env name ending in _PORT" });
 
 export const AssignedPortSchema = z.strictObject({
-  key: NonEmptyStringSchema,
+  key: PortKeySchema,
   value: PortSchema,
 });
 

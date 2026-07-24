@@ -131,6 +131,32 @@ test("Claude skill reconciliation flattens source categories into the Agent skil
   );
 });
 
+test("Claude skill reconciliation rejects unknown future flat manifest versions", () => {
+  const sandbox = makeTempDir("skill-reconcile-future-manifest");
+  const sourceCheckout = path.join(sandbox, "source");
+  const claudeSkillRoot = path.join(sandbox, ".claude", "skills");
+  write(
+    sourceCheckout,
+    "skills/internal/monke-tools-core/SKILL.md",
+    "---\nname: monke-tools-core\n---\n",
+  );
+  write(
+    claudeSkillRoot,
+    ".monke-tools-flat-skills.json",
+    JSON.stringify({ version: 2, managedBy: "monke-tools", links: [] }),
+  );
+
+  expect(() =>
+    reconcileSkillNamespaces({
+      sourceCheckout,
+      previousPreference: { targets: [{ kind: "claude" }] },
+      nextPreference: { targets: [{ kind: "claude" }] },
+      homeDirectory: sandbox,
+      writeMessage() {},
+    }),
+  ).toThrow(/Invalid monke-tools flat Skill manifest/);
+});
+
 test("skill namespace reconciliation attempts every selected target before failing on unmanaged namespaces", () => {
   const sandbox = makeTempDir("skill-reconcile-partial");
   const sourceCheckout = path.join(sandbox, "source");

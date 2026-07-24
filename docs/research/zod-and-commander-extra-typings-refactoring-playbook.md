@@ -126,6 +126,10 @@ function parseToolConfig(input: unknown): ToolConfig {
 Do not write `JSON.parse(text) as SomeType` or `yaml.parse(text) as SomeType` at a trust boundary.
 The cast changes only TypeScript's opinion; it does not validate the value.
 
+Public runtime parser boundaries should accept `unknown` and return the schema-derived validated
+output. Typing the parser input as `z.input<typeof Schema>` can hide the invalid JavaScript values
+that runtime validation exists to reject, especially from untyped callers.
+
 ### Use strict objects for formats the application owns
 
 `z.object()` strips unrecognized keys from its parsed output. `z.strictObject()` rejects them,
@@ -208,6 +212,11 @@ function parseOwnedFile<T extends z.ZodType>(
 
 The adapter should map issue paths into the repository's existing location syntax and preserve
 important domain wording. Snapshot or behavior-test those messages before migration.
+
+When migrating a staged, reason-coded parser, let schemas validate every primitive the application
+consumes, then translate Zod issue paths back into the parser's existing precedence-ordered domain
+reasons at the boundary adapter. Using `z.unknown()` for consumed fields only relocates the unsafe
+boundary, while a broad `.catch()` can silently change established fallback behavior.
 
 Zod omits input values from issues by default to reduce accidental exposure of sensitive data.
 Only enable `reportInput` deliberately
@@ -345,6 +354,10 @@ It requires TypeScript 5 or newer. Commander supplies the runtime behavior
 
 It does **not** validate arbitrary runtime objects. It derives types from the strings and parsers
 already used to declare the CLI.
+
+Determine applicability from direct source imports and Commander declarations such as
+`.argument()`, `.option()`, `.action()`, and `.opts()`, not from a transitive lockfile entry. If the
+repository has no Commander declaration, extra-typings is not applicable and should not be added.
 
 ### Prefer fluent inference
 
@@ -490,6 +503,8 @@ and inferred types; Commander remains the runtime parser.
 - Search for handwritten `isRecord`, `requireString`, `assertKnownKeys`, and normalization helpers.
 - Search for persisted objects with a `version` field but no runtime parser.
 - Search for Commander `.argument`, `.option`, `.action`, and generic `.opts<T>()` calls.
+- Treat Commander found only in a lockfile or dependency tree as transitive until direct source
+  declarations prove that extra-typings applies.
 - Identify public error text and behavior tests before changing validation.
 
 ### Boundary design
@@ -503,7 +518,7 @@ and inferred types; Commander remains the runtime parser.
 
 ### Implementation
 
-- Parse external data to `unknown`.
+- Accept `unknown` at public runtime parser boundaries and return schema-derived validated output.
 - Use strict schemas for application-owned closed formats.
 - Derive boundary types with `z.input`/`z.output`.
 - Translate Zod errors into the application's error abstraction.

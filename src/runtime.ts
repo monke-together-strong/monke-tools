@@ -15,7 +15,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { isCancel, select as clackSelect } from "@clack/prompts";
-import { z } from "zod";
+import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";

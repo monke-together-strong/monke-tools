@@ -32,6 +32,31 @@ repos: wrong
   );
 });
 
+test("loadSessionState rejects persisted assigned ports with invalid port keys", () => {
+  const sandbox = makeTempDir("registry-invalid-port-key");
+  const home = path.join(sandbox, "home");
+  const sourceRoot = path.join(sandbox, "root");
+  const statePath = getSessionStateFilePath(home, sourceRoot, "invalid-port-key");
+  write(
+    home,
+    path.relative(home, statePath),
+    `version: 1
+rootSourceRoot: ${sourceRoot}
+session: invalid-port-key
+repos:
+  - sourceRoot: ${sourceRoot}
+    worktreePath: /worktree
+    assignedPorts:
+      - key: api-port
+        value: 10000
+`,
+  );
+
+  expect(() => loadSessionState(home, sourceRoot, "invalid-port-key")).toThrow(
+    /repos\[0\]\.assignedPorts\[0\]\.key must be an uppercase env name ending in _PORT/,
+  );
+});
+
 test("loadSessionState rejects unknown keys in application-owned state", () => {
   const sandbox = makeTempDir("registry-unknown-session-key");
   const home = path.join(sandbox, "home");

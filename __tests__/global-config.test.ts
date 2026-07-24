@@ -63,6 +63,13 @@ skillInstallPreference:
   expect(() => loadGlobalMonkeConfig(relativeCustomHome)).toThrow(/absolute path/);
 });
 
+test("global monke config rejects unknown future versions with the file and field path", () => {
+  const home = makeTempDir("global-config-future-version");
+  writeInvalidConfig(home, "version: 2\n");
+
+  expect(() => loadGlobalMonkeConfig(home)).toThrow(/config\.yml[\s\S]*version/);
+});
+
 function writeInvalidConfig(home: string, contents: string): void {
   write(home, "config.yml", contents);
 }
