@@ -11,6 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
@@ -421,16 +422,18 @@ function removeManagedNamespace(namespacePath: string): void {
   rmSync(namespacePath);
 }
 
-interface FlatSkillLink {
-  name: string;
-  sourcePath: string;
-}
+const FlatSkillLinkSchema = z.strictObject({
+  name: z.string().min(1),
+  sourcePath: z.string().min(1),
+});
+const FlatSkillManifestSchema = z.strictObject({
+  version: z.literal(1),
+  managedBy: z.literal("monke-tools"),
+  links: z.array(FlatSkillLinkSchema),
+});
 
-interface FlatSkillManifest {
-  version: 1;
-  managedBy: "monke-tools";
-  links: FlatSkillLink[];
-}
+type FlatSkillLink = z.output<typeof FlatSkillLinkSchema>;
+type FlatSkillManifest = z.output<typeof FlatSkillManifestSchema>;
 
 function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
   const links = new Map<string, FlatSkillLink>();
@@ -515,23 +518,18 @@ function readFlatManifest(target: ResolvedSkillInstallTarget): FlatSkillManifest
     return null;
   }
 
-  const rawManifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Partial<FlatSkillManifest>;
-  if (
-    rawManifest.version !== 1 ||
-    rawManifest.managedBy !== "monke-tools" ||
-    !Array.isArray(rawManifest.links)
-  ) {
+  let rawManifest: unknown;
+  try {
+    rawManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  } catch {
     throw new MonkeError(`Invalid monke-tools flat Skill manifest at ${manifestPath}`);
   }
 
-  return {
-    version: 1,
-    managedBy: "monke-tools",
-    links: rawManifest.links.map((link) => ({
-      name: String(link.name),
-      sourcePath: String(link.sourcePath),
-    })),
-  };
+  const parsed = FlatSkillManifestSchema.safeParse(rawManifest);
+  if (!parsed.success) {
+    throw new MonkeError(`Invalid monke-tools flat Skill manifest at ${manifestPath}`);
+  }
+  return parsed.data;
 }
 
 function writeFlatManifest(target: ResolvedSkillInstallTarget, links: FlatSkillLink[]): void {
@@ -541,8 +539,9 @@ function writeFlatManifest(target: ResolvedSkillInstallTarget, links: FlatSkillL
     links,
   };
   const manifestPath = flatManifestPath(target);
+  const parsed = FlatSkillManifestSchema.parse(manifest);
 
-  writeFileSync(`${manifestPath}.tmp`, `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(`${manifestPath}.tmp`, `${JSON.stringify(parsed, null, 2)}\n`);
   renameSync(`${manifestPath}.tmp`, manifestPath);
 }
 

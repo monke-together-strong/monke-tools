@@ -16,8 +16,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { GroupMultiSelectPrompt } from "@clack/core";
 import * as p from "@clack/prompts";
-import { Command, CommanderError } from "commander";
+import { Command, CommanderError } from "@commander-js/extra-typings";
 import pc from "picocolors";
+import * as z from "zod";
 
 interface ImportCommandOptions {
   source: string;
@@ -68,31 +69,53 @@ const CONTROL_RE = new RegExp(
   "g",
 );
 
+const SkillImportRecipeSkillSchema = z.strictObject(
+  {
+    selector: z.string().refine((value) => value.trim().length > 0, {
+      error: "Skill import selector must be a non-empty string",
+    }),
+    slug: z.string().refine((value) => value.trim().length > 0, {
+      error: "Skill slug must be a non-empty string",
+    }),
+  },
+  { error: "Skill import recipe skill must be a JSON object" },
+);
+const SkillImportRecipeSchema = z.strictObject(
+  {
+    source: z.string().refine((value) => value.trim().length > 0, {
+      error: "Skill import recipe source must be a non-empty string",
+    }),
+    acceptOpenClawRisks: z
+      .literal(true, {
+        error: "Skill import recipe acceptOpenClawRisks must be true when present",
+      })
+      .optional(),
+    skills: z
+      .array(SkillImportRecipeSkillSchema, {
+        error: "Skill import recipe skills must be a non-empty array",
+      })
+      .min(1, { error: "Skill import recipe skills must be a non-empty array" }),
+  },
+  { error: "Skill import recipe must be a JSON object" },
+);
+const SkillImportRecipeStoreSchema = z.strictObject(
+  {
+    version: z.literal(1, { error: "Skill import recipe store version must be 1" }),
+    recipes: z.array(SkillImportRecipeSchema, {
+      error: "Skill import recipe store recipes must be an array",
+    }),
+  },
+  { error: "Skill import recipe store must be a JSON object" },
+);
+
 /** Repo-tracked store for all Skill import recipes. */
-export interface SkillImportRecipeStore {
-  /** Recipe store schema version. */
-  version: 1;
-  /** Source-scoped recipes that own imported Skill slugs. */
-  recipes: SkillImportRecipe[];
-}
+export type SkillImportRecipeStore = z.output<typeof SkillImportRecipeStoreSchema>;
 
 /** Source-scoped recipe used to rerun a Skill import. */
-export interface SkillImportRecipe {
-  /** Human-facing source string passed through to upstream `skills add`. */
-  source: string;
-  /** Whether the dedicated OpenClaw risk acceptance flag is required. */
-  acceptOpenClawRisks?: true;
-  /** Imported skills owned by this recipe. */
-  skills: SkillImportRecipeSkill[];
-}
+export type SkillImportRecipe = z.output<typeof SkillImportRecipeSchema>;
 
 /** Mapping between an upstream Skill import selector and local Skill slug. */
-export interface SkillImportRecipeSkill {
-  /** Upstream-facing selector passed as `skills add --skill`. */
-  selector: string;
-  /** Local imported Skill directory name under `skills/imported`. */
-  slug: string;
-}
+export type SkillImportRecipeSkill = z.output<typeof SkillImportRecipeSkillSchema>;
 
 /** Input for recording newly imported skills in the recipe store. */
 export interface RecordImportedSkillsInput {
@@ -484,9 +507,9 @@ function parseCommand(argv: string[]): ImportCommandOptions {
     throw error;
   }
 
-  const options = program.opts<{ install?: boolean; acceptOpenclawRisks?: boolean }>();
+  const options = program.opts();
   return {
-    source: program.args[0]!,
+    source: program.processedArgs[0],
     install: Boolean(options.install),
     acceptOpenClawRisks: Boolean(options.acceptOpenclawRisks),
   };
@@ -937,19 +960,23 @@ function stepSymbol(state: string): string {
 }
 
 function normalizeImportRecipeStore(input: unknown): SkillImportRecipeStore {
-  if (!isRecord(input)) {
-    throw new Error("Skill import recipe store must be a JSON object");
+  const parsed = SkillImportRecipeStoreSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues[0]?.message ?? "Skill import recipe store has an invalid shape",
+    );
   }
 
-  if (input.version !== 1) {
-    throw new Error("Skill import recipe store version must be 1");
-  }
-
-  if (!Array.isArray(input.recipes)) {
-    throw new Error("Skill import recipe store recipes must be an array");
-  }
-
-  const recipes = input.recipes.map(normalizeImportRecipe);
+  const recipes = parsed.data.recipes.map((recipe) => {
+    assertUniqueRecipeSkillSelectors(recipe.source, recipe.skills);
+    return {
+      ...recipe,
+      skills: recipe.skills.sort((left, right) => {
+        const slugOrder = left.slug.localeCompare(right.slug);
+        return slugOrder !== 0 ? slugOrder : left.selector.localeCompare(right.selector);
+      }),
+    };
+  });
   assertUniqueRecipeSources(recipes);
   assertUniqueImportedSkillOwners({ version: 1, recipes });
 
@@ -962,40 +989,6 @@ function normalizeImportRecipeStore(input: unknown): SkillImportRecipeStore {
       }
 
       return Number(Boolean(left.acceptOpenClawRisks)) - Number(Boolean(right.acceptOpenClawRisks));
-    }),
-  };
-}
-
-function normalizeImportRecipe(input: unknown): SkillImportRecipe {
-  if (!isRecord(input)) {
-    throw new Error("Skill import recipe must be a JSON object");
-  }
-
-  if (typeof input.source !== "string" || input.source.trim() === "") {
-    throw new Error("Skill import recipe source must be a non-empty string");
-  }
-
-  if (input.acceptOpenClawRisks !== undefined && input.acceptOpenClawRisks !== true) {
-    throw new Error("Skill import recipe acceptOpenClawRisks must be true when present");
-  }
-
-  if (!Array.isArray(input.skills) || input.skills.length === 0) {
-    throw new Error("Skill import recipe skills must be a non-empty array");
-  }
-
-  const skills = input.skills.map(normalizeImportRecipeSkill);
-  assertUniqueRecipeSkillSelectors(input.source, skills);
-
-  return {
-    source: input.source,
-    ...(input.acceptOpenClawRisks === true ? { acceptOpenClawRisks: true as const } : {}),
-    skills: skills.sort((left, right) => {
-      const slugOrder = left.slug.localeCompare(right.slug);
-      if (slugOrder !== 0) {
-        return slugOrder;
-      }
-
-      return left.selector.localeCompare(right.selector);
     }),
   };
 }
@@ -1023,25 +1016,6 @@ function assertUniqueRecipeSkillSelectors(
 
     selectors.add(skill.selector);
   }
-}
-
-function normalizeImportRecipeSkill(input: unknown): SkillImportRecipeSkill {
-  if (!isRecord(input)) {
-    throw new Error("Skill import recipe skill must be a JSON object");
-  }
-
-  if (typeof input.selector !== "string" || input.selector.trim() === "") {
-    throw new Error("Skill import selector must be a non-empty string");
-  }
-
-  if (typeof input.slug !== "string" || input.slug.trim() === "") {
-    throw new Error("Skill slug must be a non-empty string");
-  }
-
-  return {
-    selector: input.selector,
-    slug: input.slug,
-  };
 }
 
 function assertUniqueImportedSkillOwners(store: SkillImportRecipeStore): void {
@@ -1207,10 +1181,6 @@ export function assertSkillSelectorSlugMappingsMatchStagedSlugs(
       ].join("\n"),
     );
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseSkillRow(line: string): string | null {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Command, InvalidArgumentError } from "commander";
+import { Command, InvalidArgumentError } from "@commander-js/extra-typings";
 import { existsSync, readFileSync } from "node:fs";
 import {
   BetterStackApiError,
@@ -10,32 +10,6 @@ import {
   normalizeQueryUrl
 } from "./client";
 import { getFirstEnvValue, loadEnvFileIfPresent } from "./env";
-
-type BetterStackBaseOptions = {
-  envFile?: string;
-  token?: string;
-};
-
-type PaginationOptions = BetterStackBaseOptions & {
-  page?: number;
-  perPage?: number;
-};
-
-type SourceGetOptions = BetterStackBaseOptions & {
-  id: number;
-};
-
-type QueryRunOptions = BetterStackBaseOptions & {
-  host?: string;
-  password?: string;
-  sourceId: number;
-  sql?: string;
-  sqlFile?: string;
-  stdin?: boolean;
-  table: string;
-  url?: string;
-  username?: string;
-};
 
 async function main(): Promise<void> {
   const program = createProgram();
@@ -75,57 +49,62 @@ Notes:
     );
 
   const source = program.command("source").description("Inspect Better Stack sources.");
-  addCredentialOptions(
-    source
-      .command("list")
-      .description("List Better Stack sources.")
-      .option("--page <number>", "Page number.", parseIntegerOption)
-      .option("--per-page <number>", "Results per page.", parseIntegerOption)
-  ).action(handleSourceList);
-  addCredentialOptions(
-    source
-      .command("get")
-      .description("Fetch one Better Stack source.")
-      .requiredOption("--id <number>", "Better Stack source id.", parseIntegerOption)
-  ).action(handleSourceGet);
+  createPaginatedListCommand(source, "List Better Stack sources.").action(handleSourceList);
+  createSourceGetCommand(source).action(handleSourceGet);
 
   const connection = program.command("connection").description("Inspect Better Stack connections.");
-  addCredentialOptions(
-    connection
-      .command("list")
-      .description("List Better Stack connections.")
-      .option("--page <number>", "Page number.", parseIntegerOption)
-      .option("--per-page <number>", "Results per page.", parseIntegerOption)
-  ).action(handleConnectionList);
+  createPaginatedListCommand(connection, "List Better Stack connections.").action(
+    handleConnectionList,
+  );
 
   const query = program.command("query").description("Run Better Stack SQL queries.");
-  addCredentialOptions(
-    query
-      .command("run")
-      .description("Run SQL against a Better Stack source.")
-      .requiredOption("--source-id <number>", "Better Stack source id.", parseIntegerOption)
-      .requiredOption("--table <name>", "Better Stack SQL table name.")
-      .option("--sql <query>", "Inline SQL text.")
-      .option("--sql-file <path>", "Path to a file containing SQL text.")
-      .option("--stdin", "Read SQL text from stdin.")
-      .option("--url <url>", "Better Stack query endpoint URL.")
-      .option("--host <host>", "Better Stack query endpoint host.")
-      .option("--username <username>", "Better Stack query username.")
-      .option("--password <password>", "Better Stack query password."),
-    "Better Stack source API token for metadata validation."
-  ).action(handleQueryRun);
+  createQueryRunCommand(query).action(handleQueryRun);
 
   return program;
 }
 
-function addCredentialOptions(
-  command: Command,
-  tokenDescription = "Better Stack source API token."
-): Command {
-  return command
-    .option("--token <token>", tokenDescription)
+function createPaginatedListCommand(parent: Command, description: string) {
+  return parent
+    .command("list")
+    .description(description)
+    .option("--page <number>", "Page number.", parseIntegerOption)
+    .option("--per-page <number>", "Results per page.", parseIntegerOption)
+    .option("--token <token>", "Better Stack source API token.")
     .option("--env-file <path>", "Env file to load before resolving credentials.");
 }
+
+function createSourceGetCommand(parent: Command) {
+  return parent
+    .command("get")
+    .description("Fetch one Better Stack source.")
+    .requiredOption("--id <number>", "Better Stack source id.", parseIntegerOption)
+    .option("--token <token>", "Better Stack source API token.")
+    .option("--env-file <path>", "Env file to load before resolving credentials.");
+}
+
+function createQueryRunCommand(parent: Command) {
+  return parent
+    .command("run")
+    .description("Run SQL against a Better Stack source.")
+    .requiredOption("--source-id <number>", "Better Stack source id.", parseIntegerOption)
+    .requiredOption("--table <name>", "Better Stack SQL table name.")
+    .option("--sql <query>", "Inline SQL text.")
+    .option("--sql-file <path>", "Path to a file containing SQL text.")
+    .option("--stdin", "Read SQL text from stdin.")
+    .option("--url <url>", "Better Stack query endpoint URL.")
+    .option("--host <host>", "Better Stack query endpoint host.")
+    .option("--username <username>", "Better Stack query username.")
+    .option("--password <password>", "Better Stack query password.")
+    .option("--token <token>", "Better Stack source API token for metadata validation.")
+    .option("--env-file <path>", "Env file to load before resolving credentials.");
+}
+
+type PaginationCommand = ReturnType<typeof createPaginatedListCommand>;
+type PaginationOptions = ReturnType<PaginationCommand["opts"]>;
+type SourceGetCommand = ReturnType<typeof createSourceGetCommand>;
+type SourceGetOptions = ReturnType<SourceGetCommand["opts"]>;
+type QueryRunCommand = ReturnType<typeof createQueryRunCommand>;
+type QueryRunOptions = ReturnType<QueryRunCommand["opts"]>;
 
 function parseIntegerOption(value: string): number {
   const parsed = Number(value);

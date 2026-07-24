@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { listSessionStates } from "./registry.ts";
@@ -33,6 +34,11 @@ export interface ResolvedResourceCommands {
 type ResourceCommandInput = Record<string, string[]>;
 
 const RESOURCE_COMMAND_RUNNER_ARGV = "monke-resource-command-runner";
+const ResourceCommandRunnerEnvelopeSchema = z.strictObject({ value: z.unknown() });
+const ResourceCommandReturnSchema = z.record(
+  z.string(),
+  z.string().refine((value) => value.trim().length > 0),
+);
 
 const RESOURCE_COMMAND_MODULE_RUNNER = [
   'import { pathToFileURL } from "node:url";',
@@ -396,7 +402,8 @@ function readResourceCommandRunnerOutput(options: {
     });
   }
 
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  const envelope = ResourceCommandRunnerEnvelopeSchema.safeParse(parsed);
+  if (!envelope.success) {
     throw resourceCommandFailure({
       command: options.command,
       kind: "runner protocol violation",
@@ -405,7 +412,7 @@ function readResourceCommandRunnerOutput(options: {
     });
   }
 
-  return (parsed as Record<string, unknown>).value;
+  return envelope.data.value;
 }
 
 function validateResourceCommandReturn(
@@ -415,7 +422,8 @@ function validateResourceCommandReturn(
   stderr: string,
   stdin: ResourceCommandInput,
 ): Array<{ env: string; value: string }> {
-  if (!returned || typeof returned !== "object" || Array.isArray(returned)) {
+  const parsed = ResourceCommandReturnSchema.safeParse(returned);
+  if (!parsed.success) {
     throw resourceCommandFailure({
       command,
       kind: "return contract violation",
@@ -424,7 +432,7 @@ function validateResourceCommandReturn(
     });
   }
 
-  const value = returned as Record<string, unknown>;
+  const value = parsed.data;
   const expected = new Set(command.outputs);
   const actual = Object.keys(value);
   const missing = command.outputs.filter((output) => !(output in value));
@@ -439,15 +447,7 @@ function validateResourceCommandReturn(
   }
 
   return command.outputs.map((env) => {
-    const outputValue = value[env];
-    if (typeof outputValue !== "string" || !outputValue.trim()) {
-      throw resourceCommandFailure({
-        command,
-        kind: "return contract violation",
-        stdout,
-        stderr,
-      });
-    }
+    const outputValue = value[env]!;
     if ((stdin[env] ?? []).includes(outputValue)) {
       throw resourceCommandFailure({
         command,

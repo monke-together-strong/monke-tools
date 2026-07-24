@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs"
 import { tmpdir } from "node:os";
 import path from "node:path";
 import * as p from "@clack/prompts";
-import { Command, CommanderError } from "commander";
+import { Command, CommanderError } from "@commander-js/extra-typings";
 
 import {
   assertSkillSelectorSlugMappingsMatchStagedSlugs,
@@ -145,7 +145,7 @@ function parseCommand(argv: string[]): UpdateCommandOptions {
     throw error;
   }
 
-  const options = program.opts<{ install?: boolean; interactive?: boolean }>();
+  const options = program.opts();
   return {
     install: Boolean(options.install),
     interactive: Boolean(options.interactive),

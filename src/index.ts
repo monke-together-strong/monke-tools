@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Command, CommanderError } from "commander";
+import { Command, CommanderError } from "@commander-js/extra-typings";
 
 import { MonkeError } from "./errors.ts";
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
@@ -8,7 +8,6 @@ import { createRuntime } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
 import { runSwing, runSwingInteractive } from "./swing.ts";
-import type { SwingOptions } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 
 const ROOT_USAGE =
@@ -19,18 +18,6 @@ const SKILLS_USAGE = "Usage: mt skills configure";
 const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
 const SHELL_USAGE = "Usage:\n  mt shell install\n  mt shell init <bash|zsh>";
 const SWING_USAGE = "Usage: mt swing [target] [--codex]";
-
-interface RawCleanupCommandOptions {
-  merged?: boolean;
-  dryRun?: boolean;
-}
-
-interface RawSpawnCommandOptions {
-  main?: boolean;
-  master?: boolean;
-  dirty?: boolean;
-  codex?: boolean;
-}
 
 /** Run the Monke Tools CLI. */
 export function runCli(argv: string[], runtime = createRuntime()): void {
@@ -63,7 +50,7 @@ function createProgram(
   swingAction: (
     runtime: Runtime,
     target: string | undefined,
-    options: SwingOptions,
+    options: { codex?: boolean },
   ) => void | Promise<void>,
 ): Command {
   const program = new Command()
@@ -88,7 +75,7 @@ function createProgram(
     .option("-m, --main")
     .option("--master")
     .option("--codex")
-    .action((session: string, options: RawSpawnCommandOptions) => {
+    .action((session, options) => {
       runSpawn(
         runtime,
         session,
@@ -105,7 +92,7 @@ function createProgram(
     .allowExcessArguments(false)
     .argument("[target]")
     .option("--codex")
-    .action((target: string | undefined, options: SwingOptions) => {
+    .action((target, options) => {
       return swingAction(runtime, target, options);
     });
 
@@ -123,7 +110,7 @@ function createProgram(
     .allowExcessArguments(false)
     .option("--merged")
     .option("--dry-run")
-    .action((options: RawCleanupCommandOptions) => {
+    .action((options) => {
       if (options.dryRun && !options.merged) {
         throw new MonkeError(`--dry-run requires --merged\n${CLEANUP_USAGE}`);
       }
@@ -164,7 +151,7 @@ function createProgram(
     .helpOption(false)
     .allowExcessArguments(false)
     .option("--binary <path>")
-    .action((options: { binary?: string }) => {
+    .action((options) => {
       runShellInstall(runtime, options);
     });
 
@@ -174,7 +161,7 @@ function createProgram(
     .allowExcessArguments(false)
     .argument("<shell>")
     .option("--binary <path>")
-    .action((shellName: string, options: { binary?: string }) => {
+    .action((shellName, options) => {
       runShellInit(runtime, shellName, options);
     });
 
@@ -197,7 +184,7 @@ function createProgram(
     .helpOption(false)
     .allowExcessArguments(false)
     .argument("<source-checkout>")
-    .action((sourceCheckout: string) => {
+    .action((sourceCheckout) => {
       runLocalInstallSkills(runtime, sourceCheckout);
     });
 

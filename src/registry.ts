@@ -1,9 +1,11 @@
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parse, stringify } from "yaml";
+import { stringify } from "yaml";
 
 import { MonkeError } from "./errors.ts";
 import { ensureDirectory, hashKey, isPortAvailable } from "./runtime.ts";
+import { RepoReservationSchema, SessionStateSchema } from "./state-schema.ts";
+import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
 import type {
   AssignedPort,
   RepoConfig,
@@ -34,13 +36,14 @@ export function loadSessionState(
     };
   }
 
-  return parse(readFileSync(filePath, "utf8")) as SessionState;
+  return parseOwnedYamlFile(filePath, SessionStateSchema);
 }
 
 export function saveSessionState(home: string, state: SessionState): void {
   const filePath = getSessionStateFilePath(home, state.rootSourceRoot, state.session);
+  const parsed = parseBoundaryValue(SessionStateSchema, state, filePath);
   ensureDirectory(path.dirname(filePath));
-  writeFileSync(filePath, stringify(state), "utf8");
+  writeFileSync(filePath, stringify(parsed), "utf8");
 }
 
 export function removeSessionState(home: string, rootSourceRoot: string, session: string): void {
@@ -55,7 +58,7 @@ export function listSessionStates(home: string): SessionState[] {
 
   return readdirSync(directoryPath)
     .filter((entry) => entry.endsWith(".yml"))
-    .map((entry) => parse(readFileSync(path.join(directoryPath, entry), "utf8")) as SessionState);
+    .map((entry) => parseOwnedYamlFile(path.join(directoryPath, entry), SessionStateSchema));
 }
 
 export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]): void {
@@ -80,7 +83,7 @@ export function getOrCreateReservation(
 
   const filePath = getReservationFilePath(home, sourceRoot);
   if (existsSync(filePath)) {
-    const existing = parse(readFileSync(filePath, "utf8")) as RepoReservation;
+    const existing = parseOwnedYamlFile(filePath, RepoReservationSchema);
     if (size > existing.size) {
       throw new MonkeError(
         `Repo ${sourceRoot} owns ${size} local ports but its reservation only has room for ${existing.size}`,
@@ -102,8 +105,9 @@ export function getOrCreateReservation(
   };
 
   ensureDirectory(path.dirname(filePath));
-  writeFileSync(filePath, stringify(nextReservation), "utf8");
-  return nextReservation;
+  const parsed = parseBoundaryValue(RepoReservationSchema, nextReservation, filePath);
+  writeFileSync(filePath, stringify(parsed), "utf8");
+  return parsed;
 }
 
 export function allocateLocalPorts(options: {
@@ -230,9 +234,7 @@ function listReservations(home: string): RepoReservation[] {
 
   return readdirSync(directoryPath)
     .filter((entry) => entry.endsWith(".yml"))
-    .map(
-      (entry) => parse(readFileSync(path.join(directoryPath, entry), "utf8")) as RepoReservation,
-    );
+    .map((entry) => parseOwnedYamlFile(path.join(directoryPath, entry), RepoReservationSchema));
 }
 
 function requireAssignment(

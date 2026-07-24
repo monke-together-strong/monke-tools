@@ -15,6 +15,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { isCancel, select as clackSelect } from "@clack/prompts";
+import { z } from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
@@ -22,6 +23,10 @@ import type { ExecOptions, ExecResult, Runtime, SelectPrompt } from "./types.ts"
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5_000;
 const STALE_LOCK_AGE_MS = 60_000;
+const LockMetadataSchema = z.object({
+  pid: z.number().int().positive().optional(),
+  acquiredAt: z.number().finite().optional(),
+});
 
 /** Runtime construction options for CLI commands and integration-style tests. */
 export interface RuntimeOptions {
@@ -312,17 +317,17 @@ function tryEvictStaleLock(lockPath: string): boolean {
 
   let isStale = fileTimestamp <= staleSince;
   try {
-    const metadata = JSON.parse(readFileSync(lockPath, "utf8")) as {
-      pid?: number;
-      acquiredAt?: number;
-    };
+    const parsed = LockMetadataSchema.safeParse(JSON.parse(readFileSync(lockPath, "utf8")));
+    if (parsed.success) {
+      const metadata = parsed.data;
 
-    if (typeof metadata.acquiredAt === "number") {
-      isStale = metadata.acquiredAt <= staleSince;
-    }
+      if (metadata.acquiredAt !== undefined) {
+        isStale = metadata.acquiredAt <= staleSince;
+      }
 
-    if (typeof metadata.pid === "number" && metadata.pid > 0) {
-      isStale = !isProcessRunning(metadata.pid);
+      if (metadata.pid !== undefined) {
+        isStale = !isProcessRunning(metadata.pid);
+      }
     }
   } catch {
     // Fall back to the lock file timestamp when metadata is unreadable.

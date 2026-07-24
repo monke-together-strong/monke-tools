@@ -1,9 +1,148 @@
 import { expect, test } from "vitest";
+import { readdirSync } from "node:fs";
 import path from "node:path";
 
-import { allocateLocalPorts, getOrCreateReservation, saveSessionState } from "../src/registry.ts";
+import {
+  allocateLocalPorts,
+  getOrCreateReservation,
+  getSessionStateFilePath,
+  loadSessionState,
+  saveSessionState,
+} from "../src/registry.ts";
 import type { RepoConfig, RepoReservation } from "../src/types.ts";
-import { makeTempDir } from "./helpers.ts";
+import { makeTempDir, write } from "./helpers.ts";
+
+test("loadSessionState rejects corrupt persisted state with the file and field path", () => {
+  const sandbox = makeTempDir("registry-corrupt-session");
+  const home = path.join(sandbox, "home");
+  const sourceRoot = path.join(sandbox, "root");
+  const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
+  write(
+    home,
+    path.relative(home, statePath),
+    `version: 1
+rootSourceRoot: ${sourceRoot}
+session: banana
+repos: wrong
+`,
+  );
+
+  expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
+    new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*repos`),
+  );
+});
+
+test("loadSessionState rejects unknown keys in application-owned state", () => {
+  const sandbox = makeTempDir("registry-unknown-session-key");
+  const home = path.join(sandbox, "home");
+  const sourceRoot = path.join(sandbox, "root");
+  const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
+  write(
+    home,
+    path.relative(home, statePath),
+    `version: 1
+rootSourceRoot: ${sourceRoot}
+session: banana
+repos: []
+typo: true
+`,
+  );
+
+  expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
+    new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*Unknown key typo`),
+  );
+});
+
+test("loadSessionState rejects unknown future versions", () => {
+  const sandbox = makeTempDir("registry-future-session-version");
+  const home = path.join(sandbox, "home");
+  const sourceRoot = path.join(sandbox, "root");
+  const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
+  write(
+    home,
+    path.relative(home, statePath),
+    `version: 2
+rootSourceRoot: ${sourceRoot}
+session: banana
+repos: []
+`,
+  );
+
+  expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
+    new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*version`),
+  );
+});
+
+test("saveSessionState rejects invalid values before writing them", () => {
+  const sandbox = makeTempDir("registry-invalid-write");
+  const home = path.join(sandbox, "home");
+  const sourceRoot = path.join(sandbox, "root");
+
+  expect(() =>
+    saveSessionState(home, {
+      version: 1,
+      rootSourceRoot: sourceRoot,
+      session: "banana",
+      repos: "wrong",
+    } as never),
+  ).toThrow(/Invalid .*sessions.*repos/s);
+});
+
+test("getOrCreateReservation rejects corrupt persisted reservations", () => {
+  const sandbox = makeTempDir("registry-corrupt-reservation");
+  const home = path.join(sandbox, "home");
+  const sourceRoot = path.join(sandbox, "root");
+  getOrCreateReservation(home, sourceRoot, 1);
+  const reservationDirectory = path.join(home, "repo-reservations");
+  const reservationName = readdirSync(reservationDirectory)[0]!;
+  write(
+    reservationDirectory,
+    reservationName,
+    `version: 1
+sourceRoot: ${sourceRoot}
+blockStart: 10000
+size: wrong
+`,
+  );
+
+  expect(() => getOrCreateReservation(home, sourceRoot, 1)).toThrow(
+    /Invalid .*repo-reservations.*size/s,
+  );
+});
+
+test.each([
+  {
+    name: "unknown keys",
+    contents: (sourceRoot: string) =>
+      `version: 1
+sourceRoot: ${sourceRoot}
+blockStart: 10000
+size: 1000
+typo: true
+`,
+    expected: /Unknown key typo/,
+  },
+  {
+    name: "unknown future versions",
+    contents: (sourceRoot: string) =>
+      `version: 2
+sourceRoot: ${sourceRoot}
+blockStart: 10000
+size: 1000
+`,
+    expected: /version/,
+  },
+])("getOrCreateReservation rejects $name", ({ contents, expected }) => {
+  const sandbox = makeTempDir("registry-reservation-versioning");
+  const home = path.join(sandbox, "home");
+  const sourceRoot = path.join(sandbox, "root");
+  getOrCreateReservation(home, sourceRoot, 1);
+  const reservationDirectory = path.join(home, "repo-reservations");
+  const reservationName = readdirSync(reservationDirectory)[0]!;
+  write(reservationDirectory, reservationName, contents(sourceRoot));
+
+  expect(() => getOrCreateReservation(home, sourceRoot, 1)).toThrow(expected);
+});
 
 test("allocateLocalPorts skips ports that are already taken inside the reserved block", () => {
   const sandbox = makeTempDir("registry-taken");
@@ -137,4 +276,8 @@ function makeReservation(sourceRoot: string, blockStart: number, size: number): 
     blockStart,
     size,
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
