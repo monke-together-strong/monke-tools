@@ -27,8 +27,8 @@
     "prototype:merged-cleanup-real-gh": "bun tmp/merged-worktree-cleanup-real-gh/prototype.ts",
     "typecheck": "tsc",
     "test": "bunx --bun vitest run",
-    "lint": "oxlint . --fix",
-    "lint:check": "oxlint .",
+    "lint": "oxlint src scripts __tests__ skills/internal --fix",
+    "lint:check": "oxlint src scripts __tests__ skills/internal",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"
   },
