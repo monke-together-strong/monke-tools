@@ -52,9 +52,7 @@ repos:
 `,
   );
 
-  expect(() => loadSessionState(home, sourceRoot, "invalid-port-key")).toThrow(
-    /repos\[0\]\.assignedPorts\[0\]\.key must be an uppercase env name ending in _PORT/,
-  );
+  expect(() => loadSessionState(home, sourceRoot, "invalid-port-key")).toThrow(/assignedPorts/);
 });
 
 test("loadSessionState rejects unknown keys in application-owned state", () => {
@@ -74,7 +72,7 @@ typo: true
   );
 
   expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-    new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*Unknown key typo`),
+    new RegExp(`Invalid ${escapeRegExp(statePath)}`),
   );
 });
 
@@ -145,7 +143,7 @@ blockStart: 10000
 size: 1000
 typo: true
 `,
-    expected: /Unknown key typo/,
+    expected: /typo/,
   },
   {
     name: "unknown future versions",

@@ -259,7 +259,7 @@ test("skill import recipe store rejects unknown future versions", () => {
     JSON.stringify({ version: 2, recipes: [] }),
   );
 
-  expect(() => readImportRecipeStore(sandbox)).toThrow(/version must be 1/);
+  expect(() => readImportRecipeStore(sandbox)).toThrow(/version.*must be 1/);
 });
 
 test("skill import recipe store rejects duplicate selectors in one recipe", () => {

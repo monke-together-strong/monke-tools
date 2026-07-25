@@ -176,7 +176,7 @@ apps:
   });
 
   expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /seedPaths must be an array/,
+    /seedPaths.*must be an array/,
   );
 });
 

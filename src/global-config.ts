@@ -8,9 +8,16 @@ import { ensureDirectory } from "./runtime.ts";
 import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
 
 const BuiltInSkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor"]);
+const AbsolutePathSchema = z
+  .string({ error: "must be a non-empty absolute path" })
+  .refine((value) => value.trim().length > 0, {
+    error: "must be a non-empty absolute path",
+  })
+  .refine((value) => path.isAbsolute(value), { error: "must be an absolute path" })
+  .transform((value) => path.resolve(value));
 const SkillInstallTargetPreferenceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: BuiltInSkillInstallTargetKindSchema }),
-  z.strictObject({ kind: z.literal("custom"), path: z.string().min(1) }),
+  z.strictObject({ kind: z.literal("custom"), path: AbsolutePathSchema }),
 ]);
 const SkillInstallPreferenceSchema = z.strictObject({
   targets: z.array(SkillInstallTargetPreferenceSchema).min(1, {
@@ -19,7 +26,7 @@ const SkillInstallPreferenceSchema = z.strictObject({
 });
 const GlobalMonkeConfigSchema = z.strictObject({
   version: z.literal(1, { error: "must be 1" }),
-  installedSourceCheckout: z.string().min(1).optional(),
+  installedSourceCheckout: AbsolutePathSchema.optional(),
   skillInstallPreference: SkillInstallPreferenceSchema.optional(),
 });
 
@@ -100,13 +107,7 @@ function normalizeGlobalMonkeConfig(
   config: ParsedGlobalMonkeConfig,
   configPath: string,
 ): GlobalMonkeConfig {
-  const installedSourceCheckout =
-    config.installedSourceCheckout === undefined
-      ? undefined
-      : requireAbsolutePath(
-          config.installedSourceCheckout,
-          `${configPath}#installedSourceCheckout`,
-        );
+  const installedSourceCheckout = config.installedSourceCheckout;
 
   const skillInstallPreference =
     config.skillInstallPreference === undefined
@@ -130,8 +131,7 @@ function parseSkillInstallPreference(
   const seenBuiltIns = new Set<BuiltInSkillInstallTargetKind>();
   let customSeen = false;
 
-  for (const [index, rawTarget] of preference.targets.entries()) {
-    const targetLocation = `${location}.targets[${index}]`;
+  for (const rawTarget of preference.targets) {
     const kind = rawTarget.kind;
 
     switch (kind) {
@@ -151,23 +151,11 @@ function parseSkillInstallPreference(
         customSeen = true;
         targets.push({
           kind: "custom",
-          path: requireAbsolutePath(rawTarget.path, `${targetLocation}.path`),
+          path: rawTarget.path,
         });
         break;
     }
   }
 
   return { targets };
-}
-
-function requireAbsolutePath(value: unknown, location: string): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new MonkeError(`${location} must be a non-empty absolute path`);
-  }
-
-  if (!path.isAbsolute(value)) {
-    throw new MonkeError(`${location} must be an absolute path`);
-  }
-
-  return path.resolve(value);
 }

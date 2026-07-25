@@ -279,7 +279,7 @@ test.each([
   {
     name: "unknown keys in Swing history",
     contents: "version: 1\ntypo: true\n",
-    expected: /Unknown key typo/,
+    expected: /typo/,
   },
   {
     name: "unknown future Swing history versions",

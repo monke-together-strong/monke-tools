@@ -43,13 +43,6 @@ export function parseBoundaryValue<T extends z.ZodType>(
   const message = result.error.issues
     .map((issue) => {
       const location = formatIssuePath(issue.path);
-      if (issue.code === "unrecognized_keys") {
-        const suffix = location ? ` at ${location}` : "";
-        return issue.keys.map((key) => `Unknown key ${key}${suffix}`).join("\n");
-      }
-      if (location && issue.message.startsWith("must ")) {
-        return `${location} ${issue.message}`;
-      }
       return location ? `${location}: ${issue.message}` : issue.message;
     })
     .join("\n");

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Command, InvalidArgumentError } from "@commander-js/extra-typings";
+import { Command, InvalidArgumentError, type OptionValues } from "@commander-js/extra-typings";
 import { existsSync, readFileSync } from "node:fs";
 import {
   BetterStackApiError,
@@ -64,38 +64,52 @@ Notes:
 }
 
 function createPaginatedListCommand(parent: Command, description: string) {
-  return parent
-    .command("list")
-    .description(description)
-    .option("--page <number>", "Page number.", parseIntegerOption)
-    .option("--per-page <number>", "Results per page.", parseIntegerOption)
-    .option("--token <token>", "Better Stack source API token.")
-    .option("--env-file <path>", "Env file to load before resolving credentials.");
+  return addCredentialOptions(
+    parent
+      .command("list")
+      .description(description)
+      .option("--page <number>", "Page number.", parseIntegerOption)
+      .option("--per-page <number>", "Results per page.", parseIntegerOption),
+  );
 }
 
 function createSourceGetCommand(parent: Command) {
-  return parent
-    .command("get")
-    .description("Fetch one Better Stack source.")
-    .requiredOption("--id <number>", "Better Stack source id.", parseIntegerOption)
-    .option("--token <token>", "Better Stack source API token.")
-    .option("--env-file <path>", "Env file to load before resolving credentials.");
+  return addCredentialOptions(
+    parent
+      .command("get")
+      .description("Fetch one Better Stack source.")
+      .requiredOption("--id <number>", "Better Stack source id.", parseIntegerOption),
+  );
 }
 
 function createQueryRunCommand(parent: Command) {
-  return parent
-    .command("run")
-    .description("Run SQL against a Better Stack source.")
-    .requiredOption("--source-id <number>", "Better Stack source id.", parseIntegerOption)
-    .requiredOption("--table <name>", "Better Stack SQL table name.")
-    .option("--sql <query>", "Inline SQL text.")
-    .option("--sql-file <path>", "Path to a file containing SQL text.")
-    .option("--stdin", "Read SQL text from stdin.")
-    .option("--url <url>", "Better Stack query endpoint URL.")
-    .option("--host <host>", "Better Stack query endpoint host.")
-    .option("--username <username>", "Better Stack query username.")
-    .option("--password <password>", "Better Stack query password.")
-    .option("--token <token>", "Better Stack source API token for metadata validation.")
+  return addCredentialOptions(
+    parent
+      .command("run")
+      .description("Run SQL against a Better Stack source.")
+      .requiredOption("--source-id <number>", "Better Stack source id.", parseIntegerOption)
+      .requiredOption("--table <name>", "Better Stack SQL table name.")
+      .option("--sql <query>", "Inline SQL text.")
+      .option("--sql-file <path>", "Path to a file containing SQL text.")
+      .option("--stdin", "Read SQL text from stdin.")
+      .option("--url <url>", "Better Stack query endpoint URL.")
+      .option("--host <host>", "Better Stack query endpoint host.")
+      .option("--username <username>", "Better Stack query username.")
+      .option("--password <password>", "Better Stack query password."),
+    "Better Stack source API token for metadata validation.",
+  );
+}
+
+function addCredentialOptions<
+  Args extends unknown[],
+  Options extends OptionValues,
+  GlobalOptions extends OptionValues,
+>(
+  command: Command<Args, Options, GlobalOptions>,
+  tokenDescription = "Better Stack source API token.",
+) {
+  return command
+    .option("--token <token>", tokenDescription)
     .option("--env-file <path>", "Env file to load before resolving credentials.");
 }
 

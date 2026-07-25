@@ -64,18 +64,32 @@ const ResourceCommandSchema = z.strictObject({
     .number({ error: "must be a positive integer" })
     .int({ error: "must be a positive integer" })
     .positive({ error: "must be a positive integer" })
-    .optional(),
+    .default(DEFAULT_RESOURCE_COMMAND_TIMEOUT_SECONDS),
   outputs: z
     .array(EnvNameSchema, { error: "must be a non-empty array" })
     .min(1, { error: "must be a non-empty array" }),
 });
-const ResourcesSchema = z.strictObject({
-  values: z.record(z.string(), NonEmptyStringSchema).optional(),
-  commands: z.record(z.string(), ResourceCommandSchema).optional(),
-});
+const ResourceValuesSchema = z
+  .record(EnvNameSchema, NonEmptyStringSchema)
+  .refine((values) => Object.keys(values).length > 0, {
+    error: "must declare at least one value",
+  });
+const ResourceCommandsSchema = z
+  .record(LabelSchema, ResourceCommandSchema)
+  .refine((commands) => Object.keys(commands).length > 0, {
+    error: "must declare at least one command",
+  });
+const ResourcesSchema = z
+  .strictObject({
+    values: ResourceValuesSchema.optional(),
+    commands: ResourceCommandsSchema.optional(),
+  })
+  .refine((resources) => resources.values !== undefined || resources.commands !== undefined, {
+    error: "must contain values or commands",
+  });
 const RawRepoConfigSchema = z.strictObject({
-  apps: z.record(z.string(), AppSchema, { error: "must contain an apps section" }),
-  external: z.record(z.string(), ExternalRepoSchema).optional(),
+  apps: z.record(LabelSchema, AppSchema, { error: "must contain an apps section" }),
+  external: z.record(LabelSchema, ExternalRepoSchema).optional(),
   bootstrapCommand: NonEmptyStringSchema.optional(),
   cleanupCommand: NonEmptyStringSchema.optional(),
   seedPaths: z.array(NonEmptyStringSchema, { error: "must be an array" }).optional(),
@@ -218,7 +232,6 @@ function parseRepoConfigObject(
   const claimedTargets = new Map<string, string>();
 
   for (const [label, rawApp] of Object.entries(config.apps)) {
-    validateLabel(label, `${configPath}#apps`);
     const relativePath = rawApp.path;
     const relativeEnvFile = rawApp.envFile ?? DEFAULT_ENV_FILE;
     const absoluteAppPath = resolveInside(
@@ -279,7 +292,6 @@ function parseRepoConfigObject(
   const externalPathEnvOwners = new Map<string, string>();
 
   for (const [label, rawExternal] of Object.entries(config.external ?? {})) {
-    validateLabel(label, `${configPath}#external`);
     const relativePath = rawExternal.path;
     const pathEnv = rawExternal.pathEnv;
     const existingPathEnvOwner = externalPathEnvOwners.get(pathEnv);
@@ -378,19 +390,6 @@ function pathExistsOnFilesystem(sourceRoot: string, relativePath: string): boole
   return existsSync(path.join(sourceRoot, relativePath));
 }
 
-function requireEnvName(value: unknown, location: string): string {
-  if (typeof value !== "string" || !ENV_RE.test(value)) {
-    throw new MonkeError(`${location} must be an uppercase env name`);
-  }
-  return value;
-}
-
-function validateLabel(label: string, location: string): void {
-  if (!LABEL_RE.test(label)) {
-    throw new MonkeError(`${location} label ${label} must be lowercase alphanumeric plus hyphen`);
-  }
-}
-
 function resolveInside(root: string, relativePath: string, location: string): string {
   const resolved = path.resolve(root, relativePath);
   const relative = path.relative(root, resolved);
@@ -454,24 +453,11 @@ function parseResources(
     return { resourceValuesInOrder: [], resourceCommandsInOrder: [] };
   }
 
-  if (Object.keys(resources).length === 0) {
-    throw new MonkeError(`${configPath}#resources must contain values or commands`);
-  }
-
-  if (resources.values === undefined && resources.commands === undefined) {
-    throw new MonkeError(`${configPath}#resources must contain values or commands`);
-  }
-
   const seenEnvNames = new Set<string>();
 
   const resourceValuesInOrder: ResourceValueConfig[] = [];
   if (resources.values !== undefined) {
-    if (Object.keys(resources.values).length === 0) {
-      throw new MonkeError(`${configPath}#resources.values must declare at least one value`);
-    }
-
     for (const [env, literal] of Object.entries(resources.values)) {
-      requireEnvName(env, `${configPath}#resources.values`);
       claimResourceEnvName(seenEnvNames, env, configPath);
       resourceValuesInOrder.push({
         env,
@@ -482,13 +468,7 @@ function parseResources(
 
   const resourceCommandsInOrder: ResourceCommandConfig[] = [];
   if (resources.commands !== undefined) {
-    if (Object.keys(resources.commands).length === 0) {
-      throw new MonkeError(`${configPath}#resources.commands must declare at least one command`);
-    }
-
     for (const [name, commandValue] of Object.entries(resources.commands)) {
-      validateLabel(name, `${configPath}#resources.commands`);
-
       const outputs = requireResourceCommandOutputs(
         commandValue.outputs,
         `${configPath}#resources.commands.${name}.outputs`,
@@ -501,10 +481,7 @@ function parseResources(
           commandValue.run,
           `${configPath}#resources.commands.${name}.run`,
         ),
-        timeoutSeconds: requireResourceCommandTimeout(
-          commandValue.timeoutSeconds,
-          `${configPath}#resources.commands.${name}.timeoutSeconds`,
-        ),
+        timeoutSeconds: commandValue.timeoutSeconds,
         outputs,
       });
     }
@@ -559,18 +536,6 @@ function requireResourceCommandRunPath(relativePath: string, location: string): 
   }
 
   return normalizedPath;
-}
-
-function requireResourceCommandTimeout(value: unknown, location: string): number {
-  if (value === undefined) {
-    return DEFAULT_RESOURCE_COMMAND_TIMEOUT_SECONDS;
-  }
-
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    throw new MonkeError(`${location} must be a positive integer`);
-  }
-
-  return value;
 }
 
 function requireResourceLiteral(literal: string, location: string): string {

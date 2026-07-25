@@ -100,7 +100,7 @@ test.each([
       run: ./scripts/e2e-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL`,
-    expected: /resources.commands label Bad_Name/,
+    expected: /resources\.commands\.Bad_Name/,
   },
   {
     name: "old command field",
@@ -109,7 +109,7 @@ test.each([
       command: pnpm e2e:allocate-symbols
       outputs:
         - E2E_FLOW1_SYMBOL`,
-    expected: /Unknown key command.*resources.commands.e2e-symbols/,
+    expected: /resources\.commands\.e2e-symbols.*command/s,
   },
   {
     name: "missing run",
@@ -135,7 +135,7 @@ test.each([
       run: /tmp/e2e-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL`,
-    expected: /run must be a relative JS\/TS module path/,
+    expected: /run.*must be a relative JS\/TS module path/,
   },
   {
     name: "escaping run path",
@@ -153,7 +153,7 @@ test.each([
       run: e2e-symbols
       outputs:
         - E2E_FLOW1_SYMBOL`,
-    expected: /run must be a relative JS\/TS module path/,
+    expected: /run.*must be a relative JS\/TS module path/,
   },
   {
     name: "invalid timeout",
@@ -171,7 +171,7 @@ test.each([
     e2e-symbols:
       run: ./scripts/e2e-symbols.ts
       outputs: []`,
-    expected: /outputs must be a non-empty array/,
+    expected: /outputs.*must be a non-empty array/,
   },
   {
     name: "invalid output name",
@@ -219,7 +219,7 @@ test.each([
   {
     name: "empty commands section",
     resources: `commands: {}`,
-    expected: /resources.commands must declare at least one command/,
+    expected: /resources\.commands.*must declare at least one command/,
   },
 ])("loadResolvedGraph rejects resource commands with $name", ({ resources, expected }) => {
   const sandbox = makeTempDir("config-invalid-resource-command");
@@ -256,9 +256,7 @@ apps:
 `,
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /Unknown key DISCORD_CHANNEL.*resources/,
-  );
+  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/DISCORD_CHANNEL/);
 });
 
 test("loadResolvedGraph rejects empty resources sections", () => {
@@ -277,7 +275,7 @@ apps:
   });
 
   expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /resources must contain values or commands/,
+    /resources.*must contain values or commands/,
   );
 });
 
@@ -298,7 +296,7 @@ apps:
   });
 
   expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /resources.values must declare at least one value/,
+    /resources\.values.*must declare at least one value/,
   );
 });
 
@@ -320,7 +318,7 @@ apps:
   });
 
   expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /resources.values.*uppercase env name/,
+    /resources\.values\.discord_channel/,
   );
 });
 

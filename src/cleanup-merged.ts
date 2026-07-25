@@ -439,12 +439,12 @@ function queryMergedPrs(
       return { ok: false, error: `GitHub merged PR lookup failed: ${commandDetail(result)}` };
     }
 
-    const parsed = z.array(z.unknown()).safeParse(JSON.parse(result.stdout) as unknown);
-    if (!parsed.success) {
+    const parsed = JSON.parse(result.stdout) as unknown;
+    if (!Array.isArray(parsed)) {
       return { ok: false, error: "GitHub merged PR lookup did not return a list" };
     }
 
-    return { ok: true, value: parsed.data.map(normalizeMergedPrMatch) };
+    return { ok: true, value: parsed.map(normalizeMergedPrMatch) };
   } catch (error) {
     return { ok: false, error: `GitHub merged PR lookup failed: ${errorMessage(error)}` };
   }
