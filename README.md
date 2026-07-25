@@ -97,4 +97,4 @@ bun run src/index.ts shell install
 bun run src/index.ts skills configure
 ```
 
-Repo-specific Backlog.md guidance lives in [docs/agents/backlog.md](docs/agents/backlog.md).
+Work is tracked in [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues).

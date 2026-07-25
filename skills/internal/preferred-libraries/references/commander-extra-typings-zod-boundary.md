@@ -1,7 +1,6 @@
 # Commander, extra-typings, and Zod boundary
 
-> **Status: WIP.** The simplest default, not a settled public error contract. Add error classes or
-> machine-readable codes only when a real consumer requires them.
+> **Status: WIP SLOP**
 
 Use this pattern for a TypeScript CLI that accepts structured runtime input.
 
