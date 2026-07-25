@@ -31,8 +31,16 @@ tool calls, referenced sessions, local files, diffs, commits, logs, test output,
 and exact user wording. Prefer raw evidence over memory; do not diagnose before
 it supports the cause.
 
+For a missed-skill incident, reconstruct the selection boundary. Before a skill
+is invoked, the agent sees its catalog name and description, not its body. Treat
+the description as the primary artifact for why the skill was or was not
+selected; inspect the body only for behavior after invocation. If the description
+does not name the observable trigger, make the description—not the body—the fix
+surface.
+
 Completion criterion: every available artifact the user pointed at has been read
-or explicitly marked unavailable.
+or explicitly marked unavailable; for a missed skill, its selection-time
+description has been evaluated.
 
 ## 3. Diagnose
 
@@ -48,8 +56,16 @@ Write a compact cause chain:
 Avoid vague causes such as "confusion" or "miscommunication" unless you can name
 the concrete instruction or missing distinction that created it.
 
+Run a generalization check before choosing the fix. Name the stable class of
+cases the target behavior owns, and treat the observed incident as evidence and
+a regression case—not as the definition. Keep incidental wording, actors, tools,
+sites, and execution details out of the fix unless they are part of that stable
+class. A fix is overfit when it handles the observed incident but misses
+equivalent cases.
+
 Completion criterion: the chain names the concrete trigger, why it won, and the
-smallest fix surface.
+smallest fix surface; the proposed fix covers the stable class without
+incident-specific constraints.
 
 ## 4. Apply Or Recommend The Fix
 
@@ -60,11 +76,17 @@ usage rule, or process change.
 If the user only asks what happened, report the diagnosis and recommend the fix
 without editing.
 
+Treat the target artifact's existing theme as a constraint. Preserve its scope,
+structure, tone, and level of detail; make the smallest local edit that fits.
+Change the theme only when the evidence identifies it as the cause or the user
+explicitly asks.
+
 When creating or updating a skill, invoke `/writing-great-skills` before editing
 and verify the finished skill against it.
 
 Completion criterion: either the fix is implemented and verified when practical,
-or the recommended fix is concrete enough for another agent to apply.
+or the recommended fix is concrete enough for another agent to apply; the target
+artifact's theme was preserved unless the change was explicitly warranted.
 
 ## 5. Report The Lesson
 

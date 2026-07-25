@@ -1,9 +1,18 @@
 import { expect, test } from "vitest";
-import { chmodSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath } from "../src/registry.ts";
+import { hashKey } from "../src/runtime.ts";
 import type { SelectPrompt } from "../src/types.ts";
 import {
   createRepo,
@@ -241,6 +250,57 @@ test("swing dash toggles to the Previous Swing target scoped by Root repo", () =
   );
 });
 
+test("swing rejects corrupt Previous Swing target history with its file and field path", () => {
+  const sandbox = makeTempDir("swing-corrupt-history");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+  runMonke({ cwd: repoRoot, args: ["swing", "banana"], monkeHome: home });
+  const historyDirectory = path.join(home, "swing-history");
+  const historyPath = path.join(historyDirectory, readdirSync(historyDirectory)[0]!);
+  writeFileSync(
+    historyPath,
+    `version: 1
+previous:
+  kind: session
+`,
+    "utf8",
+  );
+
+  expect(() => runMonke({ cwd: worktreeRoot, args: ["swing", "-"], monkeHome: home })).toThrow(
+    /Invalid .*swing-history.*previous\.session/s,
+  );
+});
+
+test.each([
+  {
+    name: "unknown keys in Swing history",
+    contents: "version: 1\ntypo: true\n",
+    expected: /typo/,
+  },
+  {
+    name: "unknown future Swing history versions",
+    contents: "version: 2\n",
+    expected: /version/,
+  },
+])("swing rejects $name", ({ contents, expected }) => {
+  const sandbox = makeTempDir("swing-history-versioning");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  const historyDirectory = path.join(home, "swing-history");
+  mkdirSync(historyDirectory, { recursive: true });
+  writeFileSync(path.join(historyDirectory, `${hashKey(repoRoot)}.yml`), contents, "utf8");
+
+  expect(() => runMonke({ cwd: repoRoot, args: ["swing", "-"], monkeHome: home })).toThrow(
+    expected,
+  );
+});
+
 test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions", () => {
   const sandbox = makeTempDir("swing-pr");
   const home = path.join(sandbox, "home");
@@ -301,6 +361,31 @@ test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions",
   expect(byCodexPr.stdout).toBe(`${worktreeRoot}\n`);
   expect(byCodexPr.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
   expect(readFileSync(openLogPath, "utf8")).toBe(`${codexThreadUrl}\n`);
+});
+
+test("swing reports malformed GitHub PR fields with the response field path", () => {
+  const sandbox = makeTempDir("swing-pr-malformed");
+  const home = path.join(sandbox, "home");
+  const binDirectory = path.join(sandbox, "bin");
+  const repoRoot = createRepo(path.join(sandbox, "root"), {
+    "README.md": "hello\n",
+  });
+  installSwingGhShim(binDirectory, {
+    "404": {
+      headRefName: 404,
+      headRepositoryOwner: { login: "owner" },
+      headRepository: { name: "root" },
+    },
+  });
+
+  expect(() =>
+    runMonke({
+      cwd: repoRoot,
+      args: ["swing", "pr:404"],
+      monkeHome: home,
+      binDirectory,
+    }),
+  ).toThrow(/Invalid GitHub PR #404:[\s\S]*headRefName/);
 });
 
 test("swing creates a missing same-repo GitHub PR Session", () => {
@@ -620,17 +705,7 @@ function localBranchExists(repoRoot: string, branch: string): boolean {
   }
 }
 
-function installSwingGhShim(
-  binDirectory: string,
-  prs: Record<
-    string,
-    {
-      headRefName: string;
-      headRepositoryOwner: { login: string };
-      headRepository: { name: string };
-    }
-  >,
-): void {
+function installSwingGhShim(binDirectory: string, prs: Record<string, unknown>): void {
   mkdirSync(binDirectory, { recursive: true });
   const cases = Object.entries(prs)
     .map(([number, pr]) => `    ${number}) printf '%s\\n' '${JSON.stringify(pr)}'; exit 0 ;;`)

@@ -4,3 +4,8 @@ export class MonkeError extends Error {
     this.name = "MonkeError";
   }
 }
+
+/** Read a displayable message off an unknown thrown value. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

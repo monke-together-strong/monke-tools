@@ -597,6 +597,60 @@ test("cleanup --merged skips safely when GitHub metadata is unavailable", () => 
   expect(readSingleYamlFile(path.join(home, "sessions"))).toBeDefined();
 });
 
+test("cleanup --merged fails closed for malformed GitHub PR metadata", () => {
+  const sandbox = makeTempDir("cleanup-merged-malformed-gh");
+  const binDirectory = path.join(sandbox, "bin");
+  installGitShim(binDirectory);
+  const home = path.join(sandbox, "home");
+  const root = createRepo(path.join(sandbox, "root"), {
+    "apps/api/.env.local": "PORT=3000\n",
+    "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+  });
+
+  runMonke({
+    cwd: root,
+    args: ["spawn", "clean-merged"],
+    monkeHome: home,
+    binDirectory,
+  });
+  const worktree = getExpectedWorktreePath(home, root, "clean-merged");
+  git(worktree, ["add", "-A"]);
+  git(worktree, ["commit", "-m", "session clean merged"]);
+  installFakeGhForMergedPrs(binDirectory, {
+    repo: "owner/repo",
+    prsByHead: {
+      "clean-merged": [
+        {
+          number: "not-a-number",
+          headRefName: "clean-merged",
+          baseRefName: "main",
+          headRefOid: git(worktree, ["rev-parse", "HEAD"]),
+          isCrossRepository: false,
+        },
+      ],
+    },
+  });
+
+  const result = runMonke({
+    cwd: root,
+    args: ["cleanup", "--merged"],
+    monkeHome: home,
+    binDirectory,
+  });
+
+  expect(result.stderr).toContain("no exact merged PR match");
+  expect(result.stderr).toContain("Merged cleanup: removed 0 worktrees, skipped 1 worktree");
+  expect(existsSync(worktree)).toBe(true);
+  expect(readSingleYamlFile(path.join(home, "sessions"))).toBeDefined();
+});
+
 test("cleanup --merged keeps session state when cleanupCommand fails after worktree removal", () => {
   const sandbox = makeTempDir("cleanup-merged-command-failure");
   const binDirectory = path.join(sandbox, "bin");

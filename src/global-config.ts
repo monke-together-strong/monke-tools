@@ -1,9 +1,37 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parseDocument, stringify } from "yaml";
+import { stringify } from "yaml";
+import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { ensureDirectory } from "./runtime.ts";
+import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
+
+const BuiltInSkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor"]);
+const AbsolutePathSchema = z
+  .string({ error: "must be a non-empty absolute path" })
+  .refine((value) => value.trim().length > 0, {
+    error: "must be a non-empty absolute path",
+  })
+  .refine((value) => path.isAbsolute(value), { error: "must be an absolute path" })
+  .transform((value) => path.resolve(value));
+const SkillInstallTargetPreferenceSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: BuiltInSkillInstallTargetKindSchema }),
+  z.strictObject({ kind: z.literal("custom"), path: AbsolutePathSchema }),
+]);
+const SkillInstallPreferenceSchema = z.strictObject({
+  targets: z.array(SkillInstallTargetPreferenceSchema).min(1, {
+    error: "must be a non-empty array",
+  }),
+});
+const GlobalMonkeConfigSchema = z.strictObject({
+  version: z.literal(1, { error: "must be 1" }),
+  installedSourceCheckout: AbsolutePathSchema.optional(),
+  skillInstallPreference: SkillInstallPreferenceSchema.optional(),
+});
+
+type ParsedSkillInstallPreference = z.output<typeof SkillInstallPreferenceSchema>;
+type ParsedGlobalMonkeConfig = z.output<typeof GlobalMonkeConfigSchema>;
 
 /** Built-in Agent skill roots supported by monke-tools. */
 export type BuiltInSkillInstallTargetKind = "codex" | "claude" | "cursor";
@@ -53,51 +81,33 @@ export function loadGlobalMonkeConfig(home: string): GlobalMonkeConfig {
     return { version: 1 };
   }
 
-  const document = parseDocument(readFileSync(configPath, "utf8"), {
-    uniqueKeys: true,
-    merge: false,
-    strict: true,
-  });
-
-  if (document.errors.length > 0) {
-    const message = document.errors.map((error) => error.message).join("\n");
-    throw new MonkeError(`Invalid ${configPath}:\n${message}`);
-  }
-
-  return parseGlobalMonkeConfig(document.toJS() as unknown, configPath);
+  return normalizeGlobalMonkeConfig(
+    parseOwnedYamlFile(configPath, GlobalMonkeConfigSchema),
+    configPath,
+  );
 }
 
 /** Save versioned Global monke config to `config.yml` under the monke home directory. */
 export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig): void {
-  const parsed = parseGlobalMonkeConfig(config, getGlobalConfigPath(home));
+  const configPath = getGlobalConfigPath(home);
+  const parsed = normalizeGlobalMonkeConfig(
+    parseBoundaryValue(GlobalMonkeConfigSchema, config, configPath),
+    configPath,
+  );
   ensureDirectory(home);
-  writeFileSync(getGlobalConfigPath(home), stringify(parsed), "utf8");
+  writeFileSync(configPath, stringify(parsed), "utf8");
 }
 
 /** Return the path of the Global monke config file for a monke home directory. */
-export function getGlobalConfigPath(home: string): string {
+function getGlobalConfigPath(home: string): string {
   return path.join(home, "config.yml");
 }
 
-function parseGlobalMonkeConfig(rawConfig: unknown, configPath: string): GlobalMonkeConfig {
-  const config = asRecord(rawConfig, configPath);
-  assertKnownKeys(
-    config,
-    ["version", "installedSourceCheckout", "skillInstallPreference"],
-    configPath,
-  );
-
-  if (config.version !== 1) {
-    throw new MonkeError(`${configPath}#version must be 1`);
-  }
-
-  const installedSourceCheckout =
-    config.installedSourceCheckout === undefined
-      ? undefined
-      : requireAbsolutePath(
-          config.installedSourceCheckout,
-          `${configPath}#installedSourceCheckout`,
-        );
+function normalizeGlobalMonkeConfig(
+  config: ParsedGlobalMonkeConfig,
+  configPath: string,
+): GlobalMonkeConfig {
+  const installedSourceCheckout = config.installedSourceCheckout;
 
   const skillInstallPreference =
     config.skillInstallPreference === undefined
@@ -112,35 +122,22 @@ function parseGlobalMonkeConfig(rawConfig: unknown, configPath: string): GlobalM
 }
 
 function parseSkillInstallPreference(
-  rawPreference: unknown,
+  preference: ParsedSkillInstallPreference,
   configPath: string,
 ): SkillInstallPreference {
   const location = `${configPath}#skillInstallPreference`;
-  const preference = asRecord(rawPreference, location);
-  assertKnownKeys(preference, ["targets"], location);
-
-  if (!Array.isArray(preference.targets)) {
-    throw new MonkeError(`${location}.targets must be a non-empty array`);
-  }
-
-  if (preference.targets.length === 0) {
-    throw new MonkeError(`${location}.targets must be a non-empty array`);
-  }
 
   const targets: SkillInstallTargetPreference[] = [];
   const seenBuiltIns = new Set<BuiltInSkillInstallTargetKind>();
   let customSeen = false;
 
-  for (const [index, rawTarget] of preference.targets.entries()) {
-    const targetLocation = `${location}.targets[${index}]`;
-    const target = asRecord(rawTarget, targetLocation);
-    const kind = target.kind;
+  for (const rawTarget of preference.targets) {
+    const kind = rawTarget.kind;
 
     switch (kind) {
       case "codex":
       case "claude":
       case "cursor":
-        assertKnownKeys(target, ["kind"], targetLocation);
         if (seenBuiltIns.has(kind)) {
           throw new MonkeError(`Duplicate Skill install target ${kind} in ${location}`);
         }
@@ -148,52 +145,17 @@ function parseSkillInstallPreference(
         targets.push({ kind });
         break;
       case "custom":
-        assertKnownKeys(target, ["kind", "path"], targetLocation);
         if (customSeen) {
           throw new MonkeError(`${location} may contain at most one custom target`);
         }
         customSeen = true;
         targets.push({
           kind: "custom",
-          path: requireAbsolutePath(target.path, `${targetLocation}.path`),
+          path: rawTarget.path,
         });
         break;
-      default:
-        throw new MonkeError(`${targetLocation}.kind must be codex, claude, cursor, or custom`);
     }
   }
 
   return { targets };
-}
-
-function requireAbsolutePath(value: unknown, location: string): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new MonkeError(`${location} must be a non-empty absolute path`);
-  }
-
-  if (!path.isAbsolute(value)) {
-    throw new MonkeError(`${location} must be an absolute path`);
-  }
-
-  return path.resolve(value);
-}
-
-function asRecord(value: unknown, location: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new MonkeError(`${location} must be a mapping`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function assertKnownKeys(
-  value: Record<string, unknown>,
-  allowed: readonly string[],
-  location: string,
-): void {
-  const allowedSet = new Set(allowed);
-  for (const key of Object.keys(value)) {
-    if (!allowedSet.has(key)) {
-      throw new MonkeError(`Unknown key ${key} at ${location}`);
-    }
-  }
 }

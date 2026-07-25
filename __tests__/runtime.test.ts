@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "vitest";
 
@@ -40,6 +40,20 @@ test("withGlobalLock evicts stale locks left by dead processes", () => {
   expect(existsSync(lockPath)).toBe(false);
 });
 
+test("withGlobalLock falls back to the file timestamp for invalid lock metadata", () => {
+  const sandbox = makeTempDir("runtime-invalid-lock");
+  const home = path.join(sandbox, "home");
+  const lockPath = path.join(home, "lock");
+  const staleTime = new Date(Date.now() - 86_400_000);
+
+  mkdirSync(home, { recursive: true });
+  writeFileSync(lockPath, JSON.stringify({ pid: "not-a-number" }), "utf8");
+  utimesSync(lockPath, staleTime, staleTime);
+
+  expect(withGlobalLock(home, () => "acquired")).toBe("acquired");
+  expect(existsSync(lockPath)).toBe(false);
+});
+
 test("withGlobalLock does not evict stale locks held by a live process", () => {
   const sandbox = makeTempDir("runtime-live-stale-lock");
   const home = path.join(sandbox, "home");
@@ -51,6 +65,20 @@ test("withGlobalLock does not evict stale locks held by a live process", () => {
     JSON.stringify({ pid: process.pid, acquiredAt: Date.now() - 86_400_000 }),
     "utf8",
   );
+
+  expect(() => withGlobalLock(home, () => "acquired")).toThrow(/Timed out waiting for lock/);
+  expect(existsSync(lockPath)).toBe(true);
+}, 7_000);
+
+test("withGlobalLock preserves a valid live pid when another metadata field is invalid", () => {
+  const sandbox = makeTempDir("runtime-live-mixed-lock");
+  const home = path.join(sandbox, "home");
+  const lockPath = path.join(home, "lock");
+  const staleTime = new Date(Date.now() - 86_400_000);
+
+  mkdirSync(home, { recursive: true });
+  writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: "invalid" }), "utf8");
+  utimesSync(lockPath, staleTime, staleTime);
 
   expect(() => withGlobalLock(home, () => "acquired")).toThrow(/Timed out waiting for lock/);
   expect(existsSync(lockPath)).toBe(true);

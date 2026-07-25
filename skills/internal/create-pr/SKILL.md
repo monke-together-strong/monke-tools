@@ -26,6 +26,9 @@ self-contained post-merge contract, and stop after the PR exists.
 2. Inspect the rebased branch.
    - Check the branch upstream and the commits/diff against the intended base.
    - Confirm the latest intended base is an ancestor of `HEAD`.
+   - Exclude research notes and artifacts, including `docs/research/`, unless
+     the user explicitly asks to publish them. Research may inform the PR, but
+     it is not part of the deliverable by default.
 
 3. Collect proof.
    - Record the verification commands already run, or run the smallest
@@ -38,9 +41,14 @@ self-contained post-merge contract, and stop after the PR exists.
      [browser video proof](references/browser-video-proof.md) when the behavior
      is workflow-shaped, timing-sensitive, or hard to trust from screenshots
      alone. There can be more than 1 screenshot or video.
+   - Before upload, pass every final media asset through the
+     [proof asset review](references/proof-asset-review.md).
    - Upload local media with `$github-image-upload`; embed the returned
      GitHub attachment markdown or bare video URLs in the PR body. Do not leave
      local file paths as proof.
+
+   Proof collection is complete when relevant checks are recorded and every
+   required media asset passes the Evidence Gate and is embedded from GitHub.
 
 4. Draft the post-merge contract.
    - If root `POST_MERGE.md` exists, read it as repo-specific authoring context

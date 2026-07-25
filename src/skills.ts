@@ -11,11 +11,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import * as z from "zod";
 
-import { MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
 import { createLogger } from "./logger.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
+import { parseBoundaryValue } from "./validation.ts";
 import type {
   BuiltInSkillInstallTargetKind,
   SkillInstallPreference,
@@ -25,7 +27,7 @@ import type {
 import type { Runtime } from "./types.ts";
 
 /** Directory name monke-tools owns inside each selected Agent skill root. */
-export const SKILL_NAMESPACE = "monke-tools";
+const SKILL_NAMESPACE = "monke-tools";
 const FLAT_SKILL_MANIFEST = ".monke-tools-flat-skills.json";
 
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
@@ -172,7 +174,7 @@ export function reconcileSkillNamespaces(options: {
     try {
       removeManagedTarget(previousTarget);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       failures.push(`${previousTarget.agentSkillRoot}: ${message}`);
     }
   }
@@ -182,7 +184,7 @@ export function reconcileSkillNamespaces(options: {
       reconcileOneTarget(target, skillSourceTree);
       options.writeMessage(`Linked ${SKILL_NAMESPACE} skills at ${managedLocation(target)}\n`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       failures.push(`${target.agentSkillRoot}: ${message}`);
     }
   }
@@ -195,10 +197,7 @@ export function reconcileSkillNamespaces(options: {
 }
 
 /** Normalize one custom Agent skill root path for storage in Global monke config. */
-export function normalizeCustomSkillRoot(options: {
-  input: string;
-  homeDirectory: string;
-}): string {
+function normalizeCustomSkillRoot(options: { input: string; homeDirectory: string }): string {
   const trimmed = options.input.trim();
   if (!trimmed) {
     throw new MonkeError("Custom Skill install target path must be a non-empty absolute path");
@@ -421,16 +420,18 @@ function removeManagedNamespace(namespacePath: string): void {
   rmSync(namespacePath);
 }
 
-interface FlatSkillLink {
-  name: string;
-  sourcePath: string;
-}
+const FlatSkillLinkSchema = z.strictObject({
+  name: z.string().min(1),
+  sourcePath: z.string().min(1),
+});
+const FlatSkillManifestSchema = z.strictObject({
+  version: z.literal(1),
+  managedBy: z.literal("monke-tools"),
+  links: z.array(FlatSkillLinkSchema),
+});
 
-interface FlatSkillManifest {
-  version: 1;
-  managedBy: "monke-tools";
-  links: FlatSkillLink[];
-}
+type FlatSkillLink = z.output<typeof FlatSkillLinkSchema>;
+type FlatSkillManifest = z.output<typeof FlatSkillManifestSchema>;
 
 function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
   const links = new Map<string, FlatSkillLink>();
@@ -515,23 +516,18 @@ function readFlatManifest(target: ResolvedSkillInstallTarget): FlatSkillManifest
     return null;
   }
 
-  const rawManifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Partial<FlatSkillManifest>;
-  if (
-    rawManifest.version !== 1 ||
-    rawManifest.managedBy !== "monke-tools" ||
-    !Array.isArray(rawManifest.links)
-  ) {
+  let rawManifest: unknown;
+  try {
+    rawManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  } catch {
     throw new MonkeError(`Invalid monke-tools flat Skill manifest at ${manifestPath}`);
   }
 
-  return {
-    version: 1,
-    managedBy: "monke-tools",
-    links: rawManifest.links.map((link) => ({
-      name: String(link.name),
-      sourcePath: String(link.sourcePath),
-    })),
-  };
+  return parseBoundaryValue(
+    FlatSkillManifestSchema,
+    rawManifest,
+    `monke-tools flat Skill manifest at ${manifestPath}`,
+  );
 }
 
 function writeFlatManifest(target: ResolvedSkillInstallTarget, links: FlatSkillLink[]): void {
@@ -541,8 +537,9 @@ function writeFlatManifest(target: ResolvedSkillInstallTarget, links: FlatSkillL
     links,
   };
   const manifestPath = flatManifestPath(target);
+  const parsed = FlatSkillManifestSchema.parse(manifest);
 
-  writeFileSync(`${manifestPath}.tmp`, `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(`${manifestPath}.tmp`, `${JSON.stringify(parsed, null, 2)}\n`);
   renameSync(`${manifestPath}.tmp`, manifestPath);
 }
 

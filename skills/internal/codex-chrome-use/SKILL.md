@@ -1,6 +1,6 @@
 ---
 name: codex-chrome-use
-description: Recover Codex Chrome control when browser operations hang while Chrome remains open, or when multiple Chrome extension profiles are available.
+description: Use whenever Codex controls Chrome. Select the correct Chrome extension profile, probe browser control safely, and escalate from evidence when control fails.
 ---
 
 # Codex Chrome Use
@@ -27,18 +27,21 @@ Completion criterion: Chrome is bound to the only backend or the explicit last-u
 
 ## 3. Probe Once
 
-Try `tabs.selected()`. If it returns no tab, call `user.openTabs()` once with an 8-second `Promise.race` timeout. Claim the target using the exact returned tab object, then verify its title and URL before navigating.
+Try `tabs.selected()`. If it returns no tab, call `user.openTabs()` once with an 8-second `Promise.race` timeout and retain that listing as the baseline. Claim the target using the exact returned tab object, then verify its title and URL before navigating.
+
+Treat an error from `tabs.new()` as an indeterminate creation result: the tab or window may have opened before grouping failed. Refresh `user.openTabs()` once with the same timeout, compare it with the baseline, and reuse any newly opened normal tab before escalating to a fresh window.
 
 If the probe succeeds, resume the Chrome skill. For a recovery-only test, release the claimed tab with `tabs.finalize({ keep: [{ tab, status: "handoff" }] })` as the final browser action.
 
-Completion criterion: the target tab is claimed, or one bounded failure is recorded without wedging the session.
+Completion criterion: the target tab is claimed, or one bounded failure is recorded and every indeterminate tab creation has been checked once without wedging the session.
 
 ## 4. Escalate From Evidence
 
 Run the Chrome skill's health checks after the corrected profile fails.
 
-- Healthy Chrome, extension, and native host: request a fresh same-profile window, or use Computer Use only when the user explicitly authorized that fallback.
+- Healthy Chrome, extension, and native host: an explicit invocation of this skill for an active Chrome task authorizes opening one fresh normal window in the selected profile. Open it without another permission prompt, wait two seconds, and retry the connection once. Existing fresh-window permission in the current task remains valid for the same recovery incident.
+- Use Computer Use only when the user explicitly authorized that fallback.
 - Chrome capability absent from the task: reopen the Codex task.
 - Failed extension/native-host checks: follow the Chrome skill's repair or reinstall guidance.
 
-Completion criterion: restart or reinstall advice cites the failed layer; a tab timeout alone never supports it.
+Completion criterion: the authorized fresh-window retry ran at most once, or restart or reinstall advice cites the failed layer; a tab timeout alone never supports it.
