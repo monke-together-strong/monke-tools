@@ -377,6 +377,25 @@ test("skill import recipe store allows one slug to be owned once per Import kind
   ]);
 });
 
+test("skill import recipe recording rejects one source mapping two selectors to one slug", () => {
+  const sandbox = makeTempDir("skill-import-recipes-source-slug");
+  recordImportedGuidance(sandbox, {
+    source: "owner/repo",
+    acceptOpenClawRisks: false,
+    kind: "reference",
+    skills: [{ selector: "alpha-reference", slug: "alpha" }],
+  });
+
+  expect(() =>
+    recordImportedGuidance(sandbox, {
+      source: "owner/repo",
+      acceptOpenClawRisks: false,
+      kind: "skill",
+      skills: [{ selector: "alpha-skill", slug: "alpha" }],
+    }),
+  ).toThrow(/Duplicate imported slug in recipe owner\/repo: alpha/);
+});
+
 test("skill import recipe recording rejects duplicate imported skill owners", () => {
   const sandbox = makeTempDir("skill-import-recipes-duplicate");
   writeImportRecipeStore(sandbox, {
@@ -1626,6 +1645,76 @@ test("skills update detects a supporting symlink that consumes a reference file"
         writeMessage() {},
       }),
     ).rejects.toThrow(/used by skills\/internal\/reviewer\/references\/base\.md/);
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe("old reference");
+  expect(existsSync(path.join(sandbox, "skills/references/imported/renamed-alpha"))).toBe(false);
+  expect(readImportRecipeStore(sandbox)).toEqual(originalStore);
+});
+
+test("skills update detects reference documents and symlinks that consume another reference", async () => {
+  const sandbox = makeTempDir("skill-update-reference-consumer");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const originalStore = {
+    version: 2 as const,
+    recipes: [
+      {
+        source: "owner/a-alpha",
+        skills: [{ selector: "alpha", slug: "alpha", kind: "reference" as const }],
+      },
+      {
+        source: "owner/z-bravo",
+        skills: [{ selector: "bravo", slug: "bravo", kind: "reference" as const }],
+      },
+    ],
+  };
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+    stagedSlugBySelector: {
+      alpha: "renamed-alpha",
+    },
+  });
+  writeImportRecipeStore(sandbox, originalStore);
+  write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
+  write(sandbox, "skills/references/imported/bravo/MAIN.md", "[Alpha](../alpha/MAIN.md)\n");
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await expect(
+      runUpdateSkills(["--interactive"], {
+        confirmSlugReplacement() {
+          return true;
+        },
+        writeMessage() {},
+      }),
+    ).rejects.toThrow(/used by skills\/references\/imported\/bravo\/MAIN\.md/);
+
+    write(sandbox, "skills/references/imported/bravo/MAIN.md", "# Bravo\n");
+    const internalReferenceSymlink = path.join(
+      sandbox,
+      "skills/references/internal/reviewer/alpha.md",
+    );
+    mkdirSync(path.dirname(internalReferenceSymlink), { recursive: true });
+    symlinkSync("../../imported/alpha/MAIN.md", internalReferenceSymlink);
+
+    await expect(
+      runUpdateSkills(["--interactive"], {
+        confirmSlugReplacement() {
+          return true;
+        },
+        writeMessage() {},
+      }),
+    ).rejects.toThrow(/used by skills\/references\/internal\/reviewer\/alpha\.md/);
   } finally {
     process.chdir(originalCwd);
     process.env.PATH = originalPath;

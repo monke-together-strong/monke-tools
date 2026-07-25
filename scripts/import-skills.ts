@@ -69,6 +69,7 @@ const SKILLS_CLI_ARGS = ["--yes", "skills", "add"];
 export const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
 export const IMPORTED_REFERENCES_ROOT = path.join("skills", "references", "imported");
 const INTERNAL_SKILLS_ROOT = path.join("skills", "internal");
+const INTERNAL_REFERENCES_ROOT = path.join("skills", "references", "internal");
 const IMPORT_RECIPE_STORE_PATH = path.join(IMPORTED_SKILLS_ROOT, ".monke-imports.json");
 const CSI_RE = new RegExp(String.raw`\u001b\[[\u0030-\u003f]*[\u0020-\u002f]*[\u0040-\u007e]`, "g");
 const OSC_RE = new RegExp(String.raw`\u001b\][\s\S]*?(?:\u0007|\u001b\\)`, "g");
@@ -415,10 +416,23 @@ function assertObsoleteReferencesAreUnconsumed(
       continue;
     }
 
+    const obsoleteReferenceRoot = importedGuidancePath(repoRoot, guidance);
     const referencePathPrefix = `${path.posix.join("references", "imported", guidance.slug)}/`;
-    const consumers = [INTERNAL_SKILLS_ROOT, IMPORTED_SKILLS_ROOT]
-      .flatMap((root) => listReferenceConsumers(path.join(repoRoot, root), referencePathPrefix))
-      .map((entryPath) => path.relative(repoRoot, entryPath));
+    const consumers = [
+      INTERNAL_SKILLS_ROOT,
+      IMPORTED_SKILLS_ROOT,
+      INTERNAL_REFERENCES_ROOT,
+      IMPORTED_REFERENCES_ROOT,
+    ]
+      .flatMap((root) =>
+        listReferenceConsumers(
+          path.join(repoRoot, root),
+          obsoleteReferenceRoot,
+          referencePathPrefix,
+        ),
+      )
+      .map((entryPath) => path.relative(repoRoot, entryPath))
+      .sort();
 
     if (consumers.length > 0) {
       throw new MonkeError(
@@ -428,24 +442,58 @@ function assertObsoleteReferencesAreUnconsumed(
   }
 }
 
-function listReferenceConsumers(root: string, referencePathPrefix: string): string[] {
-  if (!existsSync(root)) {
+function listReferenceConsumers(
+  root: string,
+  obsoleteReferenceRoot: string,
+  referencePathPrefix: string,
+): string[] {
+  if (!existsSync(root) || isPathWithin(obsoleteReferenceRoot, root)) {
     return [];
   }
 
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      return listReferenceConsumers(entryPath, referencePathPrefix);
+      return listReferenceConsumers(entryPath, obsoleteReferenceRoot, referencePathPrefix);
     }
     if (entry.isFile()) {
-      return readFileSync(entryPath, "utf8").includes(referencePathPrefix) ? [entryPath] : [];
+      const content = readFileSync(entryPath, "utf8");
+      const consumesReference =
+        content.includes(referencePathPrefix) ||
+        contentContainsRelativePathInto(content, path.dirname(entryPath), obsoleteReferenceRoot);
+      return consumesReference ? [entryPath] : [];
     }
     if (entry.isSymbolicLink()) {
-      return readlinkSync(entryPath).includes(referencePathPrefix) ? [entryPath] : [];
+      const linkTarget = readlinkSync(entryPath);
+      const resolvedTarget = path.resolve(path.dirname(entryPath), linkTarget);
+      return linkTarget.includes(referencePathPrefix) ||
+        isPathWithin(obsoleteReferenceRoot, resolvedTarget)
+        ? [entryPath]
+        : [];
     }
     return [];
   });
+}
+
+function contentContainsRelativePathInto(
+  content: string,
+  consumerDirectory: string,
+  targetRoot: string,
+): boolean {
+  const relativePathPattern = /(?:\.\.?\/)+[^\s)"'`>]+/g;
+  return [...content.matchAll(relativePathPattern)].some((match) =>
+    isPathWithin(targetRoot, path.resolve(consumerDirectory, match[0] ?? "")),
+  );
+}
+
+function isPathWithin(parent: string, candidate: string): boolean {
+  const relativePath = path.relative(parent, candidate);
+  return (
+    relativePath.length === 0 ||
+    (!relativePath.startsWith(`..${path.sep}`) &&
+      relativePath !== ".." &&
+      !path.isAbsolute(relativePath))
+  );
 }
 
 export function importedGuidancePath(
@@ -1166,6 +1214,7 @@ export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeSto
 
   const recipes = store.recipes.map((recipe) => {
     assertUniqueRecipeSkillSelectors(recipe.source, recipe.skills);
+    assertUniqueRecipeSkillSlugs(recipe.source, recipe.skills);
     return {
       ...recipe,
       skills: recipe.skills.sort((left, right) => {
@@ -1212,6 +1261,20 @@ function assertUniqueRecipeSkillSelectors(
     }
 
     selectors.add(skill.selector);
+  }
+}
+
+function assertUniqueRecipeSkillSlugs(
+  source: string,
+  skills: readonly SkillImportRecipeSkill[],
+): void {
+  const slugs = new Set<string>();
+  for (const skill of skills) {
+    if (slugs.has(skill.slug)) {
+      throw new MonkeError(`Duplicate imported slug in recipe ${source}: ${skill.slug}`);
+    }
+
+    slugs.add(skill.slug);
   }
 }
 
