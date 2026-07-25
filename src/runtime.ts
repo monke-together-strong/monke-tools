@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { isCancel, select as clackSelect } from "@clack/prompts";
 import * as z from "zod";
 
-import { MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError } from "./errors.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
 import type { ExecOptions, ExecResult, Runtime, SelectPrompt } from "./types.ts";
 
@@ -231,7 +231,7 @@ function withLockPath<T>(lockPath: string, callback: () => T): T {
       fileDescriptor = openSync(lockPath, "wx");
       writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }), "utf8");
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       if (!message.includes("EEXIST")) {
         throw error;
       }

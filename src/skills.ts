@@ -13,10 +13,11 @@ import {
 import path from "node:path";
 import * as z from "zod";
 
-import { MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
 import { createLogger } from "./logger.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
+import { parseBoundaryValue } from "./validation.ts";
 import type {
   BuiltInSkillInstallTargetKind,
   SkillInstallPreference,
@@ -173,7 +174,7 @@ export function reconcileSkillNamespaces(options: {
     try {
       removeManagedTarget(previousTarget);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       failures.push(`${previousTarget.agentSkillRoot}: ${message}`);
     }
   }
@@ -183,7 +184,7 @@ export function reconcileSkillNamespaces(options: {
       reconcileOneTarget(target, skillSourceTree);
       options.writeMessage(`Linked ${SKILL_NAMESPACE} skills at ${managedLocation(target)}\n`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       failures.push(`${target.agentSkillRoot}: ${message}`);
     }
   }
@@ -525,11 +526,11 @@ function readFlatManifest(target: ResolvedSkillInstallTarget): FlatSkillManifest
     throw new MonkeError(`Invalid monke-tools flat Skill manifest at ${manifestPath}`);
   }
 
-  const parsed = FlatSkillManifestSchema.safeParse(rawManifest);
-  if (!parsed.success) {
-    throw new MonkeError(`Invalid monke-tools flat Skill manifest at ${manifestPath}`);
-  }
-  return parsed.data;
+  return parseBoundaryValue(
+    FlatSkillManifestSchema,
+    rawManifest,
+    `monke-tools flat Skill manifest at ${manifestPath}`,
+  );
 }
 
 function writeFlatManifest(target: ResolvedSkillInstallTarget, links: FlatSkillLink[]): void {

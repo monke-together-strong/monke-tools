@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import * as z from "zod";
 
+import { errorMessage } from "./errors.ts";
 import { resolveDefaultBranchRef } from "./git.ts";
 import type { Runtime } from "./types.ts";
 
@@ -519,10 +520,6 @@ function realpathOrNull(targetPath: string): string | null {
 
 function commandDetail(result: { stdout: string; stderr: string; exitCode: number }): string {
   return result.stderr.trim() || result.stdout.trim() || `exit code ${result.exitCode}`;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function shortSha(sha: string): string {

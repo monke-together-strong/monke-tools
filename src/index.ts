@@ -43,6 +43,7 @@ function createProgram(
     options: { codex?: boolean },
   ) => void | Promise<void>,
 ): Command {
+  // Subcommands copy these at .command() time, so every subcommand below must be declared after.
   const program = new Command()
     .name("mt")
     .helpOption(false)
@@ -53,8 +54,6 @@ function createProgram(
 
   program
     .command("spawn")
-    .helpOption(false)
-    .allowExcessArguments(false)
     .argument("<session>")
     .option("--no-dirty")
     .option("-m, --main")
@@ -73,26 +72,18 @@ function createProgram(
 
   program
     .command("swing")
-    .helpOption(false)
-    .allowExcessArguments(false)
     .argument("[target]")
     .option("--codex")
     .action((target, options) => {
       return swingAction(runtime, target, options);
     });
 
-  program
-    .command("materialize")
-    .helpOption(false)
-    .allowExcessArguments(false)
-    .action(() => {
-      runMaterialize(runtime);
-    });
+  program.command("materialize").action(() => {
+    runMaterialize(runtime);
+  });
 
   const cleanup = program
     .command("cleanup")
-    .helpOption(false)
-    .allowExcessArguments(false)
     .option("--merged")
     .option("--dry-run")
     .action((options) => {
@@ -108,33 +99,21 @@ function createProgram(
       );
     });
 
-  program
-    .command("setup")
-    .helpOption(false)
-    .allowExcessArguments(false)
-    .action(() => {
-      runSetup(runtime);
-    });
+  program.command("setup").action(() => {
+    runSetup(runtime);
+  });
 
   program
     .command("install-dependencies")
     .description("Install or verify runtime dependencies used by mt")
-    .helpOption(false)
-    .allowExcessArguments(false)
     .action(() => {
       runInstallDependencies(runtime);
     });
 
-  const shell = program
-    .command("shell")
-    .helpOption(false)
-    .allowExcessArguments(false)
-    .addHelpCommand(false);
+  const shell = program.command("shell");
 
   shell
     .command("install")
-    .helpOption(false)
-    .allowExcessArguments(false)
     .option("--binary <path>")
     .action((options) => {
       runShellInstall(runtime, options);
@@ -142,32 +121,20 @@ function createProgram(
 
   shell
     .command("init")
-    .helpOption(false)
-    .allowExcessArguments(false)
     .addArgument(new Argument("<shell>").choices(["bash", "zsh"]))
     .option("--binary <path>")
     .action((shellName, options) => {
       runShellInit(runtime, shellName, options);
     });
 
-  const skills = program
-    .command("skills")
-    .helpOption(false)
-    .allowExcessArguments(false)
-    .addHelpCommand(false);
+  const skills = program.command("skills");
 
-  skills
-    .command("configure")
-    .helpOption(false)
-    .allowExcessArguments(false)
-    .action(() => {
-      runSkillsConfigure(runtime);
-    });
+  skills.command("configure").action(() => {
+    runSkillsConfigure(runtime);
+  });
 
   skills
     .command("local-install")
-    .helpOption(false)
-    .allowExcessArguments(false)
     .argument("<source-checkout>")
     .action((sourceCheckout) => {
       runLocalInstallSkills(runtime, sourceCheckout);
