@@ -378,12 +378,6 @@ export function copyStagedGuidanceToManagedRoots(options: {
 function transformPreparedReference(referencePath: string): void {
   const skillEntryPath = path.join(referencePath, "SKILL.md");
   const referenceEntryPath = path.join(referencePath, "MAIN.md");
-  const nestedSkillEntries = listNestedSkillEntries(referencePath, skillEntryPath);
-  if (nestedSkillEntries.length > 0) {
-    throw new MonkeError(
-      `Cannot import reference because supporting content contains nested SKILL.md at ${nestedSkillEntries.join(", ")}`,
-    );
-  }
   if (existsSync(referenceEntryPath)) {
     throw new MonkeError(
       `Cannot import reference because upstream guidance already contains MAIN.md at ${referenceEntryPath}`,
@@ -399,17 +393,6 @@ function transformPreparedReference(referencePath: string): void {
   const body = removeLeadingYamlFrontmatter(readFileSync(skillEntryPath, "utf8"));
   unlinkSync(skillEntryPath);
   writeFileSync(referenceEntryPath, body, { encoding: "utf8", flag: "wx" });
-}
-
-function listNestedSkillEntries(root: string, rootSkillEntry: string): string[] {
-  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
-    const entryPath = path.join(root, entry.name);
-    const matchesNestedSkillEntry = entry.name === "SKILL.md" && entryPath !== rootSkillEntry;
-    if (matchesNestedSkillEntry) {
-      return [entryPath];
-    }
-    return entry.isDirectory() ? listNestedSkillEntries(entryPath, rootSkillEntry) : [];
-  });
 }
 
 function removeLeadingYamlFrontmatter(markdown: string): string {
