@@ -18,8 +18,6 @@
   ],
   "type": "module",
   "scripts": {
-    "mt": "bun run src/index.ts",
-    "monke-tools": "bun run src/index.ts",
     "install:local": "sh ./scripts/install-local.sh",
     "skills:import": "bun run scripts/import-skills.ts",
     "skills:update": "bun run scripts/update-skills.ts",
