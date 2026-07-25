@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parse, stringify } from "yaml";
+import { stringify } from "yaml";
+import * as z from "zod";
 
 import { openCodexThread } from "./codex.ts";
 import { MonkeError } from "./errors.ts";
@@ -16,26 +17,34 @@ import { getSessionStateFilePath, listSessionStates } from "./registry.ts";
 import { ensureDirectory, getMonkeHome, hashKey, withGlobalLock } from "./runtime.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
+import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
 
-type SwingHistoryTarget =
-  | {
-      kind: "source";
-    }
-  | {
-      kind: "session";
-      session: string;
-    }
-  | {
-      kind: "external-session";
-      session: string;
-      path: string;
-    };
+const SwingHistoryTargetSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("source") }),
+  z.strictObject({ kind: z.literal("session"), session: z.string().min(1) }),
+  z.strictObject({
+    kind: z.literal("external-session"),
+    session: z.string().min(1),
+    path: z.string().min(1),
+  }),
+]);
 
-interface SwingHistory {
-  version: 1;
-  current?: SwingHistoryTarget;
-  previous?: SwingHistoryTarget;
-}
+const SwingHistorySchema = z.strictObject({
+  version: z.literal(1),
+  current: SwingHistoryTargetSchema.optional(),
+  previous: SwingHistoryTargetSchema.optional(),
+});
+const GithubRepositorySchema = z.object({
+  nameWithOwner: z.string().min(1),
+});
+const GithubPullRequestSchema = z.object({
+  headRefName: z.string().min(1),
+  headRepository: z.object({ name: z.string().min(1) }),
+  headRepositoryOwner: z.object({ login: z.string().min(1) }),
+});
+
+type SwingHistoryTarget = z.output<typeof SwingHistoryTargetSchema>;
+type SwingHistory = z.output<typeof SwingHistorySchema>;
 
 interface ResolvedSwingTarget {
   target: SwingHistoryTarget;
@@ -386,32 +395,14 @@ function resolvePullRequestSession(
     ],
     { cwd: rootSourceRoot },
   ).stdout;
-  const pullRequest = parseJsonObject(output, `GitHub PR #${pullRequestNumber}`);
-  const headRefName = requireStringField(
-    pullRequest,
-    "headRefName",
+  const pullRequest = parseGithubJson(
+    output,
     `GitHub PR #${pullRequestNumber}`,
+    GithubPullRequestSchema,
   );
-  const headRepository = requireRecordField(
-    pullRequest,
-    "headRepository",
-    `GitHub PR #${pullRequestNumber}`,
-  );
-  const headRepositoryOwner = requireRecordField(
-    pullRequest,
-    "headRepositoryOwner",
-    `GitHub PR #${pullRequestNumber}`,
-  );
-  const headRepoName = requireStringField(
-    headRepository,
-    "name",
-    `GitHub PR #${pullRequestNumber} headRepository`,
-  );
-  const headOwnerLogin = requireStringField(
-    headRepositoryOwner,
-    "login",
-    `GitHub PR #${pullRequestNumber} headRepositoryOwner`,
-  );
+  const headRefName = pullRequest.headRefName;
+  const headRepoName = pullRequest.headRepository.name;
+  const headOwnerLogin = pullRequest.headRepositoryOwner.login;
 
   if (!isSameGithubRepo({ owner: headOwnerLogin, name: headRepoName }, currentRepo)) {
     throw new MonkeError(
@@ -474,7 +465,7 @@ function resolveCurrentGithubRepo(
   }).stdout;
   const trimmed = output.trim();
   const nameWithOwner = trimmed.startsWith("{")
-    ? requireStringField(parseJsonObject(trimmed, "GitHub repo"), "nameWithOwner", "GitHub repo")
+    ? parseGithubJson(trimmed, "GitHub repo", GithubRepositorySchema).nameWithOwner
     : trimmed;
   const [owner, name] = nameWithOwner.split("/");
 
@@ -591,43 +582,30 @@ function loadSwingHistory(home: string, rootSourceRoot: string): SwingHistory {
     return { version: 1 };
   }
 
-  return parse(readFileSync(filePath, "utf8")) as SwingHistory;
+  return parseOwnedYamlFile(filePath, SwingHistorySchema);
 }
 
 function saveSwingHistory(home: string, rootSourceRoot: string, history: SwingHistory): void {
   const filePath = getSwingHistoryFilePath(home, rootSourceRoot);
+  const parsed = parseBoundaryValue(SwingHistorySchema, history, filePath);
   ensureDirectory(path.dirname(filePath));
-  writeFileSync(filePath, stringify(history), "utf8");
+  writeFileSync(filePath, stringify(parsed), "utf8");
 }
 
 function getSwingHistoryFilePath(home: string, rootSourceRoot: string): string {
   return path.join(home, "swing-history", `${hashKey(rootSourceRoot)}.yml`);
 }
 
-function parseJsonObject(output: string, label: string): Record<string, unknown> {
-  const parsed = JSON.parse(output) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new MonkeError(`Expected ${label} to be a JSON object`);
-  }
-  return parsed as Record<string, unknown>;
-}
-
-function requireRecordField(
-  value: Record<string, unknown>,
-  field: string,
+function parseGithubJson<T extends z.ZodType>(
+  output: string,
   label: string,
-): Record<string, unknown> {
-  const fieldValue = value[field];
-  if (!fieldValue || typeof fieldValue !== "object" || Array.isArray(fieldValue)) {
-    throw new MonkeError(`Expected ${label}.${field} to be a JSON object`);
+  schema: T,
+): z.output<T> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    throw new MonkeError(`Invalid ${label}: expected JSON output`);
   }
-  return fieldValue as Record<string, unknown>;
-}
-
-function requireStringField(value: Record<string, unknown>, field: string, label: string): string {
-  const fieldValue = value[field];
-  if (typeof fieldValue !== "string" || fieldValue.length === 0) {
-    throw new MonkeError(`Expected ${label}.${field} to be a non-empty string`);
-  }
-  return fieldValue;
+  return parseBoundaryValue(schema, parsed, label);
 }

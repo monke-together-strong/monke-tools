@@ -47,8 +47,8 @@ Use Playwright when the workflow can be scripted deterministically.
    await expect(page.getByText("Success")).toBeVisible();
    ```
 
-   Completion criterion: the script proves the final state with URL, text, role,
-   or state assertions before recording ends.
+   Completion criterion: URL, text, role, or state assertions prove the final
+   state before recording ends.
 
 4. Close the context to flush the video.
 
@@ -60,7 +60,7 @@ Use Playwright when the workflow can be scripted deterministically.
 
    Completion criterion: a `.webm` file exists and has nonzero duration.
 
-5. Verify the video artifact.
+5. Validate the video encoding.
 
    ```bash
    ffprobe -hide_banner "$webmPath"
@@ -86,7 +86,12 @@ Use Playwright when the workflow can be scripted deterministically.
    Completion criterion: `ffprobe -hide_banner proof.mp4` reports H.264 video in
    an MP4 container.
 
-7. Upload the MP4 with `$github-image-upload`.
+7. Pass the final MP4 through the
+   [proof asset review](proof-asset-review.md).
+
+   Completion criterion: the MP4 passes the Evidence Gate.
+
+8. Upload the MP4 with `$github-image-upload`.
 
    Completion criterion: `$github-image-upload` returns a
    `https://github.com/user-attachments/assets/...` URL for the MP4.

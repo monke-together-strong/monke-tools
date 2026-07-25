@@ -25,13 +25,21 @@ If `state` is `MERGED` or `CLOSED`, delete the heartbeat, report the terminal st
 
 Nitpick is a severity label, not a dismissal. Prefer fixing consistency polish; prefer rejecting imaginary-scenario complexity.
 
-3. **Commit and push:** After implementing changes, commit and push. Then go back to step 1 - the reviewers will automatically re-review your new push.
+3. **Diagnose CI failures:** Read the failing logs, run the smallest relevant target when practical, and classify each failure as a PR regression, deterministic baseline defect, repo-owned flake, or external infrastructure failure.
+   - Use retries as diagnostic probes. A passing retry supplies evidence but does not resolve a repo-owned flake.
+   - For a suspected flake, locate the unstable boundary and attempt the smallest durable fix: remove the race or shared state, isolate the test, reduce unnecessary work, or calibrate a resource limit to the intended workload. Verify the fix with repeated targeted runs.
+   - Rerun without a code change only when evidence identifies an external infrastructure failure, or while diagnosis remains explicitly open.
+   - If the durable fix would materially expand the PR, report the diagnosis and ask whether to expand scope instead of declaring the PR merge-ready.
 
-4. **Loop:** Repeat until a full cycle passes with nothing meaningful left to address from either reviewer.
+   This step is complete when every observed CI failure has an evidence-backed classification and either a verified repo-owned fix or a concrete external cause.
 
-5. **Double-verify merge-ready:** Before declaring the PR merge-ready, verify twice that (a) all reviewers have re-run on the latest commit, (b) no outstanding required changes remain, and (c) CI is green and the PR is mergeable.
+4. **Commit and push:** After implementing changes, commit and push. Then go back to step 1 - the reviewers will automatically re-review your new push.
 
-6. **Stop. Hand off to human.** Report that the PR is merge-ready and wait. **Do not merge.**
+5. **Loop:** Repeat until a full cycle passes with nothing meaningful left to address from either reviewer.
+
+6. **Double-verify merge-ready:** Before declaring the PR merge-ready, verify twice that (a) all reviewers have re-run on the latest commit, (b) no outstanding required changes remain, and (c) every observed CI failure completed step 3, current CI is green, and the PR is mergeable.
+
+7. **Stop. Hand off to human.** Report that the PR is merge-ready and wait. **Do not merge.**
 
 ## Hard rule: never merge without explicit approval
 

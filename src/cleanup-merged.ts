@@ -1,7 +1,30 @@
 import { existsSync, realpathSync } from "node:fs";
+import * as z from "zod";
 
+import { errorMessage } from "./errors.ts";
 import { resolveDefaultBranchRef } from "./git.ts";
 import type { Runtime } from "./types.ts";
+
+const GithubRepositoryLookupSchema = z.object({
+  nameWithOwner: z.string().min(1),
+});
+const MergedPrInputSchema = z.object({
+  number: z.number().optional(),
+  headRefName: z.string().optional(),
+  baseRefName: z.string().optional(),
+  headRefOid: z.union([z.string(), z.null()]).optional(),
+  mergedAt: z.string().optional(),
+  url: z.string().optional(),
+  isCrossRepository: z.boolean().optional(),
+  headRepository: z
+    .object({
+      name: z.string().optional(),
+      nameWithOwner: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
+  headRepositoryOwner: z.object({ login: z.string().optional() }).nullable().optional(),
+});
 
 /** GitHub metadata used to prove that one Session branch was merged. */
 export interface MergedPrMatch {
@@ -372,12 +395,12 @@ function getGithubRepositoryFullName(
       return { ok: false, error: `GitHub repository lookup failed: ${commandDetail(result)}` };
     }
 
-    const parsed = JSON.parse(result.stdout) as { nameWithOwner?: unknown };
-    if (typeof parsed.nameWithOwner !== "string" || parsed.nameWithOwner.length === 0) {
+    const parsed = GithubRepositoryLookupSchema.safeParse(JSON.parse(result.stdout) as unknown);
+    if (!parsed.success) {
       return { ok: false, error: "GitHub repository lookup did not return nameWithOwner" };
     }
 
-    return { ok: true, value: parsed.nameWithOwner };
+    return { ok: true, value: parsed.data.nameWithOwner };
   } catch (error) {
     return { ok: false, error: `GitHub repository lookup failed: ${errorMessage(error)}` };
   }
@@ -429,37 +452,18 @@ function queryMergedPrs(
 }
 
 function normalizeMergedPrMatch(value: unknown): MergedPrMatch {
-  const record = isRecord(value) ? value : {};
+  const parsed = MergedPrInputSchema.safeParse(value);
+  const record = parsed.success ? parsed.data : {};
   return {
-    number: typeof record.number === "number" ? record.number : 0,
-    headRefName: typeof record.headRefName === "string" ? record.headRefName : "",
-    baseRefName: typeof record.baseRefName === "string" ? record.baseRefName : "",
-    headRefOid:
-      typeof record.headRefOid === "string" || record.headRefOid === null
-        ? record.headRefOid
-        : null,
-    mergedAt: typeof record.mergedAt === "string" ? record.mergedAt : undefined,
-    url: typeof record.url === "string" ? record.url : undefined,
-    isCrossRepository:
-      typeof record.isCrossRepository === "boolean" ? record.isCrossRepository : undefined,
-    headRepository: isRecord(record.headRepository)
-      ? {
-          name:
-            typeof record.headRepository.name === "string" ? record.headRepository.name : undefined,
-          nameWithOwner:
-            typeof record.headRepository.nameWithOwner === "string"
-              ? record.headRepository.nameWithOwner
-              : undefined,
-        }
-      : null,
-    headRepositoryOwner: isRecord(record.headRepositoryOwner)
-      ? {
-          login:
-            typeof record.headRepositoryOwner.login === "string"
-              ? record.headRepositoryOwner.login
-              : undefined,
-        }
-      : null,
+    number: record.number ?? 0,
+    headRefName: record.headRefName ?? "",
+    baseRefName: record.baseRefName ?? "",
+    headRefOid: record.headRefOid ?? null,
+    mergedAt: record.mergedAt,
+    url: record.url,
+    isCrossRepository: record.isCrossRepository,
+    headRepository: record.headRepository ?? null,
+    headRepositoryOwner: record.headRepositoryOwner ?? null,
   };
 }
 
@@ -518,14 +522,6 @@ function commandDetail(result: { stdout: string; stderr: string; exitCode: numbe
   return result.stderr.trim() || result.stdout.trim() || `exit code ${result.exitCode}`;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function shortSha(sha: string): string {
   return sha.slice(0, 8);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

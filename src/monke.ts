@@ -38,7 +38,7 @@ import {
   resolveRepoContext,
   validateWorktreeForSession,
 } from "./git.ts";
-import { MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
 import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
@@ -621,16 +621,12 @@ function loadReposByRootForCleanup(
   try {
     return loadResolvedGraphForSession(runtime, rootSourceRoot, state).reposByRoot;
   } catch (error) {
-    const detail = formatErrorDetail(error);
+    const detail = errorMessage(error);
     runtime.writeStderr(
       `Warning: could not load repo config for session ${state.session} (${detail}); using Cleanup commands recorded in Session state.\n`,
     );
     return new Map();
   }
-}
-
-function formatErrorDetail(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export function runInstallDependencies(runtime: Runtime): void {
@@ -804,7 +800,7 @@ function removeDeadSessionStates(runtime: Runtime, home: string, rootSourceRoot:
     } catch (error) {
       failures.push({
         session: state.session,
-        detail: formatErrorDetail(error),
+        detail: errorMessage(error),
         stateFile: getSessionStateFilePath(home, state.rootSourceRoot, state.session),
       });
     }
@@ -1265,7 +1261,7 @@ function runCleanupCommands(
         },
       });
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
+      const detail = errorMessage(error);
       throw new MonkeError(
         `Cleanup command failed for session ${state.session} repo ${sourceRoot}: ${cleanupCommand}\n${detail}`,
       );
@@ -1293,7 +1289,7 @@ function runBootstrapCommand(
       ),
     });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = errorMessage(error);
     throw new MonkeError(
       `Bootstrap command failed for ${repoConfig.sourceRoot}: ${repoConfig.bootstrapCommand}\n${detail}\nPartial Session state was kept; fix the command and re-run mt spawn ${session} to resume from this repo.`,
     );
