@@ -7,6 +7,7 @@ import * as p from "@clack/prompts";
 import { Command } from "@commander-js/extra-typings";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
+import { MonkeError } from "../src/errors.ts";
 import {
   assertSkillSelectorSlugMappingsMatchStagedSlugs,
   buildSkillsInstallArgs,
@@ -114,7 +115,7 @@ export async function runUpdateSkills(
   }
 
   if (failures.length > 0) {
-    throw new Error(
+    throw new MonkeError(
       `Skill update failed for ${failures.length} recipe(s):\n${failures.join("\n")}`,
     );
   }
@@ -150,7 +151,7 @@ function validateImportedSkillOwnership(repoRoot: string, store: SkillImportReci
     for (const skill of recipe.skills) {
       const existingOwner = ownedSlugs.get(skill.slug);
       if (existingOwner) {
-        throw new Error(
+        throw new MonkeError(
           `Imported skill slug ${skill.slug} is owned by both ${existingOwner} and ${recipe.source}`,
         );
       }
@@ -163,7 +164,7 @@ function validateImportedSkillOwnership(repoRoot: string, store: SkillImportReci
     (slug) => !ownedSlugs.has(slug),
   );
   if (untrackedSlugs.length > 0) {
-    throw new Error(`Untracked imported skill directories: ${untrackedSlugs.join(", ")}`);
+    throw new MonkeError(`Untracked imported skill directories: ${untrackedSlugs.join(", ")}`);
   }
 }
 
@@ -186,7 +187,7 @@ async function resolveStagedSkillReplacements(options: {
   }
 
   if (!options.interactive) {
-    throw new Error(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
+    throw new MonkeError(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
   }
 
   const selectorMappings = resolveSkillSelectorSlugMappings({
@@ -215,13 +216,13 @@ async function resolveStagedSkillReplacements(options: {
   });
 
   if (replacements.length === 0) {
-    throw new Error(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
+    throw new MonkeError(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
   }
 
   for (const replacement of replacements) {
     const accepted = await options.confirmSlugReplacement(replacement);
     if (!accepted) {
-      throw new Error(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
+      throw new MonkeError(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
     }
   }
 
@@ -240,7 +241,7 @@ function assertSlugReplacementsKeepUniqueOwnership(
       }
 
       if (recipe.skills.some((skill) => skill.slug === replacement.stagedSlug)) {
-        throw new Error(
+        throw new MonkeError(
           `Cannot replace Skill slug ${replacement.recordedSlug} with ${replacement.stagedSlug}: ${replacement.stagedSlug} is already owned by recipe ${recipe.source}`,
         );
       }
@@ -261,7 +262,7 @@ function applyAcceptedSlugReplacements(
         candidate.selector === replacement.selector && candidate.slug === replacement.recordedSlug,
     );
     if (!skill) {
-      throw new Error(`Could not update recorded Skill slug ${replacement.recordedSlug}`);
+      throw new MonkeError(`Could not update recorded Skill slug ${replacement.recordedSlug}`);
     }
 
     if (!stagedSlugSet.has(replacement.recordedSlug)) {
@@ -293,7 +294,7 @@ async function promptForSlugReplacement(request: SlugReplacementRequest): Promis
   });
 
   if (p.isCancel(accepted)) {
-    throw new Error("Skill update cancelled");
+    throw new MonkeError("Skill update cancelled");
   }
 
   return accepted;

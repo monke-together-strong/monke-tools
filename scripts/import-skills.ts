@@ -21,6 +21,8 @@ import pc from "picocolors";
 import * as z from "zod";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
+import { MonkeError } from "../src/errors.ts";
+import { parseBoundaryValue } from "../src/validation.ts";
 
 interface ImportCommandOptions {
   source: string;
@@ -209,7 +211,7 @@ export function parseAvailableSkillGroups(output: string): AvailableSkillGroup[]
   }
 
   if (seenNames.size === 0) {
-    throw new Error("Could not parse any skills from `skills add <source> -l` output");
+    throw new MonkeError("Could not parse any skills from `skills add <source> -l` output");
   }
 
   return groups;
@@ -274,7 +276,7 @@ export function recordImportedSkills(repoRoot: string, input: RecordImportedSkil
 export function listStagedSkillSlugs(stagingDirectory: string): string[] {
   const stagedSkillsRoot = path.join(stagingDirectory, ".agents", "skills");
   if (!existsSync(stagedSkillsRoot)) {
-    throw new Error(`Expected staged skills at ${stagedSkillsRoot}`);
+    throw new MonkeError(`Expected staged skills at ${stagedSkillsRoot}`);
   }
 
   const stagedSkillNames = readdirSync(stagedSkillsRoot)
@@ -285,7 +287,7 @@ export function listStagedSkillSlugs(stagingDirectory: string): string[] {
     .sort();
 
   if (stagedSkillNames.length === 0) {
-    throw new Error(`No staged skill directories found at ${stagedSkillsRoot}`);
+    throw new MonkeError(`No staged skill directories found at ${stagedSkillsRoot}`);
   }
 
   return stagedSkillNames;
@@ -314,7 +316,7 @@ function mergeImportedSkillsIntoRecipeStore(
   input: RecordImportedSkillsInput,
 ): SkillImportRecipeStore {
   if (input.skills.length === 0) {
-    throw new Error("At least one imported skill must be recorded");
+    throw new MonkeError("At least one imported skill must be recorded");
   }
 
   const nextStore = normalizeImportRecipeStore(store);
@@ -323,7 +325,7 @@ function mergeImportedSkillsIntoRecipeStore(
   const recipe = nextStore.recipes.find((candidate) => candidate.source === input.source);
   if (recipe) {
     if (Boolean(recipe.acceptOpenClawRisks) !== input.acceptOpenClawRisks) {
-      throw new Error(
+      throw new MonkeError(
         `Skill import recipe for ${input.source} already exists with a different OpenClaw risk setting`,
       );
     }
@@ -335,7 +337,7 @@ function mergeImportedSkillsIntoRecipeStore(
       );
       if (existingSkill) {
         if (existingSkill.slug !== skill.slug) {
-          throw new Error(
+          throw new MonkeError(
             `Skill import selector ${skill.selector} is already recorded with slug ${existingSkill.slug}`,
           );
         }
@@ -343,7 +345,9 @@ function mergeImportedSkillsIntoRecipeStore(
       }
 
       if (recipe.skills.some((candidate) => candidate.slug === skill.slug)) {
-        throw new Error(`Imported skill slug ${skill.slug} is already owned by ${input.source}`);
+        throw new MonkeError(
+          `Imported skill slug ${skill.slug} is already owned by ${input.source}`,
+        );
       }
 
       recipe.skills.push(skill);
@@ -524,11 +528,11 @@ export function runInstallCommand(repoRoot: string): void {
   );
 
   if (result.error) {
-    throw new Error(`Failed to run skill install command: ${result.error.message}`);
+    throw new MonkeError(`Failed to run skill install command: ${result.error.message}`);
   }
 
   if (result.status !== 0) {
-    throw new Error(
+    throw new MonkeError(
       `Skill install command failed with ${result.signal ? `signal ${result.signal}` : `exit code ${result.status ?? "unknown"}`}`,
     );
   }
@@ -543,12 +547,12 @@ export function runSkillsCaptured(args: string[], cwd: string): CapturedCommandO
   });
 
   if (result.error) {
-    throw new Error(`Failed to run skills CLI: ${result.error.message}`);
+    throw new MonkeError(`Failed to run skills CLI: ${result.error.message}`);
   }
 
   if (result.status !== 0) {
     const details = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-    throw new Error(
+    throw new MonkeError(
       `Command failed: ${formatCommand(NPX_COMMAND, args)}${details ? `\n${details}` : ""}`,
     );
   }
@@ -711,7 +715,7 @@ async function promptForSkillSelection(
   });
 
   if (p.isCancel(selectedSkills)) {
-    throw new Error("Skill import cancelled");
+    throw new MonkeError("Skill import cancelled");
   }
 
   return [...selectedSkills];
@@ -952,14 +956,13 @@ function stepSymbol(state: string): string {
 }
 
 function normalizeImportRecipeStore(input: unknown): SkillImportRecipeStore {
-  const parsed = SkillImportRecipeStoreSchema.safeParse(input);
-  if (!parsed.success) {
-    throw new Error(
-      parsed.error.issues[0]?.message ?? "Skill import recipe store has an invalid shape",
-    );
-  }
+  const store = parseBoundaryValue(
+    SkillImportRecipeStoreSchema,
+    input,
+    "Skill import recipe store",
+  );
 
-  const recipes = parsed.data.recipes.map((recipe) => {
+  const recipes = store.recipes.map((recipe) => {
     assertUniqueRecipeSkillSelectors(recipe.source, recipe.skills);
     return {
       ...recipe,
@@ -989,7 +992,7 @@ function assertUniqueRecipeSources(recipes: readonly SkillImportRecipe[]): void 
   const sources = new Set<string>();
   for (const recipe of recipes) {
     if (sources.has(recipe.source)) {
-      throw new Error(`Duplicate skill import recipe source: ${recipe.source}`);
+      throw new MonkeError(`Duplicate skill import recipe source: ${recipe.source}`);
     }
 
     sources.add(recipe.source);
@@ -1003,7 +1006,7 @@ function assertUniqueRecipeSkillSelectors(
   const selectors = new Set<string>();
   for (const skill of skills) {
     if (selectors.has(skill.selector)) {
-      throw new Error(`Duplicate skill selector in recipe ${source}: ${skill.selector}`);
+      throw new MonkeError(`Duplicate skill selector in recipe ${source}: ${skill.selector}`);
     }
 
     selectors.add(skill.selector);
@@ -1017,7 +1020,7 @@ function assertUniqueImportedSkillOwners(store: SkillImportRecipeStore): void {
     for (const skill of recipe.skills) {
       const existingOwner = owners.get(skill.slug);
       if (existingOwner) {
-        throw new Error(
+        throw new MonkeError(
           `Imported skill slug ${skill.slug} is owned by both ${existingOwner} and ${recipe.source}`,
         );
       }
@@ -1038,7 +1041,7 @@ function assertSkillCanBeOwnedByRecipe(
     }
 
     if (recipe.skills.some((candidate) => candidate.slug === skill.slug)) {
-      throw new Error(
+      throw new MonkeError(
         `Imported skill slug ${skill.slug} is already owned by recipe ${recipe.source}`,
       );
     }
@@ -1073,7 +1076,7 @@ function mapSelectedSkillsToImportedSlugsFromSet(
   importedSkillSlugs: readonly string[],
 ): SkillImportRecipeSkill[] {
   if (selectors.length === 0) {
-    throw new Error("At least one Skill import selector must be selected");
+    throw new MonkeError("At least one Skill import selector must be selected");
   }
 
   const remainingSlugs = new Set(importedSkillSlugs);
@@ -1104,7 +1107,7 @@ function mapSelectedSkillsToImportedSlugsFromSet(
   }
 
   if (unmatchedSelectors.length > 0 || remainingSlugs.size > 0) {
-    throw new Error(
+    throw new MonkeError(
       [
         "Could not map selected Skill import selectors to staged Skill slugs.",
         `Selectors: ${selectors.join(", ")}`,
@@ -1121,7 +1124,7 @@ export function resolveSkillSelectorSlugMappings(
   options: ResolveSkillSelectorSlugMappingsOptions,
 ): SkillImportRecipeSkill[] {
   if (options.selectors.length === 0) {
-    throw new Error("At least one Skill import selector must be selected");
+    throw new MonkeError("At least one Skill import selector must be selected");
   }
 
   return options.selectors.map((selector) => {
@@ -1138,7 +1141,7 @@ export function resolveSkillSelectorSlugMappings(
 
       const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
       if (stagedSlugs.length !== 1) {
-        throw new Error(
+        throw new MonkeError(
           `Expected selector ${selector} from ${options.source} to stage exactly one Skill, but staged ${stagedSlugs.join(", ")}`,
         );
       }
@@ -1165,7 +1168,7 @@ export function assertSkillSelectorSlugMappingsMatchStagedSlugs(
     mappedSlugs.length !== sortedStagedSlugs.length ||
     mappedSlugs.some((slug, index) => slug !== sortedStagedSlugs[index])
   ) {
-    throw new Error(
+    throw new MonkeError(
       [
         `Could not map selected Skill import selectors to staged Skill slugs for ${source}.`,
         `Mapped slugs: ${mappedSlugs.join(", ")}`,
