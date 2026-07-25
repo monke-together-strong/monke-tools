@@ -4,8 +4,9 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs"
 import { tmpdir } from "node:os";
 import path from "node:path";
 import * as p from "@clack/prompts";
-import { Command, CommanderError } from "@commander-js/extra-typings";
+import { Command } from "@commander-js/extra-typings";
 
+import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
 import {
   assertSkillSelectorSlugMappingsMatchStagedSlugs,
   buildSkillsInstallArgs,
@@ -130,20 +131,10 @@ function parseCommand(argv: string[]): UpdateCommandOptions {
     .description("Update imported external agent skills from recorded recipes")
     .option("-i, --install", "Run the monke-tools skill install command after updating")
     .option("--interactive", "Prompt before accepting staged Skill slug replacements")
-    .allowExcessArguments(false)
-    .showSuggestionAfterError(false);
+    .allowExcessArguments(false);
 
-  program.exitOverride();
-
-  try {
-    program.parse(argv, { from: "user" });
-  } catch (error) {
-    if (error instanceof CommanderError) {
-      throw new Error("Usage: bun run skills:update -- [--install] [--interactive]");
-    }
-
-    throw error;
-  }
+  configureCliParser(program);
+  program.parse(argv, { from: "user" });
 
   const options = program.opts();
   return {
@@ -330,8 +321,6 @@ if (import.meta.main) {
   try {
     await runUpdateSkills();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`${message}\n`);
-    process.exit(1);
+    reportCliFailure(error);
   }
 }

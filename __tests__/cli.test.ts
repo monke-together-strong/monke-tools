@@ -5,46 +5,40 @@ import { fileURLToPath } from "node:url";
 import { runCli } from "../src/index.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
-const ROOT_USAGE =
-  "Usage:\n  mt spawn <session> [--no-dirty] [-m|--main|--master] [--codex]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
-const SPAWN_USAGE = "Usage: mt spawn <session> [--no-dirty] [-m|--main|--master] [--codex]";
-const SWING_USAGE = "Usage: mt swing [target] [--codex]";
-const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
-const CLEANUP_DRY_RUN_USAGE = `--dry-run requires --merged\n${CLEANUP_USAGE}`;
-const SKILLS_USAGE = "Usage: mt skills configure";
-const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
-const SHELL_USAGE = "Usage:\n  mt shell install\n  mt shell init <bash|zsh>";
 
-test("runCli preserves top-level usage for missing and unknown commands", () => {
-  expect(() => runCli([])).toThrow(ROOT_USAGE);
-  expect(() => runCli(["unknown"])).toThrow(ROOT_USAGE);
-  expect(() => runCli(["create", "banana"])).toThrow(ROOT_USAGE);
+test("runCli exposes Commander's concise command errors", () => {
+  expect(() => runCli([])).toThrow("error: missing command");
+  expect(() => runCli(["unknown"])).toThrow("error: unknown command 'unknown'");
+  expect(() => runCli(["create", "banana"])).toThrow("error: unknown command 'create'");
 });
 
-test("runCli preserves command-specific usage for invalid arity", () => {
-  expect(() => runCli(["spawn"])).toThrow(SPAWN_USAGE);
-  expect(() => runCli(["spawn", "banana", "extra"])).toThrow(SPAWN_USAGE);
-  expect(() => runCli(["swing", "banana", "extra"])).toThrow(SWING_USAGE);
-  expect(() => runCli(["materialize", "extra"])).toThrow("Usage: mt materialize");
-  expect(() => runCli(["cleanup", "extra"])).toThrow(CLEANUP_USAGE);
-  expect(() => runCli(["cleanup", "--dry-run"])).toThrow(CLEANUP_DRY_RUN_USAGE);
-  expect(() => runCli(["setup", "extra"])).toThrow("Usage: mt setup");
-  expect(() => runCli(["install-dependencies", "extra"])).toThrow("Usage: mt install-dependencies");
-  expect(() => runCli(["shell"])).toThrow(SHELL_USAGE);
-  expect(() => runCli(["shell", "unknown"])).toThrow(SHELL_USAGE);
-  expect(() => runCli(["shell", "install", "extra"])).toThrow(SHELL_USAGE);
-  expect(() => runCli(["shell", "init"])).toThrow(SHELL_USAGE);
-  expect(() => runCli(["shell", "init", "fish"])).toThrow("Usage: mt shell init <bash|zsh>");
-  expect(() => runCli(["skills"])).toThrow(SKILLS_USAGE);
-  expect(() => runCli(["skills", "unknown"])).toThrow(SKILLS_USAGE);
-  expect(() => runCli(["skills", "configure", "extra"])).toThrow(SKILLS_USAGE);
-  expect(() => runCli(["skills", "local-install"])).toThrow(SKILLS_LOCAL_INSTALL_USAGE);
-  expect(() => runCli(["skills", "local-install", "/tmp/source", "extra"])).toThrow(
-    SKILLS_LOCAL_INSTALL_USAGE,
+test("runCli exposes Commander's concise argument and option errors", () => {
+  expect(() => runCli(["spawn"])).toThrow("error: missing required argument 'session'");
+  expect(() => runCli(["spawn", "banana", "extra"])).toThrow(
+    "error: too many arguments for 'spawn'. Expected 1 argument but got 2:",
+  );
+  expect(() => runCli(["swing", "banana", "extra"])).toThrow(
+    "error: too many arguments for 'swing'. Expected 1 argument but got 2:",
+  );
+  expect(() => runCli(["materialize", "extra"])).toThrow(
+    "error: too many arguments for 'materialize'. Expected 0 arguments but got 1:",
+  );
+  expect(() => runCli(["cleanup", "--dry-run"])).toThrow(
+    "error: option '--dry-run' cannot be used without option '--merged'",
+  );
+  expect(() => runCli(["shell"])).toThrow("error: missing command");
+  expect(() => runCli(["shell", "unknown"])).toThrow("error: unknown command 'unknown'");
+  expect(() => runCli(["shell", "init"])).toThrow("error: missing required argument 'shell'");
+  expect(() => runCli(["shell", "init", "fish"])).toThrow(
+    "error: command-argument value 'fish' is invalid for argument 'shell'. Allowed choices are bash, zsh.",
+  );
+  expect(() => runCli(["skills"])).toThrow("error: missing command");
+  expect(() => runCli(["skills", "local-install"])).toThrow(
+    "error: missing required argument 'source-checkout'",
   );
 });
 
-test("main entrypoint writes usage errors to stderr", () => {
+test("main entrypoint writes one Commander diagnostic to stderr", () => {
   const result = spawnSync("bun", ["run", "src/index.ts", "cleanup", "extra"], {
     cwd: projectRoot,
     encoding: "utf8",
@@ -52,5 +46,45 @@ test("main entrypoint writes usage errors to stderr", () => {
 
   expect(result.status).toBe(1);
   expect(result.stdout).toBe("");
-  expect(result.stderr).toBe(`${CLEANUP_USAGE}\n`);
+  expect(result.stderr).toBe(
+    "error: too many arguments for 'cleanup'. Expected 0 arguments but got 1: extra.\n",
+  );
+});
+
+test("source-maintenance CLIs write one Commander diagnostic to stderr", () => {
+  const importResult = spawnSync("bun", ["run", "scripts/import-skills.ts"], {
+    cwd: projectRoot,
+    encoding: "utf8",
+  });
+  const updateResult = spawnSync("bun", ["run", "scripts/update-skills.ts", "extra"], {
+    cwd: projectRoot,
+    encoding: "utf8",
+  });
+
+  expect(importResult.status).toBe(1);
+  expect(importResult.stdout).toBe("");
+  expect(importResult.stderr).toBe("error: missing required argument 'source'\n");
+  expect(updateResult.status).toBe(1);
+  expect(updateResult.stdout).toBe("");
+  expect(updateResult.stderr).toBe(
+    "error: too many arguments. Expected 0 arguments but got 1: extra.\n",
+  );
+});
+
+test("source-maintenance CLI help is successful and writes to stdout", () => {
+  const importResult = spawnSync("bun", ["run", "scripts/import-skills.ts", "--help"], {
+    cwd: projectRoot,
+    encoding: "utf8",
+  });
+  const updateResult = spawnSync("bun", ["run", "scripts/update-skills.ts", "--help"], {
+    cwd: projectRoot,
+    encoding: "utf8",
+  });
+
+  expect(importResult.status).toBe(0);
+  expect(importResult.stdout).toContain("Usage: bun run skills:import [options] <source>");
+  expect(importResult.stderr).toBe("");
+  expect(updateResult.status).toBe(0);
+  expect(updateResult.stdout).toContain("Usage: bun run skills:update [options]");
+  expect(updateResult.stderr).toBe("");
 });

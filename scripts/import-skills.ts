@@ -16,9 +16,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { GroupMultiSelectPrompt } from "@clack/core";
 import * as p from "@clack/prompts";
-import { Command, CommanderError } from "@commander-js/extra-typings";
+import { Command } from "@commander-js/extra-typings";
 import pc from "picocolors";
 import * as z from "zod";
+
+import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
 
 interface ImportCommandOptions {
   source: string;
@@ -492,20 +494,10 @@ function parseCommand(argv: string[]): ImportCommandOptions {
     .argument("<source>")
     .option("-i, --install", "Run the monke-tools skill install command after importing")
     .option("--accept-openclaw-risks", "Pass the upstream OpenClaw risk acceptance flag")
-    .allowExcessArguments(false)
-    .showSuggestionAfterError(false);
+    .allowExcessArguments(false);
 
-  program.exitOverride();
-
-  try {
-    program.parse(argv, { from: "user" });
-  } catch (error) {
-    if (error instanceof CommanderError) {
-      throw new Error("Usage: bun run skills:import -- <source>");
-    }
-
-    throw error;
-  }
+  configureCliParser(program);
+  program.parse(argv, { from: "user" });
 
   const options = program.opts();
   return {
@@ -1257,8 +1249,6 @@ if (import.meta.main) {
   try {
     await runImportSkills();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`${message}\n`);
-    process.exit(1);
+    reportCliFailure(error);
   }
 }

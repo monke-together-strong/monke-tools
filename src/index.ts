@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
-import { Command, CommanderError } from "@commander-js/extra-typings";
+import { Argument, Command } from "@commander-js/extra-typings";
 
-import { MonkeError } from "./errors.ts";
+import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
@@ -10,38 +10,28 @@ import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
 import { runSwing, runSwingInteractive } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 
-const ROOT_USAGE =
-  "Usage:\n  mt spawn <session> [--no-dirty] [-m|--main|--master] [--codex]\n  mt swing [target] [--codex]\n  mt materialize\n  mt cleanup [--merged] [--dry-run]\n  mt setup\n  mt shell install\n  mt shell init <bash|zsh>\n  mt skills configure";
-const SPAWN_USAGE = "Usage: mt spawn <session> [--no-dirty] [-m|--main|--master] [--codex]";
-const CLEANUP_USAGE = "Usage: mt cleanup [--merged] [--dry-run]";
-const SKILLS_USAGE = "Usage: mt skills configure";
-const SKILLS_LOCAL_INSTALL_USAGE = "Usage: mt skills local-install <source-checkout>";
-const SHELL_USAGE = "Usage:\n  mt shell install\n  mt shell init <bash|zsh>";
-const SWING_USAGE = "Usage: mt swing [target] [--codex]";
-
 /** Run the Monke Tools CLI. */
 export function runCli(argv: string[], runtime = createRuntime()): void {
-  if (argv.length === 0) {
-    throw new MonkeError(ROOT_USAGE);
-  }
-
-  try {
-    createProgram(runtime, runSwing).parse(argv, { from: "user" });
-  } catch (error) {
-    throw mapCliError(error, argv);
-  }
+  const program = createProgram(runtime, runSwing);
+  requireSelectedCommand(program, argv);
+  program.parse(argv, { from: "user" });
 }
 
 /** Run the Monke Tools CLI with async interactive prompts enabled. */
 export async function runCliAsync(argv: string[], runtime = createRuntime()): Promise<void> {
+  const program = createProgram(runtime, runSwingInteractive);
+  requireSelectedCommand(program, argv);
+  await program.parseAsync(argv, { from: "user" });
+}
+
+function requireSelectedCommand(program: Command, argv: string[]): void {
   if (argv.length === 0) {
-    throw new MonkeError(ROOT_USAGE);
+    program.error("error: missing command");
   }
 
-  try {
-    await createProgram(runtime, runSwingInteractive).parseAsync(argv, { from: "user" });
-  } catch (error) {
-    throw mapCliError(error, argv);
+  const selectedCommand = program.commands.find((command) => command.name() === argv[0]);
+  if (selectedCommand?.commands.length && argv.length === 1) {
+    selectedCommand.error("error: missing command");
   }
 }
 
@@ -57,14 +47,9 @@ function createProgram(
     .name("mt")
     .helpOption(false)
     .addHelpCommand(false)
-    .showSuggestionAfterError(false)
-    .allowExcessArguments(false)
-    .configureOutput({
-      writeErr: () => undefined,
-      writeOut: () => undefined,
-    });
+    .allowExcessArguments(false);
 
-  program.exitOverride();
+  configureCliParser(program);
 
   program
     .command("spawn")
@@ -104,7 +89,7 @@ function createProgram(
       runMaterialize(runtime);
     });
 
-  program
+  const cleanup = program
     .command("cleanup")
     .helpOption(false)
     .allowExcessArguments(false)
@@ -112,7 +97,7 @@ function createProgram(
     .option("--dry-run")
     .action((options) => {
       if (options.dryRun && !options.merged) {
-        throw new MonkeError(`--dry-run requires --merged\n${CLEANUP_USAGE}`);
+        cleanup.error("error: option '--dry-run' cannot be used without option '--merged'");
       }
 
       runCleanup(
@@ -159,7 +144,7 @@ function createProgram(
     .command("init")
     .helpOption(false)
     .allowExcessArguments(false)
-    .argument("<shell>")
+    .addArgument(new Argument("<shell>").choices(["bash", "zsh"]))
     .option("--binary <path>")
     .action((shellName, options) => {
       runShellInit(runtime, shellName, options);
@@ -191,42 +176,10 @@ function createProgram(
   return program;
 }
 
-function mapCliError(error: unknown, argv: string[]): Error {
-  if (!(error instanceof CommanderError)) {
-    return error instanceof Error ? error : new Error(String(error));
-  }
-
-  switch (argv[0]) {
-    case "spawn":
-      return new MonkeError(SPAWN_USAGE);
-    case "swing":
-      return new MonkeError(SWING_USAGE);
-    case "materialize":
-      return new MonkeError("Usage: mt materialize");
-    case "cleanup":
-      return new MonkeError(CLEANUP_USAGE);
-    case "setup":
-      return new MonkeError("Usage: mt setup");
-    case "install-dependencies":
-      return new MonkeError("Usage: mt install-dependencies");
-    case "shell":
-      return new MonkeError(SHELL_USAGE);
-    case "skills":
-      if (argv[1] === "local-install") {
-        return new MonkeError(SKILLS_LOCAL_INSTALL_USAGE);
-      }
-      return new MonkeError(SKILLS_USAGE);
-    default:
-      return new MonkeError(ROOT_USAGE);
-  }
-}
-
 if (import.meta.main) {
   try {
     await runCliAsync(Bun.argv.slice(2));
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`${message}\n`);
-    process.exit(1);
+    reportCliFailure(error);
   }
 }
