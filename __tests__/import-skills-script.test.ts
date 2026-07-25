@@ -5,13 +5,12 @@ import { expect, test } from "vite-plus/test";
 
 import {
   buildGroupedSkillOptions,
-  copyStagedSkillsToImported,
   extractSecurityRiskAssessment,
   normalizeSourceForStaging,
   parseAvailableSkillGroups,
   parseAvailableSkillNames,
   readImportRecipeStore,
-  recordImportedSkills,
+  recordImportedGuidance,
   runImportSkills,
   writeImportRecipeStore,
 } from "../scripts/import-skills.ts";
@@ -129,7 +128,7 @@ test("skill import recipe store writes sorted deterministic output", () => {
   const sandbox = makeTempDir("skill-import-recipes");
 
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "z-owner/z-repo",
@@ -138,10 +137,12 @@ test("skill import recipe store writes sorted deterministic output", () => {
           {
             selector: "bravo",
             slug: "bravo",
+            kind: "skill",
           },
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -151,6 +152,7 @@ test("skill import recipe store writes sorted deterministic output", () => {
           {
             selector: "zulu",
             slug: "zulu",
+            kind: "skill",
           },
         ],
       },
@@ -158,14 +160,15 @@ test("skill import recipe store writes sorted deterministic output", () => {
   });
 
   expect(read(sandbox, "skills/imported/.monke-imports.json")).toBe(`{
-  "version": 1,
+  "version": 2,
   "recipes": [
     {
       "source": "a-owner/a-repo",
       "skills": [
         {
           "selector": "zulu",
-          "slug": "zulu"
+          "slug": "zulu",
+          "kind": "skill"
         }
       ]
     },
@@ -175,11 +178,13 @@ test("skill import recipe store writes sorted deterministic output", () => {
       "skills": [
         {
           "selector": "alpha",
-          "slug": "alpha"
+          "slug": "alpha",
+          "kind": "skill"
         },
         {
           "selector": "bravo",
-          "slug": "bravo"
+          "slug": "bravo",
+          "kind": "skill"
         }
       ]
     }
@@ -187,7 +192,7 @@ test("skill import recipe store writes sorted deterministic output", () => {
 }
 `);
   expect(readImportRecipeStore(sandbox)).toEqual({
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "a-owner/a-repo",
@@ -195,6 +200,7 @@ test("skill import recipe store writes sorted deterministic output", () => {
           {
             selector: "zulu",
             slug: "zulu",
+            kind: "skill",
           },
         ],
       },
@@ -205,10 +211,12 @@ test("skill import recipe store writes sorted deterministic output", () => {
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
           {
             selector: "bravo",
             slug: "bravo",
+            kind: "skill",
           },
         ],
       },
@@ -222,7 +230,7 @@ test("skill import recipe store rejects duplicate recipe sources", () => {
     sandbox,
     "skills/imported/.monke-imports.json",
     JSON.stringify({
-      version: 1,
+      version: 2,
       recipes: [
         {
           source: "owner/repo",
@@ -230,6 +238,7 @@ test("skill import recipe store rejects duplicate recipe sources", () => {
             {
               selector: "alpha",
               slug: "alpha",
+              kind: "skill",
             },
           ],
         },
@@ -239,6 +248,7 @@ test("skill import recipe store rejects duplicate recipe sources", () => {
             {
               selector: "bravo",
               slug: "bravo",
+              kind: "skill",
             },
           ],
         },
@@ -256,10 +266,10 @@ test("skill import recipe store rejects unknown future versions", () => {
   write(
     sandbox,
     "skills/imported/.monke-imports.json",
-    JSON.stringify({ version: 2, recipes: [] }),
+    JSON.stringify({ version: 3, recipes: [] }),
   );
 
-  expect(() => readImportRecipeStore(sandbox)).toThrow(/version.*must be 1/);
+  expect(() => readImportRecipeStore(sandbox)).toThrow(/version.*must be 2/);
 });
 
 test("skill import recipe store rejects duplicate selectors in one recipe", () => {
@@ -268,7 +278,7 @@ test("skill import recipe store rejects duplicate selectors in one recipe", () =
     sandbox,
     "skills/imported/.monke-imports.json",
     JSON.stringify({
-      version: 1,
+      version: 2,
       recipes: [
         {
           source: "owner/repo",
@@ -276,10 +286,12 @@ test("skill import recipe store rejects duplicate selectors in one recipe", () =
             {
               selector: "alpha",
               slug: "alpha",
+              kind: "skill",
             },
             {
               selector: "alpha",
               slug: "alpha-v2",
+              kind: "skill",
             },
           ],
         },
@@ -298,7 +310,7 @@ test("skill import recipe store rejects duplicate imported skill owners", () => 
     sandbox,
     "skills/imported/.monke-imports.json",
     JSON.stringify({
-      version: 1,
+      version: 2,
       recipes: [
         {
           source: "owner/first",
@@ -306,6 +318,7 @@ test("skill import recipe store rejects duplicate imported skill owners", () => 
             {
               selector: "alpha",
               slug: "alpha",
+              kind: "skill",
             },
           ],
         },
@@ -315,6 +328,7 @@ test("skill import recipe store rejects duplicate imported skill owners", () => 
             {
               selector: "other-alpha",
               slug: "alpha",
+              kind: "skill",
             },
           ],
         },
@@ -327,10 +341,38 @@ test("skill import recipe store rejects duplicate imported skill owners", () => 
   );
 });
 
+test("skill import recipe store allows one slug to be owned once per Import kind", () => {
+  const sandbox = makeTempDir("skill-import-recipes-kind-scoped-owner");
+  writeImportRecipeStore(sandbox, {
+    version: 2,
+    recipes: [
+      {
+        source: "owner/reference",
+        skills: [{ selector: "alpha-reference", slug: "alpha", kind: "reference" }],
+      },
+      {
+        source: "owner/skill",
+        skills: [{ selector: "alpha-skill", slug: "alpha", kind: "skill" }],
+      },
+    ],
+  });
+
+  expect(readImportRecipeStore(sandbox).recipes).toEqual([
+    {
+      source: "owner/reference",
+      skills: [{ selector: "alpha-reference", slug: "alpha", kind: "reference" }],
+    },
+    {
+      source: "owner/skill",
+      skills: [{ selector: "alpha-skill", slug: "alpha", kind: "skill" }],
+    },
+  ]);
+});
+
 test("skill import recipe recording rejects duplicate imported skill owners", () => {
   const sandbox = makeTempDir("skill-import-recipes-duplicate");
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/first",
@@ -338,6 +380,7 @@ test("skill import recipe recording rejects duplicate imported skill owners", ()
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -345,9 +388,10 @@ test("skill import recipe recording rejects duplicate imported skill owners", ()
   });
 
   expect(() =>
-    recordImportedSkills(sandbox, {
+    recordImportedGuidance(sandbox, {
       source: "owner/second",
       acceptOpenClawRisks: false,
+      kind: "skill",
       skills: [
         {
           selector: "other-alpha",
@@ -357,7 +401,7 @@ test("skill import recipe recording rejects duplicate imported skill owners", ()
     }),
   ).toThrow(/alpha is already owned by recipe owner\/first/);
   expect(readImportRecipeStore(sandbox)).toEqual({
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/first",
@@ -365,28 +409,12 @@ test("skill import recipe recording rejects duplicate imported skill owners", ()
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
     ],
   });
-});
-
-test("copyStagedSkillsToImported overwrites imported skills and preserves staged directory names", () => {
-  const sandbox = makeTempDir("skill-import-copy");
-  const stagingDirectory = path.join(sandbox, "staging");
-  write(stagingDirectory, ".agents/skills/alpha-skill/SKILL.md", "new alpha");
-  write(stagingDirectory, ".agents/skills/bravo-skill/SKILL.md", "new bravo");
-  write(sandbox, "skills/imported/alpha-skill/SKILL.md", "old alpha");
-
-  const imported = copyStagedSkillsToImported({
-    stagingDirectory,
-    repoRoot: sandbox,
-  });
-
-  expect(imported.sort()).toEqual(["alpha-skill", "bravo-skill"]);
-  expect(read(sandbox, "skills/imported/alpha-skill/SKILL.md")).toBe("new alpha");
-  expect(read(sandbox, "skills/imported/bravo-skill/SKILL.md")).toBe("new bravo");
 });
 
 test("skills import script wraps npx skills and copies staged universal skills", async () => {
@@ -456,6 +484,164 @@ test("skills import script wraps npx skills and copies staged universal skills",
   expect(stagingCwds.every((cwd) => !existsSync(cwd))).toBe(true);
 });
 
+test("skills import --ref creates a non-discoverable Imported reference and records its kind", async () => {
+  const sandbox = makeTempDir("skill-import-reference");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+  });
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await runImportSkills(["owner/repo", "--ref"], {
+      async selectSkills() {
+        return ["alpha"];
+      },
+      writeMessage() {},
+    });
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(existsSync(path.join(sandbox, "skills/references/imported/alpha/SKILL.md"))).toBe(false);
+  expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
+    "\n# Alpha\n\nReference body.\n",
+  );
+  expect(read(sandbox, "skills/references/imported/alpha/references/details.md")).toBe(
+    "supporting details\n",
+  );
+  expect(readImportRecipeStore(sandbox)).toEqual({
+    version: 2,
+    recipes: [
+      {
+        source: "owner/repo",
+        skills: [
+          {
+            selector: "alpha",
+            slug: "alpha",
+            kind: "reference",
+          },
+        ],
+      },
+    ],
+  });
+});
+
+test("re-importing one selector with the opposite Import kind migrates its managed copy", async () => {
+  const sandbox = makeTempDir("skill-import-kind-migration");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+  });
+  writeImportRecipeStore(sandbox, {
+    version: 2,
+    recipes: [
+      {
+        source: "owner/repo",
+        skills: [{ selector: "alpha", slug: "alpha", kind: "skill" }],
+      },
+    ],
+  });
+  write(sandbox, "skills/imported/alpha/SKILL.md", "old skill");
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await runImportSkills(["owner/repo", "--ref"], {
+      async selectSkills() {
+        return ["alpha"];
+      },
+      writeMessage() {},
+    });
+    expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBe(false);
+    expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
+      "\n# Alpha\n\nReference body.\n",
+    );
+
+    await runImportSkills(["owner/repo"], {
+      async selectSkills() {
+        return ["alpha"];
+      },
+      writeMessage() {},
+    });
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(existsSync(path.join(sandbox, "skills/references/imported/alpha"))).toBe(false);
+  expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toMatch(/^---\nname: alpha\n/);
+  expect(readImportRecipeStore(sandbox).recipes[0]?.skills).toEqual([
+    { selector: "alpha", slug: "alpha", kind: "skill" },
+  ]);
+});
+
+test("a reference MAIN.md collision leaves every selected managed copy and recipe unchanged", async () => {
+  const sandbox = makeTempDir("skill-import-reference-collision");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+    mainCollisionSelector: "bravo",
+  });
+  const originalStore = {
+    version: 2 as const,
+    recipes: [
+      {
+        source: "owner/repo",
+        skills: [
+          { selector: "alpha", slug: "alpha", kind: "skill" as const },
+          { selector: "bravo", slug: "bravo", kind: "skill" as const },
+        ],
+      },
+    ],
+  };
+  writeImportRecipeStore(sandbox, originalStore);
+  write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+  write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await expect(
+      runImportSkills(["owner/repo", "--ref"], {
+        async selectSkills() {
+          return ["alpha", "bravo"];
+        },
+        writeMessage() {},
+      }),
+    ).rejects.toThrow(/already contains MAIN\.md/);
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
+  expect(read(sandbox, "skills/imported/bravo/SKILL.md")).toBe("old bravo");
+  expect(existsSync(path.join(sandbox, "skills/references/imported/alpha"))).toBe(false);
+  expect(existsSync(path.join(sandbox, "skills/references/imported/bravo"))).toBe(false);
+  expect(readImportRecipeStore(sandbox)).toEqual(originalStore);
+});
+
 test("skills import script records selected skills and merges compatible same-source recipes", async () => {
   const sandbox = makeTempDir("skill-import-script-recipes");
   const skillsLogPath = path.join(sandbox, "skills.log");
@@ -486,7 +672,7 @@ test("skills import script records selected skills and merges compatible same-so
   }
 
   expect(readImportRecipeStore(sandbox)).toEqual({
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -494,10 +680,12 @@ test("skills import script records selected skills and merges compatible same-so
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
           {
             selector: "bravo",
             slug: "bravo",
+            kind: "skill",
           },
         ],
       },
@@ -538,7 +726,7 @@ test("skills import script resolves multiple selector slug aliases", async () =>
   expect(read(sandbox, "skills/imported/renamed-alpha/SKILL.md")).toBe("new renamed-alpha");
   expect(read(sandbox, "skills/imported/renamed-bravo/SKILL.md")).toBe("new renamed-bravo");
   expect(readImportRecipeStore(sandbox)).toEqual({
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -546,10 +734,12 @@ test("skills import script resolves multiple selector slug aliases", async () =>
           {
             selector: "alpha",
             slug: "renamed-alpha",
+            kind: "skill",
           },
           {
             selector: "bravo",
             slug: "renamed-bravo",
+            kind: "skill",
           },
         ],
       },
@@ -599,7 +789,7 @@ test("skills import script passes and records explicit OpenClaw risk acceptance"
     "--yes skills add openclaw/agent-skills --dangerously-accept-openclaw-risks --skill autoreview --agent universal --copy --yes",
   );
   expect(readImportRecipeStore(sandbox)).toEqual({
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "openclaw/agent-skills",
@@ -608,10 +798,60 @@ test("skills import script passes and records explicit OpenClaw risk acceptance"
           {
             selector: "autoreview",
             slug: "autoreview",
+            kind: "skill",
           },
         ],
       },
     ],
+  });
+});
+
+test("reference import preserves security, OpenClaw risk, and optional-install behavior", async () => {
+  const sandbox = makeTempDir("skill-import-reference-openclaw-install");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const installCalls: string[] = [];
+  let stdout = "";
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+  });
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await runImportSkills(
+      ["openclaw/agent-skills", "--ref", "--accept-openclaw-risks", "--install"],
+      {
+        async selectSkills() {
+          return ["alpha"];
+        },
+        runInstallCommand(repoRoot) {
+          installCalls.push(repoRoot);
+          expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
+            "\n# Alpha\n\nReference body.\n",
+          );
+        },
+        writeMessage(message) {
+          stdout += message;
+        },
+      },
+    );
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(stripAnsiForTest(stdout)).toContain("Security Risk Assessments");
+  expect(installCalls).toEqual([sandbox]);
+  expect(readImportRecipeStore(sandbox).recipes[0]).toEqual({
+    source: "openclaw/agent-skills",
+    acceptOpenClawRisks: true,
+    skills: [{ selector: "alpha", slug: "alpha", kind: "reference" }],
   });
 });
 
@@ -623,7 +863,7 @@ test("skills import script rejects local slug ownership conflicts before copying
   const originalPath = process.env.PATH;
   const fakeBinDirectory = installFakeNpx(sandbox, { skillsLogPath, skillsCwdLogPath });
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/first",
@@ -631,6 +871,7 @@ test("skills import script rejects local slug ownership conflicts before copying
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -657,7 +898,7 @@ test("skills import script rejects local slug ownership conflicts before copying
 
   expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
   expect(readImportRecipeStore(sandbox)).toEqual({
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/first",
@@ -665,6 +906,7 @@ test("skills import script rejects local slug ownership conflicts before copying
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -712,7 +954,7 @@ test("skills update reruns recorded recipes without prompting for selection", as
   let stdout = "";
   const fakeBinDirectory = installFakeNpx(sandbox, { skillsLogPath, skillsCwdLogPath });
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -720,10 +962,12 @@ test("skills update reruns recorded recipes without prompting for selection", as
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
           {
             selector: "bravo",
             slug: "bravo",
+            kind: "skill",
           },
         ],
       },
@@ -756,6 +1000,49 @@ test("skills update reruns recorded recipes without prompting for selection", as
   expect(skillsLog).not.toContain("-l");
 });
 
+test("skills update refreshes an Imported reference without recreating an Imported skill", async () => {
+  const sandbox = makeTempDir("skill-update-reference");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+  });
+  writeImportRecipeStore(sandbox, {
+    version: 2,
+    recipes: [
+      {
+        source: "owner/repo",
+        skills: [{ selector: "alpha", slug: "alpha", kind: "reference" }],
+      },
+    ],
+  });
+  write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await runUpdateSkills([], {
+      writeMessage() {},
+    });
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBe(false);
+  expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
+    "\n# Alpha\n\nReference body.\n",
+  );
+  expect(read(sandbox, "skills/references/imported/alpha/references/details.md")).toBe(
+    "supporting details\n",
+  );
+});
+
 test("skills update continues through later recipes after one recipe fails", async () => {
   const sandbox = makeTempDir("skill-update-script-failure");
   const skillsLogPath = path.join(sandbox, "skills.log");
@@ -766,9 +1053,10 @@ test("skills update continues through later recipes after one recipe fails", asy
     skillsLogPath,
     skillsCwdLogPath,
     failInstallSources: ["owner/fails"],
+    stageReferenceFixture: true,
   });
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/fails",
@@ -776,6 +1064,7 @@ test("skills update continues through later recipes after one recipe fails", asy
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -785,13 +1074,14 @@ test("skills update continues through later recipes after one recipe fails", asy
           {
             selector: "bravo",
             slug: "bravo",
+            kind: "reference",
           },
         ],
       },
     ],
   });
   write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
-  write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
+  write(sandbox, "skills/references/imported/bravo/MAIN.md", "old bravo");
 
   try {
     process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
@@ -808,7 +1098,9 @@ test("skills update continues through later recipes after one recipe fails", asy
   }
 
   expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
-  expect(read(sandbox, "skills/imported/bravo/SKILL.md")).toBe("new bravo");
+  expect(read(sandbox, "skills/references/imported/bravo/MAIN.md")).toBe(
+    "\n# Alpha\n\nReference body.\n",
+  );
   const skillsLog = readFileSync(skillsLogPath, "utf8");
   expect(skillsLog).toContain(
     "--yes skills add owner/fails --skill alpha --agent universal --copy --yes",
@@ -826,7 +1118,7 @@ test("skills update rejects untracked imported skill directories before invoking
   const originalPath = process.env.PATH;
   const fakeBinDirectory = installFakeNpx(sandbox, { skillsLogPath, skillsCwdLogPath });
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -834,6 +1126,7 @@ test("skills update rejects untracked imported skill directories before invoking
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -875,7 +1168,7 @@ test("skills update rejects staged slug mismatches non-interactively without mut
     },
   });
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -883,6 +1176,7 @@ test("skills update rejects staged slug mismatches non-interactively without mut
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -907,7 +1201,7 @@ test("skills update rejects staged slug mismatches non-interactively without mut
   expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
   expect(existsSync(path.join(sandbox, "skills/imported/renamed-alpha"))).toBe(false);
   expect(readImportRecipeStore(sandbox)).toEqual({
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -915,6 +1209,7 @@ test("skills update rejects staged slug mismatches non-interactively without mut
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -937,7 +1232,7 @@ test("skills update can interactively accept a staged slug rename", async () => 
     },
   });
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -945,6 +1240,7 @@ test("skills update can interactively accept a staged slug rename", async () => 
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -980,7 +1276,7 @@ test("skills update can interactively accept a staged slug rename", async () => 
   expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBe(false);
   expect(read(sandbox, "skills/imported/renamed-alpha/SKILL.md")).toBe("new renamed-alpha");
   expect(readImportRecipeStore(sandbox)).toEqual({
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -988,11 +1284,64 @@ test("skills update can interactively accept a staged slug rename", async () => 
           {
             selector: "alpha",
             slug: "renamed-alpha",
+            kind: "skill",
           },
         ],
       },
     ],
   });
+});
+
+test("skills update preserves reference transformation across an accepted slug rename", async () => {
+  const sandbox = makeTempDir("skill-update-reference-slug-accept");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+    stagedSlugBySelector: {
+      alpha: "renamed-alpha",
+    },
+  });
+  writeImportRecipeStore(sandbox, {
+    version: 2,
+    recipes: [
+      {
+        source: "owner/repo",
+        skills: [{ selector: "alpha", slug: "alpha", kind: "reference" }],
+      },
+    ],
+  });
+  write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await runUpdateSkills(["--interactive"], {
+      confirmSlugReplacement() {
+        return true;
+      },
+      writeMessage() {},
+    });
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(existsSync(path.join(sandbox, "skills/references/imported/alpha"))).toBe(false);
+  expect(existsSync(path.join(sandbox, "skills/references/imported/renamed-alpha/SKILL.md"))).toBe(
+    false,
+  );
+  expect(read(sandbox, "skills/references/imported/renamed-alpha/MAIN.md")).toBe(
+    "\n# Alpha\n\nReference body.\n",
+  );
+  expect(readImportRecipeStore(sandbox).recipes[0]?.skills).toEqual([
+    { selector: "alpha", slug: "renamed-alpha", kind: "reference" },
+  ]);
 });
 
 test("skills update can interactively accept multiple staged slug renames", async () => {
@@ -1011,7 +1360,7 @@ test("skills update can interactively accept multiple staged slug renames", asyn
     },
   });
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -1019,10 +1368,12 @@ test("skills update can interactively accept multiple staged slug renames", asyn
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
           {
             selector: "bravo",
             slug: "bravo",
+            kind: "skill",
           },
         ],
       },
@@ -1068,7 +1419,7 @@ test("skills update can interactively accept multiple staged slug renames", asyn
   expect(read(sandbox, "skills/imported/renamed-alpha/SKILL.md")).toBe("new renamed-alpha");
   expect(read(sandbox, "skills/imported/renamed-bravo/SKILL.md")).toBe("new renamed-bravo");
   expect(readImportRecipeStore(sandbox)).toEqual({
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -1076,10 +1427,12 @@ test("skills update can interactively accept multiple staged slug renames", asyn
           {
             selector: "alpha",
             slug: "renamed-alpha",
+            kind: "skill",
           },
           {
             selector: "bravo",
             slug: "renamed-bravo",
+            kind: "skill",
           },
         ],
       },
@@ -1113,7 +1466,7 @@ test("skills update rejects accepted slug renames that would duplicate another r
     },
   });
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "a/renames",
@@ -1121,6 +1474,7 @@ test("skills update rejects accepted slug renames that would duplicate another r
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -1130,6 +1484,7 @@ test("skills update rejects accepted slug renames that would duplicate another r
           {
             selector: "beta",
             slug: "beta",
+            kind: "skill",
           },
         ],
       },
@@ -1158,7 +1513,7 @@ test("skills update rejects accepted slug renames that would duplicate another r
   expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
   expect(read(sandbox, "skills/imported/beta/SKILL.md")).toBe("old beta");
   expect(readImportRecipeStore(sandbox)).toEqual({
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "a/renames",
@@ -1166,6 +1521,7 @@ test("skills update rejects accepted slug renames that would duplicate another r
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -1175,6 +1531,7 @@ test("skills update rejects accepted slug renames that would duplicate another r
           {
             selector: "beta",
             slug: "beta",
+            kind: "skill",
           },
         ],
       },
@@ -1191,7 +1548,7 @@ test("skills update can run local skill install after refreshing recipes", async
   const installCalls: string[] = [];
   const fakeBinDirectory = installFakeNpx(sandbox, { skillsLogPath, skillsCwdLogPath });
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "owner/repo",
@@ -1199,6 +1556,7 @@ test("skills update can run local skill install after refreshing recipes", async
           {
             selector: "alpha",
             slug: "alpha",
+            kind: "skill",
           },
         ],
       },
@@ -1233,7 +1591,7 @@ test("skills update passes recorded OpenClaw risk acceptance", async () => {
   const originalPath = process.env.PATH;
   const fakeBinDirectory = installFakeNpx(sandbox, { skillsLogPath, skillsCwdLogPath });
   writeImportRecipeStore(sandbox, {
-    version: 1,
+    version: 2,
     recipes: [
       {
         source: "openclaw/agent-skills",
@@ -1242,6 +1600,7 @@ test("skills update passes recorded OpenClaw risk acceptance", async () => {
           {
             selector: "autoreview",
             slug: "autoreview",
+            kind: "skill",
           },
         ],
       },
@@ -1275,6 +1634,8 @@ function installFakeNpx(
     skillsCwdLogPath: string;
     failInstallSources?: string[];
     stagedSlugBySelector?: Record<string, string>;
+    stageReferenceFixture?: boolean;
+    mainCollisionSelector?: string;
   },
 ): string {
   const binDirectory = path.join(sandbox, "fake-bin");
@@ -1370,7 +1731,31 @@ ${Object.entries(options.stagedSlugBySelector ?? {})
     *) ;;
   esac
   mkdir -p ".agents/skills/$staged_slug"
-  printf 'new %s' "$staged_slug" > ".agents/skills/$staged_slug/SKILL.md"
+${
+  options.stageReferenceFixture
+    ? `  cat > ".agents/skills/$staged_slug/SKILL.md" <<'SKILL'
+---
+name: alpha
+description: Reference fixture
+metadata:
+  owner: upstream
+---
+
+# Alpha
+
+Reference body.
+SKILL
+  mkdir -p ".agents/skills/$staged_slug/references"
+  printf 'supporting details\\n' > ".agents/skills/$staged_slug/references/details.md"`
+    : `  printf 'new %s' "$staged_slug" > ".agents/skills/$staged_slug/SKILL.md"`
+}
+${
+  options.mainCollisionSelector
+    ? `  if [ "$skill" = "${options.mainCollisionSelector}" ]; then
+    printf 'upstream collision\\n' > ".agents/skills/$staged_slug/MAIN.md"
+  fi`
+    : ""
+}
 done
 printf '{"version":1}' > skills-lock.json
 exit 0

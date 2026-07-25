@@ -131,6 +131,63 @@ test("Claude skill reconciliation flattens source categories into the Agent skil
   );
 });
 
+test("Reference-backed skills resolve packaged references from namespaced and Claude flat targets", () => {
+  const sandbox = makeTempDir("skill-reconcile-reference-backed");
+  const sourceCheckout = path.join(sandbox, "source");
+  const customSkillRoot = path.join(sandbox, "custom", "skills");
+  const wrapperRelativePath = "skills/internal/code-review/SKILL.md";
+  const upstreamRelativePath = "../../references/imported/code-review/MAIN.md";
+  const standardsRelativePath = "../../references/internal/CODING_STANDARDS.md";
+  write(
+    sourceCheckout,
+    wrapperRelativePath,
+    `Use [base](${upstreamRelativePath}) and [standards](${standardsRelativePath}).\n`,
+  );
+  write(
+    sourceCheckout,
+    "skills/references/imported/code-review/MAIN.md",
+    "upstream review workflow\n",
+  );
+  write(sourceCheckout, "skills/references/internal/CODING_STANDARDS.md", "team coding baseline\n");
+
+  reconcileSkillNamespaces({
+    sourceCheckout,
+    previousPreference: null,
+    nextPreference: {
+      targets: [{ kind: "custom", path: customSkillRoot }, { kind: "claude" }],
+    },
+    homeDirectory: sandbox,
+    writeMessage() {},
+  });
+
+  const installedWrapperDirectories = [
+    path.join(customSkillRoot, "monke-tools", "internal", "code-review"),
+    path.join(sandbox, ".claude", "skills", "code-review"),
+  ];
+  for (const wrapperDirectory of installedWrapperDirectories) {
+    expect(readFileSync(path.join(wrapperDirectory, upstreamRelativePath), "utf8")).toBe(
+      "upstream review workflow\n",
+    );
+    expect(readFileSync(path.join(wrapperDirectory, standardsRelativePath), "utf8")).toBe(
+      "team coding baseline\n",
+    );
+  }
+  expect(existsSync(path.join(sandbox, ".claude", "skills", "references"))).toBe(false);
+
+  reconcileSkillNamespaces({
+    sourceCheckout,
+    previousPreference: {
+      targets: [{ kind: "custom", path: customSkillRoot }, { kind: "claude" }],
+    },
+    nextPreference: {
+      targets: [{ kind: "custom", path: customSkillRoot }],
+    },
+    homeDirectory: sandbox,
+    writeMessage() {},
+  });
+  expect(existsSync(path.join(sandbox, ".claude", "references"))).toBe(false);
+});
+
 test("Claude skill reconciliation rejects unknown future flat manifest versions", () => {
   const sandbox = makeTempDir("skill-reconcile-future-manifest");
   const sourceCheckout = path.join(sandbox, "source");

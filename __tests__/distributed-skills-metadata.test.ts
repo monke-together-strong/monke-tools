@@ -19,6 +19,62 @@ test("distributed skill source layout uses internal and imported categories", ()
   expect(coreSkill).toMatch(/^name: monke-tools-core$/m);
 });
 
+test("code-review is a Reference-backed skill and its references are not discoverable", () => {
+  const wrapper = readFileSync(
+    path.join(projectRoot, "skills", "internal", "code-review", "SKILL.md"),
+    "utf8",
+  );
+  const importedReference = readFileSync(
+    path.join(projectRoot, "skills", "references", "imported", "code-review", "MAIN.md"),
+    "utf8",
+  );
+  const teamBaseline = readFileSync(
+    path.join(projectRoot, "skills", "references", "internal", "CODING_STANDARDS.md"),
+    "utf8",
+  );
+
+  expect(wrapper).toContain("../../references/imported/code-review/MAIN.md");
+  expect(wrapper).toContain("../../references/internal/CODING_STANDARDS.md");
+  expect(wrapper).toContain("Repo coding standards");
+  expect(wrapper).toContain("Team coding baseline");
+  expect(importedReference).toMatch(/^\nTwo-axis review/);
+  expect(importedReference).not.toMatch(/^---$/m);
+  expect(teamBaseline).toContain("No team-owned coding rules are defined yet.");
+  expect(existsSync(path.join(projectRoot, "skills", "imported", "code-review"))).toBe(false);
+  expect(
+    existsSync(
+      path.join(projectRoot, "skills", "references", "imported", "code-review", "SKILL.md"),
+    ),
+  ).toBe(false);
+});
+
+test("tracked import recipes record one Import kind for every selector", () => {
+  const store = JSON.parse(
+    readFileSync(path.join(projectRoot, "skills", "imported", ".monke-imports.json"), "utf8"),
+  ) as {
+    version: number;
+    recipes: Array<{
+      source: string;
+      skills: Array<{ selector: string; kind: string }>;
+    }>;
+  };
+  const importedGuidance = store.recipes.flatMap((recipe) =>
+    recipe.skills.map((guidance) => ({ source: recipe.source, ...guidance })),
+  );
+
+  expect(store.version).toBe(2);
+  expect(importedGuidance.every((guidance) => ["skill", "reference"].includes(guidance.kind))).toBe(
+    true,
+  );
+  expect(
+    importedGuidance.find(
+      (guidance) =>
+        guidance.source === "https://github.com/mattpocock/skills" &&
+        guidance.selector === "code-review",
+    )?.kind,
+  ).toBe("reference");
+});
+
 test("metadata and install docs do not reference the retired package discovery path", () => {
   const combined = [
     "README.md",
