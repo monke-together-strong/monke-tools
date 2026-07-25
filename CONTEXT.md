@@ -318,6 +318,12 @@ _Avoid_: Skill install, setup, non-interactive config
 The operation that runs registered per-session teardown and removes session-state records whose worktrees no longer exist.
 _Avoid_: Delete session, prune repos
 
+### Organization reports
+
+**Report target**:
+The configured shared organization destination to which monke-tools publishes finalized agent reports.
+_Avoid_: Setup target, storage backend, upload destination
+
 ### Agent retrospective
 
 **Retrospective**:
@@ -501,6 +507,8 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 - **Global monke config** lives at `$MONKE_HOME/config.yml`, defaulting to `~/.monke/config.yml`.
 - The initial **Global monke config** format version is `1`.
 - The **Installed source checkout** belongs to **Global monke config**.
+- A **Local tool install** has at most one active **Report target**.
+- A **Report target** is shared by an organization, not owned by one user.
 - A **Skill source tree** belongs to the **Installed source checkout**.
 - monke-tools does not infer a replacement **Installed source checkout** when the configured checkout is missing.
 - A **Skill install preference** belongs to **Global monke config**.
