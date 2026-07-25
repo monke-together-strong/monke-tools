@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "vitest";
+import { expect, test } from "vite-plus/test";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 

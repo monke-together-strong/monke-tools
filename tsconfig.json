@@ -24,6 +24,7 @@
     "scripts/**/*.ts",
     "__tests__/**/*.ts",
     "skills/internal/agent-session-retrospective/scripts/**/*.ts",
-    "vitest.config.ts"
+    "skills/internal/betterstack-cli/scripts/**/*.ts",
+    "vite.config.ts"
   ]
 }

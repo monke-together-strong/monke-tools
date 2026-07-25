@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test } from "vite-plus/test";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
@@ -167,7 +167,7 @@ size: 1000
   expect(() => getOrCreateReservation(home, sourceRoot, 1)).toThrow(expected);
 });
 
-test("allocateLocalPorts skips ports that are already taken inside the reserved block", () => {
+test("allocateLocalPorts skips ports that are already taken inside the reserved block", async () => {
   const sandbox = makeTempDir("registry-taken");
   const repoConfig = makeRepoConfig(path.join(sandbox, "root"), ["API_PORT"]);
 
@@ -197,7 +197,7 @@ test("allocateLocalPorts skips ports that are already taken inside the reserved 
 
     expect(assignments.get("API_PORT")).toBe(occupiedPort + 1);
   } finally {
-    listener.stop(true);
+    await listener.stop(true);
   }
 });
 

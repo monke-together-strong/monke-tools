@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test } from "vite-plus/test";
 import path from "node:path";
 
 import { rewriteEnvFile } from "../src/env.ts";

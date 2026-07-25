@@ -1,33 +1,41 @@
 # monke-tools
 
-This repo is initialized as a Bun project with Oxlint and Oxfmt wired in as the default linting and formatting tools.
+This repo uses Vite+ as its unified toolchain and Bun as its package manager and runtime.
 
 `monke-tools` creates per-session worktrees for one repo or a small dependency graph, rewrites mapped env vars to unique local ports, syncs dependency paths into each worktree's root `.env`, and lets you re-materialize the session when you need to refresh it.
 
 ## Quick start
 
+Install [Vite+](https://viteplus.dev/guide/) once, then use it for project tooling:
+
 ```bash
-bun install
-bun test
-bun run lint:check
-bun run fmt:check
+curl -fsSL https://vite.plus | bash
+vp install
+vp check
+vp run test
 ```
+
+`monke-tools` remains intentionally Bun-native. Use `vp run test` instead of the
+built-in `vp test` so Vitest runs under Bun, and use `vp run install:local`
+instead of `vp build` or `vp pack` because the installed artifact is a
+Bun-compiled standalone executable rather than a Vite web app or JavaScript
+library package.
 
 ## Local install
 
 ```bash
-bun run install:local
+vp run install:local
 mt spawn banana
 mt spawn banana --codex
 mt spawn banana --no-dirty
 mt spawn banana -m
 ```
 
-`bun run install:local` rebuilds the local executable from the current checkout, installs it to `~/.local/bin/monke-tools`, and installs `~/.local/bin/mt` plus `~/.local/bin/monke` wrappers that invoke it. It also installs shell integration for bash and zsh, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots.
+`vp run install:local` rebuilds the local executable from the current checkout, installs it to `~/.local/bin/monke-tools`, and installs `~/.local/bin/mt` plus `~/.local/bin/monke` wrappers that invoke it. It also installs shell integration for bash and zsh, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots.
 
 On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and relink the managed skills to the current checkout.
 
-After changing CLI source code, run `bun run install:local` again before testing from another repo. For linked skills, file edits are visible immediately through symlinks. If you add or remove skill directories, rerun reconciliation (`bun run install:local` or `mt skills configure`) so flat Claude links are refreshed.
+After changing CLI source code, run `vp run install:local` again before testing from another repo. For linked skills, file edits are visible immediately through symlinks. If you add or remove skill directories, rerun reconciliation (`vp run install:local` or `mt skills configure`) so flat Claude links are refreshed.
 
 ## Distributed Skills
 
@@ -88,13 +96,13 @@ external:
 ## Development
 
 ```bash
-bun run src/index.ts spawn banana
-bun run src/index.ts swing banana
-bun run src/index.ts materialize
-bun run src/index.ts cleanup
-bun run src/index.ts setup
-bun run src/index.ts shell install
-bun run src/index.ts skills configure
+vp run mt -- spawn banana
+vp run mt -- swing banana
+vp run mt -- materialize
+vp run mt -- cleanup
+vp run mt -- setup
+vp run mt -- shell install
+vp run mt -- skills configure
 ```
 
 Work is tracked in [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues).
