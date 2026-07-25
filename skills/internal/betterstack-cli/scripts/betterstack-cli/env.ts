@@ -37,14 +37,15 @@ export function loadEnvFileIfPresent(filePath: string): void {
       continue;
     }
 
-    const [rawKey, ...valueParts] = trimmed.split("=");
+    const separatorIndex = trimmed.indexOf("=");
+    const rawKey = trimmed.slice(0, separatorIndex);
     const normalizedKey = trimWhitespace(rawKey.replace(/^export\s+/, ""));
 
     if (!normalizedKey || process.env[normalizedKey] !== undefined) {
       continue;
     }
 
-    const rawValue = valueParts.join("=");
+    const rawValue = trimmed.slice(separatorIndex + 1);
     process.env[normalizedKey] = unwrapQuotedValue(trimWhitespace(rawValue));
   }
 }

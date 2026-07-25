@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { parse } from "yaml";
-import { expect, test } from "vitest";
+import { expect, test } from "vite-plus/test";
 
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { makeTempDir, read, write } from "./helpers.ts";

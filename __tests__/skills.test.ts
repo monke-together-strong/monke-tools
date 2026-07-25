@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
-import { expect, test } from "vitest";
+import { expect, test } from "vite-plus/test";
 
 import { reconcileSkillNamespaces, resolveSkillInstallTargets } from "../src/skills.ts";
 import { makeTempDir, write } from "./helpers.ts";

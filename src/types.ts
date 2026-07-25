@@ -1,12 +1,4 @@
-import type {
-  AssignedPort,
-  RepoReservation,
-  ResourceCommandOutputState,
-  ResourceCommandState,
-  ResourceValueState,
-  SessionRepoState,
-  SessionState,
-} from "./state-schema.ts";
+import type { SessionRepoState } from "./state-schema.ts";
 
 export interface Runtime {
   /** Current working directory used by monke-tools operations. */

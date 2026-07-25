@@ -4,10 +4,10 @@ Check [./CONTEXT.md](./CONTEXT.md) for terminology questions.
 
 ## Essentials
 
-- Package manager: `bun`
-- Test: `bun test`
-- Lint: `bun run lint:check`
-- Format check: `bun run fmt:check`
+- Toolchain and package manager: Vite+ (`vp`) backed by Bun
+- Install: `vp install`
+- Check: `vp check`
+- Test: `vp run test` (the package script preserves the Bun runtime)
 - Follow git flow, don't create `codex/` branches
 - Put clean source clones created for testing under `tmp/`.
 

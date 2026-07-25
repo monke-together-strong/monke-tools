@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { expect, test } from "vitest";
+import { expect, test } from "vite-plus/test";
 
 import { createRuntime, withGlobalLock } from "../src/runtime.ts";
 import { makeTempDir } from "./helpers.ts";

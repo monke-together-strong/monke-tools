@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import pc from "picocolors";
-import { expect, test } from "vitest";
+import { expect, test } from "vite-plus/test";
 
 import {
   buildGroupedSkillOptions,
