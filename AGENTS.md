@@ -11,9 +11,9 @@ Check [./CONTEXT.md](./CONTEXT.md) for terminology questions.
 - Follow git flow, don't create `codex/` branches
 - Put clean source clones created for testing under `tmp/`.
 
-## Task-Specific Guides
+## Task Tracking
 
-- [Backlog.md guide](docs/agents/backlog.md)
+- [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues)
 
 
 ## Reference Repos
