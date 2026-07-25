@@ -641,6 +641,40 @@ test("reference import preserves relative symlinks between supporting files", as
   expect(readFileSync(importedLink, "utf8")).toBe("supporting details\n");
 });
 
+test("reference import rejects a nested Skill entry without committing state", async () => {
+  const sandbox = makeTempDir("skill-import-reference-nested-entry");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+    stageNestedSkillEntry: true,
+  });
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await expect(
+      runImportSkills(["owner/repo", "--ref"], {
+        async selectSkills() {
+          return ["alpha"];
+        },
+        writeMessage() {},
+      }),
+    ).rejects.toThrow(/supporting content contains nested SKILL\.md/);
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(existsSync(path.join(sandbox, "skills/references/imported/alpha"))).toBe(false);
+  expect(existsSync(path.join(sandbox, "skills/imported/.monke-imports.json"))).toBe(false);
+});
+
 test("re-importing one selector with the opposite Import kind migrates its managed copy", async () => {
   const sandbox = makeTempDir("skill-import-kind-migration");
   const skillsLogPath = path.join(sandbox, "skills.log");
@@ -2069,6 +2103,7 @@ function installFakeNpx(
     failInstallSources?: string[];
     stagedSlugBySelector?: Record<string, string>;
     stageReferenceFixture?: boolean;
+    stageNestedSkillEntry?: boolean;
     stageSupportingSymlink?: boolean;
     mainCollisionSelector?: string;
     stagedSkillEntrySymlinkTarget?: string;
@@ -2186,6 +2221,12 @@ SKILL
 ${
   options.stageSupportingSymlink
     ? `  ln -s 'details.md' ".agents/skills/$staged_slug/references/details-link.md"`
+    : ""
+}
+${
+  options.stageNestedSkillEntry
+    ? `  mkdir -p ".agents/skills/$staged_slug/references/nested"
+  printf 'nested skill\\n' > ".agents/skills/$staged_slug/references/nested/SKILL.md"`
     : ""
 }`
     : `  printf 'new %s' "$staged_slug" > ".agents/skills/$staged_slug/SKILL.md"`
