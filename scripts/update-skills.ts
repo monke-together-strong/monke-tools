@@ -14,6 +14,7 @@ import {
   copyStagedGuidanceToManagedRoots,
   extractSecurityRiskAssessment,
   listStagedSkillSlugs,
+  normalizeImportRecipeStore,
   normalizeSourceForStaging,
   IMPORTED_REFERENCES_ROOT,
   IMPORTED_SKILLS_ROOT,
@@ -59,7 +60,7 @@ export async function runUpdateSkills(
 ): Promise<void> {
   const { install, interactive } = parseCommand(argv);
   const repoRoot = process.cwd();
-  const store = readImportRecipeStore(repoRoot);
+  let store = readImportRecipeStore(repoRoot);
   const writeMessage = dependencies.writeMessage ?? process.stdout.write.bind(process.stdout);
   const failures: string[] = [];
 
@@ -92,20 +93,23 @@ export async function runUpdateSkills(
         interactive,
         confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
       });
-      assertSlugReplacementsKeepUniqueOwnership(store, recipe, slugReplacements);
       const stagedGuidance = applySlugReplacementsToGuidance(recipe, slugReplacements);
+      const nextStore =
+        slugReplacements.length > 0
+          ? applySlugReplacementsToStore(store, recipe.source, stagedGuidance)
+          : store;
       copyStagedGuidanceToManagedRoots({
         stagingDirectory,
         repoRoot,
         guidance: stagedGuidance,
         obsoleteGuidance: guidanceReplacedBySlugChanges(recipe, slugReplacements),
         commitState() {
-          applyAcceptedSlugReplacements(recipe, slugReplacements);
           if (slugReplacements.length > 0) {
-            writeImportRecipeStore(repoRoot, store);
+            writeImportRecipeStore(repoRoot, nextStore);
           }
         },
       });
+      store = nextStore;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${recipe.source}: ${message}`);
@@ -224,33 +228,17 @@ async function resolveStagedSkillReplacements(options: {
   return replacements;
 }
 
-function assertSlugReplacementsKeepUniqueOwnership(
+function applySlugReplacementsToStore(
   store: SkillImportRecipeStore,
-  owningRecipe: SkillImportRecipe,
-  replacements: readonly SlugReplacementRequest[],
-): void {
-  for (const replacement of replacements) {
-    const replacingSkill = owningRecipe.skills.find(
-      (skill) => skill.selector === replacement.selector,
-    );
-    if (!replacingSkill) {
-      throw new MonkeError(`Could not find recorded Skill selector ${replacement.selector}`);
-    }
-
-    for (const recipe of store.recipes) {
-      const conflictingSkill = recipe.skills.find(
-        (skill) =>
-          skill !== replacingSkill &&
-          skill.kind === replacingSkill.kind &&
-          skill.slug === replacement.stagedSlug,
-      );
-      if (conflictingSkill) {
-        throw new MonkeError(
-          `Cannot replace Skill slug ${replacement.recordedSlug} with ${replacement.stagedSlug}: ${replacement.stagedSlug} is already owned by recipe ${recipe.source}`,
-        );
-      }
-    }
-  }
+  source: string,
+  guidance: SkillImportRecipe["skills"],
+): SkillImportRecipeStore {
+  return normalizeImportRecipeStore({
+    ...store,
+    recipes: store.recipes.map((recipe) =>
+      recipe.source === source ? { ...recipe, skills: guidance } : recipe,
+    ),
+  });
 }
 
 function applySlugReplacementsToGuidance(
@@ -272,23 +260,6 @@ function guidanceReplacedBySlugChanges(
 ): SkillImportRecipe["skills"] {
   const replacedSelectors = new Set(replacements.map((replacement) => replacement.selector));
   return recipe.skills.filter((skill) => replacedSelectors.has(skill.selector));
-}
-
-function applyAcceptedSlugReplacements(
-  recipe: SkillImportRecipe,
-  replacements: readonly SlugReplacementRequest[],
-): void {
-  for (const replacement of replacements) {
-    const skill = recipe.skills.find(
-      (candidate) =>
-        candidate.selector === replacement.selector && candidate.slug === replacement.recordedSlug,
-    );
-    if (!skill) {
-      throw new MonkeError(`Could not update recorded Skill slug ${replacement.recordedSlug}`);
-    }
-
-    skill.slug = replacement.stagedSlug;
-  }
 }
 
 function renderSlugMismatchMessage(

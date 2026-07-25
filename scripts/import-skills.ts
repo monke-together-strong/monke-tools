@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -11,6 +12,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -65,6 +67,7 @@ const NPX_COMMAND = process.platform === "win32" ? "npx.cmd" : "npx";
 const SKILLS_CLI_ARGS = ["--yes", "skills", "add"];
 export const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
 export const IMPORTED_REFERENCES_ROOT = path.join("skills", "references", "imported");
+const INTERNAL_SKILLS_ROOT = path.join("skills", "internal");
 const IMPORT_RECIPE_STORE_PATH = path.join(IMPORTED_SKILLS_ROOT, ".monke-imports.json");
 const CSI_RE = new RegExp(String.raw`\u001b\[[\u0030-\u003f]*[\u0020-\u002f]*[\u0040-\u007e]`, "g");
 const OSC_RE = new RegExp(String.raw`\u001b\][\s\S]*?(?:\u0007|\u001b\\)`, "g");
@@ -320,6 +323,9 @@ export function copyStagedGuidanceToManagedRoots(options: {
       if (!existsSync(sourcePath)) {
         throw new MonkeError(`Expected staged Skill directory at ${sourcePath}`);
       }
+      if (!lstatSync(sourcePath).isDirectory()) {
+        throw new MonkeError(`Expected staged Skill directory to be a regular directory`);
+      }
 
       const preparedPath = path.join(preparedRoot, item.kind, item.slug);
       mkdirSync(path.dirname(preparedPath), { recursive: true });
@@ -330,6 +336,7 @@ export function copyStagedGuidanceToManagedRoots(options: {
     }
 
     const affectedGuidance = [...options.guidance, ...(options.obsoleteGuidance ?? [])];
+    assertObsoleteReferencesAreUnconsumed(options.repoRoot, options.obsoleteGuidance ?? []);
     for (const [index, item] of affectedGuidance.entries()) {
       const targetPath = importedGuidancePath(options.repoRoot, item);
       if (affectedPaths.has(targetPath)) {
@@ -374,10 +381,13 @@ function transformPreparedReference(referencePath: string): void {
   if (!existsSync(skillEntryPath)) {
     throw new MonkeError(`Expected staged Skill entry document at ${skillEntryPath}`);
   }
+  if (!lstatSync(skillEntryPath).isFile()) {
+    throw new MonkeError(`Expected staged Skill entry document to be a regular file`);
+  }
 
   const body = removeLeadingYamlFrontmatter(readFileSync(skillEntryPath, "utf8"));
-  renameSync(skillEntryPath, referenceEntryPath);
-  writeFileSync(referenceEntryPath, body, "utf8");
+  unlinkSync(skillEntryPath);
+  writeFileSync(referenceEntryPath, body, { encoding: "utf8", flag: "wx" });
 }
 
 function removeLeadingYamlFrontmatter(markdown: string): string {
@@ -390,6 +400,40 @@ function removeLeadingYamlFrontmatter(markdown: string): string {
     throw new MonkeError("Imported reference has unterminated leading YAML frontmatter");
   }
   return markdown.slice(match[0].length);
+}
+
+function assertObsoleteReferencesAreUnconsumed(
+  repoRoot: string,
+  obsoleteGuidance: readonly SkillImportRecipeSkill[],
+): void {
+  for (const guidance of obsoleteGuidance) {
+    if (guidance.kind !== "reference") {
+      continue;
+    }
+
+    const referencePath = path.posix.join("references", "imported", guidance.slug, "MAIN.md");
+    const consumers = [INTERNAL_SKILLS_ROOT, IMPORTED_SKILLS_ROOT]
+      .flatMap((root) => listSkillEntryDocuments(path.join(repoRoot, root)))
+      .filter((entryPath) => readFileSync(entryPath, "utf8").includes(referencePath))
+      .map((entryPath) => path.relative(repoRoot, entryPath));
+
+    if (consumers.length > 0) {
+      throw new MonkeError(
+        `Cannot replace Imported reference ${guidance.slug}; it is used by ${consumers.join(", ")}`,
+      );
+    }
+  }
+}
+
+function listSkillEntryDocuments(root: string): string[] {
+  if (!existsSync(root)) {
+    return [];
+  }
+
+  return readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(root, entry.name, "SKILL.md"))
+    .filter(existsSync);
 }
 
 export function importedGuidancePath(
@@ -1101,7 +1145,7 @@ function stepSymbol(state: string): string {
   }
 }
 
-function normalizeImportRecipeStore(input: unknown): SkillImportRecipeStore {
+export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeStore {
   const store = parseBoundaryValue(
     SkillImportRecipeStoreSchema,
     input,
