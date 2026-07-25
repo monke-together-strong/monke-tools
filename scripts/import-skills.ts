@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -329,7 +330,7 @@ export function copyStagedGuidanceToManagedRoots(options: {
 
       const preparedPath = path.join(preparedRoot, item.kind, item.slug);
       mkdirSync(path.dirname(preparedPath), { recursive: true });
-      cpSync(sourcePath, preparedPath, { recursive: true });
+      cpSync(sourcePath, preparedPath, { recursive: true, verbatimSymlinks: true });
       if (item.kind === "reference") {
         transformPreparedReference(preparedPath);
       }
@@ -352,7 +353,10 @@ export function copyStagedGuidanceToManagedRoots(options: {
     for (const item of options.guidance) {
       const targetPath = importedGuidancePath(options.repoRoot, item);
       mkdirSync(path.dirname(targetPath), { recursive: true });
-      cpSync(path.join(preparedRoot, item.kind, item.slug), targetPath, { recursive: true });
+      cpSync(path.join(preparedRoot, item.kind, item.slug), targetPath, {
+        recursive: true,
+        verbatimSymlinks: true,
+      });
     }
     options.commitState?.();
   } catch (error) {
@@ -411,10 +415,9 @@ function assertObsoleteReferencesAreUnconsumed(
       continue;
     }
 
-    const referencePath = path.posix.join("references", "imported", guidance.slug, "MAIN.md");
+    const referencePathPrefix = `${path.posix.join("references", "imported", guidance.slug)}/`;
     const consumers = [INTERNAL_SKILLS_ROOT, IMPORTED_SKILLS_ROOT]
-      .flatMap((root) => listSkillEntryDocuments(path.join(repoRoot, root)))
-      .filter((entryPath) => readFileSync(entryPath, "utf8").includes(referencePath))
+      .flatMap((root) => listReferenceConsumers(path.join(repoRoot, root), referencePathPrefix))
       .map((entryPath) => path.relative(repoRoot, entryPath));
 
     if (consumers.length > 0) {
@@ -425,15 +428,24 @@ function assertObsoleteReferencesAreUnconsumed(
   }
 }
 
-function listSkillEntryDocuments(root: string): string[] {
+function listReferenceConsumers(root: string, referencePathPrefix: string): string[] {
   if (!existsSync(root)) {
     return [];
   }
 
-  return readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(root, entry.name, "SKILL.md"))
-    .filter(existsSync);
+  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      return listReferenceConsumers(entryPath, referencePathPrefix);
+    }
+    if (entry.isFile()) {
+      return readFileSync(entryPath, "utf8").includes(referencePathPrefix) ? [entryPath] : [];
+    }
+    if (entry.isSymbolicLink()) {
+      return readlinkSync(entryPath).includes(referencePathPrefix) ? [entryPath] : [];
+    }
+    return [];
+  });
 }
 
 export function importedGuidancePath(

@@ -1,4 +1,12 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import pc from "picocolors";
 import { expect, test } from "vite-plus/test";
@@ -576,6 +584,42 @@ name: outside-entry
   expect(readFileSync(outsideEntryPath, "utf8")).toBe(outsideEntry);
   expect(existsSync(path.join(sandbox, "skills/references/imported/alpha"))).toBe(false);
   expect(existsSync(path.join(sandbox, "skills/imported/.monke-imports.json"))).toBe(false);
+});
+
+test("reference import preserves relative symlinks between supporting files", async () => {
+  const sandbox = makeTempDir("skill-import-reference-supporting-symlink");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+    stageSupportingSymlink: true,
+  });
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await runImportSkills(["owner/repo", "--ref"], {
+      async selectSkills() {
+        return ["alpha"];
+      },
+      writeMessage() {},
+    });
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  const importedLink = path.join(
+    sandbox,
+    "skills/references/imported/alpha/references/details-link.md",
+  );
+  expect(readlinkSync(importedLink)).toBe("details.md");
+  expect(readFileSync(importedLink, "utf8")).toBe("supporting details\n");
 });
 
 test("re-importing one selector with the opposite Import kind migrates its managed copy", async () => {
@@ -1486,6 +1530,112 @@ test("skills update rejects renaming an Imported reference used by a Reference-b
   expect(readImportRecipeStore(sandbox)).toEqual(originalStore);
 });
 
+test("skills update detects a supporting document that consumes a reference support file", async () => {
+  const sandbox = makeTempDir("skill-update-consumed-reference-support");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const originalStore = {
+    version: 2 as const,
+    recipes: [
+      {
+        source: "owner/repo",
+        skills: [{ selector: "alpha", slug: "alpha", kind: "reference" as const }],
+      },
+    ],
+  };
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+    stagedSlugBySelector: {
+      alpha: "renamed-alpha",
+    },
+  });
+  writeImportRecipeStore(sandbox, originalStore);
+  write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
+  write(sandbox, "skills/internal/reviewer/SKILL.md", "# Reviewer\n");
+  write(
+    sandbox,
+    "skills/internal/reviewer/references/checklist.md",
+    "[Details](../../../references/imported/alpha/references/details.md)\n",
+  );
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await expect(
+      runUpdateSkills(["--interactive"], {
+        confirmSlugReplacement() {
+          return true;
+        },
+        writeMessage() {},
+      }),
+    ).rejects.toThrow(/used by skills\/internal\/reviewer\/references\/checklist\.md/);
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe("old reference");
+  expect(existsSync(path.join(sandbox, "skills/references/imported/renamed-alpha"))).toBe(false);
+  expect(readImportRecipeStore(sandbox)).toEqual(originalStore);
+});
+
+test("skills update detects a supporting symlink that consumes a reference file", async () => {
+  const sandbox = makeTempDir("skill-update-consumed-reference-symlink");
+  const skillsLogPath = path.join(sandbox, "skills.log");
+  const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  const originalStore = {
+    version: 2 as const,
+    recipes: [
+      {
+        source: "owner/repo",
+        skills: [{ selector: "alpha", slug: "alpha", kind: "reference" as const }],
+      },
+    ],
+  };
+  const fakeBinDirectory = installFakeNpx(sandbox, {
+    skillsLogPath,
+    skillsCwdLogPath,
+    stageReferenceFixture: true,
+    stagedSlugBySelector: {
+      alpha: "renamed-alpha",
+    },
+  });
+  writeImportRecipeStore(sandbox, originalStore);
+  write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
+  write(sandbox, "skills/internal/reviewer/SKILL.md", "# Reviewer\n");
+  const supportingSymlink = path.join(sandbox, "skills/internal/reviewer/references/base.md");
+  mkdirSync(path.dirname(supportingSymlink), { recursive: true });
+  symlinkSync("../../../references/imported/alpha/MAIN.md", supportingSymlink);
+
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+
+    await expect(
+      runUpdateSkills(["--interactive"], {
+        confirmSlugReplacement() {
+          return true;
+        },
+        writeMessage() {},
+      }),
+    ).rejects.toThrow(/used by skills\/internal\/reviewer\/references\/base\.md/);
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+
+  expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe("old reference");
+  expect(existsSync(path.join(sandbox, "skills/references/imported/renamed-alpha"))).toBe(false);
+  expect(readImportRecipeStore(sandbox)).toEqual(originalStore);
+});
+
 test("skills update can interactively accept multiple staged slug renames", async () => {
   const sandbox = makeTempDir("skill-update-script-multiple-slug-accept");
   const skillsLogPath = path.join(sandbox, "skills.log");
@@ -1830,6 +1980,7 @@ function installFakeNpx(
     failInstallSources?: string[];
     stagedSlugBySelector?: Record<string, string>;
     stageReferenceFixture?: boolean;
+    stageSupportingSymlink?: boolean;
     mainCollisionSelector?: string;
     stagedSkillEntrySymlinkTarget?: string;
   },
@@ -1942,7 +2093,12 @@ metadata:
 Reference body.
 SKILL
   mkdir -p ".agents/skills/$staged_slug/references"
-  printf 'supporting details\\n' > ".agents/skills/$staged_slug/references/details.md"`
+  printf 'supporting details\\n' > ".agents/skills/$staged_slug/references/details.md"
+${
+  options.stageSupportingSymlink
+    ? `  ln -s 'details.md' ".agents/skills/$staged_slug/references/details-link.md"`
+    : ""
+}`
     : `  printf 'new %s' "$staged_slug" > ".agents/skills/$staged_slug/SKILL.md"`
 }
 ${
