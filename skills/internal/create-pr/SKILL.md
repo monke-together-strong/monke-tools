@@ -41,9 +41,14 @@ self-contained post-merge contract, and stop after the PR exists.
      [browser video proof](references/browser-video-proof.md) when the behavior
      is workflow-shaped, timing-sensitive, or hard to trust from screenshots
      alone. There can be more than 1 screenshot or video.
+   - Before upload, pass every final media asset through the
+     [proof asset review](references/proof-asset-review.md).
    - Upload local media with `$github-image-upload`; embed the returned
      GitHub attachment markdown or bare video URLs in the PR body. Do not leave
      local file paths as proof.
+
+   Proof collection is complete when relevant checks are recorded and every
+   required media asset passes the Evidence Gate and is embedded from GitHub.
 
 4. Draft the post-merge contract.
    - If root `POST_MERGE.md` exists, read it as repo-specific authoring context

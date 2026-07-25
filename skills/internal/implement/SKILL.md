@@ -21,7 +21,19 @@ The PRD gate is complete only after checking explicit native-tracker slice evide
 - issue comments that explicitly link implementation slices
 - linked-issue relationships or timeline cross-references available through the native tracker
 
-Do not inspect milestones, project items, labels, or broad tracker search results. If the native tracker cannot expose linked issues or timeline cross-references directly, use one exact search for the PRD issue id or URL.
+Use the native tracker's relationship or timeline endpoint when the ordinary
+issue view omits those fields. Treat that view as incomplete, not as evidence
+that the tracker lacks relationship data.
+
+Do not inspect milestones, project items, labels, or broad tracker search
+results. Only when the native tracker has no relationship or timeline surface,
+run exact searches for both the tracker-local PRD issue key or ID and its
+canonical URL. Inspect results only for explicit implementation-slice
+references.
+
+A negative gate is valid only when the relationship or timeline source was
+queried, or its absence was established, and both exact reference forms found
+no slices. Record the sources, endpoints, and reference forms checked.
 
 Exit:
 
