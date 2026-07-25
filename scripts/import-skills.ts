@@ -683,17 +683,17 @@ export async function runImportSkills(
       importedSkillSlugs: stagedSlugs,
     });
     const previousRecipeStore = readImportRecipeStore(repoRoot);
-    const nextRecipeStore = mergeImportedGuidanceIntoRecipeStore(previousRecipeStore, {
-      source,
-      acceptOpenClawRisks,
-      kind,
-      skills: stagedSelections,
-    });
     const importedGuidance = stagedSelections.map((selection) => ({ ...selection, kind }));
     const obsoleteGuidance = findMigratedGuidanceCopies({
       source,
       importedGuidance,
       previousStore: previousRecipeStore,
+    });
+    const nextRecipeStore = mergeImportedGuidanceIntoRecipeStore(previousRecipeStore, {
+      source,
+      acceptOpenClawRisks,
+      kind,
+      skills: stagedSelections,
     });
     copyStagedGuidanceToManagedRoots({
       stagingDirectory,

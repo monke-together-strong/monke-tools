@@ -612,7 +612,7 @@ function writeFlatManifest(
     version: 1,
     managedBy: "monke-tools",
     links,
-    supportingLinks,
+    ...(supportingLinks.length > 0 ? { supportingLinks } : {}),
   };
   const manifestPath = flatManifestPath(target);
   const parsed = FlatSkillManifestSchema.parse(manifest);

@@ -93,7 +93,8 @@ test("Claude skill reconciliation flattens source categories into the Agent skil
   const manifestPath = path.join(claudeSkillRoot, ".monke-tools-flat-skills.json");
   const coreLink = path.join(claudeSkillRoot, "monke-tools-core");
   const tddLink = path.join(claudeSkillRoot, "tdd");
-  expect(JSON.parse(readFileSync(manifestPath, "utf8")).links).toEqual([
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  expect(manifest.links).toEqual([
     {
       name: "monke-tools-core",
       sourcePath: path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
@@ -103,6 +104,7 @@ test("Claude skill reconciliation flattens source categories into the Agent skil
       sourcePath: path.join(sourceCheckout, "skills", "imported", "tdd"),
     },
   ]);
+  expect(manifest).not.toHaveProperty("supportingLinks");
   expect(lstatSync(coreLink).isSymbolicLink()).toBe(true);
   expect(readlinkSync(coreLink)).toBe(
     path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
@@ -172,6 +174,19 @@ test("Reference-backed skills resolve packaged references from namespaced and Cl
       "team coding baseline\n",
     );
   }
+  expect(
+    JSON.parse(
+      readFileSync(
+        path.join(sandbox, ".claude", "skills", ".monke-tools-flat-skills.json"),
+        "utf8",
+      ),
+    ).supportingLinks,
+  ).toEqual([
+    {
+      targetPath: path.join(sandbox, ".claude", "references"),
+      sourcePath: path.join(sourceCheckout, "skills", "references"),
+    },
+  ]);
   expect(existsSync(path.join(sandbox, ".claude", "skills", "references"))).toBe(false);
 
   reconcileSkillNamespaces({

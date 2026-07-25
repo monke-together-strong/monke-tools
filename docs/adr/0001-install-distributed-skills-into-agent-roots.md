@@ -20,7 +20,7 @@ Claude receives flat root-level symlinks instead because Claude does not discove
 <claude-home>/references -> <installed-source-checkout>/skills/references
 ```
 
-The Claude layout is tracked with a managed manifest in the Claude skill root so later installs can refresh or remove only links that monke-tools created. The supporting reference link remains outside the Agent skill root, so references resolve from flat linked skills without becoming independently discoverable.
+The Claude layout is tracked with a managed manifest in the Claude skill root so later installs can validate, refresh, or remove only links that monke-tools created, including the supporting reference link when Claude is deselected. The manifest records that supporting link even though it remains outside the Agent skill root, so references resolve from flat linked skills without becoming independently discoverable.
 
 Global monke config is versioned YAML at `config.yml` under monke home. It stores the Installed source checkout and one current Skill install preference:
 

@@ -219,7 +219,7 @@ A repo-tracked file in the **Skill source tree** that records **Skill import rec
 _Avoid_: Global monke config, local preference, session state
 
 **Skill import selector**:
-The upstream-facing skill identifier passed to a **Skill import** to choose one imported skill from its outside source.
+The upstream-facing skill identifier passed to a **Skill import** to choose one **Imported guidance** item from its outside source.
 _Avoid_: Skill slug, agent skill name, folder name
 
 **Import kind**:
