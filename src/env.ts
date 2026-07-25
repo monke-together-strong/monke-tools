@@ -38,11 +38,6 @@ export function seedWorktreeFiles(
   }
 }
 
-/** Collect source-checkout ports that local session allocations should avoid. */
-export function collectBaselinePorts(config: RepoConfig): Set<number> {
-  return collectBaselinePortsFromRoot({ config, sourceRoot: config.sourceRoot });
-}
-
 /** Collect content-root ports that local session allocations should avoid. */
 export function collectBaselinePortsFromRoot(
   options: CollectBaselinePortsFromRootOptions,

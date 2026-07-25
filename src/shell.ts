@@ -69,7 +69,7 @@ export function runShellInstall(runtime: Runtime, options: ShellInstallOptions =
   );
 }
 
-export function renderShellAdapter(shell: SupportedShell, binaryPath: string): string {
+function renderShellAdapter(shell: SupportedShell, binaryPath: string): string {
   return `# monke-tools shell integration for ${shell}
 mt() {
   local __monke_mt_directive

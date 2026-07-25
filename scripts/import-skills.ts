@@ -61,7 +61,7 @@ interface SecurityRiskRow {
 
 const NPX_COMMAND = process.platform === "win32" ? "npx.cmd" : "npx";
 const SKILLS_CLI_ARGS = ["--yes", "skills", "add"];
-const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
+export const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
 const IMPORT_RECIPE_STORE_PATH = path.join(IMPORTED_SKILLS_ROOT, ".monke-imports.json");
 const CSI_RE = new RegExp(String.raw`\u001b\[[\u0030-\u003f]*[\u0020-\u002f]*[\u0040-\u007e]`, "g");
 const OSC_RE = new RegExp(String.raw`\u001b\][\s\S]*?(?:\u0007|\u001b\\)`, "g");
@@ -227,7 +227,7 @@ export function normalizeSourceForStaging(source: string, cwd: string): string {
 }
 
 /** Builds arguments for listing skills from an upstream source. */
-export function buildSkillsListArgs(source: string, acceptOpenClawRisks: boolean): string[] {
+function buildSkillsListArgs(source: string, acceptOpenClawRisks: boolean): string[] {
   return [...SKILLS_CLI_ARGS, source, ...buildOpenClawRiskArgs(acceptOpenClawRisks), "-l"];
 }
 
@@ -380,7 +380,7 @@ export function extractSecurityRiskAssessment(output: string): string | null {
 }
 
 /** Parses upstream security assessment rows from install output. */
-export function parseSecurityRiskAssessment(output: string): SecurityRiskAssessment | null {
+function parseSecurityRiskAssessment(output: string): SecurityRiskAssessment | null {
   const rawLines = output.split(/\r?\n/);
   const strippedLines = rawLines.map(stripTerminalEscapes);
   const startIndex = strippedLines.findIndex((line) => line.includes("Security Risk Assessments"));

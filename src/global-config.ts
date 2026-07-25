@@ -99,7 +99,7 @@ export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig): 
 }
 
 /** Return the path of the Global monke config file for a monke home directory. */
-export function getGlobalConfigPath(home: string): string {
+function getGlobalConfigPath(home: string): string {
   return path.join(home, "config.yml");
 }
 

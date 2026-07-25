@@ -6,27 +6,27 @@ const PortKeySchema = z
   .string()
   .regex(/^[A-Z][A-Z0-9_]*_PORT$/, { error: "must be an uppercase env name ending in _PORT" });
 
-export const AssignedPortSchema = z.strictObject({
+const AssignedPortSchema = z.strictObject({
   key: PortKeySchema,
   value: PortSchema,
 });
 
-export const ResourceValueStateSchema = z.strictObject({
+const ResourceValueStateSchema = z.strictObject({
   env: NonEmptyStringSchema,
   value: NonEmptyStringSchema,
 });
 
-export const ResourceCommandOutputStateSchema = z.strictObject({
+const ResourceCommandOutputStateSchema = z.strictObject({
   env: NonEmptyStringSchema,
   value: NonEmptyStringSchema,
 });
 
-export const ResourceCommandStateSchema = z.strictObject({
+const ResourceCommandStateSchema = z.strictObject({
   name: NonEmptyStringSchema,
   outputs: z.array(ResourceCommandOutputStateSchema),
 });
 
-export const SessionRepoStateSchema = z.strictObject({
+const SessionRepoStateSchema = z.strictObject({
   sourceRoot: NonEmptyStringSchema,
   worktreePath: NonEmptyStringSchema,
   assignedPorts: z.array(AssignedPortSchema),

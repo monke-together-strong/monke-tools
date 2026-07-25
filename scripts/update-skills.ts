@@ -15,6 +15,7 @@ import {
   extractSecurityRiskAssessment,
   listStagedSkillSlugs,
   normalizeSourceForStaging,
+  IMPORTED_SKILLS_ROOT,
   readImportRecipeStore,
   resolveSkillSelectorSlugMappings,
   runInstallCommand,
@@ -22,8 +23,6 @@ import {
   writeImportRecipeStore,
 } from "./import-skills.ts";
 import type { SkillImportRecipe, SkillImportRecipeStore } from "./import-skills.ts";
-
-const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
 
 interface UpdateCommandOptions {
   install: boolean;

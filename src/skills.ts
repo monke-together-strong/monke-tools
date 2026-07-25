@@ -27,7 +27,7 @@ import type {
 import type { Runtime } from "./types.ts";
 
 /** Directory name monke-tools owns inside each selected Agent skill root. */
-export const SKILL_NAMESPACE = "monke-tools";
+const SKILL_NAMESPACE = "monke-tools";
 const FLAT_SKILL_MANIFEST = ".monke-tools-flat-skills.json";
 
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
@@ -197,10 +197,7 @@ export function reconcileSkillNamespaces(options: {
 }
 
 /** Normalize one custom Agent skill root path for storage in Global monke config. */
-export function normalizeCustomSkillRoot(options: {
-  input: string;
-  homeDirectory: string;
-}): string {
+function normalizeCustomSkillRoot(options: { input: string; homeDirectory: string }): string {
   const trimmed = options.input.trim();
   if (!trimmed) {
     throw new MonkeError("Custom Skill install target path must be a non-empty absolute path");
