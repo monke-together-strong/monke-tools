@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { defineConfig } from "vite-plus";
@@ -51,21 +50,6 @@ export default defineConfig({
     format: ["esm"],
     outDir: path.resolve(workspaceRoot, "packages/oxlint-config/dist"),
   },
-  plugins: [
-    {
-      enforce: "pre",
-      async load(id) {
-        const filePath = id.split("?")[0] ?? "";
-        if (!filePath.endsWith(".md")) {
-          return null;
-        }
-
-        const source = await readFile(filePath, "utf-8");
-        return `export default ${JSON.stringify(source)};`;
-      },
-      name: "markdown-as-text",
-    },
-  ],
   staged: {
     "*": "vp check --fix",
   },
