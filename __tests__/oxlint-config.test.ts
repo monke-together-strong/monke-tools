@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+import type { OxlintConfig, OxlintOverride } from "vite-plus/lint";
 
 import mtsLint, { createOxlintConfig } from "../packages/oxlint-config/src/config.ts";
 
@@ -70,6 +71,45 @@ describe("shared Oxlint config", () => {
       rules: {
         "no-await-in-loop": "off",
       },
+    });
+  });
+
+  test("composes consumer Oxlint config after shared policy", () => {
+    const extension = {
+      rules: {
+        "no-console": "error",
+      },
+    } satisfies OxlintConfig;
+    const localOverride = {
+      files: ["src/routes/**"],
+      rules: {
+        "sort-keys": "off",
+      },
+    } satisfies OxlintOverride;
+    const config = createOxlintConfig({
+      env: {
+        node: true,
+      },
+      extends: [extension],
+      ignorePatterns: [".repo-output"],
+      overrides: [localOverride],
+      rules: {
+        "no-bitwise": "off",
+      },
+    });
+
+    expect(config.extends).toStrictEqual([...(mtsLint.extends ?? []), extension]);
+    expect(config.ignorePatterns).toStrictEqual([
+      ...(mtsLint.ignorePatterns ?? []),
+      ".repo-output",
+    ]);
+    expect(config.overrides?.at(-1)).toStrictEqual(localOverride);
+    expect(config.rules).toMatchObject({
+      "no-bitwise": "off",
+      "no-use-before-define": ["error", { functions: false }],
+    });
+    expect(config.env).toMatchObject({
+      node: true,
     });
   });
 });

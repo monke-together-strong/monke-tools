@@ -12,4 +12,6 @@ remain allowed while other uses before definition are checked.
 
 Mixed-framework repositories can use `createOxlintConfig` to apply framework-neutral policy to
 complete test trees while excluding Playwright or other framework-owned paths from Vitest rules.
-The existing default export retains broad Vitest conventions for Vitest-only repositories.
+The factory accepts ordinary Oxlint config fields and composes extensions, ignores, overrides, and
+rules without manual spreads. The existing default export retains broad Vitest conventions for
+Vitest-only repositories.

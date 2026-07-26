@@ -5,7 +5,7 @@ import vitest from "ultracite/oxlint/vitest";
 
 const defaultTestFiles = ["**/*.{test,spec}.{ts,tsx,js,jsx}", "**/__tests__/**/*.{ts,tsx,js,jsx}"];
 
-export interface CreateOxlintConfigOptions {
+export interface CreateOxlintConfigOptions extends OxlintConfig {
   /** Files receiving framework-neutral test policy, including test helpers. */
   testFiles?: readonly string[];
   /** Non-Vitest test files to exclude from the default Vitest preset. */
@@ -13,7 +13,15 @@ export interface CreateOxlintConfigOptions {
 }
 
 export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): OxlintConfig {
-  const vitestExcludeFiles = options.vitestExcludeFiles ?? [];
+  const {
+    extends: extensions = [],
+    ignorePatterns = [],
+    overrides = [],
+    rules = {},
+    testFiles = defaultTestFiles,
+    vitestExcludeFiles = [],
+    ...config
+  } = options;
   const vitestOverrides = (vitest.overrides ?? []).map<OxlintOverride>((override) => {
     const excludeFiles = [...(override.excludeFiles ?? []), ...vitestExcludeFiles];
 
@@ -28,12 +36,13 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
   });
 
   return {
-    extends: [core],
-    ignorePatterns: core.ignorePatterns ?? [],
+    ...config,
+    extends: [core, ...extensions],
+    ignorePatterns: [...(core.ignorePatterns ?? []), ...ignorePatterns],
     overrides: [
       ...vitestOverrides,
       {
-        files: [...(options.testFiles ?? defaultTestFiles)],
+        files: [...testFiles],
         rules: {
           "no-await-in-loop": "off",
         },
@@ -44,6 +53,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
           "unicorn/no-useless-undefined": ["error", { checkArguments: false }],
         },
       },
+      ...overrides,
     ],
     rules: {
       "func-style": "off",
@@ -53,6 +63,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
       "unicorn/no-nested-ternary": "off",
+      ...rules,
     },
   };
 }
