@@ -22,9 +22,12 @@ vp check
 vp check --fix
 ```
 
-The config composes Ultracite's native core preset, carries its generic ignore
-patterns, and leaves environment globals and repository-specific ignores to the
-consumer. Append local ignores when composing the config:
+The config composes Ultracite's native core and Vitest presets, carries the core
+preset's generic ignore patterns, and leaves environment globals and
+repository-specific ignores to the consumer. Its TypeScript and test overrides
+permit common API-boundary, callback, and behavior-test patterns while retaining
+the underlying correctness checks. Append local ignores when composing the
+config:
 
 ```ts
 lint: {
