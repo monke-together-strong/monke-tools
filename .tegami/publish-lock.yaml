@@ -12,5 +12,4 @@ core:packages:
 npm:mark-latest:
   - id: npm:@monke-together-strong/oxlint-config
 npm:packages:
-  - id: npm:monke-tools
   - id: npm:@monke-together-strong/oxlint-config
