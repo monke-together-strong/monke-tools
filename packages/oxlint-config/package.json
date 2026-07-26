@@ -1,0 +1,39 @@
+{
+  "name": "@monke-together-strong/oxlint-config",
+  "version": "0.0.0",
+  "description": "Shared lint preset for Vite+ repositories.",
+  "homepage": "https://github.com/monke-together-strong/monke-tools/tree/main/packages/oxlint-config#readme",
+  "bugs": {
+    "url": "https://github.com/monke-together-strong/monke-tools/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/monke-together-strong/monke-tools.git",
+    "directory": "packages/oxlint-config"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/config.d.mts",
+      "import": "./dist/config.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepack": "vp pack"
+  },
+  "dependencies": {
+    "ultracite": "7.9.4"
+  },
+  "peerDependencies": {
+    "vite-plus": "^0.2.6"
+  }
+}
