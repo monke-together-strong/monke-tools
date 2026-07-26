@@ -1,3 +1,1 @@
-# Team Coding Baseline
-
-No team-owned coding rules are defined yet.
+# Team Coding Standards Baseline

@@ -39,7 +39,7 @@ test("code-review is a Reference-backed skill and its references are not discove
   expect(wrapper).toContain("Team coding baseline");
   expect(importedReference).toMatch(/^\nTwo-axis review/);
   expect(importedReference).not.toMatch(/^---$/m);
-  expect(teamBaseline).toContain("No team-owned coding rules are defined yet.");
+  expect(teamBaseline).toMatch(/^# Team Coding Standards Baseline$/m);
   expect(existsSync(path.join(projectRoot, "skills", "imported", "code-review"))).toBe(false);
   expect(
     existsSync(
