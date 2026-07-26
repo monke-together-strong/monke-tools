@@ -381,13 +381,24 @@ function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree
   removeManagedNamespace(target.namespacePath);
 
   const links = discoverFlatSkillLinks(skillSourceTree);
+  const supportingLinks = discoverFlatSupportingLinks(target, skillSourceTree);
   const previousManifest = readFlatManifest(target);
   assertFlatLinksCanBeManaged(target, links, previousManifest);
+  assertFlatSupportingLinksCanBeManaged(supportingLinks, previousManifest);
 
   removeFlatManagedLinks(target);
 
   const createdLinks: FlatSkillLink[] = [];
+  const createdSupportingLinks: FlatSupportingLink[] = [];
   try {
+    for (const link of supportingLinks) {
+      mkdirSync(path.dirname(link.targetPath), { recursive: true });
+      if (lstatIfExists(link.targetPath)) {
+        rmSync(link.targetPath);
+      }
+      symlinkSync(link.sourcePath, link.targetPath, "dir");
+      createdSupportingLinks.push(link);
+    }
     for (const link of links) {
       const linkPath = path.join(target.agentSkillRoot, link.name);
       if (lstatIfExists(linkPath)) {
@@ -397,11 +408,11 @@ function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree
       createdLinks.push(link);
     }
   } catch (error) {
-    writeFlatManifest(target, createdLinks);
+    writeFlatManifest(target, createdLinks, createdSupportingLinks);
     throw error;
   }
 
-  writeFlatManifest(target, links);
+  writeFlatManifest(target, links, supportingLinks);
 }
 
 function removeManagedTarget(target: ResolvedSkillInstallTarget): void {
@@ -428,9 +439,20 @@ const FlatSkillManifestSchema = z.strictObject({
   version: z.literal(1),
   managedBy: z.literal("monke-tools"),
   links: z.array(FlatSkillLinkSchema),
+  supportingLinks: z
+    .array(
+      z.strictObject({
+        targetPath: z.string().min(1),
+        sourcePath: z.string().min(1),
+      }),
+    )
+    .optional(),
 });
 
 type FlatSkillLink = z.output<typeof FlatSkillLinkSchema>;
+type FlatSupportingLink = NonNullable<
+  z.output<typeof FlatSkillManifestSchema>["supportingLinks"]
+>[number];
 type FlatSkillManifest = z.output<typeof FlatSkillManifestSchema>;
 
 function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
@@ -464,6 +486,23 @@ function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
   return [...links.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
+function discoverFlatSupportingLinks(
+  target: ResolvedSkillInstallTarget,
+  skillSourceTree: string,
+): FlatSupportingLink[] {
+  const referenceSourceTree = path.join(skillSourceTree, "references");
+  if (!existsSync(referenceSourceTree)) {
+    return [];
+  }
+
+  return [
+    {
+      targetPath: path.resolve(target.agentSkillRoot, "..", "references"),
+      sourcePath: referenceSourceTree,
+    },
+  ];
+}
+
 function assertFlatLinksCanBeManaged(
   target: ResolvedSkillInstallTarget,
   links: FlatSkillLink[],
@@ -490,6 +529,34 @@ function assertFlatLinksCanBeManaged(
   }
 }
 
+function assertFlatSupportingLinksCanBeManaged(
+  links: FlatSupportingLink[],
+  previousManifest: FlatSkillManifest | null,
+): void {
+  const previousLinks = new Map(
+    previousManifest?.supportingLinks?.map((link) => [link.targetPath, link.sourcePath]) ?? [],
+  );
+
+  for (const link of links) {
+    const linkStat = lstatIfExists(link.targetPath);
+    if (!linkStat) {
+      continue;
+    }
+    if (!linkStat.isSymbolicLink()) {
+      throw new MonkeError(
+        `Refusing to overwrite non-managed Reference source tree link at ${link.targetPath}`,
+      );
+    }
+
+    const currentTarget = readlinkSync(link.targetPath);
+    if (currentTarget !== link.sourcePath && currentTarget !== previousLinks.get(link.targetPath)) {
+      throw new MonkeError(
+        `Refusing to overwrite non-managed Reference source tree link at ${link.targetPath}`,
+      );
+    }
+  }
+}
+
 function removeFlatManagedLinks(target: ResolvedSkillInstallTarget): void {
   const manifest = readFlatManifest(target);
   if (!manifest) {
@@ -504,6 +571,12 @@ function removeFlatManagedLinks(target: ResolvedSkillInstallTarget): void {
     }
     if (readlinkSync(linkPath) === link.sourcePath) {
       rmSync(linkPath);
+    }
+  }
+  for (const link of manifest.supportingLinks ?? []) {
+    const linkStat = lstatIfExists(link.targetPath);
+    if (linkStat?.isSymbolicLink() && readlinkSync(link.targetPath) === link.sourcePath) {
+      rmSync(link.targetPath);
     }
   }
 
@@ -530,11 +603,16 @@ function readFlatManifest(target: ResolvedSkillInstallTarget): FlatSkillManifest
   );
 }
 
-function writeFlatManifest(target: ResolvedSkillInstallTarget, links: FlatSkillLink[]): void {
+function writeFlatManifest(
+  target: ResolvedSkillInstallTarget,
+  links: FlatSkillLink[],
+  supportingLinks: FlatSupportingLink[],
+): void {
   const manifest: FlatSkillManifest = {
     version: 1,
     managedBy: "monke-tools",
     links,
+    ...(supportingLinks.length > 0 ? { supportingLinks } : {}),
   };
   const manifestPath = flatManifestPath(target);
   const parsed = FlatSkillManifestSchema.parse(manifest);

@@ -1,12 +1,13 @@
 {
-  "version": 1,
+  "version": 2,
   "recipes": [
     {
       "source": "git@github.com:petergyang/no-ai-slop.git",
       "skills": [
         {
           "selector": "no-ai-slop",
-          "slug": "no-ai-slop"
+          "slug": "no-ai-slop",
+          "kind": "skill"
         }
       ]
     },
@@ -15,7 +16,8 @@
       "skills": [
         {
           "selector": "thermo-nuclear-code-quality-review",
-          "slug": "thermo-nuclear-code-quality-review"
+          "slug": "thermo-nuclear-code-quality-review",
+          "kind": "skill"
         }
       ]
     },
@@ -24,83 +26,103 @@
       "skills": [
         {
           "selector": "code-review",
-          "slug": "code-review"
+          "slug": "code-review",
+          "kind": "reference"
         },
         {
           "selector": "codebase-design",
-          "slug": "codebase-design"
+          "slug": "codebase-design",
+          "kind": "skill"
         },
         {
           "selector": "diagnosing-bugs",
-          "slug": "diagnosing-bugs"
+          "slug": "diagnosing-bugs",
+          "kind": "skill"
         },
         {
           "selector": "domain-modeling",
-          "slug": "domain-modeling"
+          "slug": "domain-modeling",
+          "kind": "skill"
         },
         {
           "selector": "grill-with-docs",
-          "slug": "grill-with-docs"
+          "slug": "grill-with-docs",
+          "kind": "skill"
         },
         {
           "selector": "grilling",
-          "slug": "grilling"
+          "slug": "grilling",
+          "kind": "skill"
         },
         {
           "selector": "handoff",
-          "slug": "handoff"
+          "slug": "handoff",
+          "kind": "skill"
         },
         {
           "selector": "improve-codebase-architecture",
-          "slug": "improve-codebase-architecture"
+          "slug": "improve-codebase-architecture",
+          "kind": "skill"
         },
         {
           "selector": "prototype",
-          "slug": "prototype"
+          "slug": "prototype",
+          "kind": "skill"
         },
         {
           "selector": "research",
-          "slug": "research"
+          "slug": "research",
+          "kind": "skill"
         },
         {
           "selector": "resolving-merge-conflicts",
-          "slug": "resolving-merge-conflicts"
+          "slug": "resolving-merge-conflicts",
+          "kind": "skill"
         },
         {
           "selector": "setup-matt-pocock-skills",
-          "slug": "setup-matt-pocock-skills"
+          "slug": "setup-matt-pocock-skills",
+          "kind": "skill"
         },
         {
           "selector": "tdd",
-          "slug": "tdd"
+          "slug": "tdd",
+          "kind": "skill"
         },
         {
           "selector": "teach",
-          "slug": "teach"
+          "slug": "teach",
+          "kind": "skill"
         },
         {
           "selector": "to-spec",
-          "slug": "to-spec"
+          "slug": "to-spec",
+          "kind": "skill"
         },
         {
           "selector": "to-tickets",
-          "slug": "to-tickets"
+          "slug": "to-tickets",
+          "kind": "skill"
         },
         {
           "selector": "triage",
-          "slug": "triage"
+          "slug": "triage",
+          "kind": "skill"
         },
         {
           "selector": "wayfinder",
-          "slug": "wayfinder"
+          "slug": "wayfinder",
+          "kind": "skill"
         },
         {
           "selector": "wizard",
-          "slug": "wizard"
+          "slug": "wizard",
+          "kind": "skill"
         },
         {
           "selector": "writing-great-skills",
-          "slug": "writing-great-skills"
+          "slug": "writing-great-skills",
+          "kind": "skill"
         }
       ]
     },
@@ -109,7 +131,8 @@
       "skills": [
         {
           "selector": "shadcn",
-          "slug": "shadcn"
+          "slug": "shadcn",
+          "kind": "skill"
         }
       ]
     },
@@ -118,7 +141,8 @@
       "skills": [
         {
           "selector": "archify",
-          "slug": "archify"
+          "slug": "archify",
+          "kind": "skill"
         }
       ]
     },
@@ -128,11 +152,13 @@
       "skills": [
         {
           "selector": "autoreview",
-          "slug": "autoreview"
+          "slug": "autoreview",
+          "kind": "skill"
         },
         {
           "selector": "behavior-validator",
-          "slug": "behavior-validator"
+          "slug": "behavior-validator",
+          "kind": "skill"
         }
       ]
     },
@@ -141,7 +167,8 @@
       "skills": [
         {
           "selector": "improve",
-          "slug": "improve"
+          "slug": "improve",
+          "kind": "skill"
         }
       ]
     }
