@@ -4,6 +4,7 @@ builds
 coverage
 .DS_Store
 *.bun-build
+.monke-guidance-backup-*/
 
 tmp/
 plans/

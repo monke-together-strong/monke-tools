@@ -11,10 +11,12 @@ import { MonkeError } from "../src/errors.ts";
 import {
   assertSkillSelectorSlugMappingsMatchStagedSlugs,
   buildSkillsInstallArgs,
-  copyStagedSkillsToImported,
+  copyStagedGuidanceToManagedRoots,
   extractSecurityRiskAssessment,
   listStagedSkillSlugs,
+  normalizeImportRecipeStore,
   normalizeSourceForStaging,
+  IMPORTED_REFERENCES_ROOT,
   IMPORTED_SKILLS_ROOT,
   readImportRecipeStore,
   resolveSkillSelectorSlugMappings,
@@ -51,18 +53,18 @@ export interface UpdateSkillsDependencies {
   writeMessage?: (message: string) => void;
 }
 
-/** Reruns all recorded Skill import recipes into `skills/imported`. */
+/** Reruns all recorded Skill import recipes into their recorded managed roots. */
 export async function runUpdateSkills(
   argv: string[] = process.argv.slice(2),
   dependencies: UpdateSkillsDependencies = {},
 ): Promise<void> {
   const { install, interactive } = parseCommand(argv);
   const repoRoot = process.cwd();
-  const store = readImportRecipeStore(repoRoot);
+  let store = readImportRecipeStore(repoRoot);
   const writeMessage = dependencies.writeMessage ?? process.stdout.write.bind(process.stdout);
   const failures: string[] = [];
 
-  validateImportedSkillOwnership(repoRoot, store);
+  validateImportedGuidanceDirectoriesAreTracked(repoRoot, store);
 
   for (const recipe of store.recipes) {
     const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-update-"));
@@ -91,20 +93,23 @@ export async function runUpdateSkills(
         interactive,
         confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
       });
-      assertSlugReplacementsKeepUniqueOwnership(store, recipe, slugReplacements);
-      copyStagedSkillsToImported({
+      const stagedGuidance = applySlugReplacementsToGuidance(recipe, slugReplacements);
+      const nextStore =
+        slugReplacements.length > 0
+          ? applySlugReplacementsToStore(store, recipe.source, stagedGuidance)
+          : store;
+      copyStagedGuidanceToManagedRoots({
         stagingDirectory,
         repoRoot,
+        guidance: stagedGuidance,
+        obsoleteGuidance: guidanceReplacedBySlugChanges(recipe, slugReplacements),
+        commitState() {
+          if (slugReplacements.length > 0) {
+            writeImportRecipeStore(repoRoot, nextStore);
+          }
+        },
       });
-      applyAcceptedSlugReplacements(
-        repoRoot,
-        recipe,
-        slugReplacements,
-        listStagedSkillSlugs(stagingDirectory),
-      );
-      if (slugReplacements.length > 0) {
-        writeImportRecipeStore(repoRoot, store);
-      }
+      store = nextStore;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${recipe.source}: ${message}`);
@@ -128,7 +133,7 @@ export async function runUpdateSkills(
 function parseCommand(argv: string[]): UpdateCommandOptions {
   const program = new Command()
     .name("bun run skills:update")
-    .description("Update imported external agent skills from recorded recipes")
+    .description("Update imported agent guidance from recorded recipes")
     .option("-i, --install", "Run the monke-tools skill install command after updating")
     .option("--interactive", "Prompt before accepting staged Skill slug replacements")
     .allowExcessArguments(false);
@@ -143,27 +148,22 @@ function parseCommand(argv: string[]): UpdateCommandOptions {
   };
 }
 
-function validateImportedSkillOwnership(repoRoot: string, store: SkillImportRecipeStore): void {
-  const ownedSlugs = new Map<string, string>();
-
-  for (const recipe of store.recipes) {
-    for (const skill of recipe.skills) {
-      const existingOwner = ownedSlugs.get(skill.slug);
-      if (existingOwner) {
-        throw new MonkeError(
-          `Imported skill slug ${skill.slug} is owned by both ${existingOwner} and ${recipe.source}`,
-        );
-      }
-
-      ownedSlugs.set(skill.slug, recipe.source);
-    }
-  }
-
-  const untrackedSlugs = listImportedSkillDirectories(repoRoot).filter(
-    (slug) => !ownedSlugs.has(slug),
+function validateImportedGuidanceDirectoriesAreTracked(
+  repoRoot: string,
+  store: SkillImportRecipeStore,
+): void {
+  const ownedGuidance = new Set(
+    store.recipes.flatMap((recipe) => recipe.skills.map((skill) => `${skill.kind}:${skill.slug}`)),
   );
-  if (untrackedSlugs.length > 0) {
-    throw new MonkeError(`Untracked imported skill directories: ${untrackedSlugs.join(", ")}`);
+
+  for (const kind of ["skill", "reference"] as const) {
+    const root = kind === "skill" ? IMPORTED_SKILLS_ROOT : IMPORTED_REFERENCES_ROOT;
+    const untrackedSlugs = listGuidanceDirectories(path.join(repoRoot, root)).filter(
+      (slug) => !ownedGuidance.has(`${kind}:${slug}`),
+    );
+    if (untrackedSlugs.length > 0) {
+      throw new MonkeError(`Untracked imported ${kind} directories: ${untrackedSlugs.join(", ")}`);
+    }
   }
 }
 
@@ -228,50 +228,38 @@ async function resolveStagedSkillReplacements(options: {
   return replacements;
 }
 
-function assertSlugReplacementsKeepUniqueOwnership(
+function applySlugReplacementsToStore(
   store: SkillImportRecipeStore,
-  owningRecipe: SkillImportRecipe,
-  replacements: readonly SlugReplacementRequest[],
-): void {
-  for (const replacement of replacements) {
-    for (const recipe of store.recipes) {
-      if (recipe === owningRecipe) {
-        continue;
-      }
-
-      if (recipe.skills.some((skill) => skill.slug === replacement.stagedSlug)) {
-        throw new MonkeError(
-          `Cannot replace Skill slug ${replacement.recordedSlug} with ${replacement.stagedSlug}: ${replacement.stagedSlug} is already owned by recipe ${recipe.source}`,
-        );
-      }
-    }
-  }
+  source: string,
+  guidance: SkillImportRecipe["skills"],
+): SkillImportRecipeStore {
+  return normalizeImportRecipeStore({
+    ...store,
+    recipes: store.recipes.map((recipe) =>
+      recipe.source === source ? { ...recipe, skills: guidance } : recipe,
+    ),
+  });
 }
 
-function applyAcceptedSlugReplacements(
-  repoRoot: string,
+function applySlugReplacementsToGuidance(
   recipe: SkillImportRecipe,
   replacements: readonly SlugReplacementRequest[],
-  stagedSlugs: readonly string[],
-): void {
-  const stagedSlugSet = new Set(stagedSlugs);
-  for (const replacement of replacements) {
-    const skill = recipe.skills.find(
-      (candidate) =>
-        candidate.selector === replacement.selector && candidate.slug === replacement.recordedSlug,
-    );
-    if (!skill) {
-      throw new MonkeError(`Could not update recorded Skill slug ${replacement.recordedSlug}`);
-    }
+): SkillImportRecipe["skills"] {
+  const stagedSlugBySelector = new Map(
+    replacements.map((replacement) => [replacement.selector, replacement.stagedSlug]),
+  );
+  return recipe.skills.map((skill) => ({
+    ...skill,
+    slug: stagedSlugBySelector.get(skill.selector) ?? skill.slug,
+  }));
+}
 
-    if (!stagedSlugSet.has(replacement.recordedSlug)) {
-      rmSync(path.join(repoRoot, IMPORTED_SKILLS_ROOT, replacement.recordedSlug), {
-        recursive: true,
-        force: true,
-      });
-    }
-    skill.slug = replacement.stagedSlug;
-  }
+function guidanceReplacedBySlugChanges(
+  recipe: SkillImportRecipe,
+  replacements: readonly SlugReplacementRequest[],
+): SkillImportRecipe["skills"] {
+  const replacedSelectors = new Set(replacements.map((replacement) => replacement.selector));
+  return recipe.skills.filter((skill) => replacedSelectors.has(skill.selector));
 }
 
 function renderSlugMismatchMessage(
@@ -299,12 +287,7 @@ async function promptForSlugReplacement(request: SlugReplacementRequest): Promis
   return accepted;
 }
 
-function listImportedSkillDirectories(repoRoot: string): string[] {
-  const importedSkillsRoot = path.join(repoRoot, IMPORTED_SKILLS_ROOT);
-  return listSkillDirectories(importedSkillsRoot);
-}
-
-function listSkillDirectories(root: string): string[] {
+function listGuidanceDirectories(root: string): string[] {
   if (!existsSync(root)) {
     return [];
   }

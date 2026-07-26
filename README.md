@@ -52,7 +52,8 @@ Codex, Cursor, and custom targets receive one managed `monke-tools` namespace sy
 The Skill source tree is organized as:
 
 - `skills/internal`: monke-tools-owned Distributed skills, including `monke-tools-core`
-- `skills/imported`: Imported skills preserved from outside projects
+- `skills/imported`: discoverable Imported skills preserved from outside projects
+- `skills/references`: non-invocable Internal and Imported references used by Distributed skills
 
 ## Commands
 

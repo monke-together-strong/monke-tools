@@ -147,8 +147,12 @@ Agent guidance distributed through the **Local tool install** so agents in a **C
 _Avoid_: Package skill, copied prompt, generated instruction file
 
 **Skill source tree**:
-The `skills/` directory in the monke-tools source checkout that stores **Distributed skills** before they are installed into **Agent skill roots**.
+The `skills/` directory in the monke-tools source checkout that packages **Distributed skills** and **Distributed references** for installation into **Agent skill roots**.
 _Avoid_: Skill registry, source root, package metadata
+
+**Reference source tree**:
+The `references/` area inside the **Skill source tree** that stores **Distributed references**, separated into internal and imported ownership groups.
+_Avoid_: Skill source tree, global reference directory, reference cache
 
 **Installed source checkout**:
 The monke-tools source checkout used by the current **Local tool install**.
@@ -170,16 +174,44 @@ _Avoid_: Skill family, split skill set, command reference
 A monke-tools-owned **Distributed skill** distributed with the local install, whether it helps agents work on monke-tools itself or use monke-tools from a **Consumer repo**.
 _Avoid_: Repo skill, local skill, source-only skill
 
+**Imported guidance**:
+Agent guidance brought into monke-tools from outside and distributed as either an **Imported skill** or an **Imported reference**.
+_Avoid_: Import artifact, external files, vendored docs
+
 **Imported skill**:
-A monke-tools **Distributed skill** brought in from outside monke-tools and distributed through the same local install.
+A discoverable **Imported guidance** item distributed as a **Distributed skill**.
 _Avoid_: External skill, third-party skill, copied skill
 
+**Distributed reference**:
+Non-invocable agent guidance packaged inside the **Skill source tree** for explicit use by skills or other files.
+_Avoid_: Global skill, hidden skill, always-loaded context
+
+**Internal reference**:
+A monke-tools-owned **Distributed reference** packaged with the local install.
+_Avoid_: Imported reference, personal reference, internal skill
+
+**Imported reference**:
+A non-invocable **Imported guidance** item distributed as a **Distributed reference**.
+_Avoid_: Reference skill, imported skill, global reference
+
+**Reference-backed skill**:
+An invocable **Distributed skill** that loads an unchanged **Distributed reference** as its base behavior and applies additional guidance with explicit precedence.
+_Avoid_: Forked skill, patched imported skill, copied skill
+
+**Team coding baseline**:
+Team-owned coding guidance applied across **Consumer repos** as a fallback when a repo does not define a conflicting standard.
+_Avoid_: Repo coding standards, personal preferences, lint rules
+
+**Repo coding standards**:
+Authoritative coding guidance documented by a **Consumer repo**; it overrides conflicting team or imported review baselines.
+_Avoid_: Team coding baseline, formatter config, inferred conventions
+
 **Skill import**:
-The operation that brings selected **Imported skills** from an outside source into the **Skill source tree**.
+The operation that brings selected upstream skills into the **Skill source tree** as **Imported skills** or **Imported references**.
 _Avoid_: Skill install, skill add, skill sync
 
 **Skill import recipe**:
-A remembered description of one **Skill import** that can be rerun to refresh the same **Imported skills** from the same outside source.
+A remembered description of one **Skill import** that can be rerun to refresh the same **Imported guidance** from the same outside source.
 _Avoid_: Lock file, update config, import cache
 
 **Skill import recipe store**:
@@ -187,11 +219,15 @@ A repo-tracked file in the **Skill source tree** that records **Skill import rec
 _Avoid_: Global monke config, local preference, session state
 
 **Skill import selector**:
-The upstream-facing skill identifier passed to a **Skill import** to choose one imported skill from its outside source.
+The upstream-facing skill identifier passed to a **Skill import** to choose one **Imported guidance** item from its outside source.
 _Avoid_: Skill slug, agent skill name, folder name
 
-**Imported skill owner**:
-The one **Skill import recipe** that is allowed to refresh a particular **Imported skill** in the **Skill source tree**.
+**Import kind**:
+The recipe choice that makes selected **Imported guidance** either an **Imported skill** or an **Imported reference**.
+_Avoid_: Install target, agent type, source type
+
+**Imported guidance owner**:
+The one **Skill import recipe** that is allowed to refresh a particular **Imported guidance** item in the **Skill source tree**.
 _Avoid_: Last import wins, source hint, fallback recipe
 
 **Agent skill root**:
@@ -544,16 +580,19 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 - A failed **Skill install target** does not prevent other selected **Skill install targets** from being reconciled.
 - A **Local install refresh** fails overall after reconciliation if any selected **Skill install target** failed.
 - A **Distributed skill** belongs to the monke-tools source version that ships it.
-- A **Skill source tree** stores **Distributed skills** under the same category path used in installed **Skill namespaces**.
+- A **Distributed reference** belongs to the monke-tools source version that ships it.
+- A **Skill source tree** packages **Distributed skills** and **Distributed references** under ownership-specific category paths.
 - A **Distributed skill** has a **Skill slug** and may have a different **Agent skill name**.
 - The **Core distributed skill** uses `core` as its **Skill slug** and `monke-tools-core` as its **Agent skill name**.
 - A **Distributed skill** is either an **Internal skill** or an **Imported skill**.
 - An **Imported skill** preserves its upstream **Agent skill name** by default.
-- Each **Imported skill** has exactly one **Imported skill owner**.
+- An **Imported guidance** item has exactly one **Import kind**.
+- Changing an **Imported guidance** item's **Import kind** migrates it instead of creating a second managed copy.
+- Each **Imported guidance** item has exactly one **Imported guidance owner**.
 - A **Skill import recipe** belongs to the **Skill import recipe store**.
-- A **Skill import recipe** records the **Skill import selector** and import metadata needed to reproduce a **Skill import**.
-- A **Skill import recipe** can be rerun to refresh the **Imported skills** it owns.
-- A **Skill namespace** contains only monke-tools **Distributed skills**.
+- A **Skill import recipe** records the **Skill import selector**, **Import kind**, and import metadata needed to reproduce a **Skill import**.
+- A **Skill import recipe** can be rerun to refresh all **Imported guidance** it owns.
+- A **Skill namespace** packages monke-tools **Distributed skills** and **Distributed references**, but only **Distributed skills** are discoverable.
 - A **Skill namespace** is always named `monke-tools`.
 - A **Managed skill namespace** is a symlink to the **Skill source tree**.
 - Any symlink at the explicit monke-tools **Skill namespace** path is treated as a **Managed skill namespace**.

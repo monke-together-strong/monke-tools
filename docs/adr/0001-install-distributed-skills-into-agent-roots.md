@@ -17,9 +17,10 @@ Claude receives flat root-level symlinks instead because Claude does not discove
 ```text
 <claude-skill-root>/monke-tools-core -> <installed-source-checkout>/skills/internal/monke-tools-core
 <claude-skill-root>/<imported-skill> -> <installed-source-checkout>/skills/imported/<imported-skill>
+<claude-home>/references -> <installed-source-checkout>/skills/references
 ```
 
-The Claude layout is tracked with a managed manifest in the Claude skill root so later installs can refresh or remove only links that monke-tools created.
+The Claude layout is tracked with a managed manifest in the Claude skill root so later installs can validate, refresh, or remove only links that monke-tools created, including the supporting reference link when Claude is deselected. The manifest records that supporting link even though it remains outside the Agent skill root, so references resolve from flat linked skills without becoming independently discoverable.
 
 Global monke config is versioned YAML at `config.yml` under monke home. It stores the Installed source checkout and one current Skill install preference:
 
@@ -52,9 +53,12 @@ skills/
     monke-tools-core/
       SKILL.md
   imported/
+  references/
+    internal/
+    imported/
 ```
 
-Internal skills are owned by monke-tools. Imported skills come from other projects and preserve their upstream Agent skill names by default.
+Internal skills are owned by monke-tools. Imported skills come from other projects and preserve their upstream Agent skill names by default. Internal and Imported references are packaged for explicit composition by Reference-backed skills and are not standalone workflows.
 
 ## Consequences
 
