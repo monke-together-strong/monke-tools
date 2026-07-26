@@ -1,9 +1,13 @@
-# `@mts/oxlint-config`
+# `@monke-together-strong/oxlint-config`
 
-Shared MTS Oxlint policy for Vite+ repositories.
+Shared lint preset for Vite+ repositories, maintained by Monke Together Strong.
+
+```sh
+bun add -D @monke-together-strong/oxlint-config
+```
 
 ```ts
-import mtsLint from "@mts/oxlint-config";
+import mtsLint from "@monke-together-strong/oxlint-config";
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
@@ -29,5 +33,4 @@ lint: {
 },
 ```
 
-This package is private and build-ready. Registry publishing and packed-tarball
-verification are intentionally deferred.
+The Shared lint preset is published on public npm under the MIT license.
