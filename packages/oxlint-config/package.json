@@ -1,6 +1,6 @@
 {
   "name": "@monke-together-strong/oxlint-config",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Shared lint preset for Vite+ repositories.",
   "homepage": "https://github.com/monke-together-strong/monke-tools/tree/main/packages/oxlint-config#readme",
   "bugs": {

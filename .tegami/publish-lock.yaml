@@ -1,0 +1,16 @@
+core:changelogs:
+  - content: "---\nsubject: First public release\npackages:\n  \"@monke-together-strong/oxlint-config\":\n    type: minor\n---\n\n## Initial release\n\nPublish the shared Oxlint preset for Vite+ `^0.2.6` projects.\n"
+    filename: 2026-07-25-first-release.md
+    v: 0.0.0
+core:packages:
+  - id: npm:monke-tools
+    updated: false
+  - changelogIds:
+      - 2026-07-25-first-release.md
+    id: npm:@monke-together-strong/oxlint-config
+    updated: true
+npm:mark-latest:
+  - id: npm:@monke-together-strong/oxlint-config
+npm:packages:
+  - id: npm:monke-tools
+  - id: npm:@monke-together-strong/oxlint-config
