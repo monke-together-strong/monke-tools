@@ -23,6 +23,7 @@
     "src/**/*.ts",
     "scripts/**/*.ts",
     "__tests__/**/*.ts",
+    "packages/**/*.ts",
     "skills/internal/agent-session-retrospective/scripts/**/*.ts",
     "skills/internal/betterstack-cli/scripts/**/*.ts",
     "vite.config.ts"

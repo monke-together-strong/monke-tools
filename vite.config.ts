@@ -1,7 +1,29 @@
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
 
+const workspaceRoot = dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
+  pack: {
+    entry: [resolve(workspaceRoot, "packages/oxlint-config/src/config.ts")],
+    dts: {
+      generator: "tsgo",
+      tsgo: {
+        path: resolve(
+          dirname(createRequire(import.meta.url).resolve("@typescript/native/package.json")),
+          "bin/tsc",
+        ),
+      },
+    },
+    deps: {
+      neverBundle: true,
+    },
+    format: ["esm"],
+    outDir: resolve(workspaceRoot, "packages/oxlint-config/dist"),
+  },
   plugins: [
     {
       name: "markdown-as-text",
