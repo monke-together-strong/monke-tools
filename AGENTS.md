@@ -17,12 +17,10 @@ Check [./CONTEXT.md](./CONTEXT.md) for terminology questions.
 
 ## Releases
 
-Add a `.tegami/*.md` Release entry for consumer-visible package behavior, API,
-runtime dependency, or consumer requirement changes. Tests, internal refactors,
-repository tooling, and documentation that does not change the package contract
-do not need one. The first real release uses a minor entry for `0.1.0`. During
-`0.x`, use patch for compatible fixes that preserve lint outcomes and the package
-API; use minor for deliberate policy, API, or consumer-requirement changes.
+Add a `.tegami/*.md` entry only for consumer-visible package changes. During
+`0.x`, use patch for compatible fixes and minor for policy, API, or consumer
+requirement changes. See [issue #86](https://github.com/monke-together-strong/monke-tools/issues/86)
+for first-release setup.
 
 ## Reference Repos
 
