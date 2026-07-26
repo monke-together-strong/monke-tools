@@ -6,7 +6,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -50,6 +50,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
@@ -62,6 +63,7 @@ jobs:
           node-version: 24
 
       - name: Setup npm
+        # Tegami packs with Bun but publishes through npm; trusted publishing requires npm 11.5.1+.
         run: npm install --global npm@11.5.1
 
       - name: Install deps
