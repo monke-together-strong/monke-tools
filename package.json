@@ -12,6 +12,9 @@
     "type": "git",
     "url": "git+ssh://git@github.com/monke-together-strong/monke-tools.git"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "files": [
     "skills",
     "!skills/_artifacts"

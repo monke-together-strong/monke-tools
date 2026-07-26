@@ -1,0 +1,23 @@
+{
+  "name": "@mts/oxlint-config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared MTS Oxlint configuration.",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/config.d.mts",
+      "import": "./dist/config.mjs"
+    }
+  },
+  "dependencies": {
+    "ultracite": "7.9.4"
+  },
+  "peerDependencies": {
+    "vite-plus": "0.2.6"
+  }
+}
