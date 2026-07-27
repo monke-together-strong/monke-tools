@@ -2,21 +2,21 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { defineConfig } from "vite-plus";
 
-import mtsLint from "./packages/oxlint-config/src/config.ts";
+import { createOxlintConfig } from "./packages/oxlint-config/src/config.ts";
 
 const workspaceRoot = import.meta.dirname;
+const mtsLint = createOxlintConfig({
+  vitestExcludeFiles: ["**/__tests__/helpers.ts"],
+});
 
 export default defineConfig({
   fmt: {
-    ignorePatterns: ["backlog/**", "skills/**", "AGENTS.md", "CLAUDE.md"],
+    ignorePatterns: ["skills/**", "AGENTS.md"],
     printWidth: 100,
   },
   lint: {
     ...mtsLint,
-    categories: {
-      correctness: "warn",
-    },
-    ignorePatterns: [...mtsLint.ignorePatterns, "skills/imported/**"],
+    ignorePatterns: [...(mtsLint.ignorePatterns ?? []), "skills/imported/**"],
     jsPlugins: [
       {
         name: "vite-plus",
@@ -29,7 +29,6 @@ export default defineConfig({
     },
     rules: {
       ...mtsLint.rules,
-      "eslint/no-unused-vars": "error",
       "vite-plus/prefer-vite-plus-imports": "error",
     },
   },

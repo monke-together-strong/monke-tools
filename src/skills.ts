@@ -31,8 +31,8 @@ const SKILL_NAMESPACE = "monke-tools";
 const FLAT_SKILL_MANIFEST = ".monke-tools-flat-skills.json";
 
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
-  codex: path.join(".codex", "skills"),
   claude: path.join(".claude", "skills"),
+  codex: path.join(".codex", "skills"),
   cursor: path.join(".cursor", "skills"),
 };
 type SkillInstallLayout = "namespace" | "flat";
@@ -64,14 +64,14 @@ export function resolveSkillInstallTargets(options: {
     const agentSkillRoot =
       target.kind === "custom"
         ? normalizeCustomSkillRoot({
-            input: target.path,
             homeDirectory: options.homeDirectory,
+            input: target.path,
           })
         : path.join(options.homeDirectory, BUILT_IN_TARGET_ROOTS[target.kind]);
 
     return {
-      kind: target.kind,
       agentSkillRoot,
+      kind: target.kind,
       namespacePath: path.join(agentSkillRoot, SKILL_NAMESPACE),
     };
   });
@@ -102,10 +102,10 @@ export function runSkillsConfigure(runtime: Runtime): void {
   });
 
   reconcileSkillNamespaces({
-    sourceCheckout,
-    previousPreference,
-    nextPreference,
     homeDirectory,
+    nextPreference,
+    previousPreference,
+    sourceCheckout,
     writeMessage(message) {
       runtime.writeStderr(message);
     },
@@ -132,10 +132,10 @@ export function runLocalInstallSkills(runtime: Runtime, sourceCheckout: string):
   }
 
   reconcileSkillNamespaces({
-    sourceCheckout: installedSourceCheckout,
-    previousPreference: config.skillInstallPreference,
-    nextPreference: config.skillInstallPreference,
     homeDirectory,
+    nextPreference: config.skillInstallPreference,
+    previousPreference: config.skillInstallPreference,
+    sourceCheckout: installedSourceCheckout,
     writeMessage(message) {
       runtime.writeStderr(message);
     },
@@ -156,12 +156,12 @@ export function reconcileSkillNamespaces(options: {
     options.previousPreference === null
       ? []
       : resolveSkillInstallTargets({
-          preference: options.previousPreference,
           homeDirectory: options.homeDirectory,
+          preference: options.previousPreference,
         });
   const nextTargets = resolveSkillInstallTargets({
-    preference: options.nextPreference,
     homeDirectory: options.homeDirectory,
+    preference: options.nextPreference,
   });
   const nextKeys = new Set(nextTargets.map(targetKey));
   const failures: string[] = [];
@@ -245,8 +245,8 @@ function promptForSkillInstallPreference(
       kind: "custom",
       path: resolveCustomSkillRootAnswer({
         answer: customAnswer,
-        previousPath: previousCustomPath,
         homeDirectory,
+        previousPath: previousCustomPath,
       }),
     });
   }
@@ -281,8 +281,8 @@ function resolveCustomSkillRootAnswer(options: {
   }
 
   return normalizeCustomSkillRoot({
-    input: options.answer,
     homeDirectory: options.homeDirectory,
+    input: options.answer,
   });
 }
 
@@ -301,7 +301,7 @@ function parseSelectedTargetKinds(
   const selectedSet = new Set<SkillInstallTargetKind>();
   const tokens = answer
     .toLowerCase()
-    .split(/[\s,]+/)
+    .split(/[\s,]+/u)
     .map((token) => token.trim())
     .filter(Boolean);
 
@@ -436,17 +436,17 @@ const FlatSkillLinkSchema = z.strictObject({
   sourcePath: z.string().min(1),
 });
 const FlatSkillManifestSchema = z.strictObject({
-  version: z.literal(1),
-  managedBy: z.literal("monke-tools"),
   links: z.array(FlatSkillLinkSchema),
+  managedBy: z.literal("monke-tools"),
   supportingLinks: z
     .array(
       z.strictObject({
-        targetPath: z.string().min(1),
         sourcePath: z.string().min(1),
+        targetPath: z.string().min(1),
       }),
     )
     .optional(),
+  version: z.literal(1),
 });
 
 type FlatSkillLink = z.output<typeof FlatSkillLinkSchema>;
@@ -483,7 +483,7 @@ function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
     }
   }
 
-  return [...links.values()].sort((left, right) => left.name.localeCompare(right.name));
+  return [...links.values()].toSorted((left, right) => left.name.localeCompare(right.name));
 }
 
 function discoverFlatSupportingLinks(
@@ -497,8 +497,8 @@ function discoverFlatSupportingLinks(
 
   return [
     {
-      targetPath: path.resolve(target.agentSkillRoot, "..", "references"),
       sourcePath: referenceSourceTree,
+      targetPath: path.resolve(target.agentSkillRoot, "..", "references"),
     },
   ];
 }
@@ -591,7 +591,7 @@ function readFlatManifest(target: ResolvedSkillInstallTarget): FlatSkillManifest
 
   let rawManifest: unknown;
   try {
-    rawManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    rawManifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
   } catch {
     throw new MonkeError(`Invalid monke-tools flat Skill manifest at ${manifestPath}`);
   }
@@ -609,9 +609,9 @@ function writeFlatManifest(
   supportingLinks: FlatSupportingLink[],
 ): void {
   const manifest: FlatSkillManifest = {
-    version: 1,
-    managedBy: "monke-tools",
     links,
+    managedBy: "monke-tools",
+    version: 1,
     ...(supportingLinks.length > 0 ? { supportingLinks } : {}),
   };
   const manifestPath = flatManifestPath(target);

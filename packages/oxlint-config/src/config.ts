@@ -1,4 +1,4 @@
-import type { OxlintConfig, OxlintOverride } from "vite-plus/lint";
+import type { OxlintConfig, OxlintOverride } from "oxlint";
 
 import core from "ultracite/oxlint/core";
 import vitest from "ultracite/oxlint/vitest";

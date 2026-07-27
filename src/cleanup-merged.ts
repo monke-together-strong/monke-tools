@@ -9,13 +9,9 @@ const GithubRepositoryLookupSchema = z.object({
   nameWithOwner: z.string().min(1),
 });
 const MergedPrInputSchema = z.object({
-  number: z.number().optional(),
-  headRefName: z.string().optional(),
   baseRefName: z.string().optional(),
+  headRefName: z.string().optional(),
   headRefOid: z.union([z.string(), z.null()]).optional(),
-  mergedAt: z.string().optional(),
-  url: z.string().optional(),
-  isCrossRepository: z.boolean().optional(),
   headRepository: z
     .object({
       name: z.string().optional(),
@@ -24,6 +20,10 @@ const MergedPrInputSchema = z.object({
     .nullable()
     .optional(),
   headRepositoryOwner: z.object({ login: z.string().optional() }).nullable().optional(),
+  isCrossRepository: z.boolean().optional(),
+  mergedAt: z.string().optional(),
+  number: z.number().optional(),
+  url: z.string().optional(),
 });
 
 /** GitHub metadata used to prove that one Session branch was merged. */
@@ -141,8 +141,8 @@ export function inspectMergedWorktreeCleanup(
   if (!defaultBranch.ok) {
     return {
       eligible: false,
-      reasons: [defaultBranch.error],
       evidence: [],
+      reasons: [defaultBranch.error],
     };
   }
 
@@ -153,19 +153,19 @@ export function inspectMergedWorktreeCleanup(
   }
   const matchingMergedPrs = repository.ok
     ? queryMergedPrs(runtime, {
-        sourceRoot: candidate.sourceRoot,
+        defaultBranch: defaultBranch.value,
         repositoryFullName: repository.value,
         session: candidate.session,
-        defaultBranch: defaultBranch.value,
+        sourceRoot: candidate.sourceRoot,
       })
-    : { ok: false as const, error: repository.error };
+    : { error: repository.error, ok: false as const };
 
   const snapshot = buildMergedCleanupSnapshot(runtime, {
     ...candidate,
     defaultBranch: defaultBranch.value,
-    repositoryFullName: repository.ok ? repository.value : null,
-    matchingMergedPrs: matchingMergedPrs.ok ? matchingMergedPrs.value : [],
     lookupError: matchingMergedPrs.ok ? null : matchingMergedPrs.error,
+    matchingMergedPrs: matchingMergedPrs.ok ? matchingMergedPrs.value : [],
+    repositoryFullName: repository.ok ? repository.value : null,
   });
 
   return decideMergedWorktreeCleanup(snapshot);
@@ -184,10 +184,10 @@ export function decideMergedWorktreeCleanup(
     reasons.push("session worktree path is not a Git worktree root");
   } else if (snapshot.isSourceCheckout) {
     reasons.push("session worktree path points at the source checkout");
-  } else if (!snapshot.sameGitRepository) {
-    reasons.push("session worktree path belongs to a different Git repository");
-  } else {
+  } else if (snapshot.sameGitRepository) {
     evidence.push("worktree belongs to the expected repository");
+  } else {
+    reasons.push("session worktree path belongs to a different Git repository");
   }
 
   const hasValidWorktreeIdentity =
@@ -200,25 +200,25 @@ export function decideMergedWorktreeCleanup(
   if (!hasValidWorktreeIdentity) {
     return {
       eligible: false,
-      reasons,
       evidence,
+      reasons,
     };
   }
 
   if (!snapshot.branch) {
     reasons.push("worktree is detached");
-  } else if (snapshot.branch !== snapshot.session) {
-    reasons.push(`worktree branch ${snapshot.branch} does not match session ${snapshot.session}`);
-  } else {
+  } else if (snapshot.branch === snapshot.session) {
     branchMatchesSession = true;
     evidence.push(`branch matches session: ${snapshot.branch}`);
+  } else {
+    reasons.push(`worktree branch ${snapshot.branch} does not match session ${snapshot.session}`);
   }
 
   if (!branchMatchesSession) {
     return {
       eligible: false,
-      reasons,
       evidence,
+      reasons,
     };
   }
 
@@ -253,14 +253,14 @@ export function decideMergedWorktreeCleanup(
         reasons.push("merged PR match did not include headRefOid");
       } else if (!snapshot.localHead) {
         reasons.push("unable to read local worktree HEAD");
-      } else if (snapshot.localHead !== match.headRefOid) {
+      } else if (snapshot.localHead === match.headRefOid) {
+        evidence.push(`local HEAD matches merged PR head: ${shortSha(snapshot.localHead)}`);
+      } else {
         reasons.push(
           `local HEAD ${shortSha(snapshot.localHead)} differs from merged PR head ${shortSha(
             match.headRefOid,
           )}`,
         );
-      } else {
-        evidence.push(`local HEAD matches merged PR head: ${shortSha(snapshot.localHead)}`);
       }
     }
   }
@@ -275,8 +275,8 @@ export function decideMergedWorktreeCleanup(
 
   return {
     eligible: reasons.length === 0,
-    reasons,
     evidence,
+    reasons,
   };
 }
 
@@ -329,7 +329,7 @@ function buildMergedCleanupSnapshot(
     realpathOrNull(options.worktreePath) === realpathOrNull(options.sourceRoot);
   const sameGitRepository =
     worktreeIsGitRoot &&
-    actualCommonDir?.ok === true &&
+    actualCommonDir?.ok &&
     expectedCommonDir.ok &&
     realpathOrNull(actualCommonDir.value) === realpathOrNull(expectedCommonDir.value);
   const branchResult = worktreeIsGitRoot
@@ -345,22 +345,22 @@ function buildMergedCleanupSnapshot(
     : null;
 
   return {
-    session: options.session,
-    defaultBranch: options.defaultBranch,
-    sourceRoot: options.sourceRoot,
-    repositoryFullName: options.repositoryFullName,
-    worktreePath: options.worktreePath,
-    worktreeExists,
-    worktreeIsGitRoot,
-    isSourceCheckout,
-    sameGitRepository,
     branch,
+    defaultBranch: options.defaultBranch,
+    isSourceCheckout,
     localHead: localHeadResult?.ok === true ? localHeadResult.value : null,
-    statusLines: statusResult?.ok === true ? splitLines(statusResult.value) : [],
+    lookupError: options.lookupError,
+    matchingMergedPrs: options.matchingMergedPrs,
+    repositoryFullName: options.repositoryFullName,
+    sameGitRepository,
+    session: options.session,
+    sourceRoot: options.sourceRoot,
     statusError:
       statusResult?.ok === false ? `unable to read normal Git status: ${statusResult.error}` : null,
-    matchingMergedPrs: options.matchingMergedPrs,
-    lookupError: options.lookupError,
+    statusLines: statusResult?.ok === true ? splitLines(statusResult.value) : [],
+    worktreeExists,
+    worktreeIsGitRoot,
+    worktreePath: options.worktreePath,
   };
 }
 
@@ -376,8 +376,8 @@ function getDefaultBranch(
     };
   } catch (error) {
     return {
-      ok: false,
       error: `unable to resolve default branch: ${errorMessage(error)}`,
+      ok: false,
     };
   }
 }
@@ -388,21 +388,21 @@ function getGithubRepositoryFullName(
 ): { ok: true; value: string } | { ok: false; error: string } {
   try {
     const result = runtime.exec("gh", ["repo", "view", "--json", "nameWithOwner"], {
-      cwd: sourceRoot,
       allowFailure: true,
+      cwd: sourceRoot,
     });
     if (result.exitCode !== 0) {
-      return { ok: false, error: `GitHub repository lookup failed: ${commandDetail(result)}` };
+      return { error: `GitHub repository lookup failed: ${commandDetail(result)}`, ok: false };
     }
 
     const parsed = GithubRepositoryLookupSchema.safeParse(JSON.parse(result.stdout) as unknown);
     if (!parsed.success) {
-      return { ok: false, error: "GitHub repository lookup did not return nameWithOwner" };
+      return { error: "GitHub repository lookup did not return nameWithOwner", ok: false };
     }
 
     return { ok: true, value: parsed.data.nameWithOwner };
   } catch (error) {
-    return { ok: false, error: `GitHub repository lookup failed: ${errorMessage(error)}` };
+    return { error: `GitHub repository lookup failed: ${errorMessage(error)}`, ok: false };
   }
 }
 
@@ -434,20 +434,20 @@ function queryMergedPrs(
         "--json",
         "number,headRefName,baseRefName,headRefOid,mergedAt,url,isCrossRepository,headRepository,headRepositoryOwner",
       ],
-      { cwd: options.sourceRoot, allowFailure: true },
+      { allowFailure: true, cwd: options.sourceRoot },
     );
     if (result.exitCode !== 0) {
-      return { ok: false, error: `GitHub merged PR lookup failed: ${commandDetail(result)}` };
+      return { error: `GitHub merged PR lookup failed: ${commandDetail(result)}`, ok: false };
     }
 
     const parsed = JSON.parse(result.stdout) as unknown;
     if (!Array.isArray(parsed)) {
-      return { ok: false, error: "GitHub merged PR lookup did not return a list" };
+      return { error: "GitHub merged PR lookup did not return a list", ok: false };
     }
 
     return { ok: true, value: parsed.map(normalizeMergedPrMatch) };
   } catch (error) {
-    return { ok: false, error: `GitHub merged PR lookup failed: ${errorMessage(error)}` };
+    return { error: `GitHub merged PR lookup failed: ${errorMessage(error)}`, ok: false };
   }
 }
 
@@ -455,15 +455,15 @@ function normalizeMergedPrMatch(value: unknown): MergedPrMatch {
   const parsed = MergedPrInputSchema.safeParse(value);
   const record = parsed.success ? parsed.data : {};
   return {
-    number: record.number ?? 0,
-    headRefName: record.headRefName ?? "",
     baseRefName: record.baseRefName ?? "",
+    headRefName: record.headRefName ?? "",
     headRefOid: record.headRefOid ?? null,
-    mergedAt: record.mergedAt,
-    url: record.url,
-    isCrossRepository: record.isCrossRepository,
     headRepository: record.headRepository ?? null,
     headRepositoryOwner: record.headRepositoryOwner ?? null,
+    isCrossRepository: record.isCrossRepository,
+    mergedAt: record.mergedAt,
+    number: record.number ?? 0,
+    url: record.url,
   };
 }
 
@@ -493,13 +493,13 @@ function tryGit(
   args: string[],
 ): { ok: true; value: string } | { ok: false; error: string } {
   try {
-    const result = runtime.exec("git", args, { cwd, allowFailure: true });
+    const result = runtime.exec("git", args, { allowFailure: true, cwd });
     if (result.exitCode !== 0) {
-      return { ok: false, error: commandDetail(result) };
+      return { error: commandDetail(result), ok: false };
     }
     return { ok: true, value: result.stdout.trim() };
   } catch (error) {
-    return { ok: false, error: errorMessage(error) };
+    return { error: errorMessage(error), ok: false };
   }
 }
 

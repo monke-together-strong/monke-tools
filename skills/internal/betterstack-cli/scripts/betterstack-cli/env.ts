@@ -7,7 +7,7 @@ function trimWhitespace(value: string): string {
 function unwrapQuotedValue(value: string): string {
   if (value.length >= 2) {
     const first = value[0];
-    const last = value[value.length - 1];
+    const last = value.at(-1);
 
     if ((first === `"` && last === `"`) || (first === `'` && last === `'`)) {
       return value.slice(1, -1);
@@ -21,7 +21,7 @@ export function loadEnvFileIfPresent(filePath: string): void {
   let content: string;
 
   try {
-    content = readFileSync(filePath, "utf8");
+    content = readFileSync(filePath, "utf-8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return;
@@ -30,7 +30,7 @@ export function loadEnvFileIfPresent(filePath: string): void {
     throw error;
   }
 
-  for (const rawLine of content.split(/\r?\n/)) {
+  for (const rawLine of content.split(/\r?\n/u)) {
     const trimmed = trimWhitespace(rawLine);
 
     if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) {
@@ -39,7 +39,7 @@ export function loadEnvFileIfPresent(filePath: string): void {
 
     const separatorIndex = trimmed.indexOf("=");
     const rawKey = trimmed.slice(0, separatorIndex);
-    const normalizedKey = trimWhitespace(rawKey.replace(/^export\s+/, ""));
+    const normalizedKey = trimWhitespace(rawKey.replace(/^export\s+/u, ""));
 
     if (!normalizedKey || process.env[normalizedKey] !== undefined) {
       continue;

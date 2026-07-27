@@ -72,9 +72,9 @@ export async function runUpdateSkills(
       const normalizedSource = normalizeSourceForStaging(recipe.source, repoRoot);
       const installOutput = runSkillsCaptured(
         buildSkillsInstallArgs({
-          source: normalizedSource,
           acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
           selectors: recipe.skills.map((skill) => skill.selector),
+          source: normalizedSource,
         }),
         stagingDirectory,
       );
@@ -86,12 +86,12 @@ export async function runUpdateSkills(
       }
 
       const slugReplacements = await resolveStagedSkillReplacements({
+        acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
+        confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
+        interactive,
         recipe,
         source: normalizedSource,
-        acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
         stagingDirectory,
-        interactive,
-        confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
       });
       const stagedGuidance = applySlugReplacementsToGuidance(recipe, slugReplacements);
       const nextStore =
@@ -99,22 +99,22 @@ export async function runUpdateSkills(
           ? applySlugReplacementsToStore(store, recipe.source, stagedGuidance)
           : store;
       copyStagedGuidanceToManagedRoots({
-        stagingDirectory,
-        repoRoot,
-        guidance: stagedGuidance,
-        obsoleteGuidance: guidanceReplacedBySlugChanges(recipe, slugReplacements),
         commitState() {
           if (slugReplacements.length > 0) {
             writeImportRecipeStore(repoRoot, nextStore);
           }
         },
+        guidance: stagedGuidance,
+        obsoleteGuidance: guidanceReplacedBySlugChanges(recipe, slugReplacements),
+        repoRoot,
+        stagingDirectory,
       });
       store = nextStore;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${recipe.source}: ${message}`);
     } finally {
-      rmSync(stagingDirectory, { recursive: true, force: true });
+      rmSync(stagingDirectory, { force: true, recursive: true });
     }
   }
 
@@ -176,7 +176,7 @@ async function resolveStagedSkillReplacements(options: {
   confirmSlugReplacement: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
 }): Promise<SlugReplacementRequest[]> {
   const { recipe, stagingDirectory } = options;
-  const recordedSlugs = recipe.skills.map((skill) => skill.slug).sort();
+  const recordedSlugs = recipe.skills.map((skill) => skill.slug).toSorted();
   const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
   const missingSlugs = recordedSlugs.filter((slug) => !stagedSlugs.includes(slug));
   const unexpectedSlugs = stagedSlugs.filter((slug) => !recordedSlugs.includes(slug));
@@ -190,9 +190,9 @@ async function resolveStagedSkillReplacements(options: {
   }
 
   const selectorMappings = resolveSkillSelectorSlugMappings({
-    source: options.source,
     acceptOpenClawRisks: options.acceptOpenClawRisks,
     selectors: recipe.skills.map((skill) => skill.selector),
+    source: options.source,
   });
   assertSkillSelectorSlugMappingsMatchStagedSlugs(recipe.source, selectorMappings, stagedSlugs);
   const stagedSlugBySelector = new Map(
@@ -206,9 +206,9 @@ async function resolveStagedSkillReplacements(options: {
 
     return [
       {
-        source: recipe.source,
-        selector: skill.selector,
         recordedSlug: skill.slug,
+        selector: skill.selector,
+        source: recipe.source,
         stagedSlug,
       },
     ];
@@ -276,8 +276,8 @@ function renderSlugMismatchMessage(
 
 async function promptForSlugReplacement(request: SlugReplacementRequest): Promise<boolean> {
   const accepted = await p.confirm({
-    message: `Staged Skill slug changed for ${request.source}: ${request.recordedSlug} -> ${request.stagedSlug}. Replace the recorded slug and imported directory?`,
     initialValue: false,
+    message: `Staged Skill slug changed for ${request.source}: ${request.recordedSlug} -> ${request.stagedSlug}. Replace the recorded slug and imported directory?`,
   });
 
   if (p.isCancel(accepted)) {
@@ -297,7 +297,7 @@ function listGuidanceDirectories(root: string): string[] {
       const entryPath = path.join(root, entry);
       return statSync(entryPath).isDirectory();
     })
-    .sort();
+    .toSorted();
 }
 
 if (import.meta.main) {

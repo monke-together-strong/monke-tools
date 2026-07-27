@@ -60,13 +60,13 @@ export function resolveRepoContext(
   }
 
   return {
-    cwd,
-    worktreeRoot,
-    sourceRoot,
-    gitCommonDir,
     currentBranch,
+    cwd,
+    gitCommonDir,
     isSourceCheckout,
     sessionName,
+    sourceRoot,
+    worktreeRoot,
   };
 }
 
@@ -147,8 +147,8 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
     if (!line.trim()) {
       if (current.path) {
         entries.push({
-          path: current.path,
           branch: current.branch ?? null,
+          path: current.path,
           prunable: current.prunable ?? false,
         });
       }
@@ -173,8 +173,8 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
 
   if (current.path) {
     entries.push({
-      path: current.path,
       branch: current.branch ?? null,
+      path: current.path,
       prunable: current.prunable ?? false,
     });
   }
@@ -184,8 +184,8 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
 
 export function branchExists(runtime: Runtime, sourceRoot: string, branch: string): boolean {
   const result = runtime.exec("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
-    cwd: sourceRoot,
     allowFailure: true,
+    cwd: sourceRoot,
   });
   return result.exitCode === 0;
 }
@@ -208,8 +208,8 @@ export function resolveDefaultBranchRef(
   let candidates = localCandidates;
   if (shouldRefresh) {
     const fetchResult = runtime.exec("git", ["fetch", "--prune", "origin"], {
-      cwd: sourceRoot,
       allowFailure: true,
+      cwd: sourceRoot,
     });
     if (fetchResult.exitCode === 0) {
       candidates = [...originCandidates, ...localCandidates];
@@ -291,7 +291,7 @@ export function ensureSessionWorktree(
   }
 
   if (branchMatch && pathMatch) {
-    return { path: expectedPath, created: false };
+    return { created: false, path: expectedPath };
   }
 
   if (existsSync(expectedPath) && !pathMatch) {
@@ -316,7 +316,7 @@ export function ensureSessionWorktree(
 
   mkdirSync(path.dirname(expectedPath), { recursive: true });
   runGit(runtime, sourceRoot, ["worktree", "add", expectedPath, session]);
-  return { path: expectedPath, created: true };
+  return { created: true, path: expectedPath };
 }
 
 /** Spawn a fresh Session worktree branch from a resolved git ref. */
@@ -332,7 +332,7 @@ export function ensureFreshSessionWorktreeFromRef(
 
   mkdirSync(path.dirname(expectedPath), { recursive: true });
   runGit(runtime, sourceRoot, ["worktree", "add", "-b", session, expectedPath, startRef]);
-  return { path: expectedPath, created: true };
+  return { created: true, path: expectedPath };
 }
 
 /** Best-effort removal for a fresh Session worktree and branch created by this process. */
@@ -345,8 +345,8 @@ export function removeSessionWorktreeAndBranch(
 ): boolean {
   let removed = true;
   const removeWorktree = runtime.exec("git", ["worktree", "remove", "--force", worktreePath], {
-    cwd: sourceRoot,
     allowFailure: true,
+    cwd: sourceRoot,
   });
   if (removeWorktree.exitCode !== 0 && existsSync(worktreePath)) {
     onWarning(
@@ -356,8 +356,8 @@ export function removeSessionWorktreeAndBranch(
   }
 
   const removeBranch = runtime.exec("git", ["branch", "-D", session], {
-    cwd: sourceRoot,
     allowFailure: true,
+    cwd: sourceRoot,
   });
   if (removeBranch.exitCode !== 0 && branchExists(runtime, sourceRoot, session)) {
     onWarning(
@@ -452,8 +452,8 @@ function runGit(runtime: Runtime, cwd: string, args: string[]): string {
 
 function validateSessionBranchName(runtime: Runtime, sourceRoot: string, session: string): void {
   const result = runtime.exec("git", ["check-ref-format", "--branch", session], {
-    cwd: sourceRoot,
     allowFailure: true,
+    cwd: sourceRoot,
   });
   if (result.exitCode !== 0) {
     throw new MonkeError(`Invalid session name "${session}": must be a valid git branch name`);
@@ -483,8 +483,8 @@ function listWorktreesAfterPruningSession(
 
 function refExists(runtime: Runtime, sourceRoot: string, ref: string): boolean {
   const result = runtime.exec("git", ["show-ref", "--verify", "--quiet", ref], {
-    cwd: sourceRoot,
     allowFailure: true,
+    cwd: sourceRoot,
   });
   return result.exitCode === 0;
 }

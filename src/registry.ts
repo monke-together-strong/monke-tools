@@ -29,10 +29,10 @@ export function loadSessionState(
   const filePath = getSessionStateFilePath(home, rootSourceRoot, session);
   if (!existsSync(filePath)) {
     return {
-      version: 1,
+      repos: [],
       rootSourceRoot,
       session,
-      repos: [],
+      version: 1,
     };
   }
 
@@ -43,7 +43,7 @@ export function saveSessionState(home: string, state: SessionState): void {
   const filePath = getSessionStateFilePath(home, state.rootSourceRoot, state.session);
   const parsed = parseBoundaryValue(SessionStateSchema, state, filePath);
   ensureDirectory(path.dirname(filePath));
-  writeFileSync(filePath, stringify(parsed), "utf8");
+  writeFileSync(filePath, stringify(parsed), "utf-8");
 }
 
 export function removeSessionState(home: string, rootSourceRoot: string, session: string): void {
@@ -98,15 +98,15 @@ export function getOrCreateReservation(
     return Math.max(highest, blockEnd);
   }, GLOBAL_PORT_FLOOR - 1);
   const nextReservation: RepoReservation = {
-    version: 1,
-    sourceRoot,
     blockStart: Math.max(GLOBAL_PORT_FLOOR, highestReservedPort + 1),
     size: Math.max(size, MIN_REPO_RESERVATION_SIZE),
+    sourceRoot,
+    version: 1,
   };
 
   ensureDirectory(path.dirname(filePath));
   const parsed = parseBoundaryValue(RepoReservationSchema, nextReservation, filePath);
-  writeFileSync(filePath, stringify(parsed), "utf8");
+  writeFileSync(filePath, stringify(parsed), "utf-8");
   return parsed;
 }
 
@@ -202,7 +202,7 @@ export function toAssignedPorts(
 
 export function recordRepoSuccess(state: SessionState, repoState: SessionRepoState): SessionState {
   const existingIndex = state.repos.findIndex((repo) => repo.sourceRoot === repoState.sourceRoot);
-  if (existingIndex >= 0) {
+  if (existingIndex !== -1) {
     const nextRepos = [...state.repos];
     nextRepos[existingIndex] = repoState;
     return { ...state, repos: nextRepos };

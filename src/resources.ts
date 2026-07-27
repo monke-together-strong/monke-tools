@@ -98,9 +98,9 @@ export function resolveResourceValues(options: {
       remembered ??
       interpolateResourceLiteral({
         literal: resource.literal,
+        location: `${options.repoConfig.configPath}#resources.values.${resource.env}`,
         session: options.session,
         user: resolveResourceUser(options.env),
-        location: `${options.repoConfig.configPath}#resources.values.${resource.env}`,
       });
 
     if (!value.trim()) {
@@ -124,10 +124,10 @@ export function resolveResourceValues(options: {
   });
 
   return {
-    values,
     removedEnvNames: dedupe(
       existingValues.map((resource) => resource.env).filter((env) => !declaredEnvNames.has(env)),
     ),
+    values,
   };
 }
 
@@ -160,20 +160,20 @@ export function resolveResourceCommands(options: {
 
     withResourceCommandLock(options.home, options.repoConfig.sourceRoot, command.name, () => {
       const stdin = buildResourceCommandInput({
+        command,
         home: options.home,
         session: options.session,
         sourceRoot: options.repoConfig.sourceRoot,
-        command,
       });
 
       currentByName.set(
         command.name,
         runResourceCommand({
-          runtime: options.runtime,
           command,
-          worktreePath: options.worktreePath,
-          stdin,
           resourceValues: options.resourceValues,
+          runtime: options.runtime,
+          stdin,
+          worktreePath: options.worktreePath,
         }),
       );
       options.onResolvedCommandOutputs(
@@ -211,7 +211,7 @@ function getReusableResourceCommand(
   }
 
   const rememberedByEnv = new Map(existing.outputs.map((output) => [output.env, output.value]));
-  const outputs: Array<{ env: string; value: string }> = [];
+  const outputs: { env: string; value: string }[] = [];
   for (const env of command.outputs) {
     const value = rememberedByEnv.get(env);
     if (!value?.trim()) {
@@ -241,13 +241,13 @@ function runResourceCommand(options: {
   try {
     const runner = resolveResourceCommandRunner(options.worktreePath);
     const result = options.runtime.exec(runner.command, runner.args(modulePath, outputPath), {
+      allowFailure: true,
       cwd: options.worktreePath,
       env: Object.fromEntries(
         options.resourceValues.map((resource) => [resource.env, resource.value]),
       ),
       stdin,
       timeoutSeconds: options.command.timeoutSeconds,
-      allowFailure: true,
     });
 
     if (result.timedOut) {
@@ -269,8 +269,8 @@ function runResourceCommand(options: {
     const returned = readResourceCommandRunnerOutput({
       command: options.command,
       outputPath,
-      stdout: result.stdout,
       stderr: result.stderr,
+      stdout: result.stdout,
     });
     const outputs = validateResourceCommandReturn(
       options.command,
@@ -284,7 +284,7 @@ function runResourceCommand(options: {
       outputs,
     };
   } finally {
-    rmSync(outputDirectory, { recursive: true, force: true });
+    rmSync(outputDirectory, { force: true, recursive: true });
   }
 }
 
@@ -294,7 +294,6 @@ function resolveResourceCommandRunner(worktreePath: string): {
 } {
   if (existsSync(path.join(worktreePath, "pnpm-lock.yaml"))) {
     return {
-      command: "pnpm",
       args: (modulePath, outputPath) => [
         "exec",
         "bun",
@@ -305,11 +304,11 @@ function resolveResourceCommandRunner(worktreePath: string): {
         modulePath,
         outputPath,
       ],
+      command: "pnpm",
     };
   }
 
   return {
-    command: "bun",
     args: (modulePath, outputPath) => [
       "--eval",
       RESOURCE_COMMAND_MODULE_RUNNER,
@@ -318,6 +317,7 @@ function resolveResourceCommandRunner(worktreePath: string): {
       modulePath,
       outputPath,
     ],
+    command: "bun",
   };
 }
 
@@ -368,7 +368,7 @@ function buildResourceCommandInput(options: {
   }
 
   return Object.fromEntries(
-    options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])].sort()]),
+    options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])].toSorted()]),
   );
 }
 
@@ -380,13 +380,13 @@ function readResourceCommandRunnerOutput(options: {
 }): unknown {
   let outputText: string;
   try {
-    outputText = readFileSync(options.outputPath, "utf8");
+    outputText = readFileSync(options.outputPath, "utf-8");
   } catch {
     throw resourceCommandFailure({
       command: options.command,
       kind: "runner protocol violation",
-      stdout: options.stdout,
       stderr: options.stderr,
+      stdout: options.stdout,
     });
   }
 
@@ -397,8 +397,8 @@ function readResourceCommandRunnerOutput(options: {
     throw resourceCommandFailure({
       command: options.command,
       kind: "runner protocol violation",
-      stdout: options.stdout,
       stderr: options.stderr,
+      stdout: options.stdout,
     });
   }
 
@@ -407,8 +407,8 @@ function readResourceCommandRunnerOutput(options: {
     throw resourceCommandFailure({
       command: options.command,
       kind: "runner protocol violation",
-      stdout: options.stdout,
       stderr: options.stderr,
+      stdout: options.stdout,
     });
   }
 
@@ -421,14 +421,14 @@ function validateResourceCommandReturn(
   stdout: string,
   stderr: string,
   stdin: ResourceCommandInput,
-): Array<{ env: string; value: string }> {
+): { env: string; value: string }[] {
   const parsed = ResourceCommandReturnSchema.safeParse(returned);
   if (!parsed.success) {
     throw resourceCommandFailure({
       command,
       kind: "return contract violation",
-      stdout,
       stderr,
+      stdout,
     });
   }
 
@@ -441,8 +441,8 @@ function validateResourceCommandReturn(
     throw resourceCommandFailure({
       command,
       kind: "return contract violation",
-      stdout,
       stderr,
+      stdout,
     });
   }
 
@@ -452,8 +452,8 @@ function validateResourceCommandReturn(
       throw resourceCommandFailure({
         command,
         kind: `same-output collision for ${env}`,
-        stdout,
         stderr,
+        stdout,
       });
     }
     return { env, value: outputValue };
@@ -534,7 +534,7 @@ function interpolateResourceLiteral(options: {
   user: string;
   location: string;
 }): string {
-  const value = options.literal.replace(/\$\{([^}]*)\}/g, (placeholder, name: string) => {
+  const value = options.literal.replaceAll(/\$\{([^}]*)\}/gu, (placeholder, name: string) => {
     if (name === "session") {
       return options.session;
     }

@@ -26,10 +26,10 @@ class TurnBuilder {
 
   toolCall(name: string, inputSummary: string): CanonicalTurn & { kind: "tool_call" } {
     const turn = {
-      kind: "tool_call" as const,
-      ref: `t${this.turns.length}`,
-      name,
       inputSummary,
+      kind: "tool_call" as const,
+      name,
+      ref: `t${this.turns.length}`,
     };
     this.turns.push(turn);
     return turn;
@@ -37,7 +37,7 @@ class TurnBuilder {
 }
 
 function readJsonlLines(filePath: string): { records: unknown[]; lineCount: number; hash: string } {
-  const raw = readFileSync(filePath, "utf8");
+  const raw = readFileSync(filePath, "utf-8");
   const hash = createHash("sha256").update(raw).digest("hex");
   const lines = raw.split("\n");
   const records: unknown[] = [];
@@ -53,7 +53,7 @@ function readJsonlLines(filePath: string): { records: unknown[]; lineCount: numb
       // Skip malformed lines; transcripts are occasionally truncated mid-write.
     }
   }
-  return { records, lineCount, hash };
+  return { hash, lineCount, records };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -97,10 +97,10 @@ function collectTouchedRoots(
 }
 
 const EXIT_CODE_PATTERNS = [
-  /exited with code (\d+)/i,
-  /exit code:? (\d+)/i,
-  /exit status:? (\d+)/i,
-  /process exited with status (\d+)/i,
+  /exited with code (\d+)/iu,
+  /exit code:? (\d+)/iu,
+  /exit status:? (\d+)/iu,
+  /process exited with status (\d+)/iu,
 ];
 
 function parseExitCode(output: string): number | undefined {
@@ -193,7 +193,7 @@ export function parseCodexSession(filePath: string): CanonicalSession | null {
     }
 
     if (payload.type === "message" && !hasEventProse) {
-      const role = payload.role;
+      const {role} = payload;
       if (role !== "user" && role !== "assistant") {
         continue;
       }
@@ -250,16 +250,16 @@ export function parseCodexSession(filePath: string): CanonicalSession | null {
   const primary = cwd ? resolveRepoKey(cwd) : (cwd ?? "");
   return {
     agent: "codex",
-    sessionId,
-    filePath,
-    cwd,
-    startedAt,
-    lastActivityAt,
-    sourceLineCount: lineCount,
     contentHash: hash,
+    cwd,
+    filePath,
+    lastActivityAt,
+    rawUserMessages,
+    sessionId,
+    sourceLineCount: lineCount,
+    startedAt,
     touchedRoots: [...touched].filter((root) => root !== primary).sort(),
     turns: builder.turns,
-    rawUserMessages,
   };
 }
 
@@ -318,8 +318,8 @@ export function parseClaudeSession(filePath: string): CanonicalSession | null {
       const blockRecord = asRecord(block);
       if (blockRecord?.type === "tool_result" && typeof blockRecord.tool_use_id === "string") {
         toolResults.set(blockRecord.tool_use_id, {
-          output: extractClaudeText(blockRecord.content),
           isError: blockRecord.is_error === true,
+          output: extractClaudeText(blockRecord.content),
         });
       }
     }
@@ -351,7 +351,7 @@ export function parseClaudeSession(filePath: string): CanonicalSession | null {
     if (!message) {
       continue;
     }
-    const content = message.content;
+    const {content} = message;
 
     if (record.type === "user") {
       if (typeof content === "string") {
@@ -409,16 +409,16 @@ export function parseClaudeSession(filePath: string): CanonicalSession | null {
   const primary = cwd ? resolveRepoKey(cwd) : (cwd ?? "");
   return {
     agent: "claude",
-    sessionId,
-    filePath,
-    cwd,
-    startedAt,
-    lastActivityAt,
-    sourceLineCount: lineCount,
     contentHash: hash,
+    cwd,
+    filePath,
+    lastActivityAt,
+    rawUserMessages,
+    sessionId,
+    sourceLineCount: lineCount,
+    startedAt,
     touchedRoots: [...touched].filter((root) => root !== primary).sort(),
     turns: builder.turns,
-    rawUserMessages,
   };
 }
 

@@ -21,11 +21,11 @@ import { errorMessage, MonkeError } from "./errors.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
 import type { ExecOptions, ExecResult, Runtime, SelectPrompt } from "./types.ts";
 
-const GLOBAL_LOCK_TIMEOUT_MS = 5_000;
+const GLOBAL_LOCK_TIMEOUT_MS = 5000;
 const STALE_LOCK_AGE_MS = 60_000;
 const LockMetadataSchema = z.object({
-  pid: z.unknown().optional(),
   acquiredAt: z.unknown().optional(),
+  pid: z.unknown().optional(),
 });
 const LockPidSchema = z.number().int().positive();
 const LockTimestampSchema = z.number().finite();
@@ -52,7 +52,7 @@ export interface RuntimeOptions {
 export function createRuntime(options?: RuntimeOptions): Runtime {
   const runtimeEnv = { ...process.env, ...options?.env };
   const runtimeCwd = options?.cwd ?? process.cwd();
-  const scriptedInput = options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/);
+  const scriptedInput = options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/u);
   const scriptedSelectValues = options?.selectValues ? [...options.selectValues] : null;
 
   const writeStdout = (text: string): void => {
@@ -76,8 +76,8 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
 
       const result = spawnSync(command, args, {
         cwd: execOptions?.cwd ?? runtimeCwd,
+        encoding: "utf-8",
         env: childEnv,
-        encoding: "utf8",
         input: execOptions?.stdin,
         timeout:
           execOptions?.timeoutSeconds === undefined ? undefined : execOptions.timeoutSeconds * 1000,
@@ -86,9 +86,9 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       if (result.error) {
         if (execOptions?.allowFailure && isTimeoutError(result.error)) {
           return {
-            stdout: result.stdout ?? "",
-            stderr: result.stderr ?? "",
             exitCode: -1,
+            stderr: result.stderr ?? "",
+            stdout: result.stdout ?? "",
             timedOut: true,
           };
         }
@@ -114,7 +114,15 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
         throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
       }
 
-      return { stdout, stderr, exitCode };
+      return { exitCode, stderr, stdout };
+    },
+    readLine(prompt: string): string {
+      writeStdout(prompt);
+      if (scriptedInput !== null) {
+        return scriptedInput.shift() ?? "";
+      }
+
+      return readLineFromStdin();
     },
     async select(prompt): Promise<string> {
       options?.onSelect?.(prompt);
@@ -135,17 +143,6 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
-    readLine(prompt: string): string {
-      writeStdout(prompt);
-      if (scriptedInput !== null) {
-        return scriptedInput.shift() ?? "";
-      }
-
-      return readLineFromStdin();
-    },
-    writeStdout(text: string): void {
-      writeStdout(text);
-    },
     writeStderr(text: string): void {
       if (options?.onStderr) {
         options.onStderr(text);
@@ -153,6 +150,9 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
 
       process.stderr.write(text);
+    },
+    writeStdout(text: string): void {
+      writeStdout(text);
     },
   };
 }
@@ -229,7 +229,11 @@ function withLockPath<T>(lockPath: string, callback: () => T): T {
   while (fileDescriptor === null) {
     try {
       fileDescriptor = openSync(lockPath, "wx");
-      writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }), "utf8");
+      writeFileSync(
+        lockPath,
+        JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
+        "utf-8",
+      );
     } catch (error) {
       const message = errorMessage(error);
       if (!message.includes("EEXIST")) {
@@ -259,18 +263,18 @@ function withLockPath<T>(lockPath: string, callback: () => T): T {
 }
 
 export function isPortAvailable(port: number): boolean {
-  let server: { stop(closeActiveConnections?: boolean): void } | null = null;
+  let server: { stop: (closeActiveConnections?: boolean) => void } | null = null;
 
   try {
     server = Bun.listen({
       hostname: "127.0.0.1",
       port,
       socket: {
-        data() {},
-        open() {},
         close() {},
+        data() {},
         drain() {},
         error() {},
+        open() {},
       },
     });
     return true;
@@ -295,7 +299,7 @@ function readLineFromStdin(): string {
       break;
     }
 
-    const character = buffer.toString("utf8", 0, bytesRead);
+    const character = buffer.toString("utf-8", 0, bytesRead);
     if (character === "\n") {
       break;
     }
@@ -319,7 +323,7 @@ function tryEvictStaleLock(lockPath: string): boolean {
 
   let isStale = fileTimestamp <= staleSince;
   try {
-    const parsed = LockMetadataSchema.safeParse(JSON.parse(readFileSync(lockPath, "utf8")));
+    const parsed = LockMetadataSchema.safeParse(JSON.parse(readFileSync(lockPath, "utf-8")));
     if (parsed.success) {
       const metadata = parsed.data;
       const acquiredAt = LockTimestampSchema.safeParse(metadata.acquiredAt);

@@ -7,8 +7,8 @@ import {
   realpathSync,
   rmSync,
   writeFileSync,
+  mkdtempSync,
 } from "node:fs";
-import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -24,7 +24,7 @@ afterEach(() => {
   while (tempDirectories.length > 0) {
     const directory = tempDirectories.pop();
     if (directory) {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { force: true, recursive: true });
     }
   }
 });
@@ -53,7 +53,7 @@ export function createRepo(root: string, files: Record<string, string>): string 
 export function git(cwd: string, args: string[], env?: Record<string, string>): string {
   const result = spawnSync("git", args, {
     cwd,
-    encoding: "utf8",
+    encoding: "utf-8",
     env: { ...process.env, ...env },
   });
   if (result.status !== 0) {
@@ -65,11 +65,11 @@ export function git(cwd: string, args: string[], env?: Record<string, string>): 
 export function write(root: string, relativePath: string, contents: string): void {
   const targetPath = path.join(root, relativePath);
   mkdirSync(path.dirname(targetPath), { recursive: true });
-  writeFileSync(targetPath, contents, "utf8");
+  writeFileSync(targetPath, contents, "utf-8");
 }
 
 export function read(root: string, relativePath: string): string {
-  return readFileSync(path.join(root, relativePath), "utf8");
+  return readFileSync(path.join(root, relativePath), "utf-8");
 }
 
 export function installGitShim(binDirectory: string): string {
@@ -142,10 +142,10 @@ export function installFakeGh(
   const issueCases = Object.entries(issues)
     .map(([issueNumber, issue]) => {
       const issueJson = JSON.stringify({
-        number: Number.parseInt(issueNumber, 10),
-        title: issue.title,
         body: issue.body,
         comments: (issue.comments ?? []).map((body) => ({ body })),
+        number: Number.parseInt(issueNumber, 10),
+        title: issue.title,
       });
       return `    ${issueNumber}) printf '%s\\n' ${shellQuote(issueJson)}; exit 0 ;;`;
     })
@@ -250,16 +250,16 @@ export function runMonke(options: {
       PATH: pathSegments.join(path.delimiter),
       ...options.extraEnv,
     },
-    onStdout(text) {
-      stdout += text;
-    },
     onStderr(text) {
       stderr += text;
+    },
+    onStdout(text) {
+      stdout += text;
     },
   });
 
   runCli(options.args, runtime);
-  return { stdout, stderr };
+  return { stderr, stdout };
 }
 
 export async function runMonkeAsync(options: {
@@ -282,18 +282,18 @@ export async function runMonkeAsync(options: {
       PATH: pathSegments.join(path.delimiter),
       ...options.extraEnv,
     },
-    selectValues: options.selectValues,
     onSelect: options.onSelect,
-    onStdout(text) {
-      stdout += text;
-    },
     onStderr(text) {
       stderr += text;
     },
+    onStdout(text) {
+      stdout += text;
+    },
+    selectValues: options.selectValues,
   });
 
   await runCliAsync(options.args, runtime);
-  return { stdout, stderr };
+  return { stderr, stdout };
 }
 
 export function withPlatform<T>(platform: NodeJS.Platform, callback: () => T): T {
@@ -313,12 +313,12 @@ export function readSingleYamlFile(directoryPath: string): unknown {
   if (entries.length !== 1) {
     throw new Error(`Expected exactly one yaml file in ${directoryPath}, found ${entries.length}`);
   }
-  return parse(readFileSync(path.join(directoryPath, entries[0]!), "utf8"));
+  return parse(readFileSync(path.join(directoryPath, entries[0]!), "utf-8"));
 }
 
 function writeExecutable(targetPath: string, contents: string): void {
   mkdirSync(path.dirname(targetPath), { recursive: true });
-  writeFileSync(targetPath, contents, "utf8");
+  writeFileSync(targetPath, contents, "utf-8");
   chmodSync(targetPath, 0o755);
 }
 

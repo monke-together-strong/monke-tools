@@ -1,7 +1,8 @@
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { discoverSessionFiles, parseSessionFile, type DiscoverOptions } from "./collectors.ts";
+import { discoverSessionFiles, parseSessionFile } from './collectors.ts';
+import type { DiscoverOptions } from './collectors.ts';
 import { hashKey, resolveRepoKey, sessionHashKey } from "./identity.ts";
 import {
   listReportPaths,
@@ -57,12 +58,12 @@ export function decideEligibility(
       return { include: false, reason: "frozen-unchanged" };
     }
     return {
-      include: true,
       firstNewTurnIndex: prior.lastTurnIndex,
+      include: true,
       priorFindingCount: prior.friction.length,
     };
   }
-  return { include: true, firstNewTurnIndex: 0, priorFindingCount: 0 };
+  return { firstNewTurnIndex: 0, include: true, priorFindingCount: 0 };
 }
 
 export interface EligibleSession {
@@ -86,11 +87,11 @@ export function buildBundles(
     let bundle = byRepo.get(repoKey);
     if (!bundle) {
       bundle = {
-        runTs,
-        repoKey,
-        repoHash: hashKey(repoKey),
-        sessions: [],
         priorFrictionDigest: digestFor(repoKey, frozen),
+        repoHash: hashKey(repoKey),
+        repoKey,
+        runTs,
+        sessions: [],
       };
       byRepo.set(repoKey, bundle);
     }
@@ -101,13 +102,13 @@ export function buildBundles(
     const { session } = eligible;
     const base: Omit<BundleSession, "role"> = {
       agent: session.agent,
-      sessionId: session.sessionId,
-      sessionHash: sessionHashKey(session.agent, session.sessionId),
+      contentHash: session.contentHash,
       firstNewTurnIndex: eligible.firstNewTurnIndex,
       priorFindingCount: eligible.priorFindingCount,
-      contentHash: session.contentHash,
-      turns: session.turns,
       rawUserMessages: session.rawUserMessages,
+      sessionHash: sessionHashKey(session.agent, session.sessionId),
+      sessionId: session.sessionId,
+      turns: session.turns,
     };
     bundleFor(eligible.primaryRepo).sessions.push({ ...base, role: "primary" });
     for (const secondary of session.touchedRoots) {
@@ -117,7 +118,7 @@ export function buildBundles(
     }
   }
 
-  return [...byRepo.values()].sort((a, b) => a.repoKey.localeCompare(b.repoKey));
+  return [...byRepo.values()].toSorted((a, b) => a.repoKey.localeCompare(b.repoKey));
 }
 
 function digestFor(repoKey: string, frozen: FrozenSessionRecord[]): string[] {
@@ -171,10 +172,7 @@ export function resolveRetrospectiveWindow(
   let sinceMs: number;
   let sinceSource: RetrospectiveWindow["sinceSource"];
 
-  if (input.sinceMs !== undefined) {
-    sinceMs = input.sinceMs;
-    sinceSource = "explicit";
-  } else {
+  if (input.sinceMs === undefined) {
     const previousReportMs = newestReportCursorMs(root);
     if (previousReportMs !== undefined) {
       sinceMs = previousReportMs;
@@ -183,6 +181,9 @@ export function resolveRetrospectiveWindow(
       sinceMs = untilMs - FIRST_RUN_WINDOW_MS;
       sinceSource = "first-run-default";
     }
+  } else {
+    sinceMs = input.sinceMs;
+    sinceSource = "explicit";
   }
 
   if (sinceMs > untilMs) {
@@ -198,15 +199,15 @@ export function resolveRetrospectiveWindow(
     untilMs,
     window: {
       since: new Date(sinceMs).toISOString(),
-      until: new Date(untilMs).toISOString(),
       sinceSource,
+      until: new Date(untilMs).toISOString(),
       untilSource,
     },
   };
 }
 
 function newestReportCursorMs(root: string): number | undefined {
-  const reports = listReportPaths(root).sort((a, b) => path.basename(b).localeCompare(path.basename(a)));
+  const reports = listReportPaths(root).toSorted((a, b) => path.basename(b).localeCompare(path.basename(a)));
   for (const reportPath of reports) {
     const fromWindow = parseReportWindowUntilMs(reportPath);
     if (fromWindow !== undefined) {
@@ -224,11 +225,11 @@ function newestReportCursorMs(root: string): number | undefined {
 function parseReportWindowUntilMs(reportPath: string): number | undefined {
   let content: string;
   try {
-    content = readFileSync(reportPath, "utf8");
+    content = readFileSync(reportPath, "utf-8");
   } catch {
     return undefined;
   }
-  const match = content.match(/^Window:\s+\S+\s+to\s+(\S+)/m);
+  const match = /^Window:\s+\S+\s+to\s+(\S+)/mu.exec(content);
   if (!match) {
     return undefined;
   }
@@ -245,7 +246,7 @@ function parseRunTimestampMs(value: string): number | undefined {
   if (!Number.isNaN(direct)) {
     return direct;
   }
-  const match = value.match(/^(\d{4}-\d{2}-\d{2}T)(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?Z$/);
+  const match = /^(\d{4}-\d{2}-\d{2}T)(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?Z$/u.exec(value);
   if (!match) {
     return undefined;
   }
@@ -302,9 +303,9 @@ export function runCollect(options: RunCollectOptions): CollectResult {
     const activityMs = sessionActivityMs(session);
     const prior = loadFrozenSession(root, session.agent, session.sessionId);
     const decision = decideEligibility(session, prior, {
-      nowMs,
-      idleMs,
       activityMs,
+      idleMs,
+      nowMs,
       sinceMs: resolvedWindow.sinceMs,
       untilMs: resolvedWindow.untilMs,
     });
@@ -313,25 +314,25 @@ export function runCollect(options: RunCollectOptions): CollectResult {
       continue;
     }
     eligibles.push({
-      session,
-      primaryRepo: session.cwd ? resolveRepoKey(session.cwd) : (session.cwd ?? "unknown"),
       firstNewTurnIndex: decision.firstNewTurnIndex,
+      primaryRepo: session.cwd ? resolveRepoKey(session.cwd) : (session.cwd ?? "unknown"),
       priorFindingCount: decision.priorFindingCount,
+      session,
     });
   }
 
   const bundles = buildBundles(options.runTs, eligibles, listFrozenSessions(root));
   writeRunWindow(root, options.runTs, resolvedWindow.window);
   return {
-    runTs: options.runTs,
-    window: resolvedWindow.window,
     bundles: bundles.map((bundle) => ({
-      repoKey: bundle.repoKey,
-      repoHash: bundle.repoHash,
-      sessionCount: bundle.sessions.length,
       path: writeBundle(root, bundle),
+      repoHash: bundle.repoHash,
+      repoKey: bundle.repoKey,
+      sessionCount: bundle.sessions.length,
     })),
+    runTs: options.runTs,
     skipped,
+    window: resolvedWindow.window,
   };
 }
 

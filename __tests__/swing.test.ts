@@ -1,4 +1,4 @@
-import { expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vite-plus/test";
 import {
   chmodSync,
   existsSync,
@@ -25,385 +25,390 @@ import {
   withPlatform,
 } from "./helpers.ts";
 
-test("swing navigates to an existing root repo Session worktree without creating one", () => {
-  const sandbox = makeTempDir("swing-session");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
-  });
-  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
+describe("swing", () => {
+  test("swing navigates to an existing root repo Session worktree without creating one", () => {
+    const sandbox = makeTempDir("swing-session");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
 
-  const result = runMonke({ cwd: repoRoot, args: ["swing", "banana"], monkeHome: home });
+    const result = runMonke({ args: ["swing", "banana"], cwd: repoRoot, monkeHome: home });
 
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-  expect(result.stdout).toBe(`${worktreeRoot}\n`);
-  expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
-  expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
-});
-
-test("swing without a target opens a Swing picker and selects a Session", async () => {
-  const sandbox = makeTempDir("swing-picker-number");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
-  });
-  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
-
-  const result = await runMonkeAsync({
-    cwd: repoRoot,
-    args: ["swing"],
-    monkeHome: home,
-    selectValues: ["banana"],
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+    expect(result.stdout).toBe(`${worktreeRoot}\n`);
+    expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
+    expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
   });
 
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-  expect(result.stdout.endsWith(`${worktreeRoot}\n`)).toBe(true);
-  expect(result.stderr).toContain(worktreeRoot);
-});
+  test("swing without a target opens a Swing picker and selects a Session", async () => {
+    const sandbox = makeTempDir("swing-picker-number");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
 
-test("swing picker hides paths and lists recently updated Sessions first", async () => {
-  const sandbox = makeTempDir("swing-picker-recency");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
-  });
-  runMonke({ cwd: repoRoot, args: ["spawn", "z-newer"], monkeHome: home });
-  runMonke({ cwd: repoRoot, args: ["spawn", "a-older"], monkeHome: home });
-  git(
-    getExpectedWorktreePath(home, repoRoot, "z-newer"),
-    ["commit", "--allow-empty", "-m", "newer"],
-    {
-      GIT_AUTHOR_DATE: "2035-01-02T00:00:00Z",
-      GIT_COMMITTER_DATE: "2035-01-02T00:00:00Z",
-    },
-  );
-  git(repoRoot, ["tag", "z-newer"]);
-  const stateTime = new Date("2025-01-01T00:00:00Z");
-  utimesSync(getSessionStateFilePath(home, repoRoot, "a-older"), stateTime, stateTime);
-  utimesSync(getSessionStateFilePath(home, repoRoot, "z-newer"), stateTime, stateTime);
-  let prompt: SelectPrompt | undefined;
-
-  await runMonkeAsync({
-    cwd: repoRoot,
-    args: ["swing"],
-    monkeHome: home,
-    selectValues: ["a-older"],
-    onSelect(value) {
-      prompt = value;
-    },
-  });
-
-  expect(prompt?.options.map((option) => option.value)).toEqual(["^", "z-newer", "a-older"]);
-  expect(prompt?.options.every((option) => option.hint === undefined)).toBe(true);
-});
-
-test("swing picker can select the Source checkout from a Session worktree", async () => {
-  const sandbox = makeTempDir("swing-picker-source");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
-  });
-  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-
-  const result = await runMonkeAsync({
-    cwd: worktreeRoot,
-    args: ["swing"],
-    monkeHome: home,
-    selectValues: ["^"],
-  });
-
-  expect(result.stdout.endsWith(`${repoRoot}\n`)).toBe(true);
-  expect(result.stderr).toContain(repoRoot);
-});
-
-test("swing picker selecting the current target preserves Previous Swing target history", async () => {
-  const sandbox = makeTempDir("swing-picker-current-history");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
-  });
-  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
-  runMonke({ cwd: repoRoot, args: ["spawn", "cherry"], monkeHome: home });
-  const bananaWorktree = getExpectedWorktreePath(home, repoRoot, "banana");
-  const cherryWorktree = getExpectedWorktreePath(home, repoRoot, "cherry");
-  runMonke({ cwd: repoRoot, args: ["swing", "banana"], monkeHome: home });
-  runMonke({ cwd: bananaWorktree, args: ["swing", "cherry"], monkeHome: home });
-
-  const noOpResult = await runMonkeAsync({
-    cwd: cherryWorktree,
-    args: ["swing"],
-    monkeHome: home,
-    selectValues: ["cherry"],
-  });
-  const previousResult = runMonke({
-    cwd: cherryWorktree,
-    args: ["swing", "-"],
-    monkeHome: home,
-  });
-
-  expect(noOpResult.stdout.endsWith(`${cherryWorktree}\n`)).toBe(true);
-  expect(previousResult.stdout).toBe(`${bananaWorktree}\n`);
-});
-
-test("swing picker rejects unknown selections", async () => {
-  const sandbox = makeTempDir("swing-picker-invalid");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
-  });
-  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
-
-  await expect(
-    runMonkeAsync({
-      cwd: repoRoot,
+    const result = await runMonkeAsync({
       args: ["swing"],
+      cwd: repoRoot,
       monkeHome: home,
-      selectValues: ["missing"],
-    }),
-  ).rejects.toThrow(/Unknown selection: missing/);
-});
+      selectValues: ["banana"],
+    });
 
-test("swing fails clearly when the Session does not exist", () => {
-  const sandbox = makeTempDir("swing-missing");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+    expect(result.stdout.endsWith(`${worktreeRoot}\n`)).toBeTruthy();
+    expect(result.stderr).toContain(worktreeRoot);
   });
 
-  expect(() => runMonke({ cwd: repoRoot, args: ["swing", "missing"], monkeHome: home })).toThrow(
-    `Session "missing" does not exist for ${repoRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn missing instead.`,
-  );
-});
+  test("swing picker hides paths and lists recently updated Sessions first", async () => {
+    const sandbox = makeTempDir("swing-picker-recency");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "z-newer"], cwd: repoRoot, monkeHome: home });
+    runMonke({ args: ["spawn", "a-older"], cwd: repoRoot, monkeHome: home });
+    git(
+      getExpectedWorktreePath(home, repoRoot, "z-newer"),
+      ["commit", "--allow-empty", "-m", "newer"],
+      {
+        GIT_AUTHOR_DATE: "2035-01-02T00:00:00Z",
+        GIT_COMMITTER_DATE: "2035-01-02T00:00:00Z",
+      },
+    );
+    git(repoRoot, ["tag", "z-newer"]);
+    const stateTime = new Date("2025-01-01T00:00:00Z");
+    utimesSync(getSessionStateFilePath(home, repoRoot, "a-older"), stateTime, stateTime);
+    utimesSync(getSessionStateFilePath(home, repoRoot, "z-newer"), stateTime, stateTime);
+    let prompt: SelectPrompt | undefined;
 
-test("swing treats @ inside Session names as ordinary branch text", () => {
-  const sandbox = makeTempDir("swing-at-session");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
+    await runMonkeAsync({
+      args: ["swing"],
+      cwd: repoRoot,
+      monkeHome: home,
+      onSelect(value) {
+        prompt = value;
+      },
+      selectValues: ["a-older"],
+    });
+
+    expect(prompt?.options.map((option) => option.value)).toStrictEqual([
+      "^",
+      "z-newer",
+      "a-older",
+    ]);
+    expect(prompt?.options.every((option) => option.hint === undefined)).toBeTruthy();
   });
-  runMonke({ cwd: repoRoot, args: ["spawn", "feature@alice"], monkeHome: home });
 
-  const result = runMonke({ cwd: repoRoot, args: ["swing", "feature@alice"], monkeHome: home });
+  test("swing picker can select the Source checkout from a Session worktree", async () => {
+    const sandbox = makeTempDir("swing-picker-source");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
 
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature@alice");
-  expect(result.stdout).toBe(`${worktreeRoot}\n`);
-  expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
-});
+    const result = await runMonkeAsync({
+      args: ["swing"],
+      cwd: worktreeRoot,
+      monkeHome: home,
+      selectValues: ["^"],
+    });
 
-test("swing caret returns from a Session worktree to the Source checkout", () => {
-  const sandbox = makeTempDir("swing-source");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
+    expect(result.stdout.endsWith(`${repoRoot}\n`)).toBeTruthy();
+    expect(result.stderr).toContain(repoRoot);
   });
-  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
 
-  const result = runMonke({ cwd: worktreeRoot, args: ["swing", "^"], monkeHome: home });
+  test("swing picker selecting the current target preserves Previous Swing target history", async () => {
+    const sandbox = makeTempDir("swing-picker-current-history");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
+    runMonke({ args: ["spawn", "cherry"], cwd: repoRoot, monkeHome: home });
+    const bananaWorktree = getExpectedWorktreePath(home, repoRoot, "banana");
+    const cherryWorktree = getExpectedWorktreePath(home, repoRoot, "cherry");
+    runMonke({ args: ["swing", "banana"], cwd: repoRoot, monkeHome: home });
+    runMonke({ args: ["swing", "cherry"], cwd: bananaWorktree, monkeHome: home });
 
-  expect(result.stdout).toBe(`${repoRoot}\n`);
-  expect(result.stderr).toContain(`Switch to ${repoRoot}`);
-});
+    const noOpResult = await runMonkeAsync({
+      args: ["swing"],
+      cwd: cherryWorktree,
+      monkeHome: home,
+      selectValues: ["cherry"],
+    });
+    const previousResult = runMonke({
+      args: ["swing", "-"],
+      cwd: cherryWorktree,
+      monkeHome: home,
+    });
 
-test("swing allows the current Session worktree to live outside Monke home with a warning", () => {
-  const sandbox = makeTempDir("swing-external-worktree");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
+    expect(noOpResult.stdout.endsWith(`${cherryWorktree}\n`)).toBeTruthy();
+    expect(previousResult.stdout).toBe(`${bananaWorktree}\n`);
   });
-  const worktreeRoot = path.join(sandbox, "codex", "winters-echo");
-  git(repoRoot, ["branch", "winters-echo"]);
-  git(repoRoot, ["worktree", "add", worktreeRoot, "winters-echo"]);
 
-  const result = runMonke({ cwd: worktreeRoot, args: ["swing", "^"], monkeHome: home });
-  const backToExternal = runMonke({ cwd: repoRoot, args: ["swing", "-"], monkeHome: home });
+  test("swing picker rejects unknown selections", async () => {
+    const sandbox = makeTempDir("swing-picker-invalid");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
 
-  expect(result.stdout).toBe(`${repoRoot}\n`);
-  expect(backToExternal.stdout).toBe(`${worktreeRoot}\n`);
-  expect(result.stderr).toContain(
-    `Linked worktree ${worktreeRoot} is outside ${path.join(home, "worktrees", "root")}`,
-  );
-  expect(result.stderr).toContain(`Switch to ${repoRoot}`);
-});
-
-test("swing dash toggles to the Previous Swing target scoped by Root repo", () => {
-  const sandbox = makeTempDir("swing-previous");
-  const home = path.join(sandbox, "home");
-  const firstRepo = createRepo(path.join(sandbox, "first"), {
-    "README.md": "first\n",
+    await expect(
+      runMonkeAsync({
+        args: ["swing"],
+        cwd: repoRoot,
+        monkeHome: home,
+        selectValues: ["missing"],
+      }),
+    ).rejects.toThrow(/Unknown selection: missing/u);
   });
-  const secondRepo = createRepo(path.join(sandbox, "second"), {
-    "README.md": "second\n",
+
+  test("swing fails clearly when the Session does not exist", () => {
+    const sandbox = makeTempDir("swing-missing");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+
+    expect(() => runMonke({ args: ["swing", "missing"], cwd: repoRoot, monkeHome: home })).toThrow(
+      `Session "missing" does not exist for ${repoRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn missing instead.`,
+    );
   });
-  runMonke({ cwd: firstRepo, args: ["spawn", "banana"], monkeHome: home });
-  const worktreeRoot = getExpectedWorktreePath(home, firstRepo, "banana");
-  runMonke({ cwd: firstRepo, args: ["swing", "banana"], monkeHome: home });
 
-  const backToSource = runMonke({ cwd: worktreeRoot, args: ["swing", "-"], monkeHome: home });
-  const backToSession = runMonke({ cwd: firstRepo, args: ["swing", "-"], monkeHome: home });
+  test("swing treats @ inside Session names as ordinary branch text", () => {
+    const sandbox = makeTempDir("swing-at-session");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "feature@alice"], cwd: repoRoot, monkeHome: home });
 
-  expect(backToSource.stdout).toBe(`${firstRepo}\n`);
-  expect(backToSession.stdout).toBe(`${worktreeRoot}\n`);
-  expect(() => runMonke({ cwd: secondRepo, args: ["swing", "-"], monkeHome: home })).toThrow(
-    /No Previous Swing target/,
-  );
-});
+    const result = runMonke({ args: ["swing", "feature@alice"], cwd: repoRoot, monkeHome: home });
 
-test("swing rejects corrupt Previous Swing target history with its file and field path", () => {
-  const sandbox = makeTempDir("swing-corrupt-history");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature@alice");
+    expect(result.stdout).toBe(`${worktreeRoot}\n`);
+    expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
   });
-  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-  runMonke({ cwd: repoRoot, args: ["swing", "banana"], monkeHome: home });
-  const historyDirectory = path.join(home, "swing-history");
-  const historyPath = path.join(historyDirectory, readdirSync(historyDirectory)[0]!);
-  writeFileSync(
-    historyPath,
-    `version: 1
+
+  test("swing caret returns from a Session worktree to the Source checkout", () => {
+    const sandbox = makeTempDir("swing-source");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+
+    const result = runMonke({ args: ["swing", "^"], cwd: worktreeRoot, monkeHome: home });
+
+    expect(result.stdout).toBe(`${repoRoot}\n`);
+    expect(result.stderr).toContain(`Switch to ${repoRoot}`);
+  });
+
+  test("swing allows the current Session worktree to live outside Monke home with a warning", () => {
+    const sandbox = makeTempDir("swing-external-worktree");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    const worktreeRoot = path.join(sandbox, "codex", "winters-echo");
+    git(repoRoot, ["branch", "winters-echo"]);
+    git(repoRoot, ["worktree", "add", worktreeRoot, "winters-echo"]);
+
+    const result = runMonke({ args: ["swing", "^"], cwd: worktreeRoot, monkeHome: home });
+    const backToExternal = runMonke({ args: ["swing", "-"], cwd: repoRoot, monkeHome: home });
+
+    expect(result.stdout).toBe(`${repoRoot}\n`);
+    expect(backToExternal.stdout).toBe(`${worktreeRoot}\n`);
+    expect(result.stderr).toContain(
+      `Linked worktree ${worktreeRoot} is outside ${path.join(home, "worktrees", "root")}`,
+    );
+    expect(result.stderr).toContain(`Switch to ${repoRoot}`);
+  });
+
+  test("swing dash toggles to the Previous Swing target scoped by Root repo", () => {
+    const sandbox = makeTempDir("swing-previous");
+    const home = path.join(sandbox, "home");
+    const firstRepo = createRepo(path.join(sandbox, "first"), {
+      "README.md": "first\n",
+    });
+    const secondRepo = createRepo(path.join(sandbox, "second"), {
+      "README.md": "second\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: firstRepo, monkeHome: home });
+    const worktreeRoot = getExpectedWorktreePath(home, firstRepo, "banana");
+    runMonke({ args: ["swing", "banana"], cwd: firstRepo, monkeHome: home });
+
+    const backToSource = runMonke({ args: ["swing", "-"], cwd: worktreeRoot, monkeHome: home });
+    const backToSession = runMonke({ args: ["swing", "-"], cwd: firstRepo, monkeHome: home });
+
+    expect(backToSource.stdout).toBe(`${firstRepo}\n`);
+    expect(backToSession.stdout).toBe(`${worktreeRoot}\n`);
+    expect(() => runMonke({ args: ["swing", "-"], cwd: secondRepo, monkeHome: home })).toThrow(
+      /No Previous Swing target/u,
+    );
+  });
+
+  test("swing rejects corrupt Previous Swing target history with its file and field path", () => {
+    const sandbox = makeTempDir("swing-corrupt-history");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+    runMonke({ args: ["swing", "banana"], cwd: repoRoot, monkeHome: home });
+    const historyDirectory = path.join(home, "swing-history");
+    const historyPath = path.join(historyDirectory, readdirSync(historyDirectory)[0]!);
+    writeFileSync(
+      historyPath,
+      `version: 1
 previous:
   kind: session
 `,
-    "utf8",
-  );
+      "utf-8",
+    );
 
-  expect(() => runMonke({ cwd: worktreeRoot, args: ["swing", "-"], monkeHome: home })).toThrow(
-    /Invalid .*swing-history.*previous\.session/s,
-  );
-});
-
-test.each([
-  {
-    name: "unknown keys in Swing history",
-    contents: "version: 1\ntypo: true\n",
-    expected: /typo/,
-  },
-  {
-    name: "unknown future Swing history versions",
-    contents: "version: 2\n",
-    expected: /version/,
-  },
-])("swing rejects $name", ({ contents, expected }) => {
-  const sandbox = makeTempDir("swing-history-versioning");
-  const home = path.join(sandbox, "home");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
+    expect(() => runMonke({ args: ["swing", "-"], cwd: worktreeRoot, monkeHome: home })).toThrow(
+      /Invalid .*swing-history.*previous\.session/su,
+    );
   });
-  const historyDirectory = path.join(home, "swing-history");
-  mkdirSync(historyDirectory, { recursive: true });
-  writeFileSync(path.join(historyDirectory, `${hashKey(repoRoot)}.yml`), contents, "utf8");
 
-  expect(() => runMonke({ cwd: repoRoot, args: ["swing", "-"], monkeHome: home })).toThrow(
-    expected,
-  );
-});
-
-test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions", () => {
-  const sandbox = makeTempDir("swing-pr");
-  const home = path.join(sandbox, "home");
-  const binDirectory = path.join(sandbox, "bin");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
-  });
-  installBareOrigin(sandbox, repoRoot);
-  installSwingGhShim(binDirectory, {
-    "123": {
-      headRefName: "feature/pr-123",
-      headRepositoryOwner: { login: "owner" },
-      headRepository: { name: "root" },
+  test.each([
+    {
+      contents: "version: 1\ntypo: true\n",
+      expected: /typo/u,
+      name: "unknown keys in Swing history",
     },
-    "125": {
-      headRefName: "feature/pr-125",
-      headRepositoryOwner: { login: "OWNER" },
-      headRepository: { name: "ROOT" },
+    {
+      contents: "version: 2\n",
+      expected: /version/u,
+      name: "unknown future Swing history versions",
     },
-  });
-  const openLogPath = installCodexUrlOpenShim(binDirectory);
-  runMonke({ cwd: repoRoot, args: ["spawn", "feature/pr-123"], monkeHome: home });
-  runMonke({ cwd: repoRoot, args: ["spawn", "feature/pr-125"], monkeHome: home });
-  git(repoRoot, ["push", "origin", "refs/heads/feature/pr-123:refs/pull/123/head"]);
-  git(repoRoot, ["push", "origin", "refs/heads/feature/pr-125:refs/pull/125/head"]);
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-123");
-  const caseFoldedWorktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-125");
-  const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
+  ])("swing rejects $name", ({ contents, expected }) => {
+    const sandbox = makeTempDir("swing-history-versioning");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    const historyDirectory = path.join(home, "swing-history");
+    mkdirSync(historyDirectory, { recursive: true });
+    writeFileSync(path.join(historyDirectory, `${hashKey(repoRoot)}.yml`), contents, "utf-8");
 
-  const byNumber = runMonke({
-    cwd: repoRoot,
-    args: ["swing", "pr:123"],
-    monkeHome: home,
-    binDirectory,
-  });
-  const byUrl = runMonke({
-    cwd: repoRoot,
-    args: ["swing", "https://github.com/owner/root/pull/123"],
-    monkeHome: home,
-    binDirectory,
-  });
-  const byCaseFoldedNumber = runMonke({
-    cwd: repoRoot,
-    args: ["swing", "pr:125"],
-    monkeHome: home,
-    binDirectory,
-  });
-  const byCodexPr = runMonke({
-    cwd: repoRoot,
-    args: ["swing", "pr:123", "--codex"],
-    monkeHome: home,
-    binDirectory,
+    expect(() => runMonke({ args: ["swing", "-"], cwd: repoRoot, monkeHome: home })).toThrow(
+      expected,
+    );
   });
 
-  expect(byNumber.stdout).toBe(`${worktreeRoot}\n`);
-  expect(byUrl.stdout).toBe(`${worktreeRoot}\n`);
-  expect(byCaseFoldedNumber.stdout).toBe(`${caseFoldedWorktreeRoot}\n`);
-  expect(byCodexPr.stdout).toBe(`${worktreeRoot}\n`);
-  expect(byCodexPr.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
-  expect(readFileSync(openLogPath, "utf8")).toBe(`${codexThreadUrl}\n`);
-});
+  test("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions", () => {
+    const sandbox = makeTempDir("swing-pr");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    installBareOrigin(sandbox, repoRoot);
+    installSwingGhShim(binDirectory, {
+      "123": {
+        headRefName: "feature/pr-123",
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "owner" },
+      },
+      "125": {
+        headRefName: "feature/pr-125",
+        headRepository: { name: "ROOT" },
+        headRepositoryOwner: { login: "OWNER" },
+      },
+    });
+    const openLogPath = installCodexUrlOpenShim(binDirectory);
+    runMonke({ args: ["spawn", "feature/pr-123"], cwd: repoRoot, monkeHome: home });
+    runMonke({ args: ["spawn", "feature/pr-125"], cwd: repoRoot, monkeHome: home });
+    git(repoRoot, ["push", "origin", "refs/heads/feature/pr-123:refs/pull/123/head"]);
+    git(repoRoot, ["push", "origin", "refs/heads/feature/pr-125:refs/pull/125/head"]);
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-123");
+    const caseFoldedWorktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-125");
+    const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
 
-test("swing reports malformed GitHub PR fields with the response field path", () => {
-  const sandbox = makeTempDir("swing-pr-malformed");
-  const home = path.join(sandbox, "home");
-  const binDirectory = path.join(sandbox, "bin");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
-  });
-  installSwingGhShim(binDirectory, {
-    "404": {
-      headRefName: 404,
-      headRepositoryOwner: { login: "owner" },
-      headRepository: { name: "root" },
-    },
-  });
-
-  expect(() =>
-    runMonke({
-      cwd: repoRoot,
-      args: ["swing", "pr:404"],
-      monkeHome: home,
+    const byNumber = runMonke({
+      args: ["swing", "pr:123"],
       binDirectory,
-    }),
-  ).toThrow(/Invalid GitHub PR #404:[\s\S]*headRefName/);
-});
+      cwd: repoRoot,
+      monkeHome: home,
+    });
+    const byUrl = runMonke({
+      args: ["swing", "https://github.com/owner/root/pull/123"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home,
+    });
+    const byCaseFoldedNumber = runMonke({
+      args: ["swing", "pr:125"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home,
+    });
+    const byCodexPr = runMonke({
+      args: ["swing", "pr:123", "--codex"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home,
+    });
 
-test("swing creates a missing same-repo GitHub PR Session", () => {
-  const sandbox = makeTempDir("swing-pr-create");
-  const home = path.join(sandbox, "home");
-  const binDirectory = path.join(sandbox, "bin");
-  const prBranch = "feature/issue-81-flow-market-unit";
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "main\n",
+    expect(byNumber.stdout).toBe(`${worktreeRoot}\n`);
+    expect(byUrl.stdout).toBe(`${worktreeRoot}\n`);
+    expect(byCaseFoldedNumber.stdout).toBe(`${caseFoldedWorktreeRoot}\n`);
+    expect(byCodexPr.stdout).toBe(`${worktreeRoot}\n`);
+    expect(byCodexPr.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
+    expect(readFileSync(openLogPath, "utf-8")).toBe(`${codexThreadUrl}\n`);
   });
-  installBareOrigin(sandbox, repoRoot);
-  git(repoRoot, ["switch", "-c", prBranch]);
-  writeFileSync(path.join(repoRoot, "README.md"), "pr head\n", "utf8");
-  mkdirSync(path.join(repoRoot, "apps/api"), { recursive: true });
-  writeFileSync(path.join(repoRoot, "apps/api/.env.local"), "PORT=3000\n", "utf8");
-  writeFileSync(
-    path.join(repoRoot, "monke.yml"),
-    `bootstrapCommand: printf 'bootstrapped\\n' > bootstrap.log
+
+  test("swing reports malformed GitHub PR fields with the response field path", () => {
+    const sandbox = makeTempDir("swing-pr-malformed");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    installSwingGhShim(binDirectory, {
+      "404": {
+        headRefName: 404,
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "owner" },
+      },
+    });
+
+    expect(() =>
+      runMonke({
+        args: ["swing", "pr:404"],
+        binDirectory,
+        cwd: repoRoot,
+        monkeHome: home,
+      }),
+    ).toThrow(/Invalid GitHub PR #404:[\s\S]*headRefName/u);
+  });
+
+  test("swing creates a missing same-repo GitHub PR Session", () => {
+    const sandbox = makeTempDir("swing-pr-create");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const prBranch = "feature/issue-81-flow-market-unit";
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "main\n",
+    });
+    installBareOrigin(sandbox, repoRoot);
+    git(repoRoot, ["switch", "-c", prBranch]);
+    writeFileSync(path.join(repoRoot, "README.md"), "pr head\n", "utf-8");
+    mkdirSync(path.join(repoRoot, "apps/api"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "apps/api/.env.local"), "PORT=3000\n", "utf-8");
+    writeFileSync(
+      path.join(repoRoot, "monke.yml"),
+      `bootstrapCommand: printf 'bootstrapped\\n' > bootstrap.log
 apps:
   api:
     path: apps/api
@@ -412,263 +417,266 @@ apps:
       - port: API_PORT
         env: PORT
 `,
-    "utf8",
-  );
-  git(repoRoot, ["add", "README.md"]);
-  git(repoRoot, ["add", "apps/api/.env.local", "monke.yml"]);
-  git(repoRoot, ["commit", "-m", "pr head"]);
-  git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/82/head`]);
-  git(repoRoot, ["switch", "main"]);
-  git(repoRoot, ["branch", "-D", prBranch]);
-  installSwingGhShim(binDirectory, {
-    "82": {
-      headRefName: prBranch,
-      headRepositoryOwner: { login: "owner" },
-      headRepository: { name: "root" },
-    },
-  });
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
+      "utf-8",
+    );
+    git(repoRoot, ["add", "README.md"]);
+    git(repoRoot, ["add", "apps/api/.env.local", "monke.yml"]);
+    git(repoRoot, ["commit", "-m", "pr head"]);
+    git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/82/head`]);
+    git(repoRoot, ["switch", "main"]);
+    git(repoRoot, ["branch", "-D", prBranch]);
+    installSwingGhShim(binDirectory, {
+      "82": {
+        headRefName: prBranch,
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "owner" },
+      },
+    });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
 
-  const result = runMonke({
-    cwd: repoRoot,
-    args: ["swing", "pr:82"],
-    monkeHome: home,
-    binDirectory,
-  });
-
-  expect(result.stdout).toBe(`${worktreeRoot}\n`);
-  expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf8")).toBe("pr head\n");
-  expect(readFileSync(path.join(worktreeRoot, "bootstrap.log"), "utf8")).toBe("bootstrapped\n");
-  expect(readFileSync(path.join(worktreeRoot, "apps/api/.env.local"), "utf8")).toBe("PORT=10000\n");
-  expect(readFileSync(path.join(worktreeRoot, ".env"), "utf8")).toBe("API_PORT=10000\n");
-  expect(result.stderr).toContain(`Bootstrapping ${repoRoot} in ${worktreeRoot}`);
-  expect(result.stderr).toContain(`Spawned or updated session ${prBranch}`);
-  expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
-  expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
-});
-
-test("swing rejects an invalid existing PR Session path without creating the PR branch", () => {
-  const sandbox = makeTempDir("swing-pr-invalid-path");
-  const home = path.join(sandbox, "home");
-  const binDirectory = path.join(sandbox, "bin");
-  const prBranch = "feature/invalid-path";
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "main\n",
-  });
-  installBareOrigin(sandbox, repoRoot);
-  pushReadmePullRequestHead(repoRoot, {
-    branch: prBranch,
-    number: 86,
-    contents: "pr head\n",
-    message: "pr head",
-  });
-  installSwingGhShim(binDirectory, {
-    "86": {
-      headRefName: prBranch,
-      headRepositoryOwner: { login: "owner" },
-      headRepository: { name: "root" },
-    },
-  });
-  mkdirSync(getExpectedWorktreePath(home, repoRoot, prBranch), { recursive: true });
-
-  expect(() =>
-    runMonke({
-      cwd: repoRoot,
-      args: ["swing", "pr:86"],
-      monkeHome: home,
+    const result = runMonke({
+      args: ["swing", "pr:82"],
       binDirectory,
-    }),
-  ).toThrow();
-  expect(localBranchExists(repoRoot, prBranch)).toBe(false);
-});
-
-test("swing rejects an existing PR Session whose branch diverged from the PR head", () => {
-  const sandbox = makeTempDir("swing-pr-stale-existing");
-  const home = path.join(sandbox, "home");
-  const binDirectory = path.join(sandbox, "bin");
-  const prBranch = "feature/stale-existing";
-  const upstreamBranch = "feature/stale-existing-upstream";
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "main\n",
-  });
-  installBareOrigin(sandbox, repoRoot);
-  pushReadmePullRequestHead(repoRoot, {
-    branch: prBranch,
-    number: 84,
-    contents: "pr head\n",
-    message: "pr head",
-  });
-  installSwingGhShim(binDirectory, {
-    "84": {
-      headRefName: prBranch,
-      headRepositoryOwner: { login: "owner" },
-      headRepository: { name: "root" },
-    },
-  });
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
-
-  runMonke({
-    cwd: repoRoot,
-    args: ["swing", "pr:84"],
-    monkeHome: home,
-    binDirectory,
-  });
-  const originalHead = git(worktreeRoot, ["rev-parse", "HEAD"]);
-  git(repoRoot, ["switch", "-c", upstreamBranch, prBranch]);
-  writeFileSync(path.join(repoRoot, "README.md"), "updated pr head\n", "utf8");
-  git(repoRoot, ["add", "README.md"]);
-  git(repoRoot, ["commit", "-m", "advance pr head"]);
-  git(repoRoot, ["push", "origin", `${upstreamBranch}:refs/pull/84/head`]);
-  git(repoRoot, ["switch", "main"]);
-
-  expect(() =>
-    runMonke({
       cwd: repoRoot,
+      monkeHome: home,
+    });
+
+    expect(result.stdout).toBe(`${worktreeRoot}\n`);
+    expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf-8")).toBe("pr head\n");
+    expect(readFileSync(path.join(worktreeRoot, "bootstrap.log"), "utf-8")).toBe("bootstrapped\n");
+    expect(readFileSync(path.join(worktreeRoot, "apps/api/.env.local"), "utf-8")).toBe(
+      "PORT=10000\n",
+    );
+    expect(readFileSync(path.join(worktreeRoot, ".env"), "utf-8")).toBe("API_PORT=10000\n");
+    expect(result.stderr).toContain(`Bootstrapping ${repoRoot} in ${worktreeRoot}`);
+    expect(result.stderr).toContain(`Spawned or updated session ${prBranch}`);
+    expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
+    expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
+  });
+
+  test("swing rejects an invalid existing PR Session path without creating the PR branch", () => {
+    const sandbox = makeTempDir("swing-pr-invalid-path");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const prBranch = "feature/invalid-path";
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "main\n",
+    });
+    installBareOrigin(sandbox, repoRoot);
+    pushReadmePullRequestHead(repoRoot, {
+      branch: prBranch,
+      contents: "pr head\n",
+      message: "pr head",
+      number: 86,
+    });
+    installSwingGhShim(binDirectory, {
+      "86": {
+        headRefName: prBranch,
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "owner" },
+      },
+    });
+    mkdirSync(getExpectedWorktreePath(home, repoRoot, prBranch), { recursive: true });
+
+    expect(() =>
+      runMonke({
+        args: ["swing", "pr:86"],
+        binDirectory,
+        cwd: repoRoot,
+        monkeHome: home,
+      }),
+    ).toThrow(/not a git repository/u);
+    expect(localBranchExists(repoRoot, prBranch)).toBeFalsy();
+  });
+
+  test("swing rejects an existing PR Session whose branch diverged from the PR head", () => {
+    const sandbox = makeTempDir("swing-pr-stale-existing");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const prBranch = "feature/stale-existing";
+    const upstreamBranch = "feature/stale-existing-upstream";
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "main\n",
+    });
+    installBareOrigin(sandbox, repoRoot);
+    pushReadmePullRequestHead(repoRoot, {
+      branch: prBranch,
+      contents: "pr head\n",
+      message: "pr head",
+      number: 84,
+    });
+    installSwingGhShim(binDirectory, {
+      "84": {
+        headRefName: prBranch,
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "owner" },
+      },
+    });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
+
+    runMonke({
       args: ["swing", "pr:84"],
-      monkeHome: home,
       binDirectory,
-    }),
-  ).toThrow(`Local branch "${prBranch}" differs from PR #84 head`);
-  expect(git(worktreeRoot, ["rev-parse", "HEAD"])).toBe(originalHead);
-  expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf8")).toBe("pr head\n");
-});
-
-test("swing navigates to an existing in-sync PR Session after re-fetching", () => {
-  const sandbox = makeTempDir("swing-pr-existing-in-sync");
-  const home = path.join(sandbox, "home");
-  const binDirectory = path.join(sandbox, "bin");
-  const prBranch = "feature/in-sync-pr";
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "main\n",
-  });
-  installBareOrigin(sandbox, repoRoot);
-  pushReadmePullRequestHead(repoRoot, {
-    branch: prBranch,
-    number: 85,
-    contents: "pr head\n",
-    message: "pr head",
-  });
-  installSwingGhShim(binDirectory, {
-    "85": {
-      headRefName: prBranch,
-      headRepositoryOwner: { login: "owner" },
-      headRepository: { name: "root" },
-    },
-  });
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
-
-  runMonke({
-    cwd: repoRoot,
-    args: ["swing", "pr:85"],
-    monkeHome: home,
-    binDirectory,
-  });
-  const secondSwing = runMonke({
-    cwd: repoRoot,
-    args: ["swing", "pr:85"],
-    monkeHome: home,
-    binDirectory,
-  });
-
-  expect(secondSwing.stdout).toBe(`${worktreeRoot}\n`);
-  expect(secondSwing.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
-});
-
-test("swing rejects missing PR Session when a local PR branch diverges", () => {
-  const sandbox = makeTempDir("swing-pr-stale-local");
-  const home = path.join(sandbox, "home");
-  const binDirectory = path.join(sandbox, "bin");
-  const prBranch = "feature/stale-local";
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "main\n",
-  });
-  installBareOrigin(sandbox, repoRoot);
-  pushReadmePullRequestHead(repoRoot, {
-    branch: prBranch,
-    number: 83,
-    contents: "pr head\n",
-    message: "pr head",
-  });
-  git(repoRoot, ["branch", prBranch, "main"]);
-  installSwingGhShim(binDirectory, {
-    "83": {
-      headRefName: prBranch,
-      headRepositoryOwner: { login: "owner" },
-      headRepository: { name: "root" },
-    },
-  });
-
-  expect(() =>
-    runMonke({
       cwd: repoRoot,
-      args: ["swing", "pr:83"],
       monkeHome: home,
-      binDirectory,
-    }),
-  ).toThrow(`Local branch "${prBranch}" differs from PR #83 head`);
-  expect(existsSync(getExpectedWorktreePath(home, repoRoot, prBranch))).toBe(false);
-});
+    });
+    const originalHead = git(worktreeRoot, ["rev-parse", "HEAD"]);
+    git(repoRoot, ["switch", "-c", upstreamBranch, prBranch]);
+    writeFileSync(path.join(repoRoot, "README.md"), "updated pr head\n", "utf-8");
+    git(repoRoot, ["add", "README.md"]);
+    git(repoRoot, ["commit", "-m", "advance pr head"]);
+    git(repoRoot, ["push", "origin", `${upstreamBranch}:refs/pull/84/head`]);
+    git(repoRoot, ["switch", "main"]);
 
-test("swing --codex escapes percent-encoded URLs for the Windows launcher", () => {
-  const sandbox = makeTempDir("swing-codex-windows");
-  const home = path.join(sandbox, "home");
-  const binDirectory = path.join(sandbox, "bin");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
+    expect(() =>
+      runMonke({
+        args: ["swing", "pr:84"],
+        binDirectory,
+        cwd: repoRoot,
+        monkeHome: home,
+      }),
+    ).toThrow(`Local branch "${prBranch}" differs from PR #84 head`);
+    expect(git(worktreeRoot, ["rev-parse", "HEAD"])).toBe(originalHead);
+    expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf-8")).toBe("pr head\n");
   });
-  const cmdLogPath = installWindowsCmdShim(binDirectory);
-  runMonke({ cwd: repoRoot, args: ["spawn", "banana"], monkeHome: home });
-  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-  const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
 
-  const result = withPlatform("win32", () =>
+  test("swing navigates to an existing in-sync PR Session after re-fetching", () => {
+    const sandbox = makeTempDir("swing-pr-existing-in-sync");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const prBranch = "feature/in-sync-pr";
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "main\n",
+    });
+    installBareOrigin(sandbox, repoRoot);
+    pushReadmePullRequestHead(repoRoot, {
+      branch: prBranch,
+      contents: "pr head\n",
+      message: "pr head",
+      number: 85,
+    });
+    installSwingGhShim(binDirectory, {
+      "85": {
+        headRefName: prBranch,
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "owner" },
+      },
+    });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
+
     runMonke({
-      cwd: repoRoot,
-      args: ["swing", "banana", "--codex"],
-      monkeHome: home,
+      args: ["swing", "pr:85"],
       binDirectory,
-    }),
-  );
+      cwd: repoRoot,
+      monkeHome: home,
+    });
+    const secondSwing = runMonke({
+      args: ["swing", "pr:85"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home,
+    });
 
-  expect(result.stdout).toBe(`${worktreeRoot}\n`);
-  expect(result.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
-  expect(readFileSync(cmdLogPath, "utf8")).toBe(
-    `/c\nstart\n\n${codexThreadUrl.replaceAll("%", "^%")}\n`,
-  );
-});
-
-test("swing rejects unsupported PR and target forms clearly", () => {
-  const sandbox = makeTempDir("swing-unsupported");
-  const home = path.join(sandbox, "home");
-  const binDirectory = path.join(sandbox, "bin");
-  const repoRoot = createRepo(path.join(sandbox, "root"), {
-    "README.md": "hello\n",
-  });
-  installSwingGhShim(binDirectory, {
-    "124": {
-      headRefName: "fork/pr-124",
-      headRepositoryOwner: { login: "contributor" },
-      headRepository: { name: "root" },
-    },
+    expect(secondSwing.stdout).toBe(`${worktreeRoot}\n`);
+    expect(secondSwing.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
   });
 
-  expect(() =>
-    runMonke({ cwd: repoRoot, args: ["swing", "pr:124"], monkeHome: home, binDirectory }),
-  ).toThrow(/Fork PR targets are not supported/);
-  expect(() =>
-    runMonke({
-      cwd: repoRoot,
-      args: ["swing", "https://github.com/other/root/pull/124"],
-      monkeHome: home,
-      binDirectory,
-    }),
-  ).toThrow(/Cross-repo PR URLs are not supported/);
-  expect(() => runMonke({ cwd: repoRoot, args: ["swing", "mr:12"], monkeHome: home })).toThrow(
-    /Merge request Swing targets are out of scope/,
-  );
-  expect(() => runMonke({ cwd: repoRoot, args: ["swing", "@"], monkeHome: home })).toThrow(
-    /@ Swing targets are not supported/,
-  );
+  test("swing rejects missing PR Session when a local PR branch diverges", () => {
+    const sandbox = makeTempDir("swing-pr-stale-local");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const prBranch = "feature/stale-local";
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "main\n",
+    });
+    installBareOrigin(sandbox, repoRoot);
+    pushReadmePullRequestHead(repoRoot, {
+      branch: prBranch,
+      contents: "pr head\n",
+      message: "pr head",
+      number: 83,
+    });
+    git(repoRoot, ["branch", prBranch, "main"]);
+    installSwingGhShim(binDirectory, {
+      "83": {
+        headRefName: prBranch,
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "owner" },
+      },
+    });
+
+    expect(() =>
+      runMonke({
+        args: ["swing", "pr:83"],
+        binDirectory,
+        cwd: repoRoot,
+        monkeHome: home,
+      }),
+    ).toThrow(`Local branch "${prBranch}" differs from PR #83 head`);
+    expect(existsSync(getExpectedWorktreePath(home, repoRoot, prBranch))).toBeFalsy();
+  });
+
+  test("swing --codex escapes percent-encoded URLs for the Windows launcher", () => {
+    const sandbox = makeTempDir("swing-codex-windows");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    const cmdLogPath = installWindowsCmdShim(binDirectory);
+    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+    const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
+
+    const result = withPlatform("win32", () =>
+      runMonke({
+        args: ["swing", "banana", "--codex"],
+        binDirectory,
+        cwd: repoRoot,
+        monkeHome: home,
+      }),
+    );
+
+    expect(result.stdout).toBe(`${worktreeRoot}\n`);
+    expect(result.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
+    expect(readFileSync(cmdLogPath, "utf-8")).toBe(
+      `/c\nstart\n\n${codexThreadUrl.replaceAll("%", "^%")}\n`,
+    );
+  });
+
+  test("swing rejects unsupported PR and target forms clearly", () => {
+    const sandbox = makeTempDir("swing-unsupported");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    installSwingGhShim(binDirectory, {
+      "124": {
+        headRefName: "fork/pr-124",
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "contributor" },
+      },
+    });
+
+    expect(() =>
+      runMonke({ args: ["swing", "pr:124"], binDirectory, cwd: repoRoot, monkeHome: home }),
+    ).toThrow(/Fork PR targets are not supported/u);
+    expect(() =>
+      runMonke({
+        args: ["swing", "https://github.com/other/root/pull/124"],
+        binDirectory,
+        cwd: repoRoot,
+        monkeHome: home,
+      }),
+    ).toThrow(/Cross-repo PR URLs are not supported/u);
+    expect(() => runMonke({ args: ["swing", "mr:12"], cwd: repoRoot, monkeHome: home })).toThrow(
+      /Merge request Swing targets are out of scope/u,
+    );
+    expect(() => runMonke({ args: ["swing", "@"], cwd: repoRoot, monkeHome: home })).toThrow(
+      /@ Swing targets are not supported/u,
+    );
+  });
 });
 
 function installBareOrigin(sandbox: string, repoRoot: string): void {
@@ -688,7 +696,7 @@ function pushReadmePullRequestHead(
   },
 ): void {
   git(repoRoot, ["switch", "-c", options.branch]);
-  writeFileSync(path.join(repoRoot, "README.md"), options.contents, "utf8");
+  writeFileSync(path.join(repoRoot, "README.md"), options.contents, "utf-8");
   git(repoRoot, ["add", "README.md"]);
   git(repoRoot, ["commit", "-m", options.message]);
   git(repoRoot, ["push", "origin", `${options.branch}:refs/pull/${options.number}/head`]);
@@ -725,6 +733,6 @@ echo "unsupported gh invocation: $*" >&2
 exit 1
 `;
   const targetPath = path.join(binDirectory, "gh");
-  writeFileSync(targetPath, script, "utf8");
+  writeFileSync(targetPath, script, "utf-8");
   chmodSync(targetPath, 0o755);
 }

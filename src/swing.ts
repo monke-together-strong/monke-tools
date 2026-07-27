@@ -24,15 +24,15 @@ const SwingHistoryTargetSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("session"), session: z.string().min(1) }),
   z.strictObject({
     kind: z.literal("external-session"),
-    session: z.string().min(1),
     path: z.string().min(1),
+    session: z.string().min(1),
   }),
 ]);
 
 const SwingHistorySchema = z.strictObject({
-  version: z.literal(1),
   current: SwingHistoryTargetSchema.optional(),
   previous: SwingHistoryTargetSchema.optional(),
+  version: z.literal(1),
 });
 const GithubRepositorySchema = z.object({
   nameWithOwner: z.string().min(1),
@@ -126,9 +126,9 @@ function navigateToSwingTarget(
     moved = !isSameSwingTarget(resolved.target, currentTarget);
     if (moved) {
       saveSwingHistory(home, rootSourceRoot, {
-        version: 1,
         current: resolved.target,
         previous: currentTarget,
+        version: 1,
       });
     }
     targetPath = resolved.path;
@@ -151,13 +151,13 @@ async function selectSwingTarget(
 ): Promise<string> {
   const options = listSwingPickerOptions(runtime, home, rootSourceRoot, currentTarget);
   const initialValue = options.find((option) => option.markers.includes("current"))?.rawTarget;
-  return runtime.select({
-    message: "Swing target",
+  return await runtime.select({
     initialValue,
     maxItems: Math.min(options.length, 10),
+    message: "Swing target",
     options: options.map((option) => ({
-      value: option.rawTarget,
       label: formatSwingPickerLabel(option),
+      value: option.rawTarget,
     })),
   });
 }
@@ -173,10 +173,10 @@ function listSwingPickerOptions(
 
   if (existsSync(rootSourceRoot)) {
     options.push({
-      rawTarget: "^",
-      target: { kind: "source" },
       label: "Source checkout",
       markers: formatTargetMarkers({ kind: "source" }, currentTarget, previousTarget),
+      rawTarget: "^",
+      target: { kind: "source" },
     });
   }
 
@@ -209,10 +209,10 @@ function listSwingPickerOptions(
 
     const target: SwingHistoryTarget = { kind: "session", session: state.session };
     options.push({
-      rawTarget: state.session,
-      target,
       label: `Session ${state.session}`,
       markers: formatTargetMarkers(target, currentTarget, previousTarget),
+      rawTarget: state.session,
+      target,
     });
   }
 
@@ -227,7 +227,7 @@ function listBranchCommitTimes(runtime: Runtime, rootSourceRoot: string): Map<st
   const result = runtime.exec(
     "git",
     ["for-each-ref", "--format=%(refname:lstrip=2)\t%(committerdate:unix)", "refs/heads"],
-    { cwd: rootSourceRoot, allowFailure: true },
+    { allowFailure: true, cwd: rootSourceRoot },
   );
   if (result.exitCode !== 0) {
     return new Map();
@@ -276,7 +276,7 @@ function resolveSwingTarget(
   }
 
   if (rawTarget === "-") {
-    const previous = loadSwingHistory(home, rootSourceRoot).previous;
+    const { previous } = loadSwingHistory(home, rootSourceRoot);
     if (!previous) {
       throw new MonkeError(`No Previous Swing target recorded for ${rootSourceRoot}`);
     }
@@ -345,12 +345,12 @@ function resolveStoredTarget(
     if (!existsSync(rootSourceRoot)) {
       throw new MonkeError(`Source checkout does not exist at ${rootSourceRoot}`);
     }
-    return { target, path: rootSourceRoot };
+    return { path: rootSourceRoot, target };
   }
 
   if (target.kind === "external-session") {
     validateExternalSessionTarget(runtime, rootSourceRoot, target);
-    return { target, path: target.path };
+    return { path: target.path, target };
   }
 
   const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, target.session);
@@ -368,7 +368,7 @@ function resolveStoredTarget(
     }
   }
   validateWorktreeForSession(runtime, home, rootSourceRoot, worktreePath, target.session);
-  return { target, path: worktreePath };
+  return { path: worktreePath, target };
 }
 
 function resolvePullRequestSession(
@@ -400,11 +400,11 @@ function resolvePullRequestSession(
     `GitHub PR #${pullRequestNumber}`,
     GithubPullRequestSchema,
   );
-  const headRefName = pullRequest.headRefName;
+  const { headRefName } = pullRequest;
   const headRepoName = pullRequest.headRepository.name;
   const headOwnerLogin = pullRequest.headRepositoryOwner.login;
 
-  if (!isSameGithubRepo({ owner: headOwnerLogin, name: headRepoName }, currentRepo)) {
+  if (!isSameGithubRepo({ name: headRepoName, owner: headOwnerLogin }, currentRepo)) {
     throw new MonkeError(
       `Fork PR targets are not supported: PR #${pullRequestNumber} comes from ${headOwnerLogin}/${headRepoName}`,
     );
@@ -450,8 +450,8 @@ function ensurePullRequestSessionBranch(
     }
   } finally {
     runtime.exec("git", ["update-ref", "-d", temporaryRef], {
-      cwd: rootSourceRoot,
       allowFailure: true,
+      cwd: rootSourceRoot,
     });
   }
 }
@@ -473,11 +473,11 @@ function resolveCurrentGithubRepo(
     throw new MonkeError(`Could not resolve current GitHub repo from gh output: ${trimmed}`);
   }
 
-  return { owner, name };
+  return { name, owner };
 }
 
 function parsePullRequestTarget(rawTarget: string): PullRequestSwingTarget | null {
-  const prMatch = rawTarget.match(/^pr:(\d+)$/);
+  const prMatch = /^pr:(\d+)$/u.exec(rawTarget);
   if (prMatch) {
     return { number: Number.parseInt(prMatch[1]!, 10) };
   }
@@ -487,13 +487,13 @@ function parsePullRequestTarget(rawTarget: string): PullRequestSwingTarget | nul
     if (url.hostname !== "github.com") {
       return null;
     }
-    const match = url.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/);
+    const match = /^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/u.exec(url.pathname);
     return match
       ? {
           number: Number.parseInt(match[3]!, 10),
           repo: {
-            owner: match[1]!,
             name: match[2]!,
+            owner: match[1]!,
           },
         }
       : null;
@@ -529,8 +529,8 @@ function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistory
       }
     : {
         kind: "external-session",
-        session: context.sessionName,
         path: context.worktreeRoot,
+        session: context.sessionName,
       };
 }
 
@@ -589,7 +589,7 @@ function saveSwingHistory(home: string, rootSourceRoot: string, history: SwingHi
   const filePath = getSwingHistoryFilePath(home, rootSourceRoot);
   const parsed = parseBoundaryValue(SwingHistorySchema, history, filePath);
   ensureDirectory(path.dirname(filePath));
-  writeFileSync(filePath, stringify(parsed), "utf8");
+  writeFileSync(filePath, stringify(parsed), "utf-8");
 }
 
 function getSwingHistoryFilePath(home: string, rootSourceRoot: string): string {

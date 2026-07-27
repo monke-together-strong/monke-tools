@@ -65,7 +65,7 @@ function createProgram(
         session,
         options.main || options.master
           ? { mode: "default-branch" }
-          : { mode: "current-head", copyDirty: options.dirty !== false },
+          : { copyDirty: options.dirty, mode: "current-head" },
         { codex: options.codex },
       );
     });
@@ -74,9 +74,7 @@ function createProgram(
     .command("swing")
     .argument("[target]")
     .option("--codex")
-    .action((target, options) => {
-      return swingAction(runtime, target, options);
-    });
+    .action((target, options) => swingAction(runtime, target, options));
 
   program.command("materialize").action(() => {
     runMaterialize(runtime);
@@ -94,7 +92,7 @@ function createProgram(
       runCleanup(
         runtime,
         options.merged === true
-          ? { mode: "merged", dryRun: options.dryRun === true }
+          ? { dryRun: options.dryRun === true, mode: "merged" }
           : { mode: "dead-only" },
       );
     });

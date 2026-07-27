@@ -71,35 +71,35 @@ export const IMPORTED_REFERENCES_ROOT = path.join("skills", "references", "impor
 const INTERNAL_SKILLS_ROOT = path.join("skills", "internal");
 const INTERNAL_REFERENCES_ROOT = path.join("skills", "references", "internal");
 const IMPORT_RECIPE_STORE_PATH = path.join(IMPORTED_SKILLS_ROOT, ".monke-imports.json");
-const CSI_RE = new RegExp(String.raw`\u001b\[[\u0030-\u003f]*[\u0020-\u002f]*[\u0040-\u007e]`, "g");
-const OSC_RE = new RegExp(String.raw`\u001b\][\s\S]*?(?:\u0007|\u001b\\)`, "g");
-const DCS_PM_APC_RE = new RegExp(String.raw`\u001b[P^_][\s\S]*?(?:\u001b\\)`, "g");
-const SIMPLE_ESC_RE = new RegExp(String.raw`\u001b[\u0020-\u007e]`, "g");
-const C1_RE = new RegExp(String.raw`[\u0080-\u009f]`, "g");
+const CSI_RE = new RegExp(
+  String.raw`\u001b\[[\u0030-\u003f]*[\u0020-\u002f]*[\u0040-\u007e]`,
+  "gu",
+);
+const OSC_RE = new RegExp(String.raw`\u001b\][\s\S]*?(?:\u0007|\u001b\\)`, "gu");
+const DCS_PM_APC_RE = new RegExp(String.raw`\u001b[P^_][\s\S]*?(?:\u001b\\)`, "gu");
+const SIMPLE_ESC_RE = new RegExp(String.raw`\u001b[\u0020-\u007e]`, "gu");
+const C1_RE = new RegExp(String.raw`[\u0080-\u009f]`, "gu");
 const CONTROL_RE = new RegExp(
   String.raw`[\u0000-\u0006\u0007\u0008\u000b\u000c\u000d-\u001a\u001c-\u001f\u007f]`,
-  "g",
+  "gu",
 );
 
 const SkillImportRecipeSkillSchema = z.strictObject(
   {
+    kind: z.enum(["skill", "reference"], {
+      error: "Import kind must be skill or reference",
+    }),
     selector: z.string().refine((value) => value.trim().length > 0, {
       error: "Skill import selector must be a non-empty string",
     }),
     slug: z.string().refine((value) => value.trim().length > 0, {
       error: "Skill slug must be a non-empty string",
     }),
-    kind: z.enum(["skill", "reference"], {
-      error: "Import kind must be skill or reference",
-    }),
   },
   { error: "Skill import recipe skill must be a JSON object" },
 );
 const SkillImportRecipeSchema = z.strictObject(
   {
-    source: z.string().refine((value) => value.trim().length > 0, {
-      error: "Skill import recipe source must be a non-empty string",
-    }),
     acceptOpenClawRisks: z
       .literal(true, {
         error: "Skill import recipe acceptOpenClawRisks must be true when present",
@@ -110,15 +110,18 @@ const SkillImportRecipeSchema = z.strictObject(
         error: "Skill import recipe skills must be a non-empty array",
       })
       .min(1, { error: "Skill import recipe skills must be a non-empty array" }),
+    source: z.string().refine((value) => value.trim().length > 0, {
+      error: "Skill import recipe source must be a non-empty string",
+    }),
   },
   { error: "Skill import recipe must be a JSON object" },
 );
 const SkillImportRecipeStoreSchema = z.strictObject(
   {
-    version: z.literal(2, { error: "Skill import recipe store version must be 2" }),
     recipes: z.array(SkillImportRecipeSchema, {
       error: "Skill import recipe store recipes must be an array",
     }),
+    version: z.literal(2, { error: "Skill import recipe store version must be 2" }),
   },
   { error: "Skill import recipe store must be a JSON object" },
 );
@@ -185,7 +188,7 @@ export function parseAvailableSkillNames(output: string): string[] {
 
 /** Parses upstream skill groups and selectors from `skills add -l` output. */
 export function parseAvailableSkillGroups(output: string): AvailableSkillGroup[] {
-  const lines = stripTerminalEscapes(output).split(/\r?\n/);
+  const lines = stripTerminalEscapes(output).split(/\r?\n/u);
   const groups: AvailableSkillGroup[] = [];
   const seenNames = new Set<string>();
   let inAvailableSkillsSection = false;
@@ -261,12 +264,12 @@ export function readImportRecipeStore(repoRoot: string): SkillImportRecipeStore 
   const storePath = path.join(repoRoot, IMPORT_RECIPE_STORE_PATH);
   if (!existsSync(storePath)) {
     return {
-      version: 2,
       recipes: [],
+      version: 2,
     };
   }
 
-  return normalizeImportRecipeStore(JSON.parse(readFileSync(storePath, "utf8")));
+  return normalizeImportRecipeStore(JSON.parse(readFileSync(storePath, "utf-8")));
 }
 
 /** Writes the Skill import recipe store with deterministic recipe and skill ordering. */
@@ -275,7 +278,7 @@ export function writeImportRecipeStore(repoRoot: string, store: SkillImportRecip
   const storePath = path.join(repoRoot, IMPORT_RECIPE_STORE_PATH);
   mkdirSync(path.dirname(storePath), { recursive: true });
   const temporaryStorePath = `${storePath}.tmp`;
-  writeFileSync(temporaryStorePath, `${JSON.stringify(normalizedStore, null, 2)}\n`, "utf8");
+  writeFileSync(temporaryStorePath, `${JSON.stringify(normalizedStore, null, 2)}\n`, "utf-8");
   renameSync(temporaryStorePath, storePath);
 }
 
@@ -297,7 +300,7 @@ export function listStagedSkillSlugs(stagingDirectory: string): string[] {
       const entryPath = path.join(stagedSkillsRoot, entry);
       return statSync(entryPath).isDirectory();
     })
-    .sort();
+    .toSorted();
 
   if (stagedSkillNames.length === 0) {
     throw new MonkeError(`No staged skill directories found at ${stagedSkillsRoot}`);
@@ -362,7 +365,7 @@ export function copyStagedGuidanceToManagedRoots(options: {
     options.commitState?.();
   } catch (error) {
     for (const [targetPath, backupPath] of affectedPaths) {
-      rmSync(targetPath, { recursive: true, force: true });
+      rmSync(targetPath, { force: true, recursive: true });
       if (existsSync(backupPath)) {
         mkdirSync(path.dirname(targetPath), { recursive: true });
         renameSync(backupPath, targetPath);
@@ -370,8 +373,8 @@ export function copyStagedGuidanceToManagedRoots(options: {
     }
     throw error;
   } finally {
-    rmSync(preparedRoot, { recursive: true, force: true });
-    rmSync(backupRoot, { recursive: true, force: true });
+    rmSync(preparedRoot, { force: true, recursive: true });
+    rmSync(backupRoot, { force: true, recursive: true });
   }
 }
 
@@ -390,9 +393,9 @@ function transformPreparedReference(referencePath: string): void {
     throw new MonkeError(`Expected staged Skill entry document to be a regular file`);
   }
 
-  const body = removeLeadingYamlFrontmatter(readFileSync(skillEntryPath, "utf8"));
+  const body = removeLeadingYamlFrontmatter(readFileSync(skillEntryPath, "utf-8"));
   unlinkSync(skillEntryPath);
-  writeFileSync(referenceEntryPath, body, { encoding: "utf8", flag: "wx" });
+  writeFileSync(referenceEntryPath, body, { encoding: "utf-8", flag: "wx" });
 }
 
 function removeLeadingYamlFrontmatter(markdown: string): string {
@@ -400,7 +403,7 @@ function removeLeadingYamlFrontmatter(markdown: string): string {
     return markdown;
   }
 
-  const match = markdown.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/);
+  const match = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u.exec(markdown);
   if (!match) {
     throw new MonkeError("Imported reference has unterminated leading YAML frontmatter");
   }
@@ -432,7 +435,7 @@ function assertObsoleteReferencesAreUnconsumed(
         ),
       )
       .map((entryPath) => path.relative(repoRoot, entryPath))
-      .sort();
+      .toSorted();
 
     if (consumers.length > 0) {
       throw new MonkeError(
@@ -457,7 +460,7 @@ function listReferenceConsumers(
       return listReferenceConsumers(entryPath, obsoleteReferenceRoot, referencePathPrefix);
     }
     if (entry.isFile()) {
-      const content = readFileSync(entryPath, "utf8");
+      const content = readFileSync(entryPath, "utf-8");
       const consumesReference =
         content.includes(referencePathPrefix) ||
         contentContainsRelativePathInto(content, path.dirname(entryPath), obsoleteReferenceRoot);
@@ -480,7 +483,7 @@ function contentContainsRelativePathInto(
   consumerDirectory: string,
   targetRoot: string,
 ): boolean {
-  const relativePathPattern = /(?:\.\.?\/)+[^\s)"'`>]+/g;
+  const relativePathPattern = /(?:\.\.?\/)+[^\s)"'`>]+/gu;
   return [...content.matchAll(relativePathPattern)].some((match) =>
     isPathWithin(targetRoot, path.resolve(consumerDirectory, match[0] ?? "")),
   );
@@ -592,7 +595,7 @@ export function extractSecurityRiskAssessment(output: string): string | null {
 
 /** Parses upstream security assessment rows from install output. */
 function parseSecurityRiskAssessment(output: string): SecurityRiskAssessment | null {
-  const rawLines = output.split(/\r?\n/);
+  const rawLines = output.split(/\r?\n/u);
   const strippedLines = rawLines.map(stripTerminalEscapes);
   const startIndex = strippedLines.findIndex((line) => line.includes("Security Risk Assessments"));
   if (startIndex === -1) {
@@ -632,8 +635,8 @@ function parseSecurityRiskAssessment(output: string): SecurityRiskAssessment | n
   }
 
   return {
-    rows,
     detailsUrl,
+    rows,
   };
 }
 
@@ -662,9 +665,9 @@ export async function runImportSkills(
 
     const installOutput = runSkillsCaptured(
       buildSkillsInstallArgs({
-        source: normalizedSource,
         acceptOpenClawRisks,
         selectors: selectedSkills,
+        source: normalizedSource,
       }),
       stagingDirectory,
     );
@@ -677,32 +680,32 @@ export async function runImportSkills(
 
     const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
     const stagedSelections = mapSelectedSkillsToImportedSlugs({
-      source: normalizedSource,
       acceptOpenClawRisks,
-      selectors: selectedSkills,
       importedSkillSlugs: stagedSlugs,
+      selectors: selectedSkills,
+      source: normalizedSource,
     });
     const previousRecipeStore = readImportRecipeStore(repoRoot);
     const importedGuidance = stagedSelections.map((selection) => ({ ...selection, kind }));
     const obsoleteGuidance = findMigratedGuidanceCopies({
-      source,
       importedGuidance,
       previousStore: previousRecipeStore,
+      source,
     });
     const nextRecipeStore = mergeImportedGuidanceIntoRecipeStore(previousRecipeStore, {
-      source,
       acceptOpenClawRisks,
       kind,
       skills: stagedSelections,
+      source,
     });
     copyStagedGuidanceToManagedRoots({
-      stagingDirectory,
-      repoRoot,
-      guidance: importedGuidance,
-      obsoleteGuidance,
       commitState() {
         writeImportRecipeStore(repoRoot, nextRecipeStore);
       },
+      guidance: importedGuidance,
+      obsoleteGuidance,
+      repoRoot,
+      stagingDirectory,
     });
 
     if (install) {
@@ -710,7 +713,7 @@ export async function runImportSkills(
       (dependencies.runInstallCommand ?? runInstallCommand)(repoRoot);
     }
   } finally {
-    rmSync(stagingDirectory, { recursive: true, force: true });
+    rmSync(stagingDirectory, { force: true, recursive: true });
   }
 }
 
@@ -754,10 +757,10 @@ function parseCommand(argv: string[]): ImportCommandOptions {
 
   const options = program.opts();
   return {
-    source: program.processedArgs[0],
-    install: Boolean(options.install),
     acceptOpenClawRisks: Boolean(options.acceptOpenclawRisks),
+    install: Boolean(options.install),
     kind: options.ref ? "reference" : "skill",
+    source: program.processedArgs[0],
   };
 }
 
@@ -792,8 +795,8 @@ export function runInstallCommand(repoRoot: string): void {
 export function runSkillsCaptured(args: string[], cwd: string): CapturedCommandOutput {
   const result = spawnSync(NPX_COMMAND, args, {
     cwd,
+    encoding: "utf-8",
     env: process.env,
-    encoding: "utf8",
   });
 
   if (result.error) {
@@ -808,8 +811,8 @@ export function runSkillsCaptured(args: string[], cwd: string): CapturedCommandO
   }
 
   return {
-    stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
+    stdout: result.stdout ?? "",
   };
 }
 
@@ -854,20 +857,21 @@ function renderSecurityRiskAssessment(assessment: SecurityRiskAssessment): strin
 }
 
 function parseSecurityRiskRow(line: string): SecurityRiskRow | null {
-  const wideParts = line.split(/\s{2,}/).filter(Boolean);
+  const wideParts = line.split(/\s{2,}/u).filter(Boolean);
   if (wideParts.length >= 4) {
     const [skillName, gen, socket, snyk] = wideParts;
     return {
-      skillName: skillName!,
       gen: gen!,
-      socket: socket!,
+      skillName: skillName!,
       snyk: snyk!,
+      socket: socket!,
     };
   }
 
   const riskPattern = "(?:Critical Risk|High Risk|Med Risk|Low Risk|Safe|--)";
   const rowPattern = new RegExp(
     `^(\\S+)\\s+(${riskPattern})\\s+((?:\\d+ alerts?)|--)\\s+(${riskPattern})$`,
+    "u",
   );
   const match = line.match(rowPattern);
   if (!match) {
@@ -876,10 +880,10 @@ function parseSecurityRiskRow(line: string): SecurityRiskRow | null {
 
   const [, skillName = "", gen = "", socket = "", snyk = ""] = match;
   return {
-    skillName,
     gen,
-    socket,
+    skillName,
     snyk,
+    socket,
   };
 }
 
@@ -900,15 +904,15 @@ function renderNoteBox(title: string, bodyLines: string[]): string {
     visibleLength(title) + 2,
     ...bodyLines.map((line) => visibleLength(line)),
   );
-  const titlePrefix = `${pc.green("\u25c7")}  ${title} `;
+  const titlePrefix = `${pc.green("\u25C7")}  ${title} `;
   const topRuleWidth = Math.max(1, contentWidth - visibleLength(title) - 1);
   const lines = [
-    `${titlePrefix}${pc.dim("\u2500".repeat(topRuleWidth))}${pc.dim("\u256e")}`,
+    `${titlePrefix}${pc.dim("\u2500".repeat(topRuleWidth))}${pc.dim("\u256E")}`,
     ...bodyLines.map((line) => {
       const padding = " ".repeat(contentWidth - visibleLength(line));
       return `${pc.dim("\u2502")} ${line}${padding} ${pc.dim("\u2502")}`;
     }),
-    `${pc.dim("\u2570")}${pc.dim("\u2500".repeat(contentWidth + 2))}${pc.dim("\u256f")}`,
+    `${pc.dim("\u2570")}${pc.dim("\u2500".repeat(contentWidth + 2))}${pc.dim("\u256F")}`,
   ];
 
   return `${lines.join("\n")}\n`;
@@ -917,17 +921,22 @@ function renderNoteBox(title: string, bodyLines: string[]): string {
 function riskValueLabel(value: string): string {
   switch (value.toLowerCase()) {
     case "safe":
-    case "low risk":
+    case "low risk": {
       return pc.green(value);
-    case "med risk":
+    }
+    case "med risk": {
       return pc.yellow(value);
+    }
     case "high risk":
-    case "critical risk":
+    case "critical risk": {
       return pc.red(value);
-    case "--":
+    }
+    case "--": {
       return pc.dim(value);
-    default:
+    }
+    default: {
       return value;
+    }
   }
 }
 
@@ -957,10 +966,10 @@ async function promptForSkillSelection(
   const groupedOptions = buildGroupedSkillOptions(availableSkillGroups);
   const firstSkillName = availableSkillGroups.find((group) => group.skills.length > 0)?.skills[0];
   const selectedSkills = await groupedSkillMultiselect({
-    message: `Select skills to import ${pc.dim("(space to toggle)")}`,
-    options: groupedOptions,
     cursorAt: firstSkillName,
     maxItems: 10,
+    message: `Select skills to import ${pc.dim("(space to toggle)")}`,
+    options: groupedOptions,
     required: true,
   });
 
@@ -981,14 +990,14 @@ export function buildGroupedSkillOptions(
       .map((group) => [
         group.name,
         group.skills.map((skill) => ({
-          value: skill,
           label: skill,
+          value: skill,
         })),
       ]),
   );
 }
 
-function groupedSkillMultiselect(options: {
+async function groupedSkillMultiselect(options: {
   message: string;
   options: GroupedSkillOptions;
   cursorAt?: string;
@@ -996,16 +1005,8 @@ function groupedSkillMultiselect(options: {
   required: boolean;
 }): Promise<string[] | symbol> {
   return new GroupMultiSelectPrompt<p.Option<string>>({
-    options: options.options,
     cursorAt: options.cursorAt,
-    required: options.required,
-    selectableGroups: false,
-    validate(value) {
-      if (this.required && value.length === 0) {
-        return `Please select at least one skill.
-${pc.reset(pc.dim(`Press ${pc.gray(pc.bgWhite(pc.inverse(" space ")))} to select, ${pc.gray(pc.bgWhite(pc.inverse(" enter ")))} to submit`))}`;
-      }
-    },
+    options: options.options,
     render() {
       const title = `${pc.gray("\u2502")}
 ${stepSymbol(this.state)}  ${options.message}
@@ -1034,25 +1035,33 @@ ${stepSymbol(this.state)}  ${options.message}
             )
             .join("\n");
           return `${title}${pc.yellow("\u2502")}  ${renderVisibleGroupedPromptOptions({
-            options: this.options,
-            cursor: this.cursor,
-            selectedValues: this.value,
-            maxItems: options.maxItems,
             bar: pc.yellow("\u2502"),
+            cursor: this.cursor,
+            maxItems: options.maxItems,
+            options: this.options,
+            selectedValues: this.value,
           })}
 ${error}
 `;
         }
         default:
           return `${title}${pc.cyan("\u2502")}  ${renderVisibleGroupedPromptOptions({
-            options: this.options,
-            cursor: this.cursor,
-            selectedValues: this.value,
-            maxItems: options.maxItems,
             bar: pc.cyan("\u2502"),
+            cursor: this.cursor,
+            maxItems: options.maxItems,
+            options: this.options,
+            selectedValues: this.value,
           })}
 ${pc.cyan("\u2514")}
 `;
+      }
+    },
+    required: options.required,
+    selectableGroups: false,
+    validate(value) {
+      if (this.required && value.length === 0) {
+        return `Please select at least one skill.
+${pc.reset(pc.dim(`Press ${pc.gray(pc.bgWhite(pc.inverse(" space ")))} to select, ${pc.gray(pc.bgWhite(pc.inverse(" enter ")))} to submit`))}`;
       }
     },
   }).prompt() as Promise<string[] | symbol>;
@@ -1075,9 +1084,9 @@ function renderVisibleGroupedPromptOptions(options: {
   bar: string;
 }): string {
   const visibleOptions = getVisibleGroupedPromptOptions({
-    options: options.options,
     cursor: options.cursor,
     maxItems: options.maxItems,
+    options: options.options,
   });
 
   return visibleOptions
@@ -1101,7 +1110,7 @@ function getVisibleGroupedPromptOptions(options: {
   options: readonly GroupedPromptOption[];
   cursor: number;
   maxItems: number;
-}): Array<GroupedPromptOption & { index: number }> {
+}): (GroupedPromptOption & { index: number })[] {
   const terminalRows =
     process.stdout.rows && process.stdout.rows > 0 ? process.stdout.rows - 4 : 10;
   const maxItems = Math.max(5, Math.min(options.maxItems, terminalRows));
@@ -1118,7 +1127,7 @@ function getVisibleGroupedPromptOptions(options: {
     const groupHeaderIndex = options.options.findIndex(
       (option) => option.group === true && option.value === cursorGroupName,
     );
-    if (groupHeaderIndex >= 0 && groupHeaderIndex < start) {
+    if (groupHeaderIndex !== -1 && groupHeaderIndex < start) {
       start = groupHeaderIndex;
       end = Math.min(options.options.length, start + maxItems);
       if (options.cursor >= end) {
@@ -1134,27 +1143,27 @@ function getVisibleGroupedPromptOptions(options: {
     visible.some((option) => option.group === true && option.value === cursorGroupName);
   if (cursorGroupName && !hasCurrentGroupHeader) {
     visible.unshift({
-      value: cursorGroupName,
-      label: cursorGroupName,
       group: true,
       index: -1,
+      label: cursorGroupName,
+      value: cursorGroupName,
     });
   }
 
   if (start > 0) {
     visible.unshift({
-      value: "__more_before__",
-      label: "...",
       group: true,
       index: -1,
+      label: "...",
+      value: "__more_before__",
     });
   }
   if (end < options.options.length) {
     visible.push({
-      value: "__more_after__",
-      label: "...",
       group: true,
       index: -1,
+      label: "...",
+      value: "__more_after__",
     });
   }
 
@@ -1177,31 +1186,41 @@ function renderGroupedPromptOption(
   const branch = pc.dim(`${isLastInGroup ? "\u2514" : "\u2502"} `);
 
   switch (state) {
-    case "active":
-      return `${branch}${pc.cyan("\u25fb")} ${label}`;
-    case "selected":
-      return `${branch}${pc.green("\u25fc")} ${pc.dim(label)}`;
-    case "active-selected":
-      return `${branch}${pc.green("\u25fc")} ${label}`;
-    case "submitted":
+    case "active": {
+      return `${branch}${pc.cyan("\u25FB")} ${label}`;
+    }
+    case "selected": {
+      return `${branch}${pc.green("\u25FC")} ${pc.dim(label)}`;
+    }
+    case "active-selected": {
+      return `${branch}${pc.green("\u25FC")} ${label}`;
+    }
+    case "submitted": {
       return pc.dim(label);
-    case "cancelled":
+    }
+    case "cancelled": {
       return pc.strikethrough(pc.dim(label));
-    case "inactive":
-      return `${branch}${pc.dim("\u25fb")} ${pc.dim(label)}`;
+    }
+    case "inactive": {
+      return `${branch}${pc.dim("\u25FB")} ${pc.dim(label)}`;
+    }
   }
 }
 
 function stepSymbol(state: string): string {
   switch (state) {
-    case "cancel":
-      return pc.red("\u25a0");
-    case "error":
-      return pc.yellow("\u25b2");
-    case "submit":
-      return pc.green("\u25c7");
-    default:
-      return pc.cyan("\u25c6");
+    case "cancel": {
+      return pc.red("\u25A0");
+    }
+    case "error": {
+      return pc.yellow("\u25B2");
+    }
+    case "submit": {
+      return pc.green("\u25C7");
+    }
+    default: {
+      return pc.cyan("\u25C6");
+    }
   }
 }
 
@@ -1217,17 +1236,16 @@ export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeSto
     assertUniqueRecipeSkillSlugs(recipe.source, recipe.skills);
     return {
       ...recipe,
-      skills: recipe.skills.sort((left, right) => {
+      skills: recipe.skills.toSorted((left, right) => {
         const slugOrder = left.slug.localeCompare(right.slug);
-        return slugOrder !== 0 ? slugOrder : left.selector.localeCompare(right.selector);
+        return slugOrder === 0 ? left.selector.localeCompare(right.selector) : slugOrder;
       }),
     };
   });
   assertUniqueRecipeSources(recipes);
-  assertUniqueImportedSkillOwners({ version: 2, recipes });
+  assertUniqueImportedSkillOwners({ recipes, version: 2 });
 
   return {
-    version: 2,
     recipes: recipes.sort((left, right) => {
       const sourceOrder = left.source.localeCompare(right.source);
       if (sourceOrder !== 0) {
@@ -1236,6 +1254,7 @@ export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeSto
 
       return Number(Boolean(left.acceptOpenClawRisks)) - Number(Boolean(right.acceptOpenClawRisks));
     }),
+    version: 2,
   };
 }
 
@@ -1328,9 +1347,9 @@ function mapSelectedSkillsToImportedSlugs(options: {
     return mapSelectedSkillsToImportedSlugsFromSet(options.selectors, options.importedSkillSlugs);
   } catch {
     const mappings = resolveSkillSelectorSlugMappings({
-      source: options.source,
       acceptOpenClawRisks: options.acceptOpenClawRisks,
       selectors: options.selectors,
+      source: options.source,
     });
     assertSkillSelectorSlugMappingsMatchStagedSlugs(
       options.source,
@@ -1402,9 +1421,9 @@ export function resolveSkillSelectorSlugMappings(
     try {
       runSkillsCaptured(
         buildSkillsInstallArgs({
-          source: options.source,
           acceptOpenClawRisks: options.acceptOpenClawRisks,
           selectors: [selector],
+          source: options.source,
         }),
         stagingDirectory,
       );
@@ -1421,7 +1440,7 @@ export function resolveSkillSelectorSlugMappings(
         slug: stagedSlugs[0]!,
       };
     } finally {
-      rmSync(stagingDirectory, { recursive: true, force: true });
+      rmSync(stagingDirectory, { force: true, recursive: true });
     }
   });
 }
@@ -1432,8 +1451,8 @@ export function assertSkillSelectorSlugMappingsMatchStagedSlugs(
   mappings: readonly StagedSkillSelection[],
   stagedSlugs: readonly string[],
 ): void {
-  const mappedSlugs = mappings.map((mapping) => mapping.slug).sort();
-  const sortedStagedSlugs = [...stagedSlugs].sort();
+  const mappedSlugs = mappings.map((mapping) => mapping.slug).toSorted();
+  const sortedStagedSlugs = [...stagedSlugs].toSorted();
   if (
     mappedSlugs.length !== sortedStagedSlugs.length ||
     mappedSlugs.some((slug, index) => slug !== sortedStagedSlugs[index])
@@ -1449,7 +1468,7 @@ export function assertSkillSelectorSlugMappingsMatchStagedSlugs(
 }
 
 function parseSkillRow(line: string): string | null {
-  const match = line.match(/^\s*(?:\u2502)?( +)(\S.*)$/);
+  const match = /^\s*(?:\u2502)?( +)(\S.*)$/u.exec(line);
   if (!match) {
     return null;
   }
@@ -1514,7 +1533,7 @@ function isLocalPath(input: string): boolean {
     input.startsWith("../") ||
     input === "." ||
     input === ".." ||
-    /^[a-zA-Z]:[/\\]/.test(input)
+    /^[a-zA-Z]:[/\\]/u.test(input)
   );
 }
 

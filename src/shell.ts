@@ -106,7 +106,7 @@ function writeDirectoryDirective(runtime: Runtime, targetPath: string): boolean 
   }
 
   try {
-    writeFileSync(directivePath, targetPath, "utf8");
+    writeFileSync(directivePath, targetPath, "utf-8");
     return true;
   } catch {
     return false;
@@ -126,7 +126,7 @@ function isShellIntegrationConfigured(runtime: Runtime): boolean {
       return false;
     }
     try {
-      return readFileSync(startupFile, "utf8").includes(INTEGRATION_START);
+      return readFileSync(startupFile, "utf-8").includes(INTEGRATION_START);
     } catch {
       return false;
     }
@@ -135,20 +135,20 @@ function isShellIntegrationConfigured(runtime: Runtime): boolean {
 
 function installStartupBlock(startupFile: string, block: string): void {
   ensureDirectory(path.dirname(startupFile));
-  const existing = existsSync(startupFile) ? readFileSync(startupFile, "utf8") : "";
+  const existing = existsSync(startupFile) ? readFileSync(startupFile, "utf-8") : "";
   const startIndex = existing.indexOf(INTEGRATION_START);
   const endIndex = existing.indexOf(INTEGRATION_END);
   let nextContents: string;
 
-  if (startIndex >= 0 && endIndex > startIndex) {
+  if (startIndex !== -1 && endIndex > startIndex) {
     const afterEnd = endIndex + INTEGRATION_END.length;
-    nextContents = `${existing.slice(0, startIndex)}${block}${existing.slice(afterEnd).replace(/^\n/, "")}`;
+    nextContents = `${existing.slice(0, startIndex)}${block}${existing.slice(afterEnd).replace(/^\n/u, "")}`;
   } else {
     const separator = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
     nextContents = `${existing}${separator}${block}`;
   }
 
-  writeFileSync(startupFile, nextContents, "utf8");
+  writeFileSync(startupFile, nextContents, "utf-8");
 }
 
 function renderStartupBlock(shell: SupportedShell, binaryPath: string): string {

@@ -22,7 +22,7 @@ import type {
   RetrospectiveWindow,
 } from "./types.ts";
 
-const LOCK_TIMEOUT_MS = 5_000;
+const LOCK_TIMEOUT_MS = 5000;
 
 /** Root of all retrospective state, matching monke house style under MONKE_HOME. */
 export function retroHome(monkeHome?: string): string {
@@ -49,13 +49,13 @@ export function loadFrozenSession(
   if (!existsSync(filePath)) {
     return null;
   }
-  return parse(readFileSync(filePath, "utf8")) as FrozenSessionRecord;
+  return parse(readFileSync(filePath, "utf-8")) as FrozenSessionRecord;
 }
 
 export function saveFrozenSession(root: string, record: FrozenSessionRecord): void {
   const filePath = sessionPath(root, record.agent, record.sessionId);
   ensureDir(path.dirname(filePath));
-  writeFileSync(filePath, stringify(record), "utf8");
+  writeFileSync(filePath, stringify(record), "utf-8");
 }
 
 export function listFrozenSessions(root: string): FrozenSessionRecord[] {
@@ -65,7 +65,7 @@ export function listFrozenSessions(root: string): FrozenSessionRecord[] {
   }
   return readdirSync(dir)
     .filter((entry) => entry.endsWith(".yml"))
-    .map((entry) => parse(readFileSync(path.join(dir, entry), "utf8")) as FrozenSessionRecord);
+    .map((entry) => parse(readFileSync(path.join(dir, entry), "utf-8")) as FrozenSessionRecord);
 }
 
 // --- repo meta ---------------------------------------------------------------
@@ -73,7 +73,7 @@ export function listFrozenSessions(root: string): FrozenSessionRecord[] {
 export function saveRepoMeta(root: string, meta: RepoMeta): void {
   const filePath = path.join(root, "repos", `${hashKey(meta.repoKey)}.yml`);
   ensureDir(path.dirname(filePath));
-  writeFileSync(filePath, stringify(meta), "utf8");
+  writeFileSync(filePath, stringify(meta), "utf-8");
 }
 
 export function loadRepoMeta(root: string, repoKey: string): RepoMeta | null {
@@ -81,7 +81,7 @@ export function loadRepoMeta(root: string, repoKey: string): RepoMeta | null {
   if (!existsSync(filePath)) {
     return null;
   }
-  return parse(readFileSync(filePath, "utf8")) as RepoMeta;
+  return parse(readFileSync(filePath, "utf-8")) as RepoMeta;
 }
 
 // --- run dir (bundles + findings, transient) --------------------------------
@@ -94,12 +94,12 @@ export function writeBundle(root: string, bundle: RepoBundle): string {
   const dir = runDir(root, bundle.runTs);
   ensureDir(dir);
   const filePath = path.join(dir, `${bundle.repoHash}.json`);
-  writeFileSync(filePath, JSON.stringify(bundle, null, 2), "utf8");
+  writeFileSync(filePath, JSON.stringify(bundle, null, 2), "utf-8");
   return filePath;
 }
 
 export function readBundle(root: string, runTs: string, repoHash: string): RepoBundle {
-  return JSON.parse(readFileSync(path.join(runDir(root, runTs), `${repoHash}.json`), "utf8"));
+  return JSON.parse(readFileSync(path.join(runDir(root, runTs), `${repoHash}.json`), "utf-8"));
 }
 
 export function listBundleHashes(root: string, runTs: string): string[] {
@@ -117,7 +117,7 @@ export function listBundleHashes(root: string, runTs: string): string[] {
 export function writeRunWindow(root: string, runTs: string, window: RetrospectiveWindow): string {
   const filePath = path.join(runDir(root, runTs), "window.json");
   ensureDir(path.dirname(filePath));
-  writeFileSync(filePath, JSON.stringify(window, null, 2), "utf8");
+  writeFileSync(filePath, JSON.stringify(window, null, 2), "utf-8");
   return filePath;
 }
 
@@ -126,7 +126,7 @@ export function readRunWindow(root: string, runTs: string): RetrospectiveWindow 
   if (!existsSync(filePath)) {
     return null;
   }
-  return JSON.parse(readFileSync(filePath, "utf8")) as RetrospectiveWindow;
+  return JSON.parse(readFileSync(filePath, "utf-8")) as RetrospectiveWindow;
 }
 
 export function findingsPath(root: string, runTs: string, repoHash: string): string {
@@ -138,7 +138,7 @@ export function readFindings(root: string, runTs: string, repoHash: string): Rep
   if (!existsSync(filePath)) {
     return null;
   }
-  return JSON.parse(readFileSync(filePath, "utf8")) as RepoFindings;
+  return JSON.parse(readFileSync(filePath, "utf-8")) as RepoFindings;
 }
 
 export function prAnalysisPath(root: string, runTs: string): string {
@@ -150,11 +150,11 @@ export function readPrAnalysis(root: string, runTs: string): string | null {
   if (!existsSync(filePath)) {
     return null;
   }
-  return readFileSync(filePath, "utf8");
+  return readFileSync(filePath, "utf-8");
 }
 
 export function cleanRunDir(root: string, runTs: string): void {
-  rmSync(runDir(root, runTs), { recursive: true, force: true });
+  rmSync(runDir(root, runTs), { force: true, recursive: true });
 }
 
 // --- reports -----------------------------------------------------------------
@@ -163,7 +163,7 @@ export function writeReport(root: string, runTs: string, content: string): strin
   const dir = path.join(root, "reports");
   ensureDir(dir);
   const filePath = path.join(dir, `${runTs}-retrospective.md`);
-  writeFileSync(filePath, content, "utf8");
+  writeFileSync(filePath, content, "utf-8");
   return filePath;
 }
 
@@ -171,7 +171,7 @@ export function writeReportArtifact(root: string, runTs: string, suffix: string,
   const dir = path.join(root, "reports");
   ensureDir(dir);
   const filePath = path.join(dir, `${runTs}-${suffix}.md`);
-  writeFileSync(filePath, content, "utf8");
+  writeFileSync(filePath, content, "utf-8");
   return filePath;
 }
 
@@ -183,7 +183,7 @@ export function listReportPaths(root: string): string[] {
   return readdirSync(dir)
     .filter((entry) => entry.endsWith("-retrospective.md"))
     .map((entry) => path.join(dir, entry))
-    .sort();
+    .toSorted();
 }
 
 // --- lock (one run at a time) ------------------------------------------------
@@ -198,7 +198,7 @@ export function withRetroLock<T>(root: string, callback: () => T): T {
   while (fd === null) {
     try {
       fd = openSync(lockPath, "wx");
-      writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }), "utf8");
+      writeFileSync(lockPath, JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }), "utf-8");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes("EEXIST")) {
@@ -208,7 +208,7 @@ export function withRetroLock<T>(root: string, callback: () => T): T {
         continue;
       }
       if (Date.now() >= deadline) {
-        throw new Error(`Timed out waiting for retrospective lock at ${lockPath}`);
+        throw new Error(`Timed out waiting for retrospective lock at ${lockPath}`, { cause: error });
       }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
     }
@@ -225,7 +225,7 @@ export function withRetroLock<T>(root: string, callback: () => T): T {
 function evictIfStale(lockPath: string): boolean {
   let stale = false;
   try {
-    const meta = JSON.parse(readFileSync(lockPath, "utf8")) as { pid?: number; acquiredAt?: number };
+    const meta = JSON.parse(readFileSync(lockPath, "utf-8")) as { pid?: number; acquiredAt?: number };
     if (typeof meta.pid === "number" && meta.pid > 0) {
       // Liveness wins over age: a long run (>60s) past the cutoff must keep its lock.
       try {

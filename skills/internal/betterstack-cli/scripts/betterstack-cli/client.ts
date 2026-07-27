@@ -1,12 +1,12 @@
-type QueryCredentials = {
+interface QueryCredentials {
   password: string;
   url: string;
   username: string;
-};
+}
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-export type BetterStackSourceResponse = {
+export interface BetterStackSourceResponse {
   data: {
     id: string;
     type: string;
@@ -18,10 +18,10 @@ export type BetterStackSourceResponse = {
       name: string;
     };
   };
-};
+}
 
-export type BetterStackConnectionsResponse = {
-  data: Array<{
+export interface BetterStackConnectionsResponse {
+  data: {
     id: string;
     type: string;
     attributes: {
@@ -35,8 +35,8 @@ export type BetterStackConnectionsResponse = {
       team_ids: number[];
       team_names: string[];
     };
-  }>;
-};
+  }[];
+}
 
 export class BetterStackApiError extends Error {
   body: string;
@@ -53,14 +53,14 @@ export class BetterStackApiError extends Error {
 }
 
 export class BetterStackClient {
-  #token: string;
+  readonly #token: string;
 
   constructor(token: string) {
     this.#token = token;
   }
 
   async getSource(id: number): Promise<string> {
-    return this.#requestJsonText(`https://telemetry.betterstack.com/api/v1/sources/${id}`);
+    return await this.#requestJsonText(`https://telemetry.betterstack.com/api/v1/sources/${id}`);
   }
 
   async listSources(page?: number, perPage?: number): Promise<string> {
@@ -74,7 +74,7 @@ export class BetterStackClient {
       url.searchParams.set("per_page", String(perPage));
     }
 
-    return this.#requestJsonText(url.toString());
+    return await this.#requestJsonText(url.toString());
   }
 
   async listConnections(page?: number, perPage?: number): Promise<string> {
@@ -88,32 +88,32 @@ export class BetterStackClient {
       url.searchParams.set("per_page", String(perPage));
     }
 
-    return this.#requestJsonText(url.toString());
+    return await this.#requestJsonText(url.toString());
   }
 
   async runQuery(credentials: QueryCredentials, query: string): Promise<string> {
     const response = await fetch(credentials.url, {
-      method: "POST",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      body: query,
       headers: {
         Authorization: `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64")}`,
         "Content-Type": "text/plain"
       },
-      body: query
+      method: "POST",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return this.#readTextResponse(response);
+    return await this.#readTextResponse(response);
   }
 
   async #requestJsonText(url: string): Promise<string> {
     const response = await fetch(url, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${this.#token}`
-      }
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return this.#readTextResponse(response);
+    return await this.#readTextResponse(response);
   }
 
   async #readTextResponse(response: Response): Promise<string> {
@@ -128,7 +128,7 @@ export class BetterStackClient {
 }
 
 export function normalizeQueryUrl(input: string): string {
-  const schemeMatch = input.match(/^([a-z][a-z\d+.-]*):\/\//i);
+  const schemeMatch = /^([a-z][a-z\d+.-]*):\/\//iu.exec(input);
 
   if (schemeMatch) {
     if (schemeMatch[1]?.toLowerCase() !== "https") {

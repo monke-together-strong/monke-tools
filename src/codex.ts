@@ -27,14 +27,14 @@ function formatCodexNewThreadUrl(targetPath: string): string {
 
 function getUrlOpener(url: string): { command: string; args: string[] } {
   if (process.platform === "darwin") {
-    return { command: "open", args: [url] };
+    return { args: [url], command: "open" };
   }
 
   if (process.platform === "win32") {
-    return { command: "cmd", args: ["/c", "start", "", escapeWindowsCmdUrl(url)] };
+    return { args: ["/c", "start", "", escapeWindowsCmdUrl(url)], command: "cmd" };
   }
 
-  return { command: "xdg-open", args: [url] };
+  return { args: [url], command: "xdg-open" };
 }
 
 function escapeWindowsCmdUrl(url: string): string {

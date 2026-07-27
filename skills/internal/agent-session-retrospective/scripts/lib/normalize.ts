@@ -58,7 +58,7 @@ function clip(text: string, max: number): string {
 }
 
 function collapseWhitespace(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+  return text.replaceAll(/\s+/gu, " ").trim();
 }
 
 function safeStringify(value: unknown): string {
