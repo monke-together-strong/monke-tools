@@ -13,6 +13,7 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import type { SpawnSyncReturns } from "node:child_process";
 import { createHash } from "node:crypto";
 import { isCancel, select as clackSelect } from "@clack/prompts";
 import * as z from "zod";
@@ -67,53 +68,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     cwd: runtimeCwd,
     env: runtimeEnv,
     exec(command: string, args: string[] = [], execOptions?: ExecOptions): ExecResult {
-      const childEnv = {
-        ...runtimeEnv,
-        ...execOptions?.env,
-      };
-      delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
-
-      const result = spawnSync(command, args, {
-        cwd: execOptions?.cwd ?? runtimeCwd,
-        encoding: "utf-8",
-        env: childEnv,
-        input: execOptions?.stdin,
-        timeout:
-          execOptions?.timeoutSeconds === undefined ? undefined : execOptions.timeoutSeconds * 1000,
-      });
-
-      if (result.error) {
-        if (execOptions?.allowFailure === true && isTimeoutError(result.error)) {
-          return {
-            exitCode: -1,
-            stderr: result.stderr ?? "",
-            stdout: result.stdout ?? "",
-            timedOut: true,
-          };
-        }
-
-        throw new MonkeError(
-          `Failed to run ${formatCommand(command, args)}: ${result.error.message}`,
-        );
-      }
-
-      const stdout = result.stdout ?? "";
-      const stderr = result.stderr ?? "";
-      const exitCode = result.status ?? -1;
-
-      if (execOptions?.allowFailure !== true && result.status === null) {
-        const reason = result.signal
-          ? `terminated by signal ${result.signal}`
-          : "terminated by signal";
-        throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
-      }
-
-      if (execOptions?.allowFailure !== true && exitCode !== 0) {
-        const reason = stderr.trim() || stdout.trim() || `exit code ${exitCode}`;
-        throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
-      }
-
-      return { exitCode, stderr, stdout };
+      return executeCommand(runtimeEnv, runtimeCwd, command, args, execOptions);
     },
     readLine(prompt: string): string {
       writeStdout(prompt);
@@ -154,6 +109,72 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       writeStdout(text);
     },
   };
+}
+
+function executeCommand(
+  runtimeEnv: Record<string, string | undefined>,
+  runtimeCwd: string,
+  command: string,
+  args: string[],
+  options: ExecOptions | undefined,
+): ExecResult {
+  const childEnv = { ...runtimeEnv, ...options?.env };
+  delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
+
+  const result = spawnSync(command, args, {
+    cwd: options?.cwd ?? runtimeCwd,
+    encoding: "utf-8",
+    env: childEnv,
+    input: options?.stdin,
+    timeout: options?.timeoutSeconds === undefined ? undefined : options.timeoutSeconds * 1000,
+  });
+
+  if (result.error) {
+    return handleSpawnError(result, command, args, options?.allowFailure === true);
+  }
+  return handleCompletedCommand(result, command, args, options?.allowFailure === true);
+}
+
+function handleSpawnError(
+  result: SpawnSyncReturns<string>,
+  command: string,
+  args: string[],
+  allowFailure: boolean,
+): ExecResult {
+  const { error } = result;
+  if (error === undefined) {
+    throw new MonkeError(`Expected ${formatCommand(command, args)} to have a spawn error`);
+  }
+  if (allowFailure && isTimeoutError(error)) {
+    return {
+      exitCode: -1,
+      stderr: result.stderr ?? "",
+      stdout: result.stdout ?? "",
+      timedOut: true,
+    };
+  }
+  throw new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`);
+}
+
+function handleCompletedCommand(
+  result: SpawnSyncReturns<string>,
+  command: string,
+  args: string[],
+  allowFailure: boolean,
+): ExecResult {
+  const stdout = result.stdout ?? "";
+  const stderr = result.stderr ?? "";
+  const exitCode = result.status ?? -1;
+
+  if (!allowFailure && result.status === null) {
+    const reason = result.signal ? `terminated by signal ${result.signal}` : "terminated by signal";
+    throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
+  }
+  if (!allowFailure && exitCode !== 0) {
+    const reason = stderr.trim() || stdout.trim() || `exit code ${exitCode}`;
+    throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
+  }
+  return { exitCode, stderr, stdout };
 }
 
 function isTimeoutError(error: Error): boolean {

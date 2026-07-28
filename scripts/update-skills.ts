@@ -66,6 +66,8 @@ export async function runUpdateSkills(
 
   validateImportedGuidanceDirectoriesAreTracked(repoRoot, store);
 
+  // Every recipe reaches the loop tail; Oxlint currently misclassifies the try/finally body.
+  // oxlint-disable-next-line no-unreachable-loop
   for (const recipe of store.recipes) {
     const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-update-"));
     try {

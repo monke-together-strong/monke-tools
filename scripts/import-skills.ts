@@ -1089,6 +1089,9 @@ ${pc.cyan("\u2514")}
         return `Please select at least one skill.
 ${pc.reset(pc.dim(`Press ${pc.gray(pc.bgWhite(pc.inverse(" space ")))} to select, ${pc.gray(pc.bgWhite(pc.inverse(" enter ")))} to submit`))}`;
       }
+      // Clack uses undefined as the successful validation sentinel.
+      // oxlint-disable-next-line unicorn/no-useless-undefined
+      return undefined;
     },
   }).prompt();
 

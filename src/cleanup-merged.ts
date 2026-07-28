@@ -178,6 +178,27 @@ export function decideMergedWorktreeCleanup(
   const reasons: string[] = [];
   const evidence: string[] = [];
 
+  if (!validateWorktreeIdentity(snapshot, reasons, evidence)) {
+    return { eligible: false, evidence, reasons };
+  }
+  if (!validateSessionBranch(snapshot, reasons, evidence)) {
+    return { eligible: false, evidence, reasons };
+  }
+  validateMergedPr(snapshot, reasons, evidence);
+  validateCleanWorktree(snapshot, reasons, evidence);
+
+  return {
+    eligible: reasons.length === 0,
+    evidence,
+    reasons,
+  };
+}
+
+function validateWorktreeIdentity(
+  snapshot: MergedCleanupSnapshot,
+  reasons: string[],
+  evidence: string[],
+): boolean {
   if (!snapshot.worktreeExists) {
     reasons.push("session worktree path is missing");
   } else if (!snapshot.worktreeIsGitRoot) {
@@ -189,85 +210,90 @@ export function decideMergedWorktreeCleanup(
   } else {
     reasons.push("session worktree path belongs to a different Git repository");
   }
-
-  const hasValidWorktreeIdentity =
+  return (
     snapshot.worktreeExists &&
     snapshot.worktreeIsGitRoot &&
     !snapshot.isSourceCheckout &&
-    snapshot.sameGitRepository;
-  let branchMatchesSession = false;
+    snapshot.sameGitRepository
+  );
+}
 
-  if (!hasValidWorktreeIdentity) {
-    return {
-      eligible: false,
-      evidence,
-      reasons,
-    };
-  }
-
+function validateSessionBranch(
+  snapshot: MergedCleanupSnapshot,
+  reasons: string[],
+  evidence: string[],
+): boolean {
   if (snapshot.branch === null || snapshot.branch === "") {
     reasons.push("worktree is detached");
   } else if (snapshot.branch === snapshot.session) {
-    branchMatchesSession = true;
     evidence.push(`branch matches session: ${snapshot.branch}`);
+    return true;
   } else {
     reasons.push(`worktree branch ${snapshot.branch} does not match session ${snapshot.session}`);
   }
+  return false;
+}
 
-  if (!branchMatchesSession) {
-    return {
-      eligible: false,
-      evidence,
-      reasons,
-    };
-  }
-
+function validateMergedPr(
+  snapshot: MergedCleanupSnapshot,
+  reasons: string[],
+  evidence: string[],
+): void {
   if (snapshot.lookupError !== null && snapshot.lookupError !== "") {
     reasons.push(snapshot.lookupError);
-  } else {
-    const exactMatches = snapshot.matchingMergedPrs.filter(
-      (pr) => pr.headRefName === snapshot.session && pr.baseRefName === snapshot.defaultBranch,
-    );
-    const crossRepositoryMatches = exactMatches.filter(
-      (pr) => !isSameRepositoryPr(pr, snapshot.repositoryFullName),
-    );
-    const sameRepositoryMatches = exactMatches.filter((pr) =>
-      isSameRepositoryPr(pr, snapshot.repositoryFullName),
-    );
-
-    if (crossRepositoryMatches.length > 0) {
-      reasons.push("merged PR head repository does not match source repository");
-    } else if (sameRepositoryMatches.length === 0) {
-      reasons.push("no exact merged PR match for session branch and default branch");
-    } else if (sameRepositoryMatches.length > 1) {
-      reasons.push(
-        `${sameRepositoryMatches.length} merged PR matches; branch history is ambiguous`,
-      );
-    } else {
-      const [match] = sameRepositoryMatches;
-      if (match === undefined) {
-        throw new Error("Expected one same-repository merged PR match");
-      }
-      evidence.push(
-        `exact merged PR: #${match.number} ${match.headRefName} -> ${match.baseRefName}`,
-      );
-
-      if (match.headRefOid === null || match.headRefOid === "") {
-        reasons.push("merged PR match did not include headRefOid");
-      } else if (snapshot.localHead === null || snapshot.localHead === "") {
-        reasons.push("unable to read local worktree HEAD");
-      } else if (snapshot.localHead === match.headRefOid) {
-        evidence.push(`local HEAD matches merged PR head: ${shortSha(snapshot.localHead)}`);
-      } else {
-        reasons.push(
-          `local HEAD ${shortSha(snapshot.localHead)} differs from merged PR head ${shortSha(
-            match.headRefOid,
-          )}`,
-        );
-      }
-    }
+    return;
   }
 
+  const exactMatches = snapshot.matchingMergedPrs.filter(
+    (pr) => pr.headRefName === snapshot.session && pr.baseRefName === snapshot.defaultBranch,
+  );
+  const crossRepositoryMatches = exactMatches.filter(
+    (pr) => !isSameRepositoryPr(pr, snapshot.repositoryFullName),
+  );
+  const sameRepositoryMatches = exactMatches.filter((pr) =>
+    isSameRepositoryPr(pr, snapshot.repositoryFullName),
+  );
+
+  if (crossRepositoryMatches.length > 0) {
+    reasons.push("merged PR head repository does not match source repository");
+  } else if (sameRepositoryMatches.length === 0) {
+    reasons.push("no exact merged PR match for session branch and default branch");
+  } else if (sameRepositoryMatches.length > 1) {
+    reasons.push(`${sameRepositoryMatches.length} merged PR matches; branch history is ambiguous`);
+  } else {
+    const [match] = sameRepositoryMatches;
+    if (match === undefined) {
+      throw new Error("Expected one same-repository merged PR match");
+    }
+    evidence.push(`exact merged PR: #${match.number} ${match.headRefName} -> ${match.baseRefName}`);
+    validateMergedPrHead(snapshot.localHead, match, reasons, evidence);
+  }
+}
+
+function validateMergedPrHead(
+  localHead: string | null,
+  match: MergedPrMatch,
+  reasons: string[],
+  evidence: string[],
+): void {
+  if (match.headRefOid === null || match.headRefOid === "") {
+    reasons.push("merged PR match did not include headRefOid");
+  } else if (localHead === null || localHead === "") {
+    reasons.push("unable to read local worktree HEAD");
+  } else if (localHead === match.headRefOid) {
+    evidence.push(`local HEAD matches merged PR head: ${shortSha(localHead)}`);
+  } else {
+    reasons.push(
+      `local HEAD ${shortSha(localHead)} differs from merged PR head ${shortSha(match.headRefOid)}`,
+    );
+  }
+}
+
+function validateCleanWorktree(
+  snapshot: MergedCleanupSnapshot,
+  reasons: string[],
+  evidence: string[],
+): void {
   if (snapshot.statusError !== null && snapshot.statusError !== "") {
     reasons.push(snapshot.statusError);
   } else if (snapshot.statusLines.length > 0) {
@@ -275,12 +301,6 @@ export function decideMergedWorktreeCleanup(
   } else {
     evidence.push("worktree is clean according to normal Git status");
   }
-
-  return {
-    eligible: reasons.length === 0,
-    evidence,
-    reasons,
-  };
 }
 
 /** Remove one worktree after its merge-cleanable decision has already passed. */
@@ -303,6 +323,48 @@ function buildMergedCleanupSnapshot(
     lookupError: string | null;
   },
 ): MergedCleanupSnapshot {
+  const worktree = inspectWorktree(runtime, options);
+
+  return {
+    ...worktree,
+    defaultBranch: options.defaultBranch,
+    lookupError: options.lookupError,
+    matchingMergedPrs: options.matchingMergedPrs,
+    repositoryFullName: options.repositoryFullName,
+    session: options.session,
+    sourceRoot: options.sourceRoot,
+    worktreePath: options.worktreePath,
+  };
+}
+
+function inspectWorktree(
+  runtime: Runtime,
+  options: MergedCleanupCandidate,
+): Pick<
+  MergedCleanupSnapshot,
+  | "branch"
+  | "isSourceCheckout"
+  | "localHead"
+  | "sameGitRepository"
+  | "statusError"
+  | "statusLines"
+  | "worktreeExists"
+  | "worktreeIsGitRoot"
+> {
+  const identity = inspectWorktreeIdentity(runtime, options);
+  return {
+    ...identity,
+    ...inspectWorktreeState(runtime, options.worktreePath, identity.worktreeIsGitRoot),
+  };
+}
+
+function inspectWorktreeIdentity(
+  runtime: Runtime,
+  options: MergedCleanupCandidate,
+): Pick<
+  MergedCleanupSnapshot,
+  "isSourceCheckout" | "sameGitRepository" | "worktreeExists" | "worktreeIsGitRoot"
+> {
   const worktreeExists = existsSync(options.worktreePath);
   const expectedCommonDir = tryGit(runtime, options.sourceRoot, [
     "rev-parse",
@@ -335,35 +397,38 @@ function buildMergedCleanupSnapshot(
     actualCommonDir?.ok &&
     expectedCommonDir.ok &&
     realpathOrNull(actualCommonDir.value) === realpathOrNull(expectedCommonDir.value);
+
+  return {
+    isSourceCheckout,
+    sameGitRepository,
+    worktreeExists,
+    worktreeIsGitRoot,
+  };
+}
+
+function inspectWorktreeState(
+  runtime: Runtime,
+  worktreePath: string,
+  worktreeIsGitRoot: boolean,
+): Pick<MergedCleanupSnapshot, "branch" | "localHead" | "statusError" | "statusLines"> {
   const branchResult = worktreeIsGitRoot
-    ? tryGit(runtime, options.worktreePath, ["rev-parse", "--abbrev-ref", "HEAD"])
+    ? tryGit(runtime, worktreePath, ["rev-parse", "--abbrev-ref", "HEAD"])
     : null;
   const branch =
     branchResult?.ok === true && branchResult.value !== "HEAD" ? branchResult.value : null;
   const localHeadResult = worktreeIsGitRoot
-    ? tryGit(runtime, options.worktreePath, ["rev-parse", "HEAD"])
+    ? tryGit(runtime, worktreePath, ["rev-parse", "HEAD"])
     : null;
   const statusResult = worktreeIsGitRoot
-    ? tryGit(runtime, options.worktreePath, ["status", "--porcelain", "--untracked-files=normal"])
+    ? tryGit(runtime, worktreePath, ["status", "--porcelain", "--untracked-files=normal"])
     : null;
 
   return {
     branch,
-    defaultBranch: options.defaultBranch,
-    isSourceCheckout,
     localHead: localHeadResult?.ok === true ? localHeadResult.value : null,
-    lookupError: options.lookupError,
-    matchingMergedPrs: options.matchingMergedPrs,
-    repositoryFullName: options.repositoryFullName,
-    sameGitRepository,
-    session: options.session,
-    sourceRoot: options.sourceRoot,
     statusError:
       statusResult?.ok === false ? `unable to read normal Git status: ${statusResult.error}` : null,
     statusLines: statusResult?.ok === true ? splitLines(statusResult.value) : [],
-    worktreeExists,
-    worktreeIsGitRoot,
-    worktreePath: options.worktreePath,
   };
 }
 
