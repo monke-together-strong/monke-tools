@@ -3,6 +3,7 @@
 import { Argument, Command } from "@commander-js/extra-typings";
 
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
+import { runChop } from "./chop.ts";
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
@@ -79,6 +80,14 @@ function createProgram(
   program.command("materialize").action(() => {
     runMaterialize(runtime);
   });
+
+  program
+    .command("chop")
+    .description("Remove one worktree while preserving its local branch")
+    .argument("[target]")
+    .action((target) => {
+      runChop(runtime, target);
+    });
 
   const cleanup = program
     .command("cleanup")
