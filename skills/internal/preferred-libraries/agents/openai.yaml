@@ -1,4 +1,4 @@
 interface:
   display_name: "Preferred Libraries"
-  short_description: "Default external libraries by capability"
-  default_prompt: "Use $preferred-libraries to choose the default library for this implementation."
+  short_description: "Default JS/TS tooling and libraries"
+  default_prompt: "Use $preferred-libraries to choose the default project tooling and libraries for this implementation."

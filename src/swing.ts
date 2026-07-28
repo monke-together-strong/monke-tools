@@ -147,14 +147,14 @@ function navigateToSwingTarget(
   }
 }
 
-async function selectSwingTarget(
+function selectSwingTarget(
   runtime: Runtime,
   home: string,
   rootSourceRoot: string,
   currentTarget: SwingHistoryTarget
 ): Promise<string> {
   const options = listSwingPickerOptions(runtime, home, rootSourceRoot, currentTarget);
-  return await runtime.select({
+  return runtime.select({
     maxItems: Math.min(options.length, 10),
     message: "Swing target",
     options: options.map((option) => ({

@@ -72,6 +72,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
       "typescript/promise-function-async": "off",
+      "typescript/return-await": ["error", "in-try-catch"],
       "unicorn/no-nested-ternary": "off",
       ...rules,
     },

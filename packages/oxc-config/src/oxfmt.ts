@@ -9,6 +9,7 @@ export function createOxfmtConfig(options: OxfmtConfig = {}): OxfmtConfig {
   return {
     ...ultracite,
     printWidth: 100,
+    proseWrap: "preserve",
     ...config,
     ignorePatterns: [
       ...(ultracite.ignorePatterns ?? []),

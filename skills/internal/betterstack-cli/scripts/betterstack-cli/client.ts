@@ -49,11 +49,11 @@ export class BetterStackClient {
     this.#token = token;
   }
 
-  async getSource(id: number): Promise<string> {
-    return await this.#requestJsonText(`https://telemetry.betterstack.com/api/v1/sources/${id}`);
+  getSource(id: number): Promise<string> {
+    return this.#requestJsonText(`https://telemetry.betterstack.com/api/v1/sources/${id}`);
   }
 
-  async listSources(page?: number, perPage?: number): Promise<string> {
+  listSources(page?: number, perPage?: number): Promise<string> {
     const url = new URL("https://telemetry.betterstack.com/api/v1/sources");
 
     if (page !== undefined) {
@@ -64,10 +64,10 @@ export class BetterStackClient {
       url.searchParams.set("per_page", String(perPage));
     }
 
-    return await this.#requestJsonText(url.toString());
+    return this.#requestJsonText(url.toString());
   }
 
-  async listConnections(page?: number, perPage?: number): Promise<string> {
+  listConnections(page?: number, perPage?: number): Promise<string> {
     const url = new URL("https://telemetry.betterstack.com/api/v1/connections");
 
     if (page !== undefined) {
@@ -78,7 +78,7 @@ export class BetterStackClient {
       url.searchParams.set("per_page", String(perPage));
     }
 
-    return await this.#requestJsonText(url.toString());
+    return this.#requestJsonText(url.toString());
   }
 
   static async runQuery(credentials: QueryCredentials, query: string): Promise<string> {
@@ -92,7 +92,7 @@ export class BetterStackClient {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return await readTextResponse(response);
+    return readTextResponse(response);
   }
 
   async #requestJsonText(url: string): Promise<string> {
@@ -103,7 +103,7 @@ export class BetterStackClient {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return await readTextResponse(response);
+    return readTextResponse(response);
   }
 }
 
