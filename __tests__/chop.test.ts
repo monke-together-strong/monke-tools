@@ -889,6 +889,46 @@ external:
     expect(existsSync(fixture.statePath)).toBeFalsy();
   });
 
+  test("a dependency Source checkout can retry retained Session finalization", () => {
+    const fixture = createMultiRepoSessionFixture("chop-dependency-source-retry");
+    const attempts = path.join(fixture.sandbox, "attempts.log");
+    const allow = path.join(fixture.sandbox, "allow-cleanup");
+    const state = loadSessionState(fixture.home, fixture.root, fixture.session);
+    saveSessionState(fixture.home, {
+      ...state,
+      repos: state.repos.map((repo) => ({
+        ...repo,
+        cleanupCommand:
+          repo.sourceRoot === fixture.root
+            ? `printf "root\\n" >> "${attempts}"; test -f "${allow}"`
+            : `printf "dep\\n" >> "${attempts}"`,
+      })),
+    });
+
+    expect(() => {
+      runMonke({
+        args: ["chop"],
+        cwd: fixture.depWorktree,
+        monkeHome: fixture.home,
+      });
+    }).toThrow(/Cleanup command failed/u);
+
+    expect(existsSync(fixture.depWorktree)).toBeFalsy();
+    expect(existsSync(fixture.rootWorktree)).toBeFalsy();
+    expect(existsSync(fixture.statePath)).toBeTruthy();
+    expect(readFileSync(attempts, "utf-8")).toBe("root\n");
+
+    writeFileSync(allow, "", "utf-8");
+    runMonke({
+      args: ["chop", fixture.session],
+      cwd: fixture.depRoot,
+      monkeHome: fixture.home,
+    });
+
+    expect(readFileSync(attempts, "utf-8")).toBe("root\nroot\ndep\n");
+    expect(existsSync(fixture.statePath)).toBeFalsy();
+  });
+
   test("self-removal requests shell relocation before a later Cleanup failure", () => {
     const fixture = createFailingCleanupSessionFixture("chop-cleanup-failure-shell");
     const directivePath = path.join(fixture.sandbox, "directive");
@@ -1238,6 +1278,25 @@ apps: {}
     expect(registrations).toContain(otherWorktree);
     expect(existsSync(otherWorktree)).toBeTruthy();
     expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
+  });
+
+  test("requires an exact registered path for stale Ordinary recovery", () => {
+    const fixture = createOrdinaryFixture("chop-stale-ordinary-exact");
+    const aliasPath = path.join(fixture.sandbox, "ordinary-alias");
+    symlinkSync(fixture.worktreePath, aliasPath, process.platform === "win32" ? "junction" : "dir");
+    rmSync(fixture.worktreePath, { recursive: true });
+
+    expect(() => {
+      runMonke({
+        args: ["chop", aliasPath],
+        cwd: fixture.sourceRoot,
+        monkeHome: fixture.home,
+      });
+    }).toThrow(/target not found/u);
+
+    expect(git(fixture.sourceRoot, ["worktree", "list", "--porcelain"])).toContain(
+      fixture.worktreePath,
+    );
   });
 
   test("rejects a locked stale Ordinary registration even with --force", () => {

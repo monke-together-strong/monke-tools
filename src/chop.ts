@@ -186,6 +186,17 @@ function resolveChopTarget(
     assertSessionIdentity(home, state, { rootSourceRoot: rootScope, session: target });
     return validateSessionChopTarget(home, state);
   }
+  if (invocation.isSourceCheckout) {
+    const retained = findRetainedSessionForSource(
+      listSessionStatesRelevantToWorktrees(home, []),
+      target,
+      invocation.sourceRoot,
+    );
+    if (retained !== null) {
+      assertSessionIdentity(home, retained);
+      return validateSessionChopTarget(home, retained);
+    }
+  }
 
   const ordinaryCandidate = resolveOrdinaryTarget(runtime, invocation, target);
   const managedCandidate = isManagedWorktreePath(home, ordinaryCandidate.path);
@@ -505,6 +516,25 @@ function findSessionOwner(
   return matches[0] ?? null;
 }
 
+function findRetainedSessionForSource(
+  states: SessionState[],
+  session: string,
+  sourceRoot: string,
+): SessionState | null {
+  const matches = states.filter(
+    (state) =>
+      state.session === session &&
+      state.repos.some((repo) => samePath(repo.sourceRoot, sourceRoot)) &&
+      state.repos.every((repo) => !existsSync(repo.worktreePath)),
+  );
+  if (matches.length > 1) {
+    throw new MonkeError(
+      `Session ${session} is ambiguous for Source checkout ${sourceRoot}; retry from its Root repo Source checkout`,
+    );
+  }
+  return matches[0] ?? null;
+}
+
 function resolveOrdinaryTarget(
   runtime: Runtime,
   invocation: ReturnType<typeof resolveRepoContext>,
@@ -526,6 +556,8 @@ function resolveOrdinaryTarget(
   }
 
   const unresolvedTargetPath = path.isAbsolute(target) ? target : path.resolve(runtime.cwd, target);
+  // Missing worktrees intentionally stay lexical: stale recovery requires the
+  // exact registered path so an alias cannot authorize pruning Git metadata.
   const targetPath = existsSync(unresolvedTargetPath)
     ? realpathSync.native(unresolvedTargetPath)
     : unresolvedTargetPath;
