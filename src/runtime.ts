@@ -13,22 +13,22 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import type { SpawnSyncReturns } from "node:child_process";
 import { createHash } from "node:crypto";
 import { isCancel, select as clackSelect } from "@clack/prompts";
 import * as z from "zod";
 
 import { errorMessage, MonkeError } from "./errors.ts";
-import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
 import type { ExecOptions, ExecResult, Runtime, SelectPrompt } from "./types.ts";
 
-const GLOBAL_LOCK_TIMEOUT_MS = 5_000;
+const GLOBAL_LOCK_TIMEOUT_MS = 5000;
 const STALE_LOCK_AGE_MS = 60_000;
 const LockMetadataSchema = z.object({
-  pid: z.unknown().optional(),
   acquiredAt: z.unknown().optional(),
+  pid: z.unknown().optional(),
 });
 const LockPidSchema = z.number().int().positive();
-const LockTimestampSchema = z.number().finite();
+const LockTimestampSchema = z.number();
 
 /** Runtime construction options for CLI commands and integration-style tests. */
 export interface RuntimeOptions {
@@ -52,7 +52,7 @@ export interface RuntimeOptions {
 export function createRuntime(options?: RuntimeOptions): Runtime {
   const runtimeEnv = { ...process.env, ...options?.env };
   const runtimeCwd = options?.cwd ?? process.cwd();
-  const scriptedInput = options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/);
+  const scriptedInput = options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/u);
   const scriptedSelectValues = options?.selectValues ? [...options.selectValues] : null;
 
   const writeStdout = (text: string): void => {
@@ -68,53 +68,15 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     cwd: runtimeCwd,
     env: runtimeEnv,
     exec(command: string, args: string[] = [], execOptions?: ExecOptions): ExecResult {
-      const childEnv = {
-        ...runtimeEnv,
-        ...execOptions?.env,
-      };
-      delete childEnv[SHELL_DIRECTORY_DIRECTIVE_ENV];
-
-      const result = spawnSync(command, args, {
-        cwd: execOptions?.cwd ?? runtimeCwd,
-        env: childEnv,
-        encoding: "utf8",
-        input: execOptions?.stdin,
-        timeout:
-          execOptions?.timeoutSeconds === undefined ? undefined : execOptions.timeoutSeconds * 1000,
-      });
-
-      if (result.error) {
-        if (execOptions?.allowFailure && isTimeoutError(result.error)) {
-          return {
-            stdout: result.stdout ?? "",
-            stderr: result.stderr ?? "",
-            exitCode: -1,
-            timedOut: true,
-          };
-        }
-
-        throw new MonkeError(
-          `Failed to run ${formatCommand(command, args)}: ${result.error.message}`,
-        );
+      return executeCommand(runtimeEnv, runtimeCwd, command, args, execOptions);
+    },
+    readLine(prompt: string): string {
+      writeStdout(prompt);
+      if (scriptedInput !== null) {
+        return scriptedInput.shift() ?? "";
       }
 
-      const stdout = result.stdout ?? "";
-      const stderr = result.stderr ?? "";
-      const exitCode = result.status === null ? -1 : result.status;
-
-      if (!execOptions?.allowFailure && result.status === null) {
-        const reason = result.signal
-          ? `terminated by signal ${result.signal}`
-          : "terminated by signal";
-        throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
-      }
-
-      if (!execOptions?.allowFailure && exitCode !== 0) {
-        const reason = stderr.trim() || stdout.trim() || `exit code ${exitCode}`;
-        throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
-      }
-
-      return { stdout, stderr, exitCode };
+      return readLineFromStdin();
     },
     async select(prompt): Promise<string> {
       options?.onSelect?.(prompt);
@@ -135,17 +97,6 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
-    readLine(prompt: string): string {
-      writeStdout(prompt);
-      if (scriptedInput !== null) {
-        return scriptedInput.shift() ?? "";
-      }
-
-      return readLineFromStdin();
-    },
-    writeStdout(text: string): void {
-      writeStdout(text);
-    },
     writeStderr(text: string): void {
       if (options?.onStderr) {
         options.onStderr(text);
@@ -154,7 +105,76 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
 
       process.stderr.write(text);
     },
+    writeStdout(text: string): void {
+      writeStdout(text);
+    },
   };
+}
+
+function executeCommand(
+  runtimeEnv: Record<string, string | undefined>,
+  runtimeCwd: string,
+  command: string,
+  args: string[],
+  options: ExecOptions | undefined,
+): ExecResult {
+  const childEnv = { ...runtimeEnv, ...options?.env };
+  delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
+
+  const result = spawnSync(command, args, {
+    cwd: options?.cwd ?? runtimeCwd,
+    encoding: "utf-8",
+    env: childEnv,
+    input: options?.stdin,
+    timeout: options?.timeoutSeconds === undefined ? undefined : options.timeoutSeconds * 1000,
+  });
+
+  if (result.error) {
+    return handleSpawnError(result, command, args, options?.allowFailure === true);
+  }
+  return handleCompletedCommand(result, command, args, options?.allowFailure === true);
+}
+
+function handleSpawnError(
+  result: SpawnSyncReturns<string>,
+  command: string,
+  args: string[],
+  allowFailure: boolean,
+): ExecResult {
+  const { error } = result;
+  if (error === undefined) {
+    throw new MonkeError(`Expected ${formatCommand(command, args)} to have a spawn error`);
+  }
+  if (allowFailure && isTimeoutError(error)) {
+    return {
+      exitCode: -1,
+      stderr: result.stderr ?? "",
+      stdout: result.stdout ?? "",
+      timedOut: true,
+    };
+  }
+  throw new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`);
+}
+
+function handleCompletedCommand(
+  result: SpawnSyncReturns<string>,
+  command: string,
+  args: string[],
+  allowFailure: boolean,
+): ExecResult {
+  const stdout = result.stdout ?? "";
+  const stderr = result.stderr ?? "";
+  const exitCode = result.status ?? -1;
+
+  if (!allowFailure && result.status === null) {
+    const reason = result.signal ? `terminated by signal ${result.signal}` : "terminated by signal";
+    throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
+  }
+  if (!allowFailure && exitCode !== 0) {
+    const reason = stderr.trim() || stdout.trim() || `exit code ${exitCode}`;
+    throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
+  }
+  return { exitCode, stderr, stdout };
 }
 
 function isTimeoutError(error: Error): boolean {
@@ -187,7 +207,7 @@ export function findExecutable(
   env: Record<string, string | undefined>,
 ): string | null {
   const pathValue = env.PATH;
-  if (!pathValue) {
+  if (pathValue === undefined || pathValue === "") {
     return null;
   }
 
@@ -229,7 +249,11 @@ function withLockPath<T>(lockPath: string, callback: () => T): T {
   while (fileDescriptor === null) {
     try {
       fileDescriptor = openSync(lockPath, "wx");
-      writeFileSync(lockPath, JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }), "utf8");
+      writeFileSync(
+        lockPath,
+        JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
+        "utf-8",
+      );
     } catch (error) {
       const message = errorMessage(error);
       if (!message.includes("EEXIST")) {
@@ -259,18 +283,28 @@ function withLockPath<T>(lockPath: string, callback: () => T): T {
 }
 
 export function isPortAvailable(port: number): boolean {
-  let server: { stop(closeActiveConnections?: boolean): void } | null = null;
+  let server: { stop: (closeActiveConnections?: boolean) => void } | null = null;
 
   try {
     server = Bun.listen({
       hostname: "127.0.0.1",
       port,
       socket: {
-        data() {},
-        open() {},
-        close() {},
-        drain() {},
-        error() {},
+        close() {
+          // Port probing only needs the listener lifecycle.
+        },
+        data() {
+          // Port probing never consumes socket data.
+        },
+        drain() {
+          // Port probing never writes socket data.
+        },
+        error() {
+          // Listen failures are handled by the surrounding try/catch.
+        },
+        open() {
+          // A successful open means the port is available.
+        },
       },
     });
     return true;
@@ -295,7 +329,7 @@ function readLineFromStdin(): string {
       break;
     }
 
-    const character = buffer.toString("utf8", 0, bytesRead);
+    const character = buffer.toString("utf-8", 0, bytesRead);
     if (character === "\n") {
       break;
     }
@@ -319,7 +353,7 @@ function tryEvictStaleLock(lockPath: string): boolean {
 
   let isStale = fileTimestamp <= staleSince;
   try {
-    const parsed = LockMetadataSchema.safeParse(JSON.parse(readFileSync(lockPath, "utf8")));
+    const parsed = LockMetadataSchema.safeParse(JSON.parse(readFileSync(lockPath, "utf-8")));
     if (parsed.success) {
       const metadata = parsed.data;
       const acquiredAt = LockTimestampSchema.safeParse(metadata.acquiredAt);

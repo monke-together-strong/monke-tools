@@ -16,24 +16,13 @@
   "workspaces": [
     "packages/*"
   ],
-  "files": [
-    "skills",
-    "!skills/_artifacts"
-  ],
   "type": "module",
   "scripts": {
     "install:local": "sh ./scripts/install-local.sh",
     "skills:import": "bun run scripts/import-skills.ts",
     "skills:update": "bun run scripts/update-skills.ts",
     "tegami": "bun run scripts/tegami.mts",
-    "prototype:merged-cleanup": "bun tmp/merged-worktree-cleanup-prototype/prototype.ts",
-    "prototype:merged-cleanup-real-gh": "bun tmp/merged-worktree-cleanup-real-gh/prototype.ts",
-    "typecheck": "tsc",
     "test": "bunx --bun vp test run",
-    "lint": "vp lint src scripts __tests__ skills/internal --fix",
-    "lint:check": "vp lint src scripts __tests__ skills/internal",
-    "fmt": "vp fmt",
-    "fmt:check": "vp fmt --check",
     "prepare": "vp config"
   },
   "dependencies": {

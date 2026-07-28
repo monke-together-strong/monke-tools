@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 
+import { isNonEmptyString } from "./normalize.ts";
 import {
   cleanRunDir,
   listBundleHashes,
@@ -15,7 +16,8 @@ import {
   writeReport,
   writeReportArtifact,
 } from "./store.ts";
-import { readPrManifest, type PrAnalysisManifest, type PrWorkItemSummary } from "./pr-analysis.ts";
+import { readPrManifest } from './pr-analysis.ts';
+import type { PrAnalysisManifest, PrWorkItemSummary } from './pr-analysis.ts';
 import type {
   BundleSession,
   CanonicalTurn,
@@ -59,8 +61,8 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle): Va
   for (const episode of findings.frictionEpisodes ?? []) {
     const refs = refsByPrimarySession.get(episode.sessionId);
     const citedTurnRefs = episode.citedTurnRefs ?? [];
-    const refsValid = refs && citedTurnRefs.every((ref) => refs.has(ref));
-    if (!episode.id || seenIds.has(episode.id) || !refsValid) {
+    const refsValid = refs !== undefined && citedTurnRefs.every((ref) => refs.has(ref));
+    if (!isNonEmptyString(episode.id) || seenIds.has(episode.id) || !refsValid) {
       droppedEpisodes += 1;
       continue;
     }
@@ -86,11 +88,11 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle): Va
   }));
 
   return {
-    repoKey: findings.repoKey,
+    dropped: { episodes: droppedEpisodes, fixes: droppedFixes },
     episodes,
     fixes,
     repeatedAsks,
-    dropped: { episodes: droppedEpisodes, fixes: droppedFixes },
+    repoKey: findings.repoKey,
   };
 }
 
@@ -138,7 +140,7 @@ export function runCommit(options: RunCommitOptions): CommitResult {
   }
 
   const prAnalysis = readPrAnalysis(root, options.runTs);
-  if (!prAnalysis?.trim()) {
+  if (!isNonEmptyString(prAnalysis?.trim())) {
     throw new Error(`commit requires runs/${options.runTs}/pr-analysis.md from the required PR analysis lane`);
   }
   const prAnalysisValidation = validatePrAnalysis(prAnalysis, readPrManifest(root, options.runTs));
@@ -155,29 +157,29 @@ export function runCommit(options: RunCommitOptions): CommitResult {
       const newFriction = slice.validated.episodes
         .filter((episode) => episode.sessionId === session.sessionId)
         .map((episode) => ({
-          id: `${options.runTs}:${episode.id}`,
-          citedTurnRefs: episode.citedTurnRefs,
           body: episode.body,
+          citedTurnRefs: episode.citedTurnRefs,
+          id: `${options.runTs}:${episode.id}`,
         }));
       const record: FrozenSessionRecord = {
-        version: 1,
-        sessionId: session.sessionId,
         agent: session.agent,
+        analyzedAt: options.nowIso,
+        contentHash: session.contentHash,
+        friction: [...(prior?.friction ?? []), ...newFriction],
+        lastTurnIndex: session.turns.length,
+        rawUserMessages: session.rawUserMessages,
         repoKey: slice.bundle.repoKey,
         secondary: secondaryRootsOf(session, slices),
-        lastTurnIndex: session.turns.length,
-        contentHash: session.contentHash,
-        analyzedAt: options.nowIso,
-        friction: [...(prior?.friction ?? []), ...newFriction],
-        rawUserMessages: session.rawUserMessages,
+        sessionId: session.sessionId,
+        version: 1,
       };
       saveFrozenSession(root, record);
       const repoMeta = loadRepoMeta(root, slice.bundle.repoKey);
       saveRepoMeta(root, {
-        version: 1,
-        repoKey: slice.bundle.repoKey,
         firstSeenAt: repoMeta?.firstSeenAt ?? options.nowIso,
         lastAnalyzedAt: options.nowIso,
+        repoKey: slice.bundle.repoKey,
+        version: 1,
       });
       if (prior) {
         appendedSessions += 1;
@@ -188,13 +190,13 @@ export function runCommit(options: RunCommitOptions): CommitResult {
   }
 
   const synthesis =
-    options.synthesisPath && existsSync(options.synthesisPath)
-      ? readFileSync(options.synthesisPath, "utf8").trim()
+    isNonEmptyString(options.synthesisPath) && existsSync(options.synthesisPath)
+      ? readFileSync(options.synthesisPath, "utf-8").trim()
       : "";
   const artifacts = buildReportArtifacts(options.runTs, synthesis, slices, {
-    window: readRunWindow(root, options.runTs),
     prAnalysis,
     prAnalysisWarnings: prAnalysisValidation.warnings,
+    window: readRunWindow(root, options.runTs),
   });
   const reportPath = writeReport(root, options.runTs, artifacts.report);
   const sessionSourcePath = writeReportArtifact(root, options.runTs, "session-sources", artifacts.sessionSources);
@@ -202,17 +204,17 @@ export function runCommit(options: RunCommitOptions): CommitResult {
   cleanRunDir(root, options.runTs);
 
   return {
-    reportPath,
-    sourcePaths: {
-      session: sessionSourcePath,
-      pr: prSourcePath,
-    },
-    frozenSessions,
     appendedSessions,
     dropped,
+    frozenSessions,
     prAnalysis: {
       present: Boolean(prAnalysis?.trim()),
       warnings: prAnalysisValidation.warnings,
+    },
+    reportPath,
+    sourcePaths: {
+      pr: prSourcePath,
+      session: sessionSourcePath,
     },
   };
 }
@@ -228,7 +230,7 @@ function secondaryRootsOf(session: BundleSession, slices: RepoSlice[]): string[]
       roots.add(slice.bundle.repoKey);
     }
   }
-  return [...roots].sort();
+  return [...roots].toSorted();
 }
 
 // --- report (action-first, design decision 16) -------------------------------
@@ -254,38 +256,33 @@ export function buildReportArtifacts(
   slices: RepoSlice[],
   context: ReportContext = {},
 ): { report: string; sessionSources: string; prSources: string } {
-  const out: string[] = [];
-  out.push(`# Agent session retrospective — ${runTs}`);
-  out.push("");
-  out.push(formatWindowLine(context.window, runTs));
-  out.push("");
-  out.push(
+  const out: string[] = [
+    `# Agent session retrospective — ${runTs}`,
+    "",
+    formatWindowLine(context.window, runTs),
+    "",
     `Sources: [session sources](${sourceFileName(runTs, "session")}) · [PR sources](${sourceFileName(runTs, "pr")})`,
-  );
-  out.push("");
-
-  out.push("## Session Actions");
-  out.push("");
-  out.push(synthesis || "_No cross-repo synthesis provided for this run._");
-  out.push("");
-
-  out.push("## PR Repeated Corrective Patterns");
-  out.push("");
+    "",
+    "## Session Actions",
+    "",
+    synthesis || "_No cross-repo synthesis provided for this run._",
+    "",
+    "## PR Repeated Corrective Patterns",
+    "",
+  ];
   const prAnalysis = context.prAnalysis?.trim();
-  if (prAnalysis) {
-    out.push(extractPrRepeatedPatterns(prAnalysis));
-    out.push("");
+  if (isNonEmptyString(prAnalysis)) {
+    out.push(extractPrRepeatedPatterns(prAnalysis), "");
   } else {
     out.push(
       `_PR analysis missing: no \`runs/${runTs}/pr-analysis.md\` was available at commit time. Transcript-only synthesis is degraded._`,
-    );
-    out.push("");
+     "");
   }
 
   return {
+    prSources: buildPrSources(runTs, prAnalysis, context),
     report: out.join("\n"),
     sessionSources: buildSessionSources(runTs, slices, context.window),
-    prSources: buildPrSources(runTs, prAnalysis, context),
   };
 }
 
@@ -294,26 +291,24 @@ function buildSessionSources(
   slices: RepoSlice[],
   window: RetrospectiveWindow | null | undefined,
 ): string {
-  const out: string[] = [];
-  out.push(`# Session sources — ${runTs}`);
-  out.push("");
-  out.push(formatWindowLine(window, runTs));
-  out.push("");
-  out.push(`Main report: [${runTs}-retrospective.md](${runTs}-retrospective.md)`);
-  out.push("");
-
-  out.push("## Per-repo proposals");
-  out.push("");
+  const out: string[] = [
+    `# Session sources — ${runTs}`,
+    "",
+    formatWindowLine(window, runTs),
+    "",
+    `Main report: [${runTs}-retrospective.md](${runTs}-retrospective.md)`,
+    "",
+    "## Per-repo proposals",
+    "",
+  ];
   const reposWithSignal = slices.filter(
     (slice) => slice.validated.fixes.length > 0 || slice.validated.repeatedAsks.length > 0,
   );
   if (reposWithSignal.length === 0) {
-    out.push("_No per-repo proposals this run._");
-    out.push("");
+    out.push("_No per-repo proposals this run._", "");
   }
   for (const slice of reposWithSignal) {
-    out.push(`### ${slice.validated.repoKey}`);
-    out.push("");
+    out.push(`### ${slice.validated.repoKey}`, "");
     for (const fix of slice.validated.fixes) {
       const { target, confidence, rest } = parseFixHeader(fix.body);
       out.push(`- Target: ${target}; Confidence: ${confidence} — ${indentBody(rest)}`);
@@ -321,16 +316,17 @@ function buildSessionSources(
         renderEvidence(episode, slice.bundle),
       );
       if (evidence.length > 0) {
-        out.push("  <details><summary>evidence</summary>");
-        out.push("");
-        out.push(evidence.map((line) => `  ${line}`).join("\n"));
-        out.push("");
-        out.push("  </details>");
+        out.push(
+          "  <details><summary>evidence</summary>",
+          "",
+          evidence.map((line) => `  ${line}`).join("\n"),
+          "",
+          "  </details>",
+        );
       }
     }
     if (slice.validated.repeatedAsks.length > 0) {
-      out.push("");
-      out.push("**Repeated asks**");
+      out.push("", "**Repeated asks**");
       for (const cluster of slice.validated.repeatedAsks) {
         out.push(`- **${cluster.label}** — ${firstLine(cluster.body)}`);
       }
@@ -338,20 +334,18 @@ function buildSessionSources(
     out.push("");
   }
 
-  out.push("## Audit appendix — friction episodes");
-  out.push("");
+  out.push("## Audit appendix — friction episodes", "");
   const seenEpisodes = new Set<string>();
   for (const slice of slices) {
     for (const episode of slice.validated.episodes) {
-      const dedupeKey = `${episode.sessionId}|${[...episode.citedTurnRefs].sort().join(",")}`;
+      const dedupeKey = `${episode.sessionId}|${[...episode.citedTurnRefs].toSorted().join(",")}`;
       if (seenEpisodes.has(dedupeKey)) {
         continue;
       }
       seenEpisodes.add(dedupeKey);
       out.push(
         `- \`${slice.validated.repoKey}\` · ${episode.sessionId.slice(0, 8)} · refs ${episode.citedTurnRefs.join(", ")}`,
-      );
-      out.push(`  ${firstLine(episode.body)}`);
+       `  ${firstLine(episode.body)}`);
     }
   }
   out.push("");
@@ -360,29 +354,27 @@ function buildSessionSources(
 }
 
 function buildPrSources(runTs: string, prAnalysis: string | null | undefined, context: ReportContext): string {
-  const out: string[] = [];
-  out.push(`# PR sources — ${runTs}`);
-  out.push("");
-  out.push(formatWindowLine(context.window, runTs));
-  out.push("");
-  out.push(`Main report: [${runTs}-retrospective.md](${runTs}-retrospective.md)`);
-  out.push("");
+  const out: string[] = [
+    `# PR sources — ${runTs}`,
+    "",
+    formatWindowLine(context.window, runTs),
+    "",
+    `Main report: [${runTs}-retrospective.md](${runTs}-retrospective.md)`,
+    "",
+  ];
 
-  if (prAnalysis?.trim()) {
-    out.push(prAnalysis.trim());
-    out.push("");
+  if (isNonEmptyString(prAnalysis?.trim())) {
+    out.push(prAnalysis.trim(), "");
     const warnings = context.prAnalysisWarnings ?? [];
     if (warnings.length > 0) {
-      out.push("## Validation warnings");
-      out.push("");
+      out.push("## Validation warnings", "");
       for (const warning of warnings) {
         out.push(`- ${warning}`);
       }
       out.push("");
     }
   } else {
-    out.push("_No PR analysis source was available._");
-    out.push("");
+    out.push("_No PR analysis source was available._", "");
   }
 
   return out.join("\n");
@@ -401,7 +393,7 @@ export function validatePrAnalysis(
   manifest?: PrAnalysisManifest | null,
 ): { warnings: string[] } {
   const text = content?.trim();
-  if (!text) {
+  if (!isNonEmptyString(text)) {
     return { warnings: [] };
   }
 
@@ -410,8 +402,8 @@ export function validatePrAnalysis(
   }
 
   const counts = REQUIRED_PR_HEADINGS.map((heading) => ({
-    heading,
     count: countHeading(text, heading),
+    heading,
   }));
   const perPrHeadingSeen = counts.some((entry) => entry.count > 0);
   if (!perPrHeadingSeen) {
@@ -436,7 +428,7 @@ function validateManifestBackedPrAnalysis(
   for (const item of manifest.workItems) {
     const section = findPrAnalysisSection(text, item);
     const gap = text.includes(`\`${item.repo}#${item.number}\``);
-    if (!section) {
+    if (!isNonEmptyString(section)) {
       if (!gap) {
         warnings.push(`Expected PR \`${item.repo}#${item.number}\` is missing from PR analysis.`);
       }
@@ -449,10 +441,13 @@ function validateManifestBackedPrAnalysis(
       }
     }
 
-    if (item.openingSnapshot.ref && !containsRef(section, item.openingSnapshot.ref)) {
+    if (
+      isNonEmptyString(item.openingSnapshot.ref) &&
+      !containsRef(section, item.openingSnapshot.ref)
+    ) {
       warnings.push(`PR \`${item.repo}#${item.number}\` omits known opening ref ${item.openingSnapshot.ref}.`);
     }
-    if (item.finalHeadSha && !containsRef(section, item.finalHeadSha)) {
+    if (isNonEmptyString(item.finalHeadSha) && !containsRef(section, item.finalHeadSha)) {
       warnings.push(`PR \`${item.repo}#${item.number}\` omits known final head ${item.finalHeadSha}.`);
     }
 
@@ -472,19 +467,18 @@ function validateManifestBackedPrAnalysis(
 
 function findPrAnalysisSection(text: string, item: PrWorkItemSummary): string | null {
   const heading = `${item.repo}#${item.number}`;
-  const match = new RegExp(`^###\\s+${escapeRegExp(heading)}\\s*$`, "m").exec(text);
+  const match = new RegExp(`^###\\s+${escapeRegExp(heading)}\\s*$`, "mu").exec(text);
   if (!match || match.index === undefined) {
     return null;
   }
   const start = match.index;
   const rest = text.slice(start);
-  const next = rest.slice(match[0].length).search(/^###\s+/m);
+  const next = rest.slice(match[0].length).search(/^###\s+/mu);
   return next === -1 ? rest : rest.slice(0, match[0].length + next);
 }
 
 function countHeading(text: string, heading: string): number {
-  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return [...text.matchAll(new RegExp(`^##\\s+${escaped}\\s*$`, "gm"))].length;
+  return [...text.matchAll(new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "gmu"))].length;
 }
 
 function containsRef(text: string, ref: string): boolean {
@@ -501,9 +495,9 @@ function containsRef(text: string, ref: string): boolean {
 
 function citedShas(text: string): string[] {
   const out = new Set<string>();
-  for (const match of text.matchAll(/\b([0-9a-f]{7,40})\b/gi)) {
-    if (match[1]) {
-      out.add(match[1]);
+  for (const match of text.matchAll(/\b(?<sha>[0-9a-f]{7,40})\b/giu)) {
+    if (isNonEmptyString(match.groups?.sha)) {
+      out.add(match.groups.sha);
     }
   }
   return [...out];
@@ -522,18 +516,18 @@ function sourceFileName(runTs: string, kind: "session" | "pr"): string {
 
 function extractPrRepeatedPatterns(prAnalysis: string): string {
   const section = extractMarkdownSection(prAnalysis, "Recurring Corrective Patterns");
-  return section || "_No recurring corrective-change patterns were extracted from per-PR analyses._";
+  return section ?? "_No recurring corrective-change patterns were extracted from per-PR analyses._";
 }
 
 function extractMarkdownSection(markdown: string, heading: string): string | null {
-  const pattern = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "m");
+  const pattern = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "mu");
   const match = markdown.match(pattern);
   if (!match || match.index === undefined) {
     return null;
   }
   const start = match.index + match[0].length;
   const rest = markdown.slice(start);
-  const next = rest.search(/^##\s+/m);
+  const next = rest.search(/^##\s+/mu);
   return (next === -1 ? rest : rest.slice(0, next)).trim();
 }
 
@@ -543,17 +537,17 @@ export function parseFixHeader(body: string): { target: string; confidence: stri
   let confidence = "unspecified";
   const kept: string[] = [];
   for (const line of body.trim().split("\n")) {
-    const targetMatch = line.match(/^\s*Target:\s*(.+)$/i);
-    const confidenceMatch = line.match(/^\s*Confidence:\s*(.+)$/i);
-    if (targetMatch?.[1]) {
-      target = targetMatch[1].trim();
-    } else if (confidenceMatch?.[1]) {
-      confidence = confidenceMatch[1].trim();
-    } else if (line.trim()) {
+    const targetMatch = /^\s*Target:\s*(?<target>.+)$/iu.exec(line);
+    const confidenceMatch = /^\s*Confidence:\s*(?<confidence>.+)$/iu.exec(line);
+    if (isNonEmptyString(targetMatch?.groups?.target)) {
+      target = targetMatch.groups.target.trim();
+    } else if (isNonEmptyString(confidenceMatch?.groups?.confidence)) {
+      confidence = confidenceMatch.groups.confidence.trim();
+    } else if (line.trim() !== "") {
       kept.push(line.trim());
     }
   }
-  return { target, confidence, rest: kept.join(" ") };
+  return { confidence, rest: kept.join(" "), target };
 }
 
 function episodesFor(fix: DurableFixProposal, episodes: FrictionEpisode[]): FrictionEpisode[] {
@@ -574,7 +568,7 @@ function renderEvidence(episode: FrictionEpisode, bundle: RepoBundle): string[] 
 
 function renderTurn(turn: CanonicalTurn): string {
   if (turn.kind === "tool_call") {
-    const status = turn.error ? ` [${turn.error}]` : "";
+    const status = isNonEmptyString(turn.error) ? ` [${turn.error}]` : "";
     return `\`${turn.name}\` ${turn.inputSummary}${status}`;
   }
   return `**${turn.kind}:** ${firstLine(turn.text)}`;
@@ -590,5 +584,5 @@ function firstLine(text: string): string {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

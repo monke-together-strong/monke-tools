@@ -6,15 +6,15 @@ export interface Runtime {
   /** Process environment used by monke-tools operations. */
   readonly env: Record<string, string | undefined>;
   /** Run a command with the runtime environment. */
-  exec(command: string, args?: string[], options?: ExecOptions): ExecResult;
+  exec: (command: string, args?: string[], options?: ExecOptions) => ExecResult;
   /** Select one value from an interactive terminal picker. */
-  select(prompt: SelectPrompt): Promise<string>;
+  select: (prompt: SelectPrompt) => Promise<string>;
   /** Read one interactive input line after writing a prompt. */
-  readLine(prompt: string): string;
+  readLine: (prompt: string) => string;
   /** Write CLI output to stdout. */
-  writeStdout(text: string): void;
+  writeStdout: (text: string) => void;
   /** Write CLI output to stderr. */
-  writeStderr(text: string): void;
+  writeStderr: (text: string) => void;
 }
 
 export interface ExecOptions {

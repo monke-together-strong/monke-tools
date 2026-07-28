@@ -78,7 +78,7 @@ export function rewriteManagedEnvFiles(
   const externalValuesByKey = new Map(
     externalAssignments.map((assignment) => [assignment.key, assignment.value]),
   );
-  const externalByApp = new Map<string, Array<{ env: string; value: number }>>();
+  const externalByApp = new Map<string, { env: string; value: number }[]>();
   for (const mapping of config.externalMappingsInOrder) {
     const value = externalValuesByKey.get(mapping.portKey);
     if (value === undefined) {
@@ -118,7 +118,7 @@ export function rewriteManagedEnvFiles(
 
 export function syncRootEnvFile(
   worktreeRoot: string,
-  assignments: Array<{ env: string; value: string }>,
+  assignments: { env: string; value: string }[],
 ): void {
   syncRootEnvFileWithRemovals(worktreeRoot, assignments, []);
 }
@@ -126,7 +126,7 @@ export function syncRootEnvFile(
 /** Synchronize root .env assignments and remove stale root env names. */
 export function syncRootEnvFileWithRemovals(
   worktreeRoot: string,
-  assignments: Array<{ env: string; value: string }>,
+  assignments: { env: string; value: string }[],
   removedEnvNames: string[],
 ): void {
   if (assignments.length === 0 && removedEnvNames.length === 0) {
@@ -140,7 +140,7 @@ export function syncRootEnvFileWithRemovals(
 
   const requests = new Map(assignments.map((assignment) => [assignment.env, assignment.value]));
   const removals = new Set(removedEnvNames.filter((env) => !requests.has(env)));
-  const original = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
+  const original = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
   const lines = original ? stripTrailingNewline(original).split("\n") : [];
   const touched = new Set<string>();
   const rewritten: string[] = [];
@@ -170,11 +170,11 @@ export function syncRootEnvFileWithRemovals(
     }
   }
 
-  writeFileSync(envPath, rewritten.length > 0 ? `${rewritten.join("\n")}\n` : "", "utf8");
+  writeFileSync(envPath, rewritten.length > 0 ? `${rewritten.join("\n")}\n` : "", "utf-8");
 }
 
 export function rewriteEnvFile(filePath: string, requests: Map<string, number>): void {
-  const original = readFileSync(filePath, "utf8");
+  const original = readFileSync(filePath, "utf-8");
   const lines = original.split("\n");
   const touched = new Set<string>();
 
@@ -199,10 +199,10 @@ export function rewriteEnvFile(filePath: string, requests: Map<string, number>):
     throw new MonkeError(`Missing mapped env vars in ${filePath}: ${missing.join(", ")}`);
   }
 
-  writeFileSync(filePath, rewritten.join("\n"), "utf8");
+  writeFileSync(filePath, rewritten.join("\n"), "utf-8");
 }
 
-function listEnvFiles(root: string, relativeRoot: string = ""): string[] {
+function listEnvFiles(root: string, relativeRoot = ""): string[] {
   const absoluteRoot = path.join(root, relativeRoot);
   const results: string[] = [];
 
@@ -262,9 +262,9 @@ function seedRelativePath(
   if (existsSync(targetPath)) {
     if (sourceIsDirectory) {
       cpSync(sourcePath, targetPath, {
-        recursive: true,
-        force: false,
         errorOnExist: false,
+        force: false,
+        recursive: true,
       });
     }
     return;
@@ -273,9 +273,9 @@ function seedRelativePath(
   mkdirSync(path.dirname(targetPath), { recursive: true });
   if (sourceIsDirectory) {
     cpSync(sourcePath, targetPath, {
-      recursive: true,
-      force: false,
       errorOnExist: false,
+      force: false,
+      recursive: true,
     });
     return;
   }
@@ -285,7 +285,7 @@ function seedRelativePath(
 
 function readActiveAssignments(filePath: string): Map<string, string[]> {
   const values = new Map<string, string[]>();
-  for (const line of readFileSync(filePath, "utf8").split("\n")) {
+  for (const line of readFileSync(filePath, "utf-8").split("\n")) {
     const parsed = parseAssignmentLine(line);
     if (!parsed) {
       continue;
@@ -305,25 +305,25 @@ interface ParsedAssignmentLine {
 }
 
 function parseAssignmentLine(line: string): ParsedAssignmentLine | null {
-  if (!line.trim() || /^\s*#/.test(line)) {
+  if (!line.trim() || /^\s*#/u.test(line)) {
     return null;
   }
 
-  const match = line.match(/^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*)(.*)$/);
-  if (!match) {
+  const match =
+    /^(?<prefixStart>\s*(?:export\s+)?)(?<key>[A-Za-z_][A-Za-z0-9_]*)(?<separator>\s*=\s*)(?<remainder>.*)$/u.exec(
+      line,
+    );
+  if (!match?.groups) {
     return null;
   }
 
-  const prefixStart = match[1] ?? "";
-  const key = match[2] ?? "";
-  const separator = match[3] ?? "=";
-  const remainder = match[4] ?? "";
+  const { key = "", prefixStart = "", remainder = "", separator = "=" } = match.groups;
   const { value, comment } = splitValueAndComment(remainder);
   return {
+    comment,
     key,
     prefix: `${prefixStart}${key}${separator}`,
     rawValue: value,
-    comment,
   };
 }
 
@@ -343,16 +343,16 @@ function splitValueAndComment(value: string): { value: string; comment: string }
 
     if (char === "#" && quote === null) {
       const previous = index === 0 ? "" : value[index - 1];
-      if (!previous || /\s/.test(previous)) {
+      if (previous === undefined || previous === "" || /\s/u.test(previous)) {
         return {
-          value: value.slice(0, index),
           comment: value.slice(index),
+          value: value.slice(0, index),
         };
       }
     }
   }
 
-  return { value, comment: "" };
+  return { comment: "", value };
 }
 
 function describeRedactedValue(value: string): string {
@@ -360,8 +360,8 @@ function describeRedactedValue(value: string): string {
 }
 
 function replacePortInValue(rawValue: string, newPort: number, location: string): string {
-  const leadingWhitespace = rawValue.match(/^\s*/)?.[0] ?? "";
-  const trailingWhitespace = rawValue.match(/\s*$/)?.[0] ?? "";
+  const leadingWhitespace = /^\s*/u.exec(rawValue)?.[0] ?? "";
+  const trailingWhitespace = /\s*$/u.exec(rawValue)?.[0] ?? "";
   const trimmed = rawValue.trim();
   if (!trimmed) {
     throw new MonkeError(`Empty env value at ${location}`);
@@ -379,7 +379,7 @@ function replacePortInValue(rawValue: string, newPort: number, location: string)
   }
 
   let nextInnerValue: string;
-  if (/^\d+$/.test(innerValue)) {
+  if (/^\d+$/u.test(innerValue)) {
     nextInnerValue = String(newPort);
   } else if (innerValue.includes("://")) {
     nextInnerValue = replaceUrlPort(innerValue, newPort, location);
@@ -416,35 +416,34 @@ function replaceUrlPort(value: string, newPort: number, location: string): strin
     authorityEndCandidates.length > 0 ? Math.min(...authorityEndCandidates) : value.length;
   const authority = value.slice(authorityStart, authorityEnd);
   const lastAt = authority.lastIndexOf("@");
-  const hostPort = lastAt >= 0 ? authority.slice(lastAt + 1) : authority;
+  const hostPort = lastAt === -1 ? authority : authority.slice(lastAt + 1);
 
   let portStartInHostPort = -1;
   let currentPort = "";
   if (hostPort.startsWith("[")) {
     const bracketIndex = hostPort.indexOf("]");
-    if (bracketIndex < 0 || hostPort[bracketIndex + 1] !== ":") {
+    if (bracketIndex === -1 || hostPort[bracketIndex + 1] !== ":") {
       throw new MonkeError(
         `Expected explicit port at ${location}: ${describeRedactedValue(value)}`,
       );
     }
     portStartInHostPort = bracketIndex + 2;
-    currentPort = hostPort.slice(portStartInHostPort);
   } else {
     const colonIndex = hostPort.lastIndexOf(":");
-    if (colonIndex < 0) {
+    if (colonIndex === -1) {
       throw new MonkeError(
         `Expected explicit port at ${location}: ${describeRedactedValue(value)}`,
       );
     }
     portStartInHostPort = colonIndex + 1;
-    currentPort = hostPort.slice(portStartInHostPort);
   }
+  currentPort = hostPort.slice(portStartInHostPort);
 
-  if (!/^\d+$/.test(currentPort)) {
+  if (!/^\d+$/u.test(currentPort)) {
     throw new MonkeError(`Malformed explicit port at ${location}: ${describeRedactedValue(value)}`);
   }
 
-  const absolutePortStart = authorityStart + (lastAt >= 0 ? lastAt + 1 : 0) + portStartInHostPort;
+  const absolutePortStart = authorityStart + (lastAt === -1 ? 0 : lastAt + 1) + portStartInHostPort;
   const absolutePortEnd = absolutePortStart + currentPort.length;
   return `${value.slice(0, absolutePortStart)}${newPort}${value.slice(absolutePortEnd)}`;
 }
@@ -461,7 +460,7 @@ function extractPort(rawValue: string, location: string): number {
       : trimmed.startsWith("'") && trimmed.endsWith("'")
         ? trimmed.slice(1, -1)
         : trimmed;
-  if (/^\d+$/.test(unwrapped)) {
+  if (/^\d+$/u.test(unwrapped)) {
     return Number(unwrapped);
   }
 

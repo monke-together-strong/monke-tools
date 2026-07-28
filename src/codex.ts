@@ -13,7 +13,7 @@ export function openCodexThread(runtime: Runtime, targetPath: string): void {
   }
 
   const result = runtime.exec(opener.command, opener.args, { allowFailure: true });
-  if (result.exitCode !== 0 || result.timedOut) {
+  if (result.exitCode !== 0 || result.timedOut === true) {
     logger.warning(`Could not open Codex thread: ${formatOpenFailure(result)}`);
     return;
   }
@@ -27,14 +27,14 @@ function formatCodexNewThreadUrl(targetPath: string): string {
 
 function getUrlOpener(url: string): { command: string; args: string[] } {
   if (process.platform === "darwin") {
-    return { command: "open", args: [url] };
+    return { args: [url], command: "open" };
   }
 
   if (process.platform === "win32") {
-    return { command: "cmd", args: ["/c", "start", "", escapeWindowsCmdUrl(url)] };
+    return { args: ["/c", "start", "", escapeWindowsCmdUrl(url)], command: "cmd" };
   }
 
-  return { command: "xdg-open", args: [url] };
+  return { args: [url], command: "xdg-open" };
 }
 
 function escapeWindowsCmdUrl(url: string): string {
@@ -54,7 +54,7 @@ function formatOpenFailure(result: {
   exitCode: number;
   timedOut?: boolean;
 }): string {
-  if (result.timedOut) {
+  if (result.timedOut === true) {
     return "timed out";
   }
 

@@ -6,7 +6,7 @@ import { MonkeError } from "./errors.ts";
 
 /** Parse an application-owned YAML file and validate its runtime shape. */
 export function parseOwnedYamlFile<T extends z.ZodType>(filePath: string, schema: T): z.output<T> {
-  return parseOwnedYamlText(readFileSync(filePath, "utf8"), filePath, schema);
+  return parseOwnedYamlText(readFileSync(filePath, "utf-8"), filePath, schema);
 }
 
 /** Parse application-owned YAML text and validate its runtime shape. */
@@ -16,9 +16,9 @@ export function parseOwnedYamlText<T extends z.ZodType>(
   schema: T,
 ): z.output<T> {
   const document = parseDocument(text, {
-    uniqueKeys: true,
     merge: false,
     strict: true,
+    uniqueKeys: true,
   });
 
   if (document.errors.length > 0) {

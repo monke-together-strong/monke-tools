@@ -1,8 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import * as z from "zod";
 
 import { hashKey } from "./identity.ts";
+import { isNonEmptyString } from "./normalize.ts";
+import { RetrospectiveWindowSchema } from "./schemas.ts";
 import {
   prAnalysisPath,
   readRunWindow,
@@ -116,6 +119,69 @@ interface GhPr {
   files?: unknown[];
 }
 
+const GhRepoSchema: z.ZodType<GhRepo> = z.object({
+  isArchived: z.boolean().optional(),
+  nameWithOwner: z.string(),
+});
+const GhPrSchema: z.ZodType<GhPr> = z.object({
+  baseRefName: z.string().optional(),
+  commits: z.array(z.unknown()).optional(),
+  createdAt: z.string(),
+  createdHeadRefOid: z.string().optional(),
+  creationHeadRefOid: z.string().optional(),
+  files: z.array(z.unknown()).optional(),
+  headRefName: z.string().optional(),
+  headRefOid: z.string().optional(),
+  mergeCommit: z.unknown().optional(),
+  mergedAt: z.string(),
+  number: z.number(),
+  openingSnapshotOid: z.string().optional(),
+  openingSnapshotRef: z.string().optional(),
+  title: z.string(),
+  url: z.string(),
+});
+const GhRepoListSchema = z.array(GhRepoSchema);
+const GhPrListSchema = z.array(GhPrSchema);
+const GhPrFilesResponseSchema = z.object({
+  files: z.array(z.unknown()),
+});
+const PrAnalysisManifestSchema: z.ZodType<PrAnalysisManifest> = z.strictObject({
+  author: z.string(),
+  gaps: z.array(
+    z.strictObject({
+      impact: z.string(),
+      number: z.number().optional(),
+      reason: z.string(),
+      repo: z.string(),
+    }),
+  ),
+  generatedAt: z.string(),
+  org: z.string(),
+  runTs: z.string(),
+  version: z.literal(1),
+  window: RetrospectiveWindowSchema,
+  workItems: z.array(
+    z.strictObject({
+      analysisPath: z.string(),
+      commitShas: z.array(z.string()),
+      createdAt: z.string(),
+      finalHeadSha: z.string().optional(),
+      mergeCommitSha: z.string().optional(),
+      mergedAt: z.string(),
+      number: z.number(),
+      openingSnapshot: z.strictObject({
+        confidence: z.enum(["exact", "inferred", "unknown"]),
+        reason: z.string(),
+        ref: z.string().optional(),
+      }),
+      repo: z.string(),
+      title: z.string(),
+      url: z.string(),
+      workItemPath: z.string(),
+    }),
+  ),
+});
+
 const DEFAULT_ORG = "monke-together-strong";
 const PR_LIST_LIMIT = 100;
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
@@ -149,7 +215,7 @@ export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
 
   let repos: GhRepo[] = [];
   try {
-    repos = JSON.parse(
+    repos = parseJson(
       runText(exec, "gh", [
         "repo",
         "list",
@@ -159,20 +225,21 @@ export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
         "--json",
         "nameWithOwner,isArchived,isPrivate",
       ]),
-    ) as GhRepo[];
+      GhRepoListSchema,
+    );
   } catch (error) {
     gaps.push({
-      repo: `${org}/*`,
-      reason: `repository enumeration failed: ${errorMessage(error)}`,
       impact: "No PR trajectory evidence could be collected for the organization.",
+      reason: `repository enumeration failed: ${errorMessage(error)}`,
+      repo: `${org}/*`,
     });
   }
 
   for (const repo of repos) {
-    if (!repo.nameWithOwner) {
+    if (!isNonEmptyString(repo.nameWithOwner)) {
       continue;
     }
-    if (repo.isArchived) {
+    if (repo.isArchived === true) {
       continue;
     }
 
@@ -185,24 +252,24 @@ export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
       workItems.push(summaryOf(item));
       if (item.postOpeningDelta.source === "unavailable") {
         gaps.push({
-          repo: item.repo,
+          impact: "Primary post-opening delta evidence is missing, so PR trajectory analysis for this PR is degraded.",
           number: item.number,
           reason: `post-opening delta unavailable: ${item.postOpeningDelta.note ?? "no diff evidence"}`,
-          impact: "Primary post-opening delta evidence is missing, so PR trajectory analysis for this PR is degraded.",
+          repo: item.repo,
         });
       }
     }
   }
 
   const manifest: PrAnalysisManifest = {
-    version: 1,
-    runTs: options.runTs,
-    window,
-    org,
     author,
+    gaps: gaps.toSorted((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number)),
     generatedAt,
-    workItems: workItems.sort((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number)),
-    gaps: gaps.sort((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number)),
+    org,
+    runTs: options.runTs,
+    version: 1,
+    window,
+    workItems: workItems.toSorted((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number)),
   };
   writePrManifest(root, options.runTs, manifest);
   return manifest;
@@ -220,7 +287,7 @@ function collectRepoPrs(
   for (const day of eachDateOnly(window.since, window.until)) {
     let summaries: GhPr[];
     try {
-      summaries = JSON.parse(
+      summaries = parseJson(
         runText(exec, "gh", [
           "pr",
           "list",
@@ -237,21 +304,22 @@ function collectRepoPrs(
           "--json",
           PR_LIST_FIELDS,
         ]),
-      ) as GhPr[];
+        GhPrListSchema,
+      );
     } catch (error) {
       gaps.push({
-        repo,
-        reason: `PR lookup failed for ${day}: ${errorMessage(error)}`,
         impact: "Merged PRs from this date bucket are absent from PR trajectory analysis.",
+        reason: `PR lookup failed for ${day}: ${errorMessage(error)}`,
+        repo,
       });
       continue;
     }
 
     if (summaries.length >= PR_LIST_LIMIT) {
       gaps.push({
-        repo,
-        reason: `PR lookup for ${day} returned ${summaries.length} entries, hitting the per-day limit of ${PR_LIST_LIMIT}.`,
         impact: "That date bucket may be incomplete if additional merged PRs exist beyond the limit.",
+        reason: `PR lookup for ${day} returned ${summaries.length} entries, hitting the per-day limit of ${PR_LIST_LIMIT}.`,
+        repo,
       });
     }
 
@@ -261,24 +329,24 @@ function collectRepoPrs(
   }
 
   const prs: GhPr[] = [];
-  for (const summary of [...summariesByNumber.values()].sort((a, b) => a.number - b.number)) {
+  for (const summary of [...summariesByNumber.values()].toSorted((a, b) => a.number - b.number)) {
     try {
       prs.push(hydratePr(repo, summary, exec, gaps));
     } catch (error) {
       gaps.push({
-        repo,
+        impact: "This PR is absent from PR trajectory analysis.",
         number: summary.number,
         reason: `PR metadata lookup failed: ${errorMessage(error)}`,
-        impact: "This PR is absent from PR trajectory analysis.",
+        repo,
       });
     }
   }
 
-  return { prs, gaps };
+  return { gaps, prs };
 }
 
 function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAnalysisGap[]): GhPr {
-  const detail = JSON.parse(
+  const detail = parseJson(
     runText(exec, "gh", [
       "pr",
       "view",
@@ -288,20 +356,22 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
       "--json",
       PR_DETAIL_FIELDS,
     ]),
-  ) as GhPr;
+    GhPrSchema,
+  );
   let files: unknown[] = [];
   try {
     files = normalizePrFilesResponse(
-      JSON.parse(
+      parseJson(
         runText(exec, "gh", ["pr", "view", String(summary.number), "--repo", repo, "--json", "files"]),
+        GhPrFilesResponseSchema,
       ),
     );
   } catch (error) {
     gaps.push({
-      repo,
+      impact: "Changed-file context is missing, but post-opening delta analysis can still proceed.",
       number: summary.number,
       reason: `PR files lookup failed: ${errorMessage(error)}`,
-      impact: "Changed-file context is missing, but post-opening delta analysis can still proceed.",
+      repo,
     });
   }
   return {
@@ -330,8 +400,8 @@ export function runPrAggregate(options: RunPrAggregateOptions): { path: string; 
   ];
 
   const analyses = manifest.workItems.map((item) => ({
+    body: existsSync(item.analysisPath) ? readFileSync(item.analysisPath, "utf-8").trim() : "",
     item,
-    body: existsSync(item.analysisPath) ? readFileSync(item.analysisPath, "utf8").trim() : "",
   }));
   const groupedPatterns = groupCorrectivePatterns(analyses);
   const recurringPatterns = groupedPatterns.filter((pattern) => pattern.items.length > 1);
@@ -342,10 +412,7 @@ export function runPrAggregate(options: RunPrAggregateOptions): { path: string; 
       out.push(`- ${pattern.label} (${pattern.items.length} PRs: ${pattern.items.join(", ")})`);
     }
   }
-  out.push("");
-
-  out.push("## Observed One-Off Corrective Patterns");
-  out.push("");
+  out.push("", "## Observed One-Off Corrective Patterns", "");
   const oneOffPatterns = groupedPatterns.filter((pattern) => pattern.items.length === 1);
   if (oneOffPatterns.length === 0) {
     out.push("_No one-off corrective-change patterns were extracted._");
@@ -359,16 +426,15 @@ export function runPrAggregate(options: RunPrAggregateOptions): { path: string; 
   for (const { item, body } of analyses) {
     if (!body && !gaps.some((gap) => gap.repo === item.repo && gap.number === item.number)) {
       gaps.push({
-        repo: item.repo,
+        impact: "This PR is represented as a gap instead of an analyzed trajectory.",
         number: item.number,
         reason: `missing per-PR analysis at ${item.analysisPath}`,
-        impact: "This PR is represented as a gap instead of an analyzed trajectory.",
+        repo: item.repo,
       });
     }
   }
 
-  out.push("## PR Analysis Gaps");
-  out.push("");
+  out.push("## PR Analysis Gaps", "");
   const uniqueGaps = dedupeGaps(gaps);
   if (uniqueGaps.length === 0) {
     out.push("_No PR analysis gaps._");
@@ -377,41 +443,31 @@ export function runPrAggregate(options: RunPrAggregateOptions): { path: string; 
       out.push(`- \`${formatPrLabel(gap)}\` — ${sentence(gap.reason)} Impact: ${gap.impact}`);
     }
   }
-  out.push("");
-
-  out.push("## Per-PR Analyses");
-  out.push("");
+  out.push("", "## Per-PR Analyses", "");
   const represented = analyses.filter(({ body }) => body);
   if (represented.length === 0) {
     out.push("_No per-PR analyses were written._");
   }
   for (const { item, body } of represented) {
-    out.push(`### ${item.repo}#${item.number}`);
-    out.push("");
-    out.push(`URL: ${item.url}`);
-    out.push(
-      `Opening snapshot: ${item.openingSnapshot.confidence}${
-        item.openingSnapshot.ref ? ` ${item.openingSnapshot.ref}` : ""
-      }`,
-    );
-    if (item.finalHeadSha) {
+    out.push(`### ${item.repo}#${item.number}`, "", `URL: ${item.url}`, `Opening snapshot: ${item.openingSnapshot.confidence}${
+        isNonEmptyString(item.openingSnapshot.ref) ? ` ${item.openingSnapshot.ref}` : ""
+      }`);
+    if (isNonEmptyString(item.finalHeadSha)) {
       out.push(`Final head: ${item.finalHeadSha}`);
     }
-    if (item.mergeCommitSha) {
+    if (isNonEmptyString(item.mergeCommitSha)) {
       out.push(`Merge commit: ${item.mergeCommitSha}`);
     }
     if (item.commitShas.length > 0) {
       out.push(`PR commits: ${item.commitShas.join(", ")}`);
     }
-    out.push("");
-    out.push(body);
-    out.push("");
+    out.push("", body, "");
   }
 
   const filePath = prAnalysisPath(root, options.runTs);
   mkdirSync(path.dirname(filePath), { recursive: true });
-  writeFileSync(filePath, out.join("\n"), "utf8");
-  return { path: filePath, gaps: uniqueGaps };
+  writeFileSync(filePath, out.join("\n"), "utf-8");
+  return { gaps: uniqueGaps, path: filePath };
 }
 
 export function prManifestPath(root: string, runTs: string): string {
@@ -423,13 +479,17 @@ export function readPrManifest(root: string, runTs: string): PrAnalysisManifest 
   if (!existsSync(filePath)) {
     return null;
   }
-  return JSON.parse(readFileSync(filePath, "utf8")) as PrAnalysisManifest;
+  try {
+    return parseJson(readFileSync(filePath, "utf-8"), PrAnalysisManifestSchema);
+  } catch {
+    return null;
+  }
 }
 
 function writePrManifest(root: string, runTs: string, manifest: PrAnalysisManifest): void {
   const filePath = prManifestPath(root, runTs);
   mkdirSync(path.dirname(filePath), { recursive: true });
-  writeFileSync(filePath, JSON.stringify(manifest, null, 2), "utf8");
+  writeFileSync(filePath, JSON.stringify(manifest, null, 2), "utf-8");
 }
 
 function buildWorkItem(
@@ -442,7 +502,7 @@ function buildWorkItem(
 ): PrWorkItem {
   const commits = normalizeCommits(pr.commits);
   const openingSnapshot = inferOpeningSnapshot(pr, commits);
-  const finalHeadSha = pr.headRefOid || commits.at(-1)?.sha;
+  const finalHeadSha = isNonEmptyString(pr.headRefOid) ? pr.headRefOid : commits.at(-1)?.sha;
   const mergeCommitSha = normalizeMergeCommit(pr.mergeCommit);
   const id = workItemId(repo, pr.number);
   const dir = path.join(runDir(root, runTs), "pr-analysis", "prs");
@@ -451,47 +511,47 @@ function buildWorkItem(
   const postOpeningDelta = materializeDelta(repo, pr.number, openingSnapshot.ref, finalHeadSha, exec, repoCacheRoot);
 
   return {
-    version: 1,
-    runTs,
-    repo,
-    number: pr.number,
-    url: pr.url,
-    title: pr.title,
-    createdAt: pr.createdAt,
-    mergedAt: pr.mergedAt,
-    baseBranch: pr.baseRefName,
-    headBranch: pr.headRefName,
-    workItemPath,
     analysisPath,
-    openingSnapshot,
-    finalHeadSha,
-    mergeCommitSha,
-    commitShas: commits.map((commit) => commit.sha),
+    baseBranch: pr.baseRefName,
     changedFiles: normalizeFiles(pr.files),
     commitMessages: commits,
+    commitShas: commits.map((commit) => commit.sha),
+    createdAt: pr.createdAt,
+    finalHeadSha,
+    headBranch: pr.headRefName,
+    mergeCommitSha,
+    mergedAt: pr.mergedAt,
+    number: pr.number,
+    openingSnapshot,
     postOpeningDelta,
+    repo,
+    runTs,
+    title: pr.title,
+    url: pr.url,
+    version: 1,
+    workItemPath,
   };
 }
 
 function writeWorkItem(item: PrWorkItem): void {
   mkdirSync(path.dirname(item.workItemPath), { recursive: true });
-  writeFileSync(item.workItemPath, JSON.stringify(item, null, 2), "utf8");
+  writeFileSync(item.workItemPath, JSON.stringify(item, null, 2), "utf-8");
 }
 
 function summaryOf(item: PrWorkItem): PrWorkItemSummary {
   return {
-    repo: item.repo,
-    number: item.number,
-    url: item.url,
-    title: item.title,
-    createdAt: item.createdAt,
-    mergedAt: item.mergedAt,
-    workItemPath: item.workItemPath,
     analysisPath: item.analysisPath,
-    openingSnapshot: item.openingSnapshot,
+    commitShas: item.commitShas,
+    createdAt: item.createdAt,
     finalHeadSha: item.finalHeadSha,
     mergeCommitSha: item.mergeCommitSha,
-    commitShas: item.commitShas,
+    mergedAt: item.mergedAt,
+    number: item.number,
+    openingSnapshot: item.openingSnapshot,
+    repo: item.repo,
+    title: item.title,
+    url: item.url,
+    workItemPath: item.workItemPath,
   };
 }
 
@@ -500,24 +560,25 @@ function inferOpeningSnapshot(
   commits: PrCommitReference[],
 ): PrWorkItemSummary["openingSnapshot"] {
   const exactRef = pr.openingSnapshotOid ?? pr.openingSnapshotRef ?? pr.createdHeadRefOid ?? pr.creationHeadRefOid;
-  if (exactRef) {
+  if (isNonEmptyString(exactRef)) {
     return {
       confidence: "exact",
-      ref: exactRef,
       reason: "GitHub provided a creation-time PR head ref.",
+      ref: exactRef,
     };
   }
 
   const createdAtMs = Date.parse(pr.createdAt);
   if (!Number.isNaN(createdAtMs)) {
-    const candidate = commits
-      .filter((commit) => commit.committedDate && Date.parse(commit.committedDate) <= createdAtMs)
-      .at(-1);
+    const candidate = commits.findLast(
+      (commit) =>
+        commit.committedDate !== undefined && Date.parse(commit.committedDate) <= createdAtMs,
+    );
     if (candidate) {
       return {
         confidence: "inferred",
-        ref: candidate.sha,
         reason: "Latest PR commit whose commit date is at or before the PR creation time.",
+        ref: candidate.sha,
       };
     }
   }
@@ -536,12 +597,19 @@ function materializeDelta(
   repoCacheRoot?: string,
 ): PrWorkItem["postOpeningDelta"] {
   const missingRefNote =
-    !openingRef || !finalHeadSha
+    !isNonEmptyString(openingRef) || !isNonEmptyString(finalHeadSha)
       ? "Opening or final ref was unavailable, so no post-opening delta could be materialized."
       : undefined;
 
-  const repoDir = repoCacheRoot ? path.join(repoCacheRoot, repo.replaceAll("/", "__")) : null;
-  if (!missingRefNote && repoDir && openingRef && finalHeadSha) {
+  const repoDir = isNonEmptyString(repoCacheRoot)
+    ? path.join(repoCacheRoot, repo.replaceAll("/", "__"))
+    : null;
+  if (
+    !isNonEmptyString(missingRefNote) &&
+    isNonEmptyString(repoDir) &&
+    isNonEmptyString(openingRef) &&
+    isNonEmptyString(finalHeadSha)
+  ) {
     try {
       ensureRepoCache(repo, repoDir, exec);
       runText(exec, "git", ["fetch", "origin", `pull/${number}/head:refs/remotes/pr/${number}`, "--force"], {
@@ -551,9 +619,9 @@ function materializeDelta(
         cwd: repoDir,
       });
       return {
-        source: "local-git",
-        confidence: "primary",
         body: clipDelta(body),
+        confidence: "primary",
+        source: "local-git",
       };
     } catch {
       // Fall through to the GitHub diff fallback below.
@@ -563,19 +631,19 @@ function materializeDelta(
   try {
     const body = runText(exec, "gh", ["pr", "diff", String(number), "--repo", repo, "--patch"]);
     return {
-      source: "github-pr-diff-fallback",
-      confidence: "lower",
       body: clipDelta(body),
+      confidence: "lower",
       note: "GitHub PR diff is the whole PR diff, not a true post-opening delta.",
+      source: "github-pr-diff-fallback",
     };
   } catch (error) {
     return {
-      source: "unavailable",
-      confidence: "none",
       body: "",
+      confidence: "none",
       note: missingRefNote
         ? `${missingRefNote} GitHub PR diff fallback failed: ${errorMessage(error)}`
         : `Diff materialization failed: ${errorMessage(error)}`,
+      source: "unavailable",
     };
   }
 }
@@ -596,17 +664,17 @@ function normalizeCommits(value: unknown): PrCommitReference[] {
     .map((entry) => {
       const record = asRecord(entry);
       const sha = asString(record?.oid) ?? asString(record?.sha);
-      if (!sha) {
+      if (!isNonEmptyString(sha)) {
         return null;
       }
       const headline = asString(record?.messageHeadline) ?? asString(record?.message) ?? "";
       const body = asString(record?.messageBody);
       const committedDate = asString(record?.committedDate);
       const commit: PrCommitReference = {
+        message: isNonEmptyString(body) ? `${headline}\n\n${body}` : headline,
         sha,
-        message: body ? `${headline}\n\n${body}` : headline,
       };
-      if (committedDate) {
+      if (isNonEmptyString(committedDate)) {
         commit.committedDate = committedDate;
       }
       return commit;
@@ -624,7 +692,7 @@ function normalizeFiles(value: unknown): string[] {
       return asString(record?.path) ?? asString(record?.filename);
     })
     .filter((entry): entry is string => Boolean(entry))
-    .sort();
+    .toSorted();
 }
 
 function normalizePrFilesResponse(value: unknown): unknown[] {
@@ -641,6 +709,11 @@ function normalizeMergeCommit(value: unknown): string | undefined {
   return asString(record?.oid) ?? asString(record?.sha);
 }
 
+function parseJson<T extends z.ZodType>(text: string, schema: T): z.output<T> {
+  const value: unknown = JSON.parse(text);
+  return schema.parse(value);
+}
+
 function prInWindow(pr: GhPr, window: RetrospectiveWindow): boolean {
   const mergedAt = Date.parse(pr.mergedAt);
   return !Number.isNaN(mergedAt) && mergedAt >= Date.parse(window.since) && mergedAt <= Date.parse(window.until);
@@ -648,12 +721,12 @@ function prInWindow(pr: GhPr, window: RetrospectiveWindow): boolean {
 
 function extractCorrectivePatternLines(body: string): string[] {
   const section = extractSection(body, "Corrective Patterns");
-  if (!section) {
+  if (!isNonEmptyString(section)) {
     return [];
   }
   return section
     .split("\n")
-    .map((line) => line.trim().replace(/^[-*]\s+/, ""))
+    .map((line) => line.trim().replace(/^[-*]\s+/u, ""))
     .filter(Boolean)
     .filter((line) => !line.startsWith("##"))
     .slice(0, 8);
@@ -672,21 +745,21 @@ function groupCorrectivePatterns(
       if (!key) {
         continue;
       }
-      const existing = byPattern.get(key) ?? { label: line, items: [] };
+      const existing = byPattern.get(key) ?? { items: [], label: line };
       existing.items.push(`${item.repo}#${item.number}`);
       byPattern.set(key, existing);
     }
   }
-  return [...byPattern.values()].sort((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label));
+  return [...byPattern.values()].toSorted((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label));
 }
 
 function normalizePattern(value: string): string {
   return value
     .toLowerCase()
-    .replace(/`[^`]+`/g, "")
-    .replace(/#[0-9]+/g, "")
-    .replace(/[0-9a-f]{7,40}/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
+    .replaceAll(/`[^`]+`/gu, "")
+    .replaceAll(/#[0-9]+/gu, "")
+    .replaceAll(/[0-9a-f]{7,40}/gu, "")
+    .replaceAll(/[^a-z0-9]+/gu, " ")
     .trim();
 }
 
@@ -695,7 +768,7 @@ function dedupeGaps(gaps: PrAnalysisGap[]): PrAnalysisGap[] {
   for (const gap of gaps) {
     byKey.set(`${gap.repo}#${gap.number ?? ""}#${gap.reason}`, gap);
   }
-  return [...byKey.values()].sort((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number));
+  return [...byKey.values()].toSorted((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number));
 }
 
 function comparePrLabels(repoA: string, numberA: number | undefined, repoB: string, numberB: number | undefined): number {
@@ -703,14 +776,14 @@ function comparePrLabels(repoA: string, numberA: number | undefined, repoB: stri
 }
 
 export function extractSection(body: string, heading: string): string | null {
-  const pattern = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "m");
+  const pattern = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "mu");
   const match = body.match(pattern);
   if (!match || match.index === undefined) {
     return null;
   }
   const start = match.index + match[0].length;
   const rest = body.slice(start);
-  const next = rest.search(/^##\s+/m);
+  const next = rest.search(/^##\s+/mu);
   return (next === -1 ? rest : rest.slice(0, next)).trim();
 }
 
@@ -719,11 +792,11 @@ function formatPrLabel(gap: PrAnalysisGap): string {
 }
 
 function sentence(value: string): string {
-  return /[.!?]\s*$/.test(value) ? `${value} ` : `${value}. `;
+  return /[.!?]\s*$/u.test(value) ? `${value} ` : `${value}. `;
 }
 
 function workItemId(repo: string, number: number): string {
-  const readable = repo.replaceAll("/", "__").replaceAll(/[^a-zA-Z0-9_.-]/g, "-");
+  const readable = repo.replaceAll("/", "__").replaceAll(/[^a-zA-Z0-9_.-]/gu, "-");
   return `${readable}__${number}__${hashKey(`${repo}#${number}`).slice(0, 12)}`;
 }
 
@@ -754,14 +827,14 @@ function clipDelta(value: string): string {
 function defaultRunner(command: string, args: string[], options: { cwd?: string } = {}): CommandResult {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
-    encoding: "utf8",
+    encoding: "utf-8",
     timeout: DEFAULT_COMMAND_TIMEOUT_MS,
   });
   return {
-    status: result.status,
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
     error: result.error ? errorMessage(result.error) : undefined,
+    status: result.status,
+    stderr: result.stderr ?? "",
+    stdout: result.stdout ?? "",
   };
 }
 
@@ -773,17 +846,23 @@ function runText(
 ): string {
   const result = exec(command, args, options);
   if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(" ")} failed: ${result.stderr || result.stdout || result.error}`);
+    const detail =
+      [result.stderr, result.stdout, result.error].find(isNonEmptyString) ?? "unknown error";
+    throw new Error(`${command} ${args.join(" ")} failed: ${detail}`);
   }
   return result.stdout;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  return isRecord(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function asString(value: unknown): string | undefined {
-  return typeof value === "string" && value ? value : undefined;
+  return isNonEmptyString(value) ? value : undefined;
 }
 
 function errorMessage(error: unknown): string {
@@ -791,5 +870,5 @@ function errorMessage(error: unknown): string {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

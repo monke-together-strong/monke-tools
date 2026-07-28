@@ -1,15 +1,15 @@
-import { expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vite-plus/test";
 import path from "node:path";
 
 import { loadResolvedGraph } from "../src/config.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { createRepo, makeTempDir, write } from "./helpers.ts";
 
-test("loadResolvedGraph accepts valid local and external config", () => {
-  const sandbox = makeTempDir("config-valid");
-  const depRoot = createRepo(path.join(sandbox, "dep"), {
-    "services/db/.env.local": "PORT=5432\n",
-    "monke.yml": `apps:
+describe("configuration", () => {
+  test("loadResolvedGraph accepts valid local and external config", () => {
+    const sandbox = makeTempDir("config-valid");
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      "monke.yml": `apps:
   db:
     path: services/db
     envFile: .env.local
@@ -17,11 +17,12 @@ test("loadResolvedGraph accepts valid local and external config", () => {
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-  });
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
-    "apps/consumer/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
-    "monke.yml": `apps:
+      "services/db/.env.local": "PORT=5432\n",
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+      "apps/consumer/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -41,22 +42,25 @@ external:
         app: consumer
         env: DATABASE_URL
 `,
+    });
+
+    const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+
+    expect(graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot)).toStrictEqual([
+      depRoot,
+      root,
+    ]);
+    expect(graph.reposByRoot.get(root)?.localPortOrder).toStrictEqual(["API_PORT"]);
+    expect(graph.reposByRoot.get(root)?.externalMappingsInOrder).toHaveLength(1);
+    expect(graph.reposByRoot.get(root)?.externalInOrder[0]?.pathEnv).toBe("DEP_DIR");
+    expect(graph.reposByRoot.get(root)?.bootstrapCommand).toBeUndefined();
   });
 
-  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
-
-  expect(graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot)).toEqual([depRoot, root]);
-  expect(graph.reposByRoot.get(root)?.localPortOrder).toEqual(["API_PORT"]);
-  expect(graph.reposByRoot.get(root)?.externalMappingsInOrder).toHaveLength(1);
-  expect(graph.reposByRoot.get(root)?.externalInOrder[0]?.pathEnv).toBe("DEP_DIR");
-  expect(graph.reposByRoot.get(root)?.bootstrapCommand).toBeUndefined();
-});
-
-test("loadResolvedGraph accepts bootstrapCommand when present", () => {
-  const sandbox = makeTempDir("config-bootstrap");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `bootstrapCommand: pnpm install && pnpm generate
+  test("loadResolvedGraph accepts bootstrapCommand when present", () => {
+    const sandbox = makeTempDir("config-bootstrap");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `bootstrapCommand: pnpm install && pnpm generate
 apps:
   api:
     path: apps/api
@@ -65,20 +69,19 @@ apps:
       - port: API_PORT
         env: PORT
 `,
+    });
+
+    const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+
+    expect(graph.reposByRoot.get(root)?.bootstrapCommand).toBe("pnpm install && pnpm generate");
   });
 
-  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
-
-  expect(graph.reposByRoot.get(root)?.bootstrapCommand).toBe("pnpm install && pnpm generate");
-});
-
-test("loadResolvedGraph accepts repo-level seedPaths", () => {
-  const sandbox = makeTempDir("config-seedpaths");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{}\n",
-    "scripts/bootstrap.sh": "#!/bin/sh\n",
-    "monke.yml": `seedPaths:
+  test("loadResolvedGraph accepts repo-level seedPaths", () => {
+    const sandbox = makeTempDir("config-seedpaths");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{}\n",
+      "monke.yml": `seedPaths:
   - apps/frostbite-crawler/data/sessions
   - scripts/bootstrap.sh
 apps:
@@ -89,21 +92,22 @@ apps:
       - port: API_PORT
         env: PORT
 `,
+      "scripts/bootstrap.sh": "#!/bin/sh\n",
+    });
+
+    const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+
+    expect(graph.reposByRoot.get(root)?.seedPaths).toStrictEqual([
+      "apps/frostbite-crawler/data/sessions",
+      "scripts/bootstrap.sh",
+    ]);
   });
 
-  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
-
-  expect(graph.reposByRoot.get(root)?.seedPaths).toEqual([
-    "apps/frostbite-crawler/data/sessions",
-    "scripts/bootstrap.sh",
-  ]);
-});
-
-test("loadResolvedGraph rejects non-string bootstrapCommand", () => {
-  const sandbox = makeTempDir("config-bootstrap-non-string");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `bootstrapCommand:
+  test("loadResolvedGraph rejects non-string bootstrapCommand", () => {
+    const sandbox = makeTempDir("config-bootstrap-non-string");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `bootstrapCommand:
   nested: nope
 apps:
   api:
@@ -113,18 +117,18 @@ apps:
       - port: API_PORT
         env: PORT
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /bootstrapCommand.*non-empty string/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /bootstrapCommand.*non-empty string/,
-  );
-});
-
-test("loadResolvedGraph rejects empty bootstrapCommand", () => {
-  const sandbox = makeTempDir("config-bootstrap-empty");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `bootstrapCommand: "   "
+  test("loadResolvedGraph rejects empty bootstrapCommand", () => {
+    const sandbox = makeTempDir("config-bootstrap-empty");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `bootstrapCommand: "   "
 apps:
   api:
     path: apps/api
@@ -133,18 +137,18 @@ apps:
       - port: API_PORT
         env: PORT
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /bootstrapCommand.*non-empty string/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /bootstrapCommand.*non-empty string/,
-  );
-});
-
-test("loadResolvedGraph rejects invalid cleanupCommand values", () => {
-  const sandbox = makeTempDir("config-invalid-cleanup");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `cleanupCommand: ""
+  test("loadResolvedGraph rejects invalid cleanupCommand values", () => {
+    const sandbox = makeTempDir("config-invalid-cleanup");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `cleanupCommand: ""
 apps:
   api:
     path: apps/api
@@ -153,18 +157,18 @@ apps:
       - port: API_PORT
         env: PORT
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /cleanupCommand.*non-empty string/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /cleanupCommand.*non-empty string/,
-  );
-});
-
-test("loadResolvedGraph rejects non-array seedPaths", () => {
-  const sandbox = makeTempDir("config-seedpaths-not-array");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `seedPaths: apps/frostbite-crawler/data/sessions
+  test("loadResolvedGraph rejects non-array seedPaths", () => {
+    const sandbox = makeTempDir("config-seedpaths-not-array");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `seedPaths: apps/frostbite-crawler/data/sessions
 apps:
   api:
     path: apps/api
@@ -173,18 +177,18 @@ apps:
       - port: API_PORT
         env: PORT
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /seedPaths.*must be an array/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /seedPaths.*must be an array/,
-  );
-});
-
-test("loadResolvedGraph rejects seedPaths that escape the repo root", () => {
-  const sandbox = makeTempDir("config-seedpaths-escape");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `seedPaths:
+  test("loadResolvedGraph rejects seedPaths that escape the repo root", () => {
+    const sandbox = makeTempDir("config-seedpaths-escape");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `seedPaths:
   - ../shared/sessions
 apps:
   api:
@@ -194,19 +198,19 @@ apps:
       - port: API_PORT
         env: PORT
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /seedPaths\[0\].*must resolve inside/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /seedPaths\[0\].*must resolve inside/,
-  );
-});
-
-test("loadResolvedGraph rejects duplicate normalized seedPaths", () => {
-  const sandbox = makeTempDir("config-seedpaths-duplicate");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{}\n",
-    "monke.yml": `seedPaths:
+  test("loadResolvedGraph rejects duplicate normalized seedPaths", () => {
+    const sandbox = makeTempDir("config-seedpaths-duplicate");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "apps/frostbite-crawler/data/sessions/hoangbn/Preferences": "{}\n",
+      "monke.yml": `seedPaths:
   - apps/frostbite-crawler/data/sessions
   - apps/frostbite-crawler/data/../data/sessions
 apps:
@@ -217,16 +221,18 @@ apps:
       - port: API_PORT
         env: PORT
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /Duplicate seedPath/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/Duplicate seedPath/);
-});
-
-test("loadResolvedGraph rejects seedPaths that point at the repo root", () => {
-  const sandbox = makeTempDir("config-seedpaths-root");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `seedPaths:
+  test("loadResolvedGraph rejects seedPaths that point at the repo root", () => {
+    const sandbox = makeTempDir("config-seedpaths-root");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `seedPaths:
   - .
 apps:
   api:
@@ -236,19 +242,19 @@ apps:
       - port: API_PORT
         env: PORT
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /seedPath "." is not allowed/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /seedPath "." is not allowed/,
-  );
-});
-
-test("loadResolvedGraph rejects seedPaths that normalize to the repo root", () => {
-  const sandbox = makeTempDir("config-seedpaths-normalized-root");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "apps/.keep": "\n",
-    "monke.yml": `seedPaths:
+  test("loadResolvedGraph rejects seedPaths that normalize to the repo root", () => {
+    const sandbox = makeTempDir("config-seedpaths-normalized-root");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/.keep": "\n",
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `seedPaths:
   - apps/..
 apps:
   api:
@@ -258,18 +264,17 @@ apps:
       - port: API_PORT
         env: PORT
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /seedPath "." is not allowed/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /seedPath "." is not allowed/,
-  );
-});
-
-test("loadResolvedGraph rejects missing external pathEnv", () => {
-  const sandbox = makeTempDir("config-missing-pathenv");
-  createRepo(path.join(sandbox, "dep"), {
-    "services/db/.env.local": "PORT=5432\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph rejects missing external pathEnv", () => {
+    const sandbox = makeTempDir("config-missing-pathenv");
+    createRepo(path.join(sandbox, "dep"), {
+      "monke.yml": `apps:
   db:
     path: services/db
     envFile: .env.local
@@ -277,10 +282,11 @@ test("loadResolvedGraph rejects missing external pathEnv", () => {
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-  });
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
-    "monke.yml": `apps:
+      "services/db/.env.local": "PORT=5432\n",
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -293,16 +299,15 @@ external:
         app: api
         env: DATABASE_URL
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/pathEnv/u);
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/pathEnv/);
-});
-
-test("loadResolvedGraph rejects invalid external pathEnv", () => {
-  const sandbox = makeTempDir("config-invalid-pathenv");
-  createRepo(path.join(sandbox, "dep"), {
-    "services/db/.env.local": "PORT=5432\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph rejects invalid external pathEnv", () => {
+    const sandbox = makeTempDir("config-invalid-pathenv");
+    createRepo(path.join(sandbox, "dep"), {
+      "monke.yml": `apps:
   db:
     path: services/db
     envFile: .env.local
@@ -310,10 +315,11 @@ test("loadResolvedGraph rejects invalid external pathEnv", () => {
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-  });
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
-    "monke.yml": `apps:
+      "services/db/.env.local": "PORT=5432\n",
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -327,18 +333,17 @@ external:
         app: api
         env: DATABASE_URL
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /must be an uppercase env name/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /must be an uppercase env name/,
-  );
-});
-
-test("loadResolvedGraph rejects duplicate external pathEnv names", () => {
-  const sandbox = makeTempDir("config-duplicate-pathenv");
-  createRepo(path.join(sandbox, "dep-a"), {
-    "services/a/.env.local": "PORT=5432\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph rejects duplicate external pathEnv names", () => {
+    const sandbox = makeTempDir("config-duplicate-pathenv");
+    createRepo(path.join(sandbox, "dep-a"), {
+      "monke.yml": `apps:
   a:
     path: services/a
     envFile: .env.local
@@ -346,10 +351,10 @@ test("loadResolvedGraph rejects duplicate external pathEnv names", () => {
       - port: DEP_A_PORT
         env: PORT
 `,
-  });
-  createRepo(path.join(sandbox, "dep-b"), {
-    "services/b/.env.local": "PORT=6432\n",
-    "monke.yml": `apps:
+      "services/a/.env.local": "PORT=5432\n",
+    });
+    createRepo(path.join(sandbox, "dep-b"), {
+      "monke.yml": `apps:
   b:
     path: services/b
     envFile: .env.local
@@ -357,11 +362,12 @@ test("loadResolvedGraph rejects duplicate external pathEnv names", () => {
       - port: DEP_B_PORT
         env: PORT
 `,
-  });
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local":
-      "DATABASE_URL=postgres://localhost:5432/app\nCACHE_URL=redis://localhost:6432/0\n",
-    "monke.yml": `apps:
+      "services/b/.env.local": "PORT=6432\n",
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local":
+        "DATABASE_URL=postgres://localhost:5432/app\nCACHE_URL=redis://localhost:6432/0\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -382,18 +388,18 @@ external:
         app: api
         env: CACHE_URL
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /Duplicate external pathEnv SHARED_DEP_DIR/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /Duplicate external pathEnv SHARED_DEP_DIR/,
-  );
-});
-
-test("loadResolvedGraph rejects duplicate yaml keys", () => {
-  const sandbox = makeTempDir("config-duplicate-keys");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph rejects duplicate yaml keys", () => {
+    const sandbox = makeTempDir("config-duplicate-keys");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -403,16 +409,15 @@ test("loadResolvedGraph rejects duplicate yaml keys", () => {
     envFile: .env.local
     mappings: []
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/Invalid/u);
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/Invalid/);
-});
-
-test("loadResolvedGraph rejects duplicate rewrite targets", () => {
-  const sandbox = makeTempDir("config-duplicate-targets");
-  const depRoot = createRepo(path.join(sandbox, "dep"), {
-    "services/db/.env.local": "PORT=5432\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph rejects duplicate rewrite targets", () => {
+    const sandbox = makeTempDir("config-duplicate-targets");
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      "monke.yml": `apps:
   db:
     path: services/db
     envFile: .env.local
@@ -420,10 +425,11 @@ test("loadResolvedGraph rejects duplicate rewrite targets", () => {
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-  });
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
-    "monke.yml": `apps:
+      "services/db/.env.local": "PORT=5432\n",
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -439,19 +445,18 @@ external:
         app: api
         env: DATABASE_URL
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /Duplicate rewrite target/u,
+    );
+    expect(depRoot).toBeTruthy();
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /Duplicate rewrite target/,
-  );
-  expect(depRoot).toBeTruthy();
-});
-
-test("loadResolvedGraph rejects direct dependency references to non-local ports", () => {
-  const sandbox = makeTempDir("config-direct-only");
-  const leafRoot = createRepo(path.join(sandbox, "leaf"), {
-    "services/leaf/.env.local": "PORT=9000\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph rejects direct dependency references to non-local ports", () => {
+    const sandbox = makeTempDir("config-direct-only");
+    const leafRoot = createRepo(path.join(sandbox, "leaf"), {
+      "monke.yml": `apps:
   leaf:
     path: services/leaf
     envFile: .env.local
@@ -459,10 +464,10 @@ test("loadResolvedGraph rejects direct dependency references to non-local ports"
       - port: LEAF_PORT
         env: PORT
 `,
-  });
-  const depRoot = createRepo(path.join(sandbox, "dep"), {
-    "services/dep/.env.local": "PORT=5432\nLEAF_URL=http://localhost:9000\n",
-    "monke.yml": `apps:
+      "services/leaf/.env.local": "PORT=9000\n",
+    });
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      "monke.yml": `apps:
   dep:
     path: services/dep
     envFile: .env.local
@@ -478,10 +483,11 @@ external:
         app: dep
         env: LEAF_URL
 `,
-  });
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
-    "monke.yml": `apps:
+      "services/dep/.env.local": "PORT=5432\nLEAF_URL=http://localhost:9000\n",
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -495,19 +501,21 @@ external:
         app: api
         env: DATABASE_URL
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /not owned locally/u,
+    );
+    expect(leafRoot).toBeTruthy();
+    expect(depRoot).toBeTruthy();
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/not owned locally/);
-  expect(leafRoot).toBeTruthy();
-  expect(depRoot).toBeTruthy();
-});
-
-test("loadResolvedGraph rejects unused zero-port apps", () => {
-  const sandbox = makeTempDir("config-unused-zero-port");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "apps/consumer/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph rejects unused zero-port apps", () => {
+    const sandbox = makeTempDir("config-unused-zero-port");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "apps/consumer/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -519,19 +527,18 @@ test("loadResolvedGraph rejects unused zero-port apps", () => {
     envFile: .env.local
     mappings: []
 `,
+    });
+    write(root, "apps/consumer/.keep", "");
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /owns no local ports/u,
+    );
   });
-  write(root, "apps/consumer/.keep", "");
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /owns no local ports/,
-  );
-});
-
-test("loadResolvedGraph rejects duplicate local port keys across the resolved session graph", () => {
-  const sandbox = makeTempDir("config-duplicate-port-keys");
-  createRepo(path.join(sandbox, "dep"), {
-    "services/db/.env.local": "PORT=5432\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph rejects duplicate local port keys across the resolved session graph", () => {
+    const sandbox = makeTempDir("config-duplicate-port-keys");
+    createRepo(path.join(sandbox, "dep"), {
+      "monke.yml": `apps:
   db:
     path: services/db
     envFile: .env.local
@@ -539,11 +546,12 @@ test("loadResolvedGraph rejects duplicate local port keys across the resolved se
       - port: SHARED_PORT
         env: PORT
 `,
-  });
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "apps/consumer/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
-    "monke.yml": `apps:
+      "services/db/.env.local": "PORT=5432\n",
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "apps/consumer/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -563,17 +571,17 @@ external:
         app: consumer
         env: DATABASE_URL
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/owned by both/u);
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/owned by both/);
-});
-
-test("loadResolvedGraph allows one local port key to rewrite multiple same-repo app envs", () => {
-  const sandbox = makeTempDir("config-shared-local-port");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "apps/web/.env.local": "API_URL=http://localhost:3000\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph allows one local port key to rewrite multiple same-repo app envs", () => {
+    const sandbox = makeTempDir("config-shared-local-port");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "apps/web/.env.local": "API_URL=http://localhost:3000\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -587,25 +595,25 @@ test("loadResolvedGraph allows one local port key to rewrite multiple same-repo 
       - port: SHARED_PORT
         env: API_URL
 `,
+    });
+
+    const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+    const repo = graph.reposByRoot.get(root);
+    expect(repo?.localPortOrder).toStrictEqual(["SHARED_PORT"]);
+    expect(repo?.localMappingsByPort.get("SHARED_PORT")).toStrictEqual([
+      { portKey: "SHARED_PORT", targetApp: "api", targetEnv: "PORT" },
+      { portKey: "SHARED_PORT", targetApp: "web", targetEnv: "API_URL" },
+    ]);
   });
 
-  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
-  const repo = graph.reposByRoot.get(root);
-  expect(repo?.localPortOrder).toEqual(["SHARED_PORT"]);
-  expect(repo?.localMappingsByPort.get("SHARED_PORT")).toEqual([
-    { targetApp: "api", targetEnv: "PORT", portKey: "SHARED_PORT" },
-    { targetApp: "web", targetEnv: "API_URL", portKey: "SHARED_PORT" },
-  ]);
-});
+  test("loadResolvedGraph rejects dependency cycles instead of returning cached partial config", () => {
+    const sandbox = makeTempDir("config-cycle");
+    const root = path.join(sandbox, "root");
+    const dep = path.join(sandbox, "dep");
 
-test("loadResolvedGraph rejects dependency cycles instead of returning cached partial config", () => {
-  const sandbox = makeTempDir("config-cycle");
-  const root = path.join(sandbox, "root");
-  const dep = path.join(sandbox, "dep");
-
-  createRepo(root, {
-    "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
-    "monke.yml": `apps:
+    createRepo(root, {
+      "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -621,11 +629,11 @@ external:
         app: api
         env: DATABASE_URL
 `,
-  });
+    });
 
-  createRepo(dep, {
-    "apps/db/.env.local": "PORT=5432\nDATABASE_URL=postgres://localhost:3000/dep\n",
-    "monke.yml": `apps:
+    createRepo(dep, {
+      "apps/db/.env.local": "PORT=5432\nDATABASE_URL=postgres://localhost:3000/dep\n",
+      "monke.yml": `apps:
   db:
     path: apps/db
     envFile: .env.local
@@ -641,19 +649,19 @@ external:
         app: db
         env: DATABASE_URL
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /Dependency cycles are not supported/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /Dependency cycles are not supported/,
-  );
-});
-
-test("loadResolvedGraph rejects envFile paths that escape the app directory", () => {
-  const sandbox = makeTempDir("config-envfile-escape");
-  const root = createRepo(path.join(sandbox, "root"), {
-    ".env.root": "DATABASE_URL=postgres://localhost:5432/root\n",
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph rejects envFile paths that escape the app directory", () => {
+    const sandbox = makeTempDir("config-envfile-escape");
+    const root = createRepo(path.join(sandbox, "root"), {
+      ".env.root": "DATABASE_URL=postgres://localhost:5432/root\n",
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: ../../.env.root
@@ -661,18 +669,18 @@ test("loadResolvedGraph rejects envFile paths that escape the app directory", ()
       - port: DB_PORT
         env: DATABASE_URL
 `,
+    });
+
+    expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
+      /envFile.*must resolve inside/u,
+    );
   });
 
-  expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-    /envFile.*must resolve inside/,
-  );
-});
-
-test("loadResolvedGraph accepts an app at the repo root", () => {
-  const sandbox = makeTempDir("config-root-app");
-  const root = createRepo(path.join(sandbox, "root"), {
-    ".env": "PORT=3000\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph accepts an app at the repo root", () => {
+    const sandbox = makeTempDir("config-root-app");
+    const root = createRepo(path.join(sandbox, "root"), {
+      ".env": "PORT=3000\n",
+      "monke.yml": `apps:
   web:
     path: .
     envFile: .env
@@ -680,30 +688,31 @@ test("loadResolvedGraph accepts an app at the repo root", () => {
       - port: WEB_PORT
         env: PORT
 `,
+    });
+
+    const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+    const app = graph.reposByRoot.get(root)?.appsByLabel.get("web");
+
+    expect(app?.relativePath).toBe(".");
+    expect(app?.relativeEnvFile).toBe(".env");
+    expect(app?.absoluteAppPath).toBe(root);
+    expect(graph.reposByRoot.get(root)?.localPortOrder).toStrictEqual(["WEB_PORT"]);
   });
 
-  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
-  const app = graph.reposByRoot.get(root)?.appsByLabel.get("web");
-
-  expect(app?.relativePath).toBe(".");
-  expect(app?.relativeEnvFile).toBe(".env");
-  expect(app?.absoluteAppPath).toBe(root);
-  expect(graph.reposByRoot.get(root)?.localPortOrder).toEqual(["WEB_PORT"]);
-});
-
-test("loadResolvedGraph defaults envFile to .env when omitted", () => {
-  const sandbox = makeTempDir("config-default-envfile");
-  const root = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env": "PORT=3000\n",
-    "monke.yml": `apps:
+  test("loadResolvedGraph defaults envFile to .env when omitted", () => {
+    const sandbox = makeTempDir("config-default-envfile");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env": "PORT=3000\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     mappings:
       - port: API_PORT
         env: PORT
 `,
-  });
+    });
 
-  const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
-  expect(graph.reposByRoot.get(root)?.appsByLabel.get("api")?.relativeEnvFile).toBe(".env");
+    const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+    expect(graph.reposByRoot.get(root)?.appsByLabel.get("api")?.relativeEnvFile).toBe(".env");
+  });
 });

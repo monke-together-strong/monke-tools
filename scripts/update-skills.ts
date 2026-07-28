@@ -12,13 +12,13 @@ import {
   assertSkillSelectorSlugMappingsMatchStagedSlugs,
   buildSkillsInstallArgs,
   copyStagedGuidanceToManagedRoots,
-  extractSecurityRiskAssessment,
   listStagedSkillSlugs,
   normalizeImportRecipeStore,
   normalizeSourceForStaging,
   IMPORTED_REFERENCES_ROOT,
   IMPORTED_SKILLS_ROOT,
   readImportRecipeStore,
+  reportSecurityRiskAssessment,
   resolveSkillSelectorSlugMappings,
   runInstallCommand,
   runSkillsCaptured,
@@ -66,32 +66,34 @@ export async function runUpdateSkills(
 
   validateImportedGuidanceDirectoriesAreTracked(repoRoot, store);
 
+  // Every recipe reaches the loop tail; Oxlint currently misclassifies the try/finally body.
+  // oxlint-disable-next-line no-unreachable-loop
   for (const recipe of store.recipes) {
     const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-update-"));
     try {
       const normalizedSource = normalizeSourceForStaging(recipe.source, repoRoot);
       const installOutput = runSkillsCaptured(
         buildSkillsInstallArgs({
-          source: normalizedSource,
           acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
           selectors: recipe.skills.map((skill) => skill.selector),
+          source: normalizedSource,
         }),
         stagingDirectory,
       );
-      const securityAssessment = extractSecurityRiskAssessment(
+      reportSecurityRiskAssessment(
         `${installOutput.stdout}\n${installOutput.stderr}`,
+        writeMessage,
       );
-      if (securityAssessment) {
-        writeMessage(securityAssessment);
-      }
 
+      // Recipe updates are serial because each accepted replacement updates the store for the next.
+      // oxlint-disable-next-line no-await-in-loop
       const slugReplacements = await resolveStagedSkillReplacements({
+        acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
+        confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
+        interactive,
         recipe,
         source: normalizedSource,
-        acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
         stagingDirectory,
-        interactive,
-        confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
       });
       const stagedGuidance = applySlugReplacementsToGuidance(recipe, slugReplacements);
       const nextStore =
@@ -99,22 +101,22 @@ export async function runUpdateSkills(
           ? applySlugReplacementsToStore(store, recipe.source, stagedGuidance)
           : store;
       copyStagedGuidanceToManagedRoots({
-        stagingDirectory,
-        repoRoot,
-        guidance: stagedGuidance,
-        obsoleteGuidance: guidanceReplacedBySlugChanges(recipe, slugReplacements),
         commitState() {
           if (slugReplacements.length > 0) {
             writeImportRecipeStore(repoRoot, nextStore);
           }
         },
+        guidance: stagedGuidance,
+        obsoleteGuidance: guidanceReplacedBySlugChanges(recipe, slugReplacements),
+        repoRoot,
+        stagingDirectory,
       });
       store = nextStore;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${recipe.source}: ${message}`);
     } finally {
-      rmSync(stagingDirectory, { recursive: true, force: true });
+      rmSync(stagingDirectory, { force: true, recursive: true });
     }
   }
 
@@ -176,7 +178,7 @@ async function resolveStagedSkillReplacements(options: {
   confirmSlugReplacement: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
 }): Promise<SlugReplacementRequest[]> {
   const { recipe, stagingDirectory } = options;
-  const recordedSlugs = recipe.skills.map((skill) => skill.slug).sort();
+  const recordedSlugs = recipe.skills.map((skill) => skill.slug).toSorted();
   const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
   const missingSlugs = recordedSlugs.filter((slug) => !stagedSlugs.includes(slug));
   const unexpectedSlugs = stagedSlugs.filter((slug) => !recordedSlugs.includes(slug));
@@ -190,9 +192,9 @@ async function resolveStagedSkillReplacements(options: {
   }
 
   const selectorMappings = resolveSkillSelectorSlugMappings({
-    source: options.source,
     acceptOpenClawRisks: options.acceptOpenClawRisks,
     selectors: recipe.skills.map((skill) => skill.selector),
+    source: options.source,
   });
   assertSkillSelectorSlugMappingsMatchStagedSlugs(recipe.source, selectorMappings, stagedSlugs);
   const stagedSlugBySelector = new Map(
@@ -200,15 +202,15 @@ async function resolveStagedSkillReplacements(options: {
   );
   const replacements = recipe.skills.flatMap((skill): SlugReplacementRequest[] => {
     const stagedSlug = stagedSlugBySelector.get(skill.selector);
-    if (!stagedSlug || stagedSlug === skill.slug) {
+    if (stagedSlug === undefined || stagedSlug === "" || stagedSlug === skill.slug) {
       return [];
     }
 
     return [
       {
-        source: recipe.source,
-        selector: skill.selector,
         recordedSlug: skill.slug,
+        selector: skill.selector,
+        source: recipe.source,
         stagedSlug,
       },
     ];
@@ -219,6 +221,8 @@ async function resolveStagedSkillReplacements(options: {
   }
 
   for (const replacement of replacements) {
+    // Interactive confirmations must remain ordered rather than prompting concurrently.
+    // oxlint-disable-next-line no-await-in-loop
     const accepted = await options.confirmSlugReplacement(replacement);
     if (!accepted) {
       throw new MonkeError(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
@@ -276,8 +280,8 @@ function renderSlugMismatchMessage(
 
 async function promptForSlugReplacement(request: SlugReplacementRequest): Promise<boolean> {
   const accepted = await p.confirm({
-    message: `Staged Skill slug changed for ${request.source}: ${request.recordedSlug} -> ${request.stagedSlug}. Replace the recorded slug and imported directory?`,
     initialValue: false,
+    message: `Staged Skill slug changed for ${request.source}: ${request.recordedSlug} -> ${request.stagedSlug}. Replace the recorded slug and imported directory?`,
   });
 
   if (p.isCancel(accepted)) {
@@ -297,7 +301,7 @@ function listGuidanceDirectories(root: string): string[] {
       const entryPath = path.join(root, entry);
       return statSync(entryPath).isDirectory();
     })
-    .sort();
+    .toSorted();
 }
 
 if (import.meta.main) {

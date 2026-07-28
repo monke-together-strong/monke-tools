@@ -4,22 +4,19 @@ import type { Runtime } from "./types.ts";
 
 /** Intent-level CLI logger that keeps status output on stderr. */
 export interface Logger {
-  success(message: string): void;
-  warning(message: string): void;
-  hint(message: string): void;
-  info(message: string): void;
-  error(message: string): void;
+  success: (message: string) => void;
+  warning: (message: string) => void;
+  hint: (message: string) => void;
+  info: (message: string) => void;
+  error: (message: string) => void;
 }
 
 export function createLogger(runtime: Runtime): Logger {
   const colors = createColors(shouldUseColor(runtime));
 
   return {
-    success(message) {
-      runtime.writeStderr(`${colors.green(message)}\n`);
-    },
-    warning(message) {
-      runtime.writeStderr(`${colors.yellow(message)}\n`);
+    error(message) {
+      runtime.writeStderr(`${colors.red(message)}\n`);
     },
     hint(message) {
       runtime.writeStderr(`${colors.dim(message)}\n`);
@@ -27,8 +24,11 @@ export function createLogger(runtime: Runtime): Logger {
     info(message) {
       runtime.writeStderr(`${message}\n`);
     },
-    error(message) {
-      runtime.writeStderr(`${colors.red(message)}\n`);
+    success(message) {
+      runtime.writeStderr(`${colors.green(message)}\n`);
+    },
+    warning(message) {
+      runtime.writeStderr(`${colors.yellow(message)}\n`);
     },
   };
 }

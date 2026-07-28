@@ -1,16 +1,73 @@
-import type { OxlintConfig } from "vite-plus/lint";
+import type { OxlintConfig, OxlintOverride } from "oxlint";
 
 import core from "ultracite/oxlint/core";
+import vitest from "ultracite/oxlint/vitest";
 
-const config = {
-  extends: [core],
-  ignorePatterns: core.ignorePatterns ?? [],
-  rules: {
-    "func-style": "off",
-    "no-nested-ternary": "off",
-    "no-use-before-define": "off",
-    "unicorn/no-nested-ternary": "off",
-  },
-} satisfies OxlintConfig;
+const defaultTestFiles = ["**/*.{test,spec}.{ts,tsx,js,jsx}", "**/__tests__/**/*.{ts,tsx,js,jsx}"];
 
-export default config;
+export interface CreateOxlintConfigOptions extends OxlintConfig {
+  /** Files receiving framework-neutral test policy, including test helpers. */
+  testFiles?: readonly string[];
+  /** Non-Vitest test files to exclude from the default Vitest preset. */
+  vitestExcludeFiles?: readonly string[];
+}
+
+export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): OxlintConfig {
+  const {
+    extends: extensions = [],
+    ignorePatterns = [],
+    overrides = [],
+    rules = {},
+    testFiles = defaultTestFiles,
+    vitestExcludeFiles = [],
+    ...config
+  } = options;
+  const vitestOverrides = (vitest.overrides ?? []).map<OxlintOverride>((override) => {
+    const excludeFiles = [...(override.excludeFiles ?? []), ...vitestExcludeFiles];
+
+    return {
+      ...override,
+      ...(excludeFiles.length > 0 ? { excludeFiles } : {}),
+      rules: {
+        ...override.rules,
+        "vitest/max-expects": "off",
+      },
+    };
+  });
+
+  return {
+    ...config,
+    extends: [core, ...extensions],
+    ignorePatterns: [...(core.ignorePatterns ?? []), ...ignorePatterns],
+    overrides: [
+      ...vitestOverrides,
+      {
+        files: [...testFiles],
+        rules: {
+          "no-await-in-loop": "off",
+        },
+      },
+      {
+        files: ["**/*.{ts,tsx}"],
+        rules: {
+          "unicorn/no-useless-undefined": ["error", { checkArguments: false }],
+        },
+      },
+      ...overrides,
+    ],
+    rules: {
+      "func-style": "off",
+      "no-nested-ternary": "off",
+      "no-use-before-define": ["error", { functions: false }],
+      "prefer-regex-literals": "off",
+      "promise/avoid-new": "off",
+      "promise/prefer-await-to-callbacks": "off",
+      "promise/prefer-await-to-then": "off",
+      "typescript/promise-function-async": "off",
+      "unicorn/no-nested-ternary": "off",
+      ...rules,
+    },
+  };
+}
+
+export default createOxlintConfig();

@@ -60,9 +60,13 @@ const RESOURCE_COMMAND_MODULE_RUNNER = [
   "  const previous = previousText.trim() ? JSON.parse(previousText) : {};",
   "  const resourceModule = await import(pathToFileURL(modulePath).href);",
   '  if (!Object.prototype.hasOwnProperty.call(resourceModule, "default")) {',
+  // This is a template literal in the generated runner, not in this source module.
+  // oxlint-disable-next-line no-template-curly-in-string
   "    fail(`Resource command module ${modulePath} must export a default function`);",
   "  }",
   '  if (typeof resourceModule.default !== "function") {',
+  // This is a template literal in the generated runner, not in this source module.
+  // oxlint-disable-next-line no-template-curly-in-string
   "    fail(`Resource command module ${modulePath} default export must be a function`);",
   "  }",
   "  const value = await resourceModule.default({ previous });",
@@ -88,7 +92,7 @@ export function resolveResourceValues(options: {
   const existingValues = options.existingRepoState?.resourceValues ?? [];
   const rememberedValues = new Map(
     existingValues
-      .filter((resource) => declaredEnvNames.has(resource.env) && resource.value.trim())
+      .filter((resource) => declaredEnvNames.has(resource.env) && resource.value.trim() !== "")
       .map((resource) => [resource.env, resource.value]),
   );
 
@@ -98,9 +102,9 @@ export function resolveResourceValues(options: {
       remembered ??
       interpolateResourceLiteral({
         literal: resource.literal,
+        location: `${options.repoConfig.configPath}#resources.values.${resource.env}`,
         session: options.session,
         user: resolveResourceUser(options.env),
-        location: `${options.repoConfig.configPath}#resources.values.${resource.env}`,
       });
 
     if (!value.trim()) {
@@ -124,10 +128,10 @@ export function resolveResourceValues(options: {
   });
 
   return {
-    values,
     removedEnvNames: dedupe(
       existingValues.map((resource) => resource.env).filter((env) => !declaredEnvNames.has(env)),
     ),
+    values,
   };
 }
 
@@ -160,20 +164,20 @@ export function resolveResourceCommands(options: {
 
     withResourceCommandLock(options.home, options.repoConfig.sourceRoot, command.name, () => {
       const stdin = buildResourceCommandInput({
+        command,
         home: options.home,
         session: options.session,
         sourceRoot: options.repoConfig.sourceRoot,
-        command,
       });
 
       currentByName.set(
         command.name,
         runResourceCommand({
-          runtime: options.runtime,
           command,
-          worktreePath: options.worktreePath,
-          stdin,
           resourceValues: options.resourceValues,
+          runtime: options.runtime,
+          stdin,
+          worktreePath: options.worktreePath,
         }),
       );
       options.onResolvedCommandOutputs(
@@ -211,10 +215,10 @@ function getReusableResourceCommand(
   }
 
   const rememberedByEnv = new Map(existing.outputs.map((output) => [output.env, output.value]));
-  const outputs: Array<{ env: string; value: string }> = [];
+  const outputs: { env: string; value: string }[] = [];
   for (const env of command.outputs) {
     const value = rememberedByEnv.get(env);
-    if (!value?.trim()) {
+    if (value === undefined || value.trim() === "") {
       return null;
     }
     outputs.push({ env, value });
@@ -241,16 +245,16 @@ function runResourceCommand(options: {
   try {
     const runner = resolveResourceCommandRunner(options.worktreePath);
     const result = options.runtime.exec(runner.command, runner.args(modulePath, outputPath), {
+      allowFailure: true,
       cwd: options.worktreePath,
       env: Object.fromEntries(
         options.resourceValues.map((resource) => [resource.env, resource.value]),
       ),
       stdin,
       timeoutSeconds: options.command.timeoutSeconds,
-      allowFailure: true,
     });
 
-    if (result.timedOut) {
+    if (result.timedOut === true) {
       throw resourceCommandFailure({
         command: options.command,
         kind: "timeout",
@@ -269,8 +273,8 @@ function runResourceCommand(options: {
     const returned = readResourceCommandRunnerOutput({
       command: options.command,
       outputPath,
-      stdout: result.stdout,
       stderr: result.stderr,
+      stdout: result.stdout,
     });
     const outputs = validateResourceCommandReturn(
       options.command,
@@ -284,7 +288,7 @@ function runResourceCommand(options: {
       outputs,
     };
   } finally {
-    rmSync(outputDirectory, { recursive: true, force: true });
+    rmSync(outputDirectory, { force: true, recursive: true });
   }
 }
 
@@ -294,7 +298,6 @@ function resolveResourceCommandRunner(worktreePath: string): {
 } {
   if (existsSync(path.join(worktreePath, "pnpm-lock.yaml"))) {
     return {
-      command: "pnpm",
       args: (modulePath, outputPath) => [
         "exec",
         "bun",
@@ -305,11 +308,11 @@ function resolveResourceCommandRunner(worktreePath: string): {
         modulePath,
         outputPath,
       ],
+      command: "pnpm",
     };
   }
 
   return {
-    command: "bun",
     args: (modulePath, outputPath) => [
       "--eval",
       RESOURCE_COMMAND_MODULE_RUNNER,
@@ -318,6 +321,7 @@ function resolveResourceCommandRunner(worktreePath: string): {
       modulePath,
       outputPath,
     ],
+    command: "bun",
   };
 }
 
@@ -360,7 +364,7 @@ function buildResourceCommandInput(options: {
       );
       for (const env of options.command.outputs) {
         const remembered = rememberedByEnv.get(env);
-        if (remembered?.trim()) {
+        if (remembered !== undefined && remembered.trim() !== "") {
           valuesByEnv.get(env)?.add(remembered);
         }
       }
@@ -368,7 +372,7 @@ function buildResourceCommandInput(options: {
   }
 
   return Object.fromEntries(
-    options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])].sort()]),
+    options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])].toSorted()]),
   );
 }
 
@@ -380,13 +384,13 @@ function readResourceCommandRunnerOutput(options: {
 }): unknown {
   let outputText: string;
   try {
-    outputText = readFileSync(options.outputPath, "utf8");
+    outputText = readFileSync(options.outputPath, "utf-8");
   } catch {
     throw resourceCommandFailure({
       command: options.command,
       kind: "runner protocol violation",
-      stdout: options.stdout,
       stderr: options.stderr,
+      stdout: options.stdout,
     });
   }
 
@@ -397,8 +401,8 @@ function readResourceCommandRunnerOutput(options: {
     throw resourceCommandFailure({
       command: options.command,
       kind: "runner protocol violation",
-      stdout: options.stdout,
       stderr: options.stderr,
+      stdout: options.stdout,
     });
   }
 
@@ -407,8 +411,8 @@ function readResourceCommandRunnerOutput(options: {
     throw resourceCommandFailure({
       command: options.command,
       kind: "runner protocol violation",
-      stdout: options.stdout,
       stderr: options.stderr,
+      stdout: options.stdout,
     });
   }
 
@@ -421,14 +425,14 @@ function validateResourceCommandReturn(
   stdout: string,
   stderr: string,
   stdin: ResourceCommandInput,
-): Array<{ env: string; value: string }> {
+): { env: string; value: string }[] {
   const parsed = ResourceCommandReturnSchema.safeParse(returned);
   if (!parsed.success) {
     throw resourceCommandFailure({
       command,
       kind: "return contract violation",
-      stdout,
       stderr,
+      stdout,
     });
   }
 
@@ -441,19 +445,27 @@ function validateResourceCommandReturn(
     throw resourceCommandFailure({
       command,
       kind: "return contract violation",
-      stdout,
       stderr,
+      stdout,
     });
   }
 
   return command.outputs.map((env) => {
-    const outputValue = value[env]!;
+    const outputValue = value[env];
+    if (outputValue === undefined) {
+      throw resourceCommandFailure({
+        command,
+        kind: `missing output for ${env}`,
+        stderr,
+        stdout,
+      });
+    }
     if ((stdin[env] ?? []).includes(outputValue)) {
       throw resourceCommandFailure({
         command,
         kind: `same-output collision for ${env}`,
-        stdout,
         stderr,
+        stdout,
       });
     }
     return { env, value: outputValue };
@@ -534,17 +546,20 @@ function interpolateResourceLiteral(options: {
   user: string;
   location: string;
 }): string {
-  const value = options.literal.replace(/\$\{([^}]*)\}/g, (placeholder, name: string) => {
-    if (name === "session") {
-      return options.session;
-    }
-    if (name === "user") {
-      return options.user;
-    }
-    throw new MonkeError(
-      `${options.location} contains unsupported placeholder ${placeholder}; supported placeholders are \${session} and \${user}`,
-    );
-  });
+  const value = options.literal.replaceAll(
+    /\$\{(?<name>[^}]*)\}/gu,
+    (placeholder, name: string) => {
+      if (name === "session") {
+        return options.session;
+      }
+      if (name === "user") {
+        return options.user;
+      }
+      throw new MonkeError(
+        `${options.location} contains unsupported placeholder ${placeholder}; supported placeholders are \${session} and \${user}`,
+      );
+    },
+  );
 
   if (value.includes("${")) {
     throw new MonkeError(
@@ -556,7 +571,13 @@ function interpolateResourceLiteral(options: {
 }
 
 function resolveResourceUser(env: Record<string, string | undefined>): string {
-  return env.USER?.trim() || env.LOGNAME?.trim() || env.USERNAME?.trim() || "unknown";
+  for (const key of ["USER", "LOGNAME", "USERNAME"]) {
+    const value = env[key]?.trim();
+    if (value !== undefined && value !== "") {
+      return value;
+    }
+  }
+  return "unknown";
 }
 
 function describeRedactedValue(value: string): string {
