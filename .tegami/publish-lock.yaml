@@ -1,15 +1,14 @@
 core:changelogs:
-  - content: "---\nsubject: First public release\npackages:\n  \"@monke-together-strong/oxlint-config\":\n    type: minor\n---\n\n## Initial release\n\nPublish the shared Oxlint preset for Vite+ `^0.2.6` projects.\n"
-    filename: 2026-07-25-first-release.md
+  - content: "---\nsubject: First public release\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: minor\n---\n\n## Initial release\n\nPublish shared Oxlint and Oxfmt presets with Ultracite composition, type-aware linting and type checking, shared formatting policy, consumer override factories, and standalone `/oxlint` and `/oxfmt` exports.\n"
+    filename: first-oxc-config-release.md
     v: 0.0.0
 core:packages:
   - id: npm:monke-tools
     updated: false
   - changelogIds:
-      - 2026-07-25-first-release.md
-    id: npm:@monke-together-strong/oxlint-config
+      - first-oxc-config-release.md
+    id: npm:@monke-together-strong/oxc-config
     updated: true
-npm:mark-latest:
-  - id: npm:@monke-together-strong/oxlint-config
 npm:packages:
-  - id: npm:@monke-together-strong/oxlint-config
+  - id: npm:monke-tools
+  - id: npm:@monke-together-strong/oxc-config
