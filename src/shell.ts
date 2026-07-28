@@ -25,6 +25,19 @@ export interface ShellInstallOptions {
 
 /** Request that an active Shell adapter changes directory after mt exits. */
 export function requestShellDirectory(runtime: Runtime, targetPath: string): boolean {
+  return requestShellDirectoryWithFallback(runtime, targetPath, false);
+}
+
+/** Relocate a shell after its current worktree has already been removed. */
+export function requestShellDirectoryAfterRemoval(runtime: Runtime, targetPath: string): boolean {
+  return requestShellDirectoryWithFallback(runtime, targetPath, true);
+}
+
+function requestShellDirectoryWithFallback(
+  runtime: Runtime,
+  targetPath: string,
+  removedCurrentWorktree: boolean,
+): boolean {
   const logger = createLogger(runtime);
 
   if (writeDirectoryDirective(runtime, targetPath)) {
@@ -32,7 +45,11 @@ export function requestShellDirectory(runtime: Runtime, targetPath: string): boo
     return true;
   }
 
-  logger.info(`Switch to ${targetPath}`);
+  if (removedCurrentWorktree) {
+    logger.warning(`WARNING: your shell is still in the removed worktree; switch to ${targetPath}`);
+  } else {
+    logger.info(`Switch to ${targetPath}`);
+  }
   runtime.writeStdout(`${targetPath}\n`);
   if (isShellIntegrationConfigured(runtime)) {
     logger.hint(
@@ -72,6 +89,7 @@ export function runShellInstall(runtime: Runtime, options: ShellInstallOptions =
 function renderShellAdapter(shell: SupportedShell, binaryPath: string): string {
   return `# monke-tools shell integration for ${shell}
 mt() {
+  local __monke_mt_cd_status
   local __monke_mt_directive
   local __monke_mt_status
   local __monke_mt_target
@@ -80,11 +98,18 @@ mt() {
   ${SHELL_DIRECTORY_DIRECTIVE_ENV}="$__monke_mt_directive" ${shellQuote(binaryPath)} "$@"
   __monke_mt_status=$?
 
-  if [ "$__monke_mt_status" -eq 0 ] && [ -s "$__monke_mt_directive" ]; then
+  if [ -s "$__monke_mt_directive" ]; then
     __monke_mt_target="$(cat "$__monke_mt_directive")"
     rm -f "$__monke_mt_directive"
     if [ -n "$__monke_mt_target" ]; then
-      cd -- "$__monke_mt_target" || return $?
+      if cd -- "$__monke_mt_target"; then
+        __monke_mt_cd_status=0
+      else
+        __monke_mt_cd_status=$?
+      fi
+      if [ "$__monke_mt_status" -eq 0 ] && [ "$__monke_mt_cd_status" -ne 0 ]; then
+        return "$__monke_mt_cd_status"
+      fi
     fi
   else
     rm -f "$__monke_mt_directive"
