@@ -630,7 +630,7 @@ describe("chop", () => {
         repository: `mv ${JSON.stringify(fixture.rootWorktree)} ${JSON.stringify(replacedPath)}; mkdir ${JSON.stringify(fixture.rootWorktree)}; "$MONKE_TEST_REAL_GIT" -C ${JSON.stringify(fixture.rootWorktree)} init -b unrelated >/dev/null`,
       };
       const expectedFailures = {
-        branch: /Expected Session branch banana, found raced/u,
+        branch: /Session worktree branch\/HEAD changed from banana to raced/u,
         lock: /locked.*race/u,
         registration: /unexpected path/u,
         repository: /Cannot verify registered worktree/u,
@@ -698,32 +698,58 @@ describe("chop", () => {
   });
 
   test.each(["detached", "branch mismatch"] as const)(
-    "--force rejects a %s Session checkout without mutating another participant",
-    (failureKind) => {
-      const fixture = createMultiRepoSessionFixture(`chop-force-${failureKind.replace(" ", "-")}`);
-      if (failureKind === "detached") {
+    "removes a clean Session with a %s and warns",
+    (mismatchKind) => {
+      const fixture = createMultiRepoSessionFixture(
+        `chop-session-${mismatchKind.replace(" ", "-")}`,
+      );
+      if (mismatchKind === "detached") {
         git(fixture.rootWorktree, ["checkout", "--detach"]);
       } else {
         git(fixture.rootWorktree, ["switch", "-c", "unexpected"]);
       }
 
-      expect(() => {
-        runMonke({
-          args: ["chop", fixture.session, "--force"],
-          cwd: fixture.root,
-          monkeHome: fixture.home,
-        });
-      }).toThrow(
-        failureKind === "detached"
-          ? /Expected Session branch banana, found detached/u
-          : /Expected Session branch banana, found unexpected/u,
-      );
+      const result = runMonke({
+        args: ["chop", fixture.session],
+        cwd: fixture.root,
+        monkeHome: fixture.home,
+      });
 
-      expect(existsSync(fixture.depWorktree)).toBeTruthy();
-      expect(existsSync(fixture.rootWorktree)).toBeTruthy();
-      expect(existsSync(fixture.statePath)).toBeTruthy();
+      expect(result.stderr).toContain(
+        mismatchKind === "detached"
+          ? `Session banana worktree ${fixture.rootWorktree} is detached; chopping it anyway`
+          : `Session banana worktree ${fixture.rootWorktree} is on branch unexpected instead of banana; chopping it anyway`,
+      );
+      expect(existsSync(fixture.depWorktree)).toBeFalsy();
+      expect(existsSync(fixture.rootWorktree)).toBeFalsy();
+      expect(existsSync(fixture.statePath)).toBeFalsy();
     },
   );
+
+  test("removes the current Session after its worktree switches branches and warns", () => {
+    const sandbox = makeTempDir("chop-current-session-branch-mismatch");
+    const home = path.join(sandbox, "home");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "README.md": "root\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
+    const worktree = getExpectedWorktreePath(home, root, "banana");
+    git(worktree, ["switch", "-c", "unexpected"]);
+
+    const result = runMonke({
+      args: ["chop"],
+      cwd: worktree,
+      monkeHome: home,
+    });
+
+    expect(result.stderr).toContain(
+      `Session banana worktree ${worktree} is on branch unexpected instead of banana; chopping it anyway`,
+    );
+    expect(result.stdout).toBe(`${root}\n`);
+    expect(existsSync(worktree)).toBeFalsy();
+    expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeFalsy();
+    expect(git(root, ["rev-parse", "--verify", "refs/heads/unexpected"])).not.toBe("");
+  });
 
   test("a partial Session uses only recorded repos and saved Cleanup commands", () => {
     const sandbox = makeTempDir("chop-partial-session");
