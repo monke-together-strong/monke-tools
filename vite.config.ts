@@ -50,7 +50,7 @@ export default defineConfig({
     outDir: path.resolve(workspaceRoot, "packages/oxlint-config/dist"),
   },
   staged: {
-    "*": `sh -c 'vp check --fix "$@" || true' --`,
+    "*": `sh -c 'vp check --fix "$@"' --`,
   },
   test: {
     fileParallelism: false,

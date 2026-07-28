@@ -478,8 +478,7 @@ function findPrAnalysisSection(text: string, item: PrWorkItemSummary): string | 
 }
 
 function countHeading(text: string, heading: string): number {
-  const escaped = heading.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return [...text.matchAll(new RegExp(`^##\\s+${escaped}\\s*$`, "gmu"))].length;
+  return [...text.matchAll(new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "gmu"))].length;
 }
 
 function containsRef(text: string, ref: string): boolean {

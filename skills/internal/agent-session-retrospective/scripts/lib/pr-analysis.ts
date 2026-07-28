@@ -142,6 +142,9 @@ const GhPrSchema: z.ZodType<GhPr> = z.object({
 });
 const GhRepoListSchema = z.array(GhRepoSchema);
 const GhPrListSchema = z.array(GhPrSchema);
+const GhPrFilesResponseSchema = z.object({
+  files: z.array(z.unknown()),
+});
 const PrAnalysisManifestSchema: z.ZodType<PrAnalysisManifest> = z.strictObject({
   author: z.string(),
   gaps: z.array(
@@ -358,8 +361,9 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
   let files: unknown[] = [];
   try {
     files = normalizePrFilesResponse(
-      JSON.parse(
+      parseJson(
         runText(exec, "gh", ["pr", "view", String(summary.number), "--repo", repo, "--json", "files"]),
+        GhPrFilesResponseSchema,
       ),
     );
   } catch (error) {
@@ -475,7 +479,11 @@ export function readPrManifest(root: string, runTs: string): PrAnalysisManifest 
   if (!existsSync(filePath)) {
     return null;
   }
-  return parseJson(readFileSync(filePath, "utf-8"), PrAnalysisManifestSchema);
+  try {
+    return parseJson(readFileSync(filePath, "utf-8"), PrAnalysisManifestSchema);
+  } catch {
+    return null;
+  }
 }
 
 function writePrManifest(root: string, runTs: string, manifest: PrAnalysisManifest): void {

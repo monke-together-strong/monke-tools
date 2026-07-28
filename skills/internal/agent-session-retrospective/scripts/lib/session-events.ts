@@ -190,7 +190,7 @@ function collectTouchedRoot(
     return;
   }
 
-  const dir = existsSync(value) && statSync(value).isDirectory() ? value : path.dirname(value);
+  const dir = isDirectory(value) ? value : path.dirname(value);
   if (visitedDirs.has(dir) || !existsSync(dir)) {
     return;
   }
@@ -199,6 +199,14 @@ function collectTouchedRoot(
   const root = resolveGitRoot(dir);
   if (isNonEmptyString(root) && root !== primary) {
     into.add(root);
+  }
+}
+
+function isDirectory(value: string): boolean {
+  try {
+    return statSync(value, { throwIfNoEntry: false })?.isDirectory() ?? false;
+  } catch {
+    return false;
   }
 }
 

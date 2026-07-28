@@ -21,6 +21,8 @@ import {
   validateFindings,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/commit.ts";
 import {
+  prManifestPath,
+  readPrManifest,
   runPrAggregate,
   runPrCollect,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/pr-analysis.ts";
@@ -29,8 +31,11 @@ import type {
   PrAnalysisManifest,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/pr-analysis.ts";
 import {
+  findingsPath,
+  listFrozenSessions,
   loadFrozenSession,
   readBundle,
+  readFindings,
   saveFrozenSession,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/store.ts";
 import { summarizeOutput } from "../skills/internal/agent-session-retrospective/scripts/lib/normalize.ts";
@@ -644,21 +649,7 @@ describe("agent session retrospective", () => {
       const root = path.join(dir, "store");
       const runTs = "2026-06-01T00-00-00-000Z";
       const runDir = path.join(root, "runs", runTs);
-      mkdirSync(runDir, { recursive: true });
-      writeFileSync(
-        path.join(runDir, "window.json"),
-        JSON.stringify(
-          {
-            since: "2026-05-18T00:00:00.000Z",
-            sinceSource: "first-run-default",
-            until: "2026-06-01T00:00:00.000Z",
-            untilSource: "now",
-          },
-          null,
-          2,
-        ),
-        "utf-8",
-      );
+      writeWindow(root, runTs);
       writeFileSync(
         path.join(runDir, "pr-analysis.md"),
         [
@@ -735,21 +726,7 @@ describe("agent session retrospective", () => {
       const root = path.join(dir, "store");
       const runTs = "2026-06-01T00-00-00-000Z";
       const runDir = path.join(root, "runs", runTs);
-      mkdirSync(runDir, { recursive: true });
-      writeFileSync(
-        path.join(runDir, "window.json"),
-        JSON.stringify(
-          {
-            since: "2026-05-18T00:00:00.000Z",
-            sinceSource: "first-run-default",
-            until: "2026-06-01T00:00:00.000Z",
-            untilSource: "now",
-          },
-          null,
-          2,
-        ),
-        "utf-8",
-      );
+      writeWindow(root, runTs);
       const bundle = bundleWith(["t0"]);
       bundle.runTs = runTs;
       writeFileSync(
@@ -1272,6 +1249,54 @@ describe("agent session retrospective", () => {
       };
       saveFrozenSession(dir, record);
       expect(loadFrozenSession(dir, "claude", "s1")).toStrictEqual(record);
+    });
+
+    test("list skips invalid frozen records while preserving valid records", () => {
+      const valid: FrozenSessionRecord = {
+        agent: "codex",
+        analyzedAt: "2026-05-26T10:00:00Z",
+        contentHash: "h",
+        friction: [],
+        lastTurnIndex: 1,
+        rawUserMessages: ["hi"],
+        repoKey: "/repo",
+        secondary: [],
+        sessionId: "valid",
+        version: 1,
+      };
+      saveFrozenSession(dir, valid);
+      writeFileSync(path.join(dir, "sessions", "invalid.yml"), "version: nope\n", "utf-8");
+
+      expect(listFrozenSessions(dir)).toStrictEqual([valid]);
+    });
+
+    test("findings default omitted arrays and ignore forward-compatible keys", () => {
+      const filePath = findingsPath(dir, "ts", "repo");
+      mkdirSync(path.dirname(filePath), { recursive: true });
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          durableFixProposals: [{ body: "fix", future: true }],
+          future: true,
+          repoKey: "/repo",
+        }),
+        "utf-8",
+      );
+
+      expect(readFindings(dir, "ts", "repo")).toStrictEqual({
+        durableFixProposals: [{ body: "fix", citedEpisodeRefs: [] }],
+        frictionEpisodes: [],
+        repeatedAsks: [],
+        repoKey: "/repo",
+      });
+    });
+
+    test("invalid PR manifests degrade to missing state", () => {
+      const filePath = prManifestPath(dir, "ts");
+      mkdirSync(path.dirname(filePath), { recursive: true });
+      writeFileSync(filePath, '{"version":2}', "utf-8");
+
+      expect(readPrManifest(dir, "ts")).toBeNull();
     });
   });
 });

@@ -278,15 +278,16 @@ async function loadQueryMetadata(context: ResolvedQueryContext): Promise<{
   }
 
   const sourceMetadata = await tryLoadSourceMetadata(context.metadataToken, context.sourceId);
+  if (sourceMetadata === null) {
+    return { matchingConnection: null, sourceMetadata };
+  }
   const connections = await tryLoadConnections(context.metadataToken);
   const matchingConnection =
-    sourceMetadata === null
-      ? null
-      : (connections.find(
-          (connection) =>
-            connection.dataRegion === sourceMetadata.dataRegion &&
-            connection.teamIds.includes(sourceMetadata.teamId)
-        ) ?? null);
+    connections.find(
+      (connection) =>
+        connection.dataRegion === sourceMetadata.dataRegion &&
+        connection.teamIds.includes(sourceMetadata.teamId)
+    ) ?? null;
   return { matchingConnection, sourceMetadata };
 }
 

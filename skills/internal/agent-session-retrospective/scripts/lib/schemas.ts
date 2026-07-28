@@ -48,28 +48,28 @@ export const RepoBundleSchema: z.ZodType<RepoBundle> = z.strictObject({
   sessions: z.array(BundleSessionSchema),
 });
 
-export const RepoFindingsSchema: z.ZodType<RepoFindings> = z.strictObject({
+export const RepoFindingsSchema: z.ZodType<RepoFindings> = z.object({
   durableFixProposals: z.array(
-    z.strictObject({
+    z.object({
       body: z.string(),
-      citedEpisodeRefs: z.array(z.string()),
+      citedEpisodeRefs: z.array(z.string()).default([]),
     }),
-  ),
+  ).default([]),
   frictionEpisodes: z.array(
-    z.strictObject({
+    z.object({
       body: z.string(),
-      citedTurnRefs: z.array(z.string()),
+      citedTurnRefs: z.array(z.string()).default([]),
       id: z.string(),
       sessionId: z.string(),
     }),
-  ),
+  ).default([]),
   repeatedAsks: z.array(
-    z.strictObject({
+    z.object({
       body: z.string(),
-      exampleSessionIds: z.array(z.string()),
+      exampleSessionIds: z.array(z.string()).default([]),
       label: z.string(),
     }),
-  ),
+  ).default([]),
   repoKey: z.string(),
 });
 

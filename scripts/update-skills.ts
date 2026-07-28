@@ -12,13 +12,13 @@ import {
   assertSkillSelectorSlugMappingsMatchStagedSlugs,
   buildSkillsInstallArgs,
   copyStagedGuidanceToManagedRoots,
-  extractSecurityRiskAssessment,
   listStagedSkillSlugs,
   normalizeImportRecipeStore,
   normalizeSourceForStaging,
   IMPORTED_REFERENCES_ROOT,
   IMPORTED_SKILLS_ROOT,
   readImportRecipeStore,
+  reportSecurityRiskAssessment,
   resolveSkillSelectorSlugMappings,
   runInstallCommand,
   runSkillsCaptured,
@@ -80,12 +80,10 @@ export async function runUpdateSkills(
         }),
         stagingDirectory,
       );
-      const securityAssessment = extractSecurityRiskAssessment(
+      reportSecurityRiskAssessment(
         `${installOutput.stdout}\n${installOutput.stderr}`,
+        writeMessage,
       );
-      if (securityAssessment !== null && securityAssessment !== "") {
-        writeMessage(securityAssessment);
-      }
 
       // Recipe updates are serial because each accepted replacement updates the store for the next.
       // oxlint-disable-next-line no-await-in-loop

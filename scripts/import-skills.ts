@@ -595,6 +595,17 @@ export function extractSecurityRiskAssessment(output: string): string | null {
   return renderSecurityRiskAssessment(assessment);
 }
 
+/** Writes a non-empty upstream security assessment when one is present. */
+export function reportSecurityRiskAssessment(
+  output: string,
+  writeMessage: (message: string) => unknown,
+): void {
+  const assessment = extractSecurityRiskAssessment(output);
+  if (assessment !== null && assessment !== "") {
+    writeMessage(assessment);
+  }
+}
+
 /** Parses upstream security assessment rows from install output. */
 function parseSecurityRiskAssessment(output: string): SecurityRiskAssessment | null {
   const rawLines = output.split(/\r?\n/u);
@@ -677,12 +688,7 @@ export async function runImportSkills(
       }),
       stagingDirectory,
     );
-    const securityAssessment = extractSecurityRiskAssessment(
-      `${installOutput.stdout}\n${installOutput.stderr}`,
-    );
-    if (securityAssessment !== null && securityAssessment !== "") {
-      writeMessage(securityAssessment);
-    }
+    reportSecurityRiskAssessment(`${installOutput.stdout}\n${installOutput.stderr}`, writeMessage);
 
     const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
     const stagedSelections = mapSelectedSkillsToImportedSlugs({

@@ -255,7 +255,7 @@ apps:
         cwd: root,
         monkeHome: home,
       });
-    }).toThrow(new RegExp(`Bootstrap command failed for ${root}: exit 7`, "u"));
+    }).toThrow(`Bootstrap command failed for ${root}: exit 7`);
   });
 
   test("cleanup removes dead session state but leaves repo reservations intact", () => {

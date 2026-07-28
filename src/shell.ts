@@ -181,7 +181,7 @@ function requireSupportedShell(shellName: string): SupportedShell {
 }
 
 function isSupportedShell(shellName: string): shellName is SupportedShell {
-  return shellName === "bash" || shellName === "zsh";
+  return (SUPPORTED_SHELLS as readonly string[]).includes(shellName);
 }
 
 function getStartupFilePath(home: string, shell: SupportedShell): string {

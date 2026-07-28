@@ -74,7 +74,13 @@ export function listFrozenSessions(root: string): FrozenSessionRecord[] {
   }
   return readdirSync(dir)
     .filter((entry) => entry.endsWith(".yml"))
-    .map((entry) => parseYamlFile(path.join(dir, entry), FrozenSessionRecordSchema));
+    .flatMap((entry) => {
+      try {
+        return [parseYamlFile(path.join(dir, entry), FrozenSessionRecordSchema)];
+      } catch {
+        return [];
+      }
+    });
 }
 
 // --- repo meta ---------------------------------------------------------------

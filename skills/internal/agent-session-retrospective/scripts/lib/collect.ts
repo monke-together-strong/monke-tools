@@ -323,7 +323,7 @@ export function runCollect(options: RunCollectOptions): CollectResult {
       firstNewTurnIndex: decision.firstNewTurnIndex,
       primaryRepo: isNonEmptyString(session.cwd)
         ? resolveRepoKey(session.cwd)
-        : (session.cwd ?? "unknown"),
+        : "unknown",
       priorFindingCount: decision.priorFindingCount,
       session,
     });
