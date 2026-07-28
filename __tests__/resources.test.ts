@@ -69,8 +69,8 @@ describe("resources", () => {
       readLine() {
         throw new Error("unexpected readLine");
       },
-      async select() {
-        throw new Error("unexpected select");
+      select() {
+        return Promise.reject(new Error("unexpected select"));
       },
       writeStderr() {},
       writeStdout() {},
@@ -192,8 +192,8 @@ describe("resources", () => {
       readLine() {
         throw new Error("unexpected readLine");
       },
-      async select() {
-        throw new Error("unexpected select");
+      select() {
+        return Promise.reject(new Error("unexpected select"));
       },
       writeStderr() {},
       writeStdout() {},
@@ -264,8 +264,8 @@ describe("resources", () => {
       readLine() {
         throw new Error("unexpected readLine");
       },
-      async select() {
-        throw new Error("unexpected select");
+      select() {
+        return Promise.reject(new Error("unexpected select"));
       },
       writeStderr() {},
       writeStdout() {},
@@ -282,7 +282,7 @@ describe("resources", () => {
       worktreePath: sourceRoot,
     });
 
-    const invocation = invocations[0];
+    const [invocation] = invocations;
     expect(invocation?.command).toBe("pnpm");
     expect(invocation?.args?.slice(0, 5)).toStrictEqual([
       "exec",

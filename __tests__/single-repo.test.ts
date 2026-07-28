@@ -6,6 +6,7 @@ import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
 import { spawnSessionFromSourceRootLocked } from "../src/monke.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/registry.ts";
+import { SessionStateSchema } from "../src/state-schema.ts";
 import {
   createRepo,
   git,
@@ -62,9 +63,7 @@ describe("single-repo sessions", () => {
     );
     expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nDB_PORT=10001\n");
 
-    const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
-      repos: { sourceRoot: string; worktreePath: string }[];
-    };
+    const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(sessionState.repos).toHaveLength(1);
     expect(sessionState.repos[0]?.sourceRoot).toBe(repoRoot);
     expect(sessionState.repos[0]?.worktreePath).toBe(worktreeRoot);
@@ -177,15 +176,7 @@ describe("single-repo sessions", () => {
     expect(result.stderr).toContain(`Spawned or updated session banana\nSwitch to ${worktreeRoot}`);
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
 
-    const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
-      graphSource?: string;
-      repos: {
-        sourceRoot: string;
-        worktreePath: string;
-        assignedPorts: unknown[];
-        materializationComplete?: boolean;
-      }[];
-    };
+    const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(sessionState.graphSource).toBeUndefined();
     expect(sessionState.repos).toStrictEqual([
       {
@@ -660,10 +651,7 @@ describe("single-repo sessions", () => {
       `Warning: no monke.yml found for ${repoRoot}; spawned session worktree without materializing it.`,
     );
 
-    const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
-      graphSource?: string;
-      repos: { sourceRoot: string; worktreePath: string; materializationComplete?: boolean }[];
-    };
+    const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(sessionState.graphSource).toBe("session-branch");
     expect(sessionState.repos[0]).toMatchObject({
       materializationComplete: false,
@@ -1067,9 +1055,7 @@ apps:
       "API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\nSTATIC_HANDLE=fixed-banana\n",
     );
 
-    const initialState = readSingleYamlFile(path.join(home, "sessions")) as {
-      repos: { resourceValues?: { env: string; value: string }[] }[];
-    };
+    const initialState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(initialState.repos[0]?.resourceValues).toStrictEqual([
       { env: "DISCORD_CHANNEL", value: "mt-ada-banana" },
       { env: "STATIC_HANDLE", value: "fixed-banana" },
@@ -1101,9 +1087,7 @@ apps:
 
     expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\n");
 
-    const nextState = readSingleYamlFile(path.join(home, "sessions")) as {
-      repos: { resourceValues?: { env: string; value: string }[] }[];
-    };
+    const nextState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(nextState.repos[0]?.resourceValues).toStrictEqual([
       { env: "DISCORD_CHANNEL", value: "mt-ada-banana" },
     ]);
@@ -1135,14 +1119,14 @@ apps:
       monkeHome: home,
     });
 
-    const message = captureThrowMessage(() =>
+    const message = captureThrowMessage(() => {
       runMonke({
         args: ["spawn", "second"],
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
-    );
+      });
+    });
     expect(message).toContain("Resource value collision for DISCORD_CHANNEL=<redacted length=6>");
     expect(message).toContain(`in ${repoRoot}; retained session first already owns that value`);
     expect(message).not.toContain("DISCORD_CHANNEL=shared");

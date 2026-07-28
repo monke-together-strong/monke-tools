@@ -108,7 +108,7 @@ repos: []
         rootSourceRoot: sourceRoot,
         session: "banana",
         version: 1,
-      } as never);
+      });
     }).toThrow(/Invalid .*sessions.*repos/su);
   });
 
@@ -118,7 +118,10 @@ repos: []
     const sourceRoot = path.join(sandbox, "root");
     getOrCreateReservation(home, sourceRoot, 1);
     const reservationDirectory = path.join(home, "repo-reservations");
-    const reservationName = readdirSync(reservationDirectory)[0]!;
+    const [reservationName] = readdirSync(reservationDirectory);
+    if (reservationName === undefined) {
+      throw new Error("expected a reservation file");
+    }
     write(
       reservationDirectory,
       reservationName,
@@ -162,7 +165,10 @@ size: 1000
     const sourceRoot = path.join(sandbox, "root");
     getOrCreateReservation(home, sourceRoot, 1);
     const reservationDirectory = path.join(home, "repo-reservations");
-    const reservationName = readdirSync(reservationDirectory)[0]!;
+    const [reservationName] = readdirSync(reservationDirectory);
+    if (reservationName === undefined) {
+      throw new Error("expected a reservation file");
+    }
     write(reservationDirectory, reservationName, contents(sourceRoot));
 
     expect(() => getOrCreateReservation(home, sourceRoot, 1)).toThrow(expected);

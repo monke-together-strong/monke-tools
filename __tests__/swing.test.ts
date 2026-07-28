@@ -265,7 +265,11 @@ describe("swing", () => {
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     runMonke({ args: ["swing", "banana"], cwd: repoRoot, monkeHome: home });
     const historyDirectory = path.join(home, "swing-history");
-    const historyPath = path.join(historyDirectory, readdirSync(historyDirectory)[0]!);
+    const [historyName] = readdirSync(historyDirectory);
+    if (historyName === undefined) {
+      throw new Error("expected a Swing history file");
+    }
+    const historyPath = path.join(historyDirectory, historyName);
     writeFileSync(
       historyPath,
       `version: 1

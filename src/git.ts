@@ -44,7 +44,7 @@ export function resolveRepoContext(
   const shouldInferSessionName = options.inferSessionName ?? true;
   let sessionName: string | null = null;
   if (!isSourceCheckout && shouldInferSessionName) {
-    if (!home) {
+    if (home === null || home === undefined || home === "") {
       throw new MonkeError("Unable to infer the current session without a Monke home");
     }
     sessionName = inferSessionNameForContext(
@@ -145,7 +145,7 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
 
   for (const line of output.split("\n")) {
     if (!line.trim()) {
-      if (current.path) {
+      if (current.path !== undefined && current.path !== "") {
         entries.push({
           branch: current.branch ?? null,
           path: current.path,
@@ -171,7 +171,7 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
     }
   }
 
-  if (current.path) {
+  if (current.path !== undefined && current.path !== "") {
     entries.push({
       branch: current.branch ?? null,
       path: current.path,
@@ -308,7 +308,7 @@ export function ensureSessionWorktree(
   }
 
   if (!branchExists(runtime, sourceRoot, session)) {
-    if (!options.skipCleanCheck) {
+    if (options.skipCleanCheck !== true) {
       ensureCleanCheckout(runtime, sourceRoot);
     }
     runGit(runtime, sourceRoot, ["branch", session, "HEAD"]);

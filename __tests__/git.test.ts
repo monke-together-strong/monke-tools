@@ -85,8 +85,8 @@ prunable gitdir file points to non-existent location
       readLine() {
         throw new Error("unexpected readLine");
       },
-      async select() {
-        throw new Error("unexpected select");
+      select() {
+        return Promise.reject(new Error("unexpected select"));
       },
       writeStderr() {},
       writeStdout() {},

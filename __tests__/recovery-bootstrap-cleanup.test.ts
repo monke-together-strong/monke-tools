@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath } from "../src/registry.ts";
+import { RepoReservationSchema, SessionStateSchema } from "../src/state-schema.ts";
 import {
   createRepo,
   git,
@@ -86,9 +87,7 @@ external:
     const depWorktree = getExpectedWorktreePath(home, depRoot, "resume");
     const firstMtime = statSync(path.join(depWorktree, ".env")).mtimeMs;
 
-    const partialState = readSingleYamlFile(path.join(home, "sessions")) as {
-      repos: { sourceRoot: string; materializationComplete?: boolean }[];
-    };
+    const partialState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(partialState.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
     expect(partialState.repos[1]?.materializationComplete).toBeFalsy();
 
@@ -298,9 +297,10 @@ apps:
     expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
       /Expected exactly one yaml file.*found 0/u,
     );
-    const reservationState = readSingleYamlFile(path.join(home, "repo-reservations")) as {
-      sourceRoot: string;
-    };
+    const reservationState = readSingleYamlFile(
+      path.join(home, "repo-reservations"),
+      RepoReservationSchema,
+    );
     expect(reservationState.sourceRoot).toBe(root);
   });
 
@@ -924,9 +924,11 @@ apps:
       thrown = error;
     }
 
-    expect(thrown).toBeInstanceOf(Error);
-    expect((thrown as Error).message).toContain("retry-one");
-    expect((thrown as Error).message).toContain("retry-two");
+    if (!(thrown instanceof Error)) {
+      throw new Error("expected cleanup to throw an Error");
+    }
+    expect(thrown.message).toContain("retry-one");
+    expect(thrown.message).toContain("retry-two");
     expect(read(root, "cleanup-attempts.log").trim().split("\n").toSorted()).toStrictEqual([
       "retry-one",
       "retry-two",
@@ -975,9 +977,7 @@ apps:
     ).toThrow(/Cleanup command failed.*cleanup failed/su);
 
     expect(read(root, "cleanup-failure.log")).toBe("mt-retry-me\n");
-    const retainedState = readSingleYamlFile(path.join(home, "sessions")) as {
-      repos: { resourceValues?: { env: string; value: string }[] }[];
-    };
+    const retainedState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(retainedState.repos[0]?.resourceValues).toStrictEqual([
       { env: "DISCORD_CHANNEL", value: "mt-retry-me" },
     ]);

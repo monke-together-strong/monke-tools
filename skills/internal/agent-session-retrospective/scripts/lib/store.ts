@@ -11,8 +11,17 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 import { parse, stringify } from "yaml";
+import type * as z from "zod";
 
 import { hashKey, sessionHashKey } from "./identity.ts";
+import {
+  FrozenSessionRecordSchema,
+  RepoBundleSchema,
+  RepoFindingsSchema,
+  RepoMetaSchema,
+  RetrospectiveWindowSchema,
+  RetroLockMetadataSchema,
+} from "./schemas.ts";
 import type {
   AgentKind,
   FrozenSessionRecord,
@@ -49,7 +58,7 @@ export function loadFrozenSession(
   if (!existsSync(filePath)) {
     return null;
   }
-  return parse(readFileSync(filePath, "utf-8")) as FrozenSessionRecord;
+  return parseYamlFile(filePath, FrozenSessionRecordSchema);
 }
 
 export function saveFrozenSession(root: string, record: FrozenSessionRecord): void {
@@ -65,7 +74,7 @@ export function listFrozenSessions(root: string): FrozenSessionRecord[] {
   }
   return readdirSync(dir)
     .filter((entry) => entry.endsWith(".yml"))
-    .map((entry) => parse(readFileSync(path.join(dir, entry), "utf-8")) as FrozenSessionRecord);
+    .map((entry) => parseYamlFile(path.join(dir, entry), FrozenSessionRecordSchema));
 }
 
 // --- repo meta ---------------------------------------------------------------
@@ -81,7 +90,7 @@ export function loadRepoMeta(root: string, repoKey: string): RepoMeta | null {
   if (!existsSync(filePath)) {
     return null;
   }
-  return parse(readFileSync(filePath, "utf-8")) as RepoMeta;
+  return parseYamlFile(filePath, RepoMetaSchema);
 }
 
 // --- run dir (bundles + findings, transient) --------------------------------
@@ -99,7 +108,10 @@ export function writeBundle(root: string, bundle: RepoBundle): string {
 }
 
 export function readBundle(root: string, runTs: string, repoHash: string): RepoBundle {
-  return JSON.parse(readFileSync(path.join(runDir(root, runTs), `${repoHash}.json`), "utf-8"));
+  return parseJsonFile(
+    path.join(runDir(root, runTs), `${repoHash}.json`),
+    RepoBundleSchema,
+  );
 }
 
 export function listBundleHashes(root: string, runTs: string): string[] {
@@ -126,7 +138,7 @@ export function readRunWindow(root: string, runTs: string): RetrospectiveWindow 
   if (!existsSync(filePath)) {
     return null;
   }
-  return JSON.parse(readFileSync(filePath, "utf-8")) as RetrospectiveWindow;
+  return parseJsonFile(filePath, RetrospectiveWindowSchema);
 }
 
 export function findingsPath(root: string, runTs: string, repoHash: string): string {
@@ -138,7 +150,7 @@ export function readFindings(root: string, runTs: string, repoHash: string): Rep
   if (!existsSync(filePath)) {
     return null;
   }
-  return JSON.parse(readFileSync(filePath, "utf-8")) as RepoFindings;
+  return parseJsonFile(filePath, RepoFindingsSchema);
 }
 
 export function prAnalysisPath(root: string, runTs: string): string {
@@ -225,7 +237,7 @@ export function withRetroLock<T>(root: string, callback: () => T): T {
 function evictIfStale(lockPath: string): boolean {
   let stale = false;
   try {
-    const meta = JSON.parse(readFileSync(lockPath, "utf-8")) as { pid?: number; acquiredAt?: number };
+    const meta = parseJsonFile(lockPath, RetroLockMetadataSchema);
     if (typeof meta.pid === "number" && meta.pid > 0) {
       // Liveness wins over age: a long run (>60s) past the cutoff must keep its lock.
       try {
@@ -249,4 +261,14 @@ function evictIfStale(lockPath: string): boolean {
   } catch {
     return false;
   }
+}
+
+function parseYamlFile<T extends z.ZodType>(filePath: string, schema: T): z.output<T> {
+  const value: unknown = parse(readFileSync(filePath, "utf-8"));
+  return schema.parse(value);
+}
+
+function parseJsonFile<T extends z.ZodType>(filePath: string, schema: T): z.output<T> {
+  const value: unknown = JSON.parse(readFileSync(filePath, "utf-8"));
+  return schema.parse(value);
 }

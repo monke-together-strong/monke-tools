@@ -1,3 +1,5 @@
+import { BetterStackApiError } from "./api-error";
+
 interface QueryCredentials {
   password: string;
   url: string;
@@ -5,6 +7,8 @@ interface QueryCredentials {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
+
+export { BetterStackApiError } from "./api-error";
 
 export interface BetterStackSourceResponse {
   data: {
@@ -36,20 +40,6 @@ export interface BetterStackConnectionsResponse {
       team_names: string[];
     };
   }[];
-}
-
-export class BetterStackApiError extends Error {
-  body: string;
-  status: number;
-  statusText: string;
-
-  constructor(status: number, statusText: string, body: string) {
-    super(`Better Stack API request failed with ${status} ${statusText}`);
-    this.body = body;
-    this.name = "BetterStackApiError";
-    this.status = status;
-    this.statusText = statusText;
-  }
 }
 
 export class BetterStackClient {
@@ -91,7 +81,7 @@ export class BetterStackClient {
     return await this.#requestJsonText(url.toString());
   }
 
-  async runQuery(credentials: QueryCredentials, query: string): Promise<string> {
+  static async runQuery(credentials: QueryCredentials, query: string): Promise<string> {
     const response = await fetch(credentials.url, {
       body: query,
       headers: {
@@ -102,7 +92,7 @@ export class BetterStackClient {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return await this.#readTextResponse(response);
+    return await readTextResponse(response);
   }
 
   async #requestJsonText(url: string): Promise<string> {
@@ -113,25 +103,15 @@ export class BetterStackClient {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return await this.#readTextResponse(response);
-  }
-
-  async #readTextResponse(response: Response): Promise<string> {
-    const body = await response.text();
-
-    if (!response.ok) {
-      throw new BetterStackApiError(response.status, response.statusText, body);
-    }
-
-    return body;
+    return await readTextResponse(response);
   }
 }
 
 export function normalizeQueryUrl(input: string): string {
-  const schemeMatch = /^([a-z][a-z\d+.-]*):\/\//iu.exec(input);
+  const schemeMatch = /^(?<scheme>[a-z][a-z\d+.-]*):\/\//iu.exec(input);
 
   if (schemeMatch) {
-    if (schemeMatch[1]?.toLowerCase() !== "https") {
+    if (schemeMatch.groups?.scheme?.toLowerCase() !== "https") {
       throw new Error("Better Stack query URL must use HTTPS.");
     }
 
@@ -140,4 +120,14 @@ export function normalizeQueryUrl(input: string): string {
 
   const separator = input.includes("?") ? "&" : "?";
   return `https://${input}${separator}output_format_pretty_row_numbers=0`;
+}
+
+async function readTextResponse(response: Response): Promise<string> {
+  const body = await response.text();
+
+  if (!response.ok) {
+    throw new BetterStackApiError(response.status, response.statusText, body);
+  }
+
+  return body;
 }

@@ -133,7 +133,7 @@ export function runSpawn(
 
   createLogger(runtime).success(`Spawned or updated session ${session}`);
   requestShellDirectory(runtime, rootWorktreePath);
-  if (runOptions.codex) {
+  if (runOptions.codex === true) {
     openCodexThread(runtime, rootWorktreePath);
   }
 }
@@ -273,11 +273,10 @@ export function spawnSessionFromSourceRootLocked(
     assertDirtyCarryBoundary(runtime, home, sourceRoot, session, dirtySnapshot);
   }
   let sessionState = loadSessionState(home, rootSourceRoot, session);
-  if (spawnFromDefaultBranch || spawnFromSessionBranch) {
-    sessionState = { ...sessionState, graphSource: "session-branch" };
-  } else {
-    sessionState = { ...sessionState, graphSource: undefined };
-  }
+  sessionState = {
+    ...sessionState,
+    graphSource: spawnFromDefaultBranch || spawnFromSessionBranch ? "session-branch" : undefined,
+  };
   ensureSessionPrefix(
     sessionState,
     graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot),
@@ -641,7 +640,7 @@ export function runMaterialize(runtime: Runtime): void {
   if (context.isSourceCheckout) {
     throw new MonkeError("mt materialize must run inside a session worktree");
   }
-  if (!context.sessionName) {
+  if (context.sessionName === null || context.sessionName === "") {
     throw new MonkeError("Unable to infer the current session");
   }
   const session = context.sessionName;
@@ -970,7 +969,7 @@ function materializeRepo(options: {
     );
   };
   let resolvedResourceCommands: ReturnType<typeof resolveResourceCommands> | undefined;
-  if (!repoConfig.bootstrapCommand) {
+  if (repoConfig.bootstrapCommand === undefined || repoConfig.bootstrapCommand === "") {
     resolvedResourceCommands = resolveResourceCommands({
       existingRepoState: existingState,
       home,
@@ -1021,7 +1020,7 @@ function materializeRepo(options: {
     existingState?.resourceCommandOutputs ?? [],
   );
 
-  if (repoConfig.bootstrapCommand) {
+  if (repoConfig.bootstrapCommand !== undefined && repoConfig.bootstrapCommand !== "") {
     syncRootEnvFileWithRemovals(worktreePath, rootEnvAssignmentsBeforeCommands, [
       ...resolvedResourceValues.removedEnvNames,
       ...existingResourceCommandEnvNames,
@@ -1073,7 +1072,7 @@ function materializeRepo(options: {
     ],
     [...resolvedResourceValues.removedEnvNames, ...resolvedResourceCommands.removedEnvNames],
   );
-  if (!repoConfig.bootstrapCommand) {
+  if (repoConfig.bootstrapCommand === undefined || repoConfig.bootstrapCommand === "") {
     runBootstrapCommand(
       options.runtime,
       repoConfig,
@@ -1198,7 +1197,7 @@ function buildSessionRepoState(options: {
     worktreePath: options.worktreePath,
   };
 
-  if (options.cleanupCommand) {
+  if (options.cleanupCommand !== undefined && options.cleanupCommand !== "") {
     state.cleanupCommand = options.cleanupCommand;
   }
 
@@ -1236,7 +1235,7 @@ function runCleanupCommands(
   for (const repoState of state.repos) {
     const repoConfig = reposByRoot.get(repoState.sourceRoot);
     const cleanupCommand = repoState.cleanupCommand ?? repoConfig?.cleanupCommand;
-    if (!cleanupCommand) {
+    if (cleanupCommand === undefined || cleanupCommand === "") {
       continue;
     }
     const sourceRoot = repoConfig?.sourceRoot ?? repoState.sourceRoot;
@@ -1278,7 +1277,7 @@ function runBootstrapCommand(
   externalPathAssignments: { env: string; value: string }[],
   session: string,
 ): void {
-  if (!repoConfig.bootstrapCommand) {
+  if (repoConfig.bootstrapCommand === undefined || repoConfig.bootstrapCommand === "") {
     return;
   }
 
@@ -1308,7 +1307,7 @@ function assertUniqueExpectedWorktreePaths(
     const expectedPath = getExpectedWorktreePath(home, repoConfig.sourceRoot, session);
     const normalizedPath = path.normalize(expectedPath);
     const existingOwner = ownerByPath.get(normalizedPath);
-    if (existingOwner) {
+    if (existingOwner !== undefined) {
       throw new MonkeError(
         `Session worktree path collision at ${expectedPath}: ${existingOwner} and ${repoConfig.sourceRoot} both resolve to ${path.basename(repoConfig.sourceRoot)}/${session}`,
       );
@@ -1351,8 +1350,7 @@ function findFirstIndexNeedingWork(
   session: string,
   currentRepoIndex: number,
 ): number {
-  for (let index = 0; index < currentRepoIndex; index += 1) {
-    const repoConfig = reposInOrder[index]!;
+  for (const [index, repoConfig] of reposInOrder.slice(0, currentRepoIndex).entries()) {
     const existing = state.repos.find((repo) => repo.sourceRoot === repoConfig.sourceRoot);
     if (!existing) {
       return index;

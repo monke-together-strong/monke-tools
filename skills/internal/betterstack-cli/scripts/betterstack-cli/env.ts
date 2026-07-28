@@ -6,7 +6,7 @@ function trimWhitespace(value: string): string {
 
 function unwrapQuotedValue(value: string): string {
   if (value.length >= 2) {
-    const first = value[0];
+    const [first] = value;
     const last = value.at(-1);
 
     if ((first === `"` && last === `"`) || (first === `'` && last === `'`)) {
@@ -23,7 +23,7 @@ export function loadEnvFileIfPresent(filePath: string): void {
   try {
     content = readFileSync(filePath, "utf-8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
       return;
     }
 
@@ -33,7 +33,7 @@ export function loadEnvFileIfPresent(filePath: string): void {
   for (const rawLine of content.split(/\r?\n/u)) {
     const trimmed = trimWhitespace(rawLine);
 
-    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) {
+    if (trimmed === "" || trimmed.startsWith("#") || !trimmed.includes("=")) {
       continue;
     }
 
@@ -41,7 +41,7 @@ export function loadEnvFileIfPresent(filePath: string): void {
     const rawKey = trimmed.slice(0, separatorIndex);
     const normalizedKey = trimWhitespace(rawKey.replace(/^export\s+/u, ""));
 
-    if (!normalizedKey || process.env[normalizedKey] !== undefined) {
+    if (normalizedKey === "" || process.env[normalizedKey] !== undefined) {
       continue;
     }
 
@@ -54,7 +54,7 @@ export function getFirstEnvValue(names: string[]): string | undefined {
   for (const name of names) {
     const value = process.env[name];
 
-    if (value) {
+    if (value !== undefined && value !== "") {
       return value;
     }
   }

@@ -1,8 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import * as z from "zod";
 
 import { hashKey } from "./identity.ts";
+import { isNonEmptyString } from "./normalize.ts";
+import { RetrospectiveWindowSchema } from "./schemas.ts";
 import {
   prAnalysisPath,
   readRunWindow,
@@ -116,6 +119,66 @@ interface GhPr {
   files?: unknown[];
 }
 
+const GhRepoSchema: z.ZodType<GhRepo> = z.object({
+  isArchived: z.boolean().optional(),
+  nameWithOwner: z.string(),
+});
+const GhPrSchema: z.ZodType<GhPr> = z.object({
+  baseRefName: z.string().optional(),
+  commits: z.array(z.unknown()).optional(),
+  createdAt: z.string(),
+  createdHeadRefOid: z.string().optional(),
+  creationHeadRefOid: z.string().optional(),
+  files: z.array(z.unknown()).optional(),
+  headRefName: z.string().optional(),
+  headRefOid: z.string().optional(),
+  mergeCommit: z.unknown().optional(),
+  mergedAt: z.string(),
+  number: z.number(),
+  openingSnapshotOid: z.string().optional(),
+  openingSnapshotRef: z.string().optional(),
+  title: z.string(),
+  url: z.string(),
+});
+const GhRepoListSchema = z.array(GhRepoSchema);
+const GhPrListSchema = z.array(GhPrSchema);
+const PrAnalysisManifestSchema: z.ZodType<PrAnalysisManifest> = z.strictObject({
+  author: z.string(),
+  gaps: z.array(
+    z.strictObject({
+      impact: z.string(),
+      number: z.number().optional(),
+      reason: z.string(),
+      repo: z.string(),
+    }),
+  ),
+  generatedAt: z.string(),
+  org: z.string(),
+  runTs: z.string(),
+  version: z.literal(1),
+  window: RetrospectiveWindowSchema,
+  workItems: z.array(
+    z.strictObject({
+      analysisPath: z.string(),
+      commitShas: z.array(z.string()),
+      createdAt: z.string(),
+      finalHeadSha: z.string().optional(),
+      mergeCommitSha: z.string().optional(),
+      mergedAt: z.string(),
+      number: z.number(),
+      openingSnapshot: z.strictObject({
+        confidence: z.enum(["exact", "inferred", "unknown"]),
+        reason: z.string(),
+        ref: z.string().optional(),
+      }),
+      repo: z.string(),
+      title: z.string(),
+      url: z.string(),
+      workItemPath: z.string(),
+    }),
+  ),
+});
+
 const DEFAULT_ORG = "monke-together-strong";
 const PR_LIST_LIMIT = 100;
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
@@ -149,7 +212,7 @@ export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
 
   let repos: GhRepo[] = [];
   try {
-    repos = JSON.parse(
+    repos = parseJson(
       runText(exec, "gh", [
         "repo",
         "list",
@@ -159,7 +222,8 @@ export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
         "--json",
         "nameWithOwner,isArchived,isPrivate",
       ]),
-    ) as GhRepo[];
+      GhRepoListSchema,
+    );
   } catch (error) {
     gaps.push({
       impact: "No PR trajectory evidence could be collected for the organization.",
@@ -169,10 +233,10 @@ export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
   }
 
   for (const repo of repos) {
-    if (!repo.nameWithOwner) {
+    if (!isNonEmptyString(repo.nameWithOwner)) {
       continue;
     }
-    if (repo.isArchived) {
+    if (repo.isArchived === true) {
       continue;
     }
 
@@ -196,13 +260,13 @@ export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
 
   const manifest: PrAnalysisManifest = {
     author,
-    gaps: gaps.sort((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number)),
+    gaps: gaps.toSorted((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number)),
     generatedAt,
     org,
     runTs: options.runTs,
     version: 1,
     window,
-    workItems: workItems.sort((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number)),
+    workItems: workItems.toSorted((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number)),
   };
   writePrManifest(root, options.runTs, manifest);
   return manifest;
@@ -220,7 +284,7 @@ function collectRepoPrs(
   for (const day of eachDateOnly(window.since, window.until)) {
     let summaries: GhPr[];
     try {
-      summaries = JSON.parse(
+      summaries = parseJson(
         runText(exec, "gh", [
           "pr",
           "list",
@@ -237,7 +301,8 @@ function collectRepoPrs(
           "--json",
           PR_LIST_FIELDS,
         ]),
-      ) as GhPr[];
+        GhPrListSchema,
+      );
     } catch (error) {
       gaps.push({
         impact: "Merged PRs from this date bucket are absent from PR trajectory analysis.",
@@ -278,7 +343,7 @@ function collectRepoPrs(
 }
 
 function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAnalysisGap[]): GhPr {
-  const detail = JSON.parse(
+  const detail = parseJson(
     runText(exec, "gh", [
       "pr",
       "view",
@@ -288,7 +353,8 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
       "--json",
       PR_DETAIL_FIELDS,
     ]),
-  ) as GhPr;
+    GhPrSchema,
+  );
   let files: unknown[] = [];
   try {
     files = normalizePrFilesResponse(
@@ -380,12 +446,12 @@ export function runPrAggregate(options: RunPrAggregateOptions): { path: string; 
   }
   for (const { item, body } of represented) {
     out.push(`### ${item.repo}#${item.number}`, "", `URL: ${item.url}`, `Opening snapshot: ${item.openingSnapshot.confidence}${
-        item.openingSnapshot.ref ? ` ${item.openingSnapshot.ref}` : ""
+        isNonEmptyString(item.openingSnapshot.ref) ? ` ${item.openingSnapshot.ref}` : ""
       }`);
-    if (item.finalHeadSha) {
+    if (isNonEmptyString(item.finalHeadSha)) {
       out.push(`Final head: ${item.finalHeadSha}`);
     }
-    if (item.mergeCommitSha) {
+    if (isNonEmptyString(item.mergeCommitSha)) {
       out.push(`Merge commit: ${item.mergeCommitSha}`);
     }
     if (item.commitShas.length > 0) {
@@ -409,7 +475,7 @@ export function readPrManifest(root: string, runTs: string): PrAnalysisManifest 
   if (!existsSync(filePath)) {
     return null;
   }
-  return JSON.parse(readFileSync(filePath, "utf-8")) as PrAnalysisManifest;
+  return parseJson(readFileSync(filePath, "utf-8"), PrAnalysisManifestSchema);
 }
 
 function writePrManifest(root: string, runTs: string, manifest: PrAnalysisManifest): void {
@@ -428,7 +494,7 @@ function buildWorkItem(
 ): PrWorkItem {
   const commits = normalizeCommits(pr.commits);
   const openingSnapshot = inferOpeningSnapshot(pr, commits);
-  const finalHeadSha = pr.headRefOid || commits.at(-1)?.sha;
+  const finalHeadSha = isNonEmptyString(pr.headRefOid) ? pr.headRefOid : commits.at(-1)?.sha;
   const mergeCommitSha = normalizeMergeCommit(pr.mergeCommit);
   const id = workItemId(repo, pr.number);
   const dir = path.join(runDir(root, runTs), "pr-analysis", "prs");
@@ -486,7 +552,7 @@ function inferOpeningSnapshot(
   commits: PrCommitReference[],
 ): PrWorkItemSummary["openingSnapshot"] {
   const exactRef = pr.openingSnapshotOid ?? pr.openingSnapshotRef ?? pr.createdHeadRefOid ?? pr.creationHeadRefOid;
-  if (exactRef) {
+  if (isNonEmptyString(exactRef)) {
     return {
       confidence: "exact",
       reason: "GitHub provided a creation-time PR head ref.",
@@ -496,9 +562,10 @@ function inferOpeningSnapshot(
 
   const createdAtMs = Date.parse(pr.createdAt);
   if (!Number.isNaN(createdAtMs)) {
-    const candidate = commits
-      .filter((commit) => commit.committedDate && Date.parse(commit.committedDate) <= createdAtMs)
-      .at(-1);
+    const candidate = commits.findLast(
+      (commit) =>
+        commit.committedDate !== undefined && Date.parse(commit.committedDate) <= createdAtMs,
+    );
     if (candidate) {
       return {
         confidence: "inferred",
@@ -522,12 +589,19 @@ function materializeDelta(
   repoCacheRoot?: string,
 ): PrWorkItem["postOpeningDelta"] {
   const missingRefNote =
-    !openingRef || !finalHeadSha
+    !isNonEmptyString(openingRef) || !isNonEmptyString(finalHeadSha)
       ? "Opening or final ref was unavailable, so no post-opening delta could be materialized."
       : undefined;
 
-  const repoDir = repoCacheRoot ? path.join(repoCacheRoot, repo.replaceAll("/", "__")) : null;
-  if (!missingRefNote && repoDir && openingRef && finalHeadSha) {
+  const repoDir = isNonEmptyString(repoCacheRoot)
+    ? path.join(repoCacheRoot, repo.replaceAll("/", "__"))
+    : null;
+  if (
+    !isNonEmptyString(missingRefNote) &&
+    isNonEmptyString(repoDir) &&
+    isNonEmptyString(openingRef) &&
+    isNonEmptyString(finalHeadSha)
+  ) {
     try {
       ensureRepoCache(repo, repoDir, exec);
       runText(exec, "git", ["fetch", "origin", `pull/${number}/head:refs/remotes/pr/${number}`, "--force"], {
@@ -582,17 +656,17 @@ function normalizeCommits(value: unknown): PrCommitReference[] {
     .map((entry) => {
       const record = asRecord(entry);
       const sha = asString(record?.oid) ?? asString(record?.sha);
-      if (!sha) {
+      if (!isNonEmptyString(sha)) {
         return null;
       }
       const headline = asString(record?.messageHeadline) ?? asString(record?.message) ?? "";
       const body = asString(record?.messageBody);
       const committedDate = asString(record?.committedDate);
       const commit: PrCommitReference = {
-        message: body ? `${headline}\n\n${body}` : headline,
+        message: isNonEmptyString(body) ? `${headline}\n\n${body}` : headline,
         sha,
       };
-      if (committedDate) {
+      if (isNonEmptyString(committedDate)) {
         commit.committedDate = committedDate;
       }
       return commit;
@@ -627,6 +701,11 @@ function normalizeMergeCommit(value: unknown): string | undefined {
   return asString(record?.oid) ?? asString(record?.sha);
 }
 
+function parseJson<T extends z.ZodType>(text: string, schema: T): z.output<T> {
+  const value: unknown = JSON.parse(text);
+  return schema.parse(value);
+}
+
 function prInWindow(pr: GhPr, window: RetrospectiveWindow): boolean {
   const mergedAt = Date.parse(pr.mergedAt);
   return !Number.isNaN(mergedAt) && mergedAt >= Date.parse(window.since) && mergedAt <= Date.parse(window.until);
@@ -634,7 +713,7 @@ function prInWindow(pr: GhPr, window: RetrospectiveWindow): boolean {
 
 function extractCorrectivePatternLines(body: string): string[] {
   const section = extractSection(body, "Corrective Patterns");
-  if (!section) {
+  if (!isNonEmptyString(section)) {
     return [];
   }
   return section
@@ -759,17 +838,23 @@ function runText(
 ): string {
   const result = exec(command, args, options);
   if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(" ")} failed: ${result.stderr || result.stdout || result.error}`);
+    const detail =
+      [result.stderr, result.stdout, result.error].find(isNonEmptyString) ?? "unknown error";
+    throw new Error(`${command} ${args.join(" ")} failed: ${detail}`);
   }
   return result.stdout;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  return isRecord(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function asString(value: unknown): string | undefined {
-  return typeof value === "string" && value ? value : undefined;
+  return isNonEmptyString(value) ? value : undefined;
 }
 
 function errorMessage(error: unknown): string {

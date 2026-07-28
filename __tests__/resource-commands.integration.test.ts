@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vite-plus/test";
 import { chmodSync } from "node:fs";
 import path from "node:path";
+import * as z from "zod";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { loadSessionState, saveSessionState } from "../src/registry.ts";
+import { SessionStateSchema } from "../src/state-schema.ts";
+import type { SessionState } from "../src/types.ts";
 import {
   createRepo,
   installShShim,
@@ -24,12 +27,14 @@ interface ResourceCommandScenario {
   ) => { stdout: string; stderr: string };
   materialize: (session: string) => { stdout: string; stderr: string };
   cleanup: () => { stdout: string; stderr: string };
-  readSessionState: <T>() => T;
+  readSessionState: () => SessionState;
   readWorktree: (session: string, relativePath: string) => string;
   writeRoot: (relativePath: string, contents: string) => void;
   writeWorktree: (session: string, relativePath: string, contents: string) => void;
   worktree: (session: string) => string;
 }
+
+const ResourceCommandInputSchema = z.record(z.string(), z.array(z.string()));
 
 describe("resource commands", () => {
   test("spawn runs resource commands from the worktree and writes outputs to root env and state", () => {
@@ -64,14 +69,7 @@ export default function ({ previous }) {
     );
     expect(scenario.readWorktree("banana", "apps/api/.env.local")).toBe("PORT=10000\n");
 
-    const sessionState = scenario.readSessionState<{
-      repos: {
-        resourceCommandOutputs?: {
-          name: string;
-          outputs: { env: string; value: string }[];
-        }[];
-      }[];
-    }>();
+    const sessionState = scenario.readSessionState();
     expect(sessionState.repos[0]?.resourceCommandOutputs).toStrictEqual([
       {
         name: "e2e-symbols",
@@ -173,6 +171,8 @@ export default function ({ previous }) {
 `,
       name: "single-repo-resource-command-retained-input",
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
+      // Exercise the resource-literal interpolation syntax as YAML data.
+      // oxlint-disable-next-line no-template-curly-in-string
       resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}",
     });
     saveSessionState(scenario.home, {
@@ -200,10 +200,9 @@ export default function ({ previous }) {
 
     scenario.spawn("second");
 
-    const secondInput = JSON.parse(scenario.readWorktree("second", "command-stdin.json")) as Record<
-      string,
-      string[]
-    >;
+    const secondInput = ResourceCommandInputSchema.parse(
+      JSON.parse(scenario.readWorktree("second", "command-stdin.json")),
+    );
     expect(Object.keys(secondInput)).toStrictEqual(["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]);
     expect(secondInput).toStrictEqual({
       E2E_FLOW1_SYMBOL: ["SOL/USDT:USDT"],
@@ -292,10 +291,9 @@ export default function ({ previous }) {
 
     scenario.spawn("current");
 
-    const input = JSON.parse(scenario.readWorktree("current", "command-stdin.json")) as Record<
-      string,
-      string[]
-    >;
+    const input = ResourceCommandInputSchema.parse(
+      JSON.parse(scenario.readWorktree("current", "command-stdin.json")),
+    );
     expect(input.E2E_FLOW1_SYMBOL?.toSorted()).toStrictEqual(["SOL/USDT:USDT"]);
     expect(input.E2E_FLOW2_SYMBOL?.toSorted()).toStrictEqual(["NEAR/USDT:USDT"]);
     expect(JSON.stringify(input)).not.toContain("DETERMINISTIC_SHOULD_NOT_APPEAR");
@@ -569,9 +567,7 @@ export default function () {
     scenario.materialize("banana");
 
     expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
-    const sessionState = scenario.readSessionState<{
-      repos: { resourceCommandOutputs?: unknown }[];
-    }>();
+    const sessionState = scenario.readSessionState();
     expect(sessionState.repos[0]?.resourceCommandOutputs).toBeUndefined();
   });
 
@@ -637,15 +633,7 @@ export default function () {
 
     expect(() => scenario.spawn("banana")).toThrow(/Missing mapped env vars/u);
 
-    const partialState = scenario.readSessionState<{
-      repos: {
-        resourceCommandOutputs?: {
-          name: string;
-          outputs: { env: string; value: string }[];
-        }[];
-        materializationComplete?: boolean;
-      }[];
-    }>();
+    const partialState = scenario.readSessionState();
     expect(partialState.repos[0]?.resourceCommandOutputs).toStrictEqual([
       {
         name: "e2e-symbols",
@@ -700,13 +688,7 @@ export default function () {
 
     expect(() => scenario.materialize("banana")).toThrow(/Missing mapped env vars/u);
 
-    const partialState = scenario.readSessionState<{
-      repos: {
-        resourceCommandOutputs?: {
-          outputs: { env: string; value: string }[];
-        }[];
-      }[];
-    }>();
+    const partialState = scenario.readSessionState();
     expect(partialState.repos[0]?.resourceCommandOutputs?.[0]?.outputs).toStrictEqual([
       { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
       { env: "E2E_FLOW3_SYMBOL", value: "ATOM/USDT:USDT" },
@@ -819,7 +801,7 @@ export default function () {
     });
 
     expect(() => scenario.spawn("banana")).toThrow(
-      /Resource command e2e-symbols failed[\s\S]*(Cannot find module|Module not found)/u,
+      /Resource command e2e-symbols failed[\s\S]*(?:Cannot find module|Module not found)/u,
     );
   });
 
@@ -943,7 +925,10 @@ function createResourceCommandScenario(options: {
   const binDirectory = path.join(sandbox, "bin");
   installShShim(binDirectory);
   const home = path.join(sandbox, "home");
-  const moduleFiles = options.module ? { [moduleFilePath(options.run)]: options.module } : {};
+  const moduleFiles =
+    options.module !== undefined && options.module !== ""
+      ? { [moduleFilePath(options.run)]: options.module }
+      : {};
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": options.appEnv ?? "PORT=3000\n",
     "monke.yml": options.monkeYml ?? singleCommandMonkeYml(options),
@@ -971,8 +956,8 @@ function createResourceCommandScenario(options: {
         monkeHome: home,
       });
     },
-    readSessionState<T>() {
-      return readSingleYamlFile(path.join(home, "sessions")) as T;
+    readSessionState() {
+      return readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     },
     readWorktree(session, relativePath) {
       return read(worktree(session), relativePath);
@@ -1005,9 +990,10 @@ function singleCommandMonkeYml(options: {
   run?: string;
   timeoutSeconds?: number;
 }): string {
-  const resourceValues = options.resourceValuesYaml
-    ? `  values:\n${indentBlock(options.resourceValuesYaml, 4)}\n`
-    : "";
+  const resourceValues =
+    options.resourceValuesYaml !== undefined && options.resourceValuesYaml !== ""
+      ? `  values:\n${indentBlock(options.resourceValuesYaml, 4)}\n`
+      : "";
   const outputs = options.outputs ?? ["E2E_FLOW1_SYMBOL"];
   return withDefaultApp(`resources:
 ${resourceValues}  commands:

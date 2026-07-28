@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stringify } from "yaml";
+import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { ensureDirectory, hashKey, isPortAvailable } from "./runtime.ts";
@@ -20,6 +21,10 @@ const GLOBAL_PORT_FLOOR = 10_000;
 // (tens of ports per session) times comfortable concurrency headroom; blocks stack from
 // GLOBAL_PORT_FLOOR, so even ~50 repos at this width fit under the 65535 ceiling.
 const MIN_REPO_RESERVATION_SIZE = 1000;
+const SessionStateIdentitySchema = z.object({
+  rootSourceRoot: z.string(),
+  session: z.string(),
+});
 
 export function loadSessionState(
   home: string,
@@ -39,9 +44,13 @@ export function loadSessionState(
   return parseOwnedYamlFile(filePath, SessionStateSchema);
 }
 
-export function saveSessionState(home: string, state: SessionState): void {
-  const filePath = getSessionStateFilePath(home, state.rootSourceRoot, state.session);
-  const parsed = parseBoundaryValue(SessionStateSchema, state, filePath);
+export function saveSessionState(home: string, state: unknown): void {
+  const identity = SessionStateIdentitySchema.safeParse(state);
+  const label = identity.success
+    ? getSessionStateFilePath(home, identity.data.rootSourceRoot, identity.data.session)
+    : "session state";
+  const parsed = parseBoundaryValue(SessionStateSchema, state, label);
+  const filePath = getSessionStateFilePath(home, parsed.rootSourceRoot, parsed.session);
   ensureDirectory(path.dirname(filePath));
   writeFileSync(filePath, stringify(parsed), "utf-8");
 }
@@ -92,11 +101,11 @@ export function getOrCreateReservation(
     return existing;
   }
 
-  const reservations = listReservations(home);
-  const highestReservedPort = reservations.reduce((highest, reservation) => {
+  let highestReservedPort = GLOBAL_PORT_FLOOR - 1;
+  for (const reservation of listReservations(home)) {
     const blockEnd = reservation.blockStart + reservation.size - 1;
-    return Math.max(highest, blockEnd);
-  }, GLOBAL_PORT_FLOOR - 1);
+    highestReservedPort = Math.max(highestReservedPort, blockEnd);
+  }
   const nextReservation: RepoReservation = {
     blockStart: Math.max(GLOBAL_PORT_FLOOR, highestReservedPort + 1),
     size: Math.max(size, MIN_REPO_RESERVATION_SIZE),

@@ -101,7 +101,7 @@ monke() {
 
 function writeDirectoryDirective(runtime: Runtime, targetPath: string): boolean {
   const directivePath = runtime.env[SHELL_DIRECTORY_DIRECTIVE_ENV];
-  if (!directivePath) {
+  if (directivePath === undefined || directivePath === "") {
     return false;
   }
 
@@ -161,7 +161,7 @@ ${INTEGRATION_END}
 function resolveAdapterBinary(runtime: Runtime, binary: string | undefined): string {
   const candidate =
     binary ?? runtime.env.MONKE_TOOLS_BINARY ?? findExecutable("monke-tools", runtime.env);
-  if (!candidate) {
+  if (candidate === null || candidate === undefined || candidate === "") {
     return "monke-tools";
   }
 
@@ -181,7 +181,7 @@ function requireSupportedShell(shellName: string): SupportedShell {
 }
 
 function isSupportedShell(shellName: string): shellName is SupportedShell {
-  return SUPPORTED_SHELLS.includes(shellName as SupportedShell);
+  return shellName === "bash" || shellName === "zsh";
 }
 
 function getStartupFilePath(home: string, shell: SupportedShell): string {

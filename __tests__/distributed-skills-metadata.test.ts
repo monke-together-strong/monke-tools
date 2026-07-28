@@ -3,6 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vite-plus/test";
 
+import { normalizeImportRecipeStore } from "../scripts/import-skills.ts";
+
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("distributed skill metadata", () => {
@@ -50,15 +52,11 @@ describe("distributed skill metadata", () => {
   });
 
   test("tracked import recipes record one Import kind for every selector", () => {
-    const store = JSON.parse(
-      readFileSync(path.join(projectRoot, "skills", "imported", ".monke-imports.json"), "utf-8"),
-    ) as {
-      version: number;
-      recipes: {
-        source: string;
-        skills: { selector: string; kind: string }[];
-      }[];
-    };
+    const store = normalizeImportRecipeStore(
+      JSON.parse(
+        readFileSync(path.join(projectRoot, "skills", "imported", ".monke-imports.json"), "utf-8"),
+      ),
+    );
     const importedGuidance = store.recipes.flatMap((recipe) =>
       recipe.skills.map((guidance) => ({ source: recipe.source, ...guidance })),
     );

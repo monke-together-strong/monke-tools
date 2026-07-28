@@ -97,7 +97,8 @@ describe("merged worktree cleanup", () => {
   ])("decideMergedWorktreeCleanup skips $name with an explicit reason", ({ patch, reason }) => {
     const decision = decideMergedWorktreeCleanup(baseSnapshot(patch));
 
-    expect(decision).toMatchObject({ eligible: false, reasons: expect.arrayContaining([reason]) });
+    expect(decision.eligible).toBeFalsy();
+    expect(decision.reasons).toContain(reason);
   });
 
   function baseSnapshot(patch: Partial<MergedCleanupSnapshot> = {}): MergedCleanupSnapshot {

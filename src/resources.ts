@@ -60,9 +60,13 @@ const RESOURCE_COMMAND_MODULE_RUNNER = [
   "  const previous = previousText.trim() ? JSON.parse(previousText) : {};",
   "  const resourceModule = await import(pathToFileURL(modulePath).href);",
   '  if (!Object.prototype.hasOwnProperty.call(resourceModule, "default")) {',
+  // This is a template literal in the generated runner, not in this source module.
+  // oxlint-disable-next-line no-template-curly-in-string
   "    fail(`Resource command module ${modulePath} must export a default function`);",
   "  }",
   '  if (typeof resourceModule.default !== "function") {',
+  // This is a template literal in the generated runner, not in this source module.
+  // oxlint-disable-next-line no-template-curly-in-string
   "    fail(`Resource command module ${modulePath} default export must be a function`);",
   "  }",
   "  const value = await resourceModule.default({ previous });",
@@ -88,7 +92,7 @@ export function resolveResourceValues(options: {
   const existingValues = options.existingRepoState?.resourceValues ?? [];
   const rememberedValues = new Map(
     existingValues
-      .filter((resource) => declaredEnvNames.has(resource.env) && resource.value.trim())
+      .filter((resource) => declaredEnvNames.has(resource.env) && resource.value.trim() !== "")
       .map((resource) => [resource.env, resource.value]),
   );
 
@@ -214,7 +218,7 @@ function getReusableResourceCommand(
   const outputs: { env: string; value: string }[] = [];
   for (const env of command.outputs) {
     const value = rememberedByEnv.get(env);
-    if (!value?.trim()) {
+    if (value === undefined || value.trim() === "") {
       return null;
     }
     outputs.push({ env, value });
@@ -250,7 +254,7 @@ function runResourceCommand(options: {
       timeoutSeconds: options.command.timeoutSeconds,
     });
 
-    if (result.timedOut) {
+    if (result.timedOut === true) {
       throw resourceCommandFailure({
         command: options.command,
         kind: "timeout",
@@ -360,7 +364,7 @@ function buildResourceCommandInput(options: {
       );
       for (const env of options.command.outputs) {
         const remembered = rememberedByEnv.get(env);
-        if (remembered?.trim()) {
+        if (remembered !== undefined && remembered.trim() !== "") {
           valuesByEnv.get(env)?.add(remembered);
         }
       }
@@ -447,7 +451,15 @@ function validateResourceCommandReturn(
   }
 
   return command.outputs.map((env) => {
-    const outputValue = value[env]!;
+    const outputValue = value[env];
+    if (outputValue === undefined) {
+      throw resourceCommandFailure({
+        command,
+        kind: `missing output for ${env}`,
+        stderr,
+        stdout,
+      });
+    }
     if ((stdin[env] ?? []).includes(outputValue)) {
       throw resourceCommandFailure({
         command,
@@ -534,17 +546,20 @@ function interpolateResourceLiteral(options: {
   user: string;
   location: string;
 }): string {
-  const value = options.literal.replaceAll(/\$\{([^}]*)\}/gu, (placeholder, name: string) => {
-    if (name === "session") {
-      return options.session;
-    }
-    if (name === "user") {
-      return options.user;
-    }
-    throw new MonkeError(
-      `${options.location} contains unsupported placeholder ${placeholder}; supported placeholders are \${session} and \${user}`,
-    );
-  });
+  const value = options.literal.replaceAll(
+    /\$\{(?<name>[^}]*)\}/gu,
+    (placeholder, name: string) => {
+      if (name === "session") {
+        return options.session;
+      }
+      if (name === "user") {
+        return options.user;
+      }
+      throw new MonkeError(
+        `${options.location} contains unsupported placeholder ${placeholder}; supported placeholders are \${session} and \${user}`,
+      );
+    },
+  );
 
   if (value.includes("${")) {
     throw new MonkeError(
@@ -556,7 +571,13 @@ function interpolateResourceLiteral(options: {
 }
 
 function resolveResourceUser(env: Record<string, string | undefined>): string {
-  return env.USER?.trim() || env.LOGNAME?.trim() || env.USERNAME?.trim() || "unknown";
+  for (const key of ["USER", "LOGNAME", "USERNAME"]) {
+    const value = env[key]?.trim();
+    if (value !== undefined && value !== "") {
+      return value;
+    }
+  }
+  return "unknown";
 }
 
 function describeRedactedValue(value: string): string {

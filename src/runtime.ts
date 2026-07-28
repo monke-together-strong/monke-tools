@@ -18,7 +18,6 @@ import { isCancel, select as clackSelect } from "@clack/prompts";
 import * as z from "zod";
 
 import { errorMessage, MonkeError } from "./errors.ts";
-import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
 import type { ExecOptions, ExecResult, Runtime, SelectPrompt } from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
@@ -28,7 +27,7 @@ const LockMetadataSchema = z.object({
   pid: z.unknown().optional(),
 });
 const LockPidSchema = z.number().int().positive();
-const LockTimestampSchema = z.number().finite();
+const LockTimestampSchema = z.number();
 
 /** Runtime construction options for CLI commands and integration-style tests. */
 export interface RuntimeOptions {
@@ -72,7 +71,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
         ...runtimeEnv,
         ...execOptions?.env,
       };
-      delete childEnv[SHELL_DIRECTORY_DIRECTIVE_ENV];
+      delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
 
       const result = spawnSync(command, args, {
         cwd: execOptions?.cwd ?? runtimeCwd,
@@ -84,7 +83,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       });
 
       if (result.error) {
-        if (execOptions?.allowFailure && isTimeoutError(result.error)) {
+        if (execOptions?.allowFailure === true && isTimeoutError(result.error)) {
           return {
             exitCode: -1,
             stderr: result.stderr ?? "",
@@ -100,16 +99,16 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
 
       const stdout = result.stdout ?? "";
       const stderr = result.stderr ?? "";
-      const exitCode = result.status === null ? -1 : result.status;
+      const exitCode = result.status ?? -1;
 
-      if (!execOptions?.allowFailure && result.status === null) {
+      if (execOptions?.allowFailure !== true && result.status === null) {
         const reason = result.signal
           ? `terminated by signal ${result.signal}`
           : "terminated by signal";
         throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
       }
 
-      if (!execOptions?.allowFailure && exitCode !== 0) {
+      if (execOptions?.allowFailure !== true && exitCode !== 0) {
         const reason = stderr.trim() || stdout.trim() || `exit code ${exitCode}`;
         throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
       }
@@ -187,7 +186,7 @@ export function findExecutable(
   env: Record<string, string | undefined>,
 ): string | null {
   const pathValue = env.PATH;
-  if (!pathValue) {
+  if (pathValue === undefined || pathValue === "") {
     return null;
   }
 
@@ -270,11 +269,21 @@ export function isPortAvailable(port: number): boolean {
       hostname: "127.0.0.1",
       port,
       socket: {
-        close() {},
-        data() {},
-        drain() {},
-        error() {},
-        open() {},
+        close() {
+          // Port probing only needs the listener lifecycle.
+        },
+        data() {
+          // Port probing never consumes socket data.
+        },
+        drain() {
+          // Port probing never writes socket data.
+        },
+        error() {
+          // Listen failures are handled by the surrounding try/catch.
+        },
+        open() {
+          // A successful open means the port is available.
+        },
       },
     });
     return true;

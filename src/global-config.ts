@@ -156,6 +156,9 @@ function parseSkillInstallPreference(
         });
         break;
       }
+      default: {
+        throw new MonkeError(`Unsupported Skill install target in ${location}`);
+      }
     }
   }
 

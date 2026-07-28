@@ -205,7 +205,7 @@ export function decideMergedWorktreeCleanup(
     };
   }
 
-  if (!snapshot.branch) {
+  if (snapshot.branch === null || snapshot.branch === "") {
     reasons.push("worktree is detached");
   } else if (snapshot.branch === snapshot.session) {
     branchMatchesSession = true;
@@ -222,7 +222,7 @@ export function decideMergedWorktreeCleanup(
     };
   }
 
-  if (snapshot.lookupError) {
+  if (snapshot.lookupError !== null && snapshot.lookupError !== "") {
     reasons.push(snapshot.lookupError);
   } else {
     const exactMatches = snapshot.matchingMergedPrs.filter(
@@ -244,14 +244,17 @@ export function decideMergedWorktreeCleanup(
         `${sameRepositoryMatches.length} merged PR matches; branch history is ambiguous`,
       );
     } else {
-      const match = sameRepositoryMatches[0]!;
+      const [match] = sameRepositoryMatches;
+      if (match === undefined) {
+        throw new Error("Expected one same-repository merged PR match");
+      }
       evidence.push(
         `exact merged PR: #${match.number} ${match.headRefName} -> ${match.baseRefName}`,
       );
 
-      if (!match.headRefOid) {
+      if (match.headRefOid === null || match.headRefOid === "") {
         reasons.push("merged PR match did not include headRefOid");
-      } else if (!snapshot.localHead) {
+      } else if (snapshot.localHead === null || snapshot.localHead === "") {
         reasons.push("unable to read local worktree HEAD");
       } else if (snapshot.localHead === match.headRefOid) {
         evidence.push(`local HEAD matches merged PR head: ${shortSha(snapshot.localHead)}`);
@@ -265,7 +268,7 @@ export function decideMergedWorktreeCleanup(
     }
   }
 
-  if (snapshot.statusError) {
+  if (snapshot.statusError !== null && snapshot.statusError !== "") {
     reasons.push(snapshot.statusError);
   } else if (snapshot.statusLines.length > 0) {
     reasons.push(`worktree has ${snapshot.statusLines.length} dirty/untracked status line(s)`);
@@ -468,7 +471,7 @@ function normalizeMergedPrMatch(value: unknown): MergedPrMatch {
 }
 
 function isSameRepositoryPr(match: MergedPrMatch, repositoryFullName: string | null): boolean {
-  if (!repositoryFullName) {
+  if (repositoryFullName === null || repositoryFullName === "") {
     return false;
   }
 
@@ -476,11 +479,19 @@ function isSameRepositoryPr(match: MergedPrMatch, repositoryFullName: string | n
     return false;
   }
 
-  if (match.headRepository?.nameWithOwner) {
+  if (
+    match.headRepository?.nameWithOwner !== undefined &&
+    match.headRepository.nameWithOwner !== ""
+  ) {
     return match.headRepository.nameWithOwner === repositoryFullName;
   }
 
-  if (match.headRepositoryOwner?.login && match.headRepository?.name) {
+  if (
+    match.headRepositoryOwner?.login !== undefined &&
+    match.headRepositoryOwner.login !== "" &&
+    match.headRepository?.name !== undefined &&
+    match.headRepository.name !== ""
+  ) {
     return `${match.headRepositoryOwner.login}/${match.headRepository.name}` === repositoryFullName;
   }
 

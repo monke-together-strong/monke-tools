@@ -94,17 +94,19 @@ describe("skills", () => {
     const manifestPath = path.join(claudeSkillRoot, ".monke-tools-flat-skills.json");
     const coreLink = path.join(claudeSkillRoot, "monke-tools-core");
     const tddLink = path.join(claudeSkillRoot, "tdd");
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-    expect(manifest.links).toStrictEqual([
-      {
-        name: "monke-tools-core",
-        sourcePath: path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
-      },
-      {
-        name: "tdd",
-        sourcePath: path.join(sourceCheckout, "skills", "imported", "tdd"),
-      },
-    ]);
+    const manifest: unknown = JSON.parse(readFileSync(manifestPath, "utf-8"));
+    expect(manifest).toMatchObject({
+      links: [
+        {
+          name: "monke-tools-core",
+          sourcePath: path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
+        },
+        {
+          name: "tdd",
+          sourcePath: path.join(sourceCheckout, "skills", "imported", "tdd"),
+        },
+      ],
+    });
     expect(manifest).not.toHaveProperty("supportingLinks");
     expect(lstatSync(coreLink).isSymbolicLink()).toBeTruthy();
     expect(readlinkSync(coreLink)).toBe(
@@ -185,13 +187,15 @@ describe("skills", () => {
           path.join(sandbox, ".claude", "skills", ".monke-tools-flat-skills.json"),
           "utf-8",
         ),
-      ).supportingLinks,
-    ).toStrictEqual([
-      {
-        sourcePath: path.join(sourceCheckout, "skills", "references"),
-        targetPath: path.join(sandbox, ".claude", "references"),
-      },
-    ]);
+      ),
+    ).toMatchObject({
+      supportingLinks: [
+        {
+          sourcePath: path.join(sourceCheckout, "skills", "references"),
+          targetPath: path.join(sandbox, ".claude", "references"),
+        },
+      ],
+    });
     expect(existsSync(path.join(sandbox, ".claude", "skills", "references"))).toBeFalsy();
 
     reconcileSkillNamespaces({

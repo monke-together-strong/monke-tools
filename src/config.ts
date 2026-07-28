@@ -144,7 +144,7 @@ export function loadResolvedGraph(
   for (const repo of reposInOrder) {
     for (const portKey of repo.localPortOrder) {
       const existingOwner = ownerByPortKey.get(portKey);
-      if (existingOwner && existingOwner !== repo.sourceRoot) {
+      if (existingOwner !== undefined && existingOwner !== repo.sourceRoot) {
         throw new MonkeError(
           `Port key ${portKey} is owned by both ${existingOwner} and ${repo.sourceRoot}`,
         );
@@ -295,7 +295,7 @@ function parseRepoConfigObject(
     const relativePath = rawExternal.path;
     const { pathEnv } = rawExternal;
     const existingPathEnvOwner = externalPathEnvOwners.get(pathEnv);
-    if (existingPathEnvOwner) {
+    if (existingPathEnvOwner !== undefined) {
       throw new MonkeError(
         `Duplicate external pathEnv ${pathEnv} in ${configPath} for ${existingPathEnvOwner} and ${label}`,
       );
@@ -429,7 +429,7 @@ function parseSeedPaths(
     }
 
     const existing = seen.get(normalizedPath);
-    if (existing) {
+    if (existing !== undefined) {
       throw new MonkeError(
         `Duplicate seedPath ${relativePath} in ${configPath}; already declared as ${existing}`,
       );
@@ -539,8 +539,8 @@ function requireResourceCommandRunPath(relativePath: string, location: string): 
 }
 
 function requireResourceLiteral(literal: string, location: string): string {
-  for (const match of literal.matchAll(/\$\{([^}]*)\}/gu)) {
-    const placeholder = match[1] ?? "";
+  for (const match of literal.matchAll(/\$\{(?<placeholder>[^}]*)\}/gu)) {
+    const placeholder = match.groups?.placeholder ?? "";
     if (placeholder !== "session" && placeholder !== "user") {
       throw new MonkeError(
         `${location} contains unsupported placeholder \${${placeholder}}; supported placeholders are \${session} and \${user}`,

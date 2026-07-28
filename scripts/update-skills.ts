@@ -81,10 +81,12 @@ export async function runUpdateSkills(
       const securityAssessment = extractSecurityRiskAssessment(
         `${installOutput.stdout}\n${installOutput.stderr}`,
       );
-      if (securityAssessment) {
+      if (securityAssessment !== null && securityAssessment !== "") {
         writeMessage(securityAssessment);
       }
 
+      // Recipe updates are serial because each accepted replacement updates the store for the next.
+      // oxlint-disable-next-line no-await-in-loop
       const slugReplacements = await resolveStagedSkillReplacements({
         acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
         confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
@@ -200,7 +202,7 @@ async function resolveStagedSkillReplacements(options: {
   );
   const replacements = recipe.skills.flatMap((skill): SlugReplacementRequest[] => {
     const stagedSlug = stagedSlugBySelector.get(skill.selector);
-    if (!stagedSlug || stagedSlug === skill.slug) {
+    if (stagedSlug === undefined || stagedSlug === "" || stagedSlug === skill.slug) {
       return [];
     }
 
@@ -219,6 +221,8 @@ async function resolveStagedSkillReplacements(options: {
   }
 
   for (const replacement of replacements) {
+    // Interactive confirmations must remain ordered rather than prompting concurrently.
+    // oxlint-disable-next-line no-await-in-loop
     const accepted = await options.confirmSlugReplacement(replacement);
     if (!accepted) {
       throw new MonkeError(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));

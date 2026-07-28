@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/registry.ts";
+import { SessionStateSchema } from "../src/state-schema.ts";
 import {
   createRepo,
   git,
@@ -80,9 +81,7 @@ external:
       `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\n`,
     );
 
-    const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
-      repos: { sourceRoot: string }[];
-    };
+    const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(sessionState.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
   });
 
@@ -408,10 +407,7 @@ external:
       `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
     );
 
-    const sessionState = readSingleYamlFile(path.join(home, "sessions")) as {
-      graphSource?: string;
-      repos: { sourceRoot: string }[];
-    };
+    const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(sessionState.graphSource).toBe("session-branch");
     expect(sessionState.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
 
@@ -754,13 +750,7 @@ external:
     const depWorktree = getExpectedWorktreePath(home, depRoot, "partial");
     expect(read(rootWorktree, ".env")).toBe("DEP_DIR=../dep\n");
 
-    const partialState = readSingleYamlFile(path.join(home, "sessions")) as {
-      repos: {
-        sourceRoot: string;
-        worktreePath: string;
-        materializationComplete?: boolean;
-      }[];
-    };
+    const partialState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(partialState.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
     expect(partialState.repos[1]).toMatchObject({
       materializationComplete: false,

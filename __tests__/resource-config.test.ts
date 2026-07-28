@@ -29,6 +29,8 @@ apps:
 
     expect(graph.reposByRoot.get(root)?.cleanupCommand).toBe("pnpm cleanup:session");
     expect(graph.reposByRoot.get(root)?.resourceValuesInOrder).toStrictEqual([
+      // Exercise the resource-literal interpolation syntax as data.
+      // oxlint-disable-next-line no-template-curly-in-string
       { env: "DISCORD_CHANNEL", literal: "mt-${user}-${session}" },
       { env: "STATIC_HANDLE", literal: "stable" },
     ]);

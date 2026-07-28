@@ -13,7 +13,7 @@ export function openCodexThread(runtime: Runtime, targetPath: string): void {
   }
 
   const result = runtime.exec(opener.command, opener.args, { allowFailure: true });
-  if (result.exitCode !== 0 || result.timedOut) {
+  if (result.exitCode !== 0 || result.timedOut === true) {
     logger.warning(`Could not open Codex thread: ${formatOpenFailure(result)}`);
     return;
   }
@@ -54,7 +54,7 @@ function formatOpenFailure(result: {
   exitCode: number;
   timedOut?: boolean;
 }): string {
-  if (result.timedOut) {
+  if (result.timedOut === true) {
     return "timed out";
   }
 

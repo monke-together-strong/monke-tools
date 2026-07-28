@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { parse } from "yaml";
+import type * as z from "zod";
 
 import { runCli, runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
@@ -23,7 +24,7 @@ const tempDirectories: string[] = [];
 afterEach(() => {
   while (tempDirectories.length > 0) {
     const directory = tempDirectories.pop();
-    if (directory) {
+    if (directory !== undefined && directory !== "") {
       rmSync(directory, { force: true, recursive: true });
     }
   }
@@ -144,7 +145,7 @@ export function installFakeGh(
       const issueJson = JSON.stringify({
         body: issue.body,
         comments: (issue.comments ?? []).map((body) => ({ body })),
-        number: Number.parseInt(issueNumber, 10),
+        number: Math.trunc(Number(issueNumber)),
         title: issue.title,
       });
       return `    ${issueNumber}) printf '%s\\n' ${shellQuote(issueJson)}; exit 0 ;;`;
@@ -308,12 +309,22 @@ export function withPlatform<T>(platform: NodeJS.Platform, callback: () => T): T
   }
 }
 
-export function readSingleYamlFile(directoryPath: string): unknown {
+export function readSingleYamlFile<T extends z.ZodType>(
+  directoryPath: string,
+  schema: T,
+): z.output<T>;
+export function readSingleYamlFile(directoryPath: string): unknown;
+export function readSingleYamlFile(directoryPath: string, schema?: z.ZodType): unknown {
   const entries = readdirSync(directoryPath).filter((entry) => entry.endsWith(".yml"));
   if (entries.length !== 1) {
     throw new Error(`Expected exactly one yaml file in ${directoryPath}, found ${entries.length}`);
   }
-  return parse(readFileSync(path.join(directoryPath, entries[0]!), "utf-8"));
+  const [entry] = entries;
+  if (entry === undefined) {
+    throw new Error(`Expected one yaml file in ${directoryPath}`);
+  }
+  const value: unknown = parse(readFileSync(path.join(directoryPath, entry), "utf-8"));
+  return schema ? schema.parse(value) : value;
 }
 
 function writeExecutable(targetPath: string, contents: string): void {

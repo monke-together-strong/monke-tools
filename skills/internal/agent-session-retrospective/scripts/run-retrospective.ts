@@ -25,10 +25,10 @@ function parseFlags(argv: string[]): Flags {
   const flags: Flags = {};
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
-    if (token?.startsWith("--")) {
+    if (token?.startsWith("--") === true) {
       const key = token.slice(2);
       const next = argv[i + 1];
-      if (next && !next.startsWith("--")) {
+      if (next !== undefined && next !== "" && !next.startsWith("--")) {
         flags[key] = next;
         i += 1;
       } else {
@@ -44,7 +44,7 @@ function defaultRunTs(): string {
 }
 
 function parseDateMs(value: string | undefined): number | undefined {
-  if (!value) {
+  if (value === undefined || value === "") {
     return undefined;
   }
   const parsed = Date.parse(value);
@@ -87,7 +87,7 @@ function main(): void {
 
   if (command === "commit") {
     const runTs = flags["run-ts"];
-    if (!runTs) {
+    if (runTs === undefined || runTs === "") {
       throw new Error("commit requires --run-ts");
     }
     const result = withRetroLock(root, () =>
@@ -104,7 +104,7 @@ function main(): void {
 
   if (command === "pr-collect") {
     const runTs = flags["run-ts"];
-    if (!runTs) {
+    if (runTs === undefined || runTs === "") {
       throw new Error("pr-collect requires --run-ts");
     }
     const result = withRetroLock(root, () =>
@@ -120,7 +120,7 @@ function main(): void {
 
   if (command === "pr-aggregate") {
     const runTs = flags["run-ts"];
-    if (!runTs) {
+    if (runTs === undefined || runTs === "") {
       throw new Error("pr-aggregate requires --run-ts");
     }
     const result = withRetroLock(root, () =>

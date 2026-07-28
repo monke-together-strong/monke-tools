@@ -47,7 +47,9 @@ export interface AvailableSkillGroup {
 export type GroupedSkillOptions = Record<string, p.Option<string>[]>;
 
 interface ImportSkillsDependencies {
-  selectSkills?: (availableSkillGroups: readonly AvailableSkillGroup[]) => Promise<string[]>;
+  selectSkills?: (
+    availableSkillGroups: readonly AvailableSkillGroup[],
+  ) => Promise<string[]> | string[];
   runInstallCommand?: (repoRoot: string) => void;
   writeMessage?: (message: string) => void;
 }
@@ -207,7 +209,7 @@ export function parseAvailableSkillGroups(output: string): AvailableSkillGroup[]
     }
 
     const skillName = parseSkillRow(line);
-    if (skillName) {
+    if (skillName !== null && skillName !== "") {
       if (seenNames.has(skillName)) {
         continue;
       }
@@ -218,7 +220,7 @@ export function parseAvailableSkillGroups(output: string): AvailableSkillGroup[]
     }
 
     const groupName = parseGroupHeader(line);
-    if (groupName) {
+    if (groupName !== null && groupName !== "") {
       currentGroupName = groupName;
       continue;
     }
@@ -605,8 +607,12 @@ function parseSecurityRiskAssessment(output: string): SecurityRiskAssessment | n
   const rows: SecurityRiskRow[] = [];
   let detailsUrl: string | null = null;
 
-  for (let index = startIndex + 1; index < strippedLines.length; index++) {
-    const line = cleanSecurityRiskAssessmentLine(strippedLines[index]!);
+  for (let index = startIndex + 1; index < strippedLines.length; index += 1) {
+    const rawLine = strippedLines[index];
+    if (rawLine === undefined) {
+      continue;
+    }
+    const line = cleanSecurityRiskAssessmentLine(rawLine);
     if (
       line.includes("Installation complete") ||
       line.includes("Installed ") ||
@@ -630,7 +636,7 @@ function parseSecurityRiskAssessment(output: string): SecurityRiskAssessment | n
     }
   }
 
-  if (rows.length === 0 && !detailsUrl) {
+  if (rows.length === 0 && (detailsUrl === null || detailsUrl === "")) {
     return null;
   }
 
@@ -674,7 +680,7 @@ export async function runImportSkills(
     const securityAssessment = extractSecurityRiskAssessment(
       `${installOutput.stdout}\n${installOutput.stderr}`,
     );
-    if (securityAssessment) {
+    if (securityAssessment !== null && securityAssessment !== "") {
       writeMessage(securityAssessment);
     }
 
@@ -849,7 +855,7 @@ function renderSecurityRiskAssessment(assessment: SecurityRiskAssessment): strin
     ),
   ];
 
-  if (assessment.detailsUrl) {
+  if (assessment.detailsUrl !== null && assessment.detailsUrl !== "") {
     bodyLines.push("", `${pc.dim("Details:")} ${pc.dim(assessment.detailsUrl)}`);
   }
 
@@ -860,11 +866,19 @@ function parseSecurityRiskRow(line: string): SecurityRiskRow | null {
   const wideParts = line.split(/\s{2,}/u).filter(Boolean);
   if (wideParts.length >= 4) {
     const [skillName, gen, socket, snyk] = wideParts;
+    if (
+      skillName === undefined ||
+      gen === undefined ||
+      socket === undefined ||
+      snyk === undefined
+    ) {
+      return null;
+    }
     return {
-      gen: gen!,
-      skillName: skillName!,
-      snyk: snyk!,
-      socket: socket!,
+      gen,
+      skillName,
+      snyk,
+      socket,
     };
   }
 
@@ -1004,23 +1018,28 @@ async function groupedSkillMultiselect(options: {
   maxItems: number;
   required: boolean;
 }): Promise<string[] | symbol> {
-  return new GroupMultiSelectPrompt<p.Option<string>>({
+  const result: unknown = await new GroupMultiSelectPrompt<p.Option<string>>({
     cursorAt: options.cursorAt,
     options: options.options,
     render() {
+      const rawValue: unknown = this.value;
+      const selectedValues = Array.isArray(rawValue)
+        ? rawValue.filter((value): value is string => typeof value === "string")
+        : [];
       const title = `${pc.gray("\u2502")}
 ${stepSymbol(this.state)}  ${options.message}
 `;
 
       switch (this.state) {
-        case "submit":
+        case "submit": {
           return `${title}${pc.gray("\u2502")}  ${this.options
-            .filter((option) => this.value.includes(option.value))
+            .filter((option) => selectedValues.includes(option.value))
             .map((option) => renderGroupedPromptOption(option, "submitted", this.options))
             .join(pc.dim(", "))}`;
+        }
         case "cancel": {
           const selected = this.options
-            .filter((option) => this.value.includes(option.value))
+            .filter((option) => selectedValues.includes(option.value))
             .map((option) => renderGroupedPromptOption(option, "cancelled", this.options))
             .join(pc.dim(", "));
           return `${title}${pc.gray("\u2502")}  ${
@@ -1028,7 +1047,8 @@ ${stepSymbol(this.state)}  ${options.message}
           }`;
         }
         case "error": {
-          const error = this.error
+          const rawError: unknown = this.error;
+          const error = (typeof rawError === "string" ? rawError : "")
             .split("\n")
             .map((line, index) =>
               index === 0 ? `${pc.yellow("\u2514")}  ${pc.yellow(line)}` : `   ${line}`,
@@ -1039,32 +1059,46 @@ ${stepSymbol(this.state)}  ${options.message}
             cursor: this.cursor,
             maxItems: options.maxItems,
             options: this.options,
-            selectedValues: this.value,
+            selectedValues,
           })}
 ${error}
 `;
         }
-        default:
+        case "active":
+        case "initial": {
           return `${title}${pc.cyan("\u2502")}  ${renderVisibleGroupedPromptOptions({
             bar: pc.cyan("\u2502"),
             cursor: this.cursor,
             maxItems: options.maxItems,
             options: this.options,
-            selectedValues: this.value,
+            selectedValues,
           })}
 ${pc.cyan("\u2514")}
 `;
+        }
+        default: {
+          throw new MonkeError("Unsupported grouped prompt state");
+        }
       }
     },
     required: options.required,
     selectableGroups: false,
     validate(value) {
-      if (this.required && value.length === 0) {
+      const rawValue: unknown = value;
+      if (this.required === true && Array.isArray(rawValue) && rawValue.length === 0) {
         return `Please select at least one skill.
 ${pc.reset(pc.dim(`Press ${pc.gray(pc.bgWhite(pc.inverse(" space ")))} to select, ${pc.gray(pc.bgWhite(pc.inverse(" enter ")))} to submit`))}`;
       }
     },
-  }).prompt() as Promise<string[] | symbol>;
+  }).prompt();
+
+  if (typeof result === "symbol") {
+    return result;
+  }
+  if (Array.isArray(result) && result.every((value) => typeof value === "string")) {
+    return result;
+  }
+  throw new MonkeError("Grouped Skill selection returned an invalid value");
 }
 
 type GroupedPromptOption = p.Option<string> & { group: string | boolean };
@@ -1112,7 +1146,7 @@ function getVisibleGroupedPromptOptions(options: {
   maxItems: number;
 }): (GroupedPromptOption & { index: number })[] {
   const terminalRows =
-    process.stdout.rows && process.stdout.rows > 0 ? process.stdout.rows - 4 : 10;
+    process.stdout.rows !== undefined && process.stdout.rows > 0 ? process.stdout.rows - 4 : 10;
   const maxItems = Math.max(5, Math.min(options.maxItems, terminalRows));
   const indexedOptions = options.options.map((option, index) => ({ ...option, index }));
   let start = Math.max(
@@ -1123,7 +1157,7 @@ function getVisibleGroupedPromptOptions(options: {
   const cursorOption = options.options[options.cursor];
   const cursorGroupName = typeof cursorOption?.group === "string" ? cursorOption.group : null;
 
-  if (cursorGroupName) {
+  if (cursorGroupName !== null && cursorGroupName !== "") {
     const groupHeaderIndex = options.options.findIndex(
       (option) => option.group === true && option.value === cursorGroupName,
     );
@@ -1139,9 +1173,10 @@ function getVisibleGroupedPromptOptions(options: {
 
   const visible = indexedOptions.slice(start, end);
   const hasCurrentGroupHeader =
-    !cursorGroupName ||
+    cursorGroupName === null ||
+    cursorGroupName === "" ||
     visible.some((option) => option.group === true && option.value === cursorGroupName);
-  if (cursorGroupName && !hasCurrentGroupHeader) {
+  if (cursorGroupName !== null && cursorGroupName !== "" && !hasCurrentGroupHeader) {
     visible.unshift({
       group: true,
       index: -1,
@@ -1175,7 +1210,7 @@ function renderGroupedPromptOption(
   state: GroupedPromptOptionState,
   allOptions: readonly GroupedPromptOption[],
 ): string {
-  const label = option.label ?? String(option.value);
+  const label = option.label ?? option.value;
   if (option.group === true) {
     return pc.dim(label);
   }
@@ -1203,6 +1238,9 @@ function renderGroupedPromptOption(
     }
     case "inactive": {
       return `${branch}${pc.dim("\u25FB")} ${pc.dim(label)}`;
+    }
+    default: {
+      throw new MonkeError("Unsupported grouped prompt option state");
     }
   }
 }
@@ -1246,7 +1284,7 @@ export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeSto
   assertUniqueImportedSkillOwners({ recipes, version: 2 });
 
   return {
-    recipes: recipes.sort((left, right) => {
+    recipes: recipes.toSorted((left, right) => {
       const sourceOrder = left.source.localeCompare(right.source);
       if (sourceOrder !== 0) {
         return sourceOrder;
@@ -1304,7 +1342,7 @@ function assertUniqueImportedSkillOwners(store: SkillImportRecipeStore): void {
     for (const skill of recipe.skills) {
       const ownershipKey = `${skill.kind}:${skill.slug}`;
       const existingOwner = owners.get(ownershipKey);
-      if (existingOwner) {
+      if (existingOwner !== undefined) {
         throw new MonkeError(
           `Imported ${skill.kind} slug ${skill.slug} is owned by both ${existingOwner} and ${recipe.source}`,
         );
@@ -1385,8 +1423,11 @@ function mapSelectedSkillsToImportedSlugsFromSet(
   }
 
   if (unmatchedSelectors.length === 1 && remainingSlugs.size === 1) {
-    const selector = unmatchedSelectors[0]!;
-    const slug = [...remainingSlugs][0]!;
+    const [selector] = unmatchedSelectors;
+    const [slug] = remainingSlugs;
+    if (selector === undefined || slug === undefined) {
+      throw new MonkeError("Expected one unmatched selector and one remaining staged slug");
+    }
     mappings.push({
       selector,
       slug,
@@ -1416,33 +1457,38 @@ export function resolveSkillSelectorSlugMappings(
     throw new MonkeError("At least one Skill import selector must be selected");
   }
 
-  return options.selectors.map((selector) => {
-    const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-selector-"));
-    try {
-      runSkillsCaptured(
-        buildSkillsInstallArgs({
-          acceptOpenClawRisks: options.acceptOpenClawRisks,
-          selectors: [selector],
-          source: options.source,
-        }),
-        stagingDirectory,
+  return options.selectors.map((selector) => resolveSkillSelectorSlugMapping(options, selector));
+}
+
+function resolveSkillSelectorSlugMapping(
+  options: ResolveSkillSelectorSlugMappingsOptions,
+  selector: string,
+): StagedSkillSelection {
+  const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-selector-"));
+  try {
+    runSkillsCaptured(
+      buildSkillsInstallArgs({
+        acceptOpenClawRisks: options.acceptOpenClawRisks,
+        selectors: [selector],
+        source: options.source,
+      }),
+      stagingDirectory,
+    );
+
+    const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
+    if (stagedSlugs.length !== 1) {
+      throw new MonkeError(
+        `Expected selector ${selector} from ${options.source} to stage exactly one Skill, but staged ${stagedSlugs.join(", ")}`,
       );
-
-      const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
-      if (stagedSlugs.length !== 1) {
-        throw new MonkeError(
-          `Expected selector ${selector} from ${options.source} to stage exactly one Skill, but staged ${stagedSlugs.join(", ")}`,
-        );
-      }
-
-      return {
-        selector,
-        slug: stagedSlugs[0]!,
-      };
-    } finally {
-      rmSync(stagingDirectory, { force: true, recursive: true });
     }
-  });
+    const [slug] = stagedSlugs;
+    if (slug === undefined) {
+      throw new MonkeError(`Expected selector ${selector} to resolve to one staged Skill`);
+    }
+    return { selector, slug };
+  } finally {
+    rmSync(stagingDirectory, { force: true, recursive: true });
+  }
 }
 
 /** Ensures isolated selector installs match the batched staged install result. */
@@ -1468,12 +1514,12 @@ export function assertSkillSelectorSlugMappingsMatchStagedSlugs(
 }
 
 function parseSkillRow(line: string): string | null {
-  const match = /^\s*(?:\u2502)?( +)(\S.*)$/u.exec(line);
-  if (!match) {
+  const match = /^\s*(?:\u2502)?(?<indentation> +)(?<rawName>\S.*)$/u.exec(line);
+  if (!match?.groups) {
     return null;
   }
 
-  const [, indentation = "", rawName = ""] = match;
+  const { indentation = "", rawName = "" } = match.groups;
   if (indentation.length !== 4) {
     return null;
   }

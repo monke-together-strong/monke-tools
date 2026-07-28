@@ -14,7 +14,9 @@ interface ConfigurableCliParser {
 export function configureCliParser<T extends ConfigurableCliParser>(program: T): T {
   program.showSuggestionAfterError(false);
   program.configureOutput({
-    writeErr: () => {},
+    writeErr: () => {
+      // The executable boundary reports the normalized error once.
+    },
   });
   program.exitOverride();
   return program;

@@ -7,9 +7,11 @@ describe("shared Oxlint config", () => {
   test("keeps broadly valid syntax while preserving useful checks", () => {
     expect(mtsLint.rules).toMatchObject({
       "no-use-before-define": ["error", { functions: false }],
+      "prefer-regex-literals": "off",
       "promise/avoid-new": "off",
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
+      "typescript/promise-function-async": "off",
     });
     expect(mtsLint.rules).not.toHaveProperty("no-bitwise");
   });

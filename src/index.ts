@@ -30,7 +30,7 @@ function requireSelectedCommand(program: Command, argv: string[]): void {
   }
 
   const selectedCommand = program.commands.find((command) => command.name() === argv[0]);
-  if (selectedCommand?.commands.length && argv.length === 1) {
+  if (selectedCommand !== undefined && selectedCommand.commands.length > 0 && argv.length === 1) {
     selectedCommand.error("error: missing command");
   }
 }
@@ -47,7 +47,7 @@ function createProgram(
   const program = new Command()
     .name("mt")
     .helpOption(false)
-    .addHelpCommand(false)
+    .helpCommand(false)
     .allowExcessArguments(false);
 
   configureCliParser(program);

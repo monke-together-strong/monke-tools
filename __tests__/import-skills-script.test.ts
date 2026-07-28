@@ -460,7 +460,7 @@ describe("skill importing", () => {
       process.chdir(sandbox);
 
       await runImportSkills(["owner/repo"], {
-        async selectSkills(availableSkillGroups) {
+        selectSkills(availableSkillGroups) {
           expect(availableSkillGroups).toStrictEqual([
             {
               name: "Engineering",
@@ -529,7 +529,7 @@ describe("skill importing", () => {
       process.chdir(sandbox);
 
       await runImportSkills(["owner/repo", "--ref"], {
-        async selectSkills() {
+        selectSkills() {
           return ["alpha"];
         },
         writeMessage() {},
@@ -590,7 +590,7 @@ name: outside-entry
 
       await expect(
         runImportSkills(["owner/repo", "--ref"], {
-          async selectSkills() {
+          selectSkills() {
             return ["alpha"];
           },
           writeMessage() {},
@@ -624,7 +624,7 @@ name: outside-entry
       process.chdir(sandbox);
 
       await runImportSkills(["owner/repo", "--ref"], {
-        async selectSkills() {
+        selectSkills() {
           return ["alpha"];
         },
         writeMessage() {},
@@ -669,7 +669,7 @@ name: outside-entry
       process.chdir(sandbox);
 
       await runImportSkills(["owner/repo", "--ref"], {
-        async selectSkills() {
+        selectSkills() {
           return ["alpha"];
         },
         writeMessage() {},
@@ -680,7 +680,7 @@ name: outside-entry
       );
 
       await runImportSkills(["owner/repo"], {
-        async selectSkills() {
+        selectSkills() {
           return ["alpha"];
         },
         writeMessage() {},
@@ -727,7 +727,7 @@ name: outside-entry
 
       await expect(
         runImportSkills(["owner/repo"], {
-          async selectSkills() {
+          selectSkills() {
             return ["alpha"];
           },
           writeMessage() {},
@@ -777,7 +777,7 @@ name: outside-entry
 
       await expect(
         runImportSkills(["owner/repo", "--ref"], {
-          async selectSkills() {
+          selectSkills() {
             return ["alpha", "bravo"];
           },
           writeMessage() {},
@@ -808,13 +808,13 @@ name: outside-entry
       process.chdir(sandbox);
 
       await runImportSkills(["owner/repo"], {
-        async selectSkills() {
+        selectSkills() {
           return ["alpha"];
         },
         writeMessage() {},
       });
       await runImportSkills(["owner/repo"], {
-        async selectSkills() {
+        selectSkills() {
           return ["bravo"];
         },
         writeMessage() {},
@@ -866,7 +866,7 @@ name: outside-entry
       process.chdir(sandbox);
 
       await runImportSkills(["owner/repo"], {
-        async selectSkills() {
+        selectSkills() {
           return ["alpha", "bravo"];
         },
         writeMessage() {},
@@ -924,7 +924,7 @@ name: outside-entry
       process.chdir(sandbox);
 
       await runImportSkills(["openclaw/agent-skills", "--accept-openclaw-risks"], {
-        async selectSkills() {
+        selectSkills() {
           return ["autoreview"];
         },
         writeMessage() {},
@@ -986,7 +986,7 @@ name: outside-entry
               "\n# Alpha\n\nReference body.\n",
             );
           },
-          async selectSkills() {
+          selectSkills() {
             return ["alpha"];
           },
           writeMessage(message) {
@@ -1038,7 +1038,7 @@ name: outside-entry
 
       await expect(
         runImportSkills(["owner/second"], {
-          async selectSkills() {
+          selectSkills() {
             return ["alpha"];
           },
           writeMessage() {},
@@ -1085,7 +1085,7 @@ name: outside-entry
           installCalls.push(repoRoot);
           expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("new alpha");
         },
-        async selectSkills() {
+        selectSkills() {
           return ["alpha"];
         },
         writeMessage() {},
@@ -2170,7 +2170,7 @@ ${Object.entries(options.stagedSlugBySelector ?? {})
   esac
   mkdir -p ".agents/skills/$staged_slug"
 ${
-  options.stageReferenceFixture
+  options.stageReferenceFixture === true
     ? `  cat > ".agents/skills/$staged_slug/SKILL.md" <<'SKILL'
 ---
 name: alpha
@@ -2186,21 +2186,22 @@ SKILL
   mkdir -p ".agents/skills/$staged_slug/references"
   printf 'supporting details\\n' > ".agents/skills/$staged_slug/references/details.md"
 ${
-  options.stageSupportingSymlink
+  options.stageSupportingSymlink === true
     ? `  ln -s 'details.md' ".agents/skills/$staged_slug/references/details-link.md"`
     : ""
 }`
     : `  printf 'new %s' "$staged_slug" > ".agents/skills/$staged_slug/SKILL.md"`
 }
 ${
-  options.mainCollisionSelector
+  options.mainCollisionSelector !== undefined && options.mainCollisionSelector !== ""
     ? `  if [ "$skill" = "${options.mainCollisionSelector}" ]; then
     printf 'upstream collision\\n' > ".agents/skills/$staged_slug/MAIN.md"
   fi`
     : ""
 }
 ${
-  options.stagedSkillEntrySymlinkTarget
+  options.stagedSkillEntrySymlinkTarget !== undefined &&
+  options.stagedSkillEntrySymlinkTarget !== ""
     ? `  rm ".agents/skills/$staged_slug/SKILL.md"
   ln -s '${options.stagedSkillEntrySymlinkTarget}' ".agents/skills/$staged_slug/SKILL.md"`
     : ""

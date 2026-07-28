@@ -83,7 +83,7 @@ export function runSkillsConfigure(runtime: Runtime): void {
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
   const sourceCheckout = config.installedSourceCheckout;
-  if (!sourceCheckout) {
+  if (sourceCheckout === undefined || sourceCheckout === "") {
     throw new MonkeError(
       "Installed source checkout is not configured; run bun run install:local from the monke-tools checkout first",
     );
@@ -237,7 +237,7 @@ function promptForSkillInstallPreference(
 
     const previousCustomPath = previousCustom?.path;
     const customAnswer = runtime.readLine(
-      previousCustomPath
+      previousCustomPath !== undefined && previousCustomPath !== ""
         ? `Custom Agent skill root [${previousCustomPath}]: `
         : "Custom Agent skill root: ",
     );
@@ -255,7 +255,7 @@ function promptForSkillInstallPreference(
 }
 
 function formatTargetPrompt(previousPreference: SkillInstallPreference | null): string {
-  const selectedKinds = new Set(previousPreference?.targets.map((target) => target.kind) ?? []);
+  const selectedKinds = new Set(previousPreference?.targets.map((target) => target.kind));
   const lines = ["Skill install targets:"];
 
   for (const option of TARGET_OPTIONS) {
@@ -276,7 +276,11 @@ function resolveCustomSkillRootAnswer(options: {
   previousPath: string | undefined;
   homeDirectory: string;
 }): string {
-  if (options.answer.trim() === "" && options.previousPath) {
+  if (
+    options.answer.trim() === "" &&
+    options.previousPath !== undefined &&
+    options.previousPath !== ""
+  ) {
     return options.previousPath;
   }
 
@@ -424,7 +428,7 @@ function removeManagedTarget(target: ResolvedSkillInstallTarget): void {
 
 function removeManagedNamespace(namespacePath: string): void {
   const namespaceStat = lstatIfExists(namespacePath);
-  if (!namespaceStat?.isSymbolicLink()) {
+  if (namespaceStat?.isSymbolicLink() !== true) {
     return;
   }
 
@@ -509,7 +513,7 @@ function assertFlatLinksCanBeManaged(
   previousManifest: FlatSkillManifest | null,
 ): void {
   const previousLinks = new Map(
-    previousManifest?.links.map((link) => [link.name, link.sourcePath]) ?? [],
+    previousManifest?.links.map((link) => [link.name, link.sourcePath]),
   );
 
   for (const link of links) {
@@ -534,7 +538,7 @@ function assertFlatSupportingLinksCanBeManaged(
   previousManifest: FlatSkillManifest | null,
 ): void {
   const previousLinks = new Map(
-    previousManifest?.supportingLinks?.map((link) => [link.targetPath, link.sourcePath]) ?? [],
+    previousManifest?.supportingLinks?.map((link) => [link.targetPath, link.sourcePath]),
   );
 
   for (const link of links) {
@@ -559,14 +563,14 @@ function assertFlatSupportingLinksCanBeManaged(
 
 function removeFlatManagedLinks(target: ResolvedSkillInstallTarget): void {
   const manifest = readFlatManifest(target);
-  if (!manifest) {
+  if (manifest === null) {
     return;
   }
 
   for (const link of manifest.links) {
     const linkPath = path.join(target.agentSkillRoot, link.name);
     const linkStat = lstatIfExists(linkPath);
-    if (!linkStat?.isSymbolicLink()) {
+    if (linkStat?.isSymbolicLink() !== true) {
       continue;
     }
     if (readlinkSync(linkPath) === link.sourcePath) {
@@ -575,7 +579,7 @@ function removeFlatManagedLinks(target: ResolvedSkillInstallTarget): void {
   }
   for (const link of manifest.supportingLinks ?? []) {
     const linkStat = lstatIfExists(link.targetPath);
-    if (linkStat?.isSymbolicLink() && readlinkSync(link.targetPath) === link.sourcePath) {
+    if (linkStat?.isSymbolicLink() === true && readlinkSync(link.targetPath) === link.sourcePath) {
       rmSync(link.targetPath);
     }
   }

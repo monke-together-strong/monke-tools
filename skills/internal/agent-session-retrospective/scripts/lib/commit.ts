@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 
+import { isNonEmptyString } from "./normalize.ts";
 import {
   cleanRunDir,
   listBundleHashes,
@@ -60,8 +61,8 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle): Va
   for (const episode of findings.frictionEpisodes ?? []) {
     const refs = refsByPrimarySession.get(episode.sessionId);
     const citedTurnRefs = episode.citedTurnRefs ?? [];
-    const refsValid = refs && citedTurnRefs.every((ref) => refs.has(ref));
-    if (!episode.id || seenIds.has(episode.id) || !refsValid) {
+    const refsValid = refs !== undefined && citedTurnRefs.every((ref) => refs.has(ref));
+    if (!isNonEmptyString(episode.id) || seenIds.has(episode.id) || !refsValid) {
       droppedEpisodes += 1;
       continue;
     }
@@ -139,7 +140,7 @@ export function runCommit(options: RunCommitOptions): CommitResult {
   }
 
   const prAnalysis = readPrAnalysis(root, options.runTs);
-  if (!prAnalysis?.trim()) {
+  if (!isNonEmptyString(prAnalysis?.trim())) {
     throw new Error(`commit requires runs/${options.runTs}/pr-analysis.md from the required PR analysis lane`);
   }
   const prAnalysisValidation = validatePrAnalysis(prAnalysis, readPrManifest(root, options.runTs));
@@ -189,7 +190,7 @@ export function runCommit(options: RunCommitOptions): CommitResult {
   }
 
   const synthesis =
-    options.synthesisPath && existsSync(options.synthesisPath)
+    isNonEmptyString(options.synthesisPath) && existsSync(options.synthesisPath)
       ? readFileSync(options.synthesisPath, "utf-8").trim()
       : "";
   const artifacts = buildReportArtifacts(options.runTs, synthesis, slices, {
@@ -255,8 +256,7 @@ export function buildReportArtifacts(
   slices: RepoSlice[],
   context: ReportContext = {},
 ): { report: string; sessionSources: string; prSources: string } {
-  const out: string[] = [];
-  out.push(
+  const out: string[] = [
     `# Agent session retrospective — ${runTs}`,
     "",
     formatWindowLine(context.window, runTs),
@@ -269,9 +269,9 @@ export function buildReportArtifacts(
     "",
     "## PR Repeated Corrective Patterns",
     "",
-  );
+  ];
   const prAnalysis = context.prAnalysis?.trim();
-  if (prAnalysis) {
+  if (isNonEmptyString(prAnalysis)) {
     out.push(extractPrRepeatedPatterns(prAnalysis), "");
   } else {
     out.push(
@@ -291,8 +291,7 @@ function buildSessionSources(
   slices: RepoSlice[],
   window: RetrospectiveWindow | null | undefined,
 ): string {
-  const out: string[] = [];
-  out.push(
+  const out: string[] = [
     `# Session sources — ${runTs}`,
     "",
     formatWindowLine(window, runTs),
@@ -301,7 +300,7 @@ function buildSessionSources(
     "",
     "## Per-repo proposals",
     "",
-  );
+  ];
   const reposWithSignal = slices.filter(
     (slice) => slice.validated.fixes.length > 0 || slice.validated.repeatedAsks.length > 0,
   );
@@ -355,17 +354,16 @@ function buildSessionSources(
 }
 
 function buildPrSources(runTs: string, prAnalysis: string | null | undefined, context: ReportContext): string {
-  const out: string[] = [];
-  out.push(
+  const out: string[] = [
     `# PR sources — ${runTs}`,
     "",
     formatWindowLine(context.window, runTs),
     "",
     `Main report: [${runTs}-retrospective.md](${runTs}-retrospective.md)`,
     "",
-  );
+  ];
 
-  if (prAnalysis?.trim()) {
+  if (isNonEmptyString(prAnalysis?.trim())) {
     out.push(prAnalysis.trim(), "");
     const warnings = context.prAnalysisWarnings ?? [];
     if (warnings.length > 0) {
@@ -395,7 +393,7 @@ export function validatePrAnalysis(
   manifest?: PrAnalysisManifest | null,
 ): { warnings: string[] } {
   const text = content?.trim();
-  if (!text) {
+  if (!isNonEmptyString(text)) {
     return { warnings: [] };
   }
 
@@ -430,7 +428,7 @@ function validateManifestBackedPrAnalysis(
   for (const item of manifest.workItems) {
     const section = findPrAnalysisSection(text, item);
     const gap = text.includes(`\`${item.repo}#${item.number}\``);
-    if (!section) {
+    if (!isNonEmptyString(section)) {
       if (!gap) {
         warnings.push(`Expected PR \`${item.repo}#${item.number}\` is missing from PR analysis.`);
       }
@@ -443,10 +441,13 @@ function validateManifestBackedPrAnalysis(
       }
     }
 
-    if (item.openingSnapshot.ref && !containsRef(section, item.openingSnapshot.ref)) {
+    if (
+      isNonEmptyString(item.openingSnapshot.ref) &&
+      !containsRef(section, item.openingSnapshot.ref)
+    ) {
       warnings.push(`PR \`${item.repo}#${item.number}\` omits known opening ref ${item.openingSnapshot.ref}.`);
     }
-    if (item.finalHeadSha && !containsRef(section, item.finalHeadSha)) {
+    if (isNonEmptyString(item.finalHeadSha) && !containsRef(section, item.finalHeadSha)) {
       warnings.push(`PR \`${item.repo}#${item.number}\` omits known final head ${item.finalHeadSha}.`);
     }
 
@@ -495,9 +496,9 @@ function containsRef(text: string, ref: string): boolean {
 
 function citedShas(text: string): string[] {
   const out = new Set<string>();
-  for (const match of text.matchAll(/\b([0-9a-f]{7,40})\b/giu)) {
-    if (match[1]) {
-      out.add(match[1]);
+  for (const match of text.matchAll(/\b(?<sha>[0-9a-f]{7,40})\b/giu)) {
+    if (isNonEmptyString(match.groups?.sha)) {
+      out.add(match.groups.sha);
     }
   }
   return [...out];
@@ -516,7 +517,7 @@ function sourceFileName(runTs: string, kind: "session" | "pr"): string {
 
 function extractPrRepeatedPatterns(prAnalysis: string): string {
   const section = extractMarkdownSection(prAnalysis, "Recurring Corrective Patterns");
-  return section || "_No recurring corrective-change patterns were extracted from per-PR analyses._";
+  return section ?? "_No recurring corrective-change patterns were extracted from per-PR analyses._";
 }
 
 function extractMarkdownSection(markdown: string, heading: string): string | null {
@@ -537,13 +538,13 @@ export function parseFixHeader(body: string): { target: string; confidence: stri
   let confidence = "unspecified";
   const kept: string[] = [];
   for (const line of body.trim().split("\n")) {
-    const targetMatch = /^\s*Target:\s*(.+)$/iu.exec(line);
-    const confidenceMatch = /^\s*Confidence:\s*(.+)$/iu.exec(line);
-    if (targetMatch?.[1]) {
-      target = targetMatch[1].trim();
-    } else if (confidenceMatch?.[1]) {
-      confidence = confidenceMatch[1].trim();
-    } else if (line.trim()) {
+    const targetMatch = /^\s*Target:\s*(?<target>.+)$/iu.exec(line);
+    const confidenceMatch = /^\s*Confidence:\s*(?<confidence>.+)$/iu.exec(line);
+    if (isNonEmptyString(targetMatch?.groups?.target)) {
+      target = targetMatch.groups.target.trim();
+    } else if (isNonEmptyString(confidenceMatch?.groups?.confidence)) {
+      confidence = confidenceMatch.groups.confidence.trim();
+    } else if (line.trim() !== "") {
       kept.push(line.trim());
     }
   }
@@ -568,7 +569,7 @@ function renderEvidence(episode: FrictionEpisode, bundle: RepoBundle): string[] 
 
 function renderTurn(turn: CanonicalTurn): string {
   if (turn.kind === "tool_call") {
-    const status = turn.error ? ` [${turn.error}]` : "";
+    const status = isNonEmptyString(turn.error) ? ` [${turn.error}]` : "";
     return `\`${turn.name}\` ${turn.inputSummary}${status}`;
   }
   return `**${turn.kind}:** ${firstLine(turn.text)}`;

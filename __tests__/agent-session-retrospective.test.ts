@@ -30,6 +30,7 @@ import type {
 } from "../skills/internal/agent-session-retrospective/scripts/lib/pr-analysis.ts";
 import {
   loadFrozenSession,
+  readBundle,
   saveFrozenSession,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/store.ts";
 import { summarizeOutput } from "../skills/internal/agent-session-retrospective/scripts/lib/normalize.ts";
@@ -549,7 +550,7 @@ describe("agent session retrospective", () => {
 
     test("drops episodes authored for a secondary session (friction is primary-only)", () => {
       const bundle = bundleWith(["t0"]);
-      const session = bundle.sessions[0];
+      const [session] = bundle.sessions;
       if (!session) {
         throw new Error("expected bundleWith to create one session");
       }
@@ -832,7 +833,9 @@ describe("agent session retrospective", () => {
           };
         }
         if (command === "gh" && args[0] === "pr" && args[1] === "list") {
-          expect(args.at(-1)).toBe("number,url,title,createdAt,mergedAt");
+          if (args.at(-1) !== "number,url,title,createdAt,mergedAt") {
+            throw new Error(`unexpected pr list fields: ${args.at(-1)}`);
+          }
           const search = args[args.indexOf("--search") + 1] ?? "";
           const byDay: Record<string, unknown[]> = {
             "merged:2026-05-21..2026-05-21": [
@@ -885,9 +888,12 @@ describe("agent session retrospective", () => {
             };
             return { status: 0, stderr: "", stdout: JSON.stringify(filesByNumber[number]) };
           }
-          expect(fields).toBe(
-            "number,url,title,createdAt,mergedAt,baseRefName,headRefName,headRefOid,mergeCommit,commits",
-          );
+          if (
+            fields !==
+            "number,url,title,createdAt,mergedAt,baseRefName,headRefName,headRefOid,mergeCommit,commits"
+          ) {
+            throw new Error(`unexpected pr view fields: ${fields}`);
+          }
           const detailsByNumber: Record<string, unknown> = {
             "10": {
               baseRefName: "main",
@@ -972,25 +978,32 @@ describe("agent session retrospective", () => {
       );
       expect(calls).toContain("gh pr view 7 --repo monke-together-strong/alpha --json files");
       expect(calls).toContain("gh pr diff 9 --repo monke-together-strong/alpha --patch");
-      const analyzedItem = manifest.workItems.find((item) => item.number === 7)!;
-      const missingRefItem = manifest.workItems.find((item) => item.number === 9)!;
-      const secondAnalyzedItem = manifest.workItems.find((item) => item.number === 10)!;
+      const analyzedItem = manifest.workItems.find((item) => item.number === 7);
+      const missingRefItem = manifest.workItems.find((item) => item.number === 9);
+      const secondAnalyzedItem = manifest.workItems.find((item) => item.number === 10);
+      if (
+        analyzedItem === undefined ||
+        missingRefItem === undefined ||
+        secondAnalyzedItem === undefined
+      ) {
+        throw new Error("expected work items for PRs 7, 9, and 10");
+      }
       expect(analyzedItem.openingSnapshot).toStrictEqual({
         confidence: "inferred",
         reason: "Latest PR commit whose commit date is at or before the PR creation time.",
         ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       });
-      expect(
-        JSON.parse(readFileSync(analyzedItem.workItemPath, "utf-8")).postOpeningDelta,
-      ).toMatchObject({
-        confidence: "lower",
-        source: "github-pr-diff-fallback",
+      expect(JSON.parse(readFileSync(analyzedItem.workItemPath, "utf-8"))).toMatchObject({
+        postOpeningDelta: {
+          confidence: "lower",
+          source: "github-pr-diff-fallback",
+        },
       });
-      expect(
-        JSON.parse(readFileSync(missingRefItem.workItemPath, "utf-8")).postOpeningDelta,
-      ).toMatchObject({
-        confidence: "lower",
-        source: "github-pr-diff-fallback",
+      expect(JSON.parse(readFileSync(missingRefItem.workItemPath, "utf-8"))).toMatchObject({
+        postOpeningDelta: {
+          confidence: "lower",
+          source: "github-pr-diff-fallback",
+        },
       });
       expect(secondAnalyzedItem.openingSnapshot).toStrictEqual({
         confidence: "inferred",
@@ -1235,10 +1248,10 @@ describe("agent session retrospective", () => {
       expect(result.skipped["duplicate-file"]).toBe(1);
       // The most-complete copy (long.jsonl, 5 turns) must be the one retained.
       const bundlePath = result.bundles[0]?.path;
-      if (!bundlePath) {
+      if (bundlePath === undefined || bundlePath === "") {
         throw new Error("expected one bundle to be written");
       }
-      const bundle = JSON.parse(readFileSync(bundlePath, "utf-8")) as RepoBundle;
+      const bundle = readBundle(path.join(dir, "store"), "ts", path.basename(bundlePath, ".json"));
       expect(bundle.sessions[0]?.turns).toHaveLength(5);
     });
   });

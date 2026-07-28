@@ -138,7 +138,7 @@ function navigateToSwingTarget(
     createLogger(runtime).info(`Moved Swing target to ${targetPath}`);
   }
   requestShellDirectory(runtime, targetPath);
-  if (options.codex) {
+  if (options.codex === true) {
     openCodexThread(runtime, targetPath);
   }
 }
@@ -233,16 +233,14 @@ function listBranchCommitTimes(runtime: Runtime, rootSourceRoot: string): Map<st
     return new Map();
   }
 
-  return new Map(
-    result.stdout
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => {
-        const [branch, seconds] = line.split("\t");
-        return [branch!, Number(seconds) * 1000];
-      }),
-  );
+  const activityByBranch = new Map<string, number>();
+  for (const line of result.stdout.trim().split("\n").filter(Boolean)) {
+    const [branch, seconds] = line.split("\t");
+    if (branch !== undefined && seconds !== undefined) {
+      activityByBranch.set(branch, Number(seconds) * 1000);
+    }
+  }
+  return activityByBranch;
 }
 
 function formatSwingPickerLabel(option: SwingPickerOption): string {
@@ -355,7 +353,7 @@ function resolveStoredTarget(
 
   const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, target.session);
   if (!existsSync(worktreePath)) {
-    if (options.createIfMissing) {
+    if (options.createIfMissing === true) {
       options.prepareCreate?.();
       spawnSessionFromSourceRootLocked(runtime, home, rootSourceRoot, target.session, {
         mode: "session-branch",
@@ -469,7 +467,7 @@ function resolveCurrentGithubRepo(
     : trimmed;
   const [owner, name] = nameWithOwner.split("/");
 
-  if (!owner || !name) {
+  if (owner === undefined || owner === "" || name === undefined || name === "") {
     throw new MonkeError(`Could not resolve current GitHub repo from gh output: ${trimmed}`);
   }
 
@@ -477,9 +475,9 @@ function resolveCurrentGithubRepo(
 }
 
 function parsePullRequestTarget(rawTarget: string): PullRequestSwingTarget | null {
-  const prMatch = /^pr:(\d+)$/u.exec(rawTarget);
-  if (prMatch) {
-    return { number: Number.parseInt(prMatch[1]!, 10) };
+  const prMatch = /^pr:(?<number>\d+)$/u.exec(rawTarget);
+  if (prMatch?.groups?.number !== undefined && prMatch.groups.number !== "") {
+    return { number: Math.trunc(Number(prMatch.groups.number)) };
   }
 
   try {
@@ -487,16 +485,17 @@ function parsePullRequestTarget(rawTarget: string): PullRequestSwingTarget | nul
     if (url.hostname !== "github.com") {
       return null;
     }
-    const match = /^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/u.exec(url.pathname);
-    return match
-      ? {
-          number: Number.parseInt(match[3]!, 10),
-          repo: {
-            name: match[2]!,
-            owner: match[1]!,
-          },
-        }
-      : null;
+    const match = /^\/(?<owner>[^/]+)\/(?<name>[^/]+)\/pull\/(?<number>\d+)\/?$/u.exec(
+      url.pathname,
+    );
+    const { name, number, owner } = match?.groups ?? {};
+    if (name === undefined || number === undefined || owner === undefined) {
+      return null;
+    }
+    return {
+      number: Math.trunc(Number(number)),
+      repo: { name, owner },
+    };
   } catch {
     return null;
   }
@@ -517,7 +516,7 @@ function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistory
     return { kind: "source" };
   }
 
-  if (!context.sessionName) {
+  if (context.sessionName === null || context.sessionName === "") {
     throw new MonkeError("Unable to infer the current Session for Previous Swing target history");
   }
 

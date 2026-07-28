@@ -8,9 +8,13 @@ const INPUT_SUMMARY_MAX = 200;
 const OUTPUT_HEAD_TAIL_MAX = 600;
 const PROSE_MAX = 4000;
 
+export function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value !== "";
+}
+
 /** One-line summary of a tool's input object or string. */
 export function summarizeInput(input: unknown): string {
-  if (input == null) {
+  if (input === null || input === undefined) {
     return "";
   }
   const text = typeof input === "string" ? input : safeStringify(input);
@@ -19,7 +23,7 @@ export function summarizeInput(input: unknown): string {
 
 /** Head + tail of tool output; the middle of long output is elided. */
 export function summarizeOutput(output: unknown): string | undefined {
-  if (output == null) {
+  if (output === null || output === undefined) {
     return undefined;
   }
   const text = typeof output === "string" ? output : safeStringify(output);

@@ -202,7 +202,7 @@ export function rewriteEnvFile(filePath: string, requests: Map<string, number>):
   writeFileSync(filePath, rewritten.join("\n"), "utf-8");
 }
 
-function listEnvFiles(root: string, relativeRoot: string = ""): string[] {
+function listEnvFiles(root: string, relativeRoot = ""): string[] {
   const absoluteRoot = path.join(root, relativeRoot);
   const results: string[] = [];
 
@@ -309,15 +309,15 @@ function parseAssignmentLine(line: string): ParsedAssignmentLine | null {
     return null;
   }
 
-  const match = /^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*)(.*)$/u.exec(line);
-  if (!match) {
+  const match =
+    /^(?<prefixStart>\s*(?:export\s+)?)(?<key>[A-Za-z_][A-Za-z0-9_]*)(?<separator>\s*=\s*)(?<remainder>.*)$/u.exec(
+      line,
+    );
+  if (!match?.groups) {
     return null;
   }
 
-  const prefixStart = match[1] ?? "";
-  const key = match[2] ?? "";
-  const separator = match[3] ?? "=";
-  const remainder = match[4] ?? "";
+  const { key = "", prefixStart = "", remainder = "", separator = "=" } = match.groups;
   const { value, comment } = splitValueAndComment(remainder);
   return {
     comment,
@@ -343,7 +343,7 @@ function splitValueAndComment(value: string): { value: string; comment: string }
 
     if (char === "#" && quote === null) {
       const previous = index === 0 ? "" : value[index - 1];
-      if (!previous || /\s/u.test(previous)) {
+      if (previous === undefined || previous === "" || /\s/u.test(previous)) {
         return {
           comment: value.slice(index),
           value: value.slice(0, index),
@@ -416,7 +416,7 @@ function replaceUrlPort(value: string, newPort: number, location: string): strin
     authorityEndCandidates.length > 0 ? Math.min(...authorityEndCandidates) : value.length;
   const authority = value.slice(authorityStart, authorityEnd);
   const lastAt = authority.lastIndexOf("@");
-  const hostPort = lastAt !== -1 ? authority.slice(lastAt + 1) : authority;
+  const hostPort = lastAt === -1 ? authority : authority.slice(lastAt + 1);
 
   let portStartInHostPort = -1;
   let currentPort = "";
@@ -428,7 +428,6 @@ function replaceUrlPort(value: string, newPort: number, location: string): strin
       );
     }
     portStartInHostPort = bracketIndex + 2;
-    currentPort = hostPort.slice(portStartInHostPort);
   } else {
     const colonIndex = hostPort.lastIndexOf(":");
     if (colonIndex === -1) {
@@ -437,14 +436,14 @@ function replaceUrlPort(value: string, newPort: number, location: string): strin
       );
     }
     portStartInHostPort = colonIndex + 1;
-    currentPort = hostPort.slice(portStartInHostPort);
   }
+  currentPort = hostPort.slice(portStartInHostPort);
 
   if (!/^\d+$/u.test(currentPort)) {
     throw new MonkeError(`Malformed explicit port at ${location}: ${describeRedactedValue(value)}`);
   }
 
-  const absolutePortStart = authorityStart + (lastAt !== -1 ? lastAt + 1 : 0) + portStartInHostPort;
+  const absolutePortStart = authorityStart + (lastAt === -1 ? 0 : lastAt + 1) + portStartInHostPort;
   const absolutePortEnd = absolutePortStart + currentPort.length;
   return `${value.slice(0, absolutePortStart)}${newPort}${value.slice(absolutePortEnd)}`;
 }
