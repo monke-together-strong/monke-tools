@@ -1,5 +1,6 @@
-import { describe, expect, test } from "vite-plus/test";
 import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import { loadResolvedGraph } from "../src/config.ts";
 import { createRuntime } from "../src/runtime.ts";
@@ -278,7 +279,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /resources.*must contain values or commands/u,
+      /resources.*must contain values or commands/u
     );
   });
 
@@ -299,7 +300,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /resources\.values.*must declare at least one value/u,
+      /resources\.values.*must declare at least one value/u
     );
   });
 
@@ -321,7 +322,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /resources\.values\.discord_channel/u,
+      /resources\.values\.discord_channel/u
     );
   });
 
@@ -343,7 +344,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /DISCORD_CHANNEL.*non-empty string/u,
+      /DISCORD_CHANNEL.*non-empty string/u
     );
   });
 
@@ -365,7 +366,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /unsupported placeholder.*session.*user/u,
+      /unsupported placeholder.*session.*user/u
     );
   });
 
@@ -388,7 +389,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /Map keys must be unique|duplicate key/iu,
+      /Map keys must be unique|duplicate key/iu
     );
   });
 });

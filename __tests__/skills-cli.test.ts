@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
+
 import { describe, expect, test } from "vite-plus/test";
 
 import { saveGlobalMonkeConfig, loadGlobalMonkeConfig } from "../src/global-config.ts";
@@ -16,7 +17,7 @@ describe("skills CLI", () => {
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: sourceCheckout,
@@ -46,10 +47,10 @@ describe("skills CLI", () => {
       targets: [{ kind: "codex" }, { kind: "custom", path: path.join(osHome, "team-skills") }],
     });
     expect(
-      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink(),
+      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink()
     ).toBeTruthy();
     expect(
-      lstatSync(path.join(osHome, "team-skills", "monke-tools")).isSymbolicLink(),
+      lstatSync(path.join(osHome, "team-skills", "monke-tools")).isSymbolicLink()
     ).toBeTruthy();
     expect(stdout).toContain("Skill install targets:");
     expect(stderr).toContain("Configured monke-tools skills");
@@ -64,7 +65,7 @@ describe("skills CLI", () => {
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: sourceCheckout,
@@ -82,7 +83,7 @@ describe("skills CLI", () => {
         onStderr() {},
         onStdout() {},
         stdinText: "codex,claude,cursor,custom\n~/custom-skills\n",
-      }),
+      })
     );
     runCli(
       ["skills", "configure"],
@@ -95,21 +96,21 @@ describe("skills CLI", () => {
         onStderr() {},
         onStdout() {},
         stdinText: "claude,codex\n",
-      }),
+      })
     );
 
     expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toStrictEqual({
       targets: [{ kind: "claude" }, { kind: "codex" }],
     });
     expect(
-      lstatSync(path.join(osHome, ".claude", "skills", "monke-tools-core")).isSymbolicLink(),
+      lstatSync(path.join(osHome, ".claude", "skills", "monke-tools-core")).isSymbolicLink()
     ).toBeTruthy();
     expect(readlinkSync(path.join(osHome, ".claude", "skills", "monke-tools-core"))).toBe(
-      path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
+      path.join(sourceCheckout, "skills", "internal", "monke-tools-core")
     );
     expect(existsSync(path.join(osHome, ".claude", "skills", "monke-tools"))).toBeFalsy();
     expect(
-      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink(),
+      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink()
     ).toBeTruthy();
     expect(existsSync(path.join(osHome, ".cursor", "skills", "monke-tools"))).toBeFalsy();
     expect(existsSync(path.join(customRoot, "monke-tools"))).toBeFalsy();
@@ -123,7 +124,7 @@ describe("skills CLI", () => {
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
 
     runCli(
@@ -137,7 +138,7 @@ describe("skills CLI", () => {
         onStderr() {},
         onStdout() {},
         stdinText: "codex\n",
-      }),
+      })
     );
 
     expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
@@ -148,7 +149,7 @@ describe("skills CLI", () => {
       version: 1,
     });
     expect(
-      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink(),
+      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink()
     ).toBeTruthy();
   });
 
@@ -162,12 +163,12 @@ describe("skills CLI", () => {
     write(
       oldCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
     write(
       newCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: oldCheckout,
@@ -189,7 +190,7 @@ describe("skills CLI", () => {
         },
         onStderr() {},
         onStdout() {},
-      }),
+      })
     );
 
     expect(loadGlobalMonkeConfig(monkeHome).installedSourceCheckout).toBe(newCheckout);
@@ -218,7 +219,7 @@ describe("skills CLI", () => {
           onStderr() {},
           onStdout() {},
           stdinText: "codex\n",
-        }),
+        })
       );
     }).toThrow(`Installed source checkout is missing: ${missingCheckout}`);
     expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();

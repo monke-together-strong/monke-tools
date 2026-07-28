@@ -15,11 +15,7 @@ vp check
 vp run test
 ```
 
-`monke-tools` remains intentionally Bun-native. Use `vp run test` instead of the
-built-in `vp test` so Vitest runs under Bun, and use `vp run install:local`
-instead of `vp build` or `vp pack` because the installed artifact is a
-Bun-compiled standalone executable rather than a Vite web app or JavaScript
-library package.
+`monke-tools` remains intentionally Bun-native. Use `vp run test` instead of the built-in `vp test` so Vitest runs under Bun, and use `vp run install:local` instead of `vp build` or `vp pack` because the installed artifact is a Bun-compiled standalone executable rather than a Vite web app or JavaScript library package.
 
 ## Local install
 
@@ -70,8 +66,7 @@ The Skill source tree is organized as:
 
 ## `monke.yml`
 
-Each repo that participates in a session graph declares its apps, env rewrites, optional dependency repos, and optional bootstrap or seed behavior in `monke.yml`.
-An app `path` may be `.` when the app lives at the repo root; `envFile` is resolved relative to that app path. `envFile` defaults to `.env`, so omit it for apps that use `.env` and set it only for non-default files like `.env.local`.
+Each repo that participates in a session graph declares its apps, env rewrites, optional dependency repos, and optional bootstrap or seed behavior in `monke.yml`. An app `path` may be `.` when the app lives at the repo root; `envFile` is resolved relative to that app path. `envFile` defaults to `.env`, so omit it for apps that use `.env` and set it only for non-default files like `.env.local`.
 
 ```yaml
 seedPaths:

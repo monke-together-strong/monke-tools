@@ -3,6 +3,7 @@
 import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
 import * as p from "@clack/prompts";
 import { Command } from "@commander-js/extra-typings";
 
@@ -56,7 +57,7 @@ export interface UpdateSkillsDependencies {
 /** Reruns all recorded Skill import recipes into their recorded managed roots. */
 export async function runUpdateSkills(
   argv: string[] = process.argv.slice(2),
-  dependencies: UpdateSkillsDependencies = {},
+  dependencies: UpdateSkillsDependencies = {}
 ): Promise<void> {
   const { install, interactive } = parseCommand(argv);
   const repoRoot = process.cwd();
@@ -78,11 +79,11 @@ export async function runUpdateSkills(
           selectors: recipe.skills.map((skill) => skill.selector),
           source: normalizedSource,
         }),
-        stagingDirectory,
+        stagingDirectory
       );
       reportSecurityRiskAssessment(
         `${installOutput.stdout}\n${installOutput.stderr}`,
-        writeMessage,
+        writeMessage
       );
 
       // Recipe updates are serial because each accepted replacement updates the store for the next.
@@ -122,7 +123,7 @@ export async function runUpdateSkills(
 
   if (failures.length > 0) {
     throw new MonkeError(
-      `Skill update failed for ${failures.length} recipe(s):\n${failures.join("\n")}`,
+      `Skill update failed for ${failures.length} recipe(s):\n${failures.join("\n")}`
     );
   }
 
@@ -152,16 +153,16 @@ function parseCommand(argv: string[]): UpdateCommandOptions {
 
 function validateImportedGuidanceDirectoriesAreTracked(
   repoRoot: string,
-  store: SkillImportRecipeStore,
+  store: SkillImportRecipeStore
 ): void {
   const ownedGuidance = new Set(
-    store.recipes.flatMap((recipe) => recipe.skills.map((skill) => `${skill.kind}:${skill.slug}`)),
+    store.recipes.flatMap((recipe) => recipe.skills.map((skill) => `${skill.kind}:${skill.slug}`))
   );
 
   for (const kind of ["skill", "reference"] as const) {
     const root = kind === "skill" ? IMPORTED_SKILLS_ROOT : IMPORTED_REFERENCES_ROOT;
     const untrackedSlugs = listGuidanceDirectories(path.join(repoRoot, root)).filter(
-      (slug) => !ownedGuidance.has(`${kind}:${slug}`),
+      (slug) => !ownedGuidance.has(`${kind}:${slug}`)
     );
     if (untrackedSlugs.length > 0) {
       throw new MonkeError(`Untracked imported ${kind} directories: ${untrackedSlugs.join(", ")}`);
@@ -198,7 +199,7 @@ async function resolveStagedSkillReplacements(options: {
   });
   assertSkillSelectorSlugMappingsMatchStagedSlugs(recipe.source, selectorMappings, stagedSlugs);
   const stagedSlugBySelector = new Map(
-    selectorMappings.map((mapping) => [mapping.selector, mapping.slug]),
+    selectorMappings.map((mapping) => [mapping.selector, mapping.slug])
   );
   const replacements = recipe.skills.flatMap((skill): SlugReplacementRequest[] => {
     const stagedSlug = stagedSlugBySelector.get(skill.selector);
@@ -235,22 +236,22 @@ async function resolveStagedSkillReplacements(options: {
 function applySlugReplacementsToStore(
   store: SkillImportRecipeStore,
   source: string,
-  guidance: SkillImportRecipe["skills"],
+  guidance: SkillImportRecipe["skills"]
 ): SkillImportRecipeStore {
   return normalizeImportRecipeStore({
     ...store,
     recipes: store.recipes.map((recipe) =>
-      recipe.source === source ? { ...recipe, skills: guidance } : recipe,
+      recipe.source === source ? { ...recipe, skills: guidance } : recipe
     ),
   });
 }
 
 function applySlugReplacementsToGuidance(
   recipe: SkillImportRecipe,
-  replacements: readonly SlugReplacementRequest[],
+  replacements: readonly SlugReplacementRequest[]
 ): SkillImportRecipe["skills"] {
   const stagedSlugBySelector = new Map(
-    replacements.map((replacement) => [replacement.selector, replacement.stagedSlug]),
+    replacements.map((replacement) => [replacement.selector, replacement.stagedSlug])
   );
   return recipe.skills.map((skill) => ({
     ...skill,
@@ -260,7 +261,7 @@ function applySlugReplacementsToGuidance(
 
 function guidanceReplacedBySlugChanges(
   recipe: SkillImportRecipe,
-  replacements: readonly SlugReplacementRequest[],
+  replacements: readonly SlugReplacementRequest[]
 ): SkillImportRecipe["skills"] {
   const replacedSelectors = new Set(replacements.map((replacement) => replacement.selector));
   return recipe.skills.filter((skill) => replacedSelectors.has(skill.selector));
@@ -269,7 +270,7 @@ function guidanceReplacedBySlugChanges(
 function renderSlugMismatchMessage(
   source: string,
   missingSlugs: readonly string[],
-  unexpectedSlugs: readonly string[],
+  unexpectedSlugs: readonly string[]
 ): string {
   return [
     `Skill slug mismatch for ${source}:`,

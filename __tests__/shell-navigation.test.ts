@@ -1,7 +1,8 @@
-import { describe, expect, test } from "vite-plus/test";
+import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "../src/shell.ts";
@@ -16,7 +17,7 @@ function isShellAvailable(shell: SupportedShell): boolean {
 function runGeneratedAdapter(
   shell: SupportedShell,
   mtStatus: number,
-  targetExists: boolean,
+  targetExists: boolean
 ): {
   processStatus: number | null;
   reportedPath: string;
@@ -36,7 +37,7 @@ function runGeneratedAdapter(
 printf '%s' "$MONKE_TEST_TARGET" > "$MONKE_SHELL_DIR_DIRECTIVE"
 exit ${mtStatus}
 `,
-    "utf-8",
+    "utf-8"
   );
   chmodSync(binaryPath, 0o755);
   const adapter = runMonke({
@@ -61,7 +62,7 @@ printf '%s\\n%s\\n' "$PWD" "$mt_status"
         ...process.env,
         MONKE_TEST_TARGET: targetPath,
       },
-    },
+    }
   );
   if (result.error !== undefined || result.stdout === null) {
     throw new Error(`Could not run ${shell}: ${String(result.error ?? "no output")}`);
@@ -99,7 +100,7 @@ describe("shell navigation", () => {
     expect(readFileSync(directivePath, "utf-8")).toBe(worktreeRoot);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain(
-      `Spawned or updated session banana\nSwitched to ${worktreeRoot}`,
+      `Spawned or updated session banana\nSwitched to ${worktreeRoot}`
     );
   });
 
@@ -134,7 +135,7 @@ describe("shell navigation", () => {
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
     expect(result.stderr).toContain(
-      "Shell integration is configured but not active; restart your shell or invoke mt through the shell adapter.",
+      "Shell integration is configured but not active; restart your shell or invoke mt through the shell adapter."
     );
   });
 
@@ -221,7 +222,7 @@ apps:
 
     expect(bash.stdout).toContain("# monke-tools shell integration for bash");
     expect(bash.stdout).toContain(
-      `${SHELL_DIRECTORY_DIRECTIVE_ENV}="$__monke_mt_directive" '/opt/monke-tools' "$@"`,
+      `${SHELL_DIRECTORY_DIRECTIVE_ENV}="$__monke_mt_directive" '/opt/monke-tools' "$@"`
     );
     expect(zsh.stdout).toContain("# monke-tools shell integration for zsh");
     expect(zsh.stdout).toContain('cd -- "$__monke_mt_target"');
@@ -241,7 +242,7 @@ apps:
         expect(result.processStatus).toBe(0);
         expect(result.reportedPath).toBe(result.targetPath);
         expect(result.reportedStatus).toBe("23");
-      },
+      }
     );
 
     test.skipIf(!available)(
@@ -252,7 +253,7 @@ apps:
         expect(result.processStatus).toBe(0);
         expect(result.reportedPath).toBe(result.sandbox);
         expect(result.reportedStatus).toBe("1");
-      },
+      }
     );
 
     test.skipIf(!available)(
@@ -263,7 +264,7 @@ apps:
         expect(result.processStatus).toBe(0);
         expect(result.reportedPath).toBe(result.sandbox);
         expect(result.reportedStatus).toBe("23");
-      },
+      }
     );
   });
 

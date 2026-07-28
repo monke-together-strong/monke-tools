@@ -1,10 +1,41 @@
-import { describe, expect, test } from "vite-plus/test";
 import type { OxlintConfig, OxlintOverride } from "vite-plus/lint";
+import { describe, expect, test } from "vite-plus/test";
 
-import mtsLint, { createOxlintConfig } from "../packages/oxlint-config/src/config.ts";
+import mtsFmt, { createOxfmtConfig } from "../packages/oxc-config/src/oxfmt.ts";
+import mtsLint, { createOxlintConfig } from "../packages/oxc-config/src/oxlint.ts";
+
+function findVitestOverride(config: OxlintConfig): OxlintOverride | undefined {
+  return config.extends
+    ?.filter((extension): extension is OxlintConfig => typeof extension !== "string")
+    .flatMap((extension) => extension.overrides ?? [])
+    .find((override) => override.rules?.["vitest/max-expects"] !== undefined);
+}
+
+describe("shared Oxfmt config", () => {
+  test("composes consumer config after Ultracite", () => {
+    const config = createOxfmtConfig({
+      ignorePatterns: [".repo-output"],
+      printWidth: 120,
+    });
+
+    expect(mtsFmt.printWidth).toBe(100);
+    expect(mtsFmt.ignorePatterns).toContain("skills/**");
+    expect(mtsFmt.ignorePatterns).toContain("AGENTS.md");
+    expect(config).toMatchObject({
+      printWidth: 120,
+      semi: mtsFmt.semi,
+      sortImports: mtsFmt.sortImports,
+    });
+    expect(config.ignorePatterns).toStrictEqual([...(mtsFmt.ignorePatterns ?? []), ".repo-output"]);
+  });
+});
 
 describe("shared Oxlint config", () => {
   test("keeps broadly valid syntax while preserving useful checks", () => {
+    expect(mtsLint.options).toMatchObject({
+      typeAware: true,
+      typeCheck: true,
+    });
     expect(mtsLint.rules).toMatchObject({
       "no-use-before-define": ["error", { functions: false }],
       "prefer-regex-literals": "off",
@@ -19,13 +50,11 @@ describe("shared Oxlint config", () => {
   test("applies TypeScript and test policy only to matching files", () => {
     const overrides = mtsLint.overrides ?? [];
     const typescriptOverride = overrides.find(
-      (override) => override.rules?.["unicorn/no-useless-undefined"] !== undefined,
+      (override) => override.rules?.["unicorn/no-useless-undefined"] !== undefined
     );
-    const vitestOverride = overrides.find(
-      (override) => override.rules?.["vitest/max-expects"] !== undefined,
-    );
+    const vitestOverride = findVitestOverride(mtsLint);
     const testOverride = overrides.find(
-      (override) => override.rules?.["no-await-in-loop"] !== undefined,
+      (override) => override.rules?.["no-await-in-loop"] !== undefined
     );
 
     expect(typescriptOverride).toMatchObject({
@@ -57,11 +86,9 @@ describe("shared Oxlint config", () => {
       vitestExcludeFiles: ["tests/e2e/**/*.{ts,tsx}"],
     });
     const overrides = config.overrides ?? [];
-    const vitestOverride = overrides.find(
-      (override) => override.rules?.["vitest/max-expects"] !== undefined,
-    );
+    const vitestOverride = findVitestOverride(config);
     const testOverride = overrides.find(
-      (override) => override.rules?.["no-await-in-loop"] !== undefined,
+      (override) => override.rules?.["no-await-in-loop"] !== undefined
     );
 
     expect(vitestOverride).toMatchObject({
@@ -94,6 +121,9 @@ describe("shared Oxlint config", () => {
       },
       extends: [extension],
       ignorePatterns: [".repo-output"],
+      options: {
+        typeAware: false,
+      },
       overrides: [localOverride],
       rules: {
         "no-bitwise": "off",
@@ -105,6 +135,10 @@ describe("shared Oxlint config", () => {
       ...(mtsLint.ignorePatterns ?? []),
       ".repo-output",
     ]);
+    expect(config.options).toMatchObject({
+      typeAware: false,
+      typeCheck: true,
+    });
     expect(config.overrides?.at(-1)).toStrictEqual(localOverride);
     expect(config.rules).toMatchObject({
       "no-bitwise": "off",

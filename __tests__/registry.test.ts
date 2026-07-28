@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vite-plus/test";
 import { readdirSync } from "node:fs";
 import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import {
   allocateLocalPorts,
@@ -26,11 +27,11 @@ describe("session registry", () => {
 rootSourceRoot: ${sourceRoot}
 session: banana
 repos: wrong
-`,
+`
     );
 
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-      new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*repos`, "u"),
+      new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*repos`, "u")
     );
   });
 
@@ -51,7 +52,7 @@ repos:
     assignedPorts:
       - key: api-port
         value: 10000
-`,
+`
     );
 
     expect(() => loadSessionState(home, sourceRoot, "invalid-port-key")).toThrow(/assignedPorts/u);
@@ -70,11 +71,11 @@ rootSourceRoot: ${sourceRoot}
 session: banana
 repos: []
 typo: true
-`,
+`
     );
 
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-      new RegExp(`Invalid ${escapeRegExp(statePath)}`, "u"),
+      new RegExp(`Invalid ${escapeRegExp(statePath)}`, "u")
     );
   });
 
@@ -90,11 +91,11 @@ typo: true
 rootSourceRoot: ${sourceRoot}
 session: banana
 repos: []
-`,
+`
     );
 
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-      new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*version`, "u"),
+      new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*version`, "u")
     );
   });
 
@@ -112,11 +113,11 @@ repos:
   - worktreePath: ${JSON.stringify(worktreePath)}
     duplicate: first
     duplicate: second
-`,
+`
     );
 
     expect(() => listSessionStatesRelevantToWorktrees(home, [worktreePath])).toThrow(
-      /corrupt\.yml/u,
+      /corrupt\.yml/u
     );
   });
 
@@ -152,11 +153,11 @@ repos:
 sourceRoot: ${sourceRoot}
 blockStart: 10000
 size: wrong
-`,
+`
     );
 
     expect(() => getOrCreateReservation(home, sourceRoot, 1)).toThrow(
-      /Invalid .*repo-reservations.*size/su,
+      /Invalid .*repo-reservations.*size/su
     );
   });
 
@@ -259,7 +260,7 @@ size: 1000
     expect(firstReservation?.size).toBe(1000);
 
     expect(() => getOrCreateReservation(home, sourceRoot, 1001)).toThrow(
-      /its reservation only has room for 1000/u,
+      /its reservation only has room for 1000/u
     );
   });
 

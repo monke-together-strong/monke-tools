@@ -11,20 +11,21 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+
 import * as z from "zod";
 
 import { errorMessage, MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
-import { createLogger } from "./logger.ts";
-import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
-import { parseBoundaryValue } from "./validation.ts";
 import type {
   BuiltInSkillInstallTargetKind,
   SkillInstallPreference,
   SkillInstallTargetKind,
   SkillInstallTargetPreference,
 } from "./global-config.ts";
+import { createLogger } from "./logger.ts";
+import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
+import { parseBoundaryValue } from "./validation.ts";
 
 /** Directory name monke-tools owns inside each selected Agent skill root. */
 const SKILL_NAMESPACE = "monke-tools";
@@ -85,7 +86,7 @@ export function runSkillsConfigure(runtime: Runtime): void {
   const sourceCheckout = config.installedSourceCheckout;
   if (sourceCheckout === undefined || sourceCheckout === "") {
     throw new MonkeError(
-      "Installed source checkout is not configured; run bun run install:local from the monke-tools checkout first",
+      "Installed source checkout is not configured; run bun run install:local from the monke-tools checkout first"
     );
   }
   resolveSkillSourceTree(sourceCheckout);
@@ -94,7 +95,7 @@ export function runSkillsConfigure(runtime: Runtime): void {
   const nextPreference = promptForSkillInstallPreference(
     runtime,
     previousPreference,
-    homeDirectory,
+    homeDirectory
   );
   saveGlobalMonkeConfig(monkeHome, {
     ...config,
@@ -191,7 +192,7 @@ export function reconcileSkillNamespaces(options: {
 
   if (failures.length > 0) {
     throw new MonkeError(
-      `Failed to reconcile ${failures.length} Skill install target(s):\n${failures.join("\n")}`,
+      `Failed to reconcile ${failures.length} Skill install target(s):\n${failures.join("\n")}`
     );
   }
 }
@@ -211,7 +212,7 @@ function normalizeCustomSkillRoot(options: { input: string; homeDirectory: strin
   const normalized = path.resolve(expanded);
   if (path.basename(normalized) === SKILL_NAMESPACE) {
     throw new MonkeError(
-      `Custom Skill install target must be an Agent skill root, not the ${SKILL_NAMESPACE} namespace path`,
+      `Custom Skill install target must be an Agent skill root, not the ${SKILL_NAMESPACE} namespace path`
     );
   }
 
@@ -221,7 +222,7 @@ function normalizeCustomSkillRoot(options: { input: string; homeDirectory: strin
 function promptForSkillInstallPreference(
   runtime: Runtime,
   previousPreference: SkillInstallPreference | null,
-  homeDirectory: string,
+  homeDirectory: string
 ): SkillInstallPreference {
   runtime.writeStdout(formatTargetPrompt(previousPreference));
   const targetAnswer = runtime.readLine("Select skill targets: ");
@@ -239,7 +240,7 @@ function promptForSkillInstallPreference(
     const customAnswer = runtime.readLine(
       previousCustomPath !== undefined && previousCustomPath !== ""
         ? `Custom Agent skill root [${previousCustomPath}]: `
-        : "Custom Agent skill root: ",
+        : "Custom Agent skill root: "
     );
     targets.push({
       kind: "custom",
@@ -266,7 +267,7 @@ function formatTargetPrompt(previousPreference: SkillInstallPreference | null): 
   lines.push(
     previousPreference
       ? "Enter comma-separated numbers or names. Leave blank to keep selected targets."
-      : "Enter comma-separated numbers or names. Select at least one target.",
+      : "Enter comma-separated numbers or names. Select at least one target."
   );
   return `${lines.join("\n")}\n`;
 }
@@ -292,7 +293,7 @@ function resolveCustomSkillRootAnswer(options: {
 
 function parseSelectedTargetKinds(
   answer: string,
-  previousPreference: SkillInstallPreference | null,
+  previousPreference: SkillInstallPreference | null
 ): SkillInstallTargetKind[] {
   if (answer.trim() === "") {
     if (!previousPreference) {
@@ -314,7 +315,7 @@ function parseSelectedTargetKinds(
       (candidate) =>
         candidate.selector === token ||
         candidate.kind === token ||
-        candidate.label.toLowerCase() === token,
+        candidate.label.toLowerCase() === token
     );
     if (!option) {
       throw new MonkeError(`Unknown Skill install target: ${token}`);
@@ -359,7 +360,7 @@ function reconcileOneTarget(target: ResolvedSkillInstallTarget, skillSourceTree:
 
 function reconcileNamespaceTarget(
   target: ResolvedSkillInstallTarget,
-  skillSourceTree: string,
+  skillSourceTree: string
 ): void {
   mkdirSync(target.agentSkillRoot, { recursive: true });
   if (target.kind === "claude") {
@@ -369,7 +370,7 @@ function reconcileNamespaceTarget(
   const namespaceStat = lstatIfExists(target.namespacePath);
   if (namespaceStat && !namespaceStat.isSymbolicLink()) {
     throw new MonkeError(
-      `Refusing to overwrite non-managed Skill namespace at ${target.namespacePath}`,
+      `Refusing to overwrite non-managed Skill namespace at ${target.namespacePath}`
     );
   }
 
@@ -447,7 +448,7 @@ const FlatSkillManifestSchema = z.strictObject({
       z.strictObject({
         sourcePath: z.string().min(1),
         targetPath: z.string().min(1),
-      }),
+      })
     )
     .optional(),
   version: z.literal(1),
@@ -479,7 +480,7 @@ function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
       }
       if (links.has(entry.name)) {
         throw new MonkeError(
-          `Cannot flatten duplicate Skill name ${entry.name} from ${skillSourceTree}`,
+          `Cannot flatten duplicate Skill name ${entry.name} from ${skillSourceTree}`
         );
       }
 
@@ -492,7 +493,7 @@ function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
 
 function discoverFlatSupportingLinks(
   target: ResolvedSkillInstallTarget,
-  skillSourceTree: string,
+  skillSourceTree: string
 ): FlatSupportingLink[] {
   const referenceSourceTree = path.join(skillSourceTree, "references");
   if (!existsSync(referenceSourceTree)) {
@@ -510,10 +511,10 @@ function discoverFlatSupportingLinks(
 function assertFlatLinksCanBeManaged(
   target: ResolvedSkillInstallTarget,
   links: FlatSkillLink[],
-  previousManifest: FlatSkillManifest | null,
+  previousManifest: FlatSkillManifest | null
 ): void {
   const previousLinks = new Map(
-    previousManifest?.links.map((link) => [link.name, link.sourcePath]),
+    previousManifest?.links.map((link) => [link.name, link.sourcePath])
   );
 
   for (const link of links) {
@@ -535,10 +536,10 @@ function assertFlatLinksCanBeManaged(
 
 function assertFlatSupportingLinksCanBeManaged(
   links: FlatSupportingLink[],
-  previousManifest: FlatSkillManifest | null,
+  previousManifest: FlatSkillManifest | null
 ): void {
   const previousLinks = new Map(
-    previousManifest?.supportingLinks?.map((link) => [link.targetPath, link.sourcePath]),
+    previousManifest?.supportingLinks?.map((link) => [link.targetPath, link.sourcePath])
   );
 
   for (const link of links) {
@@ -548,14 +549,14 @@ function assertFlatSupportingLinksCanBeManaged(
     }
     if (!linkStat.isSymbolicLink()) {
       throw new MonkeError(
-        `Refusing to overwrite non-managed Reference source tree link at ${link.targetPath}`,
+        `Refusing to overwrite non-managed Reference source tree link at ${link.targetPath}`
       );
     }
 
     const currentTarget = readlinkSync(link.targetPath);
     if (currentTarget !== link.sourcePath && currentTarget !== previousLinks.get(link.targetPath)) {
       throw new MonkeError(
-        `Refusing to overwrite non-managed Reference source tree link at ${link.targetPath}`,
+        `Refusing to overwrite non-managed Reference source tree link at ${link.targetPath}`
       );
     }
   }
@@ -603,14 +604,14 @@ function readFlatManifest(target: ResolvedSkillInstallTarget): FlatSkillManifest
   return parseBoundaryValue(
     FlatSkillManifestSchema,
     rawManifest,
-    `monke-tools flat Skill manifest at ${manifestPath}`,
+    `monke-tools flat Skill manifest at ${manifestPath}`
   );
 }
 
 function writeFlatManifest(
   target: ResolvedSkillInstallTarget,
   links: FlatSkillLink[],
-  supportingLinks: FlatSupportingLink[],
+  supportingLinks: FlatSupportingLink[]
 ): void {
   const manifest: FlatSkillManifest = {
     links,

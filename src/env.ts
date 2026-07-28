@@ -25,7 +25,7 @@ export interface CollectBaselinePortsFromRootOptions {
 export function seedWorktreeFiles(
   config: RepoConfig,
   worktreeRoot: string,
-  onWarning?: (message: string) => void,
+  onWarning?: (message: string) => void
 ): void {
   const seededPaths = new Set<string>();
 
@@ -40,7 +40,7 @@ export function seedWorktreeFiles(
 
 /** Collect content-root ports that local session allocations should avoid. */
 export function collectBaselinePortsFromRoot(
-  options: CollectBaselinePortsFromRootOptions,
+  options: CollectBaselinePortsFromRootOptions
 ): Set<number> {
   const ports = new Set<number>();
 
@@ -52,7 +52,7 @@ export function collectBaselinePortsFromRoot(
     const envPath = path.join(
       options.sourceRoot,
       path.relative(options.config.sourceRoot, app.absoluteAppPath),
-      app.relativeEnvFile,
+      app.relativeEnvFile
     );
     if (!existsSync(envPath)) {
       continue;
@@ -73,10 +73,10 @@ export function rewriteManagedEnvFiles(
   config: RepoConfig,
   worktreeRoot: string,
   localAssignments: Map<string, number>,
-  externalAssignments: AssignedPort[],
+  externalAssignments: AssignedPort[]
 ): void {
   const externalValuesByKey = new Map(
-    externalAssignments.map((assignment) => [assignment.key, assignment.value]),
+    externalAssignments.map((assignment) => [assignment.key, assignment.value])
   );
   const externalByApp = new Map<string, { env: string; value: number }[]>();
   for (const mapping of config.externalMappingsInOrder) {
@@ -105,7 +105,7 @@ export function rewriteManagedEnvFiles(
     const envPath = path.join(
       worktreeRoot,
       path.relative(config.sourceRoot, app.absoluteAppPath),
-      app.relativeEnvFile,
+      app.relativeEnvFile
     );
 
     if (!existsSync(envPath)) {
@@ -118,7 +118,7 @@ export function rewriteManagedEnvFiles(
 
 export function syncRootEnvFile(
   worktreeRoot: string,
-  assignments: { env: string; value: string }[],
+  assignments: { env: string; value: string }[]
 ): void {
   syncRootEnvFileWithRemovals(worktreeRoot, assignments, []);
 }
@@ -127,7 +127,7 @@ export function syncRootEnvFile(
 export function syncRootEnvFileWithRemovals(
   worktreeRoot: string,
   assignments: { env: string; value: string }[],
-  removedEnvNames: string[],
+  removedEnvNames: string[]
 ): void {
   if (assignments.length === 0 && removedEnvNames.length === 0) {
     return;
@@ -235,7 +235,7 @@ function seedRelativePath(
   relativePath: string,
   warnIfMissing: boolean,
   seededPaths: Set<string>,
-  onWarning?: (message: string) => void,
+  onWarning?: (message: string) => void
 ): void {
   const normalizedRelativePath = path.normalize(relativePath);
   if (seededPaths.has(normalizedRelativePath)) {
@@ -247,7 +247,7 @@ function seedRelativePath(
   if (!existsSync(sourcePath)) {
     if (warnIfMissing) {
       onWarning?.(
-        `Warning: seedPath ${normalizedRelativePath} is missing at ${sourcePath}; skipping`,
+        `Warning: seedPath ${normalizedRelativePath} is missing at ${sourcePath}; skipping`
       );
     }
     return;
@@ -311,7 +311,7 @@ function parseAssignmentLine(line: string): ParsedAssignmentLine | null {
 
   const match =
     /^(?<prefixStart>\s*(?:export\s+)?)(?<key>[A-Za-z_][A-Za-z0-9_]*)(?<separator>\s*=\s*)(?<remainder>.*)$/u.exec(
-      line,
+      line
     );
   if (!match?.groups) {
     return null;
@@ -385,7 +385,7 @@ function replacePortInValue(rawValue: string, newPort: number, location: string)
     nextInnerValue = replaceUrlPort(innerValue, newPort, location);
   } else {
     throw new MonkeError(
-      `Unsupported env value at ${location}: ${describeRedactedValue(innerValue)}`,
+      `Unsupported env value at ${location}: ${describeRedactedValue(innerValue)}`
     );
   }
 
@@ -424,7 +424,7 @@ function replaceUrlPort(value: string, newPort: number, location: string): strin
     const bracketIndex = hostPort.indexOf("]");
     if (bracketIndex === -1 || hostPort[bracketIndex + 1] !== ":") {
       throw new MonkeError(
-        `Expected explicit port at ${location}: ${describeRedactedValue(value)}`,
+        `Expected explicit port at ${location}: ${describeRedactedValue(value)}`
       );
     }
     portStartInHostPort = bracketIndex + 2;
@@ -432,7 +432,7 @@ function replaceUrlPort(value: string, newPort: number, location: string): strin
     const colonIndex = hostPort.lastIndexOf(":");
     if (colonIndex === -1) {
       throw new MonkeError(
-        `Expected explicit port at ${location}: ${describeRedactedValue(value)}`,
+        `Expected explicit port at ${location}: ${describeRedactedValue(value)}`
       );
     }
     portStartInHostPort = colonIndex + 1;
@@ -466,7 +466,7 @@ function extractPort(rawValue: string, location: string): number {
 
   if (!unwrapped.includes("://")) {
     throw new MonkeError(
-      `Unsupported env value at ${location}: ${describeRedactedValue(unwrapped)}`,
+      `Unsupported env value at ${location}: ${describeRedactedValue(unwrapped)}`
     );
   }
 
@@ -475,13 +475,13 @@ function extractPort(rawValue: string, location: string): number {
     parsed = new URL(unwrapped);
   } catch {
     throw new MonkeError(
-      `Malformed URL or DSN at ${location}: ${describeRedactedValue(unwrapped)}`,
+      `Malformed URL or DSN at ${location}: ${describeRedactedValue(unwrapped)}`
     );
   }
 
   if (!parsed.port) {
     throw new MonkeError(
-      `Expected explicit port at ${location}: ${describeRedactedValue(unwrapped)}`,
+      `Expected explicit port at ${location}: ${describeRedactedValue(unwrapped)}`
     );
   }
 
@@ -491,7 +491,7 @@ function extractPort(rawValue: string, location: string): number {
 function requireAssignedPort(
   assignments: Map<string, number>,
   key: string,
-  appLabel: string,
+  appLabel: string
 ): number {
   const value = assignments.get(key);
   if (value === undefined) {

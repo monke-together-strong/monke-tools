@@ -1,5 +1,6 @@
-import { describe, expect, test } from "vite-plus/test";
 import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import { loadResolvedGraph } from "../src/config.ts";
 import { createRuntime } from "../src/runtime.ts";
@@ -120,7 +121,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /bootstrapCommand.*non-empty string/u,
+      /bootstrapCommand.*non-empty string/u
     );
   });
 
@@ -140,7 +141,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /bootstrapCommand.*non-empty string/u,
+      /bootstrapCommand.*non-empty string/u
     );
   });
 
@@ -160,7 +161,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /cleanupCommand.*non-empty string/u,
+      /cleanupCommand.*non-empty string/u
     );
   });
 
@@ -180,7 +181,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /seedPaths.*must be an array/u,
+      /seedPaths.*must be an array/u
     );
   });
 
@@ -201,7 +202,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /seedPaths\[0\].*must resolve inside/u,
+      /seedPaths\[0\].*must resolve inside/u
     );
   });
 
@@ -224,7 +225,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /Duplicate seedPath/u,
+      /Duplicate seedPath/u
     );
   });
 
@@ -245,7 +246,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /seedPath "." is not allowed/u,
+      /seedPath "." is not allowed/u
     );
   });
 
@@ -267,7 +268,7 @@ apps:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /seedPath "." is not allowed/u,
+      /seedPath "." is not allowed/u
     );
   });
 
@@ -336,7 +337,7 @@ external:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /must be an uppercase env name/u,
+      /must be an uppercase env name/u
     );
   });
 
@@ -391,7 +392,7 @@ external:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /Duplicate external pathEnv SHARED_DEP_DIR/u,
+      /Duplicate external pathEnv SHARED_DEP_DIR/u
     );
   });
 
@@ -448,7 +449,7 @@ external:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /Duplicate rewrite target/u,
+      /Duplicate rewrite target/u
     );
     expect(depRoot).toBeTruthy();
   });
@@ -504,7 +505,7 @@ external:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /not owned locally/u,
+      /not owned locally/u
     );
     expect(leafRoot).toBeTruthy();
     expect(depRoot).toBeTruthy();
@@ -531,7 +532,7 @@ external:
     write(root, "apps/consumer/.keep", "");
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /owns no local ports/u,
+      /owns no local ports/u
     );
   });
 
@@ -652,7 +653,7 @@ external:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /Dependency cycles are not supported/u,
+      /Dependency cycles are not supported/u
     );
   });
 
@@ -672,7 +673,7 @@ external:
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
-      /envFile.*must resolve inside/u,
+      /envFile.*must resolve inside/u
     );
   });
 

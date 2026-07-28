@@ -1,3 +1,6 @@
+import { spawnSync } from "node:child_process";
+import type { SpawnSyncReturns } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   accessSync,
   closeSync,
@@ -12,9 +15,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-import type { SpawnSyncReturns } from "node:child_process";
-import { createHash } from "node:crypto";
+
 import { isCancel, select as clackSelect } from "@clack/prompts";
 import * as z from "zod";
 
@@ -116,7 +117,7 @@ function executeCommand(
   runtimeCwd: string,
   command: string,
   args: string[],
-  options: ExecOptions | undefined,
+  options: ExecOptions | undefined
 ): ExecResult {
   const childEnv = { ...runtimeEnv, ...options?.env };
   delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
@@ -139,7 +140,7 @@ function handleSpawnError(
   result: SpawnSyncReturns<string>,
   command: string,
   args: string[],
-  allowFailure: boolean,
+  allowFailure: boolean
 ): ExecResult {
   const { error } = result;
   if (error === undefined) {
@@ -160,7 +161,7 @@ function handleCompletedCommand(
   result: SpawnSyncReturns<string>,
   command: string,
   args: string[],
-  allowFailure: boolean,
+  allowFailure: boolean
 ): ExecResult {
   const stdout = result.stdout ?? "";
   const stderr = result.stderr ?? "";
@@ -204,7 +205,7 @@ export function hashKey(value: string): string {
 
 export function findExecutable(
   command: string,
-  env: Record<string, string | undefined>,
+  env: Record<string, string | undefined>
 ): string | null {
   const pathValue = env.PATH;
   if (pathValue === undefined || pathValue === "") {
@@ -252,7 +253,7 @@ function withLockPath<T>(lockPath: string, callback: () => T): T {
       writeFileSync(
         lockPath,
         JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
-        "utf-8",
+        "utf-8"
       );
     } catch (error) {
       const message = errorMessage(error);

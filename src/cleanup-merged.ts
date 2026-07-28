@@ -1,4 +1,5 @@
 import { existsSync, realpathSync } from "node:fs";
+
 import * as z from "zod";
 
 import { errorMessage } from "./errors.ts";
@@ -129,7 +130,7 @@ export function createMergedCleanupLookupCache(): MergedCleanupLookupCache {
 export function inspectMergedWorktreeCleanup(
   runtime: Runtime,
   candidate: MergedCleanupCandidate,
-  options: { refreshDefaultBranch?: boolean; cache?: MergedCleanupLookupCache } = {},
+  options: { refreshDefaultBranch?: boolean; cache?: MergedCleanupLookupCache } = {}
 ): MergedCleanupDecision {
   let defaultBranch = options.cache?.defaultBranchBySourceRoot.get(candidate.sourceRoot);
   if (!defaultBranch) {
@@ -173,7 +174,7 @@ export function inspectMergedWorktreeCleanup(
 
 /** Decide whether a collected worktree snapshot satisfies the merge-cleanable predicate. */
 export function decideMergedWorktreeCleanup(
-  snapshot: MergedCleanupSnapshot,
+  snapshot: MergedCleanupSnapshot
 ): MergedCleanupDecision {
   const reasons: string[] = [];
   const evidence: string[] = [];
@@ -197,7 +198,7 @@ export function decideMergedWorktreeCleanup(
 function validateWorktreeIdentity(
   snapshot: MergedCleanupSnapshot,
   reasons: string[],
-  evidence: string[],
+  evidence: string[]
 ): boolean {
   if (!snapshot.worktreeExists) {
     reasons.push("session worktree path is missing");
@@ -221,7 +222,7 @@ function validateWorktreeIdentity(
 function validateSessionBranch(
   snapshot: MergedCleanupSnapshot,
   reasons: string[],
-  evidence: string[],
+  evidence: string[]
 ): boolean {
   if (snapshot.branch === null || snapshot.branch === "") {
     reasons.push("worktree is detached");
@@ -237,7 +238,7 @@ function validateSessionBranch(
 function validateMergedPr(
   snapshot: MergedCleanupSnapshot,
   reasons: string[],
-  evidence: string[],
+  evidence: string[]
 ): void {
   if (snapshot.lookupError !== null && snapshot.lookupError !== "") {
     reasons.push(snapshot.lookupError);
@@ -245,13 +246,13 @@ function validateMergedPr(
   }
 
   const exactMatches = snapshot.matchingMergedPrs.filter(
-    (pr) => pr.headRefName === snapshot.session && pr.baseRefName === snapshot.defaultBranch,
+    (pr) => pr.headRefName === snapshot.session && pr.baseRefName === snapshot.defaultBranch
   );
   const crossRepositoryMatches = exactMatches.filter(
-    (pr) => !isSameRepositoryPr(pr, snapshot.repositoryFullName),
+    (pr) => !isSameRepositoryPr(pr, snapshot.repositoryFullName)
   );
   const sameRepositoryMatches = exactMatches.filter((pr) =>
-    isSameRepositoryPr(pr, snapshot.repositoryFullName),
+    isSameRepositoryPr(pr, snapshot.repositoryFullName)
   );
 
   if (crossRepositoryMatches.length > 0) {
@@ -274,7 +275,7 @@ function validateMergedPrHead(
   localHead: string | null,
   match: MergedPrMatch,
   reasons: string[],
-  evidence: string[],
+  evidence: string[]
 ): void {
   if (match.headRefOid === null || match.headRefOid === "") {
     reasons.push("merged PR match did not include headRefOid");
@@ -284,7 +285,7 @@ function validateMergedPrHead(
     evidence.push(`local HEAD matches merged PR head: ${shortSha(localHead)}`);
   } else {
     reasons.push(
-      `local HEAD ${shortSha(localHead)} differs from merged PR head ${shortSha(match.headRefOid)}`,
+      `local HEAD ${shortSha(localHead)} differs from merged PR head ${shortSha(match.headRefOid)}`
     );
   }
 }
@@ -292,7 +293,7 @@ function validateMergedPrHead(
 function validateCleanWorktree(
   snapshot: MergedCleanupSnapshot,
   reasons: string[],
-  evidence: string[],
+  evidence: string[]
 ): void {
   if (snapshot.statusError !== null && snapshot.statusError !== "") {
     reasons.push(snapshot.statusError);
@@ -306,7 +307,7 @@ function validateCleanWorktree(
 /** Remove one worktree after its merge-cleanable decision has already passed. */
 export function removeMergeCleanableWorktree(
   runtime: Runtime,
-  candidate: MergedCleanupCandidate,
+  candidate: MergedCleanupCandidate
 ): void {
   // Plain remove deletes ignored artifacts while still refusing dirty/untracked race additions.
   runtime.exec("git", ["worktree", "remove", candidate.worktreePath], {
@@ -321,7 +322,7 @@ function buildMergedCleanupSnapshot(
     repositoryFullName: string | null;
     matchingMergedPrs: MergedPrMatch[];
     lookupError: string | null;
-  },
+  }
 ): MergedCleanupSnapshot {
   const worktree = inspectWorktree(runtime, options);
 
@@ -339,7 +340,7 @@ function buildMergedCleanupSnapshot(
 
 function inspectWorktree(
   runtime: Runtime,
-  options: MergedCleanupCandidate,
+  options: MergedCleanupCandidate
 ): Pick<
   MergedCleanupSnapshot,
   | "branch"
@@ -360,7 +361,7 @@ function inspectWorktree(
 
 function inspectWorktreeIdentity(
   runtime: Runtime,
-  options: MergedCleanupCandidate,
+  options: MergedCleanupCandidate
 ): Pick<
   MergedCleanupSnapshot,
   "isSourceCheckout" | "sameGitRepository" | "worktreeExists" | "worktreeIsGitRoot"
@@ -409,7 +410,7 @@ function inspectWorktreeIdentity(
 function inspectWorktreeState(
   runtime: Runtime,
   worktreePath: string,
-  worktreeIsGitRoot: boolean,
+  worktreeIsGitRoot: boolean
 ): Pick<MergedCleanupSnapshot, "branch" | "localHead" | "statusError" | "statusLines"> {
   const branchResult = worktreeIsGitRoot
     ? tryGit(runtime, worktreePath, ["rev-parse", "--abbrev-ref", "HEAD"])
@@ -435,7 +436,7 @@ function inspectWorktreeState(
 function getDefaultBranch(
   runtime: Runtime,
   sourceRoot: string,
-  options: { refresh: boolean },
+  options: { refresh: boolean }
 ): { ok: true; value: string } | { ok: false; error: string } {
   try {
     return {
@@ -452,7 +453,7 @@ function getDefaultBranch(
 
 function getGithubRepositoryFullName(
   runtime: Runtime,
-  sourceRoot: string,
+  sourceRoot: string
 ): { ok: true; value: string } | { ok: false; error: string } {
   try {
     const result = runtime.exec("gh", ["repo", "view", "--json", "nameWithOwner"], {
@@ -481,7 +482,7 @@ function queryMergedPrs(
     repositoryFullName: string;
     session: string;
     defaultBranch: string;
-  },
+  }
 ): { ok: true; value: MergedPrMatch[] } | { ok: false; error: string } {
   try {
     const result = runtime.exec(
@@ -502,7 +503,7 @@ function queryMergedPrs(
         "--json",
         "number,headRefName,baseRefName,headRefOid,mergedAt,url,isCrossRepository,headRepository,headRepositoryOwner",
       ],
-      { allowFailure: true, cwd: options.sourceRoot },
+      { allowFailure: true, cwd: options.sourceRoot }
     );
     if (result.exitCode !== 0) {
       return { error: `GitHub merged PR lookup failed: ${commandDetail(result)}`, ok: false };
@@ -566,7 +567,7 @@ function isSameRepositoryPr(match: MergedPrMatch, repositoryFullName: string | n
 function tryGit(
   runtime: Runtime,
   cwd: string,
-  args: string[],
+  args: string[]
 ): { ok: true; value: string } | { ok: false; error: string } {
   try {
     const result = runtime.exec("git", args, { allowFailure: true, cwd });

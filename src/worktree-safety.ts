@@ -52,7 +52,7 @@ export function preflightWorktreeRemoval(
   runtime: Runtime,
   sourceRoot: string,
   targetPath: string,
-  options: { force: boolean },
+  options: { force: boolean }
 ): WorktreeRemovalPreflight {
   const worktree = validateRegisteredWorktreeForRemoval(runtime, sourceRoot, targetPath);
   if (options.force) {
@@ -72,11 +72,11 @@ export function preflightWorktreeRemoval(
 export function validateRegisteredWorktreeForRemoval(
   runtime: Runtime,
   sourceRoot: string,
-  targetPath: string,
+  targetPath: string
 ): WorktreeEntry {
   const target = path.normalize(targetPath);
   const entry = listWorktrees(runtime, sourceRoot).find(
-    (worktree) => path.normalize(worktree.path) === target,
+    (worktree) => path.normalize(worktree.path) === target
   );
   if (entry === undefined || entry.prunable || !existsSync(entry.path)) {
     throw new MonkeError(`No removable registered worktree exists at ${targetPath}`);
@@ -96,11 +96,11 @@ export function assertCleanWorktree(runtime: Runtime, worktreePath: string): voi
     ["status", "--porcelain", "--untracked-files=normal", "--ignore-submodules=none"],
     {
       cwd: worktreePath,
-    },
+    }
   ).stdout;
   if (status.trim() !== "") {
     throw new MonkeError(
-      `Cannot Chop dirty worktree ${worktreePath}. Commit or stash staged, modified, and untracked files first.`,
+      `Cannot Chop dirty worktree ${worktreePath}. Commit or stash staged, modified, and untracked files first.`
     );
   }
 }
@@ -120,13 +120,13 @@ function assertWorktreeIdentity(runtime: Runtime, sourceRoot: string, worktreePa
     });
   } catch (error) {
     throw new MonkeError(
-      `Cannot verify registered worktree ${worktreePath}: ${errorMessage(error)}`,
+      `Cannot verify registered worktree ${worktreePath}: ${errorMessage(error)}`
     );
   }
 
   if (path.normalize(context.sourceRoot) !== path.normalize(sourceRoot)) {
     throw new MonkeError(
-      `Worktree ${worktreePath} belongs to ${context.sourceRoot}; expected ${sourceRoot}`,
+      `Worktree ${worktreePath} belongs to ${context.sourceRoot}; expected ${sourceRoot}`
     );
   }
   if (

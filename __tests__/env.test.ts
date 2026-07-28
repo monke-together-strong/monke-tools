@@ -1,5 +1,6 @@
-import { describe, expect, test } from "vite-plus/test";
 import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import { rewriteEnvFile } from "../src/env.ts";
 import { makeTempDir, read, write } from "./helpers.ts";
@@ -17,7 +18,7 @@ DATABASE_URL='postgres://user:pass@localhost:5432/app-two'
 API_URL=http://localhost:8080/path?x=1
 IGNORED=keep
 # DATABASE_URL=postgres://localhost:9999/ignored
-`,
+`
     );
 
     rewriteEnvFile(
@@ -26,7 +27,7 @@ IGNORED=keep
         ["PORT", 11_000],
         ["DATABASE_URL", 11_001],
         ["API_URL", 11_002],
-      ]),
+      ])
     );
 
     expect(read(sandbox, "app/.env.local")).toBe(`# prelude
@@ -53,7 +54,7 @@ IGNORED=keep
     write(
       sandbox,
       "app/.env.local",
-      "DATABASE_URL=postgres://localhost/app\nBROKEN=localhost:5432\n",
+      "DATABASE_URL=postgres://localhost/app\nBROKEN=localhost:5432\n"
     );
 
     expect(() => {
@@ -75,7 +76,7 @@ IGNORED=keep
       "app/.env.local",
       `API_TOKEN=${unsupportedValue}
 DATABASE_URL=${malformedDsn}
-`,
+`
     );
 
     const unsupportedMessage = captureThrowMessage(() => {
