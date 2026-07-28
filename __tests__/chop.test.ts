@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -1185,6 +1185,21 @@ apps: {}
     },
   );
 
+  test("selects an Ordinary worktree through a canonical-equivalent path", () => {
+    const fixture = createOrdinaryFixture("chop-ordinary-canonical-path");
+    const aliasPath = path.join(fixture.sandbox, "ordinary-alias");
+    symlinkSync(fixture.worktreePath, aliasPath, process.platform === "win32" ? "junction" : "dir");
+
+    runMonke({
+      args: ["chop", aliasPath],
+      cwd: fixture.sourceRoot,
+      monkeHome: fixture.home,
+    });
+
+    expect(existsSync(fixture.worktreePath)).toBeFalsy();
+    expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
+  });
+
   test("rejects a locked Ordinary worktree before removal", () => {
     const fixture = createOrdinaryFixture("chop-locked");
     const binDirectory = path.join(fixture.sandbox, "bin");
@@ -1384,6 +1399,41 @@ apps: {}
 
       expect(existsSync(worktreePath)).toBeFalsy();
       expect(git(sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
+    },
+  );
+
+  test.each(["dirty", "all"])(
+    "rejects dirty initialized submodules hidden by ignore=%s",
+    (ignore) => {
+      const sandbox = makeTempDir(`chop-submodule-ignore-${ignore}`);
+      const home = path.join(sandbox, "home");
+      const submoduleRoot = createRepo(path.join(sandbox, "submodule"), {
+        "README.md": "submodule\n",
+      });
+      const sourceRoot = createRepo(path.join(sandbox, "root"), {
+        "README.md": "source\n",
+      });
+      addSubmodule(sourceRoot, submoduleRoot);
+      git(sourceRoot, ["config", "-f", ".gitmodules", "submodule.vendor/submodule.ignore", ignore]);
+      git(sourceRoot, ["commit", "-am", `ignore ${ignore} submodule dirt`]);
+      const worktreePath = path.join(sandbox, "ordinary");
+      git(sourceRoot, ["branch", "feature"]);
+      git(sourceRoot, ["worktree", "add", worktreePath, "feature"]);
+      initializeSubmodules(worktreePath);
+      write(worktreePath, "vendor/submodule/README.md", "dirty submodule\n");
+
+      expect(() => {
+        runMonke({
+          args: ["chop", "feature"],
+          cwd: sourceRoot,
+          monkeHome: home,
+        });
+      }).toThrow(/dirty worktree/u);
+
+      expect(existsSync(worktreePath)).toBeTruthy();
+      expect(readFileSync(path.join(worktreePath, "vendor/submodule/README.md"), "utf-8")).toBe(
+        "dirty submodule\n",
+      );
     },
   );
 

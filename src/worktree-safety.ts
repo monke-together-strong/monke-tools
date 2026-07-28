@@ -91,9 +91,13 @@ export function validateRegisteredWorktreeForRemoval(
 
 /** Reject staged, modified, or untracked files in a worktree. */
 export function assertCleanWorktree(runtime: Runtime, worktreePath: string): void {
-  const status = runtime.exec("git", ["status", "--porcelain", "--untracked-files=normal"], {
-    cwd: worktreePath,
-  }).stdout;
+  const status = runtime.exec(
+    "git",
+    ["status", "--porcelain", "--untracked-files=normal", "--ignore-submodules=none"],
+    {
+      cwd: worktreePath,
+    },
+  ).stdout;
   if (status.trim() !== "") {
     throw new MonkeError(
       `Cannot Chop dirty worktree ${worktreePath}. Commit or stash staged, modified, and untracked files first.`,

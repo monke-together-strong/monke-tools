@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import { branchExists, getExpectedWorktreePath, listWorktrees, resolveRepoContext } from "./git.ts";
@@ -525,7 +525,10 @@ function resolveOrdinaryTarget(
     );
   }
 
-  const targetPath = path.isAbsolute(target) ? target : path.resolve(runtime.cwd, target);
+  const unresolvedTargetPath = path.isAbsolute(target) ? target : path.resolve(runtime.cwd, target);
+  const targetPath = existsSync(unresolvedTargetPath)
+    ? realpathSync.native(unresolvedTargetPath)
+    : unresolvedTargetPath;
   const pathMatch = worktrees.find(
     (worktree) => path.normalize(worktree.path) === path.normalize(targetPath),
   );
