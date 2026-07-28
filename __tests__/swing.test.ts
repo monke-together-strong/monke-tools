@@ -42,6 +42,45 @@ describe("Swing", () => {
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
   });
 
+  test("swing picker navigates to a Session worktree on another branch and warns", async () => {
+    const sandbox = makeTempDir("swing-session-branch-mismatch");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+    git(worktreeRoot, ["switch", "-c", "unexpected"]);
+
+    const result = await runMonkeAsync({
+      args: ["swing"],
+      cwd: repoRoot,
+      monkeHome: home,
+      selectValues: ["banana"],
+    });
+
+    expect(result.stdout.endsWith(`${worktreeRoot}\n`)).toBeTruthy();
+    expect(result.stderr).toContain(
+      `Session banana worktree ${worktreeRoot} is on branch unexpected instead of banana; swinging to it anyway`,
+    );
+  });
+
+  test("swing can leave a managed Session worktree after its branch changes", () => {
+    const sandbox = makeTempDir("swing-current-session-branch-mismatch");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+    git(worktreeRoot, ["switch", "-c", "unexpected"]);
+
+    const result = runMonke({ args: ["swing", "^"], cwd: worktreeRoot, monkeHome: home });
+
+    expect(result.stdout).toBe(`${repoRoot}\n`);
+    expect(result.stderr).toContain(`Switch to ${repoRoot}`);
+  });
+
   test("swing without a target opens a Swing picker and selects a Session", async () => {
     const sandbox = makeTempDir("swing-picker-number");
     const home = path.join(sandbox, "home");

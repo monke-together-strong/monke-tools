@@ -13,6 +13,16 @@ export interface WorktreeEntry {
   prunable: boolean;
 }
 
+export function describeSessionBranchMismatch(
+  session: string,
+  branch: string | null,
+): string | null {
+  if (branch === session) {
+    return null;
+  }
+  return branch === null ? "is detached" : `is on branch ${branch} instead of ${session}`;
+}
+
 /** A resolved default branch candidate for one source repo. */
 export interface DefaultBranchRef {
   /** Branch name selected as the repo's default branch candidate. */
@@ -26,6 +36,7 @@ export interface DefaultBranchRef {
 interface ResolveRepoContextOptions {
   inferSessionName?: boolean;
   allowExternalSessionWorktree?: boolean;
+  allowSessionBranchMismatch?: boolean;
 }
 
 export function resolveRepoContext(
@@ -57,6 +68,7 @@ export function resolveRepoContext(
       currentBranch,
       {
         allowExternalSessionWorktree: options.allowExternalSessionWorktree ?? false,
+        allowSessionBranchMismatch: options.allowSessionBranchMismatch ?? false,
       },
     );
   }
@@ -78,7 +90,10 @@ function inferSessionNameForContext(
   sourceRoot: string,
   worktreeRoot: string,
   branch: string,
-  options: { allowExternalSessionWorktree: boolean },
+  options: {
+    allowExternalSessionWorktree: boolean;
+    allowSessionBranchMismatch: boolean;
+  },
 ): string {
   const expectedRoot = getExpectedSessionRoot(home, sourceRoot);
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
@@ -96,7 +111,9 @@ function inferSessionNameForContext(
     return branch;
   }
 
-  return inferSessionName(home, sourceRoot, worktreeRoot, branch);
+  return inferSessionName(home, sourceRoot, worktreeRoot, branch, {
+    allowBranchMismatch: options.allowSessionBranchMismatch,
+  });
 }
 
 /** Infer a Session name from a linked worktree path under Monke home. */
@@ -105,6 +122,7 @@ export function inferSessionName(
   sourceRoot: string,
   worktreeRoot: string,
   branch: string,
+  options: { allowBranchMismatch?: boolean } = {},
 ): string {
   const expectedRoot = getExpectedSessionRoot(home, sourceRoot);
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
@@ -114,7 +132,7 @@ export function inferSessionName(
     throw new MonkeError(`Expected linked worktree ${worktreeRoot} to live under ${expectedRoot}`);
   }
 
-  if (sessionName !== branch) {
+  if (sessionName !== branch && options.allowBranchMismatch !== true) {
     throw new MonkeError(
       `Expected linked worktree session "${sessionName}" to match current branch "${branch}"`,
     );
@@ -423,7 +441,8 @@ export function validateWorktreeForSession(
   sourceRoot: string,
   worktreePath: string,
   session: string,
-): void {
+  options: { allowBranchMismatch?: boolean } = {},
+): RepoContext {
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
   if (normalize(worktreePath) !== normalize(expectedPath)) {
     throw new MonkeError(
@@ -446,11 +465,12 @@ export function validateWorktreeForSession(
     );
   }
 
-  if (context.currentBranch !== session) {
+  if (context.currentBranch !== session && options.allowBranchMismatch !== true) {
     throw new MonkeError(
       `Expected worktree ${worktreePath} to be on branch ${session}, found ${context.currentBranch}`,
     );
   }
+  return context;
 }
 
 function runGit(runtime: Runtime, cwd: string, args: string[]): string {

@@ -7,6 +7,7 @@ import { openCodexThread } from "./codex.ts";
 import { MonkeError } from "./errors.ts";
 import {
   branchExists,
+  describeSessionBranchMismatch,
   getExpectedWorktreePath,
   listWorktrees,
   resolveRepoContext,
@@ -89,6 +90,7 @@ export function runSwing(runtime: Runtime, rawTarget?: string, options: SwingOpt
   const home = getMonkeHome(runtime);
   const context = resolveRepoContext(runtime, runtime.cwd, home, {
     allowExternalSessionWorktree: true,
+    allowSessionBranchMismatch: true,
   });
   const currentTarget = getCurrentSwingTarget(home, context);
   navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, rawTarget, options);
@@ -103,6 +105,7 @@ export async function runSwingInteractive(
   const home = getMonkeHome(runtime);
   const context = resolveRepoContext(runtime, runtime.cwd, home, {
     allowExternalSessionWorktree: true,
+    allowSessionBranchMismatch: true,
   });
   const currentTarget = getCurrentSwingTarget(home, context);
   const selectedTarget =
@@ -398,7 +401,15 @@ function resolveStoredTarget(
       );
     }
   }
-  validateWorktreeForSession(runtime, home, rootSourceRoot, worktreePath, target.session);
+  const context = validateWorktreeForSession(
+    runtime,
+    home,
+    rootSourceRoot,
+    worktreePath,
+    target.session,
+    { allowBranchMismatch: true },
+  );
+  warnSwingBranchMismatch(runtime, worktreePath, target.session, context.currentBranch);
   return { path: worktreePath, target };
 }
 
@@ -606,6 +617,22 @@ function validateOrdinaryWorktreeTarget(
       `Expected worktree ${target.path} to be on branch ${target.branch}, found ${context.currentBranch}`,
     );
   }
+}
+
+function warnSwingBranchMismatch(
+  runtime: Runtime,
+  worktreePath: string,
+  session: string,
+  branch: string,
+): void {
+  const mismatch = describeSessionBranchMismatch(session, branch === "HEAD" ? null : branch);
+  if (mismatch === null) {
+    return;
+  }
+
+  createLogger(runtime).warning(
+    `Session ${session} worktree ${worktreePath} ${mismatch}; swinging to it anyway`,
+  );
 }
 
 function listLinkedWorktrees(

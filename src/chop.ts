@@ -1,7 +1,13 @@
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
-import { branchExists, getExpectedWorktreePath, listWorktrees, resolveRepoContext } from "./git.ts";
+import {
+  branchExists,
+  describeSessionBranchMismatch,
+  getExpectedWorktreePath,
+  listWorktrees,
+  resolveRepoContext,
+} from "./git.ts";
 import type { WorktreeEntry } from "./git.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
@@ -41,6 +47,7 @@ interface ChopOptions {
 interface SessionRepoPreflight {
   forceGitRemoval: boolean;
   mode: "gone" | "live" | "stale";
+  registeredBranch: string | null | undefined;
   repo: SessionRepoState;
 }
 
@@ -246,6 +253,9 @@ function chopSession(
   options: ChopOptions,
 ): ChopResult {
   const preflight = preflightSession(runtime, home, target.state, target.allStates, options);
+  for (const candidate of preflight) {
+    warnSessionBranchMismatch(runtime, target.state, candidate);
+  }
   const ordered = orderSessionRemovals(
     preflight,
     invocationWorktreePath,
@@ -254,6 +264,15 @@ function chopSession(
 
   for (const candidate of ordered) {
     const current = inspectSessionRepo(runtime, home, target.state, candidate.repo, options);
+    if (
+      candidate.registeredBranch !== undefined &&
+      current.registeredBranch !== undefined &&
+      current.registeredBranch !== candidate.registeredBranch
+    ) {
+      throw new MonkeError(
+        `Session worktree branch/HEAD changed from ${formatWorktreeBranch(candidate.registeredBranch)} to ${formatWorktreeBranch(current.registeredBranch)} at ${current.repo.worktreePath}`,
+      );
+    }
     if (current.mode !== "gone") {
       removeWorktree(runtime, current.repo.sourceRoot, current.repo.worktreePath, {
         force: current.mode === "stale" || current.forceGitRemoval,
@@ -355,14 +374,10 @@ function inspectSessionRepo(
     if (exact !== undefined) {
       assertWorktreeUnlocked(exact);
     }
-    if (exact !== undefined && exact.branch !== state.session) {
-      throw new MonkeError(
-        `Stale registration at ${repo.worktreePath} is on ${exact.branch ?? "detached"} instead of ${state.session}`,
-      );
-    }
     return {
       forceGitRemoval: false,
       mode: exact === undefined ? "gone" : "stale",
+      registeredBranch: exact?.branch,
       repo,
     };
   }
@@ -370,18 +385,35 @@ function inspectSessionRepo(
   if (exact === undefined) {
     throw new MonkeError(`Session worktree exists but is not registered`);
   }
-  if (exact.branch !== state.session) {
-    throw new MonkeError(
-      `Expected Session branch ${state.session}, found ${exact.branch ?? "detached"}`,
-    );
-  }
-
   const checked = preflightWorktreeRemoval(runtime, repo.sourceRoot, repo.worktreePath, options);
   return {
     forceGitRemoval: checked.forceGitRemoval,
     mode: "live",
+    registeredBranch: exact.branch,
     repo,
   };
+}
+
+function warnSessionBranchMismatch(
+  runtime: Runtime,
+  state: SessionState,
+  candidate: SessionRepoPreflight,
+): void {
+  if (candidate.registeredBranch === undefined) {
+    return;
+  }
+
+  const mismatch = describeSessionBranchMismatch(state.session, candidate.registeredBranch);
+  if (mismatch === null) {
+    return;
+  }
+  createLogger(runtime).warning(
+    `Session ${state.session} worktree ${candidate.repo.worktreePath} ${mismatch}; chopping it anyway`,
+  );
+}
+
+function formatWorktreeBranch(branch: string | null): string {
+  return branch ?? "detached";
 }
 
 function assertSessionIdentity(
@@ -424,8 +456,7 @@ function assertInvocationSessionScope(
   );
   if (
     repo === undefined ||
-    !samePath(repo.worktreePath, getExpectedWorktreePath(home, repo.sourceRoot, state.session)) ||
-    invocation.currentBranch !== state.session
+    !samePath(repo.worktreePath, getExpectedWorktreePath(home, repo.sourceRoot, state.session))
   ) {
     throw new MonkeError(
       `Managed worktree ${invocation.worktreeRoot} does not match its recorded Session identity`,
