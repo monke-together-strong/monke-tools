@@ -42,6 +42,7 @@ import { errorMessage, MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
 import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
+import { finalizeSession } from "./session-finalization.ts";
 import { requestShellDirectory } from "./shell.ts";
 import {
   allocateLocalPorts,
@@ -66,8 +67,6 @@ import type {
   SessionRepoState,
   SessionState,
 } from "./types.ts";
-
-const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
 
 /** Options controlling how `mt spawn` chooses source content. */
 export type SpawnOptions =
@@ -679,22 +678,6 @@ function loadResolvedGraphForSession(
 }
 
 /** Load the session graph for cleanup, tolerating missing repo config. */
-function loadReposByRootForCleanup(
-  runtime: Runtime,
-  rootSourceRoot: string,
-  state: SessionState,
-): Map<string, RepoConfig> {
-  try {
-    return loadResolvedGraphForSession(runtime, rootSourceRoot, state).reposByRoot;
-  } catch (error) {
-    const detail = errorMessage(error);
-    runtime.writeStderr(
-      `Warning: could not load repo config for session ${state.session} (${detail}); using Cleanup commands recorded in Session state.\n`,
-    );
-    return new Map();
-  }
-}
-
 export function runInstallDependencies(runtime: Runtime): void {
   createLogger(runtime).success("Verified monke-tools runtime dependencies");
 }
@@ -861,8 +844,7 @@ function removeDeadSessionStates(runtime: Runtime, home: string, rootSourceRoot:
     }
 
     try {
-      runCleanupCommands(runtime, loadReposByRootForCleanup(runtime, rootSourceRoot, state), state);
-      removeSessionState(home, state.rootSourceRoot, state.session);
+      finalizeSession(runtime, home, state);
       removed += 1;
     } catch (error) {
       failures.push({
@@ -1296,49 +1278,6 @@ function preserveStaleResourceValues(
     ...currentValues,
     ...existingValues.filter((resource) => !currentEnvNames.has(resource.env)),
   ];
-}
-
-function runCleanupCommands(
-  runtime: Runtime,
-  reposByRoot: Map<string, RepoConfig>,
-  state: SessionState,
-): void {
-  for (const repoState of state.repos) {
-    const repoConfig = reposByRoot.get(repoState.sourceRoot);
-    const cleanupCommand = repoState.cleanupCommand ?? repoConfig?.cleanupCommand;
-    if (cleanupCommand === undefined || cleanupCommand === "") {
-      continue;
-    }
-    const sourceRoot = repoConfig?.sourceRoot ?? repoState.sourceRoot;
-
-    const resourceEnv = Object.fromEntries(
-      (repoState.resourceValues ?? []).map((resource) => [resource.env, resource.value]),
-    );
-    const resourceCommandEnv = Object.fromEntries(
-      (repoState.resourceCommandOutputs ?? []).flatMap((command) =>
-        command.outputs.map((resource) => [resource.env, resource.value]),
-      ),
-    );
-
-    try {
-      runtime.exec("sh", ["-c", cleanupCommand], {
-        cwd: sourceRoot,
-        env: {
-          ...resourceEnv,
-          ...resourceCommandEnv,
-          MONKE_SESSION: state.session,
-          MONKE_SOURCE_ROOT: sourceRoot,
-          MONKE_WORKTREE_PATH: repoState.worktreePath,
-        },
-        timeoutSeconds: CLEANUP_COMMAND_TIMEOUT_SECONDS,
-      });
-    } catch (error) {
-      const detail = errorMessage(error);
-      throw new MonkeError(
-        `Cleanup command failed for session ${state.session} repo ${sourceRoot}: ${cleanupCommand}\n${detail}`,
-      );
-    }
-  }
 }
 
 function runBootstrapCommand(

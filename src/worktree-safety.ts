@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import { errorMessage, MonkeError } from "./errors.ts";
@@ -10,6 +10,32 @@ import type { Runtime } from "./types.ts";
 export interface CleanWorktreeRemovalPreflight {
   forceGitRemoval: boolean;
   worktree: WorktreeEntry;
+}
+
+/** Validate that a recorded absolute path is the canonical Source checkout for its repository. */
+export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: string): void {
+  if (!path.isAbsolute(sourceRoot) || !existsSync(sourceRoot)) {
+    throw new MonkeError(`Recorded Source checkout does not exist at canonical path ${sourceRoot}`);
+  }
+  if (path.normalize(realpathSync.native(sourceRoot)) !== path.normalize(sourceRoot)) {
+    throw new MonkeError(`Recorded Source checkout path is not canonical: ${sourceRoot}`);
+  }
+
+  let context: ReturnType<typeof resolveRepoContext>;
+  try {
+    context = resolveRepoContext(runtime, sourceRoot, null, {
+      inferSessionName: false,
+    });
+  } catch (error) {
+    throw new MonkeError(`Cannot verify Source checkout ${sourceRoot}: ${errorMessage(error)}`);
+  }
+  if (
+    !context.isSourceCheckout ||
+    path.normalize(context.sourceRoot) !== path.normalize(sourceRoot) ||
+    path.normalize(context.worktreeRoot) !== path.normalize(sourceRoot)
+  ) {
+    throw new MonkeError(`Recorded Source checkout is not that repository's Source checkout`);
+  }
 }
 
 /** Run the shared structural, lock, and cleanliness checks for one clean worktree. */

@@ -1,41 +1,67 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { branchExists, listWorktrees, resolveRepoContext } from "./git.ts";
-import { MonkeError } from "./errors.ts";
+import { branchExists, getExpectedWorktreePath, listWorktrees, resolveRepoContext } from "./git.ts";
+import type { WorktreeEntry } from "./git.ts";
+import { errorMessage, MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
+import { getSessionStateFilePath, listSessionStates, loadSessionState } from "./registry.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
+import { finalizeSession } from "./session-finalization.ts";
 import { requestShellDirectoryAfterRemoval } from "./shell.ts";
-import type { Runtime } from "./types.ts";
-import { preflightCleanWorktreeRemoval } from "./worktree-safety.ts";
+import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
+import { assertCanonicalSourceCheckout, preflightCleanWorktreeRemoval } from "./worktree-safety.ts";
 
-/** Remove one explicitly selected Ordinary worktree while preserving its branch. */
+interface OrdinaryChopTarget {
+  kind: "ordinary";
+  worktreePath: string;
+}
+
+interface SessionChopTarget {
+  allStates: SessionState[];
+  kind: "session";
+  state: SessionState;
+}
+
+type ChopTarget = OrdinaryChopTarget | SessionChopTarget;
+
+interface SessionRepoPreflight {
+  forceGitRemoval: boolean;
+  mode: "gone" | "live" | "stale";
+  repo: SessionRepoState;
+}
+
+interface ChopResult {
+  kind: "ordinary" | "session";
+  removedInvocation: boolean;
+  session?: string;
+  sourceRoot: string;
+  worktreePath?: string;
+}
+
+/** Remove one selected Session or Ordinary worktree while preserving local branches. */
 export function runChop(runtime: Runtime, target: string | undefined): void {
   const home = getMonkeHome(runtime);
   const removed = withGlobalLock(home, () => {
     const invocation = resolveRepoContext(runtime, runtime.cwd, null, {
       inferSessionName: false,
     });
-    if (target === undefined && invocation.isSourceCheckout) {
-      throw new MonkeError("mt chop from a Source checkout requires an explicit target");
+    const selected = resolveChopTarget(runtime, home, invocation, target);
+
+    if (selected.kind === "session") {
+      return chopSession(runtime, home, invocation.worktreeRoot, selected);
     }
 
-    const selectedPath = resolveOrdinaryTargetPath(runtime, invocation, target);
-    assertOutsideManagedWorktrees(home, selectedPath);
-    const preflight = preflightCleanWorktreeRemoval(runtime, invocation.sourceRoot, selectedPath);
-    runtime.exec(
-      "git",
-      [
-        "worktree",
-        "remove",
-        ...(preflight.forceGitRemoval ? ["--force"] : []),
-        preflight.worktree.path,
-      ],
-      {
-        cwd: invocation.sourceRoot,
-      },
+    const preflight = preflightCleanWorktreeRemoval(
+      runtime,
+      invocation.sourceRoot,
+      selected.worktreePath,
     );
-
+    removeWorktree(runtime, invocation.sourceRoot, preflight.worktree.path, {
+      force: preflight.forceGitRemoval,
+    });
     return {
+      kind: "ordinary" as const,
       removedInvocation:
         path.normalize(invocation.worktreeRoot) === path.normalize(preflight.worktree.path),
       sourceRoot: invocation.sourceRoot,
@@ -43,10 +69,354 @@ export function runChop(runtime: Runtime, target: string | undefined): void {
     };
   });
 
-  createLogger(runtime).success(`Chopped Ordinary worktree ${removed.worktreePath}`);
+  if (removed.kind === "session") {
+    createLogger(runtime).success(`Chopped Session ${removed.session}`);
+  } else {
+    createLogger(runtime).success(`Chopped Ordinary worktree ${removed.worktreePath}`);
+  }
   if (removed.removedInvocation) {
     requestShellDirectoryAfterRemoval(runtime, removed.sourceRoot);
   }
+}
+
+function resolveChopTarget(
+  runtime: Runtime,
+  home: string,
+  invocation: ReturnType<typeof resolveRepoContext>,
+  target: string | undefined,
+): ChopTarget {
+  const managedInvocation =
+    !invocation.isSourceCheckout && isManagedWorktreePath(home, invocation.worktreeRoot);
+  let allStates: SessionState[] = [];
+  let invocationOwner: SessionState | null = null;
+  if (managedInvocation) {
+    allStates = listSessionStates(home);
+    invocationOwner = findSessionOwner(allStates, invocation.sourceRoot, invocation.worktreeRoot);
+    if (invocationOwner === null) {
+      throw new MonkeError(
+        `Managed worktree ${invocation.worktreeRoot} has no valid owning Session state`,
+      );
+    }
+    assertInvocationSessionScope(runtime, home, invocation, invocationOwner);
+  }
+
+  if (target === undefined) {
+    if (invocation.isSourceCheckout) {
+      throw new MonkeError("mt chop from a Source checkout requires an explicit target");
+    }
+    if (invocationOwner !== null) {
+      return { allStates, kind: "session", state: invocationOwner };
+    }
+    return { kind: "ordinary", worktreePath: invocation.worktreeRoot };
+  }
+
+  const rootScope = invocationOwner?.rootSourceRoot ?? invocation.sourceRoot;
+  const statePath = getSessionStateFilePath(home, rootScope, target);
+  if (existsSync(statePath)) {
+    const state = loadSessionState(home, rootScope, target);
+    assertSessionIdentity(home, state, { rootSourceRoot: rootScope, session: target });
+    return {
+      allStates: allStates.length === 0 ? listSessionStates(home) : allStates,
+      kind: "session",
+      state,
+    };
+  }
+
+  const selectedPath = resolveOrdinaryTargetPath(runtime, invocation, target);
+  if (allStates.length === 0 && isManagedWorktreePath(home, selectedPath)) {
+    allStates = listSessionStates(home);
+  }
+  const selectedOwner = findSessionOwner(allStates, invocation.sourceRoot, selectedPath);
+  if (selectedOwner !== null) {
+    assertSessionIdentity(home, selectedOwner);
+    if (path.normalize(selectedOwner.rootSourceRoot) !== path.normalize(rootScope)) {
+      throw new MonkeError(
+        `Session ${selectedOwner.session} is outside the current Root repo scope ${rootScope}`,
+      );
+    }
+    return { allStates, kind: "session", state: selectedOwner };
+  }
+
+  assertOutsideManagedWorktrees(home, selectedPath);
+  return { kind: "ordinary", worktreePath: selectedPath };
+}
+
+function chopSession(
+  runtime: Runtime,
+  home: string,
+  invocationWorktreePath: string,
+  target: SessionChopTarget,
+): ChopResult {
+  const preflight = preflightSession(runtime, home, target.state, target.allStates);
+  const ordered = orderSessionRemovals(
+    preflight,
+    invocationWorktreePath,
+    target.state.rootSourceRoot,
+  );
+
+  let removedInvocation = false;
+  let invocationSourceRoot = target.state.rootSourceRoot;
+  for (const candidate of ordered) {
+    const current = inspectSessionRepo(runtime, home, target.state, candidate.repo);
+    if (current.mode !== "gone") {
+      removeWorktree(runtime, current.repo.sourceRoot, current.repo.worktreePath, {
+        force: current.mode === "stale" || current.forceGitRemoval,
+      });
+    }
+    if (samePath(current.repo.worktreePath, invocationWorktreePath)) {
+      removedInvocation = true;
+      invocationSourceRoot = current.repo.sourceRoot;
+    }
+  }
+
+  finalizeSession(runtime, home, target.state);
+  return {
+    kind: "session",
+    removedInvocation,
+    session: target.state.session,
+    sourceRoot: invocationSourceRoot,
+  };
+}
+
+function preflightSession(
+  runtime: Runtime,
+  home: string,
+  state: SessionState,
+  allStates: SessionState[],
+): SessionRepoPreflight[] {
+  const failures: string[] = [];
+  const sessionChecks = [
+    (): void => {
+      assertSessionIdentity(home, state);
+    },
+    (): void => {
+      assertCanonicalSourceCheckout(runtime, state.rootSourceRoot);
+    },
+    (): void => {
+      assertUniqueSessionRecords(state);
+    },
+    (): void => {
+      assertSessionMaterializationOrder(state);
+    },
+    (): void => {
+      assertNoOtherStateOwnsSessionRepos(state, allStates);
+    },
+  ];
+  for (const check of sessionChecks) {
+    try {
+      check();
+    } catch (error) {
+      failures.push(errorMessage(error));
+    }
+  }
+
+  const repos: SessionRepoPreflight[] = [];
+  for (const repo of state.repos) {
+    try {
+      repos.push(inspectSessionRepo(runtime, home, state, repo));
+    } catch (error) {
+      failures.push(`${repo.worktreePath}: ${errorMessage(error)}`);
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new MonkeError(
+      `Cannot Chop Session ${state.session}; preflight failed:\n${failures
+        .map((failure) => `- ${failure}`)
+        .join("\n")}`,
+    );
+  }
+  return repos;
+}
+
+function inspectSessionRepo(
+  runtime: Runtime,
+  home: string,
+  state: SessionState,
+  repo: SessionRepoState,
+): SessionRepoPreflight {
+  assertCanonicalSourceCheckout(runtime, repo.sourceRoot);
+  const expectedPath = getExpectedWorktreePath(home, repo.sourceRoot, state.session);
+  if (!samePath(repo.worktreePath, expectedPath) || !path.isAbsolute(repo.worktreePath)) {
+    throw new MonkeError(
+      `Recorded Session worktree path is not canonical; expected ${expectedPath}`,
+    );
+  }
+
+  const worktrees = listWorktrees(runtime, repo.sourceRoot);
+  const exact = worktrees.find((entry) => samePath(entry.path, repo.worktreePath));
+  const conflicts = worktrees.filter(
+    (entry) => entry.branch === state.session && !samePath(entry.path, repo.worktreePath),
+  );
+  if (conflicts.length > 0) {
+    throw new MonkeError(
+      `Session branch ${state.session} is registered at unexpected path${conflicts.length === 1 ? "" : "s"} ${conflicts
+        .map((entry) => entry.path)
+        .join(", ")}`,
+    );
+  }
+
+  if (!existsSync(repo.worktreePath)) {
+    if (exact?.locked !== null && exact?.locked !== undefined) {
+      throw lockedWorktreeError(exact);
+    }
+    if (exact !== undefined && exact.branch !== state.session) {
+      throw new MonkeError(
+        `Stale registration at ${repo.worktreePath} is on ${exact.branch ?? "detached"} instead of ${state.session}`,
+      );
+    }
+    return {
+      forceGitRemoval: false,
+      mode: exact === undefined ? "gone" : "stale",
+      repo,
+    };
+  }
+
+  if (exact === undefined) {
+    throw new MonkeError(`Session worktree exists but is not registered`);
+  }
+  if (exact.branch !== state.session) {
+    throw new MonkeError(
+      `Expected Session branch ${state.session}, found ${exact.branch ?? "detached"}`,
+    );
+  }
+
+  const checked = preflightCleanWorktreeRemoval(runtime, repo.sourceRoot, repo.worktreePath);
+  return {
+    forceGitRemoval: checked.forceGitRemoval,
+    mode: "live",
+    repo,
+  };
+}
+
+function assertSessionIdentity(
+  home: string,
+  state: SessionState,
+  expected: { rootSourceRoot: string; session: string } = state,
+): void {
+  if (
+    !samePath(state.rootSourceRoot, expected.rootSourceRoot) ||
+    state.session !== expected.session ||
+    !existsSync(getSessionStateFilePath(home, state.rootSourceRoot, state.session))
+  ) {
+    throw new MonkeError(`Session state identity is inconsistent for ${expected.session}`);
+  }
+}
+
+function assertSessionMaterializationOrder(state: SessionState): void {
+  const rootIndex = state.repos.findIndex((repo) =>
+    samePath(repo.sourceRoot, state.rootSourceRoot),
+  );
+  if (rootIndex !== -1 && rootIndex !== state.repos.length - 1) {
+    throw new MonkeError(
+      `Session state records Root repo ${state.rootSourceRoot} before its dependencies`,
+    );
+  }
+}
+
+function assertInvocationSessionScope(
+  runtime: Runtime,
+  home: string,
+  invocation: ReturnType<typeof resolveRepoContext>,
+  state: SessionState,
+): void {
+  assertSessionIdentity(home, state);
+  assertCanonicalSourceCheckout(runtime, state.rootSourceRoot);
+  const repo = state.repos.find(
+    (candidate) =>
+      samePath(candidate.sourceRoot, invocation.sourceRoot) &&
+      samePath(candidate.worktreePath, invocation.worktreeRoot),
+  );
+  if (
+    repo === undefined ||
+    !samePath(repo.worktreePath, getExpectedWorktreePath(home, repo.sourceRoot, state.session)) ||
+    invocation.currentBranch !== state.session
+  ) {
+    throw new MonkeError(
+      `Managed worktree ${invocation.worktreeRoot} does not match its recorded Session identity`,
+    );
+  }
+}
+
+function assertUniqueSessionRecords(state: SessionState): void {
+  const sourceRoots = new Set<string>();
+  const worktreePaths = new Set<string>();
+  for (const repo of state.repos) {
+    const sourceRoot = path.normalize(repo.sourceRoot);
+    const worktreePath = path.normalize(repo.worktreePath);
+    if (sourceRoots.has(sourceRoot)) {
+      throw new MonkeError(
+        `Session state records Source checkout ${repo.sourceRoot} more than once`,
+      );
+    }
+    if (worktreePaths.has(worktreePath)) {
+      throw new MonkeError(
+        `Session state records worktree path ${repo.worktreePath} more than once`,
+      );
+    }
+    sourceRoots.add(sourceRoot);
+    worktreePaths.add(worktreePath);
+  }
+}
+
+function assertNoOtherStateOwnsSessionRepos(state: SessionState, allStates: SessionState[]): void {
+  const paths = new Set(state.repos.map((repo) => path.normalize(repo.worktreePath)));
+  for (const other of allStates) {
+    if (
+      other === state ||
+      (samePath(other.rootSourceRoot, state.rootSourceRoot) && other.session === state.session)
+    ) {
+      continue;
+    }
+    const collision = other.repos.find((repo) => paths.has(path.normalize(repo.worktreePath)));
+    if (collision !== undefined) {
+      throw new MonkeError(
+        `Session worktree ${collision.worktreePath} is also recorded by Session ${other.session}`,
+      );
+    }
+  }
+}
+
+function orderSessionRemovals(
+  repos: SessionRepoPreflight[],
+  invocationWorktreePath: string,
+  rootSourceRoot: string,
+): SessionRepoPreflight[] {
+  return [...repos].toSorted((left, right) => {
+    const leftRank = removalRank(left.repo, invocationWorktreePath, rootSourceRoot);
+    const rightRank = removalRank(right.repo, invocationWorktreePath, rootSourceRoot);
+    return leftRank - rightRank;
+  });
+}
+
+function removalRank(
+  repo: SessionRepoState,
+  invocationWorktreePath: string,
+  rootSourceRoot: string,
+): number {
+  if (samePath(repo.worktreePath, invocationWorktreePath)) {
+    return 2;
+  }
+  if (samePath(repo.sourceRoot, rootSourceRoot)) {
+    return 1;
+  }
+  return 0;
+}
+
+function findSessionOwner(
+  states: SessionState[],
+  sourceRoot: string,
+  worktreePath: string,
+): SessionState | null {
+  const matches = states.filter((state) =>
+    state.repos.some(
+      (repo) => samePath(repo.sourceRoot, sourceRoot) && samePath(repo.worktreePath, worktreePath),
+    ),
+  );
+  if (matches.length > 1) {
+    throw new MonkeError(`Worktree ${worktreePath} is recorded by multiple Sessions`);
+  }
+  return matches[0] ?? null;
 }
 
 function resolveOrdinaryTargetPath(
@@ -80,11 +450,32 @@ function resolveOrdinaryTargetPath(
 }
 
 function assertOutsideManagedWorktrees(home: string, worktreePath: string): void {
-  const managedRoot = path.join(home, "worktrees");
-  const relative = path.relative(managedRoot, worktreePath);
-  const isOutside =
-    path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`);
-  if (!isOutside) {
+  if (isManagedWorktreePath(home, worktreePath)) {
     throw new MonkeError(`Cannot Chop managed worktree ${worktreePath} as an Ordinary worktree`);
   }
+}
+
+function isManagedWorktreePath(home: string, worktreePath: string): boolean {
+  const relative = path.relative(path.join(home, "worktrees"), worktreePath);
+  return !(path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`));
+}
+
+function lockedWorktreeError(entry: WorktreeEntry): MonkeError {
+  const reason = entry.locked === "" ? "" : `: ${entry.locked}`;
+  return new MonkeError(`Cannot Chop locked worktree ${entry.path}${reason}`);
+}
+
+function removeWorktree(
+  runtime: Runtime,
+  sourceRoot: string,
+  worktreePath: string,
+  options: { force: boolean },
+): void {
+  runtime.exec("git", ["worktree", "remove", ...(options.force ? ["--force"] : []), worktreePath], {
+    cwd: sourceRoot,
+  });
+}
+
+function samePath(left: string, right: string): boolean {
+  return path.normalize(left) === path.normalize(right);
 }

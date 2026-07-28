@@ -83,7 +83,7 @@ function createProgram(
 
   program
     .command("chop")
-    .description("Remove one worktree while preserving its local branch")
+    .description("Remove one Session or Ordinary worktree target while preserving local branches")
     .argument("[target]")
     .action((target) => {
       runChop(runtime, target);
