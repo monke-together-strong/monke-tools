@@ -35,13 +35,25 @@ interface SessionRepoPreflight {
   repo: SessionRepoState;
 }
 
-interface ChopResult {
-  kind: "ordinary" | "session";
-  removedInvocation: boolean;
-  session?: string;
-  sourceRoot: string;
-  worktreePath?: string;
+interface OrdinaryPreflight {
+  forceGitRemoval: boolean;
+  mode: "live" | "stale";
+  worktree: WorktreeEntry;
 }
+
+interface OrdinaryChopResult {
+  kind: "ordinary";
+  removedInvocation: boolean;
+  sourceRoot: string;
+  worktreePath: string;
+}
+
+interface SessionChopResult {
+  kind: "session";
+  session: string;
+}
+
+type ChopResult = OrdinaryChopResult | SessionChopResult;
 
 /** Remove one selected Session or Ordinary worktree while preserving local branches. */
 export function runChop(runtime: Runtime, target: string | undefined, options: ChopOptions): void {
@@ -56,21 +68,32 @@ export function runChop(runtime: Runtime, target: string | undefined, options: C
       return chopSession(runtime, home, invocation.worktreeRoot, selected, options);
     }
 
-    const preflight = preflightWorktreeRemoval(
+    const preflight = inspectOrdinaryWorktree(
       runtime,
       invocation.sourceRoot,
       selected.worktreePath,
       options,
     );
-    removeWorktree(runtime, invocation.sourceRoot, preflight.worktree.path, {
-      force: preflight.forceGitRemoval,
+    const current = inspectOrdinaryWorktree(
+      runtime,
+      invocation.sourceRoot,
+      selected.worktreePath,
+      options,
+    );
+    if (current.worktree.branch !== preflight.worktree.branch) {
+      throw new MonkeError(
+        `Ordinary worktree branch/HEAD changed from ${preflight.worktree.branch ?? "detached"} to ${current.worktree.branch ?? "detached"} at ${current.worktree.path}`,
+      );
+    }
+    removeWorktree(runtime, invocation.sourceRoot, current.worktree.path, {
+      force: current.mode === "stale" || current.forceGitRemoval,
     });
     return {
       kind: "ordinary" as const,
       removedInvocation:
-        path.normalize(invocation.worktreeRoot) === path.normalize(preflight.worktree.path),
+        path.normalize(invocation.worktreeRoot) === path.normalize(current.worktree.path),
       sourceRoot: invocation.sourceRoot,
-      worktreePath: preflight.worktree.path,
+      worktreePath: current.worktree.path,
     };
   });
 
@@ -78,10 +101,42 @@ export function runChop(runtime: Runtime, target: string | undefined, options: C
     createLogger(runtime).success(`Chopped Session ${removed.session}`);
   } else {
     createLogger(runtime).success(`Chopped Ordinary worktree ${removed.worktreePath}`);
+    if (removed.removedInvocation) {
+      requestShellDirectoryAfterRemoval(runtime, removed.sourceRoot);
+    }
   }
-  if (removed.removedInvocation) {
-    requestShellDirectoryAfterRemoval(runtime, removed.sourceRoot);
+}
+
+function inspectOrdinaryWorktree(
+  runtime: Runtime,
+  sourceRoot: string,
+  worktreePath: string,
+  options: ChopOptions,
+): OrdinaryPreflight {
+  assertCanonicalSourceCheckout(runtime, sourceRoot);
+  if (existsSync(worktreePath)) {
+    const checked = preflightWorktreeRemoval(runtime, sourceRoot, worktreePath, options);
+    return {
+      forceGitRemoval: checked.forceGitRemoval,
+      mode: "live",
+      worktree: checked.worktree,
+    };
   }
+
+  const exact = listWorktrees(runtime, sourceRoot).find((entry) =>
+    samePath(entry.path, worktreePath),
+  );
+  if (exact === undefined) {
+    throw new MonkeError(`Chop target not found: ${worktreePath}`);
+  }
+  if (exact.locked !== null) {
+    throw lockedWorktreeError(exact);
+  }
+  return {
+    forceGitRemoval: false,
+    mode: "stale",
+    worktree: exact,
+  };
 }
 
 function resolveChopTarget(
@@ -145,7 +200,7 @@ function resolveChopTarget(
   assertOutsideManagedWorktrees(home, ordinaryCandidate.path);
   if (!ordinaryCandidate.registered) {
     throw new MonkeError(
-      `No registered worktree in ${invocation.sourceRoot} matches target "${target}"`,
+      `Chop target not found: No registered worktree in ${invocation.sourceRoot} matches target "${target}"`,
     );
   }
   return { kind: "ordinary", worktreePath: ordinaryCandidate.path };
@@ -165,8 +220,6 @@ function chopSession(
     target.state.rootSourceRoot,
   );
 
-  let removedInvocation = false;
-  let invocationSourceRoot = target.state.rootSourceRoot;
   for (const candidate of ordered) {
     const current = inspectSessionRepo(runtime, home, target.state, candidate.repo, options);
     if (current.mode !== "gone") {
@@ -175,17 +228,14 @@ function chopSession(
       });
     }
     if (samePath(current.repo.worktreePath, invocationWorktreePath)) {
-      removedInvocation = true;
-      invocationSourceRoot = current.repo.sourceRoot;
+      requestShellDirectoryAfterRemoval(runtime, current.repo.sourceRoot);
     }
   }
 
   finalizeSession(runtime, home, target.state);
   return {
     kind: "session",
-    removedInvocation,
     session: target.state.session,
-    sourceRoot: invocationSourceRoot,
   };
 }
 
@@ -449,7 +499,9 @@ function resolveOrdinaryTarget(
     return { path: branchMatch.path, registered: true };
   }
   if (branchExists(runtime, invocation.sourceRoot, target)) {
-    throw new MonkeError(`Local branch "${target}" has no registered worktree to Chop`);
+    throw new MonkeError(
+      `Chop target not found: Local branch "${target}" has no registered worktree to Chop`,
+    );
   }
 
   const targetPath = path.isAbsolute(target) ? target : path.resolve(runtime.cwd, target);
