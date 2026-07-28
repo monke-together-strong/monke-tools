@@ -18,6 +18,10 @@ _Avoid_: Main worktree, root worktree
 A linked Git worktree created for a specific repo inside a session, stored under the **Monke home** worktree area as `worktrees/<repo-name>/<session>`.
 _Avoid_: Checkout copy, clone
 
+**Ordinary worktree**:
+A linked Git worktree that is not owned by a **Session**.
+_Avoid_: Non-Monke worktree, external worktree, unmanaged Session
+
 **Root repo**:
 The source repo from which a session was requested and whose dependency graph defines the session scope.
 _Avoid_: Main repo, parent repo
@@ -33,6 +37,10 @@ _Avoid_: Cache, registry entry
 **Session state store**:
 The module that owns **Session state** for one operation: opened under the global lock, it scans retained session states once, serves cross-session queries, and persists repo checkpoints.
 _Avoid_: Registry, cache, state manager
+
+**Session finalization**:
+The targeted lifecycle step that runs a Session's Cleanup commands after all its recorded worktrees are logically gone, then removes **Session state** only after every command succeeds.
+_Avoid_: Worktree removal, broad Cleanup scan, branch deletion
 
 **Session resource**:
 A per-session string value resolved for a repo, persisted in session state, written to the session root `.env`, and optionally used during cleanup.
@@ -206,6 +214,18 @@ _Avoid_: Repo coding standards, personal preferences, lint rules
 Authoritative coding guidance documented by a **Consumer repo**; it overrides conflicting team or imported review baselines.
 _Avoid_: Team coding baseline, formatter config, inferred conventions
 
+**Shared lint preset**:
+Team-owned lint policy distributed for consistent use across **Consumer repos**.
+_Avoid_: Oxlint package, rules package, repo lint config
+
+**Release entry**:
+A pending description of a consumer-visible package change and its intended version impact.
+_Avoid_: Changelog fragment, changeset, release note file
+
+**Release PR**:
+An automatically maintained pull request that applies pending package versions and release notes; merging it authorizes immediate publication.
+_Avoid_: Version Packages PR, version bump PR, publish PR
+
 **Skill import**:
 The operation that brings selected upstream skills into the **Skill source tree** as **Imported skills** or **Imported references**.
 _Avoid_: Skill install, skill add, skill sync
@@ -298,12 +318,20 @@ _Avoid_: Arbitrary base branch, from branch
 The operation that refreshes the current session by reapplying seeding, path syncing, env rewrites, and bootstrap behavior.
 _Avoid_: Refresh, rebuild
 
+**Chop**:
+The explicit operation that removes one **Chop target** while preserving local branches. A Session target removes every recorded Session worktree and performs **Session finalization**; an Ordinary-worktree target removes only that worktree.
+_Avoid_: Cleanup, delete branch, prune
+
+**Chop target**:
+The **Session** or **Ordinary worktree** selected for one **Chop** invocation.
+_Avoid_: Branch deletion target, Cleanup candidate
+
 **Swing**:
-The operation that navigates the user's current shell to a **Source checkout** or **Session worktree** for the current **Root repo** scope. Ordinary targets must already exist; explicit pull request targets may materialize the matching **Session worktree** after validating the PR head.
+The operation that navigates the user's current shell to a **Source checkout**, **Session worktree**, or **Ordinary worktree** for the current **Root repo** scope. Ordinary targets must already exist; explicit pull request targets may materialize the matching **Session worktree** after validating the PR head.
 _Avoid_: Switch, git switch, create
 
 **Swing target**:
-A user-provided **Session**, navigation shortcut, or pull request identifier that **Swing** resolves to a local checkout path.
+A user-provided **Session**, **Ordinary worktree** branch, navigation shortcut, or pull request identifier that **Swing** resolves to a local checkout path.
 _Avoid_: Branch selector, create target, git ref
 
 **Swing picker**:
@@ -315,7 +343,7 @@ An optional **Spawn** or **Swing** behavior selected with `--codex` that opens a
 _Avoid_: Codex create, Codex worktree materialization, remote agent launch
 
 **Previous Swing target**:
-The last different **Swing target** remembered for one **Root repo**, used by `mt swing -` to return to a previous source or session checkout.
+The last different **Swing target** remembered for one **Root repo**, used by `mt swing -` to return to a previous source, Session, or Ordinary-worktree checkout.
 _Avoid_: Global previous branch, shell history, last cwd
 
 **Setup**:
@@ -323,7 +351,7 @@ The operation that updates the source checkout root `.env` with dependency path 
 _Avoid_: Materialize, bootstrap
 
 **Shell directory request**:
-A CLI-side request for an active shell adapter to move the user's current shell into a resolved **Source checkout** or **Session worktree** after a session operation succeeds.
+A CLI-side request for an active shell adapter to move the user's current shell into a resolved **Source checkout** or **Session worktree** after a session operation determines that navigation is required. Once issued, the request is honored independently of the operation's final success or failure.
 _Avoid_: cd output, directory switch, shell cd
 
 **Shell adapter**:
@@ -466,19 +494,54 @@ _Avoid_: Nag, recurring prompt, recurring instruction
 - **Default branch spawn mode** requires fresh session branches.
 - **Default branch spawn mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
 - **Spawn** always emits a **Shell directory request** for the root repo's **Session worktree** after the operation succeeds.
-- **Swing** always emits a **Shell directory request** for a resolved root repo **Source checkout** or **Session worktree**.
+- **Chop** without a target selects the current **Session** when run inside one of its managed worktrees.
+- An explicit **Chop** target selects that named **Session** within the current **Root repo** scope, even when invoked from a different Session.
+- **Chop** requires an explicit **Chop target** when run from a **Source checkout**.
+- **Chop** without a target selects the current **Ordinary worktree** when invoked from one.
+- An Ordinary-worktree **Chop target** removes only that worktree and does not perform **Session finalization**.
+- An explicit Ordinary-worktree **Chop target** may be selected by its checked-out branch name or registered absolute or relative path.
+- A **Source checkout** is never a **Chop target**; a target branch or path that resolves to one is rejected.
+- When an explicit branch or path resolves to any worktree owned by a Session, **Chop** selects the whole owning Session when valid **Session state** proves ownership and that Session is within the invocation's **Root repo** scope.
+- A Session-owned worktree is never removed as an **Ordinary worktree**; a managed target outside the invocation's **Root repo** scope is rejected.
+- Explicit **Chop** resolution checks for a Session target in the current **Root repo** scope before resolving an Ordinary-worktree target in the invoking repo.
+- An Ordinary-worktree **Chop target** must be registered to the invoking repo; **Chop** does not remove worktrees across unrelated repositories.
+- A local branch without a registered worktree is not a **Chop target**, because **Chop** preserves branches.
+- A detached **Ordinary worktree** may be a **Chop target** when selected as the current worktree or by its registered path.
+- An exact, unlocked Git registration for an Ordinary-worktree **Chop target** whose directory is already absent is treated as already removed and pruned while its branch is preserved.
+- A missing Ordinary-worktree target with no matching Git registration is not a **Chop target**, and a locked stale registration fails safety validation.
+- A detached or branch-mismatched **Session worktree** fails **Chop** safety validation, and `--force` does not override that failure.
+- A worktree in the **Monke home** managed worktree area never falls back to an Ordinary-worktree **Chop target** when its **Session state** is missing or invalid.
+- A Session **Chop target** requires valid existing **Session state**; `--force` does not reconstruct or bypass missing or invalid state.
+- A partially materialized **Session** remains a valid Session **Chop target**; Chop acts on exactly the repos and resources recorded in valid Session state and does not infer unrecorded worktrees from the current dependency graph.
+- **Chop** removes the invoking worktree last when it belongs to the selected Session; otherwise, it removes the selected Session's root worktree last.
+- A Session **Chop** preflight resolves and validates every cross-repo prerequisite that can be checked without side effects, including Session-state consistency, Source-checkout identity, and every recorded Session worktree, before removing any worktree.
+- Session **Chop** preflight reports every detected participating-repo failure together and removes nothing when any failure exists.
+- After the whole-Session preflight passes, **Chop** revalidates each worktree's identity and safety immediately before its removal.
+- If a removal-time **Chop** revalidation fails, no later worktrees are intentionally removed and **Session state** remains available for retry.
+- **Chop** treats an absent recorded worktree path as already removed only when the recorded path and **Source checkout** identity remain valid, no live worktree carries the Session branch elsewhere, and no locked Git worktree registration remains.
+- **Chop** may prune an exact unlocked stale Git registration for an already-missing recorded worktree; checkout-level branch and status checks do not apply when there is no checkout to inspect.
+- For a clean worktree with initialized submodules, **Chop** may pass Git's internal `worktree remove --force` solely to bypass Git's submodule restriction after immediately revalidating cleanliness; this does not change the user-facing meaning of `mt chop --force`.
+- **Session finalization** runs Cleanup commands in reverse materialization order, from the Root repo toward its dependencies.
+- **Session finalization** runs only Cleanup commands recorded in **Session state**; an absent recorded command means that repo has no Cleanup command, regardless of current repo configuration.
+- **Session finalization** stops at the first failed Cleanup command, preserves the full **Session state**, and does not run later dependency Cleanup commands.
+- Retrying **Session finalization** reruns Cleanup commands from the beginning because individual command successes are not checkpointed.
+- An explicit Session **Chop target** remains valid while its **Session state** is retained, even when every recorded worktree is already gone; rerunning `mt chop <session>` retries **Session finalization**.
+- **Cleanup** remains the broad operation for discovering and finalizing already-dead Sessions, while **Chop** targets one selected Session. After successful **Session state** removal, a later `mt chop <session>` reports that the target does not exist.
+- **Swing** always emits a **Shell directory request** for a resolved root repo **Source checkout**, **Session worktree**, or **Ordinary worktree**.
 - A **Codex thread launch** preserves normal **Spawn** or **Swing** behavior and additionally opens `codex://threads/new` with the resolved absolute checkout path.
-- **Swing** does not create **Session worktrees** for ordinary **Session** targets or change which branch an existing worktree has checked out.
-- A **Swing target** may be a **Session** name, the `^` source-checkout shortcut, the `-` previous-target shortcut, a `pr:<number>` pull request shortcut, or a pull request URL.
+- **Swing** does not create worktrees for ordinary **Session** or **Ordinary worktree** targets, or change which branch an existing worktree has checked out.
+- A **Swing target** may be a **Session** name, an existing **Ordinary worktree** branch, the `^` source-checkout shortcut, the `-` previous-target shortcut, a `pr:<number>` pull request shortcut, or a pull request URL.
 - The `^` **Swing target** resolves to the current **Root repo** **Source checkout** without materializing, setting up, creating, or changing branches.
 - The `-` **Swing target** resolves to the **Previous Swing target** for the current **Root repo**.
 - The `^` **Swing target** participates in **Previous Swing target** history.
 - **Previous Swing target** is scoped to one **Root repo**.
-- A pull request **Swing target** resolves through the pull request's same-repo head branch name, fetches the PR head, creates the **Session** if missing, and refuses to navigate when the local Session branch diverged from the PR head.
-- Stored **Session** navigation (`mt swing <session>`, picker selections, and `-`) remains ordinary **Session** navigation and does not revalidate a pull request head.
+- A pull request **Swing target** resolves through the pull request's same-repo head branch name, fetches the PR head, navigates to an existing matching **Session worktree** or **Ordinary worktree**, creates the **Session** if neither exists, and refuses to navigate when the local branch diverged from the PR head.
+- Stored navigation (`mt swing <target>`, picker selections, and `-`) does not revalidate a pull request head.
 - **Swing** does not support merge request targets.
 - Fork pull request targets are outside the first **Swing** contract.
 - A **Shell directory request** uses only a **Shell directory directive**; it does not support arbitrary shell execution.
+- An **Active shell adapter** honors a non-empty **Shell directory directive** regardless of the `mt` process's exit status, while preserving an existing nonzero status.
+- **Chop** does not require an **Active shell adapter**; when the invoking worktree is removed without one, it reports the destination **Source checkout** path and warns that the parent shell could not be moved.
 - When a **Shell directory request** is accepted by an **Active shell adapter**, monke-tools reports that it switched to the target checkout.
 - When no active **Shell adapter** can accept the **Shell directory request**, monke-tools reports the target path the user should switch to manually.
 - When **Shell integration install** has configured the user's shell but no **Active shell adapter** can accept the current **Shell directory request**, monke-tools reports the target path and explains that the shell integration is configured but inactive.

@@ -14,9 +14,14 @@ source files:
 The main report has a report title, a `Window:` line showing the resolved retrospective window, a
 `Sources:` line linking those two files, and two sections, in this order:
 
-1. **Session Actions** — the transcript-derived synthesis passed via `--synthesis`. Leads the
-   report because cross-repo session patterns (ranked by **value × recurrence**) are the
-   highest-leverage fixes.
+1. **Session Actions** — the transcript-derived synthesis passed via `--synthesis`, with the exact
+   subsections defined by [synthesis-contract.md](synthesis-contract.md):
+   - **Active Actions** — unresolved, partially resolved, or unknown candidates ranked by **value ×
+     recurrence**.
+   - **Skill & Workflow Opportunities** — one `create-skill`, `create-workflow`, `update`,
+     `combine`, or `no-skill` decision for every active action.
+   - **Resolved or Superseded** — current-state-verified candidates suppressed from active ranking
+     but preserved as recurrence memory.
 2. **PR Repeated Corrective Patterns** — only recurring corrective-change patterns from the
    required PR analysis lane, plus a short pointer when explicit PR gaps exist.
 
@@ -27,8 +32,8 @@ The source files hold the bulky evidence:
 - **PR sources** — the full PR trajectory aggregate, including one-off patterns, explicit gaps, and
   per-PR analyses.
 
-A reader should be able to act from the main report alone and drill into linked sources only when
-they need evidence or provenance.
+A reader should be able to act from the main report alone, see why stale candidates were suppressed,
+and drill into linked sources only when they need transcript provenance.
 
 ## Report sets are the cross-run memory
 

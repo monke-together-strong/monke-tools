@@ -25,7 +25,7 @@ import {
   withPlatform,
 } from "./helpers.ts";
 
-describe("swing", () => {
+describe("Swing", () => {
   test("swing navigates to an existing root repo Session worktree without creating one", () => {
     const sandbox = makeTempDir("swing-session");
     const home = path.join(sandbox, "home");
@@ -62,6 +62,50 @@ describe("swing", () => {
     expect(result.stderr).toContain(worktreeRoot);
   });
 
+  test("swing detects a linked worktree outside Monke home by branch name", () => {
+    const sandbox = makeTempDir("swing-linked-worktree");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    const worktreeRoot = path.join(sandbox, "ordinary-worktrees", "banana");
+    git(repoRoot, ["branch", "banana"]);
+    git(repoRoot, ["worktree", "add", worktreeRoot, "banana"]);
+
+    const result = runMonke({ args: ["swing", "banana"], cwd: repoRoot, monkeHome: home });
+
+    expect(result.stdout).toBe(`${worktreeRoot}\n`);
+    expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
+    expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
+  });
+
+  test("swing picker includes linked worktrees outside Monke home", async () => {
+    const sandbox = makeTempDir("swing-picker-linked-worktree");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n",
+    });
+    runMonke({ args: ["spawn", "mango"], cwd: repoRoot, monkeHome: home });
+    const worktreeRoot = path.join(sandbox, "ordinary-worktrees", "banana");
+    git(repoRoot, ["branch", "banana"]);
+    git(repoRoot, ["worktree", "add", worktreeRoot, "banana"]);
+    let prompt: SelectPrompt | undefined;
+
+    const result = await runMonkeAsync({
+      args: ["swing"],
+      cwd: repoRoot,
+      monkeHome: home,
+      onSelect(value) {
+        prompt = value;
+      },
+      selectValues: ["banana"],
+    });
+
+    expect(prompt?.options.map((option) => option.value)).toStrictEqual(["mango", "banana"]);
+    expect(prompt?.options.map((option) => option.label)).toStrictEqual(["mango", "banana"]);
+    expect(result.stdout.endsWith(`${worktreeRoot}\n`)).toBeTruthy();
+  });
+
   test("swing picker hides paths and lists recently updated Sessions first", async () => {
     const sandbox = makeTempDir("swing-picker-recency");
     const home = path.join(sandbox, "home");
@@ -94,11 +138,7 @@ describe("swing", () => {
       selectValues: ["a-older"],
     });
 
-    expect(prompt?.options.map((option) => option.value)).toStrictEqual([
-      "^",
-      "z-newer",
-      "a-older",
-    ]);
+    expect(prompt?.options.map((option) => option.value)).toStrictEqual(["z-newer", "a-older"]);
     expect(prompt?.options.every((option) => option.hint === undefined)).toBeTruthy();
   });
 
@@ -122,7 +162,7 @@ describe("swing", () => {
     expect(result.stderr).toContain(repoRoot);
   });
 
-  test("swing picker selecting the current target preserves Previous Swing target history", async () => {
+  test("swing picker omits the current target", async () => {
     const sandbox = makeTempDir("swing-picker-current-history");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
@@ -130,25 +170,27 @@ describe("swing", () => {
     });
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     runMonke({ args: ["spawn", "cherry"], cwd: repoRoot, monkeHome: home });
-    const bananaWorktree = getExpectedWorktreePath(home, repoRoot, "banana");
     const cherryWorktree = getExpectedWorktreePath(home, repoRoot, "cherry");
     runMonke({ args: ["swing", "banana"], cwd: repoRoot, monkeHome: home });
-    runMonke({ args: ["swing", "cherry"], cwd: bananaWorktree, monkeHome: home });
+    runMonke({
+      args: ["swing", "cherry"],
+      cwd: getExpectedWorktreePath(home, repoRoot, "banana"),
+      monkeHome: home,
+    });
 
-    const noOpResult = await runMonkeAsync({
+    let prompt: SelectPrompt | undefined;
+    const backToSource = await runMonkeAsync({
       args: ["swing"],
       cwd: cherryWorktree,
       monkeHome: home,
-      selectValues: ["cherry"],
-    });
-    const previousResult = runMonke({
-      args: ["swing", "-"],
-      cwd: cherryWorktree,
-      monkeHome: home,
+      onSelect(value) {
+        prompt = value;
+      },
+      selectValues: ["^"],
     });
 
-    expect(noOpResult.stdout.endsWith(`${cherryWorktree}\n`)).toBeTruthy();
-    expect(previousResult.stdout).toBe(`${bananaWorktree}\n`);
+    expect(prompt?.options.map((option) => option.value)).toStrictEqual(["^", "banana"]);
+    expect(backToSource.stdout.endsWith(`${repoRoot}\n`)).toBeTruthy();
   });
 
   test("swing picker rejects unknown selections", async () => {
@@ -177,7 +219,7 @@ describe("swing", () => {
     });
 
     expect(() => runMonke({ args: ["swing", "missing"], cwd: repoRoot, monkeHome: home })).toThrow(
-      `Session "missing" does not exist for ${repoRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn missing instead.`,
+      `Worktree or Session "missing" does not exist for ${repoRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn missing instead.`,
     );
   });
 
@@ -267,7 +309,7 @@ describe("swing", () => {
     const historyDirectory = path.join(home, "swing-history");
     const [historyName] = readdirSync(historyDirectory);
     if (historyName === undefined) {
-      throw new Error("expected a Swing history file");
+      throw new Error("expected Swing history file");
     }
     const historyPath = path.join(historyDirectory, historyName);
     writeFileSync(

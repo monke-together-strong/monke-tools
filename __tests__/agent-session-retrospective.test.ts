@@ -19,6 +19,7 @@ import {
   runCommit,
   validatePrAnalysis,
   validateFindings,
+  validateSynthesis,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/commit.ts";
 import {
   prManifestPath,
@@ -594,12 +595,57 @@ describe("agent session retrospective", () => {
     });
   });
 
+  describe(validateSynthesis, () => {
+    test("requires each resolution-aware synthesis section exactly once", () => {
+      const valid = [
+        "### Active Actions",
+        "",
+        "_No active actions._",
+        "",
+        "### Skill & Workflow Opportunities",
+        "",
+        "_No skill or workflow opportunities._",
+        "",
+        "### Resolved or Superseded",
+        "",
+        "_No resolved or superseded candidates._",
+      ].join("\n");
+      expect(validateSynthesis(valid)).toStrictEqual([]);
+      expect(validateSynthesis("### Active Actions")).toStrictEqual([
+        "Heading `### Skill & Workflow Opportunities` appears 0 time(s), expected 1.",
+        "Heading `### Resolved or Superseded` appears 0 time(s), expected 1.",
+      ]);
+      expect(
+        validateSynthesis(
+          [
+            "### Resolved or Superseded",
+            "### Active Actions",
+            "### Skill & Workflow Opportunities",
+          ].join("\n"),
+        ),
+      ).toStrictEqual(["Required synthesis headings are out of order."]);
+    });
+  });
+
   describe("buildReport", () => {
     test("keeps the main report action-focused and moves evidence to session sources", () => {
       const bundle = bundleWith(["t0"]);
+      const synthesis = [
+        "### Active Actions",
+        "",
+        "GLOBAL-SYNTHESIS",
+        "",
+        "### Skill & Workflow Opportunities",
+        "",
+        "_No skill or workflow opportunities._",
+        "",
+        "### Resolved or Superseded",
+        "",
+        "_No resolved or superseded candidates._",
+      ].join("\n");
       const artifacts = buildReportArtifacts(
         "ts",
-        "GLOBAL-SYNTHESIS",
+        synthesis,
         [
           {
             bundle,
@@ -694,7 +740,25 @@ describe("agent session retrospective", () => {
         "utf-8",
       );
       const synthesisPath = path.join(dir, "synthesis.md");
-      writeFileSync(synthesisPath, "Target: preflight\nConfidence: medium\nGLOBAL", "utf-8");
+      writeFileSync(
+        synthesisPath,
+        [
+          "### Active Actions",
+          "",
+          "Target: preflight",
+          "Confidence: medium",
+          "GLOBAL",
+          "",
+          "### Skill & Workflow Opportunities",
+          "",
+          "_No skill or workflow opportunities._",
+          "",
+          "### Resolved or Superseded",
+          "",
+          "_No resolved or superseded candidates._",
+        ].join("\n"),
+        "utf-8",
+      );
 
       const result = runCommit({
         nowIso: "2026-06-01T00:00:00.000Z",
@@ -757,6 +821,45 @@ describe("agent session retrospective", () => {
           runTs,
         }),
       ).toThrow("commit requires runs/2026-06-01T00-00-00-000Z/pr-analysis.md");
+      expect(existsSync(runDir)).toBeTruthy();
+      expect(loadFrozenSession(root, "codex", "s1")).toBeNull();
+    });
+
+    test("commit rejects incomplete synthesis before freezing and cleaning the run", () => {
+      const root = path.join(dir, "store");
+      const runTs = "2026-06-01T00-00-00-000Z";
+      const runDir = path.join(root, "runs", runTs);
+      mkdirSync(runDir, { recursive: true });
+      writeFileSync(
+        path.join(runDir, "pr-analysis.md"),
+        "## Recurring Corrective Patterns\n\n_No recurring corrective patterns._\n",
+        "utf-8",
+      );
+      const bundle = bundleWith(["t0"]);
+      bundle.runTs = runTs;
+      writeFileSync(path.join(runDir, `${bundle.repoHash}.json`), JSON.stringify(bundle), "utf-8");
+      const findings: RepoFindings = {
+        durableFixProposals: [],
+        frictionEpisodes: [],
+        repeatedAsks: [],
+        repoKey: "/repo",
+      };
+      writeFileSync(
+        path.join(runDir, `${bundle.repoHash}.findings.json`),
+        JSON.stringify(findings),
+        "utf-8",
+      );
+      const synthesisPath = path.join(dir, "synthesis.md");
+      writeFileSync(synthesisPath, "### Active Actions\n\n_No active actions._\n", "utf-8");
+
+      expect(() =>
+        runCommit({
+          nowIso: "2026-06-01T00:00:00.000Z",
+          retroRoot: root,
+          runTs,
+          synthesisPath,
+        }),
+      ).toThrow("invalid synthesis");
       expect(existsSync(runDir)).toBeTruthy();
       expect(loadFrozenSession(root, "codex", "s1")).toBeNull();
     });

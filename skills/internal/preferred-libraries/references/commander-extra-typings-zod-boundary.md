@@ -22,7 +22,11 @@ import is a runtime dependency even though Commander provides the parser.
 
 ```ts
 import { readFile } from "node:fs/promises";
-import { Command, CommanderError } from "@commander-js/extra-typings";
+import {
+  Command,
+  CommanderError,
+  type OutputConfiguration,
+} from "@commander-js/extra-typings";
 import * as z from "zod";
 
 const ConfigSchema = z.strictObject({
@@ -30,8 +34,29 @@ const ConfigSchema = z.strictObject({
   concurrency: z.number().int().positive(),
 });
 
+interface ConfigurableCliParser {
+  configureOutput(configuration: OutputConfiguration): unknown;
+  exitOverride(callback?: (error: CommanderError) => never): unknown;
+  showSuggestionAfterError(displaySuggestion?: boolean): unknown;
+}
+
+function configureCliParser<T extends ConfigurableCliParser>(program: T): T {
+  let errorOutput = "";
+
+  program.showSuggestionAfterError(false);
+  program.configureOutput({
+    writeErr: (message) => {
+      errorOutput += message;
+    },
+  });
+  program.exitOverride((error) => {
+    throw new CommanderError(error.exitCode, error.code, errorOutput.trimEnd() || error.message);
+  });
+  return program;
+}
+
 function reportCliFailure(error: unknown): void {
-  if (error instanceof CommanderError && error.exitCode === 0) return; // help, version
+  if (error instanceof CommanderError && error.exitCode === 0) return; // explicit help, version
 
   process.stderr.write(`${formatCliFailure(error)}\n`);
   process.exitCode = 1;
@@ -52,9 +77,7 @@ function formatCliFailure(error: unknown): string {
   return String(error);
 }
 
-const program = new Command()
-  .configureOutput({ writeErr: () => undefined })
-  .exitOverride()
+const program = configureCliParser(new Command())
   .requiredOption("--config <path>")
   .action(async (options) => {
     const raw: unknown = JSON.parse(await readFile(options.config, "utf8"));
@@ -69,8 +92,13 @@ try {
 ```
 
 Every configuration method returns `this`, so chaining into `new Command()` keeps the inferred
-argument and option types. Extract a shared helper once several executables need the same
-configuration, and make it generic so inference survives the call.
+argument and option types. The shared parser helper is generic so inference survives the call.
+
+Commander normally writes a failure to stderr before `exitOverride()` throws. Buffer that output so
+the executable handler can print it exactly once. This also preserves Commander's generated help
+when a command owns subcommands but none was selected: with `exitOverride()`, the thrown error's
+message is only the placeholder `(outputHelp)`, not the help text Commander already sent to
+`writeErr`.
 
 `ConfigSchema.parse(raw)` returns `z.output<typeof ConfigSchema>`, so no duplicate `Config`
 interface or cast is needed. Annotating the input `unknown` records that it has not yet crossed the
@@ -80,8 +108,9 @@ Configure the root parser before declaring any subcommand. `.command()` copies t
 configuration and exit callback at creation time, so a subcommand declared first writes its own
 diagnostic and calls `process.exit`, skipping the handler and killing the process mid-run. Nothing
 type-checks this and the root command still behaves, so the gap shows only on subcommand failures.
-The same copy covers `helpOption`, `addHelpCommand`, and `allowExcessArguments` — set them once on
-the root instead of repeating them per subcommand.
+The same copy covers help configuration and `allowExcessArguments` — set them once on the root
+instead of repeating them per subcommand. Leave Commander's built-in help option and help command
+enabled unless the product deliberately replaces them.
 
 Call `program.parseAsync()` when any action or hook is asynchronous, and `schema.parseAsync()` when
 a schema holds asynchronous refinements. Commander reads `process.argv` when `parse()` receives no
@@ -133,6 +162,9 @@ joining path to message reads better: `apps.web.ports must be a non-empty array`
 earns a small custom formatter, so long as it stays inside the one helper. Judge it on the sentence
 a user reads.
 
-Help and version stay stdout successes with exit status zero; every other failure produces one
-stderr diagnostic and a nonzero status. A standalone CLI that needs no testable boundary can skip
-the override and let Commander write and exit on its own.
+Explicit help (`--help` or `help <command>`) and version stay stdout successes with exit status
+zero. In Commander 15, parsing a command that owns subcommands with none selected generates help on
+stderr and exits with status one; preserve that generated output instead of replacing it with a
+custom missing-command guard. Every other failure produces one stderr diagnostic and a nonzero
+status. A standalone CLI that needs no testable boundary can skip the override and let Commander
+write and exit on its own.

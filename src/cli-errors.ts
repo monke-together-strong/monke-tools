@@ -6,19 +6,23 @@ import { MonkeError } from "./errors.ts";
 
 interface ConfigurableCliParser {
   configureOutput: (configuration: OutputConfiguration) => unknown;
-  exitOverride: () => unknown;
+  exitOverride: (callback?: (error: CommanderError) => never) => unknown;
   showSuggestionAfterError: (displaySuggestion?: boolean) => unknown;
 }
 
 /** Configure a testable CLI parser whose executable boundary owns error output. */
 export function configureCliParser<T extends ConfigurableCliParser>(program: T): T {
+  let errorOutput = "";
+
   program.showSuggestionAfterError(false);
   program.configureOutput({
-    writeErr: () => {
-      // The executable boundary reports the normalized error once.
+    writeErr: (message) => {
+      errorOutput += message;
     },
   });
-  program.exitOverride();
+  program.exitOverride((error) => {
+    throw new CommanderError(error.exitCode, error.code, errorOutput.trimEnd() || error.message);
+  });
   return program;
 }
 
