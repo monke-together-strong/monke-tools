@@ -1,6 +1,6 @@
 ---
 name: preferred-libraries
-description: Preferred external libraries by capability. Use before choosing or replacing JavaScript or TypeScript libraries, CLI parsing, runtime validation, or generic utilities; default to listed libraries when they fit.
+description: Preferred JavaScript and TypeScript project tooling and external libraries by capability. Use when setting up a new project or choosing or replacing libraries, CLI parsing, runtime validation, or generic utilities; default to listed tools when they fit.
 ---
 
 # Preferred Libraries
@@ -8,6 +8,11 @@ description: Preferred external libraries by capability. Use before choosing or 
 Before adding or proposing an external JavaScript or TypeScript library, or writing a custom implementation that a listed library would cover, check this registry.
 
 Use the listed default unless an exception applies. Completion requires one of these outcomes: use the listed library, follow an existing project standard, state that no listed library fits, or run the fresh comparison the user asked for.
+
+## Project Tooling
+
+- `vite-plus`: Use Vite+ as the default toolchain for new JavaScript and TypeScript projects. Scaffold with `vp create`, keep formatter and linter settings in `vite.config.ts`, and use `vp check` for formatting, linting, and type checking.
+- `@monke-together-strong/oxc-config`: Use as the default Oxfmt and Oxlint config for new team-owned JavaScript and TypeScript projects.
 
 ## CLI And Terminal UX
 

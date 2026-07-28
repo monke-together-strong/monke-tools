@@ -19,6 +19,7 @@ describe("shared Oxfmt config", () => {
     });
 
     expect(mtsFmt.printWidth).toBe(100);
+    expect(mtsFmt.proseWrap).toBe("preserve");
     expect(mtsFmt.ignorePatterns).toContain("skills/**");
     expect(mtsFmt.ignorePatterns).toContain("AGENTS.md");
     expect(config).toMatchObject({
@@ -43,6 +44,7 @@ describe("shared Oxlint config", () => {
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
       "typescript/promise-function-async": "off",
+      "typescript/return-await": ["error", "in-try-catch"],
     });
     expect(mtsLint.rules).not.toHaveProperty("no-bitwise");
   });

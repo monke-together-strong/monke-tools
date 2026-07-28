@@ -1,176 +1,186 @@
 {
-  "version": 2,
   "recipes": [
     {
-      "source": "git@github.com:petergyang/no-ai-slop.git",
       "skills": [
         {
+          "kind": "skill",
           "selector": "no-ai-slop",
-          "slug": "no-ai-slop",
-          "kind": "skill"
+          "slug": "no-ai-slop"
         }
-      ]
+      ],
+      "source": "git@github.com:petergyang/no-ai-slop.git"
     },
     {
-      "source": "https://github.com/cursor/plugins/tree/main/cursor-team-kit/skills",
       "skills": [
         {
+          "kind": "skill",
           "selector": "thermo-nuclear-code-quality-review",
-          "slug": "thermo-nuclear-code-quality-review",
-          "kind": "skill"
+          "slug": "thermo-nuclear-code-quality-review"
         }
-      ]
+      ],
+      "source": "https://github.com/cursor/plugins/tree/main/cursor-team-kit/skills"
     },
     {
-      "source": "https://github.com/mattpocock/skills",
       "skills": [
         {
+          "kind": "reference",
+          "selector": "ultracite",
+          "slug": "ultracite"
+        }
+      ],
+      "source": "https://github.com/haydenbleasel/ultracite/tree/main/skills/ultracite"
+    },
+    {
+      "skills": [
+        {
+          "kind": "reference",
           "selector": "code-review",
-          "slug": "code-review",
-          "kind": "reference"
+          "slug": "code-review"
         },
         {
+          "kind": "skill",
           "selector": "codebase-design",
-          "slug": "codebase-design",
-          "kind": "skill"
+          "slug": "codebase-design"
         },
         {
+          "kind": "skill",
           "selector": "diagnosing-bugs",
-          "slug": "diagnosing-bugs",
-          "kind": "skill"
+          "slug": "diagnosing-bugs"
         },
         {
+          "kind": "skill",
           "selector": "domain-modeling",
-          "slug": "domain-modeling",
-          "kind": "skill"
+          "slug": "domain-modeling"
         },
         {
+          "kind": "skill",
           "selector": "grill-with-docs",
-          "slug": "grill-with-docs",
-          "kind": "skill"
+          "slug": "grill-with-docs"
         },
         {
+          "kind": "skill",
           "selector": "grilling",
-          "slug": "grilling",
-          "kind": "skill"
+          "slug": "grilling"
         },
         {
+          "kind": "skill",
           "selector": "handoff",
-          "slug": "handoff",
-          "kind": "skill"
+          "slug": "handoff"
         },
         {
+          "kind": "skill",
           "selector": "improve-codebase-architecture",
-          "slug": "improve-codebase-architecture",
-          "kind": "skill"
+          "slug": "improve-codebase-architecture"
         },
         {
+          "kind": "skill",
           "selector": "prototype",
-          "slug": "prototype",
-          "kind": "skill"
+          "slug": "prototype"
         },
         {
+          "kind": "skill",
           "selector": "research",
-          "slug": "research",
-          "kind": "skill"
+          "slug": "research"
         },
         {
+          "kind": "skill",
           "selector": "resolving-merge-conflicts",
-          "slug": "resolving-merge-conflicts",
-          "kind": "skill"
+          "slug": "resolving-merge-conflicts"
         },
         {
+          "kind": "skill",
           "selector": "setup-matt-pocock-skills",
-          "slug": "setup-matt-pocock-skills",
-          "kind": "skill"
+          "slug": "setup-matt-pocock-skills"
         },
         {
+          "kind": "skill",
           "selector": "tdd",
-          "slug": "tdd",
-          "kind": "skill"
+          "slug": "tdd"
         },
         {
+          "kind": "skill",
           "selector": "teach",
-          "slug": "teach",
-          "kind": "skill"
+          "slug": "teach"
         },
         {
+          "kind": "skill",
           "selector": "to-spec",
-          "slug": "to-spec",
-          "kind": "skill"
+          "slug": "to-spec"
         },
         {
+          "kind": "skill",
           "selector": "to-tickets",
-          "slug": "to-tickets",
-          "kind": "skill"
+          "slug": "to-tickets"
         },
         {
+          "kind": "skill",
           "selector": "triage",
-          "slug": "triage",
-          "kind": "skill"
+          "slug": "triage"
         },
         {
+          "kind": "skill",
           "selector": "wayfinder",
-          "slug": "wayfinder",
-          "kind": "skill"
+          "slug": "wayfinder"
         },
         {
+          "kind": "skill",
           "selector": "wizard",
-          "slug": "wizard",
-          "kind": "skill"
+          "slug": "wizard"
         },
         {
+          "kind": "skill",
           "selector": "writing-great-skills",
-          "slug": "writing-great-skills",
-          "kind": "skill"
+          "slug": "writing-great-skills"
         }
-      ]
+      ],
+      "source": "https://github.com/mattpocock/skills"
     },
     {
-      "source": "https://github.com/shadcn-ui/ui",
       "skills": [
         {
+          "kind": "skill",
           "selector": "shadcn",
-          "slug": "shadcn",
-          "kind": "skill"
+          "slug": "shadcn"
         }
-      ]
+      ],
+      "source": "https://github.com/shadcn-ui/ui"
     },
     {
-      "source": "https://github.com/tt-a1i/archify",
       "skills": [
         {
+          "kind": "skill",
           "selector": "archify",
-          "slug": "archify",
-          "kind": "skill"
+          "slug": "archify"
         }
-      ]
+      ],
+      "source": "https://github.com/tt-a1i/archify"
     },
     {
-      "source": "openclaw/agent-skills",
       "acceptOpenClawRisks": true,
       "skills": [
         {
+          "kind": "skill",
           "selector": "autoreview",
-          "slug": "autoreview",
-          "kind": "skill"
+          "slug": "autoreview"
         },
         {
+          "kind": "skill",
           "selector": "behavior-validator",
-          "slug": "behavior-validator",
-          "kind": "skill"
+          "slug": "behavior-validator"
         }
-      ]
+      ],
+      "source": "openclaw/agent-skills"
     },
     {
-      "source": "shadcn/improve",
       "skills": [
         {
+          "kind": "skill",
           "selector": "improve",
-          "slug": "improve",
-          "kind": "skill"
+          "slug": "improve"
         }
-      ]
+      ],
+      "source": "shadcn/improve"
     }
-  ]
+  ],
+  "version": 2
 }
