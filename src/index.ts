@@ -84,9 +84,14 @@ function createProgram(
   program
     .command("chop")
     .description("Remove one Session or Ordinary worktree target while preserving local branches")
+    .helpOption("-h, --help", "Display help for Chop")
     .argument("[target]")
-    .action((target) => {
-      runChop(runtime, target);
+    .option(
+      "--force",
+      "Discard staged, modified, and untracked files; ignored files are always deleted",
+    )
+    .action((target, options) => {
+      runChop(runtime, target, { force: options.force === true });
     });
 
   const cleanup = program

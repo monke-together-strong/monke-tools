@@ -6,8 +6,8 @@ import { listWorktrees, resolveRepoContext } from "./git.ts";
 import type { WorktreeEntry } from "./git.ts";
 import type { Runtime } from "./types.ts";
 
-/** Shared result of a clean-worktree removal preflight. */
-export interface CleanWorktreeRemovalPreflight {
+/** Shared result of a worktree removal preflight. */
+export interface WorktreeRemovalPreflight {
   forceGitRemoval: boolean;
   worktree: WorktreeEntry;
 }
@@ -38,13 +38,17 @@ export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: stri
   }
 }
 
-/** Run the shared structural, lock, and cleanliness checks for one clean worktree. */
-export function preflightCleanWorktreeRemoval(
+/** Run shared structural and lock checks, plus cleanliness unless force was requested. */
+export function preflightWorktreeRemoval(
   runtime: Runtime,
   sourceRoot: string,
   targetPath: string,
-): CleanWorktreeRemovalPreflight {
+  options: { force: boolean },
+): WorktreeRemovalPreflight {
   const worktree = validateRegisteredWorktreeForRemoval(runtime, sourceRoot, targetPath);
+  if (options.force) {
+    return { forceGitRemoval: true, worktree };
+  }
   assertCleanWorktree(runtime, worktree.path);
   const forceGitRemoval = hasInitializedSubmodules(runtime, worktree.path);
   if (forceGitRemoval) {

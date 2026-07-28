@@ -73,8 +73,21 @@ export function read(root: string, relativePath: string): string {
   return readFileSync(path.join(root, relativePath), "utf-8");
 }
 
-export function installGitShim(binDirectory: string): string {
+export function installGitShim(
+  binDirectory: string,
+  options?: { dirtyAfterSubmoduleStatus?: string },
+): string {
   const logPath = path.join(binDirectory, "git.log");
+  const dirtyAfterSubmoduleStatus =
+    options?.dirtyAfterSubmoduleStatus === undefined
+      ? ""
+      : `if [ "$*" = "submodule status --recursive" ]; then
+  "${findExecutableOnPath("git")}" "$@"
+  status=$?
+  printf 'changed during removal\\n' > ${shellQuote(options.dirtyAfterSubmoduleStatus)}
+  exit "$status"
+fi
+`;
   writeExecutable(
     path.join(binDirectory, "git"),
     `#!/bin/sh
@@ -88,6 +101,7 @@ for arg in "$@"; do
   printf '%s' "$arg" >> ${shellQuote(logPath)}
 done
 printf '\\n' >> ${shellQuote(logPath)}
+${dirtyAfterSubmoduleStatus}
 exec "${findExecutableOnPath("git")}" "$@"
 `,
   );

@@ -10,7 +10,7 @@ import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { finalizeSession } from "./session-finalization.ts";
 import { requestShellDirectoryAfterRemoval } from "./shell.ts";
 import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
-import { assertCanonicalSourceCheckout, preflightCleanWorktreeRemoval } from "./worktree-safety.ts";
+import { assertCanonicalSourceCheckout, preflightWorktreeRemoval } from "./worktree-safety.ts";
 
 interface OrdinaryChopTarget {
   kind: "ordinary";
@@ -24,6 +24,10 @@ interface SessionChopTarget {
 }
 
 type ChopTarget = OrdinaryChopTarget | SessionChopTarget;
+
+interface ChopOptions {
+  force: boolean;
+}
 
 interface SessionRepoPreflight {
   forceGitRemoval: boolean;
@@ -40,7 +44,7 @@ interface ChopResult {
 }
 
 /** Remove one selected Session or Ordinary worktree while preserving local branches. */
-export function runChop(runtime: Runtime, target: string | undefined): void {
+export function runChop(runtime: Runtime, target: string | undefined, options: ChopOptions): void {
   const home = getMonkeHome(runtime);
   const removed = withGlobalLock(home, () => {
     const invocation = resolveRepoContext(runtime, runtime.cwd, null, {
@@ -49,13 +53,14 @@ export function runChop(runtime: Runtime, target: string | undefined): void {
     const selected = resolveChopTarget(runtime, home, invocation, target);
 
     if (selected.kind === "session") {
-      return chopSession(runtime, home, invocation.worktreeRoot, selected);
+      return chopSession(runtime, home, invocation.worktreeRoot, selected, options);
     }
 
-    const preflight = preflightCleanWorktreeRemoval(
+    const preflight = preflightWorktreeRemoval(
       runtime,
       invocation.sourceRoot,
       selected.worktreePath,
+      options,
     );
     removeWorktree(runtime, invocation.sourceRoot, preflight.worktree.path, {
       force: preflight.forceGitRemoval,
@@ -91,7 +96,7 @@ function resolveChopTarget(
   let invocationOwner: SessionState | null = null;
   if (managedInvocation) {
     allStates = listSessionStates(home);
-    invocationOwner = findSessionOwner(allStates, invocation.sourceRoot, invocation.worktreeRoot);
+    invocationOwner = findSessionOwner(allStates, invocation.worktreeRoot, invocation.sourceRoot);
     if (invocationOwner === null) {
       throw new MonkeError(
         `Managed worktree ${invocation.worktreeRoot} has no valid owning Session state`,
@@ -122,11 +127,11 @@ function resolveChopTarget(
     };
   }
 
-  const selectedPath = resolveOrdinaryTargetPath(runtime, invocation, target);
-  if (allStates.length === 0 && isManagedWorktreePath(home, selectedPath)) {
+  const ordinaryCandidate = resolveOrdinaryTarget(runtime, invocation, target);
+  if (allStates.length === 0 && isManagedWorktreePath(home, ordinaryCandidate.path)) {
     allStates = listSessionStates(home);
   }
-  const selectedOwner = findSessionOwner(allStates, invocation.sourceRoot, selectedPath);
+  const selectedOwner = findSessionOwner(allStates, ordinaryCandidate.path);
   if (selectedOwner !== null) {
     assertSessionIdentity(home, selectedOwner);
     if (path.normalize(selectedOwner.rootSourceRoot) !== path.normalize(rootScope)) {
@@ -137,8 +142,13 @@ function resolveChopTarget(
     return { allStates, kind: "session", state: selectedOwner };
   }
 
-  assertOutsideManagedWorktrees(home, selectedPath);
-  return { kind: "ordinary", worktreePath: selectedPath };
+  assertOutsideManagedWorktrees(home, ordinaryCandidate.path);
+  if (!ordinaryCandidate.registered) {
+    throw new MonkeError(
+      `No registered worktree in ${invocation.sourceRoot} matches target "${target}"`,
+    );
+  }
+  return { kind: "ordinary", worktreePath: ordinaryCandidate.path };
 }
 
 function chopSession(
@@ -146,8 +156,9 @@ function chopSession(
   home: string,
   invocationWorktreePath: string,
   target: SessionChopTarget,
+  options: ChopOptions,
 ): ChopResult {
-  const preflight = preflightSession(runtime, home, target.state, target.allStates);
+  const preflight = preflightSession(runtime, home, target.state, target.allStates, options);
   const ordered = orderSessionRemovals(
     preflight,
     invocationWorktreePath,
@@ -157,7 +168,7 @@ function chopSession(
   let removedInvocation = false;
   let invocationSourceRoot = target.state.rootSourceRoot;
   for (const candidate of ordered) {
-    const current = inspectSessionRepo(runtime, home, target.state, candidate.repo);
+    const current = inspectSessionRepo(runtime, home, target.state, candidate.repo, options);
     if (current.mode !== "gone") {
       removeWorktree(runtime, current.repo.sourceRoot, current.repo.worktreePath, {
         force: current.mode === "stale" || current.forceGitRemoval,
@@ -183,6 +194,7 @@ function preflightSession(
   home: string,
   state: SessionState,
   allStates: SessionState[],
+  options: ChopOptions,
 ): SessionRepoPreflight[] {
   const failures: string[] = [];
   const sessionChecks = [
@@ -213,7 +225,7 @@ function preflightSession(
   const repos: SessionRepoPreflight[] = [];
   for (const repo of state.repos) {
     try {
-      repos.push(inspectSessionRepo(runtime, home, state, repo));
+      repos.push(inspectSessionRepo(runtime, home, state, repo, options));
     } catch (error) {
       failures.push(`${repo.worktreePath}: ${errorMessage(error)}`);
     }
@@ -234,6 +246,7 @@ function inspectSessionRepo(
   home: string,
   state: SessionState,
   repo: SessionRepoState,
+  options: ChopOptions,
 ): SessionRepoPreflight {
   assertCanonicalSourceCheckout(runtime, repo.sourceRoot);
   const expectedPath = getExpectedWorktreePath(home, repo.sourceRoot, state.session);
@@ -281,7 +294,7 @@ function inspectSessionRepo(
     );
   }
 
-  const checked = preflightCleanWorktreeRemoval(runtime, repo.sourceRoot, repo.worktreePath);
+  const checked = preflightWorktreeRemoval(runtime, repo.sourceRoot, repo.worktreePath, options);
   return {
     forceGitRemoval: checked.forceGitRemoval,
     mode: "live",
@@ -405,12 +418,14 @@ function removalRank(
 
 function findSessionOwner(
   states: SessionState[],
-  sourceRoot: string,
   worktreePath: string,
+  sourceRoot?: string,
 ): SessionState | null {
   const matches = states.filter((state) =>
     state.repos.some(
-      (repo) => samePath(repo.sourceRoot, sourceRoot) && samePath(repo.worktreePath, worktreePath),
+      (repo) =>
+        samePath(repo.worktreePath, worktreePath) &&
+        (sourceRoot === undefined || samePath(repo.sourceRoot, sourceRoot)),
     ),
   );
   if (matches.length > 1) {
@@ -419,19 +434,19 @@ function findSessionOwner(
   return matches[0] ?? null;
 }
 
-function resolveOrdinaryTargetPath(
+function resolveOrdinaryTarget(
   runtime: Runtime,
   invocation: ReturnType<typeof resolveRepoContext>,
   target: string | undefined,
-): string {
+): { path: string; registered: boolean } {
   if (target === undefined) {
-    return invocation.worktreeRoot;
+    return { path: invocation.worktreeRoot, registered: true };
   }
 
   const worktrees = listWorktrees(runtime, invocation.sourceRoot);
   const branchMatch = worktrees.find((worktree) => worktree.branch === target);
   if (branchMatch !== undefined) {
-    return branchMatch.path;
+    return { path: branchMatch.path, registered: true };
   }
   if (branchExists(runtime, invocation.sourceRoot, target)) {
     throw new MonkeError(`Local branch "${target}" has no registered worktree to Chop`);
@@ -441,12 +456,10 @@ function resolveOrdinaryTargetPath(
   const pathMatch = worktrees.find(
     (worktree) => path.normalize(worktree.path) === path.normalize(targetPath),
   );
-  if (pathMatch === undefined) {
-    throw new MonkeError(
-      `No registered worktree in ${invocation.sourceRoot} matches target "${target}"`,
-    );
-  }
-  return pathMatch.path;
+  return {
+    path: pathMatch?.path ?? targetPath,
+    registered: pathMatch !== undefined,
+  };
 }
 
 function assertOutsideManagedWorktrees(home: string, worktreePath: string): void {
