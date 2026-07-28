@@ -1,43 +1,20 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { resolveGitRoot, resolveRepoKey } from "./identity.ts";
-import { clipProse, summarizeInput, summarizeOutput } from "./normalize.ts";
-import type { AgentKind, CanonicalSession, CanonicalTurn } from "./types.ts";
+import { summarizeInput } from "./normalize.ts";
+import { buildCanonicalSession } from "./session-events.ts";
+import type { DecodedSession, SessionAdapter, SessionEvent } from "./session-events.ts";
+import type { AgentKind, CanonicalSession } from "./types.ts";
 
 interface DiscoveredFile {
   agent: AgentKind;
   filePath: string;
 }
 
-/** A turn accumulator that assigns stable `t<index>` refs in arrival order. */
-class TurnBuilder {
-  readonly turns: CanonicalTurn[] = [];
-
-  prose(kind: "user" | "assistant", text: string): void {
-    const trimmed = clipProse(text);
-    if (!trimmed) {
-      return;
-    }
-    this.turns.push({ kind, ref: `t${this.turns.length}`, text: trimmed });
-  }
-
-  toolCall(name: string, inputSummary: string): CanonicalTurn & { kind: "tool_call" } {
-    const turn = {
-      kind: "tool_call" as const,
-      ref: `t${this.turns.length}`,
-      name,
-      inputSummary,
-    };
-    this.turns.push(turn);
-    return turn;
-  }
-}
-
 function readJsonlLines(filePath: string): { records: unknown[]; lineCount: number; hash: string } {
-  const raw = readFileSync(filePath, "utf8");
+  const raw = readFileSync(filePath, "utf-8");
   const hash = createHash("sha256").update(raw).digest("hex");
   const lines = raw.split("\n");
   const records: unknown[] = [];
@@ -53,214 +30,210 @@ function readJsonlLines(filePath: string): { records: unknown[]; lineCount: numb
       // Skip malformed lines; transcripts are occasionally truncated mid-write.
     }
   }
-  return { records, lineCount, hash };
+  return { hash, lineCount, records };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  return isRecord(value) ? value : null;
 }
 
-function collectTouchedRoots(
-  rawArgs: unknown,
-  primary: string,
-  into: Set<string>,
-  visitedDirs: Set<string>,
-): void {
-  const visit = (value: unknown): void => {
-    if (typeof value === "string") {
-      if (value.startsWith("/") && value.length > 1 && visitedDirs.size < MAX_TOUCHED_DIRS_PER_SESSION) {
-        const dir = existsSync(value) && statSync(value).isDirectory() ? value : path.dirname(value);
-        if (!visitedDirs.has(dir) && existsSync(dir)) {
-          visitedDirs.add(dir);
-          const root = resolveGitRoot(dir);
-          if (root && root !== primary) {
-            into.add(root);
-          }
-        }
-      }
-      return;
-    }
-    if (Array.isArray(value)) {
-      value.forEach(visit);
-      return;
-    }
-    const record = asRecord(value);
-    if (record) {
-      for (const key of ["workdir", "cwd", "path", "file_path", "absolute_path"]) {
-        if (key in record) {
-          visit(record[key]);
-        }
-      }
-    }
-  };
-  visit(rawArgs);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 const EXIT_CODE_PATTERNS = [
-  /exited with code (\d+)/i,
-  /exit code:? (\d+)/i,
-  /exit status:? (\d+)/i,
-  /process exited with status (\d+)/i,
+  /exited with code (?<exitCode>\d+)/iu,
+  /exit code:? (?<exitCode>\d+)/iu,
+  /exit status:? (?<exitCode>\d+)/iu,
+  /process exited with status (?<exitCode>\d+)/iu,
 ];
 
 function parseExitCode(output: string): number | undefined {
   for (const pattern of EXIT_CODE_PATTERNS) {
     const match = output.match(pattern);
-    if (match) {
-      return Number(match[1]);
+    if (match?.groups?.exitCode !== undefined && match.groups.exitCode !== "") {
+      return Number(match.groups.exitCode);
     }
   }
   return undefined;
 }
 
-// Cap distinct directory resolutions per session: a session that reads thousands
-// of paths must not trigger thousands of `git` calls. Secondary membership is
-// best-effort, then frozen once (so it is stable thereafter).
-const MAX_TOUCHED_DIRS_PER_SESSION = 64;
-
 // ---------------------------------------------------------------------------
 // Codex: event-stream JSONL (session_meta / response_item / event_msg).
 // ---------------------------------------------------------------------------
 
+const codexSessionAdapter: SessionAdapter = {
+  agent: "codex",
+  decode: decodeCodexSession,
+};
+
 export function parseCodexSession(filePath: string): CanonicalSession | null {
-  const { records, lineCount, hash } = readJsonlLines(filePath);
-  if (records.length === 0) {
-    return null;
-  }
+  return parseSessionWithAdapter(filePath, codexSessionAdapter);
+}
 
-  let sessionId = "";
-  let cwd: string | null = null;
-  let startedAt: string | null = null;
-  let lastActivityAt: string | null = null;
-
-  const hasEventProse = records.some((entry) => {
-    const record = asRecord(entry);
-    const payload = record && asRecord(record.payload);
-    const type = payload?.type;
-    return record?.type === "event_msg" && (type === "user_message" || type === "agent_message");
-  });
-
-  const builder = new TurnBuilder();
-  const pendingCalls = new Map<string, CanonicalTurn & { kind: "tool_call" }>();
-  const touched = new Set<string>();
-  const visitedDirs = new Set<string>();
-  const rawUserMessages: string[] = [];
+function decodeCodexSession(records: unknown[]): DecodedSession {
+  const session = createDecodedSession();
+  const hasEventProse = records.some(hasCodexEventProse);
 
   for (const entry of records) {
     const record = asRecord(entry);
     if (!record) {
       continue;
     }
-    if (typeof record.timestamp === "string") {
-      startedAt ??= record.timestamp;
-      lastActivityAt = record.timestamp;
-    }
+    noteActivity(session, record);
     const payload = asRecord(record.payload);
     if (!payload) {
       continue;
     }
 
     if (record.type === "session_meta") {
-      sessionId = typeof payload.id === "string" ? payload.id : sessionId;
-      cwd = typeof payload.cwd === "string" ? payload.cwd : cwd;
+      readCodexSessionMetadata(session, payload);
       continue;
     }
-    if (record.type === "turn_context" && !cwd && typeof payload.cwd === "string") {
-      cwd = payload.cwd;
-      continue;
-    }
-
-    const primary = cwd ? resolveRepoKey(cwd) : "";
-
-    if (record.type === "event_msg") {
-      if (payload.type === "user_message" && typeof payload.message === "string") {
-        rawUserMessages.push(payload.message.trim());
-        if (hasEventProse) {
-          builder.prose("user", payload.message);
-        }
-      } else if (
-        payload.type === "agent_message" &&
-        typeof payload.message === "string" &&
-        hasEventProse
-      ) {
-        builder.prose("assistant", payload.message);
-      }
+    if (record.type === "turn_context") {
+      readCodexTurnContext(session, payload);
       continue;
     }
 
-    if (record.type !== "response_item") {
-      continue;
-    }
-
-    if (payload.type === "message" && !hasEventProse) {
-      const role = payload.role;
-      if (role !== "user" && role !== "assistant") {
-        continue;
-      }
-      const text = extractCodexMessageText(payload.content);
-      if (role === "user" && isInjectedUserText(text)) {
-        continue;
-      }
-      builder.prose(role, text);
-      if (role === "user" && text.trim()) {
-        rawUserMessages.push(text.trim());
-      }
-      continue;
-    }
-
-    if (payload.type === "function_call") {
-      const name = typeof payload.name === "string" ? payload.name : "tool";
-      let parsedArgs: unknown = payload.arguments;
-      if (typeof payload.arguments === "string") {
-        try {
-          parsedArgs = JSON.parse(payload.arguments);
-        } catch {
-          parsedArgs = payload.arguments;
-        }
-      }
-      collectTouchedRoots(parsedArgs, primary, touched, visitedDirs);
-      const turn = builder.toolCall(name, summarizeInput(parsedArgs));
-      if (typeof payload.call_id === "string") {
-        pendingCalls.set(payload.call_id, turn);
-      }
-      continue;
-    }
-
-    if (payload.type === "function_call_output") {
-      const callId = typeof payload.call_id === "string" ? payload.call_id : "";
-      const turn = pendingCalls.get(callId);
-      const output = typeof payload.output === "string" ? payload.output : summarizeInput(payload.output);
-      if (turn) {
-        turn.outputHeadTail = summarizeOutput(output);
-        const exitCode = parseExitCode(output);
-        if (exitCode !== undefined) {
-          turn.exitCode = exitCode;
-          if (exitCode !== 0) {
-            turn.error = `exit ${exitCode}`;
-          }
-        }
-      }
-    }
+    session.events.push(...decodeCodexPayload(record.type, payload, hasEventProse, session.cwd));
   }
 
-  if (!sessionId) {
+  return session;
+}
+
+function hasCodexEventProse(entry: unknown): boolean {
+  const record = asRecord(entry);
+  const payload = record && asRecord(record.payload);
+  const type = payload?.type;
+  return record?.type === "event_msg" && (type === "user_message" || type === "agent_message");
+}
+
+function readCodexSessionMetadata(session: DecodedSession, payload: Record<string, unknown>): void {
+  if (typeof payload.id === "string") {
+    session.sessionId = payload.id;
+  }
+  if (typeof payload.cwd === "string") {
+    session.cwd = payload.cwd;
+  }
+}
+
+function readCodexTurnContext(session: DecodedSession, payload: Record<string, unknown>): void {
+  if ((session.cwd === null || session.cwd === "") && typeof payload.cwd === "string") {
+    session.cwd = payload.cwd;
+  }
+}
+
+function decodeCodexPayload(
+  recordType: unknown,
+  payload: Record<string, unknown>,
+  hasEventProse: boolean,
+  cwd: string | null,
+): SessionEvent[] {
+  if (recordType === "event_msg") {
+    const event = decodeCodexEventMessage(payload, hasEventProse);
+    return event ? [event] : [];
+  }
+  if (recordType === "response_item") {
+    const event = decodeCodexResponseItem(payload, hasEventProse, cwd);
+    return event ? [event] : [];
+  }
+  return [];
+}
+
+function decodeCodexEventMessage(
+  payload: Record<string, unknown>,
+  hasEventProse: boolean,
+): SessionEvent | null {
+  if (typeof payload.message !== "string") {
     return null;
   }
+  if (payload.type === "user_message") {
+    return {
+      captureRawUserMessage: true,
+      kind: "prose",
+      role: "user",
+      text: payload.message,
+    };
+  }
+  if (payload.type === "agent_message" && hasEventProse) {
+    return {
+      captureRawUserMessage: false,
+      kind: "prose",
+      role: "assistant",
+      text: payload.message,
+    };
+  }
+  return null;
+}
 
-  const primary = cwd ? resolveRepoKey(cwd) : (cwd ?? "");
+function decodeCodexResponseItem(
+  payload: Record<string, unknown>,
+  hasEventProse: boolean,
+  cwd: string | null,
+): SessionEvent | null {
+  if (payload.type === "message" && !hasEventProse) {
+    return decodeCodexResponseMessage(payload);
+  }
+  if (payload.type === "function_call") {
+    return decodeCodexFunctionCall(payload, cwd);
+  }
+  if (payload.type === "function_call_output") {
+    return decodeCodexFunctionResult(payload);
+  }
+  return null;
+}
+
+function decodeCodexResponseMessage(payload: Record<string, unknown>): SessionEvent | null {
+  const { role } = payload;
+  if (role !== "user" && role !== "assistant") {
+    return null;
+  }
+  const text = extractCodexMessageText(payload.content);
+  if (role === "user" && isInjectedUserText(text)) {
+    return null;
+  }
   return {
-    agent: "codex",
-    sessionId,
-    filePath,
-    cwd,
-    startedAt,
-    lastActivityAt,
-    sourceLineCount: lineCount,
-    contentHash: hash,
-    touchedRoots: [...touched].filter((root) => root !== primary).sort(),
-    turns: builder.turns,
-    rawUserMessages,
+    captureRawUserMessage: role === "user" && text.trim() !== "",
+    kind: "prose",
+    role,
+    text,
   };
+}
+
+function decodeCodexFunctionCall(
+  payload: Record<string, unknown>,
+  cwd: string | null,
+): SessionEvent {
+  return {
+    callId: typeof payload.call_id === "string" ? payload.call_id : null,
+    cwd,
+    input: parseCodexArguments(payload.arguments),
+    kind: "tool-call",
+    name: typeof payload.name === "string" ? payload.name : "tool",
+  };
+}
+
+function decodeCodexFunctionResult(payload: Record<string, unknown>): SessionEvent {
+  const output =
+    typeof payload.output === "string" ? payload.output : summarizeInput(payload.output);
+  const exitCode = parseExitCode(output);
+  return {
+    callId: typeof payload.call_id === "string" ? payload.call_id : "",
+    ...(exitCode === undefined ? {} : { exitCode }),
+    kind: "tool-result",
+    output,
+  };
+}
+
+function parseCodexArguments(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 function extractCodexMessageText(content: unknown): string {
@@ -294,131 +267,161 @@ function isInjectedUserText(text: string): boolean {
 // Claude: tree JSONL (user / assistant entries, content blocks).
 // ---------------------------------------------------------------------------
 
+const claudeSessionAdapter: SessionAdapter = {
+  agent: "claude",
+  decode: decodeClaudeSession,
+};
+
 export function parseClaudeSession(filePath: string): CanonicalSession | null {
-  const { records, lineCount, hash } = readJsonlLines(filePath);
-  if (records.length === 0) {
-    return null;
-  }
+  return parseSessionWithAdapter(filePath, claudeSessionAdapter);
+}
 
-  let sessionId = "";
-  let cwd: string | null = null;
-  let startedAt: string | null = null;
-  let lastActivityAt: string | null = null;
-
-  // First pass: pair tool_use ids to their tool_result output.
-  const toolResults = new Map<string, { output: string; isError: boolean }>();
-  for (const entry of records) {
-    const record = asRecord(entry);
-    const message = record && asRecord(record.message);
-    const content = message?.content;
-    if (!Array.isArray(content)) {
-      continue;
-    }
-    for (const block of content) {
-      const blockRecord = asRecord(block);
-      if (blockRecord?.type === "tool_result" && typeof blockRecord.tool_use_id === "string") {
-        toolResults.set(blockRecord.tool_use_id, {
-          output: extractClaudeText(blockRecord.content),
-          isError: blockRecord.is_error === true,
-        });
-      }
-    }
-  }
-
-  const builder = new TurnBuilder();
-  const touched = new Set<string>();
-  const visitedDirs = new Set<string>();
-  const rawUserMessages: string[] = [];
+function decodeClaudeSession(records: unknown[]): DecodedSession {
+  const session = createDecodedSession();
+  const toolResults = collectClaudeToolResults(records);
 
   for (const entry of records) {
     const record = asRecord(entry);
     if (!record) {
       continue;
     }
-    if (typeof record.sessionId === "string") {
-      sessionId ||= record.sessionId;
-    }
-    if (typeof record.cwd === "string") {
-      cwd ??= record.cwd;
-    }
-    if (typeof record.timestamp === "string") {
-      startedAt ??= record.timestamp;
-      lastActivityAt = record.timestamp;
-    }
-
-    const primary = cwd ? resolveRepoKey(cwd) : "";
+    noteActivity(session, record);
+    readClaudeSessionMetadata(session, record);
     const message = asRecord(record.message);
-    if (!message) {
-      continue;
-    }
-    const content = message.content;
-
-    if (record.type === "user") {
-      if (typeof content === "string") {
-        if (record.isMeta !== true) {
-          builder.prose("user", content);
-          rawUserMessages.push(content.trim());
-        }
-        continue;
-      }
-      if (!Array.isArray(content)) {
-        continue;
-      }
-      for (const block of content) {
-        const blockRecord = asRecord(block);
-        if (blockRecord?.type === "text" && typeof blockRecord.text === "string") {
-          if (record.isMeta !== true) {
-            builder.prose("user", blockRecord.text);
-            rawUserMessages.push(blockRecord.text.trim());
-          }
-        }
-        // tool_result blocks are attached to their tool_use turn, not emitted here.
-      }
-      continue;
-    }
-
-    if (record.type !== "assistant" || !Array.isArray(content)) {
-      continue;
-    }
-    for (const block of content) {
-      const blockRecord = asRecord(block);
-      if (!blockRecord) {
-        continue;
-      }
-      if (blockRecord.type === "text" && typeof blockRecord.text === "string") {
-        builder.prose("assistant", blockRecord.text);
-      } else if (blockRecord.type === "tool_use") {
-        const name = typeof blockRecord.name === "string" ? blockRecord.name : "tool";
-        collectTouchedRoots(blockRecord.input, primary, touched, visitedDirs);
-        const turn = builder.toolCall(name, summarizeInput(blockRecord.input));
-        const result = typeof blockRecord.id === "string" ? toolResults.get(blockRecord.id) : undefined;
-        if (result) {
-          turn.outputHeadTail = summarizeOutput(result.output);
-          if (result.isError) {
-            turn.error = "tool error";
-          }
-        }
-      }
+    if (message) {
+      session.events.push(...decodeClaudeMessage(record, message, session.cwd, toolResults));
     }
   }
 
-  if (!sessionId) {
+  return session;
+}
+
+function collectClaudeToolResults(
+  records: unknown[],
+): Map<string, SessionEvent & { kind: "tool-result" }> {
+  const results = new Map<string, SessionEvent & { kind: "tool-result" }>();
+  for (const entry of records) {
+    const record = asRecord(entry);
+    const message = record && asRecord(record.message);
+    if (!Array.isArray(message?.content)) {
+      continue;
+    }
+    for (const block of message.content) {
+      const result = decodeClaudeToolResult(block);
+      if (result) {
+        results.set(result.callId, result);
+      }
+    }
+  }
+  return results;
+}
+
+function readClaudeSessionMetadata(session: DecodedSession, record: Record<string, unknown>): void {
+  if (session.sessionId === "" && typeof record.sessionId === "string") {
+    session.sessionId = record.sessionId;
+  }
+  if (session.cwd === null && typeof record.cwd === "string") {
+    session.cwd = record.cwd;
+  }
+}
+
+function decodeClaudeMessage(
+  record: Record<string, unknown>,
+  message: Record<string, unknown>,
+  cwd: string | null,
+  toolResults: Map<string, SessionEvent & { kind: "tool-result" }>,
+): SessionEvent[] {
+  const { content } = message;
+  if (typeof content === "string") {
+    return record.type === "user" && record.isMeta !== true
+      ? [
+          {
+            captureRawUserMessage: true,
+            kind: "prose",
+            role: "user",
+            text: content,
+          },
+        ]
+      : [];
+  }
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  const events: SessionEvent[] = [];
+  for (const block of content) {
+    events.push(...decodeClaudeBlock(record, block, cwd, toolResults));
+  }
+  return events;
+}
+
+function decodeClaudeBlock(
+  record: Record<string, unknown>,
+  block: unknown,
+  cwd: string | null,
+  toolResults: Map<string, SessionEvent & { kind: "tool-result" }>,
+): SessionEvent[] {
+  const content = asRecord(block);
+  if (!content) {
+    return [];
+  }
+  if (content.type === "tool_result") {
+    return [];
+  }
+  if (
+    record.type === "user" &&
+    record.isMeta !== true &&
+    content.type === "text" &&
+    typeof content.text === "string"
+  ) {
+    return [
+      {
+        captureRawUserMessage: true,
+        kind: "prose",
+        role: "user",
+        text: content.text,
+      },
+    ];
+  }
+  if (record.type !== "assistant") {
+    return [];
+  }
+  if (content.type === "text" && typeof content.text === "string") {
+    return [
+      {
+        captureRawUserMessage: false,
+        kind: "prose",
+        role: "assistant",
+        text: content.text,
+      },
+    ];
+  }
+  if (content.type === "tool_use") {
+    const call: SessionEvent = {
+      callId: typeof content.id === "string" ? content.id : null,
+      cwd,
+      input: content.input,
+      kind: "tool-call",
+      name: typeof content.name === "string" ? content.name : "tool",
+    };
+    const result = call.callId === null ? undefined : toolResults.get(call.callId);
+    return result ? [call, result] : [call];
+  }
+  return [];
+}
+
+function decodeClaudeToolResult(
+  block: unknown,
+): (SessionEvent & { kind: "tool-result" }) | null {
+  const content = asRecord(block);
+  if (content?.type !== "tool_result" || typeof content.tool_use_id !== "string") {
     return null;
   }
-
-  const primary = cwd ? resolveRepoKey(cwd) : (cwd ?? "");
   return {
-    agent: "claude",
-    sessionId,
-    filePath,
-    cwd,
-    startedAt,
-    lastActivityAt,
-    sourceLineCount: lineCount,
-    contentHash: hash,
-    touchedRoots: [...touched].filter((root) => root !== primary).sort(),
-    turns: builder.turns,
-    rawUserMessages,
+    callId: content.tool_use_id,
+    ...(content.is_error === true ? { error: "tool error" } : {}),
+    kind: "tool-result",
+    output: extractClaudeText(content.content),
   };
 }
 
@@ -439,6 +442,41 @@ function extractClaudeText(content: unknown): string {
     })
     .filter(Boolean)
     .join("\n");
+}
+
+function parseSessionWithAdapter(
+  filePath: string,
+  adapter: SessionAdapter,
+): CanonicalSession | null {
+  const { records, lineCount, hash } = readJsonlLines(filePath);
+  if (records.length === 0) {
+    return null;
+  }
+  return buildCanonicalSession({
+    agent: adapter.agent,
+    contentHash: hash,
+    filePath,
+    sourceLineCount: lineCount,
+    ...adapter.decode(records),
+  });
+}
+
+function createDecodedSession(): DecodedSession {
+  return {
+    cwd: null,
+    events: [],
+    lastActivityAt: null,
+    sessionId: "",
+    startedAt: null,
+  };
+}
+
+function noteActivity(session: DecodedSession, record: Record<string, unknown>): void {
+  if (typeof record.timestamp !== "string") {
+    return;
+  }
+  session.startedAt ??= record.timestamp;
+  session.lastActivityAt = record.timestamp;
 }
 
 // ---------------------------------------------------------------------------

@@ -25,9 +25,9 @@ const SkillInstallPreferenceSchema = z.strictObject({
   }),
 });
 const GlobalMonkeConfigSchema = z.strictObject({
-  version: z.literal(1, { error: "must be 1" }),
   installedSourceCheckout: AbsolutePathSchema.optional(),
   skillInstallPreference: SkillInstallPreferenceSchema.optional(),
+  version: z.literal(1, { error: "must be 1" }),
 });
 
 type ParsedSkillInstallPreference = z.output<typeof SkillInstallPreferenceSchema>;
@@ -95,7 +95,7 @@ export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig): 
     configPath,
   );
   ensureDirectory(home);
-  writeFileSync(configPath, stringify(parsed), "utf8");
+  writeFileSync(configPath, stringify(parsed), "utf-8");
 }
 
 /** Return the path of the Global monke config file for a monke home directory. */
@@ -107,7 +107,7 @@ function normalizeGlobalMonkeConfig(
   config: ParsedGlobalMonkeConfig,
   configPath: string,
 ): GlobalMonkeConfig {
-  const installedSourceCheckout = config.installedSourceCheckout;
+  const { installedSourceCheckout } = config;
 
   const skillInstallPreference =
     config.skillInstallPreference === undefined
@@ -132,19 +132,20 @@ function parseSkillInstallPreference(
   let customSeen = false;
 
   for (const rawTarget of preference.targets) {
-    const kind = rawTarget.kind;
+    const { kind } = rawTarget;
 
     switch (kind) {
       case "codex":
       case "claude":
-      case "cursor":
+      case "cursor": {
         if (seenBuiltIns.has(kind)) {
           throw new MonkeError(`Duplicate Skill install target ${kind} in ${location}`);
         }
         seenBuiltIns.add(kind);
         targets.push({ kind });
         break;
-      case "custom":
+      }
+      case "custom": {
         if (customSeen) {
           throw new MonkeError(`${location} may contain at most one custom target`);
         }
@@ -154,6 +155,10 @@ function parseSkillInstallPreference(
           path: rawTarget.path,
         });
         break;
+      }
+      default: {
+        throw new MonkeError(`Unsupported Skill install target in ${location}`);
+      }
     }
   }
 

@@ -1,14 +1,10 @@
 #!/usr/bin/env bun
 
-import { Command, InvalidArgumentError, type OptionValues } from "@commander-js/extra-typings";
+import { Command, InvalidArgumentError } from '@commander-js/extra-typings';
+import type { OptionValues } from '@commander-js/extra-typings';
 import { existsSync, readFileSync } from "node:fs";
-import {
-  BetterStackApiError,
-  BetterStackClient,
-  type BetterStackConnectionsResponse,
-  type BetterStackSourceResponse,
-  normalizeQueryUrl
-} from "./client";
+import { BetterStackApiError, BetterStackClient, normalizeQueryUrl } from './client';
+import type { BetterStackConnectionsResponse, BetterStackSourceResponse } from './client';
 import { getFirstEnvValue, loadEnvFileIfPresent } from "./env";
 
 async function main(): Promise<void> {
@@ -130,13 +126,13 @@ function parseIntegerOption(value: string): number {
 }
 
 function initializeEnvironment(envFilePath?: string): void {
-  if (envFilePath) {
+  if (envFilePath !== undefined && envFilePath !== "") {
     loadEnvFileIfPresent(envFilePath);
     return;
   }
 
-  const defaultEnvFile = process.env["BETTERSTACK_ENV_FILE"];
-  if (defaultEnvFile) {
+  const defaultEnvFile = process.env.BETTERSTACK_ENV_FILE;
+  if (defaultEnvFile !== undefined && defaultEnvFile !== "") {
     loadEnvFileIfPresent(defaultEnvFile);
     return;
   }
@@ -150,8 +146,8 @@ async function handleSourceList(options: PaginationOptions): Promise<void> {
   initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
-  const page = options.page;
-  const perPage = options.perPage;
+  const {page} = options;
+  const {perPage} = options;
 
   writeStdout(await client.listSources(page, perPage));
 }
@@ -160,7 +156,7 @@ async function handleSourceGet(options: SourceGetOptions): Promise<void> {
   initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
-  const id = options.id;
+  const {id} = options;
 
   writeStdout(await client.getSource(id));
 }
@@ -169,8 +165,8 @@ async function handleConnectionList(options: PaginationOptions): Promise<void> {
   initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
-  const page = options.page;
-  const perPage = options.perPage;
+  const {page} = options;
+  const {perPage} = options;
 
   writeStdout(await client.listConnections(page, perPage));
 }
@@ -188,35 +184,34 @@ async function handleQueryRun(options: QueryRunOptions): Promise<void> {
     table
   });
 
-  const client = new BetterStackClient("");
-  const response = await client.runQuery(resolvedCredentials, sql);
+  const response = await BetterStackClient.runQuery(resolvedCredentials, sql);
 
   writeStdout(response);
 }
 
-type ResolvedQueryContext = {
+interface ResolvedQueryContext {
   metadataToken?: string;
   sourceId: number;
   table: string;
-};
+}
 
-type BetterStackSourceMetadata = {
+interface BetterStackSourceMetadata {
   dataRegion: string;
   expectedTable: string;
   sourceId: string;
   sourceName: string;
   teamId: number;
   teamName: string;
-};
+}
 
-type BetterStackConnectionMetadata = {
+interface BetterStackConnectionMetadata {
   dataRegion: string;
   host: string;
   port: number;
   teamIds: number[];
   teamNames: string[];
   username: string;
-};
+}
 
 class BetterStackResponseShapeError extends Error {
   constructor(message: string) {
@@ -229,63 +224,35 @@ async function resolveQueryCredentials(
   options: QueryRunOptions,
   context: ResolvedQueryContext
 ): Promise<{ password: string; url: string; username: string }> {
-  const sourceMetadata = context.metadataToken
-    ? await tryLoadSourceMetadata(context.metadataToken, context.sourceId)
-    : null;
-  const connections = context.metadataToken ? await tryLoadConnections(context.metadataToken) : [];
-  const matchingConnection = sourceMetadata
-    ? (connections.find(
-        (connection) =>
-          connection.dataRegion === sourceMetadata.dataRegion &&
-          connection.teamIds.includes(sourceMetadata.teamId)
-      ) ?? null)
-    : null;
-  const rawUrlInput =
+  const { matchingConnection, sourceMetadata } = await loadQueryMetadata(context);
+  validateQueryTable(context, sourceMetadata);
+
+  const rawUrlInput = requireQueryCredential(
     options.url ??
-    options.host ??
-    getFirstEnvValue([
-      "BETTERSTACK_QUERY_URL",
-      "BETTERSTACK_SQL_URL",
-      "BETTERSTACK_QUERY_HOST",
-      "BETTERSTACK_SQL_HOST"
-    ]) ??
-    (matchingConnection ? formatConnectionEndpoint(matchingConnection) : undefined);
-  const username =
-    options.username ??
-    getFirstEnvValue(["BETTERSTACK_QUERY_USERNAME", "BETTERSTACK_SQL_USERNAME"]) ??
-    matchingConnection?.username;
-  const password =
-    options.password ??
-    getFirstEnvValue(["BETTERSTACK_QUERY_PASSWORD", "BETTERSTACK_SQL_PASSWORD"]);
-
-  if (sourceMetadata) {
-    if (context.table !== sourceMetadata.expectedTable) {
-      fail(
-        `Table mismatch for source ${sourceMetadata.sourceId}. Expected ${sourceMetadata.expectedTable}, received ${context.table}.`
-      );
-    }
-  }
-
-  if (!rawUrlInput) {
-    const connectionHint =
+      options.host ??
+      getFirstEnvValue([
+        "BETTERSTACK_QUERY_URL",
+        "BETTERSTACK_SQL_URL",
+        "BETTERSTACK_QUERY_HOST",
+        "BETTERSTACK_SQL_HOST"
+      ]) ??
+      (matchingConnection ? formatConnectionEndpoint(matchingConnection) : undefined),
+    `Missing query endpoint. Provide --url/--host or set BETTERSTACK_QUERY_URL, BETTERSTACK_SQL_URL, BETTERSTACK_QUERY_HOST, or BETTERSTACK_SQL_HOST. Expected ${
       matchingConnection?.host ??
-      `a Better Stack connection for team/source ${sourceMetadata?.teamName ?? context.sourceId}`;
-    fail(
-      `Missing query endpoint. Provide --url/--host or set BETTERSTACK_QUERY_URL, BETTERSTACK_SQL_URL, BETTERSTACK_QUERY_HOST, or BETTERSTACK_SQL_HOST. Expected ${connectionHint}.`
-    );
-  }
-
-  if (!username) {
-    fail(
-      "Missing query username. Provide --username or set BETTERSTACK_QUERY_USERNAME or BETTERSTACK_SQL_USERNAME."
-    );
-  }
-
-  if (!password) {
-    fail(
-      "Missing query password. Provide --password or set BETTERSTACK_QUERY_PASSWORD or BETTERSTACK_SQL_PASSWORD."
-    );
-  }
+      `a Better Stack connection for team/source ${sourceMetadata?.teamName ?? context.sourceId}`
+    }.`
+  );
+  const username = requireQueryCredential(
+    options.username ??
+      getFirstEnvValue(["BETTERSTACK_QUERY_USERNAME", "BETTERSTACK_SQL_USERNAME"]) ??
+      matchingConnection?.username,
+    "Missing query username. Provide --username or set BETTERSTACK_QUERY_USERNAME or BETTERSTACK_SQL_USERNAME."
+  );
+  const password = requireQueryCredential(
+    options.password ??
+      getFirstEnvValue(["BETTERSTACK_QUERY_PASSWORD", "BETTERSTACK_SQL_PASSWORD"]),
+    "Missing query password. Provide --password or set BETTERSTACK_QUERY_PASSWORD or BETTERSTACK_SQL_PASSWORD."
+  );
 
   const normalizedUrl = normalizeQueryUrl(rawUrlInput);
 
@@ -300,6 +267,46 @@ async function resolveQueryCredentials(
     url: normalizedUrl,
     username
   };
+}
+
+async function loadQueryMetadata(context: ResolvedQueryContext): Promise<{
+  matchingConnection: BetterStackConnectionMetadata | null;
+  sourceMetadata: BetterStackSourceMetadata | null;
+}> {
+  if (context.metadataToken === undefined || context.metadataToken === "") {
+    return { matchingConnection: null, sourceMetadata: null };
+  }
+
+  const sourceMetadata = await tryLoadSourceMetadata(context.metadataToken, context.sourceId);
+  if (sourceMetadata === null) {
+    return { matchingConnection: null, sourceMetadata };
+  }
+  const connections = await tryLoadConnections(context.metadataToken);
+  const matchingConnection =
+    connections.find(
+      (connection) =>
+        connection.dataRegion === sourceMetadata.dataRegion &&
+        connection.teamIds.includes(sourceMetadata.teamId)
+    ) ?? null;
+  return { matchingConnection, sourceMetadata };
+}
+
+function validateQueryTable(
+  context: ResolvedQueryContext,
+  sourceMetadata: BetterStackSourceMetadata | null
+): void {
+  if (sourceMetadata !== null && context.table !== sourceMetadata.expectedTable) {
+    fail(
+      `Table mismatch for source ${sourceMetadata.sourceId}. Expected ${sourceMetadata.expectedTable}, received ${context.table}.`
+    );
+  }
+}
+
+function requireQueryCredential(value: string | undefined, message: string): string {
+  if (value === undefined || value === "") {
+    fail(message);
+  }
+  return value;
 }
 
 async function loadSourceMetadata(
@@ -416,7 +423,7 @@ function isAllowedBetterStackQueryHost(hostname: string): boolean {
 }
 
 function formatConnectionEndpoint(connection: BetterStackConnectionMetadata): string {
-  if (connection.host.match(/:\d+$/)) {
+  if (/:\d+$/u.test(connection.host)) {
     return connection.host;
   }
 
@@ -436,45 +443,45 @@ function formatHostAndPort(host: string, port: number): string {
 }
 
 function isBetterStackSourceResponse(value: unknown): value is BetterStackSourceResponse {
-  if (!isRecord(value) || !isRecord(value["data"])) {
+  if (!isRecord(value) || !isRecord(value.data)) {
     return false;
   }
 
-  const data = value["data"];
-  const attributes = data["attributes"];
+  const {data} = value;
+  const {attributes} = data;
 
   return (
     isRecord(attributes) &&
-    typeof data["id"] === "string" &&
-    typeof attributes["team_id"] === "number" &&
-    typeof attributes["team_name"] === "string" &&
-    typeof attributes["table_name"] === "string" &&
-    typeof attributes["data_region"] === "string" &&
-    typeof attributes["name"] === "string"
+    typeof data.id === "string" &&
+    typeof attributes.team_id === "number" &&
+    typeof attributes.team_name === "string" &&
+    typeof attributes.table_name === "string" &&
+    typeof attributes.data_region === "string" &&
+    typeof attributes.name === "string"
   );
 }
 
 function isBetterStackConnectionsResponse(value: unknown): value is BetterStackConnectionsResponse {
-  if (!isRecord(value) || !Array.isArray(value["data"])) {
+  if (!isRecord(value) || !Array.isArray(value.data)) {
     return false;
   }
 
-  return value["data"].every((connection) => {
-    if (!isRecord(connection) || !isRecord(connection["attributes"])) {
+  return value.data.every((connection) => {
+    if (!isRecord(connection) || !isRecord(connection.attributes)) {
       return false;
     }
 
-    const attributes = connection["attributes"];
+    const {attributes} = connection;
 
     return (
-      typeof attributes["data_region"] === "string" &&
-      typeof attributes["host"] === "string" &&
-      typeof attributes["port"] === "number" &&
-      Array.isArray(attributes["team_ids"]) &&
-      attributes["team_ids"].every((teamId) => typeof teamId === "number") &&
-      Array.isArray(attributes["team_names"]) &&
-      attributes["team_names"].every((teamName) => typeof teamName === "string") &&
-      typeof attributes["username"] === "string"
+      typeof attributes.data_region === "string" &&
+      typeof attributes.host === "string" &&
+      typeof attributes.port === "number" &&
+      Array.isArray(attributes.team_ids) &&
+      attributes.team_ids.every((teamId) => typeof teamId === "number") &&
+      Array.isArray(attributes.team_names) &&
+      attributes.team_names.every((teamName) => typeof teamName === "string") &&
+      typeof attributes.username === "string"
     );
   });
 }
@@ -486,7 +493,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function createMetadataClient(tokenOverride?: string): BetterStackClient {
   const token = tokenOverride ?? getFirstEnvValue(["BETTER_STACK_TOKEN", "BETTERSTACK_API_TOKEN"]);
 
-  if (!token) {
+  if (token === undefined || token === "") {
     fail(
       "Missing Better Stack API token. Provide --token or set BETTER_STACK_TOKEN or BETTERSTACK_API_TOKEN."
     );
@@ -497,7 +504,7 @@ function createMetadataClient(tokenOverride?: string): BetterStackClient {
 
 async function resolveSql(options: QueryRunOptions): Promise<string> {
   const inlineSql = options.sql;
-  const sqlFile = options.sqlFile;
+  const {sqlFile} = options;
   const useStdin = options.stdin === true;
   const selectedInputs = [inlineSql !== undefined, sqlFile !== undefined, useStdin].filter(
     Boolean
@@ -512,7 +519,7 @@ async function resolveSql(options: QueryRunOptions): Promise<string> {
   }
 
   if (sqlFile !== undefined) {
-    return readFileSync(sqlFile, "utf8");
+    return readFileSync(sqlFile, "utf-8");
   }
 
   if (process.stdin.isTTY) {
@@ -525,7 +532,7 @@ async function resolveSql(options: QueryRunOptions): Promise<string> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
   }
 
-  return Buffer.concat(chunks).toString("utf8");
+  return Buffer.concat(chunks).toString("utf-8");
 }
 
 function fail(message: string): never {

@@ -24,12 +24,15 @@
     },
     "packages/oxlint-config": {
       "name": "@monke-together-strong/oxlint-config",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "ultracite": "7.9.4",
       },
+      "devDependencies": {
+        "oxlint": "1.75.0",
+      },
       "peerDependencies": {
-        "vite-plus": "^0.2.6",
+        "oxlint": "^1.75.0",
       },
     },
   },

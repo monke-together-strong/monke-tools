@@ -6,8 +6,8 @@ function trimWhitespace(value: string): string {
 
 function unwrapQuotedValue(value: string): string {
   if (value.length >= 2) {
-    const first = value[0];
-    const last = value[value.length - 1];
+    const [first] = value;
+    const last = value.at(-1);
 
     if ((first === `"` && last === `"`) || (first === `'` && last === `'`)) {
       return value.slice(1, -1);
@@ -21,27 +21,27 @@ export function loadEnvFileIfPresent(filePath: string): void {
   let content: string;
 
   try {
-    content = readFileSync(filePath, "utf8");
+    content = readFileSync(filePath, "utf-8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
       return;
     }
 
     throw error;
   }
 
-  for (const rawLine of content.split(/\r?\n/)) {
+  for (const rawLine of content.split(/\r?\n/u)) {
     const trimmed = trimWhitespace(rawLine);
 
-    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) {
+    if (trimmed === "" || trimmed.startsWith("#") || !trimmed.includes("=")) {
       continue;
     }
 
     const separatorIndex = trimmed.indexOf("=");
     const rawKey = trimmed.slice(0, separatorIndex);
-    const normalizedKey = trimWhitespace(rawKey.replace(/^export\s+/, ""));
+    const normalizedKey = trimWhitespace(rawKey.replace(/^export\s+/u, ""));
 
-    if (!normalizedKey || process.env[normalizedKey] !== undefined) {
+    if (normalizedKey === "" || process.env[normalizedKey] !== undefined) {
       continue;
     }
 
@@ -54,7 +54,7 @@ export function getFirstEnvValue(names: string[]): string | undefined {
   for (const name of names) {
     const value = process.env[name];
 
-    if (value) {
+    if (value !== undefined && value !== "") {
       return value;
     }
   }

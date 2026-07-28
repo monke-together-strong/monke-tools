@@ -1,8 +1,10 @@
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { discoverSessionFiles, parseSessionFile, type DiscoverOptions } from "./collectors.ts";
+import { discoverSessionFiles, parseSessionFile } from './collectors.ts';
+import type { DiscoverOptions } from './collectors.ts';
 import { hashKey, resolveRepoKey, sessionHashKey } from "./identity.ts";
+import { isNonEmptyString } from "./normalize.ts";
 import {
   listReportPaths,
   listFrozenSessions,
@@ -57,12 +59,12 @@ export function decideEligibility(
       return { include: false, reason: "frozen-unchanged" };
     }
     return {
-      include: true,
       firstNewTurnIndex: prior.lastTurnIndex,
+      include: true,
       priorFindingCount: prior.friction.length,
     };
   }
-  return { include: true, firstNewTurnIndex: 0, priorFindingCount: 0 };
+  return { firstNewTurnIndex: 0, include: true, priorFindingCount: 0 };
 }
 
 export interface EligibleSession {
@@ -86,11 +88,11 @@ export function buildBundles(
     let bundle = byRepo.get(repoKey);
     if (!bundle) {
       bundle = {
-        runTs,
-        repoKey,
-        repoHash: hashKey(repoKey),
-        sessions: [],
         priorFrictionDigest: digestFor(repoKey, frozen),
+        repoHash: hashKey(repoKey),
+        repoKey,
+        runTs,
+        sessions: [],
       };
       byRepo.set(repoKey, bundle);
     }
@@ -101,13 +103,13 @@ export function buildBundles(
     const { session } = eligible;
     const base: Omit<BundleSession, "role"> = {
       agent: session.agent,
-      sessionId: session.sessionId,
-      sessionHash: sessionHashKey(session.agent, session.sessionId),
+      contentHash: session.contentHash,
       firstNewTurnIndex: eligible.firstNewTurnIndex,
       priorFindingCount: eligible.priorFindingCount,
-      contentHash: session.contentHash,
-      turns: session.turns,
       rawUserMessages: session.rawUserMessages,
+      sessionHash: sessionHashKey(session.agent, session.sessionId),
+      sessionId: session.sessionId,
+      turns: session.turns,
     };
     bundleFor(eligible.primaryRepo).sessions.push({ ...base, role: "primary" });
     for (const secondary of session.touchedRoots) {
@@ -117,7 +119,7 @@ export function buildBundles(
     }
   }
 
-  return [...byRepo.values()].sort((a, b) => a.repoKey.localeCompare(b.repoKey));
+  return [...byRepo.values()].toSorted((a, b) => a.repoKey.localeCompare(b.repoKey));
 }
 
 function digestFor(repoKey: string, frozen: FrozenSessionRecord[]): string[] {
@@ -166,23 +168,24 @@ export function resolveRetrospectiveWindow(
   root: string,
   input: { nowMs: number; sinceMs?: number; untilMs?: number },
 ): ResolvedWindow {
+  const { sinceMs: inputSinceMs } = input;
   const untilMs = input.untilMs ?? input.nowMs;
   const untilSource = input.untilMs === undefined ? "now" : "explicit";
   let sinceMs: number;
   let sinceSource: RetrospectiveWindow["sinceSource"];
 
-  if (input.sinceMs !== undefined) {
-    sinceMs = input.sinceMs;
-    sinceSource = "explicit";
-  } else {
+  if (inputSinceMs === undefined) {
     const previousReportMs = newestReportCursorMs(root);
-    if (previousReportMs !== undefined) {
-      sinceMs = previousReportMs;
-      sinceSource = "previous-report";
-    } else {
+    if (previousReportMs === undefined) {
       sinceMs = untilMs - FIRST_RUN_WINDOW_MS;
       sinceSource = "first-run-default";
+    } else {
+      sinceMs = previousReportMs;
+      sinceSource = "previous-report";
     }
+  } else {
+    sinceMs = inputSinceMs;
+    sinceSource = "explicit";
   }
 
   if (sinceMs > untilMs) {
@@ -198,15 +201,15 @@ export function resolveRetrospectiveWindow(
     untilMs,
     window: {
       since: new Date(sinceMs).toISOString(),
-      until: new Date(untilMs).toISOString(),
       sinceSource,
+      until: new Date(untilMs).toISOString(),
       untilSource,
     },
   };
 }
 
 function newestReportCursorMs(root: string): number | undefined {
-  const reports = listReportPaths(root).sort((a, b) => path.basename(b).localeCompare(path.basename(a)));
+  const reports = listReportPaths(root).toSorted((a, b) => path.basename(b).localeCompare(path.basename(a)));
   for (const reportPath of reports) {
     const fromWindow = parseReportWindowUntilMs(reportPath);
     if (fromWindow !== undefined) {
@@ -224,16 +227,16 @@ function newestReportCursorMs(root: string): number | undefined {
 function parseReportWindowUntilMs(reportPath: string): number | undefined {
   let content: string;
   try {
-    content = readFileSync(reportPath, "utf8");
+    content = readFileSync(reportPath, "utf-8");
   } catch {
     return undefined;
   }
-  const match = content.match(/^Window:\s+\S+\s+to\s+(\S+)/m);
-  if (!match) {
+  const match = /^Window:\s+\S+\s+to\s+(?<until>\S+)/mu.exec(content);
+  if (!match?.groups) {
     return undefined;
   }
-  const until = match[1];
-  if (!until) {
+  const { until } = match.groups;
+  if (!isNonEmptyString(until)) {
     return undefined;
   }
   const parsed = Date.parse(until);
@@ -245,11 +248,15 @@ function parseRunTimestampMs(value: string): number | undefined {
   if (!Number.isNaN(direct)) {
     return direct;
   }
-  const match = value.match(/^(\d{4}-\d{2}-\d{2}T)(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?Z$/);
-  if (!match) {
+  const match =
+    /^(?<date>\d{4}-\d{2}-\d{2}T)(?<hour>\d{2})-(?<minute>\d{2})-(?<second>\d{2})(?:-(?<millisecond>\d{3}))?Z$/u.exec(
+      value,
+    );
+  if (!match?.groups) {
     return undefined;
   }
-  const iso = `${match[1]}${match[2]}:${match[3]}:${match[4]}.${match[5] ?? "000"}Z`;
+  const { date, hour, millisecond = "000", minute, second } = match.groups;
+  const iso = `${date}${hour}:${minute}:${second}.${millisecond}Z`;
   const parsed = Date.parse(iso);
   return Number.isNaN(parsed) ? undefined : parsed;
 }
@@ -302,9 +309,9 @@ export function runCollect(options: RunCollectOptions): CollectResult {
     const activityMs = sessionActivityMs(session);
     const prior = loadFrozenSession(root, session.agent, session.sessionId);
     const decision = decideEligibility(session, prior, {
-      nowMs,
-      idleMs,
       activityMs,
+      idleMs,
+      nowMs,
       sinceMs: resolvedWindow.sinceMs,
       untilMs: resolvedWindow.untilMs,
     });
@@ -313,30 +320,32 @@ export function runCollect(options: RunCollectOptions): CollectResult {
       continue;
     }
     eligibles.push({
-      session,
-      primaryRepo: session.cwd ? resolveRepoKey(session.cwd) : (session.cwd ?? "unknown"),
       firstNewTurnIndex: decision.firstNewTurnIndex,
+      primaryRepo: isNonEmptyString(session.cwd)
+        ? resolveRepoKey(session.cwd)
+        : "unknown",
       priorFindingCount: decision.priorFindingCount,
+      session,
     });
   }
 
   const bundles = buildBundles(options.runTs, eligibles, listFrozenSessions(root));
   writeRunWindow(root, options.runTs, resolvedWindow.window);
   return {
-    runTs: options.runTs,
-    window: resolvedWindow.window,
     bundles: bundles.map((bundle) => ({
-      repoKey: bundle.repoKey,
-      repoHash: bundle.repoHash,
-      sessionCount: bundle.sessions.length,
       path: writeBundle(root, bundle),
+      repoHash: bundle.repoHash,
+      repoKey: bundle.repoKey,
+      sessionCount: bundle.sessions.length,
     })),
+    runTs: options.runTs,
     skipped,
+    window: resolvedWindow.window,
   };
 }
 
 function sessionActivityMs(session: CanonicalSession): number {
-  if (session.lastActivityAt) {
+  if (isNonEmptyString(session.lastActivityAt)) {
     const parsed = Date.parse(session.lastActivityAt);
     if (!Number.isNaN(parsed)) {
       return parsed;

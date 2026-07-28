@@ -3,6 +3,17 @@ import { runCli } from "tegami/cli";
 import { github } from "tegami/plugins/github";
 
 const releaseConfig = tegami({
+  npm: {
+    client: "bun",
+    trustedPublish: {
+      provider: "github",
+      workflow: "publish.yml",
+    },
+    updateLockFile: true,
+  },
+  packages: {
+    "@monke-together-strong/oxlint-config": {},
+  },
   plugins: [
     github({
       repo: "monke-together-strong/monke-tools",
@@ -11,17 +22,6 @@ const releaseConfig = tegami({
       },
     }),
   ],
-  npm: {
-    client: "bun",
-    updateLockFile: true,
-    trustedPublish: {
-      provider: "github",
-      workflow: "publish.yml",
-    },
-  },
-  packages: {
-    "@monke-together-strong/oxlint-config": {},
-  },
 });
 
 await runCli(releaseConfig);

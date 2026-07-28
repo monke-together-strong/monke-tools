@@ -1,12 +1,16 @@
-type QueryCredentials = {
+import { BetterStackApiError } from "./api-error";
+
+interface QueryCredentials {
   password: string;
   url: string;
   username: string;
-};
+}
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-export type BetterStackSourceResponse = {
+export { BetterStackApiError } from "./api-error";
+
+export interface BetterStackSourceResponse {
   data: {
     id: string;
     type: string;
@@ -18,10 +22,10 @@ export type BetterStackSourceResponse = {
       name: string;
     };
   };
-};
+}
 
-export type BetterStackConnectionsResponse = {
-  data: Array<{
+export interface BetterStackConnectionsResponse {
+  data: {
     id: string;
     type: string;
     attributes: {
@@ -35,32 +39,18 @@ export type BetterStackConnectionsResponse = {
       team_ids: number[];
       team_names: string[];
     };
-  }>;
-};
-
-export class BetterStackApiError extends Error {
-  body: string;
-  status: number;
-  statusText: string;
-
-  constructor(status: number, statusText: string, body: string) {
-    super(`Better Stack API request failed with ${status} ${statusText}`);
-    this.body = body;
-    this.name = "BetterStackApiError";
-    this.status = status;
-    this.statusText = statusText;
-  }
+  }[];
 }
 
 export class BetterStackClient {
-  #token: string;
+  readonly #token: string;
 
   constructor(token: string) {
     this.#token = token;
   }
 
   async getSource(id: number): Promise<string> {
-    return this.#requestJsonText(`https://telemetry.betterstack.com/api/v1/sources/${id}`);
+    return await this.#requestJsonText(`https://telemetry.betterstack.com/api/v1/sources/${id}`);
   }
 
   async listSources(page?: number, perPage?: number): Promise<string> {
@@ -74,7 +64,7 @@ export class BetterStackClient {
       url.searchParams.set("per_page", String(perPage));
     }
 
-    return this.#requestJsonText(url.toString());
+    return await this.#requestJsonText(url.toString());
   }
 
   async listConnections(page?: number, perPage?: number): Promise<string> {
@@ -88,50 +78,40 @@ export class BetterStackClient {
       url.searchParams.set("per_page", String(perPage));
     }
 
-    return this.#requestJsonText(url.toString());
+    return await this.#requestJsonText(url.toString());
   }
 
-  async runQuery(credentials: QueryCredentials, query: string): Promise<string> {
+  static async runQuery(credentials: QueryCredentials, query: string): Promise<string> {
     const response = await fetch(credentials.url, {
-      method: "POST",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      body: query,
       headers: {
         Authorization: `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64")}`,
         "Content-Type": "text/plain"
       },
-      body: query
+      method: "POST",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return this.#readTextResponse(response);
+    return await readTextResponse(response);
   }
 
   async #requestJsonText(url: string): Promise<string> {
     const response = await fetch(url, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${this.#token}`
-      }
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return this.#readTextResponse(response);
-  }
-
-  async #readTextResponse(response: Response): Promise<string> {
-    const body = await response.text();
-
-    if (!response.ok) {
-      throw new BetterStackApiError(response.status, response.statusText, body);
-    }
-
-    return body;
+    return await readTextResponse(response);
   }
 }
 
 export function normalizeQueryUrl(input: string): string {
-  const schemeMatch = input.match(/^([a-z][a-z\d+.-]*):\/\//i);
+  const schemeMatch = /^(?<scheme>[a-z][a-z\d+.-]*):\/\//iu.exec(input);
 
   if (schemeMatch) {
-    if (schemeMatch[1]?.toLowerCase() !== "https") {
+    if (schemeMatch.groups?.scheme?.toLowerCase() !== "https") {
       throw new Error("Better Stack query URL must use HTTPS.");
     }
 
@@ -140,4 +120,14 @@ export function normalizeQueryUrl(input: string): string {
 
   const separator = input.includes("?") ? "&" : "?";
   return `https://${input}${separator}output_format_pretty_row_numbers=0`;
+}
+
+async function readTextResponse(response: Response): Promise<string> {
+  const body = await response.text();
+
+  if (!response.ok) {
+    throw new BetterStackApiError(response.status, response.statusText, body);
+  }
+
+  return body;
 }

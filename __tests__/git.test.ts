@@ -1,4 +1,4 @@
-import { expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vite-plus/test";
 import { rmSync } from "node:fs";
 import path from "node:path";
 
@@ -13,19 +13,20 @@ import { createRuntime } from "../src/runtime.ts";
 import { createRepo, git, makeTempDir } from "./helpers.ts";
 import type { Runtime } from "../src/types.ts";
 
-test("inferSessionName supports slash-delimited session names", () => {
-  const sourceRoot = path.join("/tmp", "monke-root");
-  const home = path.join("/tmp", "monke-home");
-  const worktreeRoot = getExpectedWorktreePath(home, sourceRoot, "feature/foo");
+describe("Git operations", () => {
+  test("inferSessionName supports slash-delimited session names", () => {
+    const sourceRoot = path.join("/tmp", "monke-root");
+    const home = path.join("/tmp", "monke-home");
+    const worktreeRoot = getExpectedWorktreePath(home, sourceRoot, "feature/foo");
 
-  expect(inferSessionName(home, sourceRoot, worktreeRoot, "feature/foo")).toBe("feature/foo");
-});
+    expect(inferSessionName(home, sourceRoot, worktreeRoot, "feature/foo")).toBe("feature/foo");
+  });
 
-test("validateWorktreeForSession rejects worktrees from a different repository", () => {
-  const sandbox = makeTempDir("git-repo-identity");
-  const sourceRoot = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `apps:
+  test("validateWorktreeForSession rejects worktrees from a different repository", () => {
+    const sandbox = makeTempDir("git-repo-identity");
+    const sourceRoot = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -33,10 +34,10 @@ test("validateWorktreeForSession rejects worktrees from a different repository",
       - port: API_PORT
         env: PORT
 `,
-  });
-  const otherSourceRoot = createRepo(path.join(sandbox, "other"), {
-    "apps/db/.env.local": "PORT=5432\n",
-    "monke.yml": `apps:
+    });
+    const otherSourceRoot = createRepo(path.join(sandbox, "other"), {
+      "apps/db/.env.local": "PORT=5432\n",
+      "monke.yml": `apps:
   db:
     path: apps/db
     envFile: .env.local
@@ -44,64 +45,64 @@ test("validateWorktreeForSession rejects worktrees from a different repository",
       - port: DB_PORT
         env: PORT
 `,
+    });
+    const home = path.join(sandbox, "home");
+    const worktreePath = getExpectedWorktreePath(home, sourceRoot, "banana");
+
+    git(otherSourceRoot, ["branch", "banana"]);
+    git(otherSourceRoot, ["worktree", "add", worktreePath, "banana"]);
+
+    expect(() => {
+      validateWorktreeForSession(
+        createRuntime({ cwd: sourceRoot, env: { MONKE_HOME: home } }),
+        home,
+        sourceRoot,
+        worktreePath,
+        "banana",
+      );
+    }).toThrow(/Expected worktree .* to belong to /u);
   });
-  const home = path.join(sandbox, "home");
-  const worktreePath = getExpectedWorktreePath(home, sourceRoot, "banana");
 
-  git(otherSourceRoot, ["branch", "banana"]);
-  git(otherSourceRoot, ["worktree", "add", worktreePath, "banana"]);
-
-  expect(() =>
-    validateWorktreeForSession(
-      createRuntime({ cwd: sourceRoot, env: { MONKE_HOME: home } }),
-      home,
-      sourceRoot,
-      worktreePath,
-      "banana",
-    ),
-  ).toThrow(/Expected worktree .* to belong to /);
-});
-
-test("listWorktrees parses prunable entries from porcelain output", () => {
-  const runtime: Runtime = {
-    cwd: "/tmp",
-    env: {},
-    exec(command, args) {
-      expect(command).toBe("git");
-      expect(args).toEqual(["worktree", "list", "--porcelain"]);
-      return {
-        stdout: `worktree /tmp/root
+  test("listWorktrees parses prunable entries from porcelain output", () => {
+    const runtime: Runtime = {
+      cwd: "/tmp",
+      env: {},
+      exec(command, args) {
+        expect(command).toBe("git");
+        expect(args).toStrictEqual(["worktree", "list", "--porcelain"]);
+        return {
+          exitCode: 0,
+          stderr: "",
+          stdout: `worktree /tmp/root
 branch refs/heads/main
 
 worktree /tmp/worktree
 branch refs/heads/feature/foo
 prunable gitdir file points to non-existent location
 `,
-        stderr: "",
-        exitCode: 0,
-      };
-    },
-    async select() {
-      throw new Error("unexpected select");
-    },
-    readLine() {
-      throw new Error("unexpected readLine");
-    },
-    writeStdout() {},
-    writeStderr() {},
-  };
+        };
+      },
+      readLine() {
+        throw new Error("unexpected readLine");
+      },
+      select() {
+        return Promise.reject(new Error("unexpected select"));
+      },
+      writeStderr() {},
+      writeStdout() {},
+    };
 
-  expect(listWorktrees(runtime, "/tmp/root")).toEqual([
-    { path: "/tmp/root", branch: "main", prunable: false },
-    { path: "/tmp/worktree", branch: "feature/foo", prunable: true },
-  ]);
-});
+    expect(listWorktrees(runtime, "/tmp/root")).toStrictEqual([
+      { branch: "main", path: "/tmp/root", prunable: false },
+      { branch: "feature/foo", path: "/tmp/worktree", prunable: true },
+    ]);
+  });
 
-test("ensureSessionWorktree recreates missing cached worktrees", () => {
-  const sandbox = makeTempDir("git-recreate-worktree");
-  const sourceRoot = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `apps:
+  test("ensureSessionWorktree recreates missing cached worktrees", () => {
+    const sandbox = makeTempDir("git-recreate-worktree");
+    const sourceRoot = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -109,27 +110,27 @@ test("ensureSessionWorktree recreates missing cached worktrees", () => {
       - port: API_PORT
         env: PORT
 `,
+    });
+    const runtime = createRuntime({ cwd: sourceRoot });
+    const session = "banana";
+    const home = path.join(sandbox, "home");
+    const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
+
+    git(sourceRoot, ["branch", session]);
+    git(sourceRoot, ["worktree", "add", expectedPath, session]);
+    rmSync(expectedPath, { force: true, recursive: true });
+
+    const result = ensureSessionWorktree(runtime, home, sourceRoot, session);
+
+    expect(result).toStrictEqual({ created: true, path: expectedPath });
+    expect(git(expectedPath, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(session);
   });
-  const runtime = createRuntime({ cwd: sourceRoot });
-  const session = "banana";
-  const home = path.join(sandbox, "home");
-  const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
 
-  git(sourceRoot, ["branch", session]);
-  git(sourceRoot, ["worktree", "add", expectedPath, session]);
-  rmSync(expectedPath, { recursive: true, force: true });
-
-  const result = ensureSessionWorktree(runtime, home, sourceRoot, session);
-
-  expect(result).toEqual({ path: expectedPath, created: true });
-  expect(git(expectedPath, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(session);
-});
-
-test("ensureSessionWorktree rejects invalid session names before worktree operations", () => {
-  const sandbox = makeTempDir("git-invalid-session");
-  const sourceRoot = createRepo(path.join(sandbox, "root"), {
-    "apps/api/.env.local": "PORT=3000\n",
-    "monke.yml": `apps:
+  test("ensureSessionWorktree rejects invalid session names before worktree operations", () => {
+    const sandbox = makeTempDir("git-invalid-session");
+    const sourceRoot = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -137,14 +138,15 @@ test("ensureSessionWorktree rejects invalid session names before worktree operat
       - port: API_PORT
         env: PORT
 `,
-  });
+    });
 
-  expect(() =>
-    ensureSessionWorktree(
-      createRuntime({ cwd: sourceRoot }),
-      path.join(sandbox, "home"),
-      sourceRoot,
-      "--help",
-    ),
-  ).toThrow(/Invalid session name "--help"/);
+    expect(() =>
+      ensureSessionWorktree(
+        createRuntime({ cwd: sourceRoot }),
+        path.join(sandbox, "home"),
+        sourceRoot,
+        "--help",
+      ),
+    ).toThrow(/Invalid session name "--help"/u);
+  });
 });

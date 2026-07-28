@@ -4,7 +4,7 @@ const NonEmptyStringSchema = z.string().min(1);
 const PortSchema = z.number().int().min(1).max(65_535);
 const PortKeySchema = z
   .string()
-  .regex(/^[A-Z][A-Z0-9_]*_PORT$/, { error: "must be an uppercase env name ending in _PORT" });
+  .regex(/^[A-Z][A-Z0-9_]*_PORT$/u, { error: "must be an uppercase env name ending in _PORT" });
 
 const AssignedPortSchema = z.strictObject({
   key: PortKeySchema,
@@ -27,29 +27,29 @@ const ResourceCommandStateSchema = z.strictObject({
 });
 
 const SessionRepoStateSchema = z.strictObject({
-  sourceRoot: NonEmptyStringSchema,
-  worktreePath: NonEmptyStringSchema,
   assignedPorts: z.array(AssignedPortSchema),
   cleanupCommand: NonEmptyStringSchema.optional(),
-  resourceValues: z.array(ResourceValueStateSchema).optional(),
-  resourceCommandOutputs: z.array(ResourceCommandStateSchema).optional(),
   materializationComplete: z.boolean().optional(),
+  resourceCommandOutputs: z.array(ResourceCommandStateSchema).optional(),
+  resourceValues: z.array(ResourceValueStateSchema).optional(),
+  sourceRoot: NonEmptyStringSchema,
+  worktreePath: NonEmptyStringSchema,
 });
 
 export const SessionStateSchema = z.strictObject({
-  version: z.literal(1),
-  rootSourceRoot: NonEmptyStringSchema,
-  session: NonEmptyStringSchema,
   graphSource: z.literal("session-branch").optional(),
   repos: z.array(SessionRepoStateSchema),
+  rootSourceRoot: NonEmptyStringSchema,
+  session: NonEmptyStringSchema,
+  version: z.literal(1),
 });
 
 export const RepoReservationSchema = z
   .strictObject({
-    version: z.literal(1),
-    sourceRoot: NonEmptyStringSchema,
     blockStart: PortSchema,
     size: z.number().int().positive(),
+    sourceRoot: NonEmptyStringSchema,
+    version: z.literal(1),
   })
   .check((context) => {
     if (context.value.blockStart + context.value.size - 1 > 65_535) {
