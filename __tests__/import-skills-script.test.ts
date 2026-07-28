@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+
 import pc from "picocolors";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -69,7 +70,7 @@ describe("skill importing", () => {
           name: "Writing",
           skills: ["charlie"],
         },
-      ]),
+      ])
     ).toStrictEqual({
       Engineering: [
         {
@@ -262,11 +263,11 @@ describe("skill importing", () => {
           },
         ],
         version: 2,
-      }),
+      })
     );
 
     expect(() => readImportRecipeStore(sandbox)).toThrow(
-      /Duplicate skill import recipe source: owner\/repo/u,
+      /Duplicate skill import recipe source: owner\/repo/u
     );
   });
 
@@ -275,7 +276,7 @@ describe("skill importing", () => {
     write(
       sandbox,
       "skills/imported/.monke-imports.json",
-      JSON.stringify({ recipes: [], version: 3 }),
+      JSON.stringify({ recipes: [], version: 3 })
     );
 
     expect(() => readImportRecipeStore(sandbox)).toThrow(/version.*must be 2/u);
@@ -305,11 +306,11 @@ describe("skill importing", () => {
           },
         ],
         version: 2,
-      }),
+      })
     );
 
     expect(() => readImportRecipeStore(sandbox)).toThrow(
-      /Duplicate skill selector in recipe owner\/repo: alpha/u,
+      /Duplicate skill selector in recipe owner\/repo: alpha/u
     );
   });
 
@@ -342,11 +343,11 @@ describe("skill importing", () => {
           },
         ],
         version: 2,
-      }),
+      })
     );
 
     expect(() => readImportRecipeStore(sandbox)).toThrow(
-      /Imported skill slug alpha is owned by both owner\/first and owner\/second/u,
+      /Imported skill slug alpha is owned by both owner\/first and owner\/second/u
     );
   });
 
@@ -503,7 +504,7 @@ describe("skill importing", () => {
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
     expect(skillsLog).toContain("--yes skills add owner/repo -l");
     expect(skillsLog).toContain(
-      "--yes skills add owner/repo --skill alpha --skill bravo --agent universal --copy --yes",
+      "--yes skills add owner/repo --skill alpha --skill bravo --agent universal --copy --yes"
     );
 
     const stagingCwds = readFileSync(skillsCwdLogPath, "utf-8").trim().split("\n").filter(Boolean);
@@ -541,10 +542,10 @@ describe("skill importing", () => {
 
     expect(existsSync(path.join(sandbox, "skills/references/imported/alpha/SKILL.md"))).toBeFalsy();
     expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
-      "\n# Alpha\n\nReference body.\n",
+      "\n# Alpha\n\nReference body.\n"
     );
     expect(read(sandbox, "skills/references/imported/alpha/references/details.md")).toBe(
-      "supporting details\n",
+      "supporting details\n"
     );
     expect(readImportRecipeStore(sandbox)).toStrictEqual({
       recipes: [
@@ -594,7 +595,7 @@ name: outside-entry
             return ["alpha"];
           },
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/regular file/u);
     } finally {
       process.chdir(originalCwd);
@@ -636,7 +637,7 @@ name: outside-entry
 
     const importedLink = path.join(
       sandbox,
-      "skills/references/imported/alpha/references/details-link.md",
+      "skills/references/imported/alpha/references/details-link.md"
     );
     expect(readlinkSync(importedLink)).toBe("details.md");
     expect(readFileSync(importedLink, "utf-8")).toBe("supporting details\n");
@@ -676,7 +677,7 @@ name: outside-entry
       });
       expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBeFalsy();
       expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
-        "\n# Alpha\n\nReference body.\n",
+        "\n# Alpha\n\nReference body.\n"
       );
 
       await runImportSkills(["owner/repo"], {
@@ -718,7 +719,7 @@ name: outside-entry
     write(
       sandbox,
       "skills/internal/reviewer/SKILL.md",
-      "[Base](../../references/imported/alpha/MAIN.md)\n",
+      "[Base](../../references/imported/alpha/MAIN.md)\n"
     );
 
     try {
@@ -731,7 +732,7 @@ name: outside-entry
             return ["alpha"];
           },
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/SKILL\.md/u);
     } finally {
       process.chdir(originalCwd);
@@ -781,7 +782,7 @@ name: outside-entry
             return ["alpha", "bravo"];
           },
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/already contains MAIN\.md/u);
     } finally {
       process.chdir(originalCwd);
@@ -901,13 +902,13 @@ name: outside-entry
 
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
     expect(skillsLog).toContain(
-      "--yes skills add owner/repo --skill alpha --skill bravo --agent universal --copy --yes",
+      "--yes skills add owner/repo --skill alpha --skill bravo --agent universal --copy --yes"
     );
     expect(skillsLog).toContain(
-      "--yes skills add owner/repo --skill alpha --agent universal --copy --yes",
+      "--yes skills add owner/repo --skill alpha --agent universal --copy --yes"
     );
     expect(skillsLog).toContain(
-      "--yes skills add owner/repo --skill bravo --agent universal --copy --yes",
+      "--yes skills add owner/repo --skill bravo --agent universal --copy --yes"
     );
   });
 
@@ -936,10 +937,10 @@ name: outside-entry
 
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
     expect(skillsLog).toContain(
-      "--yes skills add openclaw/agent-skills --dangerously-accept-openclaw-risks -l",
+      "--yes skills add openclaw/agent-skills --dangerously-accept-openclaw-risks -l"
     );
     expect(skillsLog).toContain(
-      "--yes skills add openclaw/agent-skills --dangerously-accept-openclaw-risks --skill autoreview --agent universal --copy --yes",
+      "--yes skills add openclaw/agent-skills --dangerously-accept-openclaw-risks --skill autoreview --agent universal --copy --yes"
     );
     expect(readImportRecipeStore(sandbox)).toStrictEqual({
       recipes: [
@@ -983,7 +984,7 @@ name: outside-entry
           runInstallCommand(repoRoot) {
             installCalls.push(repoRoot);
             expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
-              "\n# Alpha\n\nReference body.\n",
+              "\n# Alpha\n\nReference body.\n"
             );
           },
           selectSkills() {
@@ -992,7 +993,7 @@ name: outside-entry
           writeMessage(message) {
             stdout += message;
           },
-        },
+        }
       );
     } finally {
       process.chdir(originalCwd);
@@ -1042,7 +1043,7 @@ name: outside-entry
             return ["alpha"];
           },
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/alpha is already owned by recipe owner\/first/u);
     } finally {
       process.chdir(originalCwd);
@@ -1148,7 +1149,7 @@ name: outside-entry
     expect(stripAnsiForTest(stdout)).toContain("Security Risk Assessments");
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
     expect(skillsLog).toContain(
-      "--yes skills add owner/repo --skill alpha --skill bravo --agent universal --copy --yes",
+      "--yes skills add owner/repo --skill alpha --skill bravo --agent universal --copy --yes"
     );
     expect(skillsLog).not.toContain("-l");
   });
@@ -1189,10 +1190,10 @@ name: outside-entry
 
     expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBeFalsy();
     expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
-      "\n# Alpha\n\nReference body.\n",
+      "\n# Alpha\n\nReference body.\n"
     );
     expect(read(sandbox, "skills/references/imported/alpha/references/details.md")).toBe(
-      "supporting details\n",
+      "supporting details\n"
     );
   });
 
@@ -1243,7 +1244,7 @@ name: outside-entry
       await expect(
         runUpdateSkills([], {
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/owner\/fails/u);
     } finally {
       process.chdir(originalCwd);
@@ -1252,14 +1253,14 @@ name: outside-entry
 
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
     expect(read(sandbox, "skills/references/imported/bravo/MAIN.md")).toBe(
-      "\n# Alpha\n\nReference body.\n",
+      "\n# Alpha\n\nReference body.\n"
     );
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
     expect(skillsLog).toContain(
-      "--yes skills add owner/fails --skill alpha --agent universal --copy --yes",
+      "--yes skills add owner/fails --skill alpha --agent universal --copy --yes"
     );
     expect(skillsLog).toContain(
-      "--yes skills add owner/works --skill bravo --agent universal --copy --yes",
+      "--yes skills add owner/works --skill bravo --agent universal --copy --yes"
     );
   });
 
@@ -1295,7 +1296,7 @@ name: outside-entry
       await expect(
         runUpdateSkills([], {
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/Untracked imported skill directories: orphan/u);
     } finally {
       process.chdir(originalCwd);
@@ -1344,7 +1345,7 @@ name: outside-entry
       await expect(
         runUpdateSkills([], {
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/recorded alpha but staged renamed-alpha/u);
     } finally {
       process.chdir(originalCwd);
@@ -1487,10 +1488,10 @@ name: outside-entry
 
     expect(existsSync(path.join(sandbox, "skills/references/imported/alpha"))).toBeFalsy();
     expect(
-      existsSync(path.join(sandbox, "skills/references/imported/renamed-alpha/SKILL.md")),
+      existsSync(path.join(sandbox, "skills/references/imported/renamed-alpha/SKILL.md"))
     ).toBeFalsy();
     expect(read(sandbox, "skills/references/imported/renamed-alpha/MAIN.md")).toBe(
-      "\n# Alpha\n\nReference body.\n",
+      "\n# Alpha\n\nReference body.\n"
     );
     expect(readImportRecipeStore(sandbox).recipes[0]?.skills).toStrictEqual([
       { kind: "reference", selector: "alpha", slug: "renamed-alpha" },
@@ -1525,7 +1526,7 @@ name: outside-entry
     write(
       sandbox,
       "skills/internal/reviewer/SKILL.md",
-      "[Base](../../references/imported/alpha/MAIN.md)\n",
+      "[Base](../../references/imported/alpha/MAIN.md)\n"
     );
 
     try {
@@ -1538,7 +1539,7 @@ name: outside-entry
             return true;
           },
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/SKILL\.md/u);
     } finally {
       process.chdir(originalCwd);
@@ -1579,7 +1580,7 @@ name: outside-entry
     write(
       sandbox,
       "skills/internal/reviewer/references/checklist.md",
-      "[Details](../../../references/imported/alpha/references/details.md)\n",
+      "[Details](../../../references/imported/alpha/references/details.md)\n"
     );
 
     try {
@@ -1592,7 +1593,7 @@ name: outside-entry
             return true;
           },
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/references\/checklist\.md/u);
     } finally {
       process.chdir(originalCwd);
@@ -1644,7 +1645,7 @@ name: outside-entry
             return true;
           },
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/references\/base\.md/u);
     } finally {
       process.chdir(originalCwd);
@@ -1697,13 +1698,13 @@ name: outside-entry
             return true;
           },
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/used by skills\/references\/imported\/bravo\/MAIN\.md/u);
 
       write(sandbox, "skills/references/imported/bravo/MAIN.md", "# Bravo\n");
       const internalReferenceSymlink = path.join(
         sandbox,
-        "skills/references/internal/reviewer/alpha.md",
+        "skills/references/internal/reviewer/alpha.md"
       );
       mkdirSync(path.dirname(internalReferenceSymlink), { recursive: true });
       symlinkSync("../../imported/alpha/MAIN.md", internalReferenceSymlink);
@@ -1714,7 +1715,7 @@ name: outside-entry
             return true;
           },
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/used by skills\/references\/internal\/reviewer\/alpha\.md/u);
     } finally {
       process.chdir(originalCwd);
@@ -1823,13 +1824,13 @@ name: outside-entry
 
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
     expect(skillsLog).toContain(
-      "--yes skills add owner/repo --skill alpha --skill bravo --agent universal --copy --yes",
+      "--yes skills add owner/repo --skill alpha --skill bravo --agent universal --copy --yes"
     );
     expect(skillsLog).toContain(
-      "--yes skills add owner/repo --skill alpha --agent universal --copy --yes",
+      "--yes skills add owner/repo --skill alpha --agent universal --copy --yes"
     );
     expect(skillsLog).toContain(
-      "--yes skills add owner/repo --skill bravo --agent universal --copy --yes",
+      "--yes skills add owner/repo --skill bravo --agent universal --copy --yes"
     );
   });
 
@@ -1938,7 +1939,7 @@ name: outside-entry
             return true;
           },
           writeMessage() {},
-        }),
+        })
       ).rejects.toThrow(/beta is owned by both a\/renames and z\/other/u);
     } finally {
       process.chdir(originalCwd);
@@ -2057,7 +2058,7 @@ name: outside-entry
 
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
     expect(skillsLog).toContain(
-      "--yes skills add openclaw/agent-skills --dangerously-accept-openclaw-risks --skill autoreview --agent universal --copy --yes",
+      "--yes skills add openclaw/agent-skills --dangerously-accept-openclaw-risks --skill autoreview --agent universal --copy --yes"
     );
     expect(read(sandbox, "skills/imported/autoreview/SKILL.md")).toBe("new autoreview");
   });
@@ -2074,7 +2075,7 @@ function installFakeNpx(
     stageSupportingSymlink?: boolean;
     mainCollisionSelector?: string;
     stagedSkillEntrySymlinkTarget?: string;
-  },
+  }
 ): string {
   const binDirectory = path.join(sandbox, "fake-bin");
   mkdirSync(binDirectory, { recursive: true });
@@ -2210,7 +2211,7 @@ done
 printf '{"version":1}' > skills-lock.json
 exit 0
 `,
-    "utf-8",
+    "utf-8"
   );
   chmodSync(scriptPath, 0o755);
   return binDirectory;

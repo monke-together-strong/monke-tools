@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
@@ -37,7 +38,7 @@ const RESOURCE_COMMAND_RUNNER_ARGV = "monke-resource-command-runner";
 const ResourceCommandRunnerEnvelopeSchema = z.strictObject({ value: z.unknown() });
 const ResourceCommandReturnSchema = z.record(
   z.string(),
-  z.string().refine((value) => value.trim().length > 0),
+  z.string().refine((value) => value.trim().length > 0)
 );
 
 const RESOURCE_COMMAND_MODULE_RUNNER = [
@@ -87,13 +88,13 @@ export function resolveResourceValues(options: {
   env: Record<string, string | undefined>;
 }): ResolvedResourceValues {
   const declaredEnvNames = new Set(
-    options.repoConfig.resourceValuesInOrder.map((resource) => resource.env),
+    options.repoConfig.resourceValuesInOrder.map((resource) => resource.env)
   );
   const existingValues = options.existingRepoState?.resourceValues ?? [];
   const rememberedValues = new Map(
     existingValues
       .filter((resource) => declaredEnvNames.has(resource.env) && resource.value.trim() !== "")
-      .map((resource) => [resource.env, resource.value]),
+      .map((resource) => [resource.env, resource.value])
   );
 
   const values = options.repoConfig.resourceValuesInOrder.map((resource) => {
@@ -109,7 +110,7 @@ export function resolveResourceValues(options: {
 
     if (!value.trim()) {
       throw new MonkeError(
-        `${options.repoConfig.configPath}#resources.values.${resource.env} resolved to an empty value`,
+        `${options.repoConfig.configPath}#resources.values.${resource.env} resolved to an empty value`
       );
     }
 
@@ -129,7 +130,7 @@ export function resolveResourceValues(options: {
 
   return {
     removedEnvNames: dedupe(
-      existingValues.map((resource) => resource.env).filter((env) => !declaredEnvNames.has(env)),
+      existingValues.map((resource) => resource.env).filter((env) => !declaredEnvNames.has(env))
     ),
     values,
   };
@@ -178,29 +179,29 @@ export function resolveResourceCommands(options: {
           runtime: options.runtime,
           stdin,
           worktreePath: options.worktreePath,
-        }),
+        })
       );
       options.onResolvedCommandOutputs(
         toImmediateResourceCommandStates(
           options.repoConfig.resourceCommandsInOrder,
           currentByName,
-          existingCommands,
-        ),
+          existingCommands
+        )
       );
     });
   }
 
   const commands = toResourceCommandStates(
     options.repoConfig.resourceCommandsInOrder,
-    currentByName,
+    currentByName
   );
   const finalEnvNames = new Set(
-    commands.flatMap((command) => command.outputs.map((output) => output.env)),
+    commands.flatMap((command) => command.outputs.map((output) => output.env))
   );
   const removedEnvNames = dedupe(
     existingCommands
       .flatMap((command) => command.outputs.map((output) => output.env))
-      .filter((env) => !finalEnvNames.has(env)),
+      .filter((env) => !finalEnvNames.has(env))
   );
 
   return { commands, removedEnvNames };
@@ -208,7 +209,7 @@ export function resolveResourceCommands(options: {
 
 function getReusableResourceCommand(
   command: ResourceCommandConfig,
-  existing: ResourceCommandState | undefined,
+  existing: ResourceCommandState | undefined
 ): ResourceCommandState | null {
   if (!existing) {
     return null;
@@ -248,7 +249,7 @@ function runResourceCommand(options: {
       allowFailure: true,
       cwd: options.worktreePath,
       env: Object.fromEntries(
-        options.resourceValues.map((resource) => [resource.env, resource.value]),
+        options.resourceValues.map((resource) => [resource.env, resource.value])
       ),
       stdin,
       timeoutSeconds: options.command.timeoutSeconds,
@@ -281,7 +282,7 @@ function runResourceCommand(options: {
       returned,
       result.stdout,
       result.stderr,
-      options.stdin,
+      options.stdin
     );
     return {
       name: options.command.name,
@@ -329,7 +330,7 @@ function withResourceCommandLock<T>(
   home: string,
   sourceRoot: string,
   commandName: string,
-  callback: () => T,
+  callback: () => T
 ): T {
   return withScopedLock(home, `resource-command\u0000${sourceRoot}\u0000${commandName}`, callback);
 }
@@ -353,14 +354,14 @@ function buildResourceCommandInput(options: {
       }
 
       const rememberedCommand = (repoState.resourceCommandOutputs ?? []).find(
-        (command) => command.name === options.command.name,
+        (command) => command.name === options.command.name
       );
       if (!rememberedCommand) {
         continue;
       }
 
       const rememberedByEnv = new Map(
-        rememberedCommand.outputs.map((output) => [output.env, output.value]),
+        rememberedCommand.outputs.map((output) => [output.env, output.value])
       );
       for (const env of options.command.outputs) {
         const remembered = rememberedByEnv.get(env);
@@ -372,7 +373,7 @@ function buildResourceCommandInput(options: {
   }
 
   return Object.fromEntries(
-    options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])].toSorted()]),
+    options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])].toSorted()])
   );
 }
 
@@ -424,7 +425,7 @@ function validateResourceCommandReturn(
   returned: unknown,
   stdout: string,
   stderr: string,
-  stdin: ResourceCommandInput,
+  stdin: ResourceCommandInput
 ): { env: string; value: string }[] {
   const parsed = ResourceCommandReturnSchema.safeParse(returned);
   if (!parsed.success) {
@@ -474,13 +475,13 @@ function validateResourceCommandReturn(
 
 function resolveResourceCommandRunPath(
   worktreePath: string,
-  command: ResourceCommandConfig,
+  command: ResourceCommandConfig
 ): string {
   const resolved = path.resolve(worktreePath, command.run);
   const relative = path.relative(worktreePath, resolved);
   if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new MonkeError(
-      `Resource command ${command.name} run path must resolve inside ${worktreePath}: ${command.run}`,
+      `Resource command ${command.name} run path must resolve inside ${worktreePath}: ${command.run}`
     );
   }
   return resolved;
@@ -496,13 +497,13 @@ function resourceCommandFailure(options: {
   const stdout =
     options.stdout === undefined ? "" : `\nstdout:\n${options.stdout.trim() || "<empty>"}`;
   return new MonkeError(
-    `Resource command ${options.command.name} failed: ${options.command.run}\nkind: ${options.kind}\nstderr:\n${stderr}${stdout}`,
+    `Resource command ${options.command.name} failed: ${options.command.run}\nkind: ${options.kind}\nstderr:\n${stderr}${stdout}`
   );
 }
 
 function toResourceCommandStates(
   declaredCommands: ResourceCommandConfig[],
-  currentByName: Map<string, ResourceCommandState>,
+  currentByName: Map<string, ResourceCommandState>
 ): ResourceCommandState[] {
   return declaredCommands.flatMap((command) => {
     const state = currentByName.get(command.name);
@@ -513,7 +514,7 @@ function toResourceCommandStates(
 function toImmediateResourceCommandStates(
   declaredCommands: ResourceCommandConfig[],
   currentByName: Map<string, ResourceCommandState>,
-  existingCommands: ResourceCommandState[],
+  existingCommands: ResourceCommandState[]
 ): ResourceCommandState[] {
   const existingByName = new Map(existingCommands.map((command) => [command.name, command]));
   const declaredNames = new Set(declaredCommands.map((command) => command.name));
@@ -556,14 +557,14 @@ function interpolateResourceLiteral(options: {
         return options.user;
       }
       throw new MonkeError(
-        `${options.location} contains unsupported placeholder ${placeholder}; supported placeholders are \${session} and \${user}`,
+        `${options.location} contains unsupported placeholder ${placeholder}; supported placeholders are \${session} and \${user}`
       );
-    },
+    }
   );
 
   if (value.includes("${")) {
     throw new MonkeError(
-      `${options.location} contains an unsupported placeholder; supported placeholders are \${session} and \${user}`,
+      `${options.location} contains an unsupported placeholder; supported placeholders are \${session} and \${user}`
     );
   }
 
@@ -602,7 +603,7 @@ function rejectResourceValueCollisions(options: {
       }
 
       const rememberedValues = new Map(
-        (repoState.resourceValues ?? []).map((resource) => [resource.env, resource.value]),
+        (repoState.resourceValues ?? []).map((resource) => [resource.env, resource.value])
       );
       for (const value of options.values) {
         if (rememberedValues.get(value.env) !== value.value) {
@@ -610,7 +611,7 @@ function rejectResourceValueCollisions(options: {
         }
 
         throw new MonkeError(
-          `Resource value collision for ${value.env}=${describeRedactedValue(value.value)} in ${options.sourceRoot}; retained session ${state.session} already owns that value`,
+          `Resource value collision for ${value.env}=${describeRedactedValue(value.value)} in ${options.sourceRoot}; retained session ${state.session} already owns that value`
         );
       }
     }

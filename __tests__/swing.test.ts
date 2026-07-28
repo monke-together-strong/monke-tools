@@ -1,4 +1,3 @@
-import { describe, expect, test } from "vite-plus/test";
 import {
   chmodSync,
   existsSync,
@@ -9,6 +8,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath } from "../src/registry.ts";
@@ -61,7 +62,7 @@ describe("Swing", () => {
 
     expect(result.stdout.endsWith(`${worktreeRoot}\n`)).toBeTruthy();
     expect(result.stderr).toContain(
-      `Session banana worktree ${worktreeRoot} is on branch unexpected instead of banana; swinging to it anyway`,
+      `Session banana worktree ${worktreeRoot} is on branch unexpected instead of banana; swinging to it anyway`
     );
   });
 
@@ -159,7 +160,7 @@ describe("Swing", () => {
       {
         GIT_AUTHOR_DATE: "2035-01-02T00:00:00Z",
         GIT_COMMITTER_DATE: "2035-01-02T00:00:00Z",
-      },
+      }
     );
     git(repoRoot, ["tag", "z-newer"]);
     const stateTime = new Date("2025-01-01T00:00:00Z");
@@ -246,7 +247,7 @@ describe("Swing", () => {
         cwd: repoRoot,
         monkeHome: home,
         selectValues: ["missing"],
-      }),
+      })
     ).rejects.toThrow(/Unknown selection: missing/u);
   });
 
@@ -258,7 +259,7 @@ describe("Swing", () => {
     });
 
     expect(() => runMonke({ args: ["swing", "missing"], cwd: repoRoot, monkeHome: home })).toThrow(
-      `Worktree or Session "missing" does not exist for ${repoRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn missing instead.`,
+      `Worktree or Session "missing" does not exist for ${repoRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn missing instead.`
     );
   });
 
@@ -308,7 +309,7 @@ describe("Swing", () => {
     expect(result.stdout).toBe(`${repoRoot}\n`);
     expect(backToExternal.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toContain(
-      `Linked worktree ${worktreeRoot} is outside ${path.join(home, "worktrees", "root")}`,
+      `Linked worktree ${worktreeRoot} is outside ${path.join(home, "worktrees", "root")}`
     );
     expect(result.stderr).toContain(`Switch to ${repoRoot}`);
   });
@@ -332,7 +333,7 @@ describe("Swing", () => {
     expect(backToSource.stdout).toBe(`${firstRepo}\n`);
     expect(backToSession.stdout).toBe(`${worktreeRoot}\n`);
     expect(() => runMonke({ args: ["swing", "-"], cwd: secondRepo, monkeHome: home })).toThrow(
-      /No Previous Swing target/u,
+      /No Previous Swing target/u
     );
   });
 
@@ -357,11 +358,11 @@ describe("Swing", () => {
 previous:
   kind: session
 `,
-      "utf-8",
+      "utf-8"
     );
 
     expect(() => runMonke({ args: ["swing", "-"], cwd: worktreeRoot, monkeHome: home })).toThrow(
-      /Invalid .*swing-history.*previous\.session/su,
+      /Invalid .*swing-history.*previous\.session/su
     );
   });
 
@@ -387,7 +388,7 @@ previous:
     writeFileSync(path.join(historyDirectory, `${hashKey(repoRoot)}.yml`), contents, "utf-8");
 
     expect(() => runMonke({ args: ["swing", "-"], cwd: repoRoot, monkeHome: home })).toThrow(
-      expected,
+      expected
     );
   });
 
@@ -474,7 +475,7 @@ previous:
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/Invalid GitHub PR #404:[\s\S]*headRefName/u);
   });
 
@@ -502,7 +503,7 @@ apps:
       - port: API_PORT
         env: PORT
 `,
-      "utf-8",
+      "utf-8"
     );
     git(repoRoot, ["add", "README.md"]);
     git(repoRoot, ["add", "apps/api/.env.local", "monke.yml"]);
@@ -530,7 +531,7 @@ apps:
     expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf-8")).toBe("pr head\n");
     expect(readFileSync(path.join(worktreeRoot, "bootstrap.log"), "utf-8")).toBe("bootstrapped\n");
     expect(readFileSync(path.join(worktreeRoot, "apps/api/.env.local"), "utf-8")).toBe(
-      "PORT=10000\n",
+      "PORT=10000\n"
     );
     expect(readFileSync(path.join(worktreeRoot, ".env"), "utf-8")).toBe("API_PORT=10000\n");
     expect(result.stderr).toContain(`Bootstrapping ${repoRoot} in ${worktreeRoot}`);
@@ -569,7 +570,7 @@ apps:
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/not a git repository/u);
     expect(localBranchExists(repoRoot, prBranch)).toBeFalsy();
   });
@@ -619,7 +620,7 @@ apps:
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(`Local branch "${prBranch}" differs from PR #84 head`);
     expect(git(worktreeRoot, ["rev-parse", "HEAD"])).toBe(originalHead);
     expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf-8")).toBe("pr head\n");
@@ -696,7 +697,7 @@ apps:
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(`Local branch "${prBranch}" differs from PR #83 head`);
     expect(existsSync(getExpectedWorktreePath(home, repoRoot, prBranch))).toBeFalsy();
   });
@@ -719,13 +720,13 @@ apps:
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     );
 
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
     expect(readFileSync(cmdLogPath, "utf-8")).toBe(
-      `/c\nstart\n\n${codexThreadUrl.replaceAll("%", "^%")}\n`,
+      `/c\nstart\n\n${codexThreadUrl.replaceAll("%", "^%")}\n`
     );
   });
 
@@ -745,7 +746,7 @@ apps:
     });
 
     expect(() =>
-      runMonke({ args: ["swing", "pr:124"], binDirectory, cwd: repoRoot, monkeHome: home }),
+      runMonke({ args: ["swing", "pr:124"], binDirectory, cwd: repoRoot, monkeHome: home })
     ).toThrow(/Fork PR targets are not supported/u);
     expect(() =>
       runMonke({
@@ -753,13 +754,13 @@ apps:
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/Cross-repo PR URLs are not supported/u);
     expect(() => runMonke({ args: ["swing", "mr:12"], cwd: repoRoot, monkeHome: home })).toThrow(
-      /Merge request Swing targets are out of scope/u,
+      /Merge request Swing targets are out of scope/u
     );
     expect(() => runMonke({ args: ["swing", "@"], cwd: repoRoot, monkeHome: home })).toThrow(
-      /@ Swing targets are not supported/u,
+      /@ Swing targets are not supported/u
     );
   });
 });
@@ -778,7 +779,7 @@ function pushReadmePullRequestHead(
     number: number;
     contents: string;
     message: string;
-  },
+  }
 ): void {
   git(repoRoot, ["switch", "-c", options.branch]);
   writeFileSync(path.join(repoRoot, "README.md"), options.contents, "utf-8");

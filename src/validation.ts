@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+
 import { parseDocument } from "yaml";
 import type * as z from "zod";
 
@@ -13,7 +14,7 @@ export function parseOwnedYamlFile<T extends z.ZodType>(filePath: string, schema
 export function parseOwnedYamlText<T extends z.ZodType>(
   text: string,
   label: string,
-  schema: T,
+  schema: T
 ): z.output<T> {
   const document = parseDocument(text, {
     merge: false,
@@ -33,7 +34,7 @@ export function parseOwnedYamlText<T extends z.ZodType>(
 export function parseBoundaryValue<T extends z.ZodType>(
   schema: T,
   value: unknown,
-  label: string,
+  label: string
 ): z.output<T> {
   const result = schema.safeParse(value);
   if (result.success) {

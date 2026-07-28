@@ -12,7 +12,7 @@ const releaseConfig = tegami({
     updateLockFile: true,
   },
   packages: {
-    "@monke-together-strong/oxlint-config": {},
+    "@monke-together-strong/oxc-config": {},
   },
   plugins: [
     github({

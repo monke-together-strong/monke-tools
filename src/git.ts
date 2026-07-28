@@ -15,7 +15,7 @@ export interface WorktreeEntry {
 
 export function describeSessionBranchMismatch(
   session: string,
-  branch: string | null,
+  branch: string | null
 ): string | null {
   if (branch === session) {
     return null;
@@ -43,13 +43,13 @@ export function resolveRepoContext(
   runtime: Runtime,
   cwd: string = runtime.cwd,
   home?: string | null,
-  options: ResolveRepoContextOptions = {},
+  options: ResolveRepoContextOptions = {}
 ): RepoContext {
   const worktreeRoot = trim(
-    runGit(runtime, cwd, ["rev-parse", "--path-format=absolute", "--show-toplevel"]),
+    runGit(runtime, cwd, ["rev-parse", "--path-format=absolute", "--show-toplevel"])
   );
   const gitCommonDir = trim(
-    runGit(runtime, cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]),
+    runGit(runtime, cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
   );
   const currentBranch = trim(runGit(runtime, cwd, ["rev-parse", "--abbrev-ref", "HEAD"]));
   const sourceRoot = path.dirname(gitCommonDir);
@@ -69,7 +69,7 @@ export function resolveRepoContext(
       {
         allowExternalSessionWorktree: options.allowExternalSessionWorktree ?? false,
         allowSessionBranchMismatch: options.allowSessionBranchMismatch ?? false,
-      },
+      }
     );
   }
 
@@ -93,7 +93,7 @@ function inferSessionNameForContext(
   options: {
     allowExternalSessionWorktree: boolean;
     allowSessionBranchMismatch: boolean;
-  },
+  }
 ): string {
   const expectedRoot = getExpectedSessionRoot(home, sourceRoot);
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
@@ -101,12 +101,12 @@ function inferSessionNameForContext(
   if (isOutsideExpectedRoot(relativeSessionPath)) {
     if (!options.allowExternalSessionWorktree) {
       throw new MonkeError(
-        `Expected linked worktree ${worktreeRoot} to live under ${expectedRoot}`,
+        `Expected linked worktree ${worktreeRoot} to live under ${expectedRoot}`
       );
     }
 
     createLogger(runtime).warning(
-      `Linked worktree ${worktreeRoot} is outside ${expectedRoot}; using current branch "${branch}" as the Swing target`,
+      `Linked worktree ${worktreeRoot} is outside ${expectedRoot}; using current branch "${branch}" as the Swing target`
     );
     return branch;
   }
@@ -122,7 +122,7 @@ export function inferSessionName(
   sourceRoot: string,
   worktreeRoot: string,
   branch: string,
-  options: { allowBranchMismatch?: boolean } = {},
+  options: { allowBranchMismatch?: boolean } = {}
 ): string {
   const expectedRoot = getExpectedSessionRoot(home, sourceRoot);
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
@@ -134,7 +134,7 @@ export function inferSessionName(
 
   if (sessionName !== branch && options.allowBranchMismatch !== true) {
     throw new MonkeError(
-      `Expected linked worktree session "${sessionName}" to match current branch "${branch}"`,
+      `Expected linked worktree session "${sessionName}" to match current branch "${branch}"`
     );
   }
   return sessionName;
@@ -154,7 +154,7 @@ function isOutsideExpectedRoot(relativeSessionPath: string): boolean {
 
 export function resolveGitRepoRoot(runtime: Runtime, checkoutPath: string): string {
   return trim(
-    runGit(runtime, checkoutPath, ["rev-parse", "--path-format=absolute", "--show-toplevel"]),
+    runGit(runtime, checkoutPath, ["rev-parse", "--path-format=absolute", "--show-toplevel"])
   );
 }
 
@@ -219,7 +219,7 @@ export function branchExists(runtime: Runtime, sourceRoot: string, branch: strin
 export function resolveDefaultBranchRef(
   runtime: Runtime,
   sourceRoot: string,
-  options: { refresh?: boolean } = {},
+  options: { refresh?: boolean } = {}
 ): DefaultBranchRef {
   const shouldRefresh = options.refresh ?? true;
   const localCandidates: DefaultBranchRef[] = [
@@ -254,11 +254,11 @@ export function resolveDefaultBranchRef(
 
 export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string): void {
   const status = trim(
-    runGit(runtime, sourceRoot, ["status", "--porcelain", "--untracked-files=normal"]),
+    runGit(runtime, sourceRoot, ["status", "--porcelain", "--untracked-files=normal"])
   );
   if (status) {
     throw new MonkeError(
-      `Source checkout is dirty: ${sourceRoot}. Commit or stash the changes, or drop --no-dirty to carry them into the new Session worktree.`,
+      `Source checkout is dirty: ${sourceRoot}. Commit or stash the changes, or drop --no-dirty to carry them into the new Session worktree.`
     );
   }
 }
@@ -267,7 +267,7 @@ export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string): void 
 export function assertCleanCheckoutForSessionBranchCreation(
   runtime: Runtime,
   sourceRoot: string,
-  session: string,
+  session: string
 ): void {
   validateSessionBranchName(runtime, sourceRoot, session);
   if (!branchExists(runtime, sourceRoot, session)) {
@@ -286,7 +286,7 @@ export function ensureSessionWorktree(
   home: string,
   sourceRoot: string,
   session: string,
-  options: { skipCleanCheck?: boolean } = {},
+  options: { skipCleanCheck?: boolean } = {}
 ): { path: string; created: boolean } {
   validateSessionBranchName(runtime, sourceRoot, session);
 
@@ -294,24 +294,22 @@ export function ensureSessionWorktree(
   const worktrees = listWorktreesAfterPruningSession(runtime, sourceRoot, session, expectedPath);
 
   const branchMatch = worktrees.find(
-    (entry) => entry.branch === session && !entry.prunable && existsSync(entry.path),
+    (entry) => entry.branch === session && !entry.prunable && existsSync(entry.path)
   );
   const pathMatch = worktrees.find(
     (entry) =>
-      normalize(entry.path) === normalize(expectedPath) &&
-      !entry.prunable &&
-      existsSync(entry.path),
+      normalize(entry.path) === normalize(expectedPath) && !entry.prunable && existsSync(entry.path)
   );
 
   if (branchMatch && normalize(branchMatch.path) !== normalize(expectedPath)) {
     throw new MonkeError(
-      `Session "${session}" already exists at unexpected path ${branchMatch.path}; expected ${expectedPath}`,
+      `Session "${session}" already exists at unexpected path ${branchMatch.path}; expected ${expectedPath}`
     );
   }
 
   if (pathMatch && pathMatch.branch !== session) {
     throw new MonkeError(
-      `Worktree ${expectedPath} exists but is on branch ${pathMatch.branch ?? "detached"} instead of ${session}`,
+      `Worktree ${expectedPath} exists but is on branch ${pathMatch.branch ?? "detached"} instead of ${session}`
     );
   }
 
@@ -321,14 +319,14 @@ export function ensureSessionWorktree(
 
   if (existsSync(expectedPath) && !pathMatch) {
     throw new MonkeError(
-      `Expected worktree path ${expectedPath} already exists and is not registered. Remove or move that directory (a previous spawn may have left it behind), then re-run mt spawn.`,
+      `Expected worktree path ${expectedPath} already exists and is not registered. Remove or move that directory (a previous spawn may have left it behind), then re-run mt spawn.`
     );
   }
 
   const sourceContext = resolveRepoContext(runtime, sourceRoot, home);
   if (sourceContext.currentBranch === session && !branchMatch) {
     throw new MonkeError(
-      `Cannot spawn session "${session}" because the source checkout is already on that branch`,
+      `Cannot spawn session "${session}" because the source checkout is already on that branch`
     );
   }
 
@@ -350,7 +348,7 @@ export function ensureFreshSessionWorktreeFromRef(
   home: string,
   sourceRoot: string,
   session: string,
-  startRef: string,
+  startRef: string
 ): { path: string; created: boolean } {
   assertFreshSessionWorktreeAvailable(runtime, home, sourceRoot, session);
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
@@ -366,7 +364,7 @@ export function removeSessionWorktreeAndBranch(
   sourceRoot: string,
   worktreePath: string,
   session: string,
-  onWarning: (message: string) => void,
+  onWarning: (message: string) => void
 ): boolean {
   let removed = true;
   const removeWorktree = runtime.exec("git", ["worktree", "remove", "--force", worktreePath], {
@@ -375,7 +373,7 @@ export function removeSessionWorktreeAndBranch(
   });
   if (removeWorktree.exitCode !== 0 && existsSync(worktreePath)) {
     onWarning(
-      `Failed to remove rolled-back worktree ${worktreePath}${formatCommandDetail(removeWorktree)}`,
+      `Failed to remove rolled-back worktree ${worktreePath}${formatCommandDetail(removeWorktree)}`
     );
     removed = false;
   }
@@ -386,7 +384,7 @@ export function removeSessionWorktreeAndBranch(
   });
   if (removeBranch.exitCode !== 0 && branchExists(runtime, sourceRoot, session)) {
     onWarning(
-      `Failed to remove rolled-back branch ${session} in ${sourceRoot}${formatCommandDetail(removeBranch)}`,
+      `Failed to remove rolled-back branch ${session} in ${sourceRoot}${formatCommandDetail(removeBranch)}`
     );
     removed = false;
   }
@@ -399,7 +397,7 @@ export function assertFreshSessionWorktreeAvailable(
   runtime: Runtime,
   home: string,
   sourceRoot: string,
-  session: string,
+  session: string
 ): void {
   validateSessionBranchName(runtime, sourceRoot, session);
 
@@ -408,28 +406,26 @@ export function assertFreshSessionWorktreeAvailable(
 
   if (branchExists(runtime, sourceRoot, session)) {
     throw new MonkeError(
-      `Session branch "${session}" already exists for ${sourceRoot}; default branch spawn mode requires a fresh Session branch`,
+      `Session branch "${session}" already exists for ${sourceRoot}; default branch spawn mode requires a fresh Session branch`
     );
   }
 
   const branchMatch = worktrees.find(
-    (entry) => entry.branch === session && !entry.prunable && existsSync(entry.path),
+    (entry) => entry.branch === session && !entry.prunable && existsSync(entry.path)
   );
   if (branchMatch) {
     throw new MonkeError(
-      `Session "${session}" already has a worktree at ${branchMatch.path}; default branch spawn mode requires a fresh Session worktree`,
+      `Session "${session}" already has a worktree at ${branchMatch.path}; default branch spawn mode requires a fresh Session worktree`
     );
   }
 
   const pathMatch = worktrees.find(
     (entry) =>
-      normalize(entry.path) === normalize(expectedPath) &&
-      !entry.prunable &&
-      existsSync(entry.path),
+      normalize(entry.path) === normalize(expectedPath) && !entry.prunable && existsSync(entry.path)
   );
   if (pathMatch || existsSync(expectedPath)) {
     throw new MonkeError(
-      `Session worktree path collision at ${expectedPath}; default branch spawn mode requires an unused ${path.basename(sourceRoot)}/${session} path`,
+      `Session worktree path collision at ${expectedPath}; default branch spawn mode requires an unused ${path.basename(sourceRoot)}/${session} path`
     );
   }
 }
@@ -441,12 +437,12 @@ export function validateWorktreeForSession(
   sourceRoot: string,
   worktreePath: string,
   session: string,
-  options: { allowBranchMismatch?: boolean } = {},
+  options: { allowBranchMismatch?: boolean } = {}
 ): RepoContext {
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
   if (normalize(worktreePath) !== normalize(expectedPath)) {
     throw new MonkeError(
-      `Expected session "${session}" worktree at ${expectedPath}, found ${worktreePath}`,
+      `Expected session "${session}" worktree at ${expectedPath}, found ${worktreePath}`
     );
   }
 
@@ -461,13 +457,13 @@ export function validateWorktreeForSession(
 
   if (normalize(context.sourceRoot) !== normalize(sourceRoot)) {
     throw new MonkeError(
-      `Expected worktree ${worktreePath} to belong to ${sourceRoot}, found ${context.sourceRoot}`,
+      `Expected worktree ${worktreePath} to belong to ${sourceRoot}, found ${context.sourceRoot}`
     );
   }
 
   if (context.currentBranch !== session && options.allowBranchMismatch !== true) {
     throw new MonkeError(
-      `Expected worktree ${worktreePath} to be on branch ${session}, found ${context.currentBranch}`,
+      `Expected worktree ${worktreePath} to be on branch ${session}, found ${context.currentBranch}`
     );
   }
   return context;
@@ -491,14 +487,14 @@ function listWorktreesAfterPruningSession(
   runtime: Runtime,
   sourceRoot: string,
   session: string,
-  expectedPath: string,
+  expectedPath: string
 ): WorktreeEntry[] {
   let worktrees = listWorktrees(runtime, sourceRoot);
 
   const shouldPruneCachedEntries = worktrees.some(
     (entry) =>
       (entry.branch === session || normalize(entry.path) === normalize(expectedPath)) &&
-      (entry.prunable || !existsSync(entry.path)),
+      (entry.prunable || !existsSync(entry.path))
   );
   if (shouldPruneCachedEntries) {
     runGit(runtime, sourceRoot, ["worktree", "prune"]);

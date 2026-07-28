@@ -36,7 +36,7 @@ export function requestShellDirectoryAfterRemoval(runtime: Runtime, targetPath: 
 function requestShellDirectoryWithFallback(
   runtime: Runtime,
   targetPath: string,
-  removedCurrentWorktree: boolean,
+  removedCurrentWorktree: boolean
 ): boolean {
   const logger = createLogger(runtime);
 
@@ -53,7 +53,7 @@ function requestShellDirectoryWithFallback(
   runtime.writeStdout(`${targetPath}\n`);
   if (isShellIntegrationConfigured(runtime)) {
     logger.hint(
-      "Shell integration is configured but not active; restart your shell or invoke mt through the shell adapter.",
+      "Shell integration is configured but not active; restart your shell or invoke mt through the shell adapter."
     );
   } else {
     logger.hint("Enable automatic switching with: mt shell install");
@@ -64,7 +64,7 @@ function requestShellDirectoryWithFallback(
 export function runShellInit(
   runtime: Runtime,
   shellName: string,
-  options: ShellInitOptions = {},
+  options: ShellInitOptions = {}
 ): void {
   const shell = requireSupportedShell(shellName);
   runtime.writeStdout(renderShellAdapter(shell, resolveAdapterBinary(runtime, options.binary)));
@@ -82,7 +82,7 @@ export function runShellInstall(runtime: Runtime, options: ShellInstallOptions =
   }
 
   createLogger(runtime).success(
-    `Installed shell integration in ${installedFiles.map((file) => path.basename(file)).join(", ")}`,
+    `Installed shell integration in ${installedFiles.map((file) => path.basename(file)).join(", ")}`
   );
 }
 

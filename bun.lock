@@ -22,17 +22,20 @@
         "vite-plus": "0.2.6",
       },
     },
-    "packages/oxlint-config": {
-      "name": "@monke-together-strong/oxlint-config",
-      "version": "0.1.0",
+    "packages/oxc-config": {
+      "name": "@monke-together-strong/oxc-config",
+      "version": "0.0.0",
       "dependencies": {
         "ultracite": "7.9.4",
       },
       "devDependencies": {
+        "oxfmt": "0.60.0",
         "oxlint": "1.75.0",
       },
       "peerDependencies": {
+        "oxfmt": "^0.60.0",
         "oxlint": "^1.75.0",
+        "oxlint-tsgolint": ">=7.0.2001",
       },
     },
   },
@@ -80,7 +83,7 @@
 
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 
-    "@monke-together-strong/oxlint-config": ["@monke-together-strong/oxlint-config@workspace:packages/oxlint-config"],
+    "@monke-together-strong/oxc-config": ["@monke-together-strong/oxc-config@workspace:packages/oxc-config"],
 
     "@oxc-project/runtime": ["@oxc-project/runtime@0.141.0", "", {}, "sha512-Z/6jQ0dyvE2fVjMUO7GoD4h+3q0G4lI4BWQNjaPhC4RPxaS4hF1b7/QYKB/Tl+KAQwqqKgMF54ukR/VvV5FILg=="],
 

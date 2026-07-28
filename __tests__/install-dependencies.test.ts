@@ -1,4 +1,3 @@
-import { describe, expect, test } from "vite-plus/test";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -11,6 +10,8 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import { makeTempDir, runMonke } from "./helpers.ts";
 
@@ -48,7 +49,7 @@ describe("dependency installation", () => {
     writeFileSync(
       path.join(checkout, "scripts", "install-local.sh"),
       readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf-8"),
-      "utf-8",
+      "utf-8"
     );
     chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
     writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
@@ -85,7 +86,7 @@ describe("dependency installation", () => {
     writeFileSync(
       path.join(checkout, "scripts", "install-local.sh"),
       readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf-8"),
-      "utf-8",
+      "utf-8"
     );
     chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
     writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
@@ -107,13 +108,13 @@ describe("dependency installation", () => {
     expect(result.status).toBe(0);
     expect(readFileSync(bunLog, "utf-8")).toContain(`pwd:${path.join(checkout, "builds")}\n`);
     expect(readFileSync(monkeToolsLog, "utf-8")).toBe(
-      `install-dependencies\nshell install\nskills local-install ${checkout}\n`,
+      `install-dependencies\nshell install\nskills local-install ${checkout}\n`
     );
     expect(readFileSync(path.join(home, ".local", "bin", "mt"), "utf-8")).toBe(
-      '#!/bin/sh\nexec "$(dirname "$0")/monke-tools" "$@"\n',
+      '#!/bin/sh\nexec "$(dirname "$0")/monke-tools" "$@"\n'
     );
     expect(readFileSync(path.join(home, ".local", "bin", "monke"), "utf-8")).toBe(
-      '#!/bin/sh\nexec "$(dirname "$0")/monke-tools" "$@"\n',
+      '#!/bin/sh\nexec "$(dirname "$0")/monke-tools" "$@"\n'
     );
     expect(existsSync(path.join(home, ".local", "bin", "monke-tools"))).toBeTruthy();
     expect(result.stdout).toContain("Installed monke-tools");
@@ -135,7 +136,7 @@ describe("dependency installation", () => {
     writeFileSync(
       path.join(checkout, "scripts", "install-local.sh"),
       readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf-8"),
-      "utf-8",
+      "utf-8"
     );
     chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
     writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
@@ -212,7 +213,7 @@ exit 0
 EOF
 chmod +x "$outfile"
 `,
-    "utf-8",
+    "utf-8"
   );
   chmodSync(bunPath, 0o755);
 }

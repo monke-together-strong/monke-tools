@@ -1,18 +1,19 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 
-import {
-  parseClaudeSession,
-  parseCodexSession,
-} from "../skills/internal/agent-session-retrospective/scripts/lib/collectors.ts";
 import {
   buildBundles,
   decideEligibility,
   runCollect,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/collect.ts";
 import type { EligibleSession } from "../skills/internal/agent-session-retrospective/scripts/lib/collect.ts";
+import {
+  parseClaudeSession,
+  parseCodexSession,
+} from "../skills/internal/agent-session-retrospective/scripts/lib/collectors.ts";
 import {
   buildReportArtifacts,
   parseFixHeader,
@@ -21,6 +22,7 @@ import {
   validateFindings,
   validateSynthesis,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/commit.ts";
+import { summarizeOutput } from "../skills/internal/agent-session-retrospective/scripts/lib/normalize.ts";
 import {
   prManifestPath,
   readPrManifest,
@@ -39,7 +41,6 @@ import {
   readFindings,
   saveFrozenSession,
 } from "../skills/internal/agent-session-retrospective/scripts/lib/store.ts";
-import { summarizeOutput } from "../skills/internal/agent-session-retrospective/scripts/lib/normalize.ts";
 import type {
   CanonicalSession,
   FrozenSessionRecord,
@@ -101,9 +102,9 @@ function writeWindow(root: string, runTs = "ts"): void {
         untilSource: "now",
       },
       null,
-      2,
+      2
     ),
-    "utf-8",
+    "utf-8"
   );
 }
 
@@ -493,7 +494,7 @@ describe("agent session retrospective", () => {
         untilSource: "now",
       });
       expect(
-        JSON.parse(readFileSync(path.join(root, "runs", "ts", "window.json"), "utf-8")),
+        JSON.parse(readFileSync(path.join(root, "runs", "ts", "window.json"), "utf-8"))
       ).toStrictEqual(result.window);
     });
 
@@ -504,12 +505,12 @@ describe("agent session retrospective", () => {
       writeFileSync(
         path.join(reportsDir, "2026-05-01T00-00-00-000Z-retrospective.md"),
         "Window: 2026-04-17T00:00:00.000Z to 2026-05-01T00:00:00.000Z (first-run-default to now)\n",
-        "utf-8",
+        "utf-8"
       );
       writeFileSync(
         path.join(reportsDir, "2026-05-20T00-00-00-000Z-retrospective.md"),
         "Window: 2026-05-01T00:00:00.000Z to 2026-05-20T12:00:00.000Z (previous-report to now)\n",
-        "utf-8",
+        "utf-8"
       );
 
       const result = runCollect({
@@ -621,8 +622,8 @@ describe("agent session retrospective", () => {
             "### Resolved or Superseded",
             "### Active Actions",
             "### Skill & Workflow Opportunities",
-          ].join("\n"),
-        ),
+          ].join("\n")
+        )
       ).toStrictEqual(["Required synthesis headings are out of order."]);
     });
   });
@@ -666,7 +667,7 @@ describe("agent session retrospective", () => {
           prAnalysis:
             "## Recurring Corrective Patterns\n\n- Tightened verification before merge.\n\n## PR Analysis Gaps\n\n- `repo#1` — missing diff. Impact: degraded.",
           prAnalysisWarnings: ["PR `repo#1` omits known final head abc123."],
-        },
+        }
       );
       const { report } = artifacts;
 
@@ -715,14 +716,14 @@ describe("agent session retrospective", () => {
           "",
           "body",
         ].join("\n"),
-        "utf-8",
+        "utf-8"
       );
       const bundle = bundleWith(["t0"]);
       bundle.runTs = runTs;
       writeFileSync(
         path.join(runDir, `${bundle.repoHash}.json`),
         JSON.stringify(bundle, null, 2),
-        "utf-8",
+        "utf-8"
       );
       const findings: RepoFindings = {
         durableFixProposals: [
@@ -737,7 +738,7 @@ describe("agent session retrospective", () => {
       writeFileSync(
         path.join(runDir, `${bundle.repoHash}.findings.json`),
         JSON.stringify(findings, null, 2),
-        "utf-8",
+        "utf-8"
       );
       const synthesisPath = path.join(dir, "synthesis.md");
       writeFileSync(
@@ -757,7 +758,7 @@ describe("agent session retrospective", () => {
           "",
           "_No resolved or superseded candidates._",
         ].join("\n"),
-        "utf-8",
+        "utf-8"
       );
 
       const result = runCommit({
@@ -771,7 +772,7 @@ describe("agent session retrospective", () => {
       const prSources = readFileSync(result.sourcePaths.pr, "utf-8");
 
       expect(report).toContain(
-        "Window: 2026-05-18T00:00:00.000Z to 2026-06-01T00:00:00.000Z (first-run-default to now)",
+        "Window: 2026-05-18T00:00:00.000Z to 2026-06-01T00:00:00.000Z (first-run-default to now)"
       );
       const globalAt = report.indexOf("## Session Actions");
       const prAt = report.indexOf("## PR Repeated Corrective Patterns");
@@ -796,7 +797,7 @@ describe("agent session retrospective", () => {
       writeFileSync(
         path.join(runDir, `${bundle.repoHash}.json`),
         JSON.stringify(bundle, null, 2),
-        "utf-8",
+        "utf-8"
       );
       const findings: RepoFindings = {
         durableFixProposals: [
@@ -811,7 +812,7 @@ describe("agent session retrospective", () => {
       writeFileSync(
         path.join(runDir, `${bundle.repoHash}.findings.json`),
         JSON.stringify(findings, null, 2),
-        "utf-8",
+        "utf-8"
       );
 
       expect(() =>
@@ -819,7 +820,7 @@ describe("agent session retrospective", () => {
           nowIso: "2026-06-01T00:00:00.000Z",
           retroRoot: root,
           runTs,
-        }),
+        })
       ).toThrow("commit requires runs/2026-06-01T00-00-00-000Z/pr-analysis.md");
       expect(existsSync(runDir)).toBeTruthy();
       expect(loadFrozenSession(root, "codex", "s1")).toBeNull();
@@ -833,7 +834,7 @@ describe("agent session retrospective", () => {
       writeFileSync(
         path.join(runDir, "pr-analysis.md"),
         "## Recurring Corrective Patterns\n\n_No recurring corrective patterns._\n",
-        "utf-8",
+        "utf-8"
       );
       const bundle = bundleWith(["t0"]);
       bundle.runTs = runTs;
@@ -847,7 +848,7 @@ describe("agent session retrospective", () => {
       writeFileSync(
         path.join(runDir, `${bundle.repoHash}.findings.json`),
         JSON.stringify(findings),
-        "utf-8",
+        "utf-8"
       );
       const synthesisPath = path.join(dir, "synthesis.md");
       writeFileSync(synthesisPath, "### Active Actions\n\n_No active actions._\n", "utf-8");
@@ -858,7 +859,7 @@ describe("agent session retrospective", () => {
           retroRoot: root,
           runTs,
           synthesisPath,
-        }),
+        })
       ).toThrow("invalid synthesis");
       expect(existsSync(runDir)).toBeTruthy();
       expect(loadFrozenSession(root, "codex", "s1")).toBeNull();
@@ -1050,11 +1051,11 @@ describe("agent session retrospective", () => {
       expect(manifest.author).toBe("hoangbn");
       expect(manifest.workItems).toHaveLength(3);
       expect(
-        calls.some((call) => call.includes("pr list") && call.includes("commits")),
+        calls.some((call) => call.includes("pr list") && call.includes("commits"))
       ).toBeFalsy();
       expect(calls.some((call) => call.includes("pr list") && call.includes("files"))).toBeFalsy();
       expect(calls).toContain(
-        "gh pr view 7 --repo monke-together-strong/alpha --json number,url,title,createdAt,mergedAt,baseRefName,headRefName,headRefOid,mergeCommit,commits",
+        "gh pr view 7 --repo monke-together-strong/alpha --json number,url,title,createdAt,mergedAt,baseRefName,headRefName,headRefOid,mergeCommit,commits"
       );
       expect(calls).toContain("gh pr view 7 --repo monke-together-strong/alpha --json files");
       expect(calls).toContain("gh pr diff 9 --repo monke-together-strong/alpha --patch");
@@ -1106,7 +1107,7 @@ describe("agent session retrospective", () => {
           "## Commit Message Reference",
           "`bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb` Add verification.",
         ].join("\n"),
-        "utf-8",
+        "utf-8"
       );
       writeFileSync(
         secondAnalyzedItem.analysisPath,
@@ -1122,14 +1123,14 @@ describe("agent session retrospective", () => {
           "## Commit Message Reference",
           "`eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee` Add verification.",
         ].join("\n"),
-        "utf-8",
+        "utf-8"
       );
 
       const aggregate = runPrAggregate({ retroRoot: root, runTs: "ts" });
       const report = readFileSync(aggregate.path, "utf-8");
       expect(report).toContain("## Recurring Corrective Patterns");
       expect(report).toContain(
-        "Added missing verification before merge. (2 PRs: monke-together-strong/alpha#7, monke-together-strong/alpha#10)",
+        "Added missing verification before merge. (2 PRs: monke-together-strong/alpha#7, monke-together-strong/alpha#10)"
       );
       expect(report).not.toContain("post-opening delta unavailable");
       expect(report).toContain("### monke-together-strong/alpha#7");
@@ -1187,17 +1188,17 @@ describe("agent session retrospective", () => {
           "## Ignored Feature Scope",
           "none",
         ].join("\n"),
-        manifest,
+        manifest
       );
 
       expect(result.warnings).toContain(
-        "PR `monke-together-strong/alpha#7` is missing `## Commit Message Reference`.",
+        "PR `monke-together-strong/alpha#7` is missing `## Commit Message Reference`."
       );
       expect(result.warnings).toContain(
-        "PR `monke-together-strong/alpha#7` omits known final head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.",
+        "PR `monke-together-strong/alpha#7` omits known final head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb."
       );
       expect(result.warnings).toContain(
-        "PR `monke-together-strong/alpha#7` cites unknown commit SHA ddddddd.",
+        "PR `monke-together-strong/alpha#7` cites unknown commit SHA ddddddd."
       );
     });
 
@@ -1273,15 +1274,15 @@ describe("agent session retrospective", () => {
           "## Commit Message Reference",
           "`bbbbbbb` Add verification.",
         ].join("\n"),
-        manifest,
+        manifest
       );
 
       expect(result.warnings).toContain("Expected PR `repo#1` is missing from PR analysis.");
       expect(result.warnings).not.toContain(
-        "PR `repo#10` omits known opening ref aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+        "PR `repo#10` omits known opening ref aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
       );
       expect(result.warnings).not.toContain(
-        "PR `repo#10` omits known final head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.",
+        "PR `repo#10` omits known final head bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb."
       );
     });
   });
@@ -1308,7 +1309,7 @@ describe("agent session retrospective", () => {
         }
         writeFileSync(
           path.join(dayDir, name),
-          lines.map((line) => JSON.stringify(line)).join("\n"),
+          lines.map((line) => JSON.stringify(line)).join("\n")
         );
       };
       writeCodex("short.jsonl", 2);
@@ -1383,7 +1384,7 @@ describe("agent session retrospective", () => {
           future: true,
           repoKey: "/repo",
         }),
-        "utf-8",
+        "utf-8"
       );
 
       expect(readFindings(dir, "ts", "repo")).toStrictEqual({

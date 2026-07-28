@@ -1,5 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
+
 import { stringify } from "yaml";
 import * as z from "zod";
 
@@ -83,7 +84,7 @@ export function loadGlobalMonkeConfig(home: string): GlobalMonkeConfig {
 
   return normalizeGlobalMonkeConfig(
     parseOwnedYamlFile(configPath, GlobalMonkeConfigSchema),
-    configPath,
+    configPath
   );
 }
 
@@ -92,7 +93,7 @@ export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig): 
   const configPath = getGlobalConfigPath(home);
   const parsed = normalizeGlobalMonkeConfig(
     parseBoundaryValue(GlobalMonkeConfigSchema, config, configPath),
-    configPath,
+    configPath
   );
   ensureDirectory(home);
   writeFileSync(configPath, stringify(parsed), "utf-8");
@@ -105,7 +106,7 @@ function getGlobalConfigPath(home: string): string {
 
 function normalizeGlobalMonkeConfig(
   config: ParsedGlobalMonkeConfig,
-  configPath: string,
+  configPath: string
 ): GlobalMonkeConfig {
   const { installedSourceCheckout } = config;
 
@@ -123,7 +124,7 @@ function normalizeGlobalMonkeConfig(
 
 function parseSkillInstallPreference(
   preference: ParsedSkillInstallPreference,
-  configPath: string,
+  configPath: string
 ): SkillInstallPreference {
   const location = `${configPath}#skillInstallPreference`;
 

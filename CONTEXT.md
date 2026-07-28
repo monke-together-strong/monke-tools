@@ -6,473 +6,245 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 ### Session topology
 
-**Session**:
-A named local workspace instance that spans one source repo and any dependency repos using the same branch-aligned identity.
-_Avoid_: Branch, environment, sandbox
+**Session**: A named local workspace instance that spans one source repo and any dependency repos using the same branch-aligned identity. _Avoid_: Branch, environment, sandbox
 
-**Source checkout**:
-The original Git checkout that any working directory resolves to: the canonical non-worktree root and parent of all the repo's linked worktrees. A **Session** is created from one.
-_Avoid_: Main worktree, root worktree
+**Source checkout**: The original Git checkout that any working directory resolves to: the canonical non-worktree root and parent of all the repo's linked worktrees. A **Session** is created from one. _Avoid_: Main worktree, root worktree
 
-**Session worktree**:
-A linked Git worktree created for a specific repo inside a session, stored under the **Monke home** worktree area as `worktrees/<repo-name>/<session>`.
-_Avoid_: Checkout copy, clone
+**Session worktree**: A linked Git worktree created for a specific repo inside a session, stored under the **Monke home** worktree area as `worktrees/<repo-name>/<session>`. _Avoid_: Checkout copy, clone
 
-**Ordinary worktree**:
-A linked Git worktree that is not owned by a **Session**.
-_Avoid_: Non-Monke worktree, external worktree, unmanaged Session
+**Ordinary worktree**: A linked Git worktree that is not owned by a **Session**. _Avoid_: Non-Monke worktree, external worktree, unmanaged Session
 
-**Root repo**:
-The source repo from which a session was requested and whose dependency graph defines the session scope.
-_Avoid_: Main repo, parent repo
+**Root repo**: The source repo from which a session was requested and whose dependency graph defines the session scope. _Avoid_: Main repo, parent repo
 
-**Dependency repo**:
-Another repo declared by the root repo that must be materialized into the same session.
-_Avoid_: External repo, child repo
+**Dependency repo**: Another repo declared by the root repo that must be materialized into the same session. _Avoid_: External repo, child repo
 
-**Session state**:
-The persisted record of which repos belong to a session, where their worktrees live, and which ports were assigned.
-_Avoid_: Cache, registry entry
+**Session state**: The persisted record of which repos belong to a session, where their worktrees live, and which ports were assigned. _Avoid_: Cache, registry entry
 
-**Session state store**:
-The module that owns **Session state** for one operation: opened under the global lock, it scans retained session states once, serves cross-session queries, and persists repo checkpoints.
-_Avoid_: Registry, cache, state manager
+**Session state store**: The module that owns **Session state** for one operation: opened under the global lock, it scans retained session states once, serves cross-session queries, and persists repo checkpoints. _Avoid_: Registry, cache, state manager
 
-**Session finalization**:
-The targeted lifecycle step that runs a Session's Cleanup commands after all its recorded worktrees are logically gone, then removes **Session state** only after every command succeeds.
-_Avoid_: Worktree removal, broad Cleanup scan, branch deletion
+**Session finalization**: The targeted lifecycle step that runs a Session's Cleanup commands after all its recorded worktrees are logically gone, then removes **Session state** only after every command succeeds. _Avoid_: Worktree removal, broad Cleanup scan, branch deletion
 
-**Session resource**:
-A per-session string value resolved for a repo, persisted in session state, written to the session root `.env`, and optionally used during cleanup.
-_Avoid_: Provider, pool item, resolved env value
+**Session resource**: A per-session string value resolved for a repo, persisted in session state, written to the session root `.env`, and optionally used during cleanup. _Avoid_: Provider, pool item, resolved env value
 
-**Resource value**:
-The configured literal string that becomes a session resource value, with `${session}` available as the session-name placeholder and `${user}` available as the machine-user placeholder.
-_Avoid_: Provider acquisition, allocator, command output
+**Resource value**: The configured literal string that becomes a session resource value, with `${session}` available as the session-name placeholder and `${user}` available as the machine-user placeholder. _Avoid_: Provider acquisition, allocator, command output
 
-**Resource values**:
-The repo configuration section for deterministic literal session resources.
-_Avoid_: Resource commands, dynamic resources
+**Resource values**: The repo configuration section for deterministic literal session resources. _Avoid_: Resource commands, dynamic resources
 
-**Resource cleanup**:
-A repo-scoped shell command run during cleanup with the session's resolved resources, resource command outputs, and session metadata available in its environment.
-_Avoid_: Provider release, per-resource cleanup hook
+**Resource cleanup**: A repo-scoped shell command run during cleanup with the session's resolved resources, resource command outputs, and session metadata available in its environment. _Avoid_: Provider release, per-resource cleanup hook
 
-**Cleanup command**:
-The `monke.yml` field that configures resource cleanup for one repo.
-_Avoid_: Resource cleanup command, teardown script
+**Cleanup command**: The `monke.yml` field that configures resource cleanup for one repo. _Avoid_: Resource cleanup command, teardown script
 
-**Resource command**:
-A named repo-scoped default-export JS/TS module run from a session worktree to choose dynamic session values while monke-tools coordinates concurrent runs.
-_Avoid_: Provider, allocator, pool
+**Resource command**: A named repo-scoped default-export JS/TS module run from a session worktree to choose dynamic session values while monke-tools coordinates concurrent runs. _Avoid_: Provider, allocator, pool
 
-**Declaring repo**:
-The repo whose `monke.yml` defines a resource command.
-_Avoid_: Root repo, consumer repo, command worktree
+**Declaring repo**: The repo whose `monke.yml` defines a resource command. _Avoid_: Root repo, consumer repo, command worktree
 
-**Resource command output**:
-The exact required non-empty env-style string values returned by a resource command for one session worktree and remembered as inputs to later matching resource command runs.
-_Avoid_: Claim, provider result, pool item
+**Resource command output**: The exact required non-empty env-style string values returned by a resource command for one session worktree and remembered as inputs to later matching resource command runs. _Avoid_: Claim, provider result, pool item
 
-**Resource command input**:
-The remembered values from other retained session states for previous runs of the same resource command, grouped by required resource command output name.
-_Avoid_: Claim list, session history, lock state
+**Resource command input**: The remembered values from other retained session states for previous runs of the same resource command, grouped by required resource command output name. _Avoid_: Claim list, session history, lock state
 
-**Resource command contract**:
-The machine-readable function contract for a resource command: remembered values are passed as the `previous` argument field, and resource command output is returned from the default-export function.
-_Avoid_: CLI log format, cleanup protocol
+**Resource command contract**: The machine-readable function contract for a resource command: remembered values are passed as the `previous` argument field, and resource command output is returned from the default-export function. _Avoid_: CLI log format, cleanup protocol
 
-**Command lock**:
-The exclusive concurrency boundary for one declaring repo and one resource command name, preventing matching resource commands from running at the same time across multiple session worktrees.
-_Avoid_: Claim, resource value, cleanup handle
+**Command lock**: The exclusive concurrency boundary for one declaring repo and one resource command name, preventing matching resource commands from running at the same time across multiple session worktrees. _Avoid_: Claim, resource value, cleanup handle
 
-**Resource command timeout**:
-The maximum duration a resource command may run while holding its command lock.
-_Avoid_: Cleanup timeout, lock lifetime
+**Resource command timeout**: The maximum duration a resource command may run while holding its command lock. _Avoid_: Cleanup timeout, lock lifetime
 
-**Dead worktree**:
-A session worktree recorded in session state whose filesystem path no longer exists.
-_Avoid_: Inactive worktree, stale checkout
+**Dead worktree**: A session worktree recorded in session state whose filesystem path no longer exists. _Avoid_: Inactive worktree, stale checkout
 
-**Merged PR**:
-A pull request whose GitHub `mergedAt` value is set.
-_Avoid_: Merged worktree, merged session
+**Merged PR**: A pull request whose GitHub `mergedAt` value is set. _Avoid_: Merged worktree, merged session
 
-**Merge-cleanable Session**:
-A Session whose session branch is proven by a **Merged PR** and whose recorded session worktrees are eligible for explicit cleanup.
-_Avoid_: Merged worktree, stale session
+**Merge-cleanable Session**: A Session whose session branch is proven by a **Merged PR** and whose recorded session worktrees are eligible for explicit cleanup. _Avoid_: Merged worktree, stale session
 
 ### Repo configuration
 
-**App**:
-A configured app directory inside one repo whose env file participates in managed rewrites.
-_Avoid_: Service, project
+**App**: A configured app directory inside one repo whose env file participates in managed rewrites. _Avoid_: Service, project
 
-**Managed env file**:
-The env file inside an app whose mapped variables monke-tools rewrites.
-_Avoid_: Local env, app config
+**Managed env file**: The env file inside an app whose mapped variables monke-tools rewrites. _Avoid_: Local env, app config
 
-**Seed path**:
-A repo-relative file or directory copied into a newly spawned session worktree.
-_Avoid_: Template, bootstrap asset
+**Seed path**: A repo-relative file or directory copied into a newly spawned session worktree. _Avoid_: Template, bootstrap asset
 
-**Seed material**:
-The source-checkout files copied into a newly spawned session worktree before env rewrites, including discovered env files and configured Seed paths.
-_Avoid_: Default-branch content, tracked source
+**Seed material**: The source-checkout files copied into a newly spawned session worktree before env rewrites, including discovered env files and configured Seed paths. _Avoid_: Default-branch content, tracked source
 
-**Bootstrap command**:
-A repo-scoped shell command run after env syncing to prepare a materialized worktree.
-_Avoid_: Setup script, install step
+**Bootstrap command**: A repo-scoped shell command run after env syncing to prepare a materialized worktree. _Avoid_: Setup script, install step
 
-**Path env**:
-A root-level env variable that points from one repo to a dependency repo's path.
-_Avoid_: Dependency path, repo link
+**Path env**: A root-level env variable that points from one repo to a dependency repo's path. _Avoid_: Dependency path, repo link
 
 ### Agent guidance
 
-**Consumer repo**:
-A repo whose developer or agent uses monke-tools as a local workflow tool.
-_Avoid_: Target repo, downstream repo, using repo
+**Consumer repo**: A repo whose developer or agent uses monke-tools as a local workflow tool. _Avoid_: Target repo, downstream repo, using repo
 
-**Local tool install**:
-A developer-machine install of monke-tools built from a source checkout and shared by all **Consumer repos** through the `mt` command.
-_Avoid_: Published package, consumer dependency, package-manager link
+**Local tool install**: A developer-machine install of monke-tools built from a source checkout and shared by all **Consumer repos** through the `mt` command. _Avoid_: Published package, consumer dependency, package-manager link
 
-**Local install refresh**:
-The act of rebuilding the **Local tool install** from the current monke-tools source checkout before validating behavior in a **Consumer repo**.
-_Avoid_: Publish, dependency update, session refresh
+**Local install refresh**: The act of rebuilding the **Local tool install** from the current monke-tools source checkout before validating behavior in a **Consumer repo**. _Avoid_: Publish, dependency update, session refresh
 
-**Monke home**:
-The machine-local directory where monke-tools keeps state, preferences, and owned **Session worktrees** shared across **Consumer repos**. Defaults to `~/.monke`; Session worktrees live under `worktrees/<repo-name>/<session>` within this directory.
-_Avoid_: OS home, repo root, source checkout
+**Monke home**: The machine-local directory where monke-tools keeps state, preferences, and owned **Session worktrees** shared across **Consumer repos**. Defaults to `~/.monke`; Session worktrees live under `worktrees/<repo-name>/<session>` within this directory. _Avoid_: OS home, repo root, source checkout
 
-**Global monke config**:
-Machine-local monke-tools preferences that apply across **Consumer repos** and are stored outside any repo checkout as versioned YAML at `config.yml` under the monke home directory.
-_Avoid_: Repo config, session state, monke.yml
+**Global monke config**: Machine-local monke-tools preferences that apply across **Consumer repos** and are stored outside any repo checkout as versioned YAML at `config.yml` under the monke home directory. _Avoid_: Repo config, session state, monke.yml
 
-**Distributed skill**:
-Agent guidance distributed through the **Local tool install** so agents in a **Consumer repo** can use shared team workflows.
-_Avoid_: Package skill, copied prompt, generated instruction file
+**Distributed skill**: Agent guidance distributed through the **Local tool install** so agents in a **Consumer repo** can use shared team workflows. _Avoid_: Package skill, copied prompt, generated instruction file
 
-**Skill source tree**:
-The `skills/` directory in the monke-tools source checkout that packages **Distributed skills** and **Distributed references** for installation into **Agent skill roots**.
-_Avoid_: Skill registry, source root, package metadata
+**Skill source tree**: The `skills/` directory in the monke-tools source checkout that packages **Distributed skills** and **Distributed references** for installation into **Agent skill roots**. _Avoid_: Skill registry, source root, package metadata
 
-**Reference source tree**:
-The `references/` area inside the **Skill source tree** that stores **Distributed references**, separated into internal and imported ownership groups.
-_Avoid_: Skill source tree, global reference directory, reference cache
+**Reference source tree**: The `references/` area inside the **Skill source tree** that stores **Distributed references**, separated into internal and imported ownership groups. _Avoid_: Skill source tree, global reference directory, reference cache
 
-**Installed source checkout**:
-The monke-tools source checkout used by the current **Local tool install**.
-_Avoid_: Package root, global package link, install directory
+**Installed source checkout**: The monke-tools source checkout used by the current **Local tool install**. _Avoid_: Package root, global package link, install directory
 
-**Skill slug**:
-The filesystem name of one **Distributed skill** inside the **Skill source tree**.
-_Avoid_: Skill name, package name, agent label
+**Skill slug**: The filesystem name of one **Distributed skill** inside the **Skill source tree**. _Avoid_: Skill name, package name, agent label
 
-**Agent skill name**:
-The name declared inside a **Distributed skill** for agent-facing selection and display.
-_Avoid_: Skill slug, folder name, package skill name
+**Agent skill name**: The name declared inside a **Distributed skill** for agent-facing selection and display. _Avoid_: Skill slug, folder name, package skill name
 
-**Core distributed skill**:
-The monke-tools-owned **Distributed skill** covering the local install, consumer setup, session operations, and repo configuration.
-_Avoid_: Skill family, split skill set, command reference
+**Core distributed skill**: The monke-tools-owned **Distributed skill** covering the local install, consumer setup, session operations, and repo configuration. _Avoid_: Skill family, split skill set, command reference
 
-**Internal skill**:
-A monke-tools-owned **Distributed skill** distributed with the local install, whether it helps agents work on monke-tools itself or use monke-tools from a **Consumer repo**.
-_Avoid_: Repo skill, local skill, source-only skill
+**Internal skill**: A monke-tools-owned **Distributed skill** distributed with the local install, whether it helps agents work on monke-tools itself or use monke-tools from a **Consumer repo**. _Avoid_: Repo skill, local skill, source-only skill
 
-**Imported guidance**:
-Agent guidance brought into monke-tools from outside and distributed as either an **Imported skill** or an **Imported reference**.
-_Avoid_: Import artifact, external files, vendored docs
+**Imported guidance**: Agent guidance brought into monke-tools from outside and distributed as either an **Imported skill** or an **Imported reference**. _Avoid_: Import artifact, external files, vendored docs
 
-**Imported skill**:
-A discoverable **Imported guidance** item distributed as a **Distributed skill**.
-_Avoid_: External skill, third-party skill, copied skill
+**Imported skill**: A discoverable **Imported guidance** item distributed as a **Distributed skill**. _Avoid_: External skill, third-party skill, copied skill
 
-**Distributed reference**:
-Non-invocable agent guidance packaged inside the **Skill source tree** for explicit use by skills or other files.
-_Avoid_: Global skill, hidden skill, always-loaded context
+**Distributed reference**: Non-invocable agent guidance packaged inside the **Skill source tree** for explicit use by skills or other files. _Avoid_: Global skill, hidden skill, always-loaded context
 
-**Internal reference**:
-A monke-tools-owned **Distributed reference** packaged with the local install.
-_Avoid_: Imported reference, personal reference, internal skill
+**Internal reference**: A monke-tools-owned **Distributed reference** packaged with the local install. _Avoid_: Imported reference, personal reference, internal skill
 
-**Imported reference**:
-A non-invocable **Imported guidance** item distributed as a **Distributed reference**.
-_Avoid_: Reference skill, imported skill, global reference
+**Imported reference**: A non-invocable **Imported guidance** item distributed as a **Distributed reference**. _Avoid_: Reference skill, imported skill, global reference
 
-**Reference-backed skill**:
-An invocable **Distributed skill** that loads an unchanged **Distributed reference** as its base behavior and applies additional guidance with explicit precedence.
-_Avoid_: Forked skill, patched imported skill, copied skill
+**Reference-backed skill**: An invocable **Distributed skill** that loads an unchanged **Distributed reference** as its base behavior and applies additional guidance with explicit precedence. _Avoid_: Forked skill, patched imported skill, copied skill
 
-**Team coding baseline**:
-Team-owned coding guidance applied across **Consumer repos** as a fallback when a repo does not define a conflicting standard.
-_Avoid_: Repo coding standards, personal preferences, lint rules
+**Team coding baseline**: Team-owned coding guidance applied across **Consumer repos** as a fallback when a repo does not define a conflicting standard. _Avoid_: Repo coding standards, personal preferences, lint rules
 
-**Repo coding standards**:
-Authoritative coding guidance documented by a **Consumer repo**; it overrides conflicting team or imported review baselines.
-_Avoid_: Team coding baseline, formatter config, inferred conventions
+**Repo coding standards**: Authoritative coding guidance documented by a **Consumer repo**; it overrides conflicting team or imported review baselines. _Avoid_: Team coding baseline, formatter config, inferred conventions
 
-**Shared lint preset**:
-Team-owned lint policy distributed for consistent use across **Consumer repos**.
-_Avoid_: Oxlint package, rules package, repo lint config
+**Shared Oxc presets**: Team-owned lint and format policy distributed for consistent use across **Consumer repos**. _Avoid_: Oxc package, rules package, repo quality config
 
-**Release entry**:
-A pending description of a consumer-visible package change and its intended version impact.
-_Avoid_: Changelog fragment, changeset, release note file
+**Release entry**: A pending description of a consumer-visible package change and its intended version impact. _Avoid_: Changelog fragment, changeset, release note file
 
-**Release PR**:
-An automatically maintained pull request that applies pending package versions and release notes; merging it authorizes immediate publication.
-_Avoid_: Version Packages PR, version bump PR, publish PR
+**Release PR**: An automatically maintained pull request that applies pending package versions and release notes; merging it authorizes immediate publication. _Avoid_: Version Packages PR, version bump PR, publish PR
 
-**Skill import**:
-The operation that brings selected upstream skills into the **Skill source tree** as **Imported skills** or **Imported references**.
-_Avoid_: Skill install, skill add, skill sync
+**Skill import**: The operation that brings selected upstream skills into the **Skill source tree** as **Imported skills** or **Imported references**. _Avoid_: Skill install, skill add, skill sync
 
-**Skill import recipe**:
-A remembered description of one **Skill import** that can be rerun to refresh the same **Imported guidance** from the same outside source.
-_Avoid_: Lock file, update config, import cache
+**Skill import recipe**: A remembered description of one **Skill import** that can be rerun to refresh the same **Imported guidance** from the same outside source. _Avoid_: Lock file, update config, import cache
 
-**Skill import recipe store**:
-A repo-tracked file in the **Skill source tree** that records **Skill import recipes** shared by everyone maintaining monke-tools.
-_Avoid_: Global monke config, local preference, session state
+**Skill import recipe store**: A repo-tracked file in the **Skill source tree** that records **Skill import recipes** shared by everyone maintaining monke-tools. _Avoid_: Global monke config, local preference, session state
 
-**Skill import selector**:
-The upstream-facing skill identifier passed to a **Skill import** to choose one **Imported guidance** item from its outside source.
-_Avoid_: Skill slug, agent skill name, folder name
+**Skill import selector**: The upstream-facing skill identifier passed to a **Skill import** to choose one **Imported guidance** item from its outside source. _Avoid_: Skill slug, agent skill name, folder name
 
-**Import kind**:
-The recipe choice that makes selected **Imported guidance** either an **Imported skill** or an **Imported reference**.
-_Avoid_: Install target, agent type, source type
+**Import kind**: The recipe choice that makes selected **Imported guidance** either an **Imported skill** or an **Imported reference**. _Avoid_: Install target, agent type, source type
 
-**Imported guidance owner**:
-The one **Skill import recipe** that is allowed to refresh a particular **Imported guidance** item in the **Skill source tree**.
-_Avoid_: Last import wins, source hint, fallback recipe
+**Imported guidance owner**: The one **Skill import recipe** that is allowed to refresh a particular **Imported guidance** item in the **Skill source tree**. _Avoid_: Last import wins, source hint, fallback recipe
 
-**Agent skill root**:
-An agent-readable directory where monke-tools installs a namespaced set of **Distributed skills**.
-_Avoid_: Skill discovery surface, package root, compiled executable
+**Agent skill root**: An agent-readable directory where monke-tools installs a namespaced set of **Distributed skills**. _Avoid_: Skill discovery surface, package root, compiled executable
 
-**Skill namespace**:
-The monke-tools-owned directory inside an **Agent skill root** where monke-tools installs its **Distributed skills**.
-_Avoid_: Root skill folder, agent skill root, flat install
+**Skill namespace**: The monke-tools-owned directory inside an **Agent skill root** where monke-tools installs its **Distributed skills**. _Avoid_: Root skill folder, agent skill root, flat install
 
-**Managed skill namespace**:
-A **Skill namespace** that the local install can reconcile as a whole because monke-tools created it and owns its contents.
-_Avoid_: Skill cache, generated skills, copied namespace
+**Managed skill namespace**: A **Skill namespace** that the local install can reconcile as a whole because monke-tools created it and owns its contents. _Avoid_: Skill cache, generated skills, copied namespace
 
-**Skill install target**:
-An agent-specific or custom destination selected for installing monke-tools **Distributed skills**.
-_Avoid_: Default agent, package manager, install mode
+**Skill install target**: An agent-specific or custom destination selected for installing monke-tools **Distributed skills**. _Avoid_: Default agent, package manager, install mode
 
-**Built-in skill install target**:
-A supported agent destination that monke-tools knows how to resolve without a user-provided path.
-_Avoid_: Default target, detected target, automatic target
+**Built-in skill install target**: A supported agent destination that monke-tools knows how to resolve without a user-provided path. _Avoid_: Default target, detected target, automatic target
 
-**Custom skill install target**:
-The one user-provided destination path for installing monke-tools **Distributed skills** outside the built-in agent destinations.
-_Avoid_: Extra target, external target, arbitrary target
+**Custom skill install target**: The one user-provided destination path for installing monke-tools **Distributed skills** outside the built-in agent destinations. _Avoid_: Extra target, external target, arbitrary target
 
-**Skill install preference**:
-The remembered set of **Skill install targets** used by later local installs.
-_Avoid_: Default target, agent config, repo preference
+**Skill install preference**: The remembered set of **Skill install targets** used by later local installs. _Avoid_: Default target, agent config, repo preference
 
 ### Port assignment
 
-**Port key**:
-The canonical name for a repo-owned local port slot, always expressed as an env-style `*_PORT` identifier.
-_Avoid_: Env var, actual port
+**Port key**: The canonical name for a repo-owned local port slot, always expressed as an env-style `*_PORT` identifier. _Avoid_: Env var, actual port
 
-**Local mapping**:
-A rule that binds one app env variable to one repo-owned port key.
-_Avoid_: Port rewrite, internal mapping
+**Local mapping**: A rule that binds one app env variable to one repo-owned port key. _Avoid_: Port rewrite, internal mapping
 
-**External mapping**:
-A rule that binds one app env variable to a port key owned by a dependency repo.
-_Avoid_: Dependency override, foreign mapping
+**External mapping**: A rule that binds one app env variable to a port key owned by a dependency repo. _Avoid_: Dependency override, foreign mapping
 
-**Assigned port**:
-The concrete numeric port chosen for a port key within one session.
-_Avoid_: Port key, reserved port
+**Assigned port**: The concrete numeric port chosen for a port key within one session. _Avoid_: Port key, reserved port
 
-**Port reservation**:
-The persisted numeric block a repo owns so future sessions can allocate stable assigned ports from it.
-_Avoid_: Port range, sticky ports
+**Port reservation**: The persisted numeric block a repo owns so future sessions can allocate stable assigned ports from it. _Avoid_: Port range, sticky ports
 
-**Baseline port**:
-A numeric port already present in a repo's managed env files that should not be reallocated.
-_Avoid_: Default port, existing assignment
+**Baseline port**: A numeric port already present in a repo's managed env files that should not be reallocated. _Avoid_: Default port, existing assignment
 
 ### Session operations
 
-**Spawn**:
-The operation that creates or updates all required session worktrees from a source checkout, using current `HEAD` unless **Default branch spawn mode** is requested.
-_Avoid_: Initialize, provision
+**Spawn**: The operation that creates or updates all required session worktrees from a source checkout, using current `HEAD` unless **Default branch spawn mode** is requested. _Avoid_: Initialize, provision
 
-**Default branch spawn mode**:
-A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates fresh session branches from each participating repo's default branch content, prefers fetched `origin/main` then `origin/master`, falls back to local `main` then `master`, and rejects existing Session state or Session branches.
-_Avoid_: Arbitrary base branch, from branch
+**Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates fresh session branches from each participating repo's default branch content, prefers fetched `origin/main` then `origin/master`, falls back to local `main` then `master`, and rejects existing Session state or Session branches. _Avoid_: Arbitrary base branch, from branch
 
-**Materialize**:
-The operation that refreshes the current session by reapplying seeding, path syncing, env rewrites, and bootstrap behavior.
-_Avoid_: Refresh, rebuild
+**Materialize**: The operation that refreshes the current session by reapplying seeding, path syncing, env rewrites, and bootstrap behavior. _Avoid_: Refresh, rebuild
 
-**Chop**:
-The explicit operation that removes one **Chop target** while preserving local branches. A Session target removes every recorded Session worktree and performs **Session finalization**; an Ordinary-worktree target removes only that worktree.
-_Avoid_: Cleanup, delete branch, prune
+**Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target removes every recorded Session worktree and performs **Session finalization**; an Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
 
-**Chop target**:
-The **Session** or **Ordinary worktree** selected for one **Chop** invocation.
-_Avoid_: Branch deletion target, Cleanup candidate
+**Chop target**: The **Session** or **Ordinary worktree** selected for one **Chop** invocation. _Avoid_: Branch deletion target, Cleanup candidate
 
-**Swing**:
-The operation that navigates the user's current shell to a **Source checkout**, **Session worktree**, or **Ordinary worktree** for the current **Root repo** scope. Ordinary targets must already exist; explicit pull request targets may materialize the matching **Session worktree** after validating the PR head.
-_Avoid_: Switch, git switch, create
+**Swing**: The operation that navigates the user's current shell to a **Source checkout**, **Session worktree**, or **Ordinary worktree** for the current **Root repo** scope. Ordinary targets must already exist; explicit pull request targets may materialize the matching **Session worktree** after validating the PR head. _Avoid_: Switch, git switch, create
 
-**Swing target**:
-A user-provided **Session**, **Ordinary worktree** branch, navigation shortcut, or pull request identifier that **Swing** resolves to a local checkout path.
-_Avoid_: Branch selector, create target, git ref
+**Swing target**: A user-provided **Session**, **Ordinary worktree** branch, navigation shortcut, or pull request identifier that **Swing** resolves to a local checkout path. _Avoid_: Branch selector, create target, git ref
 
-**Swing picker**:
-The interactive **Swing** mode used when `mt swing` is run without a **Swing target**, letting a user choose from the current **Root repo**'s existing local **Swing targets**.
-_Avoid_: Branch picker, create picker, worktree creator
+**Swing picker**: The interactive **Swing** mode used when `mt swing` is run without a **Swing target**, letting a user choose from the current **Root repo**'s existing local **Swing targets**. _Avoid_: Branch picker, create picker, worktree creator
 
-**Codex thread launch**:
-An optional **Spawn** or **Swing** behavior selected with `--codex` that opens a new Codex app thread in the resolved local checkout after the primary operation succeeds.
-_Avoid_: Codex create, Codex worktree materialization, remote agent launch
+**Codex thread launch**: An optional **Spawn** or **Swing** behavior selected with `--codex` that opens a new Codex app thread in the resolved local checkout after the primary operation succeeds. _Avoid_: Codex create, Codex worktree materialization, remote agent launch
 
-**Previous Swing target**:
-The last different **Swing target** remembered for one **Root repo**, used by `mt swing -` to return to a previous source, Session, or Ordinary-worktree checkout.
-_Avoid_: Global previous branch, shell history, last cwd
+**Previous Swing target**: The last different **Swing target** remembered for one **Root repo**, used by `mt swing -` to return to a previous source, Session, or Ordinary-worktree checkout. _Avoid_: Global previous branch, shell history, last cwd
 
-**Setup**:
-The operation that updates the source checkout root `.env` with dependency path env values.
-_Avoid_: Materialize, bootstrap
+**Setup**: The operation that updates the source checkout root `.env` with dependency path env values. _Avoid_: Materialize, bootstrap
 
-**Shell directory request**:
-A CLI-side request for an active shell adapter to move the user's current shell into a resolved **Source checkout** or **Session worktree** after a session operation determines that navigation is required. Once issued, the request is honored independently of the operation's final success or failure.
-_Avoid_: cd output, directory switch, shell cd
+**Shell directory request**: A CLI-side request for an active shell adapter to move the user's current shell into a resolved **Source checkout** or **Session worktree** after a session operation determines that navigation is required. Once issued, the request is honored independently of the operation's final success or failure. _Avoid_: cd output, directory switch, shell cd
 
-**Shell adapter**:
-The human-shell function installed by monke-tools that can honor **Shell directory requests** after an `mt` command exits.
-_Avoid_: Alias, subprocess, terminal state
+**Shell adapter**: The human-shell function installed by monke-tools that can honor **Shell directory requests** after an `mt` command exits. _Avoid_: Alias, subprocess, terminal state
 
-**Active shell adapter**:
-A **Shell adapter** that is intercepting the current `mt` invocation and has provided a writable **Shell directory directive**.
-_Avoid_: Configured shell, installed shell integration, detected shell
+**Active shell adapter**: A **Shell adapter** that is intercepting the current `mt` invocation and has provided a writable **Shell directory directive**. _Avoid_: Configured shell, installed shell integration, detected shell
 
-**Shell directory directive**:
-The file-backed path handoff from the `mt` process to an active **Shell adapter** for one **Shell directory request**.
-_Avoid_: Exec directive, shell command, printed cd
+**Shell directory directive**: The file-backed path handoff from the `mt` process to an active **Shell adapter** for one **Shell directory request**. _Avoid_: Exec directive, shell command, printed cd
 
-**Shell integration install**:
-The operation that installs the shell adapter needed to honor **Shell directory requests** for supported human interactive shells.
-_Avoid_: rc patch, shell setup, cd enablement
+**Shell integration install**: The operation that installs the shell adapter needed to honor **Shell directory requests** for supported human interactive shells. _Avoid_: rc patch, shell setup, cd enablement
 
-**Shell integration init**:
-The operation that emits the shell adapter source for one supported shell.
-_Avoid_: Shell integration install, generated profile
+**Shell integration init**: The operation that emits the shell adapter source for one supported shell. _Avoid_: Shell integration install, generated profile
 
-**Skills Configure**:
-The interactive operation that lets a user choose one or more **Skill install targets** and saves the resulting **Skill install preference** in **Global monke config**.
-_Avoid_: Skill install, setup, non-interactive config
+**Skills Configure**: The interactive operation that lets a user choose one or more **Skill install targets** and saves the resulting **Skill install preference** in **Global monke config**. _Avoid_: Skill install, setup, non-interactive config
 
-**Cleanup**:
-The operation that runs registered per-session teardown and removes session-state records whose worktrees no longer exist.
-_Avoid_: Delete session, prune repos
+**Cleanup**: The operation that runs registered per-session teardown and removes session-state records whose worktrees no longer exist. _Avoid_: Delete session, prune repos
 
 ### Organization reports
 
-**Report target**:
-The configured shared organization destination to which monke-tools publishes finalized agent reports.
-_Avoid_: Setup target, storage backend, upload destination
+**Report target**: The configured shared organization destination to which monke-tools publishes finalized agent reports. _Avoid_: Setup target, storage backend, upload destination
 
 ### Agent retrospective
 
-**Retrospective**:
-One read-only analysis pass that combines recent **Agent transcript** evidence with required **PR analysis**, then reports **Durable fix proposals**. The transcript lane detects **Friction episodes** and **Repeated asks** grouped by **Source checkout**; the PR lane studies **Implementation trajectories** in the same **Retrospective window**.
-_Avoid_: Audit, review, trace, session review
+**Retrospective**: One read-only analysis pass that combines recent **Agent transcript** evidence with required **PR analysis**, then reports **Durable fix proposals**. The transcript lane detects **Friction episodes** and **Repeated asks** grouped by **Source checkout**; the PR lane studies **Implementation trajectories** in the same **Retrospective window**. _Avoid_: Audit, review, trace, session review
 
-**Implementation trajectory**:
-A pull request lifecycle analyzed from the state when the PR was opened to the merged outcome.
-_Avoid_: Session, transcript, friction episode
+**Implementation trajectory**: A pull request lifecycle analyzed from the state when the PR was opened to the merged outcome. _Avoid_: Session, transcript, friction episode
 
-**Trajectory window**:
-The retrospective time window interpreted by **Merged PR** merge time, not by transcript idle time.
-_Avoid_: Idle window, session window
+**Trajectory window**: The retrospective time window interpreted by **Merged PR** merge time, not by transcript idle time. _Avoid_: Idle window, session window
 
-**Retrospective window**:
-The time span analyzed by one agent retrospective run, defaulting from the previous completed retrospective run to now unless explicitly overridden; the first run defaults to the previous two weeks.
-_Avoid_: Unbounded scan, manual date range
+**Retrospective window**: The time span analyzed by one agent retrospective run, defaulting from the previous completed retrospective run to now unless explicitly overridden; the first run defaults to the previous two weeks. _Avoid_: Unbounded scan, manual date range
 
-**PR opening snapshot**:
-The deterministic repository state represented by a pull request when it was first opened, including all commits already present on the PR branch at creation time.
-_Avoid_: First draft, first attempt, initial candidate
+**PR opening snapshot**: The deterministic repository state represented by a pull request when it was first opened, including all commits already present on the PR branch at creation time. _Avoid_: First draft, first attempt, initial candidate
 
-**Opening snapshot confidence**:
-The evidence level for a **PR opening snapshot**, recorded as exact when GitHub exposes a reliable creation-time head ref, inferred when reconstructed from commit times, and unknown when no opening ref can be identified.
-_Avoid_: Snapshot certainty, confidence score
+**Opening snapshot confidence**: The evidence level for a **PR opening snapshot**, recorded as exact when GitHub exposes a reliable creation-time head ref, inferred when reconstructed from commit times, and unknown when no opening ref can be identified. _Avoid_: Snapshot certainty, confidence score
 
-**Merged outcome**:
-The deterministic repository state represented by a **Merged PR** at merge time.
-_Avoid_: Final draft, final patch, merged session
+**Merged outcome**: The deterministic repository state represented by a **Merged PR** at merge time. _Avoid_: Final draft, final patch, merged session
 
-**Post-opening change**:
-A change added to a pull request after the **PR opening snapshot** and before the **Merged outcome**.
-_Avoid_: Follow-up, correction turn, later commit
+**Post-opening change**: A change added to a pull request after the **PR opening snapshot** and before the **Merged outcome**. _Avoid_: Follow-up, correction turn, later commit
 
-**Post-opening delta**:
-The diff between a **PR opening snapshot** and the **Merged outcome**, used as the primary evidence for **PR analysis**.
-_Avoid_: Follow-up commits, later patch
+**Post-opening delta**: The diff between a **PR opening snapshot** and the **Merged outcome**, used as the primary evidence for **PR analysis**. _Avoid_: Follow-up commits, later patch
 
-**Corrective change**:
-A **Post-opening change** that fixes, tightens, refactors, verifies, cleans up, or removes something from the **PR opening snapshot**, rather than adding unrelated feature scope.
-_Avoid_: New feature commit, extra work
+**Corrective change**: A **Post-opening change** that fixes, tightens, refactors, verifies, cleans up, or removes something from the **PR opening snapshot**, rather than adding unrelated feature scope. _Avoid_: New feature commit, extra work
 
-**PR analysis**:
-An evidence-grounded analysis of one **Implementation trajectory**, focused on the **Post-opening delta** and recurring **Corrective change** patterns.
-_Avoid_: Session analysis, transcript analysis
+**PR analysis**: An evidence-grounded analysis of one **Implementation trajectory**, focused on the **Post-opening delta** and recurring **Corrective change** patterns. _Avoid_: Session analysis, transcript analysis
 
-**PR analysis scope**:
-The GitHub repository set included in required **PR analysis**, currently every accessible non-archived repository under the `monke-together-strong` organization rather than only repositories with eligible **Agent transcripts**.
-_Avoid_: Bundle repos, known repos
+**PR analysis scope**: The GitHub repository set included in required **PR analysis**, currently every accessible non-archived repository under the `monke-together-strong` organization rather than only repositories with eligible **Agent transcripts**. _Avoid_: Bundle repos, known repos
 
-**PR author scope**:
-The pull request author filter for required **PR analysis**, currently merged pull requests authored by the authenticated GitHub user running the skill.
-_Avoid_: Agent-authored PRs, all org PRs
+**PR author scope**: The pull request author filter for required **PR analysis**, currently merged pull requests authored by the authenticated GitHub user running the skill. _Avoid_: Agent-authored PRs, all org PRs
 
-**PR analysis report**:
-An aggregate Markdown report that combines per-PR **PR analysis** findings for one **Trajectory window** before final retrospective synthesis.
-_Avoid_: Per-PR notes, trajectory hints
+**PR analysis report**: An aggregate Markdown report that combines per-PR **PR analysis** findings for one **Trajectory window** before final retrospective synthesis. _Avoid_: Per-PR notes, trajectory hints
 
-**PR analysis gap**:
-An explicit report entry for a repository whose **PR analysis** could not be completed for a **Trajectory window**, including the reason and the impact on final retrospective synthesis.
-_Avoid_: Silent fallback, skipped PRs
+**PR analysis gap**: An explicit report entry for a repository whose **PR analysis** could not be completed for a **Trajectory window**, including the reason and the impact on final retrospective synthesis. _Avoid_: Silent fallback, skipped PRs
 
-**Agent transcript**:
-One recorded Codex or Claude agent conversation, identified by its native agent session id. A resumed conversation is the same transcript; a subagent run is a distinct child transcript linked to its parent.
-_Avoid_: Session, chat, thread, conversation
+**Agent transcript**: One recorded Codex or Claude agent conversation, identified by its native agent session id. A resumed conversation is the same transcript; a subagent run is a distinct child transcript linked to its parent. _Avoid_: Session, chat, thread, conversation
 
-**Primary repo**:
-The **Source checkout** an **Agent transcript**'s working directory resolves to — the repo it was mainly working in.
-_Avoid_: Root repo, working repo
+**Primary repo**: The **Source checkout** an **Agent transcript**'s working directory resolves to — the repo it was mainly working in. _Avoid_: Root repo, working repo
 
-**Secondary repo**:
-A different **Source checkout** whose files an **Agent transcript** touched without it being the working directory.
-_Avoid_: Dependency repo, external repo
+**Secondary repo**: A different **Source checkout** whose files an **Agent transcript** touched without it being the working directory. _Avoid_: Dependency repo, external repo
 
-**Friction episode**:
-An observed moment in an **Agent transcript** where the agent hit an issue and changed course — a neutral record of what it was attempting, the blocker, and the pivot. Not a judgment that any rule was broken.
-_Avoid_: Detour, violation, agent sin, mistake, error
+**Friction episode**: An observed moment in an **Agent transcript** where the agent hit an issue and changed course — a neutral record of what it was attempting, the blocker, and the pivot. Not a judgment that any rule was broken. _Avoid_: Detour, violation, agent sin, mistake, error
 
-**Durable fix proposal**:
-A recommended lasting change to the agent working environment — a skill, `AGENTS.md`/`CLAUDE.md`, a hook, a preflight, or a Linear issue — inferred from related **Friction episodes**, **Repeated asks**, and/or recurring **Corrective change** patterns from **PR analysis**, for a human to execute. The retrospective proposes it; it never applies it.
-_Avoid_: Auto-fix, patch, remediation, action item
+**Durable fix proposal**: A recommended lasting change to the agent working environment — a skill, `AGENTS.md`/`CLAUDE.md`, a hook, a preflight, or a Linear issue — inferred from related **Friction episodes**, **Repeated asks**, and/or recurring **Corrective change** patterns from **PR analysis**, for a human to execute. The retrospective proposes it; it never applies it. _Avoid_: Auto-fix, patch, remediation, action item
 
-**Repeated ask**:
-A fix/revert/change request the user makes to agents that recurs across multiple **Agent transcripts** — the signal that the same correction keeps being needed.
-_Avoid_: Nag, recurring prompt, recurring instruction
+**Repeated ask**: A fix/revert/change request the user makes to agents that recurs across multiple **Agent transcripts** — the signal that the same correction keeps being needed. _Avoid_: Nag, recurring prompt, recurring instruction
 
 ## Relationships
 

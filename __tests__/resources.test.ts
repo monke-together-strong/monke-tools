@@ -1,9 +1,10 @@
-import { describe, expect, test } from "vite-plus/test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { resolveResourceCommands } from "../src/resources.ts";
+import { describe, expect, test } from "vite-plus/test";
+
 import { saveSessionState } from "../src/registry.ts";
+import { resolveResourceCommands } from "../src/resources.ts";
 import { hashKey } from "../src/runtime.ts";
 import type { RepoConfig, Runtime } from "../src/types.ts";
 import { makeTempDir } from "./helpers.ts";
@@ -16,7 +17,7 @@ describe("resources", () => {
     const lockPath = path.join(
       home,
       "locks",
-      `${hashKey(`resource-command\u0000${sourceRoot}\u0000e2e-symbols`)}.lock`,
+      `${hashKey(`resource-command\u0000${sourceRoot}\u0000e2e-symbols`)}.lock`
     );
     let commandSawLock = false;
     let persistenceSawLock = false;
@@ -58,7 +59,7 @@ describe("resources", () => {
         writeFileSync(
           args?.[5] ?? "",
           JSON.stringify({ value: { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" } }),
-          "utf-8",
+          "utf-8"
         );
         return {
           exitCode: 0,
@@ -181,7 +182,7 @@ describe("resources", () => {
         writeFileSync(
           args?.[5] ?? "",
           JSON.stringify({ value: { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" } }),
-          "utf-8",
+          "utf-8"
         );
         return {
           exitCode: 0,
@@ -253,7 +254,7 @@ describe("resources", () => {
         writeFileSync(
           args?.[7] ?? "",
           JSON.stringify({ value: { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" } }),
-          "utf-8",
+          "utf-8"
         );
         return {
           exitCode: 0,

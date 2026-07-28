@@ -1,4 +1,4 @@
-import { afterEach } from "vite-plus/test";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   mkdirSync,
@@ -11,7 +11,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+
+import { afterEach } from "vite-plus/test";
 import { parse } from "yaml";
 import type * as z from "zod";
 
@@ -86,7 +87,7 @@ export function installGitShim(
       args: string;
       message?: string;
     };
-  },
+  }
 ): string {
   const logPath = path.join(binDirectory, "git.log");
   const failCommand =
@@ -135,7 +136,7 @@ printf '\\n' >> ${shellQuote(logPath)}
 ${failCommand}
 ${afterCommand}
 exec "${findExecutableOnPath("git")}" "$@"
-`,
+`
   );
   return logPath;
 }
@@ -151,7 +152,7 @@ if [ "\${1:-}" = "-lc" ]; then
   exit 42
 fi
 exec /bin/sh "$@"
-`,
+`
   );
   return logPath;
 }
@@ -164,7 +165,7 @@ export function installCodexUrlOpenShim(binDirectory: string): string {
     `#!/bin/sh
 set -eu
 printf '%s\\n' "$@" >> ${shellQuote(logPath)}
-`,
+`
   );
   return logPath;
 }
@@ -176,14 +177,14 @@ export function installWindowsCmdShim(binDirectory: string): string {
     `#!/bin/sh
 set -eu
 printf '%s\\n' "$@" >> ${shellQuote(logPath)}
-`,
+`
   );
   return logPath;
 }
 
 export function installFakeGh(
   binDirectory: string,
-  issues: Record<number, { title: string; body: string; comments?: readonly string[] }>,
+  issues: Record<number, { title: string; body: string; comments?: readonly string[] }>
 ): string {
   const logPath = path.join(binDirectory, "gh.log");
   const issueCases = Object.entries(issues)
@@ -233,13 +234,13 @@ export function installFakeGhForMergedPrs(
   options: {
     repo: string;
     prsByHead: Record<string, unknown[]>;
-  },
+  }
 ): string {
   const logPath = path.join(binDirectory, "gh.log");
   const cases = Object.entries(options.prsByHead)
     .map(
       ([head, prs]) =>
-        `    ${shellQuote(head)}) printf '%s\\n' ${shellQuote(JSON.stringify(prs))}; exit 0 ;;`,
+        `    ${shellQuote(head)}) printf '%s\\n' ${shellQuote(JSON.stringify(prs))}; exit 0 ;;`
     )
     .join("\n");
   const script = `#!/bin/sh
@@ -385,7 +386,7 @@ export function withPlatform<T>(platform: NodeJS.Platform, callback: () => T): T
 
 export function readSingleYamlFile<T extends z.ZodType>(
   directoryPath: string,
-  schema: T,
+  schema: T
 ): z.output<T>;
 export function readSingleYamlFile(directoryPath: string): unknown;
 export function readSingleYamlFile(directoryPath: string, schema?: z.ZodType): unknown {

@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vite-plus/test";
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath, loadSessionState, saveSessionState } from "../src/registry.ts";
@@ -77,13 +78,13 @@ function createOrdinaryFixture(
   options: {
     files?: Record<string, string>;
     worktreePath?: (fixture: Omit<OrdinaryFixture, "worktreePath">) => string;
-  } = {},
+  } = {}
 ): OrdinaryFixture {
   const sandbox = makeTempDir(prefix);
   const home = path.join(sandbox, "home");
   const sourceRoot = createRepo(
     path.join(sandbox, "root"),
-    options.files ?? { "README.md": "source\n" },
+    options.files ?? { "README.md": "source\n" }
   );
   const base = { home, sandbox, sourceRoot };
   const worktreePath = options.worktreePath?.(base) ?? path.join(sandbox, "ordinary");
@@ -94,7 +95,7 @@ function createOrdinaryFixture(
 
 function createMultiRepoSessionFixture(
   prefix: string,
-  session = "banana",
+  session = "banana"
 ): MultiRepoSessionFixture {
   const sandbox = makeTempDir(prefix);
   const binDirectory = path.join(sandbox, "bin");
@@ -230,7 +231,7 @@ describe("chop", () => {
       expect(existsSync(worktree)).toBeFalsy();
       expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeFalsy();
       expect(git(root, ["rev-parse", "--verify", "refs/heads/banana"])).not.toBe("");
-    },
+    }
   );
 
   test.each(["staged", "modified", "untracked"] as const)(
@@ -255,7 +256,7 @@ describe("chop", () => {
 
       expect(existsSync(worktree)).toBeTruthy();
       expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
-    },
+    }
   );
 
   test("an explicit Session target wins over the invoking Session", () => {
@@ -322,7 +323,7 @@ describe("chop", () => {
 
     expect(existsSync(fixture.worktreePath)).toBeTruthy();
     expect(
-      existsSync(getSessionStateFilePath(fixture.home, fixture.sourceRoot, "feature")),
+      existsSync(getSessionStateFilePath(fixture.home, fixture.sourceRoot, "feature"))
     ).toBeFalsy();
   });
 
@@ -348,7 +349,7 @@ describe("chop", () => {
     expect(readFileSync(directivePath, "utf-8")).toBe(fixture.depRoot);
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe(
       `root|${fixture.root}|root-${fixture.session}|dynamic-${fixture.session}|${fixture.session}\n` +
-        `dep|${fixture.depRoot}|dep-${fixture.session}|${fixture.session}\n`,
+        `dep|${fixture.depRoot}|dep-${fixture.session}|${fixture.session}\n`
     );
     const removals = readWorktreeRemovals(gitLog);
     expect(removals).toStrictEqual([
@@ -370,10 +371,10 @@ describe("chop", () => {
     expect(existsSync(fixture.rootWorktree)).toBeFalsy();
     expect(existsSync(fixture.statePath)).toBeFalsy();
     expect(
-      git(fixture.depRoot, ["rev-parse", "--verify", `refs/heads/${fixture.session}`]),
+      git(fixture.depRoot, ["rev-parse", "--verify", `refs/heads/${fixture.session}`])
     ).not.toBe("");
     expect(git(fixture.root, ["rev-parse", "--verify", `refs/heads/${fixture.session}`])).not.toBe(
-      "",
+      ""
     );
   });
 
@@ -390,10 +391,10 @@ describe("chop", () => {
     expect(existsSync(fixture.rootWorktree)).toBeFalsy();
     expect(existsSync(fixture.statePath)).toBeFalsy();
     expect(
-      git(fixture.depRoot, ["rev-parse", "--verify", `refs/heads/${fixture.session}`]),
+      git(fixture.depRoot, ["rev-parse", "--verify", `refs/heads/${fixture.session}`])
     ).not.toBe("");
     expect(git(fixture.root, ["rev-parse", "--verify", `refs/heads/${fixture.session}`])).not.toBe(
-      "",
+      ""
     );
   });
 
@@ -478,10 +479,10 @@ describe("chop", () => {
     expect(existsSync(fixture.rootWorktree)).toBeFalsy();
     expect(existsSync(fixture.statePath)).toBeFalsy();
     expect(
-      git(fixture.depRoot, ["rev-parse", "--verify", `refs/heads/${fixture.session}`]),
+      git(fixture.depRoot, ["rev-parse", "--verify", `refs/heads/${fixture.session}`])
     ).not.toBe("");
     expect(git(fixture.root, ["rev-parse", "--verify", `refs/heads/${fixture.session}`])).not.toBe(
-      "",
+      ""
     );
   });
 
@@ -614,7 +615,7 @@ describe("chop", () => {
       expect(existsSync(fixture.cleanupLog)).toBeFalsy();
       const removals = readWorktreeRemovals(gitLog);
       expect(removals).toStrictEqual([`worktree remove ${fixture.depWorktree}`]);
-    },
+    }
   );
 
   test.each(["branch", "lock", "registration", "repository"] as const)(
@@ -657,7 +658,7 @@ describe("chop", () => {
       expect(existsSync(fixture.cleanupLog)).toBeFalsy();
       const removals = readWorktreeRemovals(gitLog);
       expect(removals).toStrictEqual([`worktree remove --force ${fixture.depWorktree}`]);
-    },
+    }
   );
 
   test("a Git removal failure preserves earlier removals and the Session retry handle", () => {
@@ -701,7 +702,7 @@ describe("chop", () => {
     "removes a clean Session with a %s and warns",
     (mismatchKind) => {
       const fixture = createMultiRepoSessionFixture(
-        `chop-session-${mismatchKind.replace(" ", "-")}`,
+        `chop-session-${mismatchKind.replace(" ", "-")}`
       );
       if (mismatchKind === "detached") {
         git(fixture.rootWorktree, ["checkout", "--detach"]);
@@ -718,12 +719,12 @@ describe("chop", () => {
       expect(result.stderr).toContain(
         mismatchKind === "detached"
           ? `Session banana worktree ${fixture.rootWorktree} is detached; chopping it anyway`
-          : `Session banana worktree ${fixture.rootWorktree} is on branch unexpected instead of banana; chopping it anyway`,
+          : `Session banana worktree ${fixture.rootWorktree} is on branch unexpected instead of banana; chopping it anyway`
       );
       expect(existsSync(fixture.depWorktree)).toBeFalsy();
       expect(existsSync(fixture.rootWorktree)).toBeFalsy();
       expect(existsSync(fixture.statePath)).toBeFalsy();
-    },
+    }
   );
 
   test("removes the current Session after its worktree switches branches and warns", () => {
@@ -743,7 +744,7 @@ describe("chop", () => {
     });
 
     expect(result.stderr).toContain(
-      `Session banana worktree ${worktree} is on branch unexpected instead of banana; chopping it anyway`,
+      `Session banana worktree ${worktree} is on branch unexpected instead of banana; chopping it anyway`
     );
     expect(result.stdout).toBe(`${root}\n`);
     expect(existsSync(worktree)).toBeFalsy();
@@ -988,7 +989,7 @@ external:
     expect(result.error).toBeInstanceOf(Error);
     expect(result.stdout).toBe(`${fixture.root}\n`);
     expect(result.stderr).toContain(
-      `WARNING: your shell is still in the removed worktree; switch to ${fixture.root}`,
+      `WARNING: your shell is still in the removed worktree; switch to ${fixture.root}`
     );
     expect(existsSync(fixture.statePath)).toBeTruthy();
   });
@@ -1055,7 +1056,7 @@ repos:
   - assignedPorts: []
     sourceRoot: ${JSON.stringify(fixture.root)}
     worktreePath: ${JSON.stringify(fixture.rootWorktree)}
-`,
+`
     );
 
     expect(() => {
@@ -1092,7 +1093,7 @@ repos:
   - assignedPorts: []
     sourceRoot: ${JSON.stringify(root)}
     worktreePath: ${JSON.stringify(selectedWorktree)}
-`,
+`
     );
 
     expect(() => {
@@ -1120,7 +1121,7 @@ repos:
   - assignedPorts: []
     sourceRoot: ${JSON.stringify(fixture.depRoot)}
     worktreePath: ${JSON.stringify(fixture.depWorktree)}
-`,
+`
     );
 
     expect(() => {
@@ -1224,7 +1225,7 @@ apps: {}
     expect(result.stdout).toBe(`${fixture.sourceRoot}\n`);
     expect(result.stderr).toContain(`Chopped Ordinary worktree ${fixture.worktreePath}`);
     expect(result.stderr).toContain(
-      `WARNING: your shell is still in the removed worktree; switch to ${fixture.sourceRoot}`,
+      `WARNING: your shell is still in the removed worktree; switch to ${fixture.sourceRoot}`
     );
   });
 
@@ -1248,7 +1249,7 @@ apps: {}
       expect(existsSync(fixture.worktreePath)).toBeFalsy();
       expect(existsSync(fixture.sourceRoot)).toBeTruthy();
       expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
-    },
+    }
   );
 
   test("selects an Ordinary worktree through a canonical-equivalent path", () => {
@@ -1355,7 +1356,7 @@ apps: {}
     }).toThrow(/target not found/u);
 
     expect(git(fixture.sourceRoot, ["worktree", "list", "--porcelain"])).toContain(
-      fixture.worktreePath,
+      fixture.worktreePath
     );
   });
 
@@ -1379,7 +1380,7 @@ apps: {}
     }).toThrow(/locked.*still reserved/u);
 
     expect(git(fixture.sourceRoot, ["worktree", "list", "--porcelain"])).toContain(
-      fixture.worktreePath,
+      fixture.worktreePath
     );
   });
 
@@ -1447,7 +1448,7 @@ apps: {}
         });
       }).toThrow(/dirty worktree/u);
       expect(existsSync(fixture.worktreePath)).toBeTruthy();
-    },
+    }
   );
 
   test.each(["staged", "modified", "untracked"] as const)(
@@ -1464,7 +1465,7 @@ apps: {}
 
       expect(existsSync(fixture.worktreePath)).toBeFalsy();
       expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
-    },
+    }
   );
 
   test("rejects a registered path replaced by a checkout from another repository", () => {
@@ -1518,7 +1519,7 @@ apps: {}
 
       expect(existsSync(worktreePath)).toBeFalsy();
       expect(git(sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
-    },
+    }
   );
 
   test.each(["dirty", "all"])(
@@ -1551,9 +1552,9 @@ apps: {}
 
       expect(existsSync(worktreePath)).toBeTruthy();
       expect(readFileSync(path.join(worktreePath, "vendor/submodule/README.md"), "utf-8")).toBe(
-        "dirty submodule\n",
+        "dirty submodule\n"
       );
-    },
+    }
   );
 
   test("revalidates cleanliness immediately before synthesized submodule force", () => {
@@ -1672,10 +1673,10 @@ apps: {}
     expect(existsSync(fixture.rootWorktree)).toBeFalsy();
     expect(existsSync(fixture.statePath)).toBeFalsy();
     expect(
-      git(fixture.depRoot, ["rev-parse", "--verify", `refs/heads/${fixture.session}`]),
+      git(fixture.depRoot, ["rev-parse", "--verify", `refs/heads/${fixture.session}`])
     ).not.toBe("");
     expect(git(fixture.root, ["rev-parse", "--verify", `refs/heads/${fixture.session}`])).not.toBe(
-      "",
+      ""
     );
   });
 
@@ -1749,7 +1750,7 @@ apps: {}
       });
 
       expect(existsSync(worktreePath)).toBeFalsy();
-    },
+    }
   );
 
   test("rejects a path registered to an unrelated repository", () => {
@@ -1794,7 +1795,7 @@ apps: {}
 
       expect(existsSync(fixture.worktreePath)).toBeFalsy();
       expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
-    },
+    }
   );
 
   test.each([false, true])(
@@ -1818,7 +1819,7 @@ apps: {}
 
       expect(existsSync(worktreePath)).toBeFalsy();
       expect(git(sourceRoot, ["rev-parse", "--verify", "refs/heads/banana"])).not.toBe("");
-    },
+    }
   );
 
   test("self-removal writes the Source checkout to an Active shell directive", () => {

@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vite-plus/test";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath } from "../src/registry.ts";
@@ -95,7 +96,7 @@ external:
     write(
       getExpectedWorktreePath(home, root, "resume"),
       "apps/api/.env.local",
-      "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
+      "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n"
     );
 
     runMonke({
@@ -108,7 +109,7 @@ external:
     const secondMtime = statSync(path.join(depWorktree, ".env")).mtimeMs;
     expect(secondMtime).toBe(firstMtime);
     expect(read(getExpectedWorktreePath(home, root, "resume"), "apps/api/.env.local")).toBe(
-      "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n",
+      "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n"
     );
   });
 
@@ -295,11 +296,11 @@ apps:
     });
 
     expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
-      /Expected exactly one yaml file.*found 0/u,
+      /Expected exactly one yaml file.*found 0/u
     );
     const reservationState = readSingleYamlFile(
       path.join(home, "repo-reservations"),
-      RepoReservationSchema,
+      RepoReservationSchema
     );
     expect(reservationState.sourceRoot).toBe(root);
   });
@@ -331,7 +332,7 @@ apps:
     });
 
     expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
-      /Expected exactly one yaml file.*found 0/u,
+      /Expected exactly one yaml file.*found 0/u
     );
   });
 
@@ -402,21 +403,21 @@ apps:
     });
 
     expect(result.stderr).toContain(
-      `Would remove merged worktree clean-merged ${root}: ${cleanWorktree}`,
+      `Would remove merged worktree clean-merged ${root}: ${cleanWorktree}`
     );
     expect(result.stderr).toContain(
-      `Skipped merged worktree dirty-untracked ${root}: worktree has 1 dirty/untracked status line(s)`,
+      `Skipped merged worktree dirty-untracked ${root}: worktree has 1 dirty/untracked status line(s)`
     );
     expect(result.stderr).toContain(
-      "Merged cleanup dry-run: would remove 1 worktree, skipped 1 worktree",
+      "Merged cleanup dry-run: would remove 1 worktree, skipped 1 worktree"
     );
     expect(existsSync(cleanWorktree)).toBeTruthy();
     expect(existsSync(dirtyWorktree)).toBeTruthy();
     expect(
-      readdirSync(path.join(home, "sessions")).filter((entry) => entry.endsWith(".yml")),
+      readdirSync(path.join(home, "sessions")).filter((entry) => entry.endsWith(".yml"))
     ).toHaveLength(2);
     expect(readFileSync(gitLog, "utf-8").slice(gitLogBeforeCleanup.length)).not.toContain(
-      "fetch --prune origin",
+      "fetch --prune origin"
     );
   });
 
@@ -474,10 +475,10 @@ apps:
     expect(existsSync(worktree)).toBeFalsy();
     expect(read(root, "cleanup-merged.log")).toBe(`clean-merged\n${worktree}\n`);
     expect(() =>
-      git(root, ["show-ref", "--verify", "--quiet", "refs/heads/clean-merged"]),
+      git(root, ["show-ref", "--verify", "--quiet", "refs/heads/clean-merged"])
     ).not.toThrow();
     expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
-      /Expected exactly one yaml file.*found 0/u,
+      /Expected exactly one yaml file.*found 0/u
     );
   });
 
@@ -554,7 +555,7 @@ apps:
 
     const cleanupGitCalls = readFileSync(gitLog, "utf-8").slice(gitLogBeforeCleanup.length);
     expect(
-      cleanupGitCalls.split("\n").filter((call) => call === "fetch --prune origin"),
+      cleanupGitCalls.split("\n").filter((call) => call === "fetch --prune origin")
     ).toHaveLength(1);
   });
 
@@ -596,7 +597,7 @@ apps:
     });
 
     expect(result.stderr).toContain(
-      `Skipped merged worktree clean-merged ${root}: GitHub repository lookup failed`,
+      `Skipped merged worktree clean-merged ${root}: GitHub repository lookup failed`
     );
     expect(result.stderr).toContain("Merged cleanup: removed 0 worktrees, skipped 1 worktree");
     expect(result.stderr).toContain("Removed 0 dead sessions");
@@ -702,7 +703,7 @@ apps:
         binDirectory,
         cwd: root,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/Cleanup command failed.*cleanup failed/su);
 
     expect(existsSync(worktree)).toBeFalsy();
@@ -760,13 +761,13 @@ apps:
     });
 
     expect(read(root, "cleanup.log")).toBe(
-      `${root}\nmt-ada-clean-command\nclean-command\n${root}\n${worktree}\n`,
+      `${root}\nmt-ada-clean-command\nclean-command\n${root}\n${worktree}\n`
     );
     const shellArgs = readFileSync(shLogPath, "utf-8").trim().split("\n");
     expect(shellArgs.filter((arg) => arg === "-c")).toHaveLength(1);
     expect(shellArgs).not.toContain("-lc");
     expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
-      /Expected exactly one yaml file.*found 0/u,
+      /Expected exactly one yaml file.*found 0/u
     );
   });
 
@@ -817,7 +818,7 @@ apps:
 
     expect(read(root, "cleanup-resource-command.log")).toBe("SOL/USDT:USDT\nclean-command\n");
     expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
-      /Expected exactly one yaml file.*found 0/u,
+      /Expected exactly one yaml file.*found 0/u
     );
   });
 
@@ -856,7 +857,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     );
     git(root, [
       "worktree",
@@ -874,7 +875,7 @@ apps:
 
     expect(read(root, "cleanup-drift.log")).toBe(`drift-clean\n${root}\n`);
     expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
-      /Expected exactly one yaml file.*found 0/u,
+      /Expected exactly one yaml file.*found 0/u
     );
   });
 
@@ -973,7 +974,7 @@ apps:
         binDirectory,
         cwd: root,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/Cleanup command failed.*cleanup failed/su);
 
     expect(read(root, "cleanup-failure.log")).toBe("mt-retry-me\n");

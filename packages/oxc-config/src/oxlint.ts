@@ -1,5 +1,4 @@
 import type { OxlintConfig, OxlintOverride } from "oxlint";
-
 import core from "ultracite/oxlint/core";
 import vitest from "ultracite/oxlint/vitest";
 
@@ -16,6 +15,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
   const {
     extends: extensions = [],
     ignorePatterns = [],
+    options: lintOptions = {},
     overrides = [],
     rules = {},
     testFiles = defaultTestFiles,
@@ -34,13 +34,21 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       },
     };
   });
+  const vitestConfig: OxlintConfig = {
+    ...vitest,
+    overrides: vitestOverrides,
+  };
 
   return {
     ...config,
-    extends: [core, ...extensions],
+    extends: [core, vitestConfig, ...extensions],
     ignorePatterns: [...(core.ignorePatterns ?? []), ...ignorePatterns],
+    options: {
+      typeAware: true,
+      typeCheck: true,
+      ...lintOptions,
+    },
     overrides: [
-      ...vitestOverrides,
       {
         files: [...testFiles],
         rules: {
@@ -70,4 +78,6 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
   };
 }
 
-export default createOxlintConfig();
+export const oxlintConfig = createOxlintConfig();
+
+export default oxlintConfig;
