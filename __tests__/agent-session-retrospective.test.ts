@@ -134,6 +134,24 @@ describe("agent session retrospective", () => {
           type: "session_meta",
         },
         {
+          payload: {
+            content: [{ text: "duplicate user envelope", type: "input_text" }],
+            role: "user",
+            type: "message",
+          },
+          timestamp: "2026-05-26T10:00:00Z",
+          type: "response_item",
+        },
+        {
+          payload: {
+            content: [{ text: "duplicate assistant envelope", type: "output_text" }],
+            role: "assistant",
+            type: "message",
+          },
+          timestamp: "2026-05-26T10:00:00Z",
+          type: "response_item",
+        },
+        {
           payload: { message: "do the thing", type: "user_message" },
           timestamp: "2026-05-26T10:00:01Z",
           type: "event_msg",
@@ -176,6 +194,39 @@ describe("agent session retrospective", () => {
       const tool = session?.turns[2];
       expect(tool?.kind === "tool_call" && tool.exitCode).toBe(1);
       expect(tool?.kind === "tool_call" && tool.error).toBe("exit 1");
+    });
+
+    test("drops a tool result that appears before its matching call", () => {
+      const filePath = jsonl([
+        {
+          payload: { cwd: dir, id: "sess-out-of-order" },
+          timestamp: "2026-05-26T10:00:00Z",
+          type: "session_meta",
+        },
+        {
+          payload: {
+            call_id: "c1",
+            output: "premature",
+            type: "function_call_output",
+          },
+          timestamp: "2026-05-26T10:00:01Z",
+          type: "response_item",
+        },
+        {
+          payload: {
+            arguments: "{}",
+            call_id: "c1",
+            name: "exec_command",
+            type: "function_call",
+          },
+          timestamp: "2026-05-26T10:00:02Z",
+          type: "response_item",
+        },
+      ]);
+
+      const tool = parseCodexSession(filePath)?.turns[0];
+      expect(tool?.kind).toBe("tool_call");
+      expect(tool?.kind === "tool_call" && tool.outputHeadTail).toBeUndefined();
     });
   });
 
@@ -227,6 +278,124 @@ describe("agent session retrospective", () => {
       const tool = session?.turns[2];
       expect(tool?.kind === "tool_call" && tool.outputHeadTail).toBe("ok");
     });
+
+    test("pairs a tool result even when it appears before its matching call", () => {
+      const filePath = jsonl([
+        {
+          cwd: dir,
+          message: {
+            content: [
+              {
+                content: "already finished",
+                is_error: false,
+                tool_use_id: "tu1",
+                type: "tool_result",
+              },
+            ],
+          },
+          sessionId: "cs-out-of-order",
+          timestamp: "2026-05-26T10:00:00Z",
+          type: "user",
+        },
+        {
+          message: {
+            content: [{ id: "tu1", input: {}, name: "Bash", type: "tool_use" }],
+          },
+          sessionId: "cs-out-of-order",
+          timestamp: "2026-05-26T10:00:01Z",
+          type: "assistant",
+        },
+      ]);
+
+      const tool = parseClaudeSession(filePath)?.turns[0];
+      expect(tool?.kind).toBe("tool_call");
+      expect(tool?.kind === "tool_call" && tool.outputHeadTail).toBe("already finished");
+    });
+  });
+
+  test("Codex and Claude adapters normalize equivalent transcripts into the same turns", () => {
+    const codexFile = jsonl([
+      {
+        payload: { cwd: dir, id: "codex-session" },
+        timestamp: "2026-05-26T10:00:00Z",
+        type: "session_meta",
+      },
+      {
+        payload: { message: "inspect", type: "user_message" },
+        timestamp: "2026-05-26T10:00:01Z",
+        type: "event_msg",
+      },
+      {
+        payload: { message: "checking", type: "agent_message" },
+        timestamp: "2026-05-26T10:00:02Z",
+        type: "event_msg",
+      },
+      {
+        payload: {
+          arguments: '{"command":"ls"}',
+          call_id: "codex-tool",
+          name: "shell",
+          type: "function_call",
+        },
+        timestamp: "2026-05-26T10:00:03Z",
+        type: "response_item",
+      },
+      {
+        payload: {
+          call_id: "codex-tool",
+          output: "ok",
+          type: "function_call_output",
+        },
+        timestamp: "2026-05-26T10:00:04Z",
+        type: "response_item",
+      },
+    ]);
+    const codexSession = parseCodexSession(codexFile);
+
+    const claudeFile = jsonl([
+      {
+        cwd: dir,
+        message: { content: "inspect", role: "user" },
+        sessionId: "claude-session",
+        timestamp: "2026-05-26T10:00:00Z",
+        type: "user",
+      },
+      {
+        message: {
+          content: [
+            { text: "checking", type: "text" },
+            {
+              id: "claude-tool",
+              input: { command: "ls" },
+              name: "shell",
+              type: "tool_use",
+            },
+          ],
+        },
+        sessionId: "claude-session",
+        timestamp: "2026-05-26T10:00:01Z",
+        type: "assistant",
+      },
+      {
+        message: {
+          content: [
+            {
+              content: "ok",
+              is_error: false,
+              tool_use_id: "claude-tool",
+              type: "tool_result",
+            },
+          ],
+        },
+        sessionId: "claude-session",
+        timestamp: "2026-05-26T10:00:02Z",
+        type: "user",
+      },
+    ]);
+    const claudeSession = parseClaudeSession(claudeFile);
+
+    expect(claudeSession?.turns).toStrictEqual(codexSession?.turns);
+    expect(claudeSession?.rawUserMessages).toStrictEqual(codexSession?.rawUserMessages);
   });
 
   describe(decideEligibility, () => {
