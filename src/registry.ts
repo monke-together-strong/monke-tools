@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stringify } from "yaml";
 import * as z from "zod";
@@ -24,6 +24,9 @@ const MIN_REPO_RESERVATION_SIZE = 1000;
 const SessionStateIdentitySchema = z.object({
   rootSourceRoot: z.string(),
   session: z.string(),
+});
+const SessionStateWorktreePathsSchema = z.object({
+  repos: z.array(z.object({ worktreePath: z.string() })),
 });
 
 export function loadSessionState(
@@ -60,14 +63,32 @@ export function removeSessionState(home: string, rootSourceRoot: string, session
 }
 
 export function listSessionStates(home: string): SessionState[] {
-  const directoryPath = path.join(home, "sessions");
-  if (!existsSync(directoryPath)) {
-    return [];
-  }
+  return listSessionStateFiles(home).map((filePath) =>
+    parseOwnedYamlFile(filePath, SessionStateSchema),
+  );
+}
 
-  return readdirSync(directoryPath)
-    .filter((entry) => entry.endsWith(".yml"))
-    .map((entry) => parseOwnedYamlFile(path.join(directoryPath, entry), SessionStateSchema));
+/**
+ * List Session states for targeted ownership checks.
+ *
+ * Invalid state blocks only when it names a participating worktree; broad
+ * maintenance remains responsible for reporting unrelated invalid state.
+ */
+export function listSessionStatesRelevantToWorktrees(
+  home: string,
+  worktreePaths: string[],
+): SessionState[] {
+  const states: SessionState[] = [];
+  for (const filePath of listSessionStateFiles(home)) {
+    try {
+      states.push(parseOwnedYamlFile(filePath, SessionStateSchema));
+    } catch (error) {
+      if (invalidSessionStateReferencesWorktree(filePath, worktreePaths)) {
+        throw error;
+      }
+    }
+  }
+  return states;
 }
 
 export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]): void {
@@ -229,6 +250,30 @@ export function getSessionStateFilePath(
   session: string,
 ): string {
   return path.join(home, "sessions", `${hashKey(`${rootSourceRoot}\u0000${session}`)}.yml`);
+}
+
+function listSessionStateFiles(home: string): string[] {
+  const directoryPath = path.join(home, "sessions");
+  if (!existsSync(directoryPath)) {
+    return [];
+  }
+  return readdirSync(directoryPath)
+    .filter((entry) => entry.endsWith(".yml"))
+    .map((entry) => path.join(directoryPath, entry));
+}
+
+function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: string[]): boolean {
+  try {
+    const partial = parseOwnedYamlFile(filePath, SessionStateWorktreePathsSchema);
+    return partial.repos.some((repo) =>
+      worktreePaths.some(
+        (worktreePath) => path.normalize(repo.worktreePath) === path.normalize(worktreePath),
+      ),
+    );
+  } catch {
+    const text = readFileSync(filePath, "utf-8");
+    return worktreePaths.some((worktreePath) => text.includes(worktreePath));
+  }
 }
 
 function getReservationFilePath(home: string, sourceRoot: string): string {

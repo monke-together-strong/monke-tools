@@ -960,6 +960,116 @@ external:
     expect(existsSync(getSessionStateFilePath(home, root, "selected"))).toBeTruthy();
   });
 
+  test("explicit Session Chop ignores unrelated corrupt Session state", () => {
+    const fixture = createMultiRepoSessionFixture("chop-unrelated-corrupt-session");
+    const corruptStatePath = path.join(fixture.home, "sessions", "unrelated-corrupt.yml");
+    write(fixture.home, "sessions/unrelated-corrupt.yml", "version: nope\n");
+
+    runMonke({
+      args: ["chop", fixture.session],
+      cwd: fixture.root,
+      monkeHome: fixture.home,
+    });
+
+    expect(existsSync(fixture.depWorktree)).toBeFalsy();
+    expect(existsSync(fixture.rootWorktree)).toBeFalsy();
+    expect(existsSync(fixture.statePath)).toBeFalsy();
+    expect(existsSync(corruptStatePath)).toBeTruthy();
+  });
+
+  test("explicit Session Chop rejects corrupt state referencing its worktree", () => {
+    const fixture = createMultiRepoSessionFixture("chop-relevant-corrupt-session");
+    write(
+      fixture.home,
+      "sessions/relevant-corrupt.yml",
+      `version: 2
+session: conflicting
+rootSourceRoot: ${JSON.stringify(fixture.root)}
+repos:
+  - assignedPorts: []
+    sourceRoot: ${JSON.stringify(fixture.root)}
+    worktreePath: ${JSON.stringify(fixture.rootWorktree)}
+`,
+    );
+
+    expect(() => {
+      runMonke({
+        args: ["chop", fixture.session, "--force"],
+        cwd: fixture.root,
+        monkeHome: fixture.home,
+      });
+    }).toThrow(/relevant-corrupt\.yml/u);
+
+    expect(existsSync(fixture.depWorktree)).toBeTruthy();
+    expect(existsSync(fixture.rootWorktree)).toBeTruthy();
+    expect(existsSync(fixture.statePath)).toBeTruthy();
+  });
+
+  test("explicit Session Chop from another Session validates the selected worktree state", () => {
+    const sandbox = makeTempDir("chop-selected-relevant-corrupt-session");
+    const home = path.join(sandbox, "home");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "README.md": "root\n",
+    });
+    runMonke({ args: ["spawn", "invoking"], cwd: root, monkeHome: home });
+    runMonke({ args: ["spawn", "selected"], cwd: root, monkeHome: home });
+    const invokingWorktree = getExpectedWorktreePath(home, root, "invoking");
+    const selectedWorktree = getExpectedWorktreePath(home, root, "selected");
+    const selectedStatePath = getSessionStateFilePath(home, root, "selected");
+    write(
+      home,
+      "sessions/relevant-selected-corrupt.yml",
+      `version: 2
+session: conflicting
+rootSourceRoot: ${JSON.stringify(root)}
+repos:
+  - assignedPorts: []
+    sourceRoot: ${JSON.stringify(root)}
+    worktreePath: ${JSON.stringify(selectedWorktree)}
+`,
+    );
+
+    expect(() => {
+      runMonke({
+        args: ["chop", "selected", "--force"],
+        cwd: invokingWorktree,
+        monkeHome: home,
+      });
+    }).toThrow(/relevant-selected-corrupt\.yml/u);
+
+    expect(existsSync(invokingWorktree)).toBeTruthy();
+    expect(existsSync(selectedWorktree)).toBeTruthy();
+    expect(existsSync(selectedStatePath)).toBeTruthy();
+  });
+
+  test("current multi-repo Session validates corrupt state against every member", () => {
+    const fixture = createMultiRepoSessionFixture("chop-current-relevant-corrupt-session");
+    write(
+      fixture.home,
+      "sessions/relevant-dependency-corrupt.yml",
+      `version: 2
+session: conflicting
+rootSourceRoot: ${JSON.stringify(fixture.root)}
+repos:
+  - assignedPorts: []
+    sourceRoot: ${JSON.stringify(fixture.depRoot)}
+    worktreePath: ${JSON.stringify(fixture.depWorktree)}
+`,
+    );
+
+    expect(() => {
+      runMonke({
+        args: ["chop", "--force"],
+        cwd: fixture.rootWorktree,
+        monkeHome: fixture.home,
+      });
+    }).toThrow(/relevant-dependency-corrupt\.yml/u);
+
+    expect(existsSync(fixture.depWorktree)).toBeTruthy();
+    expect(existsSync(fixture.rootWorktree)).toBeTruthy();
+    expect(existsSync(fixture.statePath)).toBeTruthy();
+  });
+
   test("Session preflight aggregates invalid Root order with duplicate records", () => {
     const fixture = createMultiRepoSessionFixture("chop-invalid-session-order");
     const state = loadSessionState(fixture.home, fixture.root, fixture.session);

@@ -12,6 +12,15 @@ export interface WorktreeRemovalPreflight {
   worktree: WorktreeEntry;
 }
 
+/** Reject a locked Git worktree registration. */
+export function assertWorktreeUnlocked(entry: WorktreeEntry): void {
+  if (entry.locked === null) {
+    return;
+  }
+  const reason = entry.locked === "" ? "" : `: ${entry.locked}`;
+  throw new MonkeError(`Cannot Chop locked worktree ${entry.path}${reason}`);
+}
+
 /** Validate that a recorded absolute path is the canonical Source checkout for its repository. */
 export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: string): void {
   if (!path.isAbsolute(sourceRoot) || !existsSync(sourceRoot)) {
@@ -72,10 +81,7 @@ export function validateRegisteredWorktreeForRemoval(
   if (entry === undefined || entry.prunable || !existsSync(entry.path)) {
     throw new MonkeError(`No removable registered worktree exists at ${targetPath}`);
   }
-  if (entry.locked !== null) {
-    const reason = entry.locked === "" ? "" : `: ${entry.locked}`;
-    throw new MonkeError(`Cannot Chop locked worktree ${entry.path}${reason}`);
-  }
+  assertWorktreeUnlocked(entry);
   if (path.normalize(entry.path) === path.normalize(sourceRoot)) {
     throw new MonkeError(`Cannot Chop the Source checkout at ${sourceRoot}`);
   }

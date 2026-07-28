@@ -5,12 +5,21 @@ import { branchExists, getExpectedWorktreePath, listWorktrees, resolveRepoContex
 import type { WorktreeEntry } from "./git.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
-import { getSessionStateFilePath, listSessionStates, loadSessionState } from "./registry.ts";
+import {
+  getSessionStateFilePath,
+  listSessionStates,
+  listSessionStatesRelevantToWorktrees,
+  loadSessionState,
+} from "./registry.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { finalizeSession } from "./session-finalization.ts";
 import { requestShellDirectoryAfterRemoval } from "./shell.ts";
 import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
-import { assertCanonicalSourceCheckout, preflightWorktreeRemoval } from "./worktree-safety.ts";
+import {
+  assertCanonicalSourceCheckout,
+  assertWorktreeUnlocked,
+  preflightWorktreeRemoval,
+} from "./worktree-safety.ts";
 
 interface OrdinaryChopTarget {
   kind: "ordinary";
@@ -129,9 +138,7 @@ function inspectOrdinaryWorktree(
   if (exact === undefined) {
     throw new MonkeError(`Chop target not found: ${worktreePath}`);
   }
-  if (exact.locked !== null) {
-    throw lockedWorktreeError(exact);
-  }
+  assertWorktreeUnlocked(exact);
   return {
     forceGitRemoval: false,
     mode: "stale",
@@ -150,9 +157,11 @@ function resolveChopTarget(
   let allStates: SessionState[] = [];
   let invocationOwner: SessionState | null = null;
   if (managedInvocation) {
-    allStates = listSessionStates(home);
+    allStates = listSessionStatesRelevantToWorktrees(home, [invocation.worktreeRoot]);
     invocationOwner = findSessionOwner(allStates, invocation.worktreeRoot, invocation.sourceRoot);
     if (invocationOwner === null) {
+      // Preserve fail-closed behavior when invalid state may be the missing owner.
+      listSessionStates(home);
       throw new MonkeError(
         `Managed worktree ${invocation.worktreeRoot} has no valid owning Session state`,
       );
@@ -165,7 +174,7 @@ function resolveChopTarget(
       throw new MonkeError("mt chop from a Source checkout requires an explicit target");
     }
     if (invocationOwner !== null) {
-      return { allStates, kind: "session", state: invocationOwner };
+      return validateSessionChopTarget(home, invocationOwner);
     }
     return { kind: "ordinary", worktreePath: invocation.worktreeRoot };
   }
@@ -175,16 +184,13 @@ function resolveChopTarget(
   if (existsSync(statePath)) {
     const state = loadSessionState(home, rootScope, target);
     assertSessionIdentity(home, state, { rootSourceRoot: rootScope, session: target });
-    return {
-      allStates: allStates.length === 0 ? listSessionStates(home) : allStates,
-      kind: "session",
-      state,
-    };
+    return validateSessionChopTarget(home, state);
   }
 
   const ordinaryCandidate = resolveOrdinaryTarget(runtime, invocation, target);
-  if (allStates.length === 0 && isManagedWorktreePath(home, ordinaryCandidate.path)) {
-    allStates = listSessionStates(home);
+  const managedCandidate = isManagedWorktreePath(home, ordinaryCandidate.path);
+  if (allStates.length === 0 && managedCandidate) {
+    allStates = listSessionStatesRelevantToWorktrees(home, [ordinaryCandidate.path]);
   }
   const selectedOwner = findSessionOwner(allStates, ordinaryCandidate.path);
   if (selectedOwner !== null) {
@@ -194,7 +200,11 @@ function resolveChopTarget(
         `Session ${selectedOwner.session} is outside the current Root repo scope ${rootScope}`,
       );
     }
-    return { allStates, kind: "session", state: selectedOwner };
+    return validateSessionChopTarget(home, selectedOwner);
+  }
+  if (managedCandidate) {
+    // Preserve fail-closed behavior when invalid state may be the missing owner.
+    listSessionStates(home);
   }
 
   assertOutsideManagedWorktrees(home, ordinaryCandidate.path);
@@ -204,6 +214,17 @@ function resolveChopTarget(
     );
   }
   return { kind: "ordinary", worktreePath: ordinaryCandidate.path };
+}
+
+function validateSessionChopTarget(home: string, state: SessionState): SessionChopTarget {
+  return {
+    allStates: listSessionStatesRelevantToWorktrees(
+      home,
+      state.repos.map((repo) => repo.worktreePath),
+    ),
+    kind: "session",
+    state,
+  };
 }
 
 function chopSession(
@@ -320,8 +341,8 @@ function inspectSessionRepo(
   }
 
   if (!existsSync(repo.worktreePath)) {
-    if (exact?.locked !== null && exact?.locked !== undefined) {
-      throw lockedWorktreeError(exact);
+    if (exact !== undefined) {
+      assertWorktreeUnlocked(exact);
     }
     if (exact !== undefined && exact.branch !== state.session) {
       throw new MonkeError(
@@ -523,11 +544,6 @@ function assertOutsideManagedWorktrees(home: string, worktreePath: string): void
 function isManagedWorktreePath(home: string, worktreePath: string): boolean {
   const relative = path.relative(path.join(home, "worktrees"), worktreePath);
   return !(path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`));
-}
-
-function lockedWorktreeError(entry: WorktreeEntry): MonkeError {
-  const reason = entry.locked === "" ? "" : `: ${entry.locked}`;
-  return new MonkeError(`Cannot Chop locked worktree ${entry.path}${reason}`);
 }
 
 function removeWorktree(
