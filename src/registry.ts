@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { stringify } from "yaml";
+import { parseDocument, stringify, visit } from "yaml";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
@@ -266,14 +266,35 @@ function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: 
   try {
     const partial = parseOwnedYamlFile(filePath, SessionStateWorktreePathsSchema);
     return partial.repos.some((repo) =>
-      worktreePaths.some(
-        (worktreePath) => path.normalize(repo.worktreePath) === path.normalize(worktreePath),
-      ),
+      worktreePaths.some((worktreePath) => sameWorktreePath(repo.worktreePath, worktreePath)),
     );
   } catch {
     const text = readFileSync(filePath, "utf-8");
-    return worktreePaths.some((worktreePath) => text.includes(worktreePath));
+    const document = parseDocument(text, {
+      merge: false,
+      strict: false,
+      uniqueKeys: false,
+    });
+    let referencesWorktree = false;
+    visit(document, {
+      Scalar(key, scalar) {
+        const scalarValue = scalar.value;
+        if (
+          key !== "key" &&
+          typeof scalarValue === "string" &&
+          worktreePaths.some((candidate) => sameWorktreePath(scalarValue, candidate))
+        ) {
+          referencesWorktree = true;
+        }
+        return referencesWorktree ? visit.BREAK : visit.SKIP;
+      },
+    });
+    return referencesWorktree;
   }
+}
+
+function sameWorktreePath(left: string, right: string): boolean {
+  return path.normalize(left) === path.normalize(right);
 }
 
 function getReservationFilePath(home: string, sourceRoot: string): string {

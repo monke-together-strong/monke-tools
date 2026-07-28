@@ -102,8 +102,11 @@ mt() {
     __monke_mt_target="$(cat "$__monke_mt_directive")"
     rm -f "$__monke_mt_directive"
     if [ -n "$__monke_mt_target" ]; then
-      cd -- "$__monke_mt_target"
-      __monke_mt_cd_status=$?
+      if cd -- "$__monke_mt_target"; then
+        __monke_mt_cd_status=0
+      else
+        __monke_mt_cd_status=$?
+      fi
       if [ "$__monke_mt_status" -eq 0 ] && [ "$__monke_mt_cd_status" -ne 0 ]; then
         return "$__monke_mt_cd_status"
       fi

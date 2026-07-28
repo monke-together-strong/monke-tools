@@ -73,7 +73,7 @@ export function validateRegisteredWorktreeForRemoval(
   runtime: Runtime,
   sourceRoot: string,
   targetPath: string,
-) {
+): WorktreeEntry {
   const target = path.normalize(targetPath);
   const entry = listWorktrees(runtime, sourceRoot).find(
     (worktree) => path.normalize(worktree.path) === target,

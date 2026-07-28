@@ -9,6 +9,10 @@ import { createRepo, makeTempDir, read, runMonke } from "./helpers.ts";
 
 type SupportedShell = "bash" | "zsh";
 
+function isShellAvailable(shell: SupportedShell): boolean {
+  return spawnSync(shell, ["-c", "exit 0"], { stdio: "ignore" }).error === undefined;
+}
+
 function runGeneratedAdapter(
   shell: SupportedShell,
   mtStatus: number,
@@ -41,7 +45,7 @@ exit ${mtStatus}
     monkeHome: path.join(sandbox, "monke-home"),
   }).stdout;
   const result = spawnSync(
-    `/bin/${shell}`,
+    shell,
     [
       "-c",
       `${adapter}
@@ -59,6 +63,9 @@ printf '%s\\n%s\\n' "$PWD" "$mt_status"
       },
     },
   );
+  if (result.error !== undefined || result.stdout === null) {
+    throw new Error(`Could not run ${shell}: ${String(result.error ?? "no output")}`);
+  }
   const [reportedPath = "", reportedStatus = ""] = result.stdout.trim().split("\n");
   return {
     processStatus: result.status,
@@ -223,32 +230,42 @@ apps:
     expect(zsh.stderr).toBe("");
   });
 
-  test.each(["bash", "zsh"] as const)(
-    "%s adapter honors a directory request and preserves a nonzero mt status",
-    (shell) => {
-      const result = runGeneratedAdapter(shell, 23, true);
+  describe.each(["bash", "zsh"] as const)("%s adapter", (shell) => {
+    const available = isShellAvailable(shell);
+    const availability = available ? "" : " (shell unavailable)";
+    test.skipIf(!available)(
+      `honors a directory request and preserves a nonzero mt status${availability}`,
+      () => {
+        const result = runGeneratedAdapter(shell, 23, true);
 
-      expect(result.processStatus).toBe(0);
-      expect(result.reportedPath).toBe(result.targetPath);
-      expect(result.reportedStatus).toBe("23");
-    },
-  );
+        expect(result.processStatus).toBe(0);
+        expect(result.reportedPath).toBe(result.targetPath);
+        expect(result.reportedStatus).toBe("23");
+      },
+    );
 
-  test.each([
-    ["bash", 0, "1"],
-    ["zsh", 0, "1"],
-    ["bash", 23, "23"],
-    ["zsh", 23, "23"],
-  ] as const)(
-    "%s adapter handles a failed directory request after mt status %i",
-    (shell, mtStatus, expectedStatus) => {
-      const result = runGeneratedAdapter(shell, mtStatus, false);
+    test.skipIf(!available)(
+      `handles a failed directory request after mt status 0${availability}`,
+      () => {
+        const result = runGeneratedAdapter(shell, 0, false);
 
-      expect(result.processStatus).toBe(0);
-      expect(result.reportedPath).toBe(result.sandbox);
-      expect(result.reportedStatus).toBe(expectedStatus);
-    },
-  );
+        expect(result.processStatus).toBe(0);
+        expect(result.reportedPath).toBe(result.sandbox);
+        expect(result.reportedStatus).toBe("1");
+      },
+    );
+
+    test.skipIf(!available)(
+      `handles a failed directory request after mt status 23${availability}`,
+      () => {
+        const result = runGeneratedAdapter(shell, 23, false);
+
+        expect(result.processStatus).toBe(0);
+        expect(result.reportedPath).toBe(result.sandbox);
+        expect(result.reportedStatus).toBe("23");
+      },
+    );
+  });
 
   test("shell install refreshes bash and zsh startup files idempotently", () => {
     const sandbox = makeTempDir("shell-install");
