@@ -17,11 +17,11 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   fmt: createOxfmtConfig({
-    ignorePatterns: [".repo-specific-output"],
+    ignorePatterns: [".repo-specific-output"]
   }),
   lint: createOxlintConfig({
-    ignorePatterns: [".repo-specific-output"],
-  }),
+    ignorePatterns: [".repo-specific-output"]
+  })
 });
 ```
 
@@ -66,15 +66,15 @@ export default createOxlintConfig({
     {
       files: ["tests/unit/**"],
       rules: {
-        "vitest/no-disabled-tests": "off",
-      },
-    },
+        "vitest/no-disabled-tests": "off"
+      }
+    }
   ],
   rules: {
-    "no-console": "error",
+    "no-console": "error"
   },
   testFiles: ["tests/**/*.{ts,tsx}"],
-  vitestExcludeFiles: ["tests/e2e/**/*.{ts,tsx}"],
+  vitestExcludeFiles: ["tests/e2e/**/*.{ts,tsx}"]
 });
 ```
 

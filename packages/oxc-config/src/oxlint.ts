@@ -30,13 +30,13 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       ...(excludeFiles.length > 0 ? { excludeFiles } : {}),
       rules: {
         ...override.rules,
-        "vitest/max-expects": "off",
-      },
+        "vitest/max-expects": "off"
+      }
     };
   });
   const vitestConfig: OxlintConfig = {
     ...vitest,
-    overrides: vitestOverrides,
+    overrides: vitestOverrides
   };
 
   return {
@@ -46,22 +46,22 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
     options: {
       typeAware: true,
       typeCheck: true,
-      ...lintOptions,
+      ...lintOptions
     },
     overrides: [
       {
         files: [...testFiles],
         rules: {
-          "no-await-in-loop": "off",
-        },
+          "no-await-in-loop": "off"
+        }
       },
       {
         files: ["**/*.{ts,tsx}"],
         rules: {
-          "unicorn/no-useless-undefined": ["error", { checkArguments: false }],
-        },
+          "unicorn/no-useless-undefined": ["error", { checkArguments: false }]
+        }
       },
-      ...overrides,
+      ...overrides
     ],
     rules: {
       "func-style": "off",
@@ -74,8 +74,8 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "typescript/promise-function-async": "off",
       "typescript/return-await": ["error", "in-try-catch"],
       "unicorn/no-nested-ternary": "off",
-      ...rules,
-    },
+      ...rules
+    }
   };
 }
 

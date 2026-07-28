@@ -22,11 +22,11 @@ describe("CLI", () => {
 
   test.each([
     ["root", [], "Usage: mt [options] [command]"],
-    ["nested", ["shell"], "Usage: mt shell [options] [command]"],
+    ["nested", ["shell"], "Usage: mt shell [options] [command]"]
   ])("main CLI shows %s command help when no command is selected", (_name, args, usage) => {
     const result = spawnSync("bun", ["run", "src/index.ts", ...args], {
       cwd: projectRoot,
-      encoding: "utf-8",
+      encoding: "utf-8"
     });
 
     expect(result.status).toBe(1);
@@ -37,11 +37,11 @@ describe("CLI", () => {
   test.each([
     ["main", "src/index.ts", ["cleanup", "extra"]],
     ["skill import", "scripts/import-skills.ts", []],
-    ["skill update", "scripts/update-skills.ts", ["extra"]],
+    ["skill update", "scripts/update-skills.ts", ["extra"]]
   ])("%s CLI reports one concise process failure", (_name, script, args) => {
     const result = spawnSync("bun", ["run", script, ...args], {
       cwd: projectRoot,
-      encoding: "utf-8",
+      encoding: "utf-8"
     });
 
     expect(result.status).toBe(1);
@@ -53,11 +53,11 @@ describe("CLI", () => {
     ["main", "src/index.ts", ["--help"], "Usage: mt [options] [command]"],
     ["main nested", "src/index.ts", ["help", "shell"], "Usage: mt shell [options] [command]"],
     ["skill import", "scripts/import-skills.ts", ["--help"], "Usage: bun run skills:import"],
-    ["skill update", "scripts/update-skills.ts", ["--help"], "Usage: bun run skills:update"],
+    ["skill update", "scripts/update-skills.ts", ["--help"], "Usage: bun run skills:update"]
   ])("%s CLI help is successful", (_name, script, args, usage) => {
     const result = spawnSync("bun", ["run", script, ...args], {
       cwd: projectRoot,
-      encoding: "utf-8",
+      encoding: "utf-8"
     });
 
     expect(result.status).toBe(0);
@@ -68,7 +68,7 @@ describe("CLI", () => {
   test("Chop help documents force and ignored-file disposal", () => {
     const result = spawnSync("bun", ["run", "src/index.ts", "chop", "--help"], {
       cwd: projectRoot,
-      encoding: "utf-8",
+      encoding: "utf-8"
     });
 
     expect(result.status).toBe(0);

@@ -10,12 +10,13 @@ export function createOxfmtConfig(options: OxfmtConfig = {}): OxfmtConfig {
     ...ultracite,
     printWidth: 100,
     proseWrap: "preserve",
+    trailingComma: "none",
     ...config,
     ignorePatterns: [
       ...(ultracite.ignorePatterns ?? []),
       ...sharedIgnorePatterns,
-      ...ignorePatterns,
-    ],
+      ...ignorePatterns
+    ]
   };
 }
 

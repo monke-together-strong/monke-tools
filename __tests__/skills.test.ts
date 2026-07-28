@@ -18,16 +18,16 @@ describe("skills", () => {
           { kind: "codex" },
           { kind: "claude" },
           { kind: "cursor" },
-          { kind: "custom", path: path.join(homeDirectory, "team-skills") },
-        ],
-      },
+          { kind: "custom", path: path.join(homeDirectory, "team-skills") }
+        ]
+      }
     });
 
     expect(targets.map((target) => target.agentSkillRoot)).toStrictEqual([
       path.join(homeDirectory, ".codex", "skills"),
       path.join(homeDirectory, ".claude", "skills"),
       path.join(homeDirectory, ".cursor", "skills"),
-      path.join(homeDirectory, "team-skills"),
+      path.join(homeDirectory, "team-skills")
     ]);
     expect(targets.map((target) => target.agentSkillRoot)).not.toContain(monkeHome);
   });
@@ -39,8 +39,8 @@ describe("skills", () => {
       resolveSkillInstallTargets({
         homeDirectory,
         preference: {
-          targets: [{ kind: "custom", path: path.join(homeDirectory, "skills", "monke-tools") }],
-        },
+          targets: [{ kind: "custom", path: path.join(homeDirectory, "skills", "monke-tools") }]
+        }
       })
     ).toThrow(/Agent skill root/u);
   });
@@ -58,11 +58,11 @@ describe("skills", () => {
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
       nextPreference: {
-        targets: [{ kind: "custom", path: agentSkillRoot }],
+        targets: [{ kind: "custom", path: agentSkillRoot }]
       },
       previousPreference: null,
       sourceCheckout,
-      writeMessage() {},
+      writeMessage() {}
     });
 
     const namespacePath = path.join(agentSkillRoot, "monke-tools");
@@ -84,11 +84,11 @@ describe("skills", () => {
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
       nextPreference: {
-        targets: [{ kind: "claude" }],
+        targets: [{ kind: "claude" }]
       },
       previousPreference: null,
       sourceCheckout,
-      writeMessage() {},
+      writeMessage() {}
     });
 
     const claudeSkillRoot = path.join(sandbox, ".claude", "skills");
@@ -100,13 +100,13 @@ describe("skills", () => {
       links: [
         {
           name: "monke-tools-core",
-          sourcePath: path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
+          sourcePath: path.join(sourceCheckout, "skills", "internal", "monke-tools-core")
         },
         {
           name: "tdd",
-          sourcePath: path.join(sourceCheckout, "skills", "imported", "tdd"),
-        },
-      ],
+          sourcePath: path.join(sourceCheckout, "skills", "imported", "tdd")
+        }
+      ]
     });
     expect(manifest).not.toHaveProperty("supportingLinks");
     expect(lstatSync(coreLink).isSymbolicLink()).toBeTruthy();
@@ -120,13 +120,13 @@ describe("skills", () => {
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
       nextPreference: {
-        targets: [{ kind: "codex" }],
+        targets: [{ kind: "codex" }]
       },
       previousPreference: {
-        targets: [{ kind: "claude" }],
+        targets: [{ kind: "claude" }]
       },
       sourceCheckout,
-      writeMessage() {},
+      writeMessage() {}
     });
 
     expect(existsSync(coreLink)).toBeFalsy();
@@ -163,16 +163,16 @@ describe("skills", () => {
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
       nextPreference: {
-        targets: [{ kind: "custom", path: customSkillRoot }, { kind: "claude" }],
+        targets: [{ kind: "custom", path: customSkillRoot }, { kind: "claude" }]
       },
       previousPreference: null,
       sourceCheckout,
-      writeMessage() {},
+      writeMessage() {}
     });
 
     const installedWrapperDirectories = [
       path.join(customSkillRoot, "monke-tools", "internal", "code-review"),
-      path.join(sandbox, ".claude", "skills", "code-review"),
+      path.join(sandbox, ".claude", "skills", "code-review")
     ];
     for (const wrapperDirectory of installedWrapperDirectories) {
       expect(readFileSync(path.join(wrapperDirectory, upstreamRelativePath), "utf-8")).toBe(
@@ -193,22 +193,22 @@ describe("skills", () => {
       supportingLinks: [
         {
           sourcePath: path.join(sourceCheckout, "skills", "references"),
-          targetPath: path.join(sandbox, ".claude", "references"),
-        },
-      ],
+          targetPath: path.join(sandbox, ".claude", "references")
+        }
+      ]
     });
     expect(existsSync(path.join(sandbox, ".claude", "skills", "references"))).toBeFalsy();
 
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
       nextPreference: {
-        targets: [{ kind: "custom", path: customSkillRoot }],
+        targets: [{ kind: "custom", path: customSkillRoot }]
       },
       previousPreference: {
-        targets: [{ kind: "custom", path: customSkillRoot }, { kind: "claude" }],
+        targets: [{ kind: "custom", path: customSkillRoot }, { kind: "claude" }]
       },
       sourceCheckout,
-      writeMessage() {},
+      writeMessage() {}
     });
     expect(existsSync(path.join(sandbox, ".claude", "references"))).toBeFalsy();
   });
@@ -234,7 +234,7 @@ describe("skills", () => {
         nextPreference: { targets: [{ kind: "claude" }] },
         previousPreference: { targets: [{ kind: "claude" }] },
         sourceCheckout,
-        writeMessage() {},
+        writeMessage() {}
       });
     }).toThrow(/Invalid monke-tools flat Skill manifest/u);
   });
@@ -254,11 +254,11 @@ describe("skills", () => {
       reconcileSkillNamespaces({
         homeDirectory: sandbox,
         nextPreference: {
-          targets: [{ kind: "codex" }, { kind: "custom", path: blockedSkillRoot }],
+          targets: [{ kind: "codex" }, { kind: "custom", path: blockedSkillRoot }]
         },
         previousPreference: null,
         sourceCheckout,
-        writeMessage() {},
+        writeMessage() {}
       });
     }).toThrow(/Failed to reconcile 1 Skill install target/u);
 
@@ -281,13 +281,13 @@ describe("skills", () => {
       reconcileSkillNamespaces({
         homeDirectory: sandbox,
         nextPreference: {
-          targets: [{ kind: "codex" }],
+          targets: [{ kind: "codex" }]
         },
         previousPreference: {
-          targets: [{ kind: "claude" }],
+          targets: [{ kind: "claude" }]
         },
         sourceCheckout,
-        writeMessage() {},
+        writeMessage() {}
       });
     }).toThrow(/Failed to reconcile 1 Skill install target/u);
 
@@ -311,13 +311,13 @@ describe("skills", () => {
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
       nextPreference: {
-        targets: [{ kind: "codex" }],
+        targets: [{ kind: "codex" }]
       },
       previousPreference: {
-        targets: [{ kind: "custom", path: oldSkillRoot }],
+        targets: [{ kind: "custom", path: oldSkillRoot }]
       },
       sourceCheckout,
-      writeMessage() {},
+      writeMessage() {}
     });
 
     expect(existsSync(path.join(oldSkillRoot, "monke-tools"))).toBeFalsy();

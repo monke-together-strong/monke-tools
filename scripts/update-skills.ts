@@ -23,7 +23,7 @@ import {
   resolveSkillSelectorSlugMappings,
   runInstallCommand,
   runSkillsCaptured,
-  writeImportRecipeStore,
+  writeImportRecipeStore
 } from "./import-skills.ts";
 import type { SkillImportRecipe, SkillImportRecipeStore } from "./import-skills.ts";
 
@@ -77,7 +77,7 @@ export async function runUpdateSkills(
         buildSkillsInstallArgs({
           acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
           selectors: recipe.skills.map((skill) => skill.selector),
-          source: normalizedSource,
+          source: normalizedSource
         }),
         stagingDirectory
       );
@@ -94,7 +94,7 @@ export async function runUpdateSkills(
         interactive,
         recipe,
         source: normalizedSource,
-        stagingDirectory,
+        stagingDirectory
       });
       const stagedGuidance = applySlugReplacementsToGuidance(recipe, slugReplacements);
       const nextStore =
@@ -110,7 +110,7 @@ export async function runUpdateSkills(
         guidance: stagedGuidance,
         obsoleteGuidance: guidanceReplacedBySlugChanges(recipe, slugReplacements),
         repoRoot,
-        stagingDirectory,
+        stagingDirectory
       });
       store = nextStore;
     } catch (error) {
@@ -147,7 +147,7 @@ function parseCommand(argv: string[]): UpdateCommandOptions {
   const options = program.opts();
   return {
     install: Boolean(options.install),
-    interactive: Boolean(options.interactive),
+    interactive: Boolean(options.interactive)
   };
 }
 
@@ -195,7 +195,7 @@ async function resolveStagedSkillReplacements(options: {
   const selectorMappings = resolveSkillSelectorSlugMappings({
     acceptOpenClawRisks: options.acceptOpenClawRisks,
     selectors: recipe.skills.map((skill) => skill.selector),
-    source: options.source,
+    source: options.source
   });
   assertSkillSelectorSlugMappingsMatchStagedSlugs(recipe.source, selectorMappings, stagedSlugs);
   const stagedSlugBySelector = new Map(
@@ -212,8 +212,8 @@ async function resolveStagedSkillReplacements(options: {
         recordedSlug: skill.slug,
         selector: skill.selector,
         source: recipe.source,
-        stagedSlug,
-      },
+        stagedSlug
+      }
     ];
   });
 
@@ -242,7 +242,7 @@ function applySlugReplacementsToStore(
     ...store,
     recipes: store.recipes.map((recipe) =>
       recipe.source === source ? { ...recipe, skills: guidance } : recipe
-    ),
+    )
   });
 }
 
@@ -255,7 +255,7 @@ function applySlugReplacementsToGuidance(
   );
   return recipe.skills.map((skill) => ({
     ...skill,
-    slug: stagedSlugBySelector.get(skill.selector) ?? skill.slug,
+    slug: stagedSlugBySelector.get(skill.selector) ?? skill.slug
   }));
 }
 
@@ -275,14 +275,14 @@ function renderSlugMismatchMessage(
   return [
     `Skill slug mismatch for ${source}:`,
     `recorded ${missingSlugs.join(", ") || "(none)"}`,
-    `but staged ${unexpectedSlugs.join(", ") || "(none)"}`,
+    `but staged ${unexpectedSlugs.join(", ") || "(none)"}`
   ].join(" ");
 }
 
 async function promptForSlugReplacement(request: SlugReplacementRequest): Promise<boolean> {
   const accepted = await p.confirm({
     initialValue: false,
-    message: `Staged Skill slug changed for ${request.source}: ${request.recordedSlug} -> ${request.stagedSlug}. Replace the recorded slug and imported directory?`,
+    message: `Staged Skill slug changed for ${request.source}: ${request.recordedSlug} -> ${request.stagedSlug}. Replace the recorded slug and imported directory?`
   });
 
   if (p.isCancel(accepted)) {

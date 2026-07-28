@@ -14,7 +14,7 @@ import {
   rmSync,
   statSync,
   unlinkSync,
-  writeFileSync,
+  writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -90,14 +90,14 @@ const CONTROL_RE = new RegExp(
 const SkillImportRecipeSkillSchema = z.strictObject(
   {
     kind: z.enum(["skill", "reference"], {
-      error: "Import kind must be skill or reference",
+      error: "Import kind must be skill or reference"
     }),
     selector: z.string().refine((value) => value.trim().length > 0, {
-      error: "Skill import selector must be a non-empty string",
+      error: "Skill import selector must be a non-empty string"
     }),
     slug: z.string().refine((value) => value.trim().length > 0, {
-      error: "Skill slug must be a non-empty string",
-    }),
+      error: "Skill slug must be a non-empty string"
+    })
   },
   { error: "Skill import recipe skill must be a JSON object" }
 );
@@ -105,26 +105,26 @@ const SkillImportRecipeSchema = z.strictObject(
   {
     acceptOpenClawRisks: z
       .literal(true, {
-        error: "Skill import recipe acceptOpenClawRisks must be true when present",
+        error: "Skill import recipe acceptOpenClawRisks must be true when present"
       })
       .optional(),
     skills: z
       .array(SkillImportRecipeSkillSchema, {
-        error: "Skill import recipe skills must be a non-empty array",
+        error: "Skill import recipe skills must be a non-empty array"
       })
       .min(1, { error: "Skill import recipe skills must be a non-empty array" }),
     source: z.string().refine((value) => value.trim().length > 0, {
-      error: "Skill import recipe source must be a non-empty string",
-    }),
+      error: "Skill import recipe source must be a non-empty string"
+    })
   },
   { error: "Skill import recipe must be a JSON object" }
 );
 const SkillImportRecipeStoreSchema = z.strictObject(
   {
     recipes: z.array(SkillImportRecipeSchema, {
-      error: "Skill import recipe store recipes must be an array",
+      error: "Skill import recipe store recipes must be an array"
     }),
-    version: z.literal(2, { error: "Skill import recipe store version must be 2" }),
+    version: z.literal(2, { error: "Skill import recipe store version must be 2" })
   },
   { error: "Skill import recipe store must be a JSON object" }
 );
@@ -258,7 +258,7 @@ export function buildSkillsInstallArgs(options: BuildSkillsInstallArgsOptions): 
     "--agent",
     "universal",
     "--copy",
-    "--yes",
+    "--yes"
   ];
 }
 
@@ -268,7 +268,7 @@ export function readImportRecipeStore(repoRoot: string): SkillImportRecipeStore 
   if (!existsSync(storePath)) {
     return {
       recipes: [],
-      version: 2,
+      version: 2
     };
   }
 
@@ -362,7 +362,7 @@ export function copyStagedGuidanceToManagedRoots(options: {
       mkdirSync(path.dirname(targetPath), { recursive: true });
       cpSync(path.join(preparedRoot, item.kind, item.slug), targetPath, {
         recursive: true,
-        verbatimSymlinks: true,
+        verbatimSymlinks: true
       });
     }
     options.commitState?.();
@@ -428,7 +428,7 @@ function assertObsoleteReferencesAreUnconsumed(
       INTERNAL_SKILLS_ROOT,
       IMPORTED_SKILLS_ROOT,
       INTERNAL_REFERENCES_ROOT,
-      IMPORTED_REFERENCES_ROOT,
+      IMPORTED_REFERENCES_ROOT
     ]
       .flatMap((root) =>
         listReferenceConsumers(
@@ -573,7 +573,7 @@ function mergeImportedGuidanceIntoRecipeStore(
     const newRecipe: SkillImportRecipe = {
       source: input.source,
       ...(input.acceptOpenClawRisks ? { acceptOpenClawRisks: true as const } : {}),
-      skills: importedGuidance,
+      skills: importedGuidance
     };
 
     for (const skill of importedGuidance) {
@@ -654,7 +654,7 @@ function parseSecurityRiskAssessment(output: string): SecurityRiskAssessment | n
 
   return {
     detailsUrl,
-    rows,
+    rows
   };
 }
 
@@ -685,7 +685,7 @@ export async function runImportSkills(
       buildSkillsInstallArgs({
         acceptOpenClawRisks,
         selectors: selectedSkills,
-        source: normalizedSource,
+        source: normalizedSource
       }),
       stagingDirectory
     );
@@ -696,20 +696,20 @@ export async function runImportSkills(
       acceptOpenClawRisks,
       importedSkillSlugs: stagedSlugs,
       selectors: selectedSkills,
-      source: normalizedSource,
+      source: normalizedSource
     });
     const previousRecipeStore = readImportRecipeStore(repoRoot);
     const importedGuidance = stagedSelections.map((selection) => ({ ...selection, kind }));
     const obsoleteGuidance = findMigratedGuidanceCopies({
       importedGuidance,
       previousStore: previousRecipeStore,
-      source,
+      source
     });
     const nextRecipeStore = mergeImportedGuidanceIntoRecipeStore(previousRecipeStore, {
       acceptOpenClawRisks,
       kind,
       skills: stagedSelections,
-      source,
+      source
     });
     copyStagedGuidanceToManagedRoots({
       commitState() {
@@ -718,7 +718,7 @@ export async function runImportSkills(
       guidance: importedGuidance,
       obsoleteGuidance,
       repoRoot,
-      stagingDirectory,
+      stagingDirectory
     });
 
     if (install) {
@@ -773,7 +773,7 @@ function parseCommand(argv: string[]): ImportCommandOptions {
     acceptOpenClawRisks: Boolean(options.acceptOpenclawRisks),
     install: Boolean(options.install),
     kind: options.ref ? "reference" : "skill",
-    source: program.processedArgs[0],
+    source: program.processedArgs[0]
   };
 }
 
@@ -789,7 +789,7 @@ export function runInstallCommand(repoRoot: string): void {
     {
       cwd: repoRoot,
       env: process.env,
-      stdio: "inherit",
+      stdio: "inherit"
     }
   );
 
@@ -809,7 +809,7 @@ export function runSkillsCaptured(args: string[], cwd: string): CapturedCommandO
   const result = spawnSync(NPX_COMMAND, args, {
     cwd,
     encoding: "utf-8",
-    env: process.env,
+    env: process.env
   });
 
   if (result.error) {
@@ -825,7 +825,7 @@ export function runSkillsCaptured(args: string[], cwd: string): CapturedCommandO
 
   return {
     stderr: result.stderr ?? "",
-    stdout: result.stdout ?? "",
+    stdout: result.stdout ?? ""
   };
 }
 
@@ -850,16 +850,16 @@ function renderSecurityRiskAssessment(assessment: SecurityRiskAssessment): strin
       " ".repeat(skillWidth + 2),
       pc.dim(padEndVisible("Gen", genWidth + 2)),
       pc.dim(padEndVisible("Socket", socketWidth + 2)),
-      pc.dim(padEndVisible("Snyk", snykWidth)),
+      pc.dim(padEndVisible("Snyk", snykWidth))
     ].join(""),
     ...assessment.rows.map((row) =>
       [
         padEndVisible(pc.cyan(row.skillName), skillWidth + 2),
         padEndVisible(riskValueLabel(row.gen), genWidth + 2),
         padEndVisible(socketValueLabel(row.socket), socketWidth + 2),
-        padEndVisible(riskValueLabel(row.snyk), snykWidth),
+        padEndVisible(riskValueLabel(row.snyk), snykWidth)
       ].join("")
-    ),
+    )
   ];
 
   if (assessment.detailsUrl !== null && assessment.detailsUrl !== "") {
@@ -885,7 +885,7 @@ function parseSecurityRiskRow(line: string): SecurityRiskRow | null {
       gen,
       skillName,
       snyk,
-      socket,
+      socket
     };
   }
 
@@ -904,7 +904,7 @@ function parseSecurityRiskRow(line: string): SecurityRiskRow | null {
     gen,
     skillName,
     snyk,
-    socket,
+    socket
   };
 }
 
@@ -933,7 +933,7 @@ function renderNoteBox(title: string, bodyLines: string[]): string {
       const padding = " ".repeat(contentWidth - visibleLength(line));
       return `${pc.dim("\u2502")} ${line}${padding} ${pc.dim("\u2502")}`;
     }),
-    `${pc.dim("\u2570")}${pc.dim("\u2500".repeat(contentWidth + 2))}${pc.dim("\u256F")}`,
+    `${pc.dim("\u2570")}${pc.dim("\u2500".repeat(contentWidth + 2))}${pc.dim("\u256F")}`
   ];
 
   return `${lines.join("\n")}\n`;
@@ -991,7 +991,7 @@ async function promptForSkillSelection(
     maxItems: 10,
     message: `Select skills to import ${pc.dim("(space to toggle)")}`,
     options: groupedOptions,
-    required: true,
+    required: true
   });
 
   if (p.isCancel(selectedSkills)) {
@@ -1012,8 +1012,8 @@ export function buildGroupedSkillOptions(
         group.name,
         group.skills.map((skill) => ({
           label: skill,
-          value: skill,
-        })),
+          value: skill
+        }))
       ])
   );
 }
@@ -1066,7 +1066,7 @@ ${stepSymbol(this.state)}  ${options.message}
             cursor: this.cursor,
             maxItems: options.maxItems,
             options: this.options,
-            selectedValues,
+            selectedValues
           })}
 ${error}
 `;
@@ -1078,7 +1078,7 @@ ${error}
             cursor: this.cursor,
             maxItems: options.maxItems,
             options: this.options,
-            selectedValues,
+            selectedValues
           })}
 ${pc.cyan("\u2514")}
 `;
@@ -1099,7 +1099,7 @@ ${pc.reset(pc.dim(`Press ${pc.gray(pc.bgWhite(pc.inverse(" space ")))} to select
       // Clack uses undefined as the successful validation sentinel.
       // oxlint-disable-next-line unicorn/no-useless-undefined
       return undefined;
-    },
+    }
   }).prompt();
 
   if (typeof result === "symbol") {
@@ -1130,7 +1130,7 @@ function renderVisibleGroupedPromptOptions(options: {
   const visibleOptions = getVisibleGroupedPromptOptions({
     cursor: options.cursor,
     maxItems: options.maxItems,
-    options: options.options,
+    options: options.options
   });
 
   return visibleOptions
@@ -1191,7 +1191,7 @@ function getVisibleGroupedPromptOptions(options: {
       group: true,
       index: -1,
       label: cursorGroupName,
-      value: cursorGroupName,
+      value: cursorGroupName
     });
   }
 
@@ -1200,7 +1200,7 @@ function getVisibleGroupedPromptOptions(options: {
       group: true,
       index: -1,
       label: "...",
-      value: "__more_before__",
+      value: "__more_before__"
     });
   }
   if (end < options.options.length) {
@@ -1208,7 +1208,7 @@ function getVisibleGroupedPromptOptions(options: {
       group: true,
       index: -1,
       label: "...",
-      value: "__more_after__",
+      value: "__more_after__"
     });
   }
 
@@ -1287,7 +1287,7 @@ export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeSto
       skills: recipe.skills.toSorted((left, right) => {
         const slugOrder = left.slug.localeCompare(right.slug);
         return slugOrder === 0 ? left.selector.localeCompare(right.selector) : slugOrder;
-      }),
+      })
     };
   });
   assertUniqueRecipeSources(recipes);
@@ -1302,7 +1302,7 @@ export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeSto
 
       return Number(Boolean(left.acceptOpenClawRisks)) - Number(Boolean(right.acceptOpenClawRisks));
     }),
-    version: 2,
+    version: 2
   };
 }
 
@@ -1397,7 +1397,7 @@ function mapSelectedSkillsToImportedSlugs(options: {
     const mappings = resolveSkillSelectorSlugMappings({
       acceptOpenClawRisks: options.acceptOpenClawRisks,
       selectors: options.selectors,
-      source: options.source,
+      source: options.source
     });
     assertSkillSelectorSlugMappingsMatchStagedSlugs(
       options.source,
@@ -1424,7 +1424,7 @@ function mapSelectedSkillsToImportedSlugsFromSet(
     if (remainingSlugs.delete(selector)) {
       mappings.push({
         selector,
-        slug: selector,
+        slug: selector
       });
       continue;
     }
@@ -1440,7 +1440,7 @@ function mapSelectedSkillsToImportedSlugsFromSet(
     }
     mappings.push({
       selector,
-      slug,
+      slug
     });
     remainingSlugs.delete(slug);
     unmatchedSelectors.pop();
@@ -1451,7 +1451,7 @@ function mapSelectedSkillsToImportedSlugsFromSet(
       [
         "Could not map selected Skill import selectors to staged Skill slugs.",
         `Selectors: ${selectors.join(", ")}`,
-        `Staged slugs: ${importedSkillSlugs.join(", ")}`,
+        `Staged slugs: ${importedSkillSlugs.join(", ")}`
       ].join("\n")
     );
   }
@@ -1480,7 +1480,7 @@ function resolveSkillSelectorSlugMapping(
       buildSkillsInstallArgs({
         acceptOpenClawRisks: options.acceptOpenClawRisks,
         selectors: [selector],
-        source: options.source,
+        source: options.source
       }),
       stagingDirectory
     );
@@ -1517,7 +1517,7 @@ export function assertSkillSelectorSlugMappingsMatchStagedSlugs(
       [
         `Could not map selected Skill import selectors to staged Skill slugs for ${source}.`,
         `Mapped slugs: ${mappedSlugs.join(", ")}`,
-        `Staged slugs: ${sortedStagedSlugs.join(", ")}`,
+        `Staged slugs: ${sortedStagedSlugs.join(", ")}`
       ].join("\n")
     );
   }
@@ -1566,7 +1566,7 @@ function getOrCreateSkillGroup(
 
   const newGroup = {
     name: groupName,
-    skills: [],
+    skills: []
   };
   groups.push(newGroup);
   return newGroup;

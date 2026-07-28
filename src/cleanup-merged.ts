@@ -7,7 +7,7 @@ import { resolveDefaultBranchRef } from "./git.ts";
 import type { Runtime } from "./types.ts";
 
 const GithubRepositoryLookupSchema = z.object({
-  nameWithOwner: z.string().min(1),
+  nameWithOwner: z.string().min(1)
 });
 const MergedPrInputSchema = z.object({
   baseRefName: z.string().optional(),
@@ -16,7 +16,7 @@ const MergedPrInputSchema = z.object({
   headRepository: z
     .object({
       name: z.string().optional(),
-      nameWithOwner: z.string().optional(),
+      nameWithOwner: z.string().optional()
     })
     .nullable()
     .optional(),
@@ -24,7 +24,7 @@ const MergedPrInputSchema = z.object({
   isCrossRepository: z.boolean().optional(),
   mergedAt: z.string().optional(),
   number: z.number().optional(),
-  url: z.string().optional(),
+  url: z.string().optional()
 });
 
 /** GitHub metadata used to prove that one Session branch was merged. */
@@ -122,7 +122,7 @@ export interface MergedCleanupLookupCache {
 export function createMergedCleanupLookupCache(): MergedCleanupLookupCache {
   return {
     defaultBranchBySourceRoot: new Map(),
-    repositoryBySourceRoot: new Map(),
+    repositoryBySourceRoot: new Map()
   };
 }
 
@@ -135,7 +135,7 @@ export function inspectMergedWorktreeCleanup(
   let defaultBranch = options.cache?.defaultBranchBySourceRoot.get(candidate.sourceRoot);
   if (!defaultBranch) {
     defaultBranch = getDefaultBranch(runtime, candidate.sourceRoot, {
-      refresh: options.refreshDefaultBranch ?? true,
+      refresh: options.refreshDefaultBranch ?? true
     });
     options.cache?.defaultBranchBySourceRoot.set(candidate.sourceRoot, defaultBranch);
   }
@@ -143,7 +143,7 @@ export function inspectMergedWorktreeCleanup(
     return {
       eligible: false,
       evidence: [],
-      reasons: [defaultBranch.error],
+      reasons: [defaultBranch.error]
     };
   }
 
@@ -157,7 +157,7 @@ export function inspectMergedWorktreeCleanup(
         defaultBranch: defaultBranch.value,
         repositoryFullName: repository.value,
         session: candidate.session,
-        sourceRoot: candidate.sourceRoot,
+        sourceRoot: candidate.sourceRoot
       })
     : { error: repository.error, ok: false as const };
 
@@ -166,7 +166,7 @@ export function inspectMergedWorktreeCleanup(
     defaultBranch: defaultBranch.value,
     lookupError: matchingMergedPrs.ok ? null : matchingMergedPrs.error,
     matchingMergedPrs: matchingMergedPrs.ok ? matchingMergedPrs.value : [],
-    repositoryFullName: repository.ok ? repository.value : null,
+    repositoryFullName: repository.ok ? repository.value : null
   });
 
   return decideMergedWorktreeCleanup(snapshot);
@@ -191,7 +191,7 @@ export function decideMergedWorktreeCleanup(
   return {
     eligible: reasons.length === 0,
     evidence,
-    reasons,
+    reasons
   };
 }
 
@@ -311,7 +311,7 @@ export function removeMergeCleanableWorktree(
 ): void {
   // Plain remove deletes ignored artifacts while still refusing dirty/untracked race additions.
   runtime.exec("git", ["worktree", "remove", candidate.worktreePath], {
-    cwd: candidate.sourceRoot,
+    cwd: candidate.sourceRoot
   });
 }
 
@@ -334,7 +334,7 @@ function buildMergedCleanupSnapshot(
     repositoryFullName: options.repositoryFullName,
     session: options.session,
     sourceRoot: options.sourceRoot,
-    worktreePath: options.worktreePath,
+    worktreePath: options.worktreePath
   };
 }
 
@@ -355,7 +355,7 @@ function inspectWorktree(
   const identity = inspectWorktreeIdentity(runtime, options);
   return {
     ...identity,
-    ...inspectWorktreeState(runtime, options.worktreePath, identity.worktreeIsGitRoot),
+    ...inspectWorktreeState(runtime, options.worktreePath, identity.worktreeIsGitRoot)
   };
 }
 
@@ -370,20 +370,20 @@ function inspectWorktreeIdentity(
   const expectedCommonDir = tryGit(runtime, options.sourceRoot, [
     "rev-parse",
     "--path-format=absolute",
-    "--git-common-dir",
+    "--git-common-dir"
   ]);
   const actualCommonDir = worktreeExists
     ? tryGit(runtime, options.worktreePath, [
         "rev-parse",
         "--path-format=absolute",
-        "--git-common-dir",
+        "--git-common-dir"
       ])
     : null;
   const actualTopLevel = worktreeExists
     ? tryGit(runtime, options.worktreePath, [
         "rev-parse",
         "--path-format=absolute",
-        "--show-toplevel",
+        "--show-toplevel"
       ])
     : null;
   const worktreeIsGitRoot =
@@ -403,7 +403,7 @@ function inspectWorktreeIdentity(
     isSourceCheckout,
     sameGitRepository,
     worktreeExists,
-    worktreeIsGitRoot,
+    worktreeIsGitRoot
   };
 }
 
@@ -429,7 +429,7 @@ function inspectWorktreeState(
     localHead: localHeadResult?.ok === true ? localHeadResult.value : null,
     statusError:
       statusResult?.ok === false ? `unable to read normal Git status: ${statusResult.error}` : null,
-    statusLines: statusResult?.ok === true ? splitLines(statusResult.value) : [],
+    statusLines: statusResult?.ok === true ? splitLines(statusResult.value) : []
   };
 }
 
@@ -441,12 +441,12 @@ function getDefaultBranch(
   try {
     return {
       ok: true,
-      value: resolveDefaultBranchRef(runtime, sourceRoot, { refresh: options.refresh }).branch,
+      value: resolveDefaultBranchRef(runtime, sourceRoot, { refresh: options.refresh }).branch
     };
   } catch (error) {
     return {
       error: `unable to resolve default branch: ${errorMessage(error)}`,
-      ok: false,
+      ok: false
     };
   }
 }
@@ -458,7 +458,7 @@ function getGithubRepositoryFullName(
   try {
     const result = runtime.exec("gh", ["repo", "view", "--json", "nameWithOwner"], {
       allowFailure: true,
-      cwd: sourceRoot,
+      cwd: sourceRoot
     });
     if (result.exitCode !== 0) {
       return { error: `GitHub repository lookup failed: ${commandDetail(result)}`, ok: false };
@@ -501,7 +501,7 @@ function queryMergedPrs(
         "--limit",
         "100",
         "--json",
-        "number,headRefName,baseRefName,headRefOid,mergedAt,url,isCrossRepository,headRepository,headRepositoryOwner",
+        "number,headRefName,baseRefName,headRefOid,mergedAt,url,isCrossRepository,headRepository,headRepositoryOwner"
       ],
       { allowFailure: true, cwd: options.sourceRoot }
     );
@@ -532,7 +532,7 @@ function normalizeMergedPrMatch(value: unknown): MergedPrMatch {
     isCrossRepository: record.isCrossRepository,
     mergedAt: record.mergedAt,
     number: record.number ?? 0,
-    url: record.url,
+    url: record.url
   };
 }
 

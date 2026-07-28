@@ -68,7 +68,7 @@ export function resolveRepoContext(
       currentBranch,
       {
         allowExternalSessionWorktree: options.allowExternalSessionWorktree ?? false,
-        allowSessionBranchMismatch: options.allowSessionBranchMismatch ?? false,
+        allowSessionBranchMismatch: options.allowSessionBranchMismatch ?? false
       }
     );
   }
@@ -80,7 +80,7 @@ export function resolveRepoContext(
     isSourceCheckout,
     sessionName,
     sourceRoot,
-    worktreeRoot,
+    worktreeRoot
   };
 }
 
@@ -112,7 +112,7 @@ function inferSessionNameForContext(
   }
 
   return inferSessionName(home, sourceRoot, worktreeRoot, branch, {
-    allowBranchMismatch: options.allowSessionBranchMismatch,
+    allowBranchMismatch: options.allowSessionBranchMismatch
   });
 }
 
@@ -203,14 +203,14 @@ function appendWorktreeEntry(entries: WorktreeEntry[], current: Partial<Worktree
     branch: current.branch ?? null,
     locked: current.locked ?? null,
     path: current.path,
-    prunable: current.prunable ?? false,
+    prunable: current.prunable ?? false
   });
 }
 
 export function branchExists(runtime: Runtime, sourceRoot: string, branch: string): boolean {
   const result = runtime.exec("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
     allowFailure: true,
-    cwd: sourceRoot,
+    cwd: sourceRoot
   });
   return result.exitCode === 0;
 }
@@ -224,17 +224,17 @@ export function resolveDefaultBranchRef(
   const shouldRefresh = options.refresh ?? true;
   const localCandidates: DefaultBranchRef[] = [
     { branch: "main", ref: "refs/heads/main", source: "local" },
-    { branch: "master", ref: "refs/heads/master", source: "local" },
+    { branch: "master", ref: "refs/heads/master", source: "local" }
   ];
   const originCandidates: DefaultBranchRef[] = [
     { branch: "main", ref: "refs/remotes/origin/main", source: "origin" },
-    { branch: "master", ref: "refs/remotes/origin/master", source: "origin" },
+    { branch: "master", ref: "refs/remotes/origin/master", source: "origin" }
   ];
   let candidates = localCandidates;
   if (shouldRefresh) {
     const fetchResult = runtime.exec("git", ["fetch", "--prune", "origin"], {
       allowFailure: true,
-      cwd: sourceRoot,
+      cwd: sourceRoot
     });
     if (fetchResult.exitCode === 0) {
       candidates = [...originCandidates, ...localCandidates];
@@ -369,7 +369,7 @@ export function removeSessionWorktreeAndBranch(
   let removed = true;
   const removeWorktree = runtime.exec("git", ["worktree", "remove", "--force", worktreePath], {
     allowFailure: true,
-    cwd: sourceRoot,
+    cwd: sourceRoot
   });
   if (removeWorktree.exitCode !== 0 && existsSync(worktreePath)) {
     onWarning(
@@ -380,7 +380,7 @@ export function removeSessionWorktreeAndBranch(
 
   const removeBranch = runtime.exec("git", ["branch", "-D", session], {
     allowFailure: true,
-    cwd: sourceRoot,
+    cwd: sourceRoot
   });
   if (removeBranch.exitCode !== 0 && branchExists(runtime, sourceRoot, session)) {
     onWarning(
@@ -476,7 +476,7 @@ function runGit(runtime: Runtime, cwd: string, args: string[]): string {
 function validateSessionBranchName(runtime: Runtime, sourceRoot: string, session: string): void {
   const result = runtime.exec("git", ["check-ref-format", "--branch", session], {
     allowFailure: true,
-    cwd: sourceRoot,
+    cwd: sourceRoot
   });
   if (result.exitCode !== 0) {
     throw new MonkeError(`Invalid session name "${session}": must be a valid git branch name`);
@@ -507,7 +507,7 @@ function listWorktreesAfterPruningSession(
 function refExists(runtime: Runtime, sourceRoot: string, ref: string): boolean {
   const result = runtime.exec("git", ["show-ref", "--verify", "--quiet", ref], {
     allowFailure: true,
-    cwd: sourceRoot,
+    cwd: sourceRoot
   });
   return result.exitCode === 0;
 }

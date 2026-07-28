@@ -6,7 +6,7 @@ import {
   readdirSync,
   readFileSync,
   statSync,
-  writeFileSync,
+  writeFileSync
 } from "node:fs";
 import path from "node:path";
 
@@ -93,9 +93,9 @@ export function rewriteManagedEnvFiles(
     const requests = [
       ...app.localMappings.map((mapping) => ({
         env: mapping.targetEnv,
-        value: requireAssignedPort(localAssignments, mapping.portKey, app.label),
+        value: requireAssignedPort(localAssignments, mapping.portKey, app.label)
       })),
-      ...(externalByApp.get(app.label) ?? []),
+      ...(externalByApp.get(app.label) ?? [])
     ];
 
     if (requests.length === 0) {
@@ -264,7 +264,7 @@ function seedRelativePath(
       cpSync(sourcePath, targetPath, {
         errorOnExist: false,
         force: false,
-        recursive: true,
+        recursive: true
       });
     }
     return;
@@ -275,7 +275,7 @@ function seedRelativePath(
     cpSync(sourcePath, targetPath, {
       errorOnExist: false,
       force: false,
-      recursive: true,
+      recursive: true
     });
     return;
   }
@@ -323,7 +323,7 @@ function parseAssignmentLine(line: string): ParsedAssignmentLine | null {
     comment,
     key,
     prefix: `${prefixStart}${key}${separator}`,
-    rawValue: value,
+    rawValue: value
   };
 }
 
@@ -346,7 +346,7 @@ function splitValueAndComment(value: string): { value: string; comment: string }
       if (previous === undefined || previous === "" || /\s/u.test(previous)) {
         return {
           comment: value.slice(index),
-          value: value.slice(0, index),
+          value: value.slice(0, index)
         };
       }
     }
@@ -410,7 +410,7 @@ function replaceUrlPort(value: string, newPort: number, location: string): strin
   const authorityEndCandidates = [
     value.indexOf("/", authorityStart),
     value.indexOf("?", authorityStart),
-    value.indexOf("#", authorityStart),
+    value.indexOf("#", authorityStart)
   ].filter((index) => index >= 0);
   const authorityEnd =
     authorityEndCandidates.length > 0 ? Math.min(...authorityEndCandidates) : value.length;

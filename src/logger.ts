@@ -29,7 +29,7 @@ export function createLogger(runtime: Runtime): Logger {
     },
     warning(message) {
       runtime.writeStderr(`${colors.yellow(message)}\n`);
-    },
+    }
   };
 }
 

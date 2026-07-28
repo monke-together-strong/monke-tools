@@ -8,7 +8,7 @@ import {
   getExpectedWorktreePath,
   inferSessionName,
   listWorktrees,
-  validateWorktreeForSession,
+  validateWorktreeForSession
 } from "../src/git.ts";
 import { createRuntime } from "../src/runtime.ts";
 import type { Runtime } from "../src/types.ts";
@@ -34,7 +34,7 @@ describe("Git operations", () => {
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     const otherSourceRoot = createRepo(path.join(sandbox, "other"), {
       "apps/db/.env.local": "PORT=5432\n",
@@ -45,7 +45,7 @@ describe("Git operations", () => {
     mappings:
       - port: DB_PORT
         env: PORT
-`,
+`
     });
     const home = path.join(sandbox, "home");
     const worktreePath = getExpectedWorktreePath(home, sourceRoot, "banana");
@@ -80,7 +80,7 @@ branch refs/heads/main
 worktree /tmp/worktree
 branch refs/heads/feature/foo
 prunable gitdir file points to non-existent location
-`,
+`
         };
       },
       readLine() {
@@ -90,12 +90,12 @@ prunable gitdir file points to non-existent location
         return Promise.reject(new Error("unexpected select"));
       },
       writeStderr() {},
-      writeStdout() {},
+      writeStdout() {}
     };
 
     expect(listWorktrees(runtime, "/tmp/root")).toStrictEqual([
       { branch: "main", locked: null, path: "/tmp/root", prunable: false },
-      { branch: "feature/foo", locked: null, path: "/tmp/worktree", prunable: true },
+      { branch: "feature/foo", locked: null, path: "/tmp/worktree", prunable: true }
     ]);
   });
 
@@ -110,7 +110,7 @@ prunable gitdir file points to non-existent location
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     const runtime = createRuntime({ cwd: sourceRoot });
     const session = "banana";
@@ -138,7 +138,7 @@ prunable gitdir file points to non-existent location
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() =>

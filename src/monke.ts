@@ -6,14 +6,14 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
-  symlinkSync,
+  symlinkSync
 } from "node:fs";
 import path from "node:path";
 
 import {
   createMergedCleanupLookupCache,
   inspectMergedWorktreeCleanup,
-  removeMergeCleanableWorktree,
+  removeMergeCleanableWorktree
 } from "./cleanup-merged.ts";
 import type { MergedCleanupDecision } from "./cleanup-merged.ts";
 import { openCodexThread } from "./codex.ts";
@@ -23,7 +23,7 @@ import {
   syncRootEnvFileWithRemovals,
   rewriteManagedEnvFiles,
   seedWorktreeFiles,
-  collectBaselinePortsFromRoot,
+  collectBaselinePortsFromRoot
 } from "./env.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import {
@@ -37,7 +37,7 @@ import {
   removeSessionWorktreeAndBranch,
   resolveDefaultBranchRef,
   resolveRepoContext,
-  validateWorktreeForSession,
+  validateWorktreeForSession
 } from "./git.ts";
 import type { DefaultBranchRef } from "./git.ts";
 import { createLogger } from "./logger.ts";
@@ -51,7 +51,7 @@ import {
   recordRepoSuccess,
   removeSessionState,
   saveSessionState,
-  toAssignedPorts,
+  toAssignedPorts
 } from "./registry.ts";
 import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
@@ -65,7 +65,7 @@ import type {
   ResourceValueState,
   Runtime,
   SessionRepoState,
-  SessionState,
+  SessionState
 } from "./types.ts";
 
 /** Options controlling how `mt spawn` chooses source content. */
@@ -204,7 +204,7 @@ export function spawnSessionFromSourceRootLocked(
           localAssignments: new Map(
             existingState.assignedPorts.map((entry) => [entry.key, entry.value])
           ),
-          state: existingState,
+          state: existingState
         });
         continue;
       }
@@ -222,11 +222,11 @@ export function spawnSessionFromSourceRootLocked(
         );
         createdDefaultWorktrees.push({
           sourceRoot: repoConfig.sourceRoot,
-          worktreePath: worktree.path,
+          worktreePath: worktree.path
         });
       } else {
         worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session, {
-          skipCleanCheck: shouldCopyDirty(options),
+          skipCleanCheck: shouldCopyDirty(options)
         });
         const dirtySnapshot = dirtySnapshots.get(repoConfig.sourceRoot);
         if (dirtySnapshot && worktree.created) {
@@ -247,7 +247,7 @@ export function spawnSessionFromSourceRootLocked(
         runtime,
         session,
         worktreeCreated: worktree.created,
-        worktreePath: worktree.path,
+        worktreePath: worktree.path
       });
 
       results.set(repoConfig.sourceRoot, materialized);
@@ -261,7 +261,7 @@ export function spawnSessionFromSourceRootLocked(
         home,
         rootSourceRoot,
         runtime,
-        session,
+        session
       });
     }
     throw error;
@@ -345,7 +345,7 @@ function spawnWithoutConfig(
   const worktree =
     rootDefaultRef === null
       ? ensureSessionWorktree(runtime, home, rootSourceRoot, session, {
-          skipCleanCheck: shouldCopyDirty(options),
+          skipCleanCheck: shouldCopyDirty(options)
         })
       : ensureFreshSessionWorktreeFromRef(
           runtime,
@@ -361,7 +361,7 @@ function spawnWithoutConfig(
   }
   const sessionState = {
     ...loadSessionState(home, rootSourceRoot, session),
-    graphSource: options.mode === "current-head" ? undefined : ("session-branch" as const),
+    graphSource: options.mode === "current-head" ? undefined : ("session-branch" as const)
   };
   saveSessionState(
     home,
@@ -373,7 +373,7 @@ function spawnWithoutConfig(
         resourceCommandOutputs: [],
         resourceValues: [],
         sourceRoot: rootSourceRoot,
-        worktreePath: worktree.path,
+        worktreePath: worktree.path
       })
     )
   );
@@ -397,7 +397,7 @@ function loadSpawnGraph(
       },
       readRepoConfig(sourceRoot) {
         return readGitPathAtRef(runtime, sourceRoot, getDefaultRef(sourceRoot).ref, "monke.yml");
-      },
+      }
     });
   }
   if (options.mode === "session-branch") {
@@ -411,7 +411,7 @@ function loadSpawnGraph(
         return sourceRoot === rootSourceRoot
           ? readGitPathAtRef(runtime, sourceRoot, session, "monke.yml")
           : readFileSync(path.join(sourceRoot, "monke.yml"), "utf-8");
-      },
+      }
     });
   }
   return loadResolvedGraph(runtime, rootSourceRoot);
@@ -441,7 +441,7 @@ function prepareSpawnMaterialization(
 
   const sessionState = {
     ...loadSessionState(home, rootSourceRoot, session),
-    graphSource: options.mode === "current-head" ? undefined : ("session-branch" as const),
+    graphSource: options.mode === "current-head" ? undefined : ("session-branch" as const)
   };
   ensureSessionPrefix(
     sessionState,
@@ -484,7 +484,7 @@ function captureDirtySnapshots(
   return new Map(
     reposInOrder.map((repoConfig) => [
       repoConfig.sourceRoot,
-      captureDirtySnapshot(runtime, repoConfig.sourceRoot),
+      captureDirtySnapshot(runtime, repoConfig.sourceRoot)
     ])
   );
 }
@@ -494,13 +494,13 @@ function captureDirtySnapshot(runtime: Runtime, sourceRoot: string): DirtySnapsh
     "ls-files",
     "--others",
     "--exclude-standard",
-    "-z",
+    "-z"
   ]);
 
   return {
     stagedPatch: runGit(runtime, sourceRoot, ["diff", "--cached", "--binary", "--no-ext-diff"]),
     unstagedPatch: runGit(runtime, sourceRoot, ["diff", "--binary", "--no-ext-diff"]),
-    untrackedPaths: untrackedOutput.split("\0").filter((entry) => entry.length > 0),
+    untrackedPaths: untrackedOutput.split("\0").filter((entry) => entry.length > 0)
   };
 }
 
@@ -673,7 +673,7 @@ function loadResolvedGraphForSession(
         return readGitPathAtRef(runtime, sourceRoot, sessionState.session, "monke.yml");
       }
       return readFileSync(path.join(sourceRoot, "monke.yml"), "utf-8");
-    },
+    }
   });
 }
 
@@ -734,7 +734,7 @@ export function runMaterialize(runtime: Runtime): void {
         runtime,
         session,
         worktreeCreated,
-        worktreePath,
+        worktreePath
       });
 
       results.set(repoConfig.sourceRoot, materialized);
@@ -803,11 +803,11 @@ function cleanupMergedWorktrees(
       const candidate = {
         session: state.session,
         sourceRoot: repoState.sourceRoot,
-        worktreePath: repoState.worktreePath,
+        worktreePath: repoState.worktreePath
       };
       const decision = inspectMergedWorktreeCleanup(runtime, candidate, {
         cache,
-        refreshDefaultBranch: !dryRun,
+        refreshDefaultBranch: !dryRun
       });
       let removed = false;
 
@@ -821,7 +821,7 @@ function cleanupMergedWorktrees(
         removed,
         session: state.session,
         sourceRoot: repoState.sourceRoot,
-        worktreePath: repoState.worktreePath,
+        worktreePath: repoState.worktreePath
       });
     }
   }
@@ -850,7 +850,7 @@ function removeDeadSessionStates(runtime: Runtime, home: string, rootSourceRoot:
       failures.push({
         detail: errorMessage(error),
         session: state.session,
-        stateFile: getSessionStateFilePath(home, state.rootSourceRoot, state.session),
+        stateFile: getSessionStateFilePath(home, state.rootSourceRoot, state.session)
       });
     }
   }
@@ -939,7 +939,7 @@ export function runSetup(runtime: Runtime): void {
     context.sourceRoot,
     repoConfig.externalInOrder.map((externalRepo) => ({
       env: externalRepo.pathEnv,
-      value: path.relative(context.sourceRoot, externalRepo.absoluteRepoRoot) || ".",
+      value: path.relative(context.sourceRoot, externalRepo.absoluteRepoRoot) || "."
     }))
   );
 
@@ -968,7 +968,7 @@ function materializeRepo(options: {
     baselinePortsRoot,
     worktreeCreated,
     existingState,
-    dependencyResults,
+    dependencyResults
   } = options;
   const hasBootstrapCommand = repoHasBootstrapCommand(repoConfig);
 
@@ -986,7 +986,7 @@ function materializeRepo(options: {
       resourceCommandOutputs: existingState?.resourceCommandOutputs ?? [],
       resourceValues: existingState?.resourceValues ?? [],
       sourceRoot: repoConfig.sourceRoot,
-      worktreePath,
+      worktreePath
     })
   );
 
@@ -996,7 +996,7 @@ function materializeRepo(options: {
     home,
     repoConfig,
     rootSourceRoot,
-    session,
+    session
   });
   const persistResolvedResourceCommands = (
     resourceCommandOutputs: ResourceCommandState[],
@@ -1013,7 +1013,7 @@ function materializeRepo(options: {
           resolvedResourceValues.values
         ),
         sourceRoot: repoConfig.sourceRoot,
-        worktreePath,
+        worktreePath
       })
     );
   };
@@ -1029,7 +1029,7 @@ function materializeRepo(options: {
       resourceValues: resolvedResourceValues.values,
       runtime: options.runtime,
       session,
-      worktreePath,
+      worktreePath
     });
   }
   const reservation = getOrCreateReservation(
@@ -1039,7 +1039,7 @@ function materializeRepo(options: {
   );
   const baselinePorts = collectBaselinePortsFromRoot({
     config: repoConfig,
-    sourceRoot: baselinePortsRoot,
+    sourceRoot: baselinePortsRoot
   });
   const localAssignments = allocateLocalPorts({
     baselinePorts,
@@ -1048,7 +1048,7 @@ function materializeRepo(options: {
     repoConfig,
     reservation,
     rootSourceRoot,
-    session,
+    session
   });
 
   const externalAssignments = resolveExternalAssignments(repoConfig, dependencyResults);
@@ -1063,7 +1063,7 @@ function materializeRepo(options: {
     ...externalPathAssignments,
     ...toRootEnvAssignments(localAssignedPorts),
     ...toRootEnvAssignments(dedupeAssignedPorts(externalAssignments)),
-    ...toResourceEnvAssignments(resolvedResourceValues.values),
+    ...toResourceEnvAssignments(resolvedResourceValues.values)
   ];
   const existingResourceCommandEnvNames = toResourceCommandEnvNames(
     existingState?.resourceCommandOutputs ?? []
@@ -1072,7 +1072,7 @@ function materializeRepo(options: {
   if (hasBootstrapCommand) {
     syncRootEnvFileWithRemovals(worktreePath, rootEnvAssignmentsBeforeCommands, [
       ...resolvedResourceValues.removedEnvNames,
-      ...existingResourceCommandEnvNames,
+      ...existingResourceCommandEnvNames
     ]);
     options.persistRepoState(
       buildSessionRepoState({
@@ -1085,7 +1085,7 @@ function materializeRepo(options: {
           resolvedResourceValues.values
         ),
         sourceRoot: repoConfig.sourceRoot,
-        worktreePath,
+        worktreePath
       })
     );
     runBootstrapCommand(
@@ -1105,7 +1105,7 @@ function materializeRepo(options: {
       resourceValues: resolvedResourceValues.values,
       runtime: options.runtime,
       session,
-      worktreePath,
+      worktreePath
     });
   }
 
@@ -1117,7 +1117,7 @@ function materializeRepo(options: {
     worktreePath,
     [
       ...rootEnvAssignmentsBeforeCommands,
-      ...toResourceCommandEnvAssignments(resolvedResourceCommands.commands),
+      ...toResourceCommandEnvAssignments(resolvedResourceCommands.commands)
     ],
     [...resolvedResourceValues.removedEnvNames, ...resolvedResourceCommands.removedEnvNames]
   );
@@ -1140,8 +1140,8 @@ function materializeRepo(options: {
       resourceCommandOutputs: resolvedResourceCommands.commands,
       resourceValues: resolvedResourceValues.values,
       sourceRoot: repoConfig.sourceRoot,
-      worktreePath,
-    }),
+      worktreePath
+    })
   };
 }
 
@@ -1191,7 +1191,7 @@ function resolveExternalPathAssignments(
     const relativePath = path.relative(worktreePath, dependency.state.worktreePath) || ".";
     return {
       env: externalRepo.pathEnv,
-      value: relativePath,
+      value: relativePath
     };
   });
 }
@@ -1199,7 +1199,7 @@ function resolveExternalPathAssignments(
 function toRootEnvAssignments(assignments: AssignedPort[]): { env: string; value: string }[] {
   return assignments.map((assignment) => ({
     env: assignment.key,
-    value: String(assignment.value),
+    value: String(assignment.value)
   }));
 }
 
@@ -1216,7 +1216,7 @@ function toResourceEnvAssignments(
 ): { env: string; value: string }[] {
   return assignments.map((assignment) => ({
     env: assignment.env,
-    value: assignment.value,
+    value: assignment.value
   }));
 }
 
@@ -1226,7 +1226,7 @@ function toResourceCommandEnvAssignments(
   return commands.flatMap((command) =>
     command.outputs.map((assignment) => ({
       env: assignment.env,
-      value: assignment.value,
+      value: assignment.value
     }))
   );
 }
@@ -1247,7 +1247,7 @@ function buildSessionRepoState(options: {
   const state: SessionRepoState = {
     assignedPorts: options.assignedPorts,
     sourceRoot: options.sourceRoot,
-    worktreePath: options.worktreePath,
+    worktreePath: options.worktreePath
   };
 
   if (options.cleanupCommand !== undefined && options.cleanupCommand !== "") {
@@ -1276,7 +1276,7 @@ function preserveStaleResourceValues(
   const currentEnvNames = new Set(currentValues.map((resource) => resource.env));
   return [
     ...currentValues,
-    ...existingValues.filter((resource) => !currentEnvNames.has(resource.env)),
+    ...existingValues.filter((resource) => !currentEnvNames.has(resource.env))
   ];
 }
 
@@ -1297,7 +1297,7 @@ function runBootstrapCommand(
       cwd: worktreePath,
       env: Object.fromEntries(
         externalPathAssignments.map((assignment) => [assignment.env, assignment.value])
-      ),
+      )
     });
   } catch (error) {
     const detail = errorMessage(error);
@@ -1347,7 +1347,7 @@ function gitPathExistsAtRef(
 ): boolean {
   const result = runtime.exec("git", ["cat-file", "-e", `${ref}:${relativePath}`], {
     allowFailure: true,
-    cwd: sourceRoot,
+    cwd: sourceRoot
   });
   return result.exitCode === 0;
 }

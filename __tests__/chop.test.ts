@@ -13,7 +13,7 @@ import {
   makeTempDir,
   runMonke,
   runMonkeCapturingFailure,
-  write,
+  write
 } from "./helpers.ts";
 
 interface OrdinaryFixture {
@@ -64,7 +64,7 @@ function addSubmodule(repoRoot: string, submoduleRoot: string): void {
     "submodule",
     "add",
     submoduleRoot,
-    "vendor/submodule",
+    "vendor/submodule"
   ]);
   git(repoRoot, ["commit", "-am", "add submodule"]);
 }
@@ -103,10 +103,10 @@ function createMultiRepoSessionFixture(
   const home = path.join(sandbox, "home");
   const cleanupLog = path.join(sandbox, "cleanup.log");
   const depRoot = createRepo(path.join(sandbox, "dep"), {
-    "README.md": "dependency\n",
+    "README.md": "dependency\n"
   });
   const root = createRepo(path.join(sandbox, "root"), {
-    "README.md": "root\n",
+    "README.md": "root\n"
   });
   const depWorktree = getExpectedWorktreePath(home, depRoot, session);
   const rootWorktree = getExpectedWorktreePath(home, root, session);
@@ -121,7 +121,7 @@ function createMultiRepoSessionFixture(
         cleanupCommand: `printf "dep|%s|%s|%s\\n" "$PWD" "$DEP_RESOURCE" "$MONKE_SESSION" >> "${cleanupLog}"`,
         resourceValues: [{ env: "DEP_RESOURCE", value: `dep-${session}` }],
         sourceRoot: depRoot,
-        worktreePath: depWorktree,
+        worktreePath: depWorktree
       },
       {
         assignedPorts: [],
@@ -129,17 +129,17 @@ function createMultiRepoSessionFixture(
         resourceCommandOutputs: [
           {
             name: "root-dynamic",
-            outputs: [{ env: "ROOT_DYNAMIC", value: `dynamic-${session}` }],
-          },
+            outputs: [{ env: "ROOT_DYNAMIC", value: `dynamic-${session}` }]
+          }
         ],
         resourceValues: [{ env: "ROOT_RESOURCE", value: `root-${session}` }],
         sourceRoot: root,
-        worktreePath: rootWorktree,
-      },
+        worktreePath: rootWorktree
+      }
     ],
     rootSourceRoot: root,
     session,
-    version: 1,
+    version: 1
   });
 
   return {
@@ -152,7 +152,7 @@ function createMultiRepoSessionFixture(
     rootWorktree,
     sandbox,
     session,
-    statePath: getSessionStateFilePath(home, root, session),
+    statePath: getSessionStateFilePath(home, root, session)
   };
 }
 
@@ -160,7 +160,7 @@ function createFailingCleanupSessionFixture(prefix: string): FailingCleanupSessi
   const sandbox = makeTempDir(prefix);
   const home = path.join(sandbox, "home");
   const root = createRepo(path.join(sandbox, "root"), {
-    "README.md": "root\n",
+    "README.md": "root\n"
   });
   runMonke({ args: ["spawn", "retry"], cwd: root, monkeHome: home });
   const worktree = getExpectedWorktreePath(home, root, "retry");
@@ -169,15 +169,15 @@ function createFailingCleanupSessionFixture(prefix: string): FailingCleanupSessi
     ...state,
     repos: state.repos.map((repo) => ({
       ...repo,
-      cleanupCommand: "exit 23",
-    })),
+      cleanupCommand: "exit 23"
+    }))
   });
   return {
     home,
     root,
     sandbox,
     statePath: getSessionStateFilePath(home, root, "retry"),
-    worktree,
+    worktree
   };
 }
 
@@ -192,7 +192,7 @@ describe("chop", () => {
     const sandbox = makeTempDir("chop-current-session");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "source\n",
+      "README.md": "source\n"
     });
     runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
     const worktree = getExpectedWorktreePath(home, root, "banana");
@@ -200,7 +200,7 @@ describe("chop", () => {
     const result = runMonke({
       args: ["chop"],
       cwd: worktree,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(existsSync(worktree)).toBeFalsy();
@@ -216,7 +216,7 @@ describe("chop", () => {
       const sandbox = makeTempDir(`chop-force-current-session-${dirtyKind}`);
       const home = path.join(sandbox, "home");
       const root = createRepo(path.join(sandbox, "root"), {
-        "README.md": "source\n",
+        "README.md": "source\n"
       });
       runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
       const worktree = getExpectedWorktreePath(home, root, "banana");
@@ -225,7 +225,7 @@ describe("chop", () => {
       runMonke({
         args: ["chop", "--force"],
         cwd: worktree,
-        monkeHome: home,
+        monkeHome: home
       });
 
       expect(existsSync(worktree)).toBeFalsy();
@@ -240,7 +240,7 @@ describe("chop", () => {
       const sandbox = makeTempDir(`chop-dirty-session-${dirtyKind}`);
       const home = path.join(sandbox, "home");
       const root = createRepo(path.join(sandbox, "root"), {
-        "README.md": "source\n",
+        "README.md": "source\n"
       });
       runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
       const worktree = getExpectedWorktreePath(home, root, "banana");
@@ -250,7 +250,7 @@ describe("chop", () => {
         runMonke({
           args: ["chop", "banana"],
           cwd: root,
-          monkeHome: home,
+          monkeHome: home
         });
       }).toThrow(/dirty worktree/u);
 
@@ -263,7 +263,7 @@ describe("chop", () => {
     const sandbox = makeTempDir("chop-explicit-session");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "source\n",
+      "README.md": "source\n"
     });
     runMonke({ args: ["spawn", "alpha"], cwd: root, monkeHome: home });
     runMonke({ args: ["spawn", "beta"], cwd: root, monkeHome: home });
@@ -273,7 +273,7 @@ describe("chop", () => {
     runMonke({
       args: ["chop", "beta"],
       cwd: alpha,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(existsSync(alpha)).toBeTruthy();
@@ -286,7 +286,7 @@ describe("chop", () => {
     const sandbox = makeTempDir("chop-explicit-ordinary");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "source\n",
+      "README.md": "source\n"
     });
     runMonke({ args: ["spawn", "alpha"], cwd: root, monkeHome: home });
     const sessionWorktree = getExpectedWorktreePath(home, root, "alpha");
@@ -297,7 +297,7 @@ describe("chop", () => {
     runMonke({
       args: ["chop", "ordinary"],
       cwd: sessionWorktree,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(existsSync(sessionWorktree)).toBeTruthy();
@@ -312,13 +312,13 @@ describe("chop", () => {
       repos: [],
       rootSourceRoot: fixture.sourceRoot,
       session: "feature",
-      version: 1,
+      version: 1
     });
 
     runMonke({
       args: ["chop", "feature"],
       cwd: fixture.sourceRoot,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(existsSync(fixture.worktreePath)).toBeTruthy();
@@ -338,9 +338,9 @@ describe("chop", () => {
       binDirectory: fixture.binDirectory,
       cwd: fixture.depWorktree,
       extraEnv: {
-        [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath,
+        [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath
       },
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(existsSync(fixture.rootWorktree)).toBeFalsy();
@@ -354,7 +354,7 @@ describe("chop", () => {
     const removals = readWorktreeRemovals(gitLog);
     expect(removals).toStrictEqual([
       `worktree remove ${fixture.rootWorktree}`,
-      `worktree remove ${fixture.depWorktree}`,
+      `worktree remove ${fixture.depWorktree}`
     ]);
   });
 
@@ -364,7 +364,7 @@ describe("chop", () => {
     runMonke({
       args: ["chop", fixture.depWorktree],
       cwd: fixture.root,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(existsSync(fixture.depWorktree)).toBeFalsy();
@@ -384,7 +384,7 @@ describe("chop", () => {
     runMonke({
       args: ["chop", fixture.session],
       cwd: fixture.root,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(existsSync(fixture.depWorktree)).toBeFalsy();
@@ -402,10 +402,10 @@ describe("chop", () => {
     const sandbox = makeTempDir("chop-session-member-scope");
     const home = path.join(sandbox, "home");
     const firstRoot = createRepo(path.join(sandbox, "first-root"), {
-      "README.md": "first\n",
+      "README.md": "first\n"
     });
     const secondRoot = createRepo(path.join(sandbox, "second-root"), {
-      "README.md": "second\n",
+      "README.md": "second\n"
     });
     runMonke({ args: ["spawn", "first"], cwd: firstRoot, monkeHome: home });
     runMonke({ args: ["spawn", "second"], cwd: secondRoot, monkeHome: home });
@@ -416,7 +416,7 @@ describe("chop", () => {
       runMonke({
         args: ["chop", secondWorktree, "--force"],
         cwd: firstRoot,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/outside the current Root repo scope/u);
 
@@ -433,7 +433,7 @@ describe("chop", () => {
       "lock",
       "--reason",
       "dependency in use",
-      fixture.depWorktree,
+      fixture.depWorktree
     ]);
 
     let thrown: unknown;
@@ -442,7 +442,7 @@ describe("chop", () => {
         args: ["chop", fixture.session],
         binDirectory: fixture.binDirectory,
         cwd: fixture.root,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     } catch (error) {
       thrown = error;
@@ -472,7 +472,7 @@ describe("chop", () => {
     runMonke({
       args: ["chop", fixture.session, "--force"],
       cwd: fixture.root,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(existsSync(fixture.depWorktree)).toBeFalsy();
@@ -495,7 +495,7 @@ describe("chop", () => {
       "lock",
       "--reason",
       "dependency in use",
-      fixture.depWorktree,
+      fixture.depWorktree
     ]);
 
     expect(() => {
@@ -503,7 +503,7 @@ describe("chop", () => {
         args: ["chop", fixture.session, "--force"],
         binDirectory: fixture.binDirectory,
         cwd: fixture.root,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/locked.*dependency in use/u);
 
@@ -517,7 +517,7 @@ describe("chop", () => {
     const sandbox = makeTempDir("chop-stale-session");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "root\n",
+      "README.md": "root\n"
     });
     runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
     const worktree = getExpectedWorktreePath(home, root, "banana");
@@ -526,7 +526,7 @@ describe("chop", () => {
     runMonke({
       args: ["chop", "banana"],
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(git(root, ["worktree", "list", "--porcelain"])).not.toContain(worktree);
@@ -538,7 +538,7 @@ describe("chop", () => {
     const sandbox = makeTempDir("chop-stale-session-locked");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "root\n",
+      "README.md": "root\n"
     });
     runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
     const worktree = getExpectedWorktreePath(home, root, "banana");
@@ -549,7 +549,7 @@ describe("chop", () => {
       runMonke({
         args: ["chop", "banana", "--force"],
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/locked.*still reserved/u);
 
@@ -561,7 +561,7 @@ describe("chop", () => {
     const sandbox = makeTempDir("chop-session-unexpected-live-branch");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "root\n",
+      "README.md": "root\n"
     });
     runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
     const worktree = getExpectedWorktreePath(home, root, "banana");
@@ -572,7 +572,7 @@ describe("chop", () => {
       runMonke({
         args: ["chop", "banana", "--force"],
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/registered at unexpected path/u);
 
@@ -596,8 +596,8 @@ describe("chop", () => {
         afterCommand: {
           args: "submodule status --recursive",
           occurrence: 2,
-          script: `printf 'raced\\n' > ${JSON.stringify(targetFile)}${stage}`,
-        },
+          script: `printf 'raced\\n' > ${JSON.stringify(targetFile)}${stage}`
+        }
       });
 
       expect(() => {
@@ -605,7 +605,7 @@ describe("chop", () => {
           args: ["chop", fixture.session],
           binDirectory: fixture.binDirectory,
           cwd: fixture.root,
-          monkeHome: fixture.home,
+          monkeHome: fixture.home
         });
       }).toThrow(/dirty worktree/u);
 
@@ -628,20 +628,20 @@ describe("chop", () => {
         branch: `"$MONKE_TEST_REAL_GIT" -C ${JSON.stringify(fixture.rootWorktree)} switch -c raced >/dev/null`,
         lock: `"$MONKE_TEST_REAL_GIT" -C ${JSON.stringify(fixture.root)} worktree lock --reason race ${JSON.stringify(fixture.rootWorktree)}`,
         registration: `"$MONKE_TEST_REAL_GIT" -C ${JSON.stringify(fixture.root)} worktree move ${JSON.stringify(fixture.rootWorktree)} ${JSON.stringify(movedPath)}`,
-        repository: `mv ${JSON.stringify(fixture.rootWorktree)} ${JSON.stringify(replacedPath)}; mkdir ${JSON.stringify(fixture.rootWorktree)}; "$MONKE_TEST_REAL_GIT" -C ${JSON.stringify(fixture.rootWorktree)} init -b unrelated >/dev/null`,
+        repository: `mv ${JSON.stringify(fixture.rootWorktree)} ${JSON.stringify(replacedPath)}; mkdir ${JSON.stringify(fixture.rootWorktree)}; "$MONKE_TEST_REAL_GIT" -C ${JSON.stringify(fixture.rootWorktree)} init -b unrelated >/dev/null`
       };
       const expectedFailures = {
         branch: /Session worktree branch\/HEAD changed from banana to raced/u,
         lock: /locked.*race/u,
         registration: /unexpected path/u,
-        repository: /Cannot verify registered worktree/u,
+        repository: /Cannot verify registered worktree/u
       };
       const gitLog = installGitShim(fixture.binDirectory, {
         afterCommand: {
           args: "rev-parse --abbrev-ref HEAD",
           cwd: fixture.rootWorktree,
-          script: scripts[raceKind],
-        },
+          script: scripts[raceKind]
+        }
       });
 
       expect(() => {
@@ -649,7 +649,7 @@ describe("chop", () => {
           args: ["chop", fixture.session, "--force"],
           binDirectory: fixture.binDirectory,
           cwd: fixture.root,
-          monkeHome: fixture.home,
+          monkeHome: fixture.home
         });
       }).toThrow(expectedFailures[raceKind]);
 
@@ -666,8 +666,8 @@ describe("chop", () => {
     const gitLog = installGitShim(fixture.binDirectory, {
       failCommand: {
         args: `worktree remove ${fixture.rootWorktree}`,
-        message: "injected removal failure",
-      },
+        message: "injected removal failure"
+      }
     });
 
     expect(() => {
@@ -675,7 +675,7 @@ describe("chop", () => {
         args: ["chop", fixture.session],
         binDirectory: fixture.binDirectory,
         cwd: fixture.root,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/injected removal failure/u);
 
@@ -686,13 +686,13 @@ describe("chop", () => {
     const removals = readWorktreeRemovals(gitLog);
     expect(removals).toStrictEqual([
       `worktree remove ${fixture.depWorktree}`,
-      `worktree remove ${fixture.rootWorktree}`,
+      `worktree remove ${fixture.rootWorktree}`
     ]);
 
     runMonke({
       args: ["chop", fixture.session],
       cwd: fixture.root,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
     expect(existsSync(fixture.rootWorktree)).toBeFalsy();
     expect(existsSync(fixture.statePath)).toBeFalsy();
@@ -713,7 +713,7 @@ describe("chop", () => {
       const result = runMonke({
         args: ["chop", fixture.session],
         cwd: fixture.root,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
 
       expect(result.stderr).toContain(
@@ -731,7 +731,7 @@ describe("chop", () => {
     const sandbox = makeTempDir("chop-current-session-branch-mismatch");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "root\n",
+      "README.md": "root\n"
     });
     runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
     const worktree = getExpectedWorktreePath(home, root, "banana");
@@ -740,7 +740,7 @@ describe("chop", () => {
     const result = runMonke({
       args: ["chop"],
       cwd: worktree,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(result.stderr).toContain(
@@ -759,10 +759,10 @@ describe("chop", () => {
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `cleanupCommand: 'touch "${cleanupLog}"'
 apps: {}
-`,
+`
     });
     const unrecordedRoot = createRepo(path.join(sandbox, "unrecorded"), {
-      "README.md": "unrecorded\n",
+      "README.md": "unrecorded\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "monke.yml": `apps: {}
@@ -774,7 +774,7 @@ external:
       - port: UNRECORDED_PORT
         app: missing
         env: PORT
-`,
+`
     });
     const worktree = getExpectedWorktreePath(home, depRoot, "partial");
     git(depRoot, ["branch", "partial"]);
@@ -784,18 +784,18 @@ external:
         {
           assignedPorts: [],
           sourceRoot: depRoot,
-          worktreePath: worktree,
-        },
+          worktreePath: worktree
+        }
       ],
       rootSourceRoot: root,
       session: "partial",
-      version: 1,
+      version: 1
     });
 
     runMonke({
       args: ["chop", "partial"],
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(existsSync(worktree)).toBeFalsy();
@@ -808,7 +808,7 @@ external:
     const sandbox = makeTempDir("chop-finalization-retry");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "root\n",
+      "README.md": "root\n"
     });
     const worktree = getExpectedWorktreePath(home, root, "retry");
     const attempts = path.join(sandbox, "attempts.log");
@@ -821,12 +821,12 @@ external:
           assignedPorts: [],
           cleanupCommand: `printf "retry\\n" >> "${attempts}"; test -f "${allow}"`,
           sourceRoot: root,
-          worktreePath: worktree,
-        },
+          worktreePath: worktree
+        }
       ],
       rootSourceRoot: root,
       session: "retry",
-      version: 1,
+      version: 1
     });
     const otherStatePath = getSessionStateFilePath(home, root, "other");
     const otherCleanup = path.join(sandbox, "other-cleanup");
@@ -836,19 +836,19 @@ external:
           assignedPorts: [],
           cleanupCommand: `touch "${otherCleanup}"`,
           sourceRoot: root,
-          worktreePath: getExpectedWorktreePath(home, root, "other"),
-        },
+          worktreePath: getExpectedWorktreePath(home, root, "other")
+        }
       ],
       rootSourceRoot: root,
       session: "other",
-      version: 1,
+      version: 1
     });
 
     expect(() => {
       runMonke({
         args: ["chop", "retry"],
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/Cleanup command failed/u);
     expect(existsSync(worktree)).toBeFalsy();
@@ -860,7 +860,7 @@ external:
     runMonke({
       args: ["chop", "retry"],
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(readFileSync(attempts, "utf-8")).toBe("retry\nretry\n");
@@ -871,7 +871,7 @@ external:
       runMonke({
         args: ["chop", "retry"],
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/target not found/u);
     expect(readFileSync(attempts, "utf-8")).toBe("retry\nretry\n");
@@ -889,15 +889,15 @@ external:
         cleanupCommand:
           repo.sourceRoot === fixture.root
             ? `printf "root\\n" >> "${attempts}"; test -f "${allow}"`
-            : `printf "dep\\n" >> "${attempts}"`,
-      })),
+            : `printf "dep\\n" >> "${attempts}"`
+      }))
     });
 
     expect(() => {
       runMonke({
         args: ["chop", fixture.session],
         cwd: fixture.root,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/Cleanup command failed/u);
     expect(readFileSync(attempts, "utf-8")).toBe("root\n");
@@ -909,7 +909,7 @@ external:
     runMonke({
       args: ["chop", fixture.session],
       cwd: fixture.root,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(readFileSync(attempts, "utf-8")).toBe("root\nroot\ndep\n");
@@ -928,15 +928,15 @@ external:
         cleanupCommand:
           repo.sourceRoot === fixture.root
             ? `printf "root\\n" >> "${attempts}"; test -f "${allow}"`
-            : `printf "dep\\n" >> "${attempts}"`,
-      })),
+            : `printf "dep\\n" >> "${attempts}"`
+      }))
     });
 
     expect(() => {
       runMonke({
         args: ["chop"],
         cwd: fixture.depWorktree,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/Cleanup command failed/u);
 
@@ -949,7 +949,7 @@ external:
     runMonke({
       args: ["chop", fixture.session],
       cwd: fixture.depRoot,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(readFileSync(attempts, "utf-8")).toBe("root\nroot\ndep\n");
@@ -966,9 +966,9 @@ external:
         args: ["chop"],
         cwd: fixture.worktree,
         extraEnv: {
-          [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath,
+          [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath
         },
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/Cleanup command failed/u);
 
@@ -983,7 +983,7 @@ external:
     const result = runMonkeCapturingFailure({
       args: ["chop"],
       cwd: fixture.worktree,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(result.error).toBeInstanceOf(Error);
@@ -998,7 +998,7 @@ external:
     const sandbox = makeTempDir("chop-cross-session-ownership");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "root\n",
+      "README.md": "root\n"
     });
     const worktree = getExpectedWorktreePath(home, root, "selected");
     git(root, ["branch", "selected"]);
@@ -1007,20 +1007,20 @@ external:
       repos: [{ assignedPorts: [], sourceRoot: root, worktreePath: worktree }],
       rootSourceRoot: root,
       session: "selected",
-      version: 1,
+      version: 1
     });
     saveSessionState(home, {
       repos: [{ assignedPorts: [], sourceRoot: root, worktreePath: worktree }],
       rootSourceRoot: root,
       session: "conflicting",
-      version: 1,
+      version: 1
     });
 
     expect(() => {
       runMonke({
         args: ["chop", "selected", "--force"],
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/also recorded by Session conflicting/u);
     expect(existsSync(worktree)).toBeTruthy();
@@ -1035,7 +1035,7 @@ external:
     runMonke({
       args: ["chop", fixture.session],
       cwd: fixture.root,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(existsSync(fixture.depWorktree)).toBeFalsy();
@@ -1063,7 +1063,7 @@ repos:
       runMonke({
         args: ["chop", fixture.session, "--force"],
         cwd: fixture.root,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/relevant-corrupt\.yml/u);
 
@@ -1076,7 +1076,7 @@ repos:
     const sandbox = makeTempDir("chop-selected-relevant-corrupt-session");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "root\n",
+      "README.md": "root\n"
     });
     runMonke({ args: ["spawn", "invoking"], cwd: root, monkeHome: home });
     runMonke({ args: ["spawn", "selected"], cwd: root, monkeHome: home });
@@ -1100,7 +1100,7 @@ repos:
       runMonke({
         args: ["chop", "selected", "--force"],
         cwd: invokingWorktree,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/relevant-selected-corrupt\.yml/u);
 
@@ -1128,7 +1128,7 @@ repos:
       runMonke({
         args: ["chop", "--force"],
         cwd: fixture.rootWorktree,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/relevant-dependency-corrupt\.yml/u);
 
@@ -1142,7 +1142,7 @@ repos:
     const state = loadSessionState(fixture.home, fixture.root, fixture.session);
     saveSessionState(fixture.home, {
       ...state,
-      repos: [state.repos[1], state.repos[0], state.repos[0]],
+      repos: [state.repos[1], state.repos[0], state.repos[0]]
     });
 
     let thrown: unknown;
@@ -1150,7 +1150,7 @@ repos:
       runMonke({
         args: ["chop", fixture.session, "--force"],
         cwd: fixture.root,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     } catch (error) {
       thrown = error;
@@ -1174,12 +1174,12 @@ repos:
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `cleanupCommand: 'printf "current-dep\\n" >> "${cleanupLog}"'
 apps: {}
-`,
+`
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "monke.yml": `cleanupCommand: 'printf "current-root\\n" >> "${cleanupLog}"'
 apps: {}
-`,
+`
     });
     saveSessionState(home, {
       repos: [
@@ -1187,24 +1187,24 @@ apps: {}
           assignedPorts: [],
           cleanupCommand: `printf "saved-dep\\n" >> "${cleanupLog}"`,
           sourceRoot: depRoot,
-          worktreePath: getExpectedWorktreePath(home, depRoot, "dead"),
+          worktreePath: getExpectedWorktreePath(home, depRoot, "dead")
         },
         {
           assignedPorts: [],
           cleanupCommand: `printf "saved-root\\n" >> "${cleanupLog}"`,
           sourceRoot: root,
-          worktreePath: getExpectedWorktreePath(home, root, "dead"),
-        },
+          worktreePath: getExpectedWorktreePath(home, root, "dead")
+        }
       ],
       rootSourceRoot: root,
       session: "dead",
-      version: 1,
+      version: 1
     });
 
     runMonke({
       args: ["cleanup"],
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(readFileSync(cleanupLog, "utf-8")).toBe("saved-root\nsaved-dep\n");
@@ -1217,7 +1217,7 @@ apps: {}
     const result = runMonke({
       args: ["chop"],
       cwd: fixture.worktreePath,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(existsSync(fixture.worktreePath)).toBeFalsy();
@@ -1243,7 +1243,7 @@ apps: {}
       runMonke({
         args: ["chop", target],
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
 
       expect(existsSync(fixture.worktreePath)).toBeFalsy();
@@ -1260,7 +1260,7 @@ apps: {}
     runMonke({
       args: ["chop", aliasPath],
       cwd: fixture.sourceRoot,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(existsSync(fixture.worktreePath)).toBeFalsy();
@@ -1276,7 +1276,7 @@ apps: {}
       runMonke({
         args: ["chop", "feature", "--force"],
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/matches multiple registered worktrees/u);
 
@@ -1293,7 +1293,7 @@ apps: {}
     runMonke({
       args: ["chop", "orphan"],
       cwd: fixture.sourceRoot,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(existsSync(nestedPath)).toBeFalsy();
@@ -1313,7 +1313,7 @@ apps: {}
         args: ["chop", "feature"],
         binDirectory,
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/locked.*still in use/u);
 
@@ -1331,7 +1331,7 @@ apps: {}
     runMonke({
       args: ["chop", fixture.worktreePath],
       cwd: fixture.sourceRoot,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     const registrations = git(fixture.sourceRoot, ["worktree", "list", "--porcelain"]);
@@ -1351,7 +1351,7 @@ apps: {}
       runMonke({
         args: ["chop", aliasPath],
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/target not found/u);
 
@@ -1367,7 +1367,7 @@ apps: {}
       "lock",
       "--reason",
       "still reserved",
-      fixture.worktreePath,
+      fixture.worktreePath
     ]);
     rmSync(fixture.worktreePath, { recursive: true });
 
@@ -1375,7 +1375,7 @@ apps: {}
       runMonke({
         args: ["chop", fixture.worktreePath, "--force"],
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/locked.*still reserved/u);
 
@@ -1392,8 +1392,8 @@ apps: {}
       afterCommand: {
         args: "submodule status --recursive",
         cwd: fixture.worktreePath,
-        script: `printf 'raced\\n' > ${JSON.stringify(path.join(fixture.worktreePath, "raced.txt"))}`,
-      },
+        script: `printf 'raced\\n' > ${JSON.stringify(path.join(fixture.worktreePath, "raced.txt"))}`
+      }
     });
 
     expect(() => {
@@ -1401,7 +1401,7 @@ apps: {}
         args: ["chop", "feature"],
         binDirectory,
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/dirty worktree/u);
 
@@ -1417,8 +1417,8 @@ apps: {}
       afterCommand: {
         args: "rev-parse --abbrev-ref HEAD",
         cwd: fixture.worktreePath,
-        script: `"$MONKE_TEST_REAL_GIT" -C ${JSON.stringify(fixture.worktreePath)} switch -c raced >/dev/null`,
-      },
+        script: `"$MONKE_TEST_REAL_GIT" -C ${JSON.stringify(fixture.worktreePath)} switch -c raced >/dev/null`
+      }
     });
 
     expect(() => {
@@ -1426,7 +1426,7 @@ apps: {}
         args: ["chop", "feature", "--force"],
         binDirectory,
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/branch\/HEAD changed from feature to raced/u);
 
@@ -1444,7 +1444,7 @@ apps: {}
         runMonke({
           args: ["chop", "feature"],
           cwd: fixture.sourceRoot,
-          monkeHome: fixture.home,
+          monkeHome: fixture.home
         });
       }).toThrow(/dirty worktree/u);
       expect(existsSync(fixture.worktreePath)).toBeTruthy();
@@ -1460,7 +1460,7 @@ apps: {}
       runMonke({
         args: ["chop", "feature", "--force"],
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
 
       expect(existsSync(fixture.worktreePath)).toBeFalsy();
@@ -1475,7 +1475,7 @@ apps: {}
     const gitLogPath = installGitShim(binDirectory);
     rmSync(fixture.worktreePath, { recursive: true });
     createRepo(fixture.worktreePath, {
-      "README.md": "unrelated\n",
+      "README.md": "unrelated\n"
     });
 
     expect(() => {
@@ -1483,7 +1483,7 @@ apps: {}
         args: ["chop", "feature", "--force"],
         binDirectory,
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/belongs to .* expected/u);
 
@@ -1497,10 +1497,10 @@ apps: {}
       const sandbox = makeTempDir(`chop-submodule-${String(force)}`);
       const home = path.join(sandbox, "home");
       const submoduleRoot = createRepo(path.join(sandbox, "submodule"), {
-        "README.md": "submodule\n",
+        "README.md": "submodule\n"
       });
       const sourceRoot = createRepo(path.join(sandbox, "root"), {
-        "README.md": "source\n",
+        "README.md": "source\n"
       });
       addSubmodule(sourceRoot, submoduleRoot);
       const worktreePath = path.join(sandbox, "ordinary");
@@ -1514,7 +1514,7 @@ apps: {}
       runMonke({
         args: ["chop", "feature", ...(force ? ["--force"] : [])],
         cwd: sourceRoot,
-        monkeHome: home,
+        monkeHome: home
       });
 
       expect(existsSync(worktreePath)).toBeFalsy();
@@ -1528,10 +1528,10 @@ apps: {}
       const sandbox = makeTempDir(`chop-submodule-ignore-${ignore}`);
       const home = path.join(sandbox, "home");
       const submoduleRoot = createRepo(path.join(sandbox, "submodule"), {
-        "README.md": "submodule\n",
+        "README.md": "submodule\n"
       });
       const sourceRoot = createRepo(path.join(sandbox, "root"), {
-        "README.md": "source\n",
+        "README.md": "source\n"
       });
       addSubmodule(sourceRoot, submoduleRoot);
       git(sourceRoot, ["config", "-f", ".gitmodules", "submodule.vendor/submodule.ignore", ignore]);
@@ -1546,7 +1546,7 @@ apps: {}
         runMonke({
           args: ["chop", "feature"],
           cwd: sourceRoot,
-          monkeHome: home,
+          monkeHome: home
         });
       }).toThrow(/dirty worktree/u);
 
@@ -1563,10 +1563,10 @@ apps: {}
     const binDirectory = path.join(sandbox, "bin");
     mkdirSync(binDirectory);
     const submoduleRoot = createRepo(path.join(sandbox, "submodule"), {
-      "README.md": "submodule\n",
+      "README.md": "submodule\n"
     });
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "source\n",
+      "README.md": "source\n"
     });
     addSubmodule(sourceRoot, submoduleRoot);
     const worktreePath = path.join(sandbox, "ordinary");
@@ -1577,8 +1577,8 @@ apps: {}
       afterCommand: {
         args: "submodule status --recursive",
         cwd: worktreePath,
-        script: `printf 'changed during removal\\n' > ${JSON.stringify(path.join(worktreePath, "raced.txt"))}`,
-      },
+        script: `printf 'changed during removal\\n' > ${JSON.stringify(path.join(worktreePath, "raced.txt"))}`
+      }
     });
 
     expect(() => {
@@ -1586,7 +1586,7 @@ apps: {}
         args: ["chop", "feature"],
         binDirectory,
         cwd: sourceRoot,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/dirty worktree/u);
 
@@ -1598,10 +1598,10 @@ apps: {}
     const sandbox = makeTempDir("chop-session-submodule");
     const home = path.join(sandbox, "home");
     const submoduleRoot = createRepo(path.join(sandbox, "submodule"), {
-      "README.md": "submodule\n",
+      "README.md": "submodule\n"
     });
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "source\n",
+      "README.md": "source\n"
     });
     addSubmodule(sourceRoot, submoduleRoot);
     runMonke({ args: ["spawn", "banana"], cwd: sourceRoot, monkeHome: home });
@@ -1611,7 +1611,7 @@ apps: {}
     runMonke({
       args: ["chop", "banana"],
       cwd: sourceRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(existsSync(worktreePath)).toBeFalsy();
@@ -1625,10 +1625,10 @@ apps: {}
     const binDirectory = path.join(sandbox, "bin");
     mkdirSync(binDirectory);
     const submoduleRoot = createRepo(path.join(sandbox, "submodule"), {
-      "README.md": "submodule\n",
+      "README.md": "submodule\n"
     });
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "source\n",
+      "README.md": "source\n"
     });
     addSubmodule(sourceRoot, submoduleRoot);
     runMonke({ args: ["spawn", "banana"], cwd: sourceRoot, monkeHome: home });
@@ -1638,8 +1638,8 @@ apps: {}
       afterCommand: {
         args: "submodule status --recursive",
         cwd: worktreePath,
-        script: `printf 'changed during removal\\n' > ${JSON.stringify(path.join(worktreePath, "raced.txt"))}`,
-      },
+        script: `printf 'changed during removal\\n' > ${JSON.stringify(path.join(worktreePath, "raced.txt"))}`
+      }
     });
 
     expect(() => {
@@ -1647,7 +1647,7 @@ apps: {}
         args: ["chop", "banana"],
         binDirectory,
         cwd: sourceRoot,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/dirty worktree/u);
 
@@ -1659,14 +1659,14 @@ apps: {}
   test("removes a multi-repo Session containing an initialized submodule", () => {
     const fixture = createMultiRepoSessionFixture("chop-multi-session-submodule");
     const submoduleRoot = createRepo(path.join(fixture.sandbox, "submodule"), {
-      "README.md": "submodule\n",
+      "README.md": "submodule\n"
     });
     addSubmodule(fixture.depWorktree, submoduleRoot);
 
     runMonke({
       args: ["chop", fixture.session],
       cwd: fixture.root,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(existsSync(fixture.depWorktree)).toBeFalsy();
@@ -1684,7 +1684,7 @@ apps: {}
     const sandbox = makeTempDir("chop-protected-targets");
     const home = path.join(sandbox, "home");
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "source\n",
+      "README.md": "source\n"
     });
     git(sourceRoot, ["branch", "branch-only"]);
 
@@ -1702,14 +1702,14 @@ apps: {}
 
   test("does not treat a worktree in Monke's managed area as Ordinary", () => {
     const fixture = createOrdinaryFixture("chop-managed-area", {
-      worktreePath: ({ home }) => path.join(home, "worktrees", "root", "feature"),
+      worktreePath: ({ home }) => path.join(home, "worktrees", "root", "feature")
     });
 
     expect(() => {
       runMonke({
         args: ["chop", "feature", "--force"],
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/managed worktree.*Ordinary/u);
     expect(existsSync(fixture.worktreePath)).toBeTruthy();
@@ -1717,7 +1717,7 @@ apps: {}
 
   test("corrupt managed Session state fails closed", () => {
     const fixture = createOrdinaryFixture("chop-corrupt-managed-state", {
-      worktreePath: ({ home }) => path.join(home, "worktrees", "root", "feature"),
+      worktreePath: ({ home }) => path.join(home, "worktrees", "root", "feature")
     });
     write(fixture.home, "sessions/corrupt.yml", "version: nope\n");
 
@@ -1725,7 +1725,7 @@ apps: {}
       runMonke({
         args: ["chop", "feature", "--force"],
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
     }).toThrow(/corrupt\.yml/u);
 
@@ -1738,7 +1738,7 @@ apps: {}
       const sandbox = makeTempDir(`chop-detached-${selector.replace(" ", "-")}`);
       const home = path.join(sandbox, "home");
       const sourceRoot = createRepo(path.join(sandbox, "root"), {
-        "README.md": "source\n",
+        "README.md": "source\n"
       });
       const worktreePath = path.join(sandbox, "detached");
       git(sourceRoot, ["worktree", "add", "--detach", worktreePath, "HEAD"]);
@@ -1746,7 +1746,7 @@ apps: {}
       runMonke({
         args: selector === "current" ? ["chop"] : ["chop", worktreePath],
         cwd: selector === "current" ? worktreePath : sourceRoot,
-        monkeHome: home,
+        monkeHome: home
       });
 
       expect(existsSync(worktreePath)).toBeFalsy();
@@ -1757,10 +1757,10 @@ apps: {}
     const sandbox = makeTempDir("chop-unrelated-target");
     const home = path.join(sandbox, "home");
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "source\n",
+      "README.md": "source\n"
     });
     const otherRoot = createRepo(path.join(sandbox, "other"), {
-      "README.md": "other\n",
+      "README.md": "other\n"
     });
     const otherWorktree = path.join(sandbox, "other-worktree");
     git(otherRoot, ["branch", "other-feature"]);
@@ -1770,7 +1770,7 @@ apps: {}
       runMonke({
         args: ["chop", otherWorktree],
         cwd: sourceRoot,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/No registered worktree in/u);
     expect(existsSync(otherWorktree)).toBeTruthy();
@@ -1782,15 +1782,15 @@ apps: {}
       const fixture = createOrdinaryFixture(`chop-ignored-${String(force)}`, {
         files: {
           ".gitignore": "ignored/\n",
-          "README.md": "source\n",
-        },
+          "README.md": "source\n"
+        }
       });
       write(fixture.worktreePath, "ignored/artifact.txt", "generated\n");
 
       runMonke({
         args: ["chop", "feature", ...(force ? ["--force"] : [])],
         cwd: fixture.sourceRoot,
-        monkeHome: fixture.home,
+        monkeHome: fixture.home
       });
 
       expect(existsSync(fixture.worktreePath)).toBeFalsy();
@@ -1805,7 +1805,7 @@ apps: {}
       const home = path.join(sandbox, "home");
       const sourceRoot = createRepo(path.join(sandbox, "root"), {
         ".gitignore": "ignored/\n",
-        "README.md": "source\n",
+        "README.md": "source\n"
       });
       runMonke({ args: ["spawn", "banana"], cwd: sourceRoot, monkeHome: home });
       const worktreePath = getExpectedWorktreePath(home, sourceRoot, "banana");
@@ -1814,7 +1814,7 @@ apps: {}
       runMonke({
         args: ["chop", "banana", ...(force ? ["--force"] : [])],
         cwd: sourceRoot,
-        monkeHome: home,
+        monkeHome: home
       });
 
       expect(existsSync(worktreePath)).toBeFalsy();
@@ -1831,9 +1831,9 @@ apps: {}
       args: ["chop"],
       cwd: fixture.worktreePath,
       extraEnv: {
-        [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath,
+        [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath
       },
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(readFileSync(directivePath, "utf-8")).toBe(fixture.sourceRoot);
@@ -1845,8 +1845,8 @@ apps: {}
     const fixture = createOrdinaryFixture("chop-no-session-state", {
       files: {
         "README.md": "source\n",
-        "monke.yml": "cleanupCommand: 'touch cleanup-ran'\n",
-      },
+        "monke.yml": "cleanupCommand: 'touch cleanup-ran'\n"
+      }
     });
     const statePath = path.join(fixture.home, "sessions", "sentinel.yml");
     write(fixture.home, "sessions/sentinel.yml", "untouched\n");
@@ -1854,7 +1854,7 @@ apps: {}
     runMonke({
       args: ["chop", "feature"],
       cwd: fixture.sourceRoot,
-      monkeHome: fixture.home,
+      monkeHome: fixture.home
     });
 
     expect(readFileSync(statePath, "utf-8")).toBe("untouched\n");

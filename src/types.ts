@@ -146,5 +146,5 @@ export type {
   ResourceCommandState,
   ResourceValueState,
   SessionRepoState,
-  SessionState,
+  SessionState
 } from "./state-schema.ts";

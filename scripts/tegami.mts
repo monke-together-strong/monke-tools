@@ -7,21 +7,21 @@ const releaseConfig = tegami({
     client: "bun",
     trustedPublish: {
       provider: "github",
-      workflow: "publish.yml",
+      workflow: "publish.yml"
     },
-    updateLockFile: true,
+    updateLockFile: true
   },
   packages: {
-    "@monke-together-strong/oxc-config": {},
+    "@monke-together-strong/oxc-config": {}
   },
   plugins: [
     github({
       repo: "monke-together-strong/monke-tools",
       versionPr: {
-        base: "main",
-      },
-    }),
-  ],
+        base: "main"
+      }
+    })
+  ]
 });
 
 await runCli(releaseConfig);

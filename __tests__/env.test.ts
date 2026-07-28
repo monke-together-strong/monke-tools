@@ -26,7 +26,7 @@ IGNORED=keep
       new Map([
         ["PORT", 11_000],
         ["DATABASE_URL", 11_001],
-        ["API_URL", 11_002],
+        ["API_URL", 11_002]
       ])
     );
 

@@ -9,7 +9,7 @@ import {
   getSessionStateFilePath,
   listSessionStatesRelevantToWorktrees,
   loadSessionState,
-  saveSessionState,
+  saveSessionState
 } from "../src/registry.ts";
 import type { RepoConfig, RepoReservation } from "../src/types.ts";
 import { makeTempDir, write } from "./helpers.ts";
@@ -131,7 +131,7 @@ repos:
         repos: "wrong",
         rootSourceRoot: sourceRoot,
         session: "banana",
-        version: 1,
+        version: 1
       });
     }).toThrow(/Invalid .*sessions.*repos/su);
   });
@@ -171,7 +171,7 @@ size: 1000
 typo: true
 `,
       expected: /typo/u,
-      name: "unknown keys",
+      name: "unknown keys"
     },
     {
       contents: (sourceRoot: string) =>
@@ -181,8 +181,8 @@ blockStart: 10000
 size: 1000
 `,
       expected: /version/u,
-      name: "unknown future versions",
-    },
+      name: "unknown future versions"
+    }
   ])("getOrCreateReservation rejects $name", ({ contents, expected }) => {
     const sandbox = makeTempDir("registry-reservation-versioning");
     const home = path.join(sandbox, "home");
@@ -207,7 +207,7 @@ size: 1000
         return new Response("ok");
       },
       hostname: "127.0.0.1",
-      port: 0,
+      port: 0
     });
     const occupiedPort = listener.port;
     if (occupiedPort === undefined) {
@@ -223,7 +223,7 @@ size: 1000
         repoConfig,
         reservation,
         rootSourceRoot: repoConfig.sourceRoot,
-        session: "swing",
+        session: "swing"
       });
 
       expect(assignments.get("API_PORT")).toBe(occupiedPort + 1);
@@ -244,7 +244,7 @@ size: 1000
       repoConfig,
       reservation,
       rootSourceRoot: repoConfig.sourceRoot,
-      session: "swing",
+      session: "swing"
     });
 
     expect(assignments.get("API_PORT")).toBe(10_001);
@@ -278,19 +278,19 @@ size: 1000
       repoConfig,
       reservation,
       rootSourceRoot: sourceRoot,
-      session: "one",
+      session: "one"
     });
     saveSessionState(home, {
       repos: [
         {
           assignedPorts: [{ key: "API_PORT", value: firstSession.get("API_PORT") ?? -1 }],
           sourceRoot,
-          worktreePath: path.join(sandbox, "one"),
-        },
+          worktreePath: path.join(sandbox, "one")
+        }
       ],
       rootSourceRoot: sourceRoot,
       session: "one",
-      version: 1,
+      version: 1
     });
     const secondSession = allocateLocalPorts({
       baselinePorts: new Set(),
@@ -299,7 +299,7 @@ size: 1000
       repoConfig,
       reservation,
       rootSourceRoot: sourceRoot,
-      session: "two",
+      session: "two"
     });
 
     expect(firstSession.get("API_PORT")).toBe(10_000);
@@ -320,7 +320,7 @@ function makeRepoConfig(sourceRoot: string, localPortOrder: string[]): RepoConfi
     resourceCommandsInOrder: [],
     resourceValuesInOrder: [],
     seedPaths: [],
-    sourceRoot,
+    sourceRoot
   };
 }
 
@@ -329,7 +329,7 @@ function makeReservation(sourceRoot: string, blockStart: number, size: number): 
     blockStart,
     size,
     sourceRoot,
-    version: 1,
+    version: 1
   };
 }
 

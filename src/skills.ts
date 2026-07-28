@@ -8,7 +8,7 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
+  writeFileSync
 } from "node:fs";
 import path from "node:path";
 
@@ -20,7 +20,7 @@ import type {
   BuiltInSkillInstallTargetKind,
   SkillInstallPreference,
   SkillInstallTargetKind,
-  SkillInstallTargetPreference,
+  SkillInstallTargetPreference
 } from "./global-config.ts";
 import { createLogger } from "./logger.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
@@ -34,7 +34,7 @@ const FLAT_SKILL_MANIFEST = ".monke-tools-flat-skills.json";
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
   claude: path.join(".claude", "skills"),
   codex: path.join(".codex", "skills"),
-  cursor: path.join(".cursor", "skills"),
+  cursor: path.join(".cursor", "skills")
 };
 type SkillInstallLayout = "namespace" | "flat";
 // Flip Claude back to "namespace" to restore the original symlink layout.
@@ -43,7 +43,7 @@ const TARGET_OPTIONS: { kind: SkillInstallTargetKind; label: string; selector: s
   { kind: "codex", label: "Codex", selector: "1" },
   { kind: "claude", label: "Claude", selector: "2" },
   { kind: "cursor", label: "Cursor", selector: "3" },
-  { kind: "custom", label: "Custom", selector: "4" },
+  { kind: "custom", label: "Custom", selector: "4" }
 ];
 
 /** A Skill install target resolved to an Agent skill root on disk. */
@@ -66,14 +66,14 @@ export function resolveSkillInstallTargets(options: {
       target.kind === "custom"
         ? normalizeCustomSkillRoot({
             homeDirectory: options.homeDirectory,
-            input: target.path,
+            input: target.path
           })
         : path.join(options.homeDirectory, BUILT_IN_TARGET_ROOTS[target.kind]);
 
     return {
       agentSkillRoot,
       kind: target.kind,
-      namespacePath: path.join(agentSkillRoot, SKILL_NAMESPACE),
+      namespacePath: path.join(agentSkillRoot, SKILL_NAMESPACE)
     };
   });
 }
@@ -99,7 +99,7 @@ export function runSkillsConfigure(runtime: Runtime): void {
   );
   saveGlobalMonkeConfig(monkeHome, {
     ...config,
-    skillInstallPreference: nextPreference,
+    skillInstallPreference: nextPreference
   });
 
   reconcileSkillNamespaces({
@@ -109,7 +109,7 @@ export function runSkillsConfigure(runtime: Runtime): void {
     sourceCheckout,
     writeMessage(message) {
       runtime.writeStderr(message);
-    },
+    }
   });
   createLogger(runtime).success("Configured monke-tools skills");
 }
@@ -122,7 +122,7 @@ export function runLocalInstallSkills(runtime: Runtime, sourceCheckout: string):
   const installedSourceCheckout = path.resolve(sourceCheckout);
   const nextConfig = {
     ...config,
-    installedSourceCheckout,
+    installedSourceCheckout
   };
 
   saveGlobalMonkeConfig(monkeHome, nextConfig);
@@ -139,7 +139,7 @@ export function runLocalInstallSkills(runtime: Runtime, sourceCheckout: string):
     sourceCheckout: installedSourceCheckout,
     writeMessage(message) {
       runtime.writeStderr(message);
-    },
+    }
   });
   createLogger(runtime).success("Refreshed monke-tools skills");
 }
@@ -158,11 +158,11 @@ export function reconcileSkillNamespaces(options: {
       ? []
       : resolveSkillInstallTargets({
           homeDirectory: options.homeDirectory,
-          preference: options.previousPreference,
+          preference: options.previousPreference
         });
   const nextTargets = resolveSkillInstallTargets({
     homeDirectory: options.homeDirectory,
-    preference: options.nextPreference,
+    preference: options.nextPreference
   });
   const nextKeys = new Set(nextTargets.map(targetKey));
   const failures: string[] = [];
@@ -247,8 +247,8 @@ function promptForSkillInstallPreference(
       path: resolveCustomSkillRootAnswer({
         answer: customAnswer,
         homeDirectory,
-        previousPath: previousCustomPath,
-      }),
+        previousPath: previousCustomPath
+      })
     });
   }
 
@@ -287,7 +287,7 @@ function resolveCustomSkillRootAnswer(options: {
 
   return normalizeCustomSkillRoot({
     homeDirectory: options.homeDirectory,
-    input: options.answer,
+    input: options.answer
   });
 }
 
@@ -438,7 +438,7 @@ function removeManagedNamespace(namespacePath: string): void {
 
 const FlatSkillLinkSchema = z.strictObject({
   name: z.string().min(1),
-  sourcePath: z.string().min(1),
+  sourcePath: z.string().min(1)
 });
 const FlatSkillManifestSchema = z.strictObject({
   links: z.array(FlatSkillLinkSchema),
@@ -447,11 +447,11 @@ const FlatSkillManifestSchema = z.strictObject({
     .array(
       z.strictObject({
         sourcePath: z.string().min(1),
-        targetPath: z.string().min(1),
+        targetPath: z.string().min(1)
       })
     )
     .optional(),
-  version: z.literal(1),
+  version: z.literal(1)
 });
 
 type FlatSkillLink = z.output<typeof FlatSkillLinkSchema>;
@@ -503,8 +503,8 @@ function discoverFlatSupportingLinks(
   return [
     {
       sourcePath: referenceSourceTree,
-      targetPath: path.resolve(target.agentSkillRoot, "..", "references"),
-    },
+      targetPath: path.resolve(target.agentSkillRoot, "..", "references")
+    }
   ];
 }
 
@@ -617,7 +617,7 @@ function writeFlatManifest(
     links,
     managedBy: "monke-tools",
     version: 1,
-    ...(supportingLinks.length > 0 ? { supportingLinks } : {}),
+    ...(supportingLinks.length > 0 ? { supportingLinks } : {})
   };
   const manifestPath = flatManifestPath(target);
   const parsed = FlatSkillManifestSchema.parse(manifest);

@@ -19,7 +19,7 @@ export function parseOwnedYamlText<T extends z.ZodType>(
   const document = parseDocument(text, {
     merge: false,
     strict: true,
-    uniqueKeys: true,
+    uniqueKeys: true
   });
 
   if (document.errors.length > 0) {

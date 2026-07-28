@@ -18,42 +18,42 @@ describe("merged worktree cleanup", () => {
     {
       name: "dirty tracked files",
       patch: { statusLines: [" M app.ts"] },
-      reason: "worktree has 1 dirty/untracked status line(s)",
+      reason: "worktree has 1 dirty/untracked status line(s)"
     },
     {
       name: "untracked files",
       patch: { statusLines: ["?? scratch.txt"] },
-      reason: "worktree has 1 dirty/untracked status line(s)",
+      reason: "worktree has 1 dirty/untracked status line(s)"
     },
     {
       name: "local commit drift",
       patch: { localHead: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
-      reason: "local HEAD bbbbbbbb differs from merged PR head aaaaaaaa",
+      reason: "local HEAD bbbbbbbb differs from merged PR head aaaaaaaa"
     },
     {
       name: "branch mismatch",
       patch: { branch: "feature/other" },
-      reason: "worktree branch feature/other does not match session feature/done",
+      reason: "worktree branch feature/other does not match session feature/done"
     },
     {
       name: "detached worktrees",
       patch: { branch: null },
-      reason: "worktree is detached",
+      reason: "worktree is detached"
     },
     {
       name: "wrong repo paths",
       patch: { sameGitRepository: false },
-      reason: "session worktree path belongs to a different Git repository",
+      reason: "session worktree path belongs to a different Git repository"
     },
     {
       name: "missing PRs",
       patch: { matchingMergedPrs: [] },
-      reason: "no exact merged PR match for session branch and default branch",
+      reason: "no exact merged PR match for session branch and default branch"
     },
     {
       name: "multiple matching PRs",
       patch: { matchingMergedPrs: [mergedPr(1), mergedPr(2)] },
-      reason: "2 merged PR matches; branch history is ambiguous",
+      reason: "2 merged PR matches; branch history is ambiguous"
     },
     {
       name: "forked PRs",
@@ -63,37 +63,37 @@ describe("merged worktree cleanup", () => {
             ...mergedPr(1),
             headRepository: { name: "repo" },
             headRepositoryOwner: { login: "fork-owner" },
-            isCrossRepository: true,
-          },
-        ],
+            isCrossRepository: true
+          }
+        ]
       },
-      reason: "merged PR head repository does not match source repository",
+      reason: "merged PR head repository does not match source repository"
     },
     {
       name: "missing worktree paths",
       patch: { worktreeExists: false },
-      reason: "session worktree path is missing",
+      reason: "session worktree path is missing"
     },
     {
       name: "non-worktree paths",
       patch: { worktreeIsGitRoot: false },
-      reason: "session worktree path is not a Git worktree root",
+      reason: "session worktree path is not a Git worktree root"
     },
     {
       name: "source checkout paths",
       patch: { isSourceCheckout: true },
-      reason: "session worktree path points at the source checkout",
+      reason: "session worktree path points at the source checkout"
     },
     {
       name: "GitHub lookup failures",
       patch: { lookupError: "GitHub merged PR lookup failed: auth expired" },
-      reason: "GitHub merged PR lookup failed: auth expired",
+      reason: "GitHub merged PR lookup failed: auth expired"
     },
     {
       name: "failed status checks",
       patch: { statusError: "unable to read normal Git status: index corrupt" },
-      reason: "unable to read normal Git status: index corrupt",
-    },
+      reason: "unable to read normal Git status: index corrupt"
+    }
   ])("decideMergedWorktreeCleanup skips $name with an explicit reason", ({ patch, reason }) => {
     const decision = decideMergedWorktreeCleanup(baseSnapshot(patch));
 
@@ -118,7 +118,7 @@ describe("merged worktree cleanup", () => {
       worktreeExists: true,
       worktreeIsGitRoot: true,
       worktreePath: "/worktree",
-      ...patch,
+      ...patch
     };
   }
 
@@ -132,7 +132,7 @@ describe("merged worktree cleanup", () => {
       isCrossRepository: false,
       mergedAt: "2026-06-16T00:00:00Z",
       number,
-      url: `https://github.com/owner/repo/pull/${number}`,
+      url: `https://github.com/owner/repo/pull/${number}`
     };
   }
 });

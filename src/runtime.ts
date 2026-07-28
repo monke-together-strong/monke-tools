@@ -11,7 +11,7 @@ import {
   readSync,
   rmSync,
   statSync,
-  writeFileSync,
+  writeFileSync
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -26,7 +26,7 @@ const GLOBAL_LOCK_TIMEOUT_MS = 5000;
 const STALE_LOCK_AGE_MS = 60_000;
 const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
-  pid: z.unknown().optional(),
+  pid: z.unknown().optional()
 });
 const LockPidSchema = z.number().int().positive();
 const LockTimestampSchema = z.number();
@@ -108,7 +108,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     },
     writeStdout(text: string): void {
       writeStdout(text);
-    },
+    }
   };
 }
 
@@ -127,7 +127,7 @@ function executeCommand(
     encoding: "utf-8",
     env: childEnv,
     input: options?.stdin,
-    timeout: options?.timeoutSeconds === undefined ? undefined : options.timeoutSeconds * 1000,
+    timeout: options?.timeoutSeconds === undefined ? undefined : options.timeoutSeconds * 1000
   });
 
   if (result.error) {
@@ -151,7 +151,7 @@ function handleSpawnError(
       exitCode: -1,
       stderr: result.stderr ?? "",
       stdout: result.stdout ?? "",
-      timedOut: true,
+      timedOut: true
     };
   }
   throw new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`);
@@ -305,8 +305,8 @@ export function isPortAvailable(port: number): boolean {
         },
         open() {
           // A successful open means the port is available.
-        },
-      },
+        }
+      }
     });
     return true;
   } catch {

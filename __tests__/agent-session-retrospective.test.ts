@@ -7,12 +7,12 @@ import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import {
   buildBundles,
   decideEligibility,
-  runCollect,
+  runCollect
 } from "../skills/internal/agent-session-retrospective/scripts/lib/collect.ts";
 import type { EligibleSession } from "../skills/internal/agent-session-retrospective/scripts/lib/collect.ts";
 import {
   parseClaudeSession,
-  parseCodexSession,
+  parseCodexSession
 } from "../skills/internal/agent-session-retrospective/scripts/lib/collectors.ts";
 import {
   buildReportArtifacts,
@@ -20,18 +20,18 @@ import {
   runCommit,
   validatePrAnalysis,
   validateFindings,
-  validateSynthesis,
+  validateSynthesis
 } from "../skills/internal/agent-session-retrospective/scripts/lib/commit.ts";
 import { summarizeOutput } from "../skills/internal/agent-session-retrospective/scripts/lib/normalize.ts";
 import {
   prManifestPath,
   readPrManifest,
   runPrAggregate,
-  runPrCollect,
+  runPrCollect
 } from "../skills/internal/agent-session-retrospective/scripts/lib/pr-analysis.ts";
 import type {
   CommandRunner,
-  PrAnalysisManifest,
+  PrAnalysisManifest
 } from "../skills/internal/agent-session-retrospective/scripts/lib/pr-analysis.ts";
 import {
   findingsPath,
@@ -39,13 +39,13 @@ import {
   loadFrozenSession,
   readBundle,
   readFindings,
-  saveFrozenSession,
+  saveFrozenSession
 } from "../skills/internal/agent-session-retrospective/scripts/lib/store.ts";
 import type {
   CanonicalSession,
   FrozenSessionRecord,
   RepoBundle,
-  RepoFindings,
+  RepoFindings
 } from "../skills/internal/agent-session-retrospective/scripts/lib/types.ts";
 
 let dir: string;
@@ -63,7 +63,7 @@ function fakeSession(overrides: Partial<CanonicalSession> = {}): CanonicalSessio
     startedAt: "2026-05-26T10:00:00Z",
     touchedRoots: [],
     turns: [{ kind: "user", ref: "t0", text: "hi" }],
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -83,9 +83,9 @@ function bundleWith(refs: string[]): RepoBundle {
         role: "primary",
         sessionHash: "sh",
         sessionId: "s1",
-        turns: refs.map((ref) => ({ kind: "user", ref, text: ref })),
-      },
-    ],
+        turns: refs.map((ref) => ({ kind: "user", ref, text: ref }))
+      }
+    ]
   };
 }
 
@@ -99,7 +99,7 @@ function writeWindow(root: string, runTs = "ts"): void {
         since: "2026-05-18T00:00:00.000Z",
         sinceSource: "first-run-default",
         until: "2026-06-01T00:00:00.000Z",
-        untilSource: "now",
+        untilSource: "now"
       },
       null,
       2
@@ -139,55 +139,55 @@ describe("agent session retrospective", () => {
         {
           payload: { cwd: dir, id: "sess-1" },
           timestamp: "2026-05-26T10:00:00Z",
-          type: "session_meta",
+          type: "session_meta"
         },
         {
           payload: {
             content: [{ text: "duplicate user envelope", type: "input_text" }],
             role: "user",
-            type: "message",
+            type: "message"
           },
           timestamp: "2026-05-26T10:00:00Z",
-          type: "response_item",
+          type: "response_item"
         },
         {
           payload: {
             content: [{ text: "duplicate assistant envelope", type: "output_text" }],
             role: "assistant",
-            type: "message",
+            type: "message"
           },
           timestamp: "2026-05-26T10:00:00Z",
-          type: "response_item",
+          type: "response_item"
         },
         {
           payload: { message: "do the thing", type: "user_message" },
           timestamp: "2026-05-26T10:00:01Z",
-          type: "event_msg",
+          type: "event_msg"
         },
         {
           payload: { message: "on it", type: "agent_message" },
           timestamp: "2026-05-26T10:00:02Z",
-          type: "event_msg",
+          type: "event_msg"
         },
         {
           payload: {
             arguments: '{"cmd":"ls"}',
             call_id: "c1",
             name: "exec_command",
-            type: "function_call",
+            type: "function_call"
           },
           timestamp: "2026-05-26T10:00:03Z",
-          type: "response_item",
+          type: "response_item"
         },
         {
           payload: {
             call_id: "c1",
             output: "Process exited with code 1\nboom",
-            type: "function_call_output",
+            type: "function_call_output"
           },
           timestamp: "2026-05-26T10:00:04Z",
-          type: "response_item",
-        },
+          type: "response_item"
+        }
       ]);
 
       const session = parseCodexSession(filePath);
@@ -195,7 +195,7 @@ describe("agent session retrospective", () => {
       expect(session?.turns.map((turn) => turn.kind)).toStrictEqual([
         "user",
         "assistant",
-        "tool_call",
+        "tool_call"
       ]);
       expect(session?.turns.map((turn) => turn.ref)).toStrictEqual(["t0", "t1", "t2"]);
       expect(session?.rawUserMessages).toStrictEqual(["do the thing"]);
@@ -209,27 +209,27 @@ describe("agent session retrospective", () => {
         {
           payload: { cwd: dir, id: "sess-out-of-order" },
           timestamp: "2026-05-26T10:00:00Z",
-          type: "session_meta",
+          type: "session_meta"
         },
         {
           payload: {
             call_id: "c1",
             output: "premature",
-            type: "function_call_output",
+            type: "function_call_output"
           },
           timestamp: "2026-05-26T10:00:01Z",
-          type: "response_item",
+          type: "response_item"
         },
         {
           payload: {
             arguments: "{}",
             call_id: "c1",
             name: "exec_command",
-            type: "function_call",
+            type: "function_call"
           },
           timestamp: "2026-05-26T10:00:02Z",
-          type: "response_item",
-        },
+          type: "response_item"
+        }
       ]);
 
       const tool = parseCodexSession(filePath)?.turns[0];
@@ -246,41 +246,41 @@ describe("agent session retrospective", () => {
           message: { content: "please fix", role: "user" },
           sessionId: "cs-1",
           timestamp: "2026-05-26T10:00:00Z",
-          type: "user",
+          type: "user"
         },
         {
           message: {
             content: [
               { text: "sure", type: "text" },
-              { id: "tu1", input: { command: "ls" }, name: "Bash", type: "tool_use" },
-            ],
+              { id: "tu1", input: { command: "ls" }, name: "Bash", type: "tool_use" }
+            ]
           },
           sessionId: "cs-1",
           timestamp: "2026-05-26T10:00:01Z",
-          type: "assistant",
+          type: "assistant"
         },
         {
           message: {
-            content: [{ content: "ok", is_error: false, tool_use_id: "tu1", type: "tool_result" }],
+            content: [{ content: "ok", is_error: false, tool_use_id: "tu1", type: "tool_result" }]
           },
           sessionId: "cs-1",
           timestamp: "2026-05-26T10:00:02Z",
-          type: "user",
+          type: "user"
         },
         {
           isMeta: true,
           message: { content: [{ text: "<system-reminder>noise", type: "text" }] },
           sessionId: "cs-1",
           timestamp: "2026-05-26T10:00:03Z",
-          type: "user",
-        },
+          type: "user"
+        }
       ]);
 
       const session = parseClaudeSession(filePath);
       expect(session?.turns.map((turn) => turn.kind)).toStrictEqual([
         "user",
         "assistant",
-        "tool_call",
+        "tool_call"
       ]);
       expect(session?.rawUserMessages).toStrictEqual(["please fix"]);
       const tool = session?.turns[2];
@@ -297,22 +297,22 @@ describe("agent session retrospective", () => {
                 content: "already finished",
                 is_error: false,
                 tool_use_id: "tu1",
-                type: "tool_result",
-              },
-            ],
+                type: "tool_result"
+              }
+            ]
           },
           sessionId: "cs-out-of-order",
           timestamp: "2026-05-26T10:00:00Z",
-          type: "user",
+          type: "user"
         },
         {
           message: {
-            content: [{ id: "tu1", input: {}, name: "Bash", type: "tool_use" }],
+            content: [{ id: "tu1", input: {}, name: "Bash", type: "tool_use" }]
           },
           sessionId: "cs-out-of-order",
           timestamp: "2026-05-26T10:00:01Z",
-          type: "assistant",
-        },
+          type: "assistant"
+        }
       ]);
 
       const tool = parseClaudeSession(filePath)?.turns[0];
@@ -326,37 +326,37 @@ describe("agent session retrospective", () => {
       {
         payload: { cwd: dir, id: "codex-session" },
         timestamp: "2026-05-26T10:00:00Z",
-        type: "session_meta",
+        type: "session_meta"
       },
       {
         payload: { message: "inspect", type: "user_message" },
         timestamp: "2026-05-26T10:00:01Z",
-        type: "event_msg",
+        type: "event_msg"
       },
       {
         payload: { message: "checking", type: "agent_message" },
         timestamp: "2026-05-26T10:00:02Z",
-        type: "event_msg",
+        type: "event_msg"
       },
       {
         payload: {
           arguments: '{"command":"ls"}',
           call_id: "codex-tool",
           name: "shell",
-          type: "function_call",
+          type: "function_call"
         },
         timestamp: "2026-05-26T10:00:03Z",
-        type: "response_item",
+        type: "response_item"
       },
       {
         payload: {
           call_id: "codex-tool",
           output: "ok",
-          type: "function_call_output",
+          type: "function_call_output"
         },
         timestamp: "2026-05-26T10:00:04Z",
-        type: "response_item",
-      },
+        type: "response_item"
+      }
     ]);
     const codexSession = parseCodexSession(codexFile);
 
@@ -366,7 +366,7 @@ describe("agent session retrospective", () => {
         message: { content: "inspect", role: "user" },
         sessionId: "claude-session",
         timestamp: "2026-05-26T10:00:00Z",
-        type: "user",
+        type: "user"
       },
       {
         message: {
@@ -376,13 +376,13 @@ describe("agent session retrospective", () => {
               id: "claude-tool",
               input: { command: "ls" },
               name: "shell",
-              type: "tool_use",
-            },
-          ],
+              type: "tool_use"
+            }
+          ]
         },
         sessionId: "claude-session",
         timestamp: "2026-05-26T10:00:01Z",
-        type: "assistant",
+        type: "assistant"
       },
       {
         message: {
@@ -391,14 +391,14 @@ describe("agent session retrospective", () => {
               content: "ok",
               is_error: false,
               tool_use_id: "claude-tool",
-              type: "tool_result",
-            },
-          ],
+              type: "tool_result"
+            }
+          ]
         },
         sessionId: "claude-session",
         timestamp: "2026-05-26T10:00:02Z",
-        type: "user",
-      },
+        type: "user"
+      }
     ]);
     const claudeSession = parseClaudeSession(claudeFile);
 
@@ -413,7 +413,7 @@ describe("agent session retrospective", () => {
       expect(decideEligibility(fakeSession(), null, base)).toStrictEqual({
         firstNewTurnIndex: 0,
         include: true,
-        priorFindingCount: 0,
+        priorFindingCount: 0
       });
     });
 
@@ -438,24 +438,24 @@ describe("agent session retrospective", () => {
         repoKey: "/repo",
         secondary: [],
         sessionId: "s1",
-        version: 1,
+        version: 1
       };
       expect(decideEligibility(fakeSession(), prior, base)).toStrictEqual({
         include: false,
-        reason: "frozen-unchanged",
+        reason: "frozen-unchanged"
       });
 
       const grown = fakeSession({
         contentHash: "hash-v2",
         turns: [
           { kind: "user", ref: "t0", text: "hi" },
-          { kind: "assistant", ref: "t1", text: "more" },
-        ],
+          { kind: "assistant", ref: "t1", text: "more" }
+        ]
       });
       expect(decideEligibility(grown, prior, base)).toStrictEqual({
         firstNewTurnIndex: 1,
         include: true,
-        priorFindingCount: 1,
+        priorFindingCount: 1
       });
     });
   });
@@ -466,7 +466,7 @@ describe("agent session retrospective", () => {
         firstNewTurnIndex: 0,
         primaryRepo: "/repo",
         priorFindingCount: 0,
-        session: fakeSession({ touchedRoots: ["/other"] }),
+        session: fakeSession({ touchedRoots: ["/other"] })
       };
       const bundles = buildBundles("ts", [eligible], []);
       const byRepo = Object.fromEntries(bundles.map((bundle) => [bundle.repoKey, bundle]));
@@ -484,14 +484,14 @@ describe("agent session retrospective", () => {
         idleMinutes: 0,
         nowMs: Date.parse("2026-06-01T00:00:00Z"),
         retroRoot: root,
-        runTs: "ts",
+        runTs: "ts"
       });
 
       expect(result.window).toStrictEqual({
         since: "2026-05-18T00:00:00.000Z",
         sinceSource: "first-run-default",
         until: "2026-06-01T00:00:00.000Z",
-        untilSource: "now",
+        untilSource: "now"
       });
       expect(
         JSON.parse(readFileSync(path.join(root, "runs", "ts", "window.json"), "utf-8"))
@@ -519,14 +519,14 @@ describe("agent session retrospective", () => {
         idleMinutes: 0,
         nowMs: Date.parse("2026-06-01T00:00:00Z"),
         retroRoot: root,
-        runTs: "ts",
+        runTs: "ts"
       });
 
       expect(result.window).toStrictEqual({
         since: "2026-05-20T12:00:00.000Z",
         sinceSource: "previous-report",
         until: "2026-06-01T00:00:00.000Z",
-        untilSource: "now",
+        untilSource: "now"
       });
     });
   });
@@ -538,15 +538,15 @@ describe("agent session retrospective", () => {
         durableFixProposals: [
           { body: "keeps", citedEpisodeRefs: ["e1"] },
           { body: "drops — e2 was invalid", citedEpisodeRefs: ["e2"] },
-          { body: "drops — no citation", citedEpisodeRefs: [] },
+          { body: "drops — no citation", citedEpisodeRefs: [] }
         ],
         frictionEpisodes: [
           { body: "good", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" },
           { body: "bad ref", citedTurnRefs: ["t9"], id: "e2", sessionId: "s1" },
-          { body: "bad session", citedTurnRefs: ["t0"], id: "e3", sessionId: "ghost" },
+          { body: "bad session", citedTurnRefs: ["t0"], id: "e3", sessionId: "ghost" }
         ],
         repeatedAsks: [],
-        repoKey: "/repo",
+        repoKey: "/repo"
       };
 
       const result = validateFindings(findings, bundle);
@@ -566,7 +566,7 @@ describe("agent session retrospective", () => {
         durableFixProposals: [],
         frictionEpisodes: [{ body: "secondary", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" }],
         repeatedAsks: [],
-        repoKey: "/repo",
+        repoKey: "/repo"
       };
       const result = validateFindings(findings, bundle);
       expect(result.episodes).toHaveLength(0);
@@ -579,7 +579,7 @@ describe("agent session retrospective", () => {
         durableFixProposals: [],
         frictionEpisodes: [],
         repeatedAsks: [{ body: "b", exampleSessionIds: ["s1", "ghost"], label: "x" }],
-        repoKey: "/repo",
+        repoKey: "/repo"
       };
       const result = validateFindings(findings, bundle);
       expect(result.repeatedAsks[0]?.exampleSessionIds).toStrictEqual(["s1"]);
@@ -591,7 +591,7 @@ describe("agent session retrospective", () => {
       expect(parseFixHeader("Target: hook\nConfidence: high\n\nthe actual fix")).toStrictEqual({
         confidence: "high",
         rest: "the actual fix",
-        target: "hook",
+        target: "hook"
       });
     });
   });
@@ -609,19 +609,19 @@ describe("agent session retrospective", () => {
         "",
         "### Resolved or Superseded",
         "",
-        "_No resolved or superseded candidates._",
+        "_No resolved or superseded candidates._"
       ].join("\n");
       expect(validateSynthesis(valid)).toStrictEqual([]);
       expect(validateSynthesis("### Active Actions")).toStrictEqual([
         "Heading `### Skill & Workflow Opportunities` appears 0 time(s), expected 1.",
-        "Heading `### Resolved or Superseded` appears 0 time(s), expected 1.",
+        "Heading `### Resolved or Superseded` appears 0 time(s), expected 1."
       ]);
       expect(
         validateSynthesis(
           [
             "### Resolved or Superseded",
             "### Active Actions",
-            "### Skill & Workflow Opportunities",
+            "### Skill & Workflow Opportunities"
           ].join("\n")
         )
       ).toStrictEqual(["Required synthesis headings are out of order."]);
@@ -642,7 +642,7 @@ describe("agent session retrospective", () => {
         "",
         "### Resolved or Superseded",
         "",
-        "_No resolved or superseded candidates._",
+        "_No resolved or superseded candidates._"
       ].join("\n");
       const artifacts = buildReportArtifacts(
         "ts",
@@ -653,20 +653,20 @@ describe("agent session retrospective", () => {
             validated: {
               dropped: { episodes: 0, fixes: 0 },
               episodes: [
-                { body: "episode body", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" },
+                { body: "episode body", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" }
               ],
               fixes: [
-                { body: "Target: hook\nConfidence: high\nfix body", citedEpisodeRefs: ["e1"] },
+                { body: "Target: hook\nConfidence: high\nfix body", citedEpisodeRefs: ["e1"] }
               ],
               repeatedAsks: [],
-              repoKey: "/repo",
-            },
-          },
+              repoKey: "/repo"
+            }
+          }
         ],
         {
           prAnalysis:
             "## Recurring Corrective Patterns\n\n- Tightened verification before merge.\n\n## PR Analysis Gaps\n\n- `repo#1` — missing diff. Impact: degraded.",
-          prAnalysisWarnings: ["PR `repo#1` omits known final head abc123."],
+          prAnalysisWarnings: ["PR `repo#1` omits known final head abc123."]
         }
       );
       const { report } = artifacts;
@@ -714,7 +714,7 @@ describe("agent session retrospective", () => {
           "",
           "### repo#1",
           "",
-          "body",
+          "body"
         ].join("\n"),
         "utf-8"
       );
@@ -727,13 +727,13 @@ describe("agent session retrospective", () => {
       );
       const findings: RepoFindings = {
         durableFixProposals: [
-          { body: "Target: hook\nConfidence: high\nfix body", citedEpisodeRefs: ["e1"] },
+          { body: "Target: hook\nConfidence: high\nfix body", citedEpisodeRefs: ["e1"] }
         ],
         frictionEpisodes: [
-          { body: "episode body", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" },
+          { body: "episode body", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" }
         ],
         repeatedAsks: [],
-        repoKey: "/repo",
+        repoKey: "/repo"
       };
       writeFileSync(
         path.join(runDir, `${bundle.repoHash}.findings.json`),
@@ -756,7 +756,7 @@ describe("agent session retrospective", () => {
           "",
           "### Resolved or Superseded",
           "",
-          "_No resolved or superseded candidates._",
+          "_No resolved or superseded candidates._"
         ].join("\n"),
         "utf-8"
       );
@@ -765,7 +765,7 @@ describe("agent session retrospective", () => {
         nowIso: "2026-06-01T00:00:00.000Z",
         retroRoot: root,
         runTs,
-        synthesisPath,
+        synthesisPath
       });
       const report = readFileSync(result.reportPath, "utf-8");
       const sessionSources = readFileSync(result.sourcePaths.session, "utf-8");
@@ -801,13 +801,13 @@ describe("agent session retrospective", () => {
       );
       const findings: RepoFindings = {
         durableFixProposals: [
-          { body: "Target: hook\nConfidence: high\nfix body", citedEpisodeRefs: ["e1"] },
+          { body: "Target: hook\nConfidence: high\nfix body", citedEpisodeRefs: ["e1"] }
         ],
         frictionEpisodes: [
-          { body: "episode body", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" },
+          { body: "episode body", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" }
         ],
         repeatedAsks: [],
-        repoKey: "/repo",
+        repoKey: "/repo"
       };
       writeFileSync(
         path.join(runDir, `${bundle.repoHash}.findings.json`),
@@ -819,7 +819,7 @@ describe("agent session retrospective", () => {
         runCommit({
           nowIso: "2026-06-01T00:00:00.000Z",
           retroRoot: root,
-          runTs,
+          runTs
         })
       ).toThrow("commit requires runs/2026-06-01T00-00-00-000Z/pr-analysis.md");
       expect(existsSync(runDir)).toBeTruthy();
@@ -843,7 +843,7 @@ describe("agent session retrospective", () => {
         durableFixProposals: [],
         frictionEpisodes: [],
         repeatedAsks: [],
-        repoKey: "/repo",
+        repoKey: "/repo"
       };
       writeFileSync(
         path.join(runDir, `${bundle.repoHash}.findings.json`),
@@ -858,7 +858,7 @@ describe("agent session retrospective", () => {
           nowIso: "2026-06-01T00:00:00.000Z",
           retroRoot: root,
           runTs,
-          synthesisPath,
+          synthesisPath
         })
       ).toThrow("invalid synthesis");
       expect(existsSync(runDir)).toBeTruthy();
@@ -874,18 +874,18 @@ describe("agent session retrospective", () => {
             dropped: { episodes: 0, fixes: 0 },
             episodes: [
               { body: "a", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" },
-              { body: "b", citedTurnRefs: ["t1"], id: "e2", sessionId: "s1" },
+              { body: "b", citedTurnRefs: ["t1"], id: "e2", sessionId: "s1" }
             ],
             fixes: [
               {
                 body: "Target: skill\nConfidence: medium\nmerge me",
-                citedEpisodeRefs: ["e1", "e2"],
-              },
+                citedEpisodeRefs: ["e1", "e2"]
+              }
             ],
             repeatedAsks: [],
-            repoKey: "/repo",
-          },
-        },
+            repoKey: "/repo"
+          }
+        }
       ]);
       expect(artifacts.sessionSources).toContain("Target: skill; Confidence: medium — merge me");
       expect(artifacts.sessionSources.match(/<summary>evidence<\/summary>/gu)).toHaveLength(1);
@@ -909,8 +909,8 @@ describe("agent session retrospective", () => {
             stderr: "",
             stdout: JSON.stringify([
               { isArchived: false, isPrivate: true, nameWithOwner: "monke-together-strong/alpha" },
-              { isArchived: true, isPrivate: false, nameWithOwner: "monke-together-strong/old" },
-            ]),
+              { isArchived: true, isPrivate: false, nameWithOwner: "monke-together-strong/old" }
+            ])
           };
         }
         if (command === "gh" && args[0] === "pr" && args[1] === "list") {
@@ -925,8 +925,8 @@ describe("agent session retrospective", () => {
                 mergedAt: "2026-05-21T10:00:00Z",
                 number: 7,
                 title: "Tighten setup",
-                url: "https://github.com/monke-together-strong/alpha/pull/7",
-              },
+                url: "https://github.com/monke-together-strong/alpha/pull/7"
+              }
             ],
             "merged:2026-05-22..2026-05-22": [
               {
@@ -934,8 +934,8 @@ describe("agent session retrospective", () => {
                 mergedAt: "2026-05-22T11:00:00Z",
                 number: 9,
                 title: "Missing refs",
-                url: "https://github.com/monke-together-strong/alpha/pull/9",
-              },
+                url: "https://github.com/monke-together-strong/alpha/pull/9"
+              }
             ],
             "merged:2026-05-23..2026-05-23": [
               {
@@ -943,8 +943,8 @@ describe("agent session retrospective", () => {
                 mergedAt: "2026-05-23T11:00:00Z",
                 number: 10,
                 title: "Tighten docs",
-                url: "https://github.com/monke-together-strong/alpha/pull/10",
-              },
+                url: "https://github.com/monke-together-strong/alpha/pull/10"
+              }
             ],
             "merged:2026-05-24..2026-05-24": [
               {
@@ -952,9 +952,9 @@ describe("agent session retrospective", () => {
                 mergedAt: "2026-06-02T11:00:00Z",
                 number: 8,
                 title: "Too late",
-                url: "https://github.com/monke-together-strong/alpha/pull/8",
-              },
-            ],
+                url: "https://github.com/monke-together-strong/alpha/pull/8"
+              }
+            ]
           };
           return { status: 0, stderr: "", stdout: JSON.stringify(byDay[search] ?? []) };
         }
@@ -965,7 +965,7 @@ describe("agent session retrospective", () => {
             const filesByNumber: Record<string, unknown> = {
               "10": { files: [{ path: "docs.md" }] },
               "7": { files: [{ path: "setup.ts" }] },
-              "9": { files: [] },
+              "9": { files: [] }
             };
             return { status: 0, stderr: "", stdout: JSON.stringify(filesByNumber[number]) };
           }
@@ -982,13 +982,13 @@ describe("agent session retrospective", () => {
                 {
                   committedDate: "2026-05-23T09:00:00Z",
                   messageHeadline: "Initial docs",
-                  oid: "dddddddddddddddddddddddddddddddddddddddd",
+                  oid: "dddddddddddddddddddddddddddddddddddddddd"
                 },
                 {
                   committedDate: "2026-05-23T10:30:00Z",
                   messageHeadline: "Add verification",
-                  oid: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-                },
+                  oid: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                }
               ],
               createdAt: "2026-05-23T10:00:00Z",
               headRefName: "feature/docs",
@@ -997,7 +997,7 @@ describe("agent session retrospective", () => {
               mergedAt: "2026-05-23T11:00:00Z",
               number: 10,
               title: "Tighten docs",
-              url: "https://github.com/monke-together-strong/alpha/pull/10",
+              url: "https://github.com/monke-together-strong/alpha/pull/10"
             },
             "7": {
               baseRefName: "main",
@@ -1005,13 +1005,13 @@ describe("agent session retrospective", () => {
                 {
                   committedDate: "2026-05-20T09:00:00Z",
                   messageHeadline: "Initial implementation",
-                  oid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  oid: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 },
                 {
                   committedDate: "2026-05-20T11:00:00Z",
                   messageHeadline: "Add verification",
-                  oid: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                },
+                  oid: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                }
               ],
               createdAt: "2026-05-20T10:00:00Z",
               headRefName: "feature/setup",
@@ -1020,7 +1020,7 @@ describe("agent session retrospective", () => {
               mergedAt: "2026-05-21T10:00:00Z",
               number: 7,
               title: "Tighten setup",
-              url: "https://github.com/monke-together-strong/alpha/pull/7",
+              url: "https://github.com/monke-together-strong/alpha/pull/7"
             },
             "9": {
               commits: [],
@@ -1028,8 +1028,8 @@ describe("agent session retrospective", () => {
               mergedAt: "2026-05-22T11:00:00Z",
               number: 9,
               title: "Missing refs",
-              url: "https://github.com/monke-together-strong/alpha/pull/9",
-            },
+              url: "https://github.com/monke-together-strong/alpha/pull/9"
+            }
           };
           return { status: 0, stderr: "", stdout: JSON.stringify(detailsByNumber[number]) };
         }
@@ -1037,13 +1037,13 @@ describe("agent session retrospective", () => {
           return {
             status: 0,
             stderr: "",
-            stdout: "diff --git a/setup.ts b/setup.ts\n",
+            stdout: "diff --git a/setup.ts b/setup.ts\n"
           };
         }
         return {
           status: 1,
           stderr: `unexpected command: ${command} ${args.join(" ")}`,
-          stdout: "",
+          stdout: ""
         };
       };
 
@@ -1072,24 +1072,24 @@ describe("agent session retrospective", () => {
       expect(analyzedItem.openingSnapshot).toStrictEqual({
         confidence: "inferred",
         reason: "Latest PR commit whose commit date is at or before the PR creation time.",
-        ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       });
       expect(JSON.parse(readFileSync(analyzedItem.workItemPath, "utf-8"))).toMatchObject({
         postOpeningDelta: {
           confidence: "lower",
-          source: "github-pr-diff-fallback",
-        },
+          source: "github-pr-diff-fallback"
+        }
       });
       expect(JSON.parse(readFileSync(missingRefItem.workItemPath, "utf-8"))).toMatchObject({
         postOpeningDelta: {
           confidence: "lower",
-          source: "github-pr-diff-fallback",
-        },
+          source: "github-pr-diff-fallback"
+        }
       });
       expect(secondAnalyzedItem.openingSnapshot).toStrictEqual({
         confidence: "inferred",
         reason: "Latest PR commit whose commit date is at or before the PR creation time.",
-        ref: "dddddddddddddddddddddddddddddddddddddddd",
+        ref: "dddddddddddddddddddddddddddddddddddddddd"
       });
       expect(manifest.gaps).toStrictEqual([]);
 
@@ -1105,7 +1105,7 @@ describe("agent session retrospective", () => {
           "## Ignored Feature Scope",
           "_None._",
           "## Commit Message Reference",
-          "`bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb` Add verification.",
+          "`bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb` Add verification."
         ].join("\n"),
         "utf-8"
       );
@@ -1121,7 +1121,7 @@ describe("agent session retrospective", () => {
           "## Ignored Feature Scope",
           "_None._",
           "## Commit Message Reference",
-          "`eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee` Add verification.",
+          "`eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee` Add verification."
         ].join("\n"),
         "utf-8"
       );
@@ -1148,14 +1148,14 @@ describe("agent session retrospective", () => {
           since: "2026-05-18T00:00:00.000Z",
           sinceSource: "first-run-default",
           until: "2026-06-01T00:00:00.000Z",
-          untilSource: "now",
+          untilSource: "now"
         },
         workItems: [
           {
             analysisPath: "/tmp/work.analysis.md",
             commitShas: [
               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
             ],
             createdAt: "2026-05-20T10:00:00Z",
             finalHeadSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -1165,14 +1165,14 @@ describe("agent session retrospective", () => {
             openingSnapshot: {
               confidence: "inferred",
               reason: "test",
-              ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
             repo: "monke-together-strong/alpha",
             title: "Tighten setup",
             url: "https://github.com/monke-together-strong/alpha/pull/7",
-            workItemPath: "/tmp/work.json",
-          },
-        ],
+            workItemPath: "/tmp/work.json"
+          }
+        ]
       };
 
       const result = validatePrAnalysis(
@@ -1186,7 +1186,7 @@ describe("agent session retrospective", () => {
           "## Corrective Patterns",
           "fix",
           "## Ignored Feature Scope",
-          "none",
+          "none"
         ].join("\n"),
         manifest
       );
@@ -1214,14 +1214,14 @@ describe("agent session retrospective", () => {
           since: "2026-05-18T00:00:00.000Z",
           sinceSource: "first-run-default",
           until: "2026-06-01T00:00:00.000Z",
-          untilSource: "now",
+          untilSource: "now"
         },
         workItems: [
           {
             analysisPath: "/tmp/work-1.analysis.md",
             commitShas: [
               "1111111111111111111111111111111111111111",
-              "2222222222222222222222222222222222222222",
+              "2222222222222222222222222222222222222222"
             ],
             createdAt: "2026-05-20T10:00:00Z",
             finalHeadSha: "2222222222222222222222222222222222222222",
@@ -1230,18 +1230,18 @@ describe("agent session retrospective", () => {
             openingSnapshot: {
               confidence: "inferred",
               reason: "test",
-              ref: "1111111111111111111111111111111111111111",
+              ref: "1111111111111111111111111111111111111111"
             },
             repo: "repo",
             title: "One",
             url: "https://github.com/repo/pull/1",
-            workItemPath: "/tmp/work-1.json",
+            workItemPath: "/tmp/work-1.json"
           },
           {
             analysisPath: "/tmp/work-10.analysis.md",
             commitShas: [
               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
             ],
             createdAt: "2026-05-20T10:00:00Z",
             finalHeadSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -1250,14 +1250,14 @@ describe("agent session retrospective", () => {
             openingSnapshot: {
               confidence: "inferred",
               reason: "test",
-              ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              ref: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             },
             repo: "repo",
             title: "Ten",
             url: "https://github.com/repo/pull/10",
-            workItemPath: "/tmp/work-10.json",
-          },
-        ],
+            workItemPath: "/tmp/work-10.json"
+          }
+        ]
       };
 
       const result = validatePrAnalysis(
@@ -1272,7 +1272,7 @@ describe("agent session retrospective", () => {
           "## Ignored Feature Scope",
           "none",
           "## Commit Message Reference",
-          "`bbbbbbb` Add verification.",
+          "`bbbbbbb` Add verification."
         ].join("\n"),
         manifest
       );
@@ -1297,14 +1297,14 @@ describe("agent session retrospective", () => {
           {
             payload: { cwd: dir, id: "dup-1" },
             timestamp: "2026-05-26T10:00:00Z",
-            type: "session_meta",
-          },
+            type: "session_meta"
+          }
         ];
         for (let i = 0; i < turns; i += 1) {
           lines.push({
             payload: { message: `turn ${i}`, type: "user_message" },
             timestamp: "2026-05-26T10:00:01Z",
-            type: "event_msg",
+            type: "event_msg"
           });
         }
         writeFileSync(
@@ -1321,7 +1321,7 @@ describe("agent session retrospective", () => {
         idleMinutes: 0,
         nowMs: Date.parse("2026-06-01T00:00:00Z"),
         retroRoot: path.join(dir, "store"),
-        runTs: "ts",
+        runTs: "ts"
       });
 
       const sessions = result.bundles.reduce((sum, bundle) => sum + bundle.sessionCount, 0);
@@ -1349,7 +1349,7 @@ describe("agent session retrospective", () => {
         repoKey: "/repo",
         secondary: ["/other"],
         sessionId: "s1",
-        version: 1,
+        version: 1
       };
       saveFrozenSession(dir, record);
       expect(loadFrozenSession(dir, "claude", "s1")).toStrictEqual(record);
@@ -1366,7 +1366,7 @@ describe("agent session retrospective", () => {
         repoKey: "/repo",
         secondary: [],
         sessionId: "valid",
-        version: 1,
+        version: 1
       };
       saveFrozenSession(dir, valid);
       writeFileSync(path.join(dir, "sessions", "invalid.yml"), "version: nope\n", "utf-8");
@@ -1382,7 +1382,7 @@ describe("agent session retrospective", () => {
         JSON.stringify({
           durableFixProposals: [{ body: "fix", future: true }],
           future: true,
-          repoKey: "/repo",
+          repoKey: "/repo"
         }),
         "utf-8"
       );
@@ -1391,7 +1391,7 @@ describe("agent session retrospective", () => {
         durableFixProposals: [{ body: "fix", citedEpisodeRefs: [] }],
         frictionEpisodes: [],
         repeatedAsks: [],
-        repoKey: "/repo",
+        repoKey: "/repo"
       });
     });
 

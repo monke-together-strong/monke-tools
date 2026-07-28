@@ -18,7 +18,7 @@ export function configureCliParser<T extends ConfigurableCliParser>(program: T):
   program.configureOutput({
     writeErr: (message) => {
       errorOutput += message;
-    },
+    }
   });
   program.exitOverride((error) => {
     throw new CommanderError(error.exitCode, error.code, errorOutput.trimEnd() || error.message);

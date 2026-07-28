@@ -14,7 +14,7 @@ import type {
   ResourceCommandConfig,
   ResourceValueConfig,
   ResolvedGraph,
-  Runtime,
+  Runtime
 } from "./types.ts";
 import { parseOwnedYamlText } from "./validation.ts";
 
@@ -40,24 +40,24 @@ const LabelSchema = z
 
 const LocalMappingSchema = z.strictObject({
   env: EnvNameSchema,
-  port: PortNameSchema,
+  port: PortNameSchema
 });
 const AppSchema = z.strictObject({
   envFile: NonEmptyStringSchema.optional(),
   mappings: z.array(LocalMappingSchema, { error: "must be an array" }).default([]),
-  path: NonEmptyStringSchema,
+  path: NonEmptyStringSchema
 });
 const ExternalMappingSchema = z.strictObject({
   app: LabelSchema,
   env: EnvNameSchema,
-  port: PortNameSchema,
+  port: PortNameSchema
 });
 const ExternalRepoSchema = z.strictObject({
   mappings: z
     .array(ExternalMappingSchema, { error: "must be a non-empty array" })
     .min(1, { error: "must be a non-empty array" }),
   path: NonEmptyStringSchema,
-  pathEnv: EnvNameSchema,
+  pathEnv: EnvNameSchema
 });
 const ResourceCommandSchema = z.strictObject({
   outputs: z
@@ -68,25 +68,25 @@ const ResourceCommandSchema = z.strictObject({
     .number({ error: "must be a positive integer" })
     .int({ error: "must be a positive integer" })
     .positive({ error: "must be a positive integer" })
-    .default(DEFAULT_RESOURCE_COMMAND_TIMEOUT_SECONDS),
+    .default(DEFAULT_RESOURCE_COMMAND_TIMEOUT_SECONDS)
 });
 const ResourceValuesSchema = z
   .record(EnvNameSchema, NonEmptyStringSchema)
   .refine((values) => Object.keys(values).length > 0, {
-    error: "must declare at least one value",
+    error: "must declare at least one value"
   });
 const ResourceCommandsSchema = z
   .record(LabelSchema, ResourceCommandSchema)
   .refine((commands) => Object.keys(commands).length > 0, {
-    error: "must declare at least one command",
+    error: "must declare at least one command"
   });
 const ResourcesSchema = z
   .strictObject({
     commands: ResourceCommandsSchema.optional(),
-    values: ResourceValuesSchema.optional(),
+    values: ResourceValuesSchema.optional()
   })
   .refine((resources) => resources.values !== undefined || resources.commands !== undefined, {
-    error: "must contain values or commands",
+    error: "must contain values or commands"
   });
 const RawRepoConfigSchema = z.strictObject({
   apps: z.record(LabelSchema, AppSchema, { error: "must contain an apps section" }),
@@ -94,7 +94,7 @@ const RawRepoConfigSchema = z.strictObject({
   cleanupCommand: NonEmptyStringSchema.optional(),
   external: z.record(LabelSchema, ExternalRepoSchema).optional(),
   resources: ResourcesSchema.optional(),
-  seedPaths: z.array(NonEmptyStringSchema, { error: "must be an array" }).optional(),
+  seedPaths: z.array(NonEmptyStringSchema, { error: "must be an array" }).optional()
 });
 
 type RawRepoConfig = z.output<typeof RawRepoConfigSchema>;
@@ -124,7 +124,7 @@ export function loadResolvedGraph(
   function visit(sourceRoot: string): RepoConfig {
     const config = loadRepoConfig(runtime, sourceRoot, configCache, visiting, {
       pathExists,
-      readRepoConfig,
+      readRepoConfig
     });
 
     if (visited.has(sourceRoot)) {
@@ -157,7 +157,7 @@ export function loadResolvedGraph(
   return {
     reposByRoot: new Map(reposInOrder.map((repo) => [repo.sourceRoot, repo])),
     reposInMaterializationOrder: reposInOrder,
-    rootSourceRoot,
+    rootSourceRoot
   };
 }
 
@@ -280,7 +280,7 @@ function parseRepoConfigObject(
       label,
       localMappings,
       relativeEnvFile,
-      relativePath,
+      relativePath
     };
 
     appsByLabel.set(label, appConfig);
@@ -338,7 +338,7 @@ function parseRepoConfigObject(
         dependencyRoot: absoluteRepoRoot,
         portKey,
         targetApp,
-        targetEnv,
+        targetEnv
       };
       mappings.push(externalMapping);
       externalMappingsInOrder.push(externalMapping);
@@ -349,7 +349,7 @@ function parseRepoConfigObject(
       label,
       mappings,
       pathEnv,
-      relativePath,
+      relativePath
     });
   }
 
@@ -375,7 +375,7 @@ function parseRepoConfigObject(
     resourceCommandsInOrder,
     resourceValuesInOrder,
     seedPaths,
-    sourceRoot,
+    sourceRoot
   };
 }
 
@@ -462,7 +462,7 @@ function parseResources(
       claimResourceEnvName(seenEnvNames, env, configPath);
       resourceValuesInOrder.push({
         env,
-        literal: requireResourceLiteral(literal, `${configPath}#resources.values.${env}`),
+        literal: requireResourceLiteral(literal, `${configPath}#resources.values.${env}`)
       });
     }
   }
@@ -483,7 +483,7 @@ function parseResources(
           commandValue.run,
           `${configPath}#resources.commands.${name}.run`
         ),
-        timeoutSeconds: commandValue.timeoutSeconds,
+        timeoutSeconds: commandValue.timeoutSeconds
       });
     }
   }

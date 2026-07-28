@@ -19,7 +19,7 @@ import {
   readSingleYamlFile,
   runMonke,
   withPlatform,
-  write,
+  write
 } from "./helpers.ts";
 
 describe("single-repo sessions", () => {
@@ -39,7 +39,7 @@ describe("single-repo sessions", () => {
         env: PORT
       - port: DB_PORT
         env: DATABASE_URL
-`,
+`
     });
 
     const result = runMonke({
@@ -47,7 +47,7 @@ describe("single-repo sessions", () => {
       binDirectory,
       cwd: repoRoot,
       extraEnv: { HOME: path.join(sandbox, "os-home") },
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -76,7 +76,7 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "hello\n",
+      "README.md": "hello\n"
     });
     const openLogPath = installCodexUrlOpenShim(binDirectory);
 
@@ -84,7 +84,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "banana", "--codex"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -101,7 +101,7 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "hello\n",
+      "README.md": "hello\n"
     });
     const cmdLogPath = installWindowsCmdShim(binDirectory);
 
@@ -110,7 +110,7 @@ describe("single-repo sessions", () => {
         args: ["spawn", "banana", "--codex"],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       })
     );
 
@@ -136,7 +136,7 @@ describe("single-repo sessions", () => {
     mappings:
       - port: WEB_PORT
         env: PORT
-`,
+`
     });
 
     const result = runMonke({
@@ -144,7 +144,7 @@ describe("single-repo sessions", () => {
       binDirectory,
       cwd: repoRoot,
       extraEnv: { HOME: path.join(sandbox, "os-home") },
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "root-app");
@@ -158,14 +158,14 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "hello\n",
+      "README.md": "hello\n"
     });
 
     const result = runMonke({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -184,8 +184,8 @@ describe("single-repo sessions", () => {
         assignedPorts: [],
         materializationComplete: false,
         sourceRoot: repoRoot,
-        worktreePath: worktreeRoot,
-      },
+        worktreePath: worktreeRoot
+      }
     ]);
   });
 
@@ -194,7 +194,7 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
+      "README.md": "clean\n"
     });
     write(repoRoot, "README.md", "dirty\n");
     write(repoRoot, "notes.txt", "untracked\n");
@@ -203,7 +203,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "dirty-no-config"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "dirty-no-config");
@@ -216,14 +216,14 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
+      "README.md": "clean\n"
     });
 
     runMonke({
       args: ["spawn", "existing-no-config"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
     write(repoRoot, "README.md", "dirty\n");
 
@@ -232,7 +232,7 @@ describe("single-repo sessions", () => {
         args: ["spawn", "existing-no-config", "--no-dirty"],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(`Source checkout is dirty: ${repoRoot}`);
   });
@@ -243,7 +243,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
     write(repoRoot, "README.md", "dirty\n");
 
@@ -251,7 +251,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "dirty-copy"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-copy"), "README.md")).toBe(
@@ -265,7 +265,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
 
     git(repoRoot, ["branch", "banana", "HEAD"]);
@@ -282,7 +282,7 @@ describe("single-repo sessions", () => {
         args: ["spawn", "banana"],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(
       /Session branch "banana" already exists.*carrying dirty changes onto a diverged branch is unsafe.*--no-dirty.*align the branch/su
@@ -299,7 +299,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
 
     git(repoRoot, ["branch", "banana", "HEAD"]);
@@ -309,7 +309,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "banana"), "README.md")).toBe(
@@ -323,7 +323,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
     write(repoRoot, "README.md", "staged\n");
     git(repoRoot, ["add", "README.md"]);
@@ -332,7 +332,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "dirty-staged"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-staged"), "README.md")).toBe(
@@ -346,7 +346,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "a\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
     write(repoRoot, "README.md", "b\n");
     git(repoRoot, ["add", "README.md"]);
@@ -356,7 +356,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "dirty-layered"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-layered"), "README.md")).toBe("c\n");
@@ -368,7 +368,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
     rmSync(path.join(repoRoot, "README.md"));
 
@@ -376,7 +376,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "dirty-delete"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(
@@ -390,7 +390,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
     write(repoRoot, "notes/nested.txt", "carry me\n");
 
@@ -398,7 +398,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "dirty-untracked"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(
@@ -412,7 +412,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
     const outsideFile = path.join(sandbox, "outside-secret.txt");
     write(sandbox, "outside-secret.txt", "do not copy\n");
@@ -422,7 +422,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "dirty-untracked-link"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const copiedLink = path.join(
@@ -441,7 +441,7 @@ describe("single-repo sessions", () => {
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "ignored.txt\n",
       "README.md": "clean\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
     write(repoRoot, "ignored.txt", "leave behind\n");
 
@@ -449,7 +449,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "dirty-ignored"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(
@@ -463,7 +463,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
     write(repoRoot, "README.md", "dirty\n");
 
@@ -472,7 +472,7 @@ describe("single-repo sessions", () => {
         args: ["spawn", "reject-dirty", "--no-dirty"],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(`Source checkout is dirty: ${repoRoot}`);
     expect(existsSync(getExpectedWorktreePath(home, repoRoot, "reject-dirty"))).toBeFalsy();
@@ -484,21 +484,21 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "clean\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
 
     runMonke({
       args: ["spawn", "existing"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
     write(repoRoot, "README.md", "dirty\n");
     const result = runMonke({
       args: ["spawn", "existing"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "existing"), "README.md")).toBe("clean\n");
@@ -520,7 +520,7 @@ describe("single-repo sessions", () => {
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     };
     const firstRepo = createRepo(path.join(sandbox, "client-a", "api"), repoFiles);
     const secondRepo = createRepo(path.join(sandbox, "client-b", "api"), repoFiles);
@@ -529,13 +529,13 @@ describe("single-repo sessions", () => {
       args: ["spawn", "banana"],
       binDirectory,
       cwd: firstRepo,
-      monkeHome: home,
+      monkeHome: home
     });
     git(firstRepo, [
       "worktree",
       "remove",
       "--force",
-      getExpectedWorktreePath(home, firstRepo, "banana"),
+      getExpectedWorktreePath(home, firstRepo, "banana")
     ]);
 
     expect(() =>
@@ -543,7 +543,7 @@ describe("single-repo sessions", () => {
         args: ["spawn", "banana"],
         binDirectory,
         cwd: secondRepo,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(/Session worktree path collision.*already recorded/su);
   });
@@ -561,7 +561,7 @@ describe("single-repo sessions", () => {
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "apps/api/.env.local", "PORT=10000\nBRANCH_DIRTY=1\n");
@@ -570,7 +570,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "fresh", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
@@ -585,7 +585,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "main\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "README.md", "dirty feature\n");
@@ -595,7 +595,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "fresh-main", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh-main");
@@ -609,7 +609,7 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "README.md": "main\n",
-      "monke.yml": "apps: {}\n",
+      "monke.yml": "apps: {}\n"
     });
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "README.md", "dirty feature\n");
@@ -618,7 +618,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "fresh-main-no-dirty", "--no-dirty", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "fresh-main-no-dirty"), "README.md")).toBe(
@@ -631,7 +631,7 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "main\n",
+      "README.md": "main\n"
     });
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "README.md", "feature\n");
@@ -640,7 +640,7 @@ describe("single-repo sessions", () => {
       args: ["spawn", "fresh", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
@@ -655,7 +655,7 @@ describe("single-repo sessions", () => {
     expect(sessionState.repos[0]).toMatchObject({
       materializationComplete: false,
       sourceRoot: repoRoot,
-      worktreePath: worktreeRoot,
+      worktreePath: worktreeRoot
     });
   });
 
@@ -675,7 +675,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "local-only.txt", "dirty source only\n");
@@ -684,7 +684,7 @@ apps:
       args: ["spawn", "fresh", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
@@ -705,7 +705,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, ".env.demo", "DEMO=true\n");
@@ -717,7 +717,7 @@ apps:
       args: ["spawn", "fresh", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
@@ -741,7 +741,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     const origin = path.join(sandbox, "origin.git");
     git(repoRoot, ["init", "--bare", origin]);
@@ -759,7 +759,7 @@ apps:
       args: ["spawn", "remote-default", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "remote-default");
@@ -779,7 +779,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     const origin = path.join(sandbox, "origin.git");
     git(repoRoot, ["init", "--bare", origin]);
@@ -802,7 +802,7 @@ apps:
       args: ["spawn", "remote-master", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "remote-master");
@@ -822,7 +822,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     const origin = path.join(sandbox, "origin.git");
     git(repoRoot, ["init", "--bare", origin]);
@@ -841,7 +841,7 @@ apps:
       args: ["spawn", "local-default", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "local-default");
@@ -861,7 +861,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() =>
@@ -869,7 +869,7 @@ apps:
         args: ["spawn", "retryable", "-m"],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(/Expected managed env file to exist/u);
 
@@ -888,7 +888,7 @@ apps:
       args: ["spawn", "retryable", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\n");
@@ -907,13 +907,13 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     saveSessionState(home, {
       repos: [],
       rootSourceRoot: repoRoot,
       session: "fresh",
-      version: 1,
+      version: 1
     });
 
     expect(() =>
@@ -921,7 +921,7 @@ apps:
         args: ["spawn", "fresh", "-m"],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(/Session state already exists for "fresh"/u);
   });
@@ -939,7 +939,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     git(repoRoot, ["branch", "fresh"]);
 
@@ -948,7 +948,7 @@ apps:
         args: ["spawn", "fresh", "-m"],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(/Session branch "fresh" already exists/u);
   });
@@ -966,18 +966,18 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     for (const [session, flag, env] of [
       ["main-alias", "--main", "API_PORT=10000\n"],
-      ["master-alias", "--master", "API_PORT=10001\n"],
+      ["master-alias", "--master", "API_PORT=10001\n"]
     ] as const) {
       runMonke({
         args: ["spawn", session, flag],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       });
 
       expect(read(getExpectedWorktreePath(home, repoRoot, session), ".env")).toBe(env);
@@ -1004,14 +1004,14 @@ apps:
     mappings:
       - port: API_PORT
         env: API_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -1037,7 +1037,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
@@ -1045,7 +1045,7 @@ apps:
       binDirectory,
       cwd: repoRoot,
       extraEnv: { USER: "ada" },
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -1057,7 +1057,7 @@ apps:
     const initialState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(initialState.repos[0]?.resourceValues).toStrictEqual([
       { env: "DISCORD_CHANNEL", value: "mt-ada-banana" },
-      { env: "STATIC_HANDLE", value: "fixed-banana" },
+      { env: "STATIC_HANDLE", value: "fixed-banana" }
     ]);
 
     write(
@@ -1081,14 +1081,14 @@ apps:
       binDirectory,
       cwd: worktreeRoot,
       extraEnv: { USER: "ada" },
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\n");
 
     const nextState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(nextState.repos[0]?.resourceValues).toStrictEqual([
-      { env: "DISCORD_CHANNEL", value: "mt-ada-banana" },
+      { env: "DISCORD_CHANNEL", value: "mt-ada-banana" }
     ]);
   });
 
@@ -1108,14 +1108,14 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "first"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const message = captureThrowMessage(() => {
@@ -1123,7 +1123,7 @@ apps:
         args: ["spawn", "second"],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       });
     });
     expect(message).toContain("Resource value collision for DISCORD_CHANNEL=<redacted length=6>");
@@ -1147,14 +1147,14 @@ apps:
         env: PORT
       - port: DB_PORT
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(() => {
@@ -1162,7 +1162,7 @@ apps:
         args: ["materialize"],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/must run inside a session worktree/u);
 
@@ -1179,7 +1179,7 @@ apps:
       args: ["materialize"],
       binDirectory,
       cwd: worktreeRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(worktreeRoot, ".env")).toBe(before);
@@ -1202,14 +1202,14 @@ apps:
         env: PORT
       - port: DB_PORT
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -1219,7 +1219,7 @@ apps:
       args: ["materialize"],
       binDirectory,
       cwd: worktreeRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(worktreeRoot, "bootstrap-runs")).toBe(`${worktreeRoot}\n${worktreeRoot}\n`);
@@ -1247,14 +1247,14 @@ apps:
       - port: API_PORT
         env: PORT
 `,
-      "scripts/bootstrap.sh": "#!/bin/sh\necho seeded\n",
+      "scripts/bootstrap.sh": "#!/bin/sh\necho seeded\n"
     });
 
     runMonke({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -1285,7 +1285,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     write(repoRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Cookies", "cookie-jar\n");
 
@@ -1293,7 +1293,7 @@ apps:
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -1322,14 +1322,14 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -1343,14 +1343,14 @@ apps:
       args: ["materialize"],
       binDirectory,
       cwd: worktreeRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     runMonke({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
@@ -1373,14 +1373,14 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     const result = runMonke({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(result.stderr).toContain(
@@ -1401,7 +1401,7 @@ apps:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
@@ -1418,13 +1418,13 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["setup"],
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(root, ".env")).toBe("DEP_DIR=../dep\n");
@@ -1442,7 +1442,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       ".env": "KEEP_ME=1\nDEP_DIR=../old-location\n",
@@ -1460,13 +1460,13 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["setup"],
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(root, ".env")).toBe("KEEP_ME=1\nDEP_DIR=../dep\n");
@@ -1485,7 +1485,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
@@ -1502,14 +1502,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(() =>
@@ -1517,7 +1517,7 @@ external:
         args: ["setup"],
         binDirectory,
         cwd: getExpectedWorktreePath(home, root, "banana"),
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(/must run from the source checkout/u);
   });
@@ -1541,7 +1541,7 @@ apps:
         env: PORT
 `,
       "seed-data/fixture.txt": "fixture\n",
-      "tracked.txt": "committed\n",
+      "tracked.txt": "committed\n"
     });
     write(repoRoot, "tracked.txt", "dirty\n");
 
@@ -1549,7 +1549,7 @@ apps:
       args: ["spawn", "fresh-seeds", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh-seeds");
@@ -1578,14 +1578,14 @@ apps:
       - port: API_PORT
         env: PORT
 `,
-      "seed-data/fixture.txt": "fixture\n",
+      "seed-data/fixture.txt": "fixture\n"
     });
 
     runMonke({
       args: ["spawn", "respawned", "-m"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "respawned");
@@ -1595,10 +1595,10 @@ apps:
       cwd: repoRoot,
       env: { MONKE_HOME: home, PATH: process.env.PATH ?? "" },
       onStderr() {},
-      onStdout() {},
+      onStdout() {}
     });
     spawnSessionFromSourceRootLocked(runtime, home, repoRoot, "respawned", {
-      mode: "session-branch",
+      mode: "session-branch"
     });
 
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\n");

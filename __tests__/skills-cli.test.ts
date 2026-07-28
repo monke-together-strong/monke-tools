@@ -21,7 +21,7 @@ describe("skills CLI", () => {
     );
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: sourceCheckout,
-      version: 1,
+      version: 1
     });
 
     let stdout = "";
@@ -30,7 +30,7 @@ describe("skills CLI", () => {
       cwd: sandbox,
       env: {
         HOME: osHome,
-        MONKE_HOME: monkeHome,
+        MONKE_HOME: monkeHome
       },
       onStderr(text) {
         stderr += text;
@@ -38,13 +38,13 @@ describe("skills CLI", () => {
       onStdout(text) {
         stdout += text;
       },
-      stdinText: "codex,custom\n~/team-skills\n",
+      stdinText: "codex,custom\n~/team-skills\n"
     });
 
     runCli(["skills", "configure"], runtime);
 
     expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toStrictEqual({
-      targets: [{ kind: "codex" }, { kind: "custom", path: path.join(osHome, "team-skills") }],
+      targets: [{ kind: "codex" }, { kind: "custom", path: path.join(osHome, "team-skills") }]
     });
     expect(
       lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink()
@@ -69,7 +69,7 @@ describe("skills CLI", () => {
     );
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: sourceCheckout,
-      version: 1,
+      version: 1
     });
 
     runCli(
@@ -78,11 +78,11 @@ describe("skills CLI", () => {
         cwd: sandbox,
         env: {
           HOME: osHome,
-          MONKE_HOME: monkeHome,
+          MONKE_HOME: monkeHome
         },
         onStderr() {},
         onStdout() {},
-        stdinText: "codex,claude,cursor,custom\n~/custom-skills\n",
+        stdinText: "codex,claude,cursor,custom\n~/custom-skills\n"
       })
     );
     runCli(
@@ -91,16 +91,16 @@ describe("skills CLI", () => {
         cwd: sandbox,
         env: {
           HOME: osHome,
-          MONKE_HOME: monkeHome,
+          MONKE_HOME: monkeHome
         },
         onStderr() {},
         onStdout() {},
-        stdinText: "claude,codex\n",
+        stdinText: "claude,codex\n"
       })
     );
 
     expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toStrictEqual({
-      targets: [{ kind: "claude" }, { kind: "codex" }],
+      targets: [{ kind: "claude" }, { kind: "codex" }]
     });
     expect(
       lstatSync(path.join(osHome, ".claude", "skills", "monke-tools-core")).isSymbolicLink()
@@ -133,20 +133,20 @@ describe("skills CLI", () => {
         cwd: sandbox,
         env: {
           HOME: osHome,
-          MONKE_HOME: monkeHome,
+          MONKE_HOME: monkeHome
         },
         onStderr() {},
         onStdout() {},
-        stdinText: "codex\n",
+        stdinText: "codex\n"
       })
     );
 
     expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
       installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
-        targets: [{ kind: "codex" }],
+        targets: [{ kind: "codex" }]
       },
-      version: 1,
+      version: 1
     });
     expect(
       lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink()
@@ -173,9 +173,9 @@ describe("skills CLI", () => {
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: oldCheckout,
       skillInstallPreference: {
-        targets: [{ kind: "codex" }],
+        targets: [{ kind: "codex" }]
       },
-      version: 1,
+      version: 1
     });
     write(path.dirname(namespacePath), ".keep", "\n");
     symlinkSync(path.join(oldCheckout, "skills"), namespacePath, "dir");
@@ -186,10 +186,10 @@ describe("skills CLI", () => {
         cwd: sandbox,
         env: {
           HOME: osHome,
-          MONKE_HOME: monkeHome,
+          MONKE_HOME: monkeHome
         },
         onStderr() {},
-        onStdout() {},
+        onStdout() {}
       })
     );
 
@@ -204,7 +204,7 @@ describe("skills CLI", () => {
     const missingCheckout = path.join(sandbox, "missing-source");
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: missingCheckout,
-      version: 1,
+      version: 1
     });
 
     expect(() => {
@@ -214,11 +214,11 @@ describe("skills CLI", () => {
           cwd: sandbox,
           env: {
             HOME: osHome,
-            MONKE_HOME: monkeHome,
+            MONKE_HOME: monkeHome
           },
           onStderr() {},
           onStdout() {},
-          stdinText: "codex\n",
+          stdinText: "codex\n"
         })
       );
     }).toThrow(`Installed source checkout is missing: ${missingCheckout}`);

@@ -5,7 +5,7 @@ import {
   readFileSync,
   readlinkSync,
   symlinkSync,
-  writeFileSync,
+  writeFileSync
 } from "node:fs";
 import path from "node:path";
 
@@ -21,7 +21,7 @@ import {
   readImportRecipeStore,
   recordImportedGuidance,
   runImportSkills,
-  writeImportRecipeStore,
+  writeImportRecipeStore
 } from "../scripts/import-skills.ts";
 import { runUpdateSkills } from "../scripts/update-skills.ts";
 import { makeTempDir, read, write } from "./helpers.ts";
@@ -43,18 +43,18 @@ describe("skill importing", () => {
       "\u2502",
       "\u2502      Bravo skill description.",
       "\u2502",
-      "\u2514  Use --skill <name> to install specific skills",
+      "\u2514  Use --skill <name> to install specific skills"
     ].join("\n");
 
     expect(parseAvailableSkillGroups(output)).toStrictEqual([
       {
         name: "Engineering",
-        skills: ["alpha-skill"],
+        skills: ["alpha-skill"]
       },
       {
         name: "Personal Tools",
-        skills: ["Bravo Skill"],
-      },
+        skills: ["Bravo Skill"]
+      }
     ]);
     expect(parseAvailableSkillNames(output)).toStrictEqual(["alpha-skill", "Bravo Skill"]);
   });
@@ -64,30 +64,30 @@ describe("skill importing", () => {
       buildGroupedSkillOptions([
         {
           name: "Engineering",
-          skills: ["alpha", "bravo"],
+          skills: ["alpha", "bravo"]
         },
         {
           name: "Writing",
-          skills: ["charlie"],
-        },
+          skills: ["charlie"]
+        }
       ])
     ).toStrictEqual({
       Engineering: [
         {
           label: "alpha",
-          value: "alpha",
+          value: "alpha"
         },
         {
           label: "bravo",
-          value: "bravo",
-        },
+          value: "bravo"
+        }
       ],
       Writing: [
         {
           label: "charlie",
-          value: "charlie",
-        },
-      ],
+          value: "charlie"
+        }
+      ]
     });
   });
 
@@ -106,7 +106,7 @@ describe("skill importing", () => {
       "\u2502",
       "\u25C7  Installation complete",
       "\u25C7  Installed 1 skill",
-      "\u2502  \u2192 ./.agents/skills/alpha",
+      "\u2502  \u2192 ./.agents/skills/alpha"
     ].join("\n");
 
     const assessment = extractSecurityRiskAssessment(output);
@@ -145,28 +145,28 @@ describe("skill importing", () => {
             {
               kind: "skill",
               selector: "bravo",
-              slug: "bravo",
+              slug: "bravo"
             },
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "z-owner/z-repo",
+          source: "z-owner/z-repo"
         },
         {
           skills: [
             {
               kind: "skill",
               selector: "zulu",
-              slug: "zulu",
-            },
+              slug: "zulu"
+            }
           ],
-          source: "a-owner/a-repo",
-        },
+          source: "a-owner/a-repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
 
     expect(read(sandbox, "skills/imported/.monke-imports.json")).toBe(`{
@@ -208,10 +208,10 @@ describe("skill importing", () => {
             {
               kind: "skill",
               selector: "zulu",
-              slug: "zulu",
-            },
+              slug: "zulu"
+            }
           ],
-          source: "a-owner/a-repo",
+          source: "a-owner/a-repo"
         },
         {
           acceptOpenClawRisks: true,
@@ -219,18 +219,18 @@ describe("skill importing", () => {
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
+              slug: "alpha"
             },
             {
               kind: "skill",
               selector: "bravo",
-              slug: "bravo",
-            },
+              slug: "bravo"
+            }
           ],
-          source: "z-owner/z-repo",
-        },
+          source: "z-owner/z-repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
   });
 
@@ -246,23 +246,23 @@ describe("skill importing", () => {
               {
                 kind: "skill",
                 selector: "alpha",
-                slug: "alpha",
-              },
+                slug: "alpha"
+              }
             ],
-            source: "owner/repo",
+            source: "owner/repo"
           },
           {
             skills: [
               {
                 kind: "skill",
                 selector: "bravo",
-                slug: "bravo",
-              },
+                slug: "bravo"
+              }
             ],
-            source: "owner/repo",
-          },
+            source: "owner/repo"
+          }
         ],
-        version: 2,
+        version: 2
       })
     );
 
@@ -294,18 +294,18 @@ describe("skill importing", () => {
               {
                 kind: "skill",
                 selector: "alpha",
-                slug: "alpha",
+                slug: "alpha"
               },
               {
                 kind: "skill",
                 selector: "alpha",
-                slug: "alpha-v2",
-              },
+                slug: "alpha-v2"
+              }
             ],
-            source: "owner/repo",
-          },
+            source: "owner/repo"
+          }
         ],
-        version: 2,
+        version: 2
       })
     );
 
@@ -326,23 +326,23 @@ describe("skill importing", () => {
               {
                 kind: "skill",
                 selector: "alpha",
-                slug: "alpha",
-              },
+                slug: "alpha"
+              }
             ],
-            source: "owner/first",
+            source: "owner/first"
           },
           {
             skills: [
               {
                 kind: "skill",
                 selector: "other-alpha",
-                slug: "alpha",
-              },
+                slug: "alpha"
+              }
             ],
-            source: "owner/second",
-          },
+            source: "owner/second"
+          }
         ],
-        version: 2,
+        version: 2
       })
     );
 
@@ -357,25 +357,25 @@ describe("skill importing", () => {
       recipes: [
         {
           skills: [{ kind: "reference", selector: "alpha-reference", slug: "alpha" }],
-          source: "owner/reference",
+          source: "owner/reference"
         },
         {
           skills: [{ kind: "skill", selector: "alpha-skill", slug: "alpha" }],
-          source: "owner/skill",
-        },
+          source: "owner/skill"
+        }
       ],
-      version: 2,
+      version: 2
     });
 
     expect(readImportRecipeStore(sandbox).recipes).toStrictEqual([
       {
         skills: [{ kind: "reference", selector: "alpha-reference", slug: "alpha" }],
-        source: "owner/reference",
+        source: "owner/reference"
       },
       {
         skills: [{ kind: "skill", selector: "alpha-skill", slug: "alpha" }],
-        source: "owner/skill",
-      },
+        source: "owner/skill"
+      }
     ]);
   });
 
@@ -385,7 +385,7 @@ describe("skill importing", () => {
       acceptOpenClawRisks: false,
       kind: "reference",
       skills: [{ selector: "alpha-reference", slug: "alpha" }],
-      source: "owner/repo",
+      source: "owner/repo"
     });
 
     expect(() => {
@@ -393,7 +393,7 @@ describe("skill importing", () => {
         acceptOpenClawRisks: false,
         kind: "skill",
         skills: [{ selector: "alpha-skill", slug: "alpha" }],
-        source: "owner/repo",
+        source: "owner/repo"
       });
     }).toThrow(/Duplicate imported slug in recipe owner\/repo: alpha/u);
   });
@@ -407,13 +407,13 @@ describe("skill importing", () => {
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/first",
-        },
+          source: "owner/first"
+        }
       ],
-      version: 2,
+      version: 2
     });
 
     expect(() => {
@@ -423,10 +423,10 @@ describe("skill importing", () => {
         skills: [
           {
             selector: "other-alpha",
-            slug: "alpha",
-          },
+            slug: "alpha"
+          }
         ],
-        source: "owner/second",
+        source: "owner/second"
       });
     }).toThrow(/alpha is already owned by recipe owner\/first/u);
     expect(readImportRecipeStore(sandbox)).toStrictEqual({
@@ -436,13 +436,13 @@ describe("skill importing", () => {
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/first",
-        },
+          source: "owner/first"
+        }
       ],
-      version: 2,
+      version: 2
     });
   });
 
@@ -465,18 +465,18 @@ describe("skill importing", () => {
           expect(availableSkillGroups).toStrictEqual([
             {
               name: "Engineering",
-              skills: ["alpha"],
+              skills: ["alpha"]
             },
             {
               name: "Productivity",
-              skills: ["bravo"],
-            },
+              skills: ["bravo"]
+            }
           ]);
           return ["alpha", "bravo"];
         },
         writeMessage(message) {
           stdout += message;
-        },
+        }
       });
     } finally {
       process.chdir(originalCwd);
@@ -522,7 +522,7 @@ describe("skill importing", () => {
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
+      stageReferenceFixture: true
     });
 
     try {
@@ -533,7 +533,7 @@ describe("skill importing", () => {
         selectSkills() {
           return ["alpha"];
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -554,13 +554,13 @@ describe("skill importing", () => {
             {
               kind: "reference",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
   });
 
@@ -582,7 +582,7 @@ name: outside-entry
       skillsCwdLogPath,
       skillsLogPath,
       stageReferenceFixture: true,
-      stagedSkillEntrySymlinkTarget: outsideEntryPath,
+      stagedSkillEntrySymlinkTarget: outsideEntryPath
     });
 
     try {
@@ -594,7 +594,7 @@ name: outside-entry
           selectSkills() {
             return ["alpha"];
           },
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/regular file/u);
     } finally {
@@ -617,7 +617,7 @@ name: outside-entry
       skillsCwdLogPath,
       skillsLogPath,
       stageReferenceFixture: true,
-      stageSupportingSymlink: true,
+      stageSupportingSymlink: true
     });
 
     try {
@@ -628,7 +628,7 @@ name: outside-entry
         selectSkills() {
           return ["alpha"];
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -652,16 +652,16 @@ name: outside-entry
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
+      stageReferenceFixture: true
     });
     writeImportRecipeStore(sandbox, {
       recipes: [
         {
           skills: [{ kind: "skill", selector: "alpha", slug: "alpha" }],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old skill");
 
@@ -673,7 +673,7 @@ name: outside-entry
         selectSkills() {
           return ["alpha"];
         },
-        writeMessage() {},
+        writeMessage() {}
       });
       expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBeFalsy();
       expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
@@ -684,7 +684,7 @@ name: outside-entry
         selectSkills() {
           return ["alpha"];
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -694,7 +694,7 @@ name: outside-entry
     expect(existsSync(path.join(sandbox, "skills/references/imported/alpha"))).toBeFalsy();
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toMatch(/^---\nname: alpha\n/u);
     expect(readImportRecipeStore(sandbox).recipes[0]?.skills).toStrictEqual([
-      { kind: "skill", selector: "alpha", slug: "alpha" },
+      { kind: "skill", selector: "alpha", slug: "alpha" }
     ]);
   });
 
@@ -708,10 +708,10 @@ name: outside-entry
       recipes: [
         {
           skills: [{ kind: "reference" as const, selector: "alpha", slug: "alpha" }],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2 as const,
+      version: 2 as const
     };
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
     writeImportRecipeStore(sandbox, originalStore);
@@ -731,7 +731,7 @@ name: outside-entry
           selectSkills() {
             return ["alpha"];
           },
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/SKILL\.md/u);
     } finally {
@@ -754,19 +754,19 @@ name: outside-entry
       mainCollisionSelector: "bravo",
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
+      stageReferenceFixture: true
     });
     const originalStore = {
       recipes: [
         {
           skills: [
             { kind: "skill" as const, selector: "alpha", slug: "alpha" },
-            { kind: "skill" as const, selector: "bravo", slug: "bravo" },
+            { kind: "skill" as const, selector: "bravo", slug: "bravo" }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2 as const,
+      version: 2 as const
     };
     writeImportRecipeStore(sandbox, originalStore);
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
@@ -781,7 +781,7 @@ name: outside-entry
           selectSkills() {
             return ["alpha", "bravo"];
           },
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/already contains MAIN\.md/u);
     } finally {
@@ -812,13 +812,13 @@ name: outside-entry
         selectSkills() {
           return ["alpha"];
         },
-        writeMessage() {},
+        writeMessage() {}
       });
       await runImportSkills(["owner/repo"], {
         selectSkills() {
           return ["bravo"];
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -832,18 +832,18 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
+              slug: "alpha"
             },
             {
               kind: "skill",
               selector: "bravo",
-              slug: "bravo",
-            },
+              slug: "bravo"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
   });
 
@@ -858,8 +858,8 @@ name: outside-entry
       skillsLogPath,
       stagedSlugBySelector: {
         alpha: "renamed-alpha",
-        bravo: "renamed-bravo",
-      },
+        bravo: "renamed-bravo"
+      }
     });
 
     try {
@@ -870,7 +870,7 @@ name: outside-entry
         selectSkills() {
           return ["alpha", "bravo"];
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -886,18 +886,18 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "renamed-alpha",
+              slug: "renamed-alpha"
             },
             {
               kind: "skill",
               selector: "bravo",
-              slug: "renamed-bravo",
-            },
+              slug: "renamed-bravo"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
 
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
@@ -928,7 +928,7 @@ name: outside-entry
         selectSkills() {
           return ["autoreview"];
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -950,13 +950,13 @@ name: outside-entry
             {
               kind: "skill",
               selector: "autoreview",
-              slug: "autoreview",
-            },
+              slug: "autoreview"
+            }
           ],
-          source: "openclaw/agent-skills",
-        },
+          source: "openclaw/agent-skills"
+        }
       ],
-      version: 2,
+      version: 2
     });
   });
 
@@ -971,7 +971,7 @@ name: outside-entry
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
+      stageReferenceFixture: true
     });
 
     try {
@@ -992,7 +992,7 @@ name: outside-entry
           },
           writeMessage(message) {
             stdout += message;
-          },
+          }
         }
       );
     } finally {
@@ -1005,7 +1005,7 @@ name: outside-entry
     expect(readImportRecipeStore(sandbox).recipes[0]).toStrictEqual({
       acceptOpenClawRisks: true,
       skills: [{ kind: "reference", selector: "alpha", slug: "alpha" }],
-      source: "openclaw/agent-skills",
+      source: "openclaw/agent-skills"
     });
   });
 
@@ -1023,13 +1023,13 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/first",
-        },
+          source: "owner/first"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
@@ -1042,7 +1042,7 @@ name: outside-entry
           selectSkills() {
             return ["alpha"];
           },
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/alpha is already owned by recipe owner\/first/u);
     } finally {
@@ -1058,13 +1058,13 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/first",
-        },
+          source: "owner/first"
+        }
       ],
-      version: 2,
+      version: 2
     });
   });
 
@@ -1089,7 +1089,7 @@ name: outside-entry
         selectSkills() {
           return ["alpha"];
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -1114,18 +1114,18 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
+              slug: "alpha"
             },
             {
               kind: "skill",
               selector: "bravo",
-              slug: "bravo",
-            },
+              slug: "bravo"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
@@ -1137,7 +1137,7 @@ name: outside-entry
       await runUpdateSkills([], {
         writeMessage(message) {
           stdout += message;
-        },
+        }
       });
     } finally {
       process.chdir(originalCwd);
@@ -1163,16 +1163,16 @@ name: outside-entry
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
+      stageReferenceFixture: true
     });
     writeImportRecipeStore(sandbox, {
       recipes: [
         {
           skills: [{ kind: "reference", selector: "alpha", slug: "alpha" }],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
 
@@ -1181,7 +1181,7 @@ name: outside-entry
       process.chdir(sandbox);
 
       await runUpdateSkills([], {
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -1207,7 +1207,7 @@ name: outside-entry
       failInstallSources: ["owner/fails"],
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
+      stageReferenceFixture: true
     });
     writeImportRecipeStore(sandbox, {
       recipes: [
@@ -1216,23 +1216,23 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/fails",
+          source: "owner/fails"
         },
         {
           skills: [
             {
               kind: "reference",
               selector: "bravo",
-              slug: "bravo",
-            },
+              slug: "bravo"
+            }
           ],
-          source: "owner/works",
-        },
+          source: "owner/works"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/references/imported/bravo/MAIN.md", "old bravo");
@@ -1243,7 +1243,7 @@ name: outside-entry
 
       await expect(
         runUpdateSkills([], {
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/owner\/fails/u);
     } finally {
@@ -1278,13 +1278,13 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/orphan/SKILL.md", "unknown");
@@ -1295,7 +1295,7 @@ name: outside-entry
 
       await expect(
         runUpdateSkills([], {
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/Untracked imported skill directories: orphan/u);
     } finally {
@@ -1318,8 +1318,8 @@ name: outside-entry
       skillsCwdLogPath,
       skillsLogPath,
       stagedSlugBySelector: {
-        alpha: "renamed-alpha",
-      },
+        alpha: "renamed-alpha"
+      }
     });
     writeImportRecipeStore(sandbox, {
       recipes: [
@@ -1328,13 +1328,13 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
@@ -1344,7 +1344,7 @@ name: outside-entry
 
       await expect(
         runUpdateSkills([], {
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/recorded alpha but staged renamed-alpha/u);
     } finally {
@@ -1361,13 +1361,13 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
   });
 
@@ -1382,8 +1382,8 @@ name: outside-entry
       skillsCwdLogPath,
       skillsLogPath,
       stagedSlugBySelector: {
-        alpha: "renamed-alpha",
-      },
+        alpha: "renamed-alpha"
+      }
     });
     writeImportRecipeStore(sandbox, {
       recipes: [
@@ -1392,13 +1392,13 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
@@ -1410,11 +1410,11 @@ name: outside-entry
         confirmSlugReplacement(request) {
           confirmations.push({
             recordedSlug: request.recordedSlug,
-            stagedSlug: request.stagedSlug,
+            stagedSlug: request.stagedSlug
           });
           return true;
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -1424,8 +1424,8 @@ name: outside-entry
     expect(confirmations).toStrictEqual([
       {
         recordedSlug: "alpha",
-        stagedSlug: "renamed-alpha",
-      },
+        stagedSlug: "renamed-alpha"
+      }
     ]);
     expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBeFalsy();
     expect(read(sandbox, "skills/imported/renamed-alpha/SKILL.md")).toBe("new renamed-alpha");
@@ -1436,13 +1436,13 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "renamed-alpha",
-            },
+              slug: "renamed-alpha"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
   });
 
@@ -1457,17 +1457,17 @@ name: outside-entry
       skillsLogPath,
       stageReferenceFixture: true,
       stagedSlugBySelector: {
-        alpha: "renamed-alpha",
-      },
+        alpha: "renamed-alpha"
+      }
     });
     writeImportRecipeStore(sandbox, {
       recipes: [
         {
           skills: [{ kind: "reference", selector: "alpha", slug: "alpha" }],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
 
@@ -1479,7 +1479,7 @@ name: outside-entry
         confirmSlugReplacement() {
           return true;
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -1494,7 +1494,7 @@ name: outside-entry
       "\n# Alpha\n\nReference body.\n"
     );
     expect(readImportRecipeStore(sandbox).recipes[0]?.skills).toStrictEqual([
-      { kind: "reference", selector: "alpha", slug: "renamed-alpha" },
+      { kind: "reference", selector: "alpha", slug: "renamed-alpha" }
     ]);
   });
 
@@ -1508,18 +1508,18 @@ name: outside-entry
       recipes: [
         {
           skills: [{ kind: "reference" as const, selector: "alpha", slug: "alpha" }],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2 as const,
+      version: 2 as const
     };
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
       stageReferenceFixture: true,
       stagedSlugBySelector: {
-        alpha: "renamed-alpha",
-      },
+        alpha: "renamed-alpha"
+      }
     });
     writeImportRecipeStore(sandbox, originalStore);
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
@@ -1538,7 +1538,7 @@ name: outside-entry
           confirmSlugReplacement() {
             return true;
           },
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/SKILL\.md/u);
     } finally {
@@ -1561,18 +1561,18 @@ name: outside-entry
       recipes: [
         {
           skills: [{ kind: "reference" as const, selector: "alpha", slug: "alpha" }],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2 as const,
+      version: 2 as const
     };
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
       stageReferenceFixture: true,
       stagedSlugBySelector: {
-        alpha: "renamed-alpha",
-      },
+        alpha: "renamed-alpha"
+      }
     });
     writeImportRecipeStore(sandbox, originalStore);
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
@@ -1592,7 +1592,7 @@ name: outside-entry
           confirmSlugReplacement() {
             return true;
           },
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/references\/checklist\.md/u);
     } finally {
@@ -1615,18 +1615,18 @@ name: outside-entry
       recipes: [
         {
           skills: [{ kind: "reference" as const, selector: "alpha", slug: "alpha" }],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2 as const,
+      version: 2 as const
     };
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
       stageReferenceFixture: true,
       stagedSlugBySelector: {
-        alpha: "renamed-alpha",
-      },
+        alpha: "renamed-alpha"
+      }
     });
     writeImportRecipeStore(sandbox, originalStore);
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
@@ -1644,7 +1644,7 @@ name: outside-entry
           confirmSlugReplacement() {
             return true;
           },
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/references\/base\.md/u);
     } finally {
@@ -1667,22 +1667,22 @@ name: outside-entry
       recipes: [
         {
           skills: [{ kind: "reference" as const, selector: "alpha", slug: "alpha" }],
-          source: "owner/a-alpha",
+          source: "owner/a-alpha"
         },
         {
           skills: [{ kind: "reference" as const, selector: "bravo", slug: "bravo" }],
-          source: "owner/z-bravo",
-        },
+          source: "owner/z-bravo"
+        }
       ],
-      version: 2 as const,
+      version: 2 as const
     };
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
       stageReferenceFixture: true,
       stagedSlugBySelector: {
-        alpha: "renamed-alpha",
-      },
+        alpha: "renamed-alpha"
+      }
     });
     writeImportRecipeStore(sandbox, originalStore);
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
@@ -1697,7 +1697,7 @@ name: outside-entry
           confirmSlugReplacement() {
             return true;
           },
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/used by skills\/references\/imported\/bravo\/MAIN\.md/u);
 
@@ -1714,7 +1714,7 @@ name: outside-entry
           confirmSlugReplacement() {
             return true;
           },
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/used by skills\/references\/internal\/reviewer\/alpha\.md/u);
     } finally {
@@ -1739,8 +1739,8 @@ name: outside-entry
       skillsLogPath,
       stagedSlugBySelector: {
         alpha: "renamed-alpha",
-        bravo: "renamed-bravo",
-      },
+        bravo: "renamed-bravo"
+      }
     });
     writeImportRecipeStore(sandbox, {
       recipes: [
@@ -1749,18 +1749,18 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
+              slug: "alpha"
             },
             {
               kind: "skill",
               selector: "bravo",
-              slug: "bravo",
-            },
+              slug: "bravo"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
@@ -1774,11 +1774,11 @@ name: outside-entry
           confirmations.push({
             recordedSlug: request.recordedSlug,
             selector: request.selector,
-            stagedSlug: request.stagedSlug,
+            stagedSlug: request.stagedSlug
           });
           return true;
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -1789,13 +1789,13 @@ name: outside-entry
       {
         recordedSlug: "alpha",
         selector: "alpha",
-        stagedSlug: "renamed-alpha",
+        stagedSlug: "renamed-alpha"
       },
       {
         recordedSlug: "bravo",
         selector: "bravo",
-        stagedSlug: "renamed-bravo",
-      },
+        stagedSlug: "renamed-bravo"
+      }
     ]);
     expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBeFalsy();
     expect(existsSync(path.join(sandbox, "skills/imported/bravo"))).toBeFalsy();
@@ -1808,18 +1808,18 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "renamed-alpha",
+              slug: "renamed-alpha"
             },
             {
               kind: "skill",
               selector: "bravo",
-              slug: "renamed-bravo",
-            },
+              slug: "renamed-bravo"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
 
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
@@ -1845,20 +1845,20 @@ name: outside-entry
       skillsLogPath,
       stagedSlugBySelector: {
         alpha: "bravo",
-        bravo: "charlie",
-      },
+        bravo: "charlie"
+      }
     });
     writeImportRecipeStore(sandbox, {
       recipes: [
         {
           skills: [
             { kind: "skill", selector: "alpha", slug: "alpha" },
-            { kind: "skill", selector: "bravo", slug: "bravo" },
+            { kind: "skill", selector: "bravo", slug: "bravo" }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
@@ -1871,7 +1871,7 @@ name: outside-entry
         confirmSlugReplacement() {
           return true;
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -1883,7 +1883,7 @@ name: outside-entry
     expect(read(sandbox, "skills/imported/charlie/SKILL.md")).toBe("new charlie");
     expect(readImportRecipeStore(sandbox).recipes[0]?.skills).toStrictEqual([
       { kind: "skill", selector: "alpha", slug: "bravo" },
-      { kind: "skill", selector: "bravo", slug: "charlie" },
+      { kind: "skill", selector: "bravo", slug: "charlie" }
     ]);
   });
 
@@ -1898,8 +1898,8 @@ name: outside-entry
       skillsCwdLogPath,
       skillsLogPath,
       stagedSlugBySelector: {
-        alpha: "beta",
-      },
+        alpha: "beta"
+      }
     });
     writeImportRecipeStore(sandbox, {
       recipes: [
@@ -1908,23 +1908,23 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "a/renames",
+          source: "a/renames"
         },
         {
           skills: [
             {
               kind: "skill",
               selector: "beta",
-              slug: "beta",
-            },
+              slug: "beta"
+            }
           ],
-          source: "z/other",
-        },
+          source: "z/other"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/beta/SKILL.md", "old beta");
@@ -1938,7 +1938,7 @@ name: outside-entry
           confirmSlugReplacement() {
             return true;
           },
-          writeMessage() {},
+          writeMessage() {}
         })
       ).rejects.toThrow(/beta is owned by both a\/renames and z\/other/u);
     } finally {
@@ -1955,23 +1955,23 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "a/renames",
+          source: "a/renames"
         },
         {
           skills: [
             {
               kind: "skill",
               selector: "beta",
-              slug: "beta",
-            },
+              slug: "beta"
+            }
           ],
-          source: "z/other",
-        },
+          source: "z/other"
+        }
       ],
-      version: 2,
+      version: 2
     });
   });
 
@@ -1990,13 +1990,13 @@ name: outside-entry
             {
               kind: "skill",
               selector: "alpha",
-              slug: "alpha",
-            },
+              slug: "alpha"
+            }
           ],
-          source: "owner/repo",
-        },
+          source: "owner/repo"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
@@ -2009,7 +2009,7 @@ name: outside-entry
           installCalls.push(repoRoot);
           expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("new alpha");
         },
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);
@@ -2034,13 +2034,13 @@ name: outside-entry
             {
               kind: "skill",
               selector: "autoreview",
-              slug: "autoreview",
-            },
+              slug: "autoreview"
+            }
           ],
-          source: "openclaw/agent-skills",
-        },
+          source: "openclaw/agent-skills"
+        }
       ],
-      version: 2,
+      version: 2
     });
     write(sandbox, "skills/imported/autoreview/SKILL.md", "old autoreview");
 
@@ -2049,7 +2049,7 @@ name: outside-entry
       process.chdir(sandbox);
 
       await runUpdateSkills([], {
-        writeMessage() {},
+        writeMessage() {}
       });
     } finally {
       process.chdir(originalCwd);

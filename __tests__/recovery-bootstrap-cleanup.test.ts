@@ -16,7 +16,7 @@ import {
   read,
   readSingleYamlFile,
   runMonke,
-  write,
+  write
 } from "./helpers.ts";
 
 function mergedPr(options: {
@@ -34,7 +34,7 @@ function mergedPr(options: {
     isCrossRepository: false,
     mergedAt: "2026-06-16T00:00:00Z",
     number: options.number,
-    url: `https://github.com/owner/repo/pull/${options.number}`,
+    url: `https://github.com/owner/repo/pull/${options.number}`
   };
 }
 
@@ -53,7 +53,7 @@ describe("recovery, bootstrap, and cleanup", () => {
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -73,7 +73,7 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     expect(() => {
@@ -81,7 +81,7 @@ external:
         args: ["spawn", "resume"],
         binDirectory,
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(/Missing mapped env vars/u);
 
@@ -103,7 +103,7 @@ external:
       args: ["spawn", "resume"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const secondMtime = statSync(path.join(depWorktree, ".env")).mtimeMs;
@@ -127,7 +127,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -147,14 +147,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "heal"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const depWorktree = getExpectedWorktreePath(home, depRoot, "heal");
@@ -165,7 +165,7 @@ external:
       args: ["materialize"],
       binDirectory,
       cwd: getExpectedWorktreePath(home, root, "heal"),
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(existsSync(depWorktree)).toBeTruthy();
@@ -186,7 +186,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -206,14 +206,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "refresh"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const depWorktree = getExpectedWorktreePath(home, depRoot, "refresh");
@@ -224,7 +224,7 @@ external:
       args: ["materialize"],
       binDirectory,
       cwd: getExpectedWorktreePath(home, root, "refresh"),
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10000\n");
@@ -246,7 +246,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => {
@@ -254,7 +254,7 @@ apps:
         args: ["spawn", "boom"],
         binDirectory,
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       });
     }).toThrow(`Bootstrap command failed for ${root}: exit 7`);
   });
@@ -275,14 +275,14 @@ apps:
         env: PORT
       - port: DB_PORT
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "clean-me"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktree = getExpectedWorktreePath(home, root, "clean-me");
@@ -292,7 +292,7 @@ apps:
       args: ["cleanup"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
@@ -311,14 +311,14 @@ apps:
     const home = path.join(sandbox, "home");
 
     const root = createRepo(path.join(sandbox, "root"), {
-      "README.md": "# root\n",
+      "README.md": "# root\n"
     });
 
     const spawn = runMonke({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     expect(spawn.stderr).toContain("Warning:");
 
@@ -328,7 +328,7 @@ apps:
       args: ["cleanup"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
@@ -351,14 +351,14 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "clean-merged"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     const cleanWorktree = getExpectedWorktreePath(home, root, "clean-merged");
     git(cleanWorktree, ["add", "-A"]);
@@ -369,7 +369,7 @@ apps:
       args: ["spawn", "dirty-untracked"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     const dirtyWorktree = getExpectedWorktreePath(home, root, "dirty-untracked");
     git(dirtyWorktree, ["add", "-A"]);
@@ -380,18 +380,18 @@ apps:
     installFakeGhForMergedPrs(binDirectory, {
       prsByHead: {
         "clean-merged": [
-          mergedPr({ base: "main", head: "clean-merged", headRefOid: cleanHead, number: 10 }),
+          mergedPr({ base: "main", head: "clean-merged", headRefOid: cleanHead, number: 10 })
         ],
         "dirty-untracked": [
           mergedPr({
             base: "main",
             head: "dirty-untracked",
             headRefOid: dirtyHead,
-            number: 11,
-          }),
-        ],
+            number: 11
+          })
+        ]
       },
-      repo: "owner/repo",
+      repo: "owner/repo"
     });
     const gitLogBeforeCleanup = readFileSync(gitLog, "utf-8");
 
@@ -399,7 +399,7 @@ apps:
       args: ["cleanup", "--merged", "--dry-run"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(result.stderr).toContain(
@@ -437,14 +437,14 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "clean-merged"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     const worktree = getExpectedWorktreePath(home, root, "clean-merged");
     git(worktree, ["add", "-A"]);
@@ -456,17 +456,17 @@ apps:
     installFakeGhForMergedPrs(binDirectory, {
       prsByHead: {
         "clean-merged": [
-          mergedPr({ base: "main", head: "clean-merged", headRefOid: head, number: 12 }),
-        ],
+          mergedPr({ base: "main", head: "clean-merged", headRefOid: head, number: 12 })
+        ]
       },
-      repo: "owner/repo",
+      repo: "owner/repo"
     });
 
     const result = runMonke({
       args: ["cleanup", "--merged"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(result.stderr).toContain(`Removed merged worktree clean-merged ${root}: ${worktree}`);
@@ -497,14 +497,14 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "clean-one"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     const firstWorktree = getExpectedWorktreePath(home, root, "clean-one");
     git(firstWorktree, ["add", "-A"]);
@@ -515,7 +515,7 @@ apps:
       args: ["spawn", "clean-two"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     const secondWorktree = getExpectedWorktreePath(home, root, "clean-two");
     git(secondWorktree, ["add", "-A"]);
@@ -525,20 +525,20 @@ apps:
     const ghLog = installFakeGhForMergedPrs(binDirectory, {
       prsByHead: {
         "clean-one": [
-          mergedPr({ base: "main", head: "clean-one", headRefOid: firstHead, number: 20 }),
+          mergedPr({ base: "main", head: "clean-one", headRefOid: firstHead, number: 20 })
         ],
         "clean-two": [
-          mergedPr({ base: "main", head: "clean-two", headRefOid: secondHead, number: 21 }),
-        ],
+          mergedPr({ base: "main", head: "clean-two", headRefOid: secondHead, number: 21 })
+        ]
       },
-      repo: "owner/repo",
+      repo: "owner/repo"
     });
 
     runMonke({
       args: ["cleanup", "--merged", "--dry-run"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const dryRunGhCalls = readFileSync(ghLog, "utf-8").trim().split("\n");
@@ -550,7 +550,7 @@ apps:
       args: ["cleanup", "--merged"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const cleanupGitCalls = readFileSync(gitLog, "utf-8").slice(gitLogBeforeCleanup.length);
@@ -574,7 +574,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
@@ -582,7 +582,7 @@ apps:
       binDirectory,
       cwd: root,
       extraEnv: { PATH: binDirectory },
-      monkeHome: home,
+      monkeHome: home
     });
     const worktree = getExpectedWorktreePath(home, root, "clean-merged");
     git(worktree, ["add", "-A"]);
@@ -593,7 +593,7 @@ apps:
       binDirectory,
       cwd: root,
       extraEnv: { PATH: binDirectory },
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(result.stderr).toContain(
@@ -619,14 +619,14 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "clean-merged"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     const worktree = getExpectedWorktreePath(home, root, "clean-merged");
     git(worktree, ["add", "-A"]);
@@ -639,18 +639,18 @@ apps:
             headRefName: "clean-merged",
             headRefOid: git(worktree, ["rev-parse", "HEAD"]),
             isCrossRepository: false,
-            number: "not-a-number",
-          },
-        ],
+            number: "not-a-number"
+          }
+        ]
       },
-      repo: "owner/repo",
+      repo: "owner/repo"
     });
 
     const result = runMonke({
       args: ["cleanup", "--merged"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(result.stderr).toContain("no exact merged PR match");
@@ -674,14 +674,14 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "clean-merged"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     const worktree = getExpectedWorktreePath(home, root, "clean-merged");
     git(worktree, ["add", "-A"]);
@@ -691,10 +691,10 @@ apps:
     installFakeGhForMergedPrs(binDirectory, {
       prsByHead: {
         "clean-merged": [
-          mergedPr({ base: "main", head: "clean-merged", headRefOid: head, number: 13 }),
-        ],
+          mergedPr({ base: "main", head: "clean-merged", headRefOid: head, number: 13 })
+        ]
       },
-      repo: "owner/repo",
+      repo: "owner/repo"
     });
 
     expect(() =>
@@ -702,7 +702,7 @@ apps:
         args: ["cleanup", "--merged"],
         binDirectory,
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(/Cleanup command failed.*cleanup failed/su);
 
@@ -730,7 +730,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
@@ -738,14 +738,14 @@ apps:
       binDirectory,
       cwd: root,
       extraEnv: { USER: "ada" },
-      monkeHome: home,
+      monkeHome: home
     });
 
     const liveCleanup = runMonke({
       args: ["cleanup"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     expect(liveCleanup.stderr).toContain("Removed 0 dead sessions");
     expect(existsSync(path.join(root, "cleanup.log"))).toBeFalsy();
@@ -757,7 +757,7 @@ apps:
       args: ["cleanup"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(root, "cleanup.log")).toBe(
@@ -796,14 +796,14 @@ apps:
       "scripts/e2e-symbols.ts": `export default function () {
   return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 }
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "clean-command"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktree = getExpectedWorktreePath(home, root, "clean-command");
@@ -813,7 +813,7 @@ apps:
       args: ["cleanup"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(root, "cleanup-resource-command.log")).toBe("SOL/USDT:USDT\nclean-command\n");
@@ -837,14 +837,14 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "drift-clean"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     write(
@@ -863,14 +863,14 @@ apps:
       "worktree",
       "remove",
       getExpectedWorktreePath(home, root, "drift-clean"),
-      "--force",
+      "--force"
     ]);
 
     runMonke({
       args: ["cleanup"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(root, "cleanup-drift.log")).toBe(`drift-clean\n${root}\n`);
@@ -894,20 +894,20 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "retry-one"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     runMonke({
       args: ["spawn", "retry-two"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     rmSync(getExpectedWorktreePath(home, root, "retry-one"), { force: true, recursive: true });
@@ -919,7 +919,7 @@ apps:
         args: ["cleanup"],
         binDirectory,
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       });
     } catch (error) {
       thrown = error;
@@ -932,7 +932,7 @@ apps:
     expect(thrown.message).toContain("retry-two");
     expect(read(root, "cleanup-attempts.log").trim().split("\n").toSorted()).toStrictEqual([
       "retry-one",
-      "retry-two",
+      "retry-two"
     ]);
     expect(existsSync(getSessionStateFilePath(home, root, "retry-one"))).toBeTruthy();
     expect(existsSync(getSessionStateFilePath(home, root, "retry-two"))).toBeTruthy();
@@ -956,14 +956,14 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "retry-me"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     git(root, ["worktree", "remove", getExpectedWorktreePath(home, root, "retry-me"), "--force"]);
@@ -973,14 +973,14 @@ apps:
         args: ["cleanup"],
         binDirectory,
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(/Cleanup command failed.*cleanup failed/su);
 
     expect(read(root, "cleanup-failure.log")).toBe("mt-retry-me\n");
     const retainedState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(retainedState.repos[0]?.resourceValues).toStrictEqual([
-      { env: "DISCORD_CHANNEL", value: "mt-retry-me" },
+      { env: "DISCORD_CHANNEL", value: "mt-retry-me" }
     ]);
   });
 });

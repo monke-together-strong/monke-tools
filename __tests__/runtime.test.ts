@@ -21,7 +21,7 @@ describe("runtime", () => {
     await expect(
       runtime.select({
         message: "Choose one",
-        options: [{ label: "One", value: "one" }],
+        options: [{ label: "One", value: "one" }]
       })
     ).rejects.toThrow(/No scripted select values remain/u);
   });

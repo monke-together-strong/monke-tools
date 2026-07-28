@@ -13,7 +13,7 @@ import type {
   ResourceCommandState,
   ResourceValueState,
   Runtime,
-  SessionRepoState,
+  SessionRepoState
 } from "./types.ts";
 
 /** Result of resolving deterministic Resource values for one repo/session pair. */
@@ -75,7 +75,7 @@ const RESOURCE_COMMAND_MODULE_RUNNER = [
   "} catch (error) {",
   "  console.error(error instanceof Error && error.stack ? error.stack : String(error));",
   "  process.exit(1);",
-  "}",
+  "}"
 ].join("\n");
 
 /** Resolve, reuse, prune, and collision-check deterministic Resource values. */
@@ -105,7 +105,7 @@ export function resolveResourceValues(options: {
         literal: resource.literal,
         location: `${options.repoConfig.configPath}#resources.values.${resource.env}`,
         session: options.session,
-        user: resolveResourceUser(options.env),
+        user: resolveResourceUser(options.env)
       });
 
     if (!value.trim()) {
@@ -116,7 +116,7 @@ export function resolveResourceValues(options: {
 
     return {
       env: resource.env,
-      value,
+      value
     };
   });
 
@@ -125,14 +125,14 @@ export function resolveResourceValues(options: {
     rootSourceRoot: options.rootSourceRoot,
     session: options.session,
     sourceRoot: options.repoConfig.sourceRoot,
-    values,
+    values
   });
 
   return {
     removedEnvNames: dedupe(
       existingValues.map((resource) => resource.env).filter((env) => !declaredEnvNames.has(env))
     ),
-    values,
+    values
   };
 }
 
@@ -168,7 +168,7 @@ export function resolveResourceCommands(options: {
         command,
         home: options.home,
         session: options.session,
-        sourceRoot: options.repoConfig.sourceRoot,
+        sourceRoot: options.repoConfig.sourceRoot
       });
 
       currentByName.set(
@@ -178,7 +178,7 @@ export function resolveResourceCommands(options: {
           resourceValues: options.resourceValues,
           runtime: options.runtime,
           stdin,
-          worktreePath: options.worktreePath,
+          worktreePath: options.worktreePath
         })
       );
       options.onResolvedCommandOutputs(
@@ -227,7 +227,7 @@ function getReusableResourceCommand(
 
   return {
     name: command.name,
-    outputs,
+    outputs
   };
 }
 
@@ -252,14 +252,14 @@ function runResourceCommand(options: {
         options.resourceValues.map((resource) => [resource.env, resource.value])
       ),
       stdin,
-      timeoutSeconds: options.command.timeoutSeconds,
+      timeoutSeconds: options.command.timeoutSeconds
     });
 
     if (result.timedOut === true) {
       throw resourceCommandFailure({
         command: options.command,
         kind: "timeout",
-        stderr: result.stderr,
+        stderr: result.stderr
       });
     }
 
@@ -267,7 +267,7 @@ function runResourceCommand(options: {
       throw resourceCommandFailure({
         command: options.command,
         kind: `nonzero exit ${result.exitCode}`,
-        stderr: result.stderr,
+        stderr: result.stderr
       });
     }
 
@@ -275,7 +275,7 @@ function runResourceCommand(options: {
       command: options.command,
       outputPath,
       stderr: result.stderr,
-      stdout: result.stdout,
+      stdout: result.stdout
     });
     const outputs = validateResourceCommandReturn(
       options.command,
@@ -286,7 +286,7 @@ function runResourceCommand(options: {
     );
     return {
       name: options.command.name,
-      outputs,
+      outputs
     };
   } finally {
     rmSync(outputDirectory, { force: true, recursive: true });
@@ -307,9 +307,9 @@ function resolveResourceCommandRunner(worktreePath: string): {
         "--",
         RESOURCE_COMMAND_RUNNER_ARGV,
         modulePath,
-        outputPath,
+        outputPath
       ],
-      command: "pnpm",
+      command: "pnpm"
     };
   }
 
@@ -320,9 +320,9 @@ function resolveResourceCommandRunner(worktreePath: string): {
       "--",
       RESOURCE_COMMAND_RUNNER_ARGV,
       modulePath,
-      outputPath,
+      outputPath
     ],
-    command: "bun",
+    command: "bun"
   };
 }
 
@@ -391,7 +391,7 @@ function readResourceCommandRunnerOutput(options: {
       command: options.command,
       kind: "runner protocol violation",
       stderr: options.stderr,
-      stdout: options.stdout,
+      stdout: options.stdout
     });
   }
 
@@ -403,7 +403,7 @@ function readResourceCommandRunnerOutput(options: {
       command: options.command,
       kind: "runner protocol violation",
       stderr: options.stderr,
-      stdout: options.stdout,
+      stdout: options.stdout
     });
   }
 
@@ -413,7 +413,7 @@ function readResourceCommandRunnerOutput(options: {
       command: options.command,
       kind: "runner protocol violation",
       stderr: options.stderr,
-      stdout: options.stdout,
+      stdout: options.stdout
     });
   }
 
@@ -433,7 +433,7 @@ function validateResourceCommandReturn(
       command,
       kind: "return contract violation",
       stderr,
-      stdout,
+      stdout
     });
   }
 
@@ -447,7 +447,7 @@ function validateResourceCommandReturn(
       command,
       kind: "return contract violation",
       stderr,
-      stdout,
+      stdout
     });
   }
 
@@ -458,7 +458,7 @@ function validateResourceCommandReturn(
         command,
         kind: `missing output for ${env}`,
         stderr,
-        stdout,
+        stdout
       });
     }
     if ((stdin[env] ?? []).includes(outputValue)) {
@@ -466,7 +466,7 @@ function validateResourceCommandReturn(
         command,
         kind: `same-output collision for ${env}`,
         stderr,
-        stdout,
+        stdout
       });
     }
     return { env, value: outputValue };
@@ -531,13 +531,13 @@ function toImmediateResourceCommandStates(
     return [
       {
         name: command.name,
-        outputs: [...current.outputs, ...staleOutputs],
-      },
+        outputs: [...current.outputs, ...staleOutputs]
+      }
     ];
   });
   return [
     ...declaredStates,
-    ...existingCommands.filter((command) => !declaredNames.has(command.name)),
+    ...existingCommands.filter((command) => !declaredNames.has(command.name))
   ];
 }
 

@@ -36,12 +36,12 @@ describe("resources", () => {
           name: "e2e-symbols",
           outputs: ["E2E_FLOW1_SYMBOL"],
           run: "scripts/allocate-symbols.ts",
-          timeoutSeconds: 60,
-        },
+          timeoutSeconds: 60
+        }
       ],
       resourceValuesInOrder: [],
       seedPaths: [],
-      sourceRoot,
+      sourceRoot
     };
     const runtime: Runtime = {
       cwd: sourceRoot,
@@ -64,7 +64,7 @@ describe("resources", () => {
         return {
           exitCode: 0,
           stderr: "",
-          stdout: "progress log\n",
+          stdout: "progress log\n"
         };
       },
       readLine() {
@@ -74,7 +74,7 @@ describe("resources", () => {
         return Promise.reject(new Error("unexpected select"));
       },
       writeStderr() {},
-      writeStdout() {},
+      writeStdout() {}
     };
 
     const resolved = resolveResourceCommands({
@@ -85,15 +85,15 @@ describe("resources", () => {
         expect(commands).toStrictEqual([
           {
             name: "e2e-symbols",
-            outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }],
-          },
+            outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
+          }
         ]);
       },
       repoConfig,
       resourceValues: [{ env: "E2E_CHANNEL_NAME", value: "banana" }],
       runtime,
       session: "banana",
-      worktreePath: sourceRoot,
+      worktreePath: sourceRoot
     });
 
     expect(commandSawLock).toBeTruthy();
@@ -102,8 +102,8 @@ describe("resources", () => {
     expect(resolved.commands).toStrictEqual([
       {
         name: "e2e-symbols",
-        outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }],
-      },
+        outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
+      }
     ]);
   });
 
@@ -125,12 +125,12 @@ describe("resources", () => {
           name: "e2e-symbols",
           outputs: ["E2E_FLOW1_SYMBOL"],
           run: "scripts/allocate-symbols.ts",
-          timeoutSeconds: 60,
-        },
+          timeoutSeconds: 60
+        }
       ],
       resourceValuesInOrder: [],
       seedPaths: [],
-      sourceRoot,
+      sourceRoot
     };
     let stdin: unknown;
     let commandEnv: Record<string, string | undefined> | undefined;
@@ -142,16 +142,16 @@ describe("resources", () => {
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
-              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "ZEC/USDT:USDT" }],
-            },
+              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "ZEC/USDT:USDT" }]
+            }
           ],
           sourceRoot,
-          worktreePath: path.join(sourceRoot, "later"),
-        },
+          worktreePath: path.join(sourceRoot, "later")
+        }
       ],
       rootSourceRoot: sourceRoot,
       session: "later",
-      version: 1,
+      version: 1
     });
     saveSessionState(home, {
       repos: [
@@ -160,16 +160,16 @@ describe("resources", () => {
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
-              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "ADA/USDT:USDT" }],
-            },
+              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "ADA/USDT:USDT" }]
+            }
           ],
           sourceRoot,
-          worktreePath: path.join(sourceRoot, "earlier"),
-        },
+          worktreePath: path.join(sourceRoot, "earlier")
+        }
       ],
       rootSourceRoot: sourceRoot,
       session: "earlier",
-      version: 1,
+      version: 1
     });
 
     const runtime: Runtime = {
@@ -187,7 +187,7 @@ describe("resources", () => {
         return {
           exitCode: 0,
           stderr: "",
-          stdout: "",
+          stdout: ""
         };
       },
       readLine() {
@@ -197,7 +197,7 @@ describe("resources", () => {
         return Promise.reject(new Error("unexpected select"));
       },
       writeStderr() {},
-      writeStdout() {},
+      writeStdout() {}
     };
 
     resolveResourceCommands({
@@ -208,11 +208,11 @@ describe("resources", () => {
       resourceValues: [{ env: "E2E_CHANNEL_NAME", value: "current" }],
       runtime,
       session: "current",
-      worktreePath: sourceRoot,
+      worktreePath: sourceRoot
     });
 
     expect(stdin).toStrictEqual({
-      E2E_FLOW1_SYMBOL: ["ADA/USDT:USDT", "ZEC/USDT:USDT"],
+      E2E_FLOW1_SYMBOL: ["ADA/USDT:USDT", "ZEC/USDT:USDT"]
     });
     expect(commandEnv).toStrictEqual({ E2E_CHANNEL_NAME: "current" });
   });
@@ -237,12 +237,12 @@ describe("resources", () => {
           name: "e2e-symbols",
           outputs: ["E2E_FLOW1_SYMBOL"],
           run: "scripts/allocate-symbols.ts",
-          timeoutSeconds: 60,
-        },
+          timeoutSeconds: 60
+        }
       ],
       resourceValuesInOrder: [],
       seedPaths: [],
-      sourceRoot,
+      sourceRoot
     };
     const invocations: { command: string; args: string[] | undefined }[] = [];
 
@@ -259,7 +259,7 @@ describe("resources", () => {
         return {
           exitCode: 0,
           stderr: "",
-          stdout: "pnpm progress log\n",
+          stdout: "pnpm progress log\n"
         };
       },
       readLine() {
@@ -269,7 +269,7 @@ describe("resources", () => {
         return Promise.reject(new Error("unexpected select"));
       },
       writeStderr() {},
-      writeStdout() {},
+      writeStdout() {}
     };
 
     resolveResourceCommands({
@@ -280,7 +280,7 @@ describe("resources", () => {
       resourceValues: [],
       runtime,
       session: "current",
-      worktreePath: sourceRoot,
+      worktreePath: sourceRoot
     });
 
     const [invocation] = invocations;
@@ -290,7 +290,7 @@ describe("resources", () => {
       "bun",
       "--eval",
       expect.any(String),
-      "--",
+      "--"
     ]);
     expect(invocation?.args?.[5]).toBe("monke-resource-command-runner");
     expect(invocation?.args?.[6]).toBe(path.join(sourceRoot, "scripts/allocate-symbols.ts"));

@@ -6,7 +6,7 @@ import {
   readdirSync,
   readFileSync,
   utimesSync,
-  writeFileSync,
+  writeFileSync
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,7 +29,7 @@ describe("dependency installation", () => {
       binDirectory,
       cwd: sandbox,
       extraEnv: { PATH: binDirectory },
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(result.stdout).toBe("");
@@ -64,8 +64,8 @@ describe("dependency installation", () => {
         HOME: home,
         INSTALL_DEPENDENCIES_EXIT: "17",
         MONKE_TOOLS_LOG: monkeToolsLog,
-        PATH: `${binDirectory}:/usr/bin:/bin`,
-      },
+        PATH: `${binDirectory}:/usr/bin:/bin`
+      }
     });
 
     expect(result.status).toBe(17);
@@ -101,8 +101,8 @@ describe("dependency installation", () => {
         HOME: home,
         INSTALL_DEPENDENCIES_EXIT: "0",
         MONKE_TOOLS_LOG: monkeToolsLog,
-        PATH: `${binDirectory}:/usr/bin:/bin`,
-      },
+        PATH: `${binDirectory}:/usr/bin:/bin`
+      }
     });
 
     expect(result.status).toBe(0);
@@ -160,14 +160,14 @@ describe("dependency installation", () => {
         HOME: home,
         INSTALL_DEPENDENCIES_EXIT: "0",
         MONKE_TOOLS_LOG: monkeToolsLog,
-        PATH: `${binDirectory}:/usr/bin:/bin`,
-      },
+        PATH: `${binDirectory}:/usr/bin:/bin`
+      }
     });
 
     expect(result.status).toBe(0);
     expect(listBuildArtifacts(buildDirectory)).toStrictEqual([
       ".newer.bun-build",
-      ".newest.bun-build",
+      ".newest.bun-build"
     ]);
     expect(readFileSync(path.join(buildDirectory, "manual.txt"), "utf-8")).toBe("keep me");
   });

@@ -16,9 +16,9 @@ describe("global configuration", () => {
     saveGlobalMonkeConfig(home, {
       installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
-        targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }],
+        targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
       },
-      version: 1,
+      version: 1
     });
 
     const configPath = path.join(home, "config.yml");
@@ -26,16 +26,16 @@ describe("global configuration", () => {
     expect(parse(read(home, "config.yml"))).toStrictEqual({
       installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
-        targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }],
+        targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
       },
-      version: 1,
+      version: 1
     });
     expect(loadGlobalMonkeConfig(home)).toStrictEqual({
       installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
-        targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }],
+        targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
       },
-      version: 1,
+      version: 1
     });
   });
 

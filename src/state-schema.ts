@@ -8,22 +8,22 @@ const PortKeySchema = z
 
 const AssignedPortSchema = z.strictObject({
   key: PortKeySchema,
-  value: PortSchema,
+  value: PortSchema
 });
 
 const ResourceValueStateSchema = z.strictObject({
   env: NonEmptyStringSchema,
-  value: NonEmptyStringSchema,
+  value: NonEmptyStringSchema
 });
 
 const ResourceCommandOutputStateSchema = z.strictObject({
   env: NonEmptyStringSchema,
-  value: NonEmptyStringSchema,
+  value: NonEmptyStringSchema
 });
 
 const ResourceCommandStateSchema = z.strictObject({
   name: NonEmptyStringSchema,
-  outputs: z.array(ResourceCommandOutputStateSchema),
+  outputs: z.array(ResourceCommandOutputStateSchema)
 });
 
 const SessionRepoStateSchema = z.strictObject({
@@ -33,7 +33,7 @@ const SessionRepoStateSchema = z.strictObject({
   resourceCommandOutputs: z.array(ResourceCommandStateSchema).optional(),
   resourceValues: z.array(ResourceValueStateSchema).optional(),
   sourceRoot: NonEmptyStringSchema,
-  worktreePath: NonEmptyStringSchema,
+  worktreePath: NonEmptyStringSchema
 });
 
 export const SessionStateSchema = z.strictObject({
@@ -41,7 +41,7 @@ export const SessionStateSchema = z.strictObject({
   repos: z.array(SessionRepoStateSchema),
   rootSourceRoot: NonEmptyStringSchema,
   session: NonEmptyStringSchema,
-  version: z.literal(1),
+  version: z.literal(1)
 });
 
 export const RepoReservationSchema = z
@@ -49,7 +49,7 @@ export const RepoReservationSchema = z
     blockStart: PortSchema,
     size: z.number().int().positive(),
     sourceRoot: NonEmptyStringSchema,
-    version: z.literal(1),
+    version: z.literal(1)
   })
   .check((context) => {
     if (context.value.blockStart + context.value.size - 1 > 65_535) {
@@ -57,7 +57,7 @@ export const RepoReservationSchema = z
         code: "custom",
         input: context.value.size,
         message: "reserved block must end at or below port 65535",
-        path: ["size"],
+        path: ["size"]
       });
     }
   });

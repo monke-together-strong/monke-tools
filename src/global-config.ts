@@ -12,23 +12,23 @@ const BuiltInSkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor"]
 const AbsolutePathSchema = z
   .string({ error: "must be a non-empty absolute path" })
   .refine((value) => value.trim().length > 0, {
-    error: "must be a non-empty absolute path",
+    error: "must be a non-empty absolute path"
   })
   .refine((value) => path.isAbsolute(value), { error: "must be an absolute path" })
   .transform((value) => path.resolve(value));
 const SkillInstallTargetPreferenceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: BuiltInSkillInstallTargetKindSchema }),
-  z.strictObject({ kind: z.literal("custom"), path: AbsolutePathSchema }),
+  z.strictObject({ kind: z.literal("custom"), path: AbsolutePathSchema })
 ]);
 const SkillInstallPreferenceSchema = z.strictObject({
   targets: z.array(SkillInstallTargetPreferenceSchema).min(1, {
-    error: "must be a non-empty array",
-  }),
+    error: "must be a non-empty array"
+  })
 });
 const GlobalMonkeConfigSchema = z.strictObject({
   installedSourceCheckout: AbsolutePathSchema.optional(),
   skillInstallPreference: SkillInstallPreferenceSchema.optional(),
-  version: z.literal(1, { error: "must be 1" }),
+  version: z.literal(1, { error: "must be 1" })
 });
 
 type ParsedSkillInstallPreference = z.output<typeof SkillInstallPreferenceSchema>;
@@ -118,7 +118,7 @@ function normalizeGlobalMonkeConfig(
   return {
     version: 1,
     ...(installedSourceCheckout === undefined ? {} : { installedSourceCheckout }),
-    ...(skillInstallPreference === undefined ? {} : { skillInstallPreference }),
+    ...(skillInstallPreference === undefined ? {} : { skillInstallPreference })
   };
 }
 
@@ -153,7 +153,7 @@ function parseSkillInstallPreference(
         customSeen = true;
         targets.push({
           kind: "custom",
-          path: rawTarget.path,
+          path: rawTarget.path
         });
         break;
       }
