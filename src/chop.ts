@@ -545,28 +545,36 @@ function resolveOrdinaryTarget(
   }
 
   const worktrees = listWorktrees(runtime, invocation.sourceRoot);
-  const branchMatch = worktrees.find((worktree) => worktree.branch === target);
-  if (branchMatch !== undefined) {
-    return { path: branchMatch.path, registered: true };
-  }
-  if (branchExists(runtime, invocation.sourceRoot, target)) {
-    throw new MonkeError(
-      `Chop target not found: Local branch "${target}" has no registered worktree to Chop`,
-    );
-  }
-
+  const branchMatches = worktrees.filter((worktree) => worktree.branch === target);
   const unresolvedTargetPath = path.isAbsolute(target) ? target : path.resolve(runtime.cwd, target);
   // Missing worktrees intentionally stay lexical: stale recovery requires the
   // exact registered path so an alias cannot authorize pruning Git metadata.
   const targetPath = existsSync(unresolvedTargetPath)
     ? realpathSync.native(unresolvedTargetPath)
     : unresolvedTargetPath;
-  const pathMatch = worktrees.find(
+  const pathMatches = worktrees.filter(
     (worktree) => path.normalize(worktree.path) === path.normalize(targetPath),
   );
+  const matches = [...new Set([...branchMatches, ...pathMatches])];
+  if (matches.length > 1) {
+    throw new MonkeError(
+      `Chop target "${target}" matches multiple registered worktrees: ${matches
+        .map((worktree) => worktree.path)
+        .join(", ")}`,
+    );
+  }
+  const [match] = matches;
+  if (match !== undefined) {
+    return { path: match.path, registered: true };
+  }
+  if (branchExists(runtime, invocation.sourceRoot, target)) {
+    throw new MonkeError(
+      `Chop target not found: Local branch "${target}" has no registered worktree to Chop`,
+    );
+  }
   return {
-    path: pathMatch?.path ?? targetPath,
-    registered: pathMatch !== undefined,
+    path: targetPath,
+    registered: false,
   };
 }
 

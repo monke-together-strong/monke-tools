@@ -1240,6 +1240,40 @@ apps: {}
     expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
   });
 
+  test("rejects a branch selector checked out in multiple worktrees", () => {
+    const fixture = createOrdinaryFixture("chop-ordinary-duplicate-branch");
+    const duplicatePath = path.join(fixture.sandbox, "duplicate");
+    git(fixture.sourceRoot, ["worktree", "add", "--force", duplicatePath, "feature"]);
+
+    expect(() => {
+      runMonke({
+        args: ["chop", "feature", "--force"],
+        cwd: fixture.sourceRoot,
+        monkeHome: fixture.home,
+      });
+    }).toThrow(/matches multiple registered worktrees/u);
+
+    expect(existsSync(fixture.worktreePath)).toBeTruthy();
+    expect(existsSync(duplicatePath)).toBeTruthy();
+  });
+
+  test("an unmaterialized branch does not mask a registered relative path", () => {
+    const fixture = createOrdinaryFixture("chop-ordinary-branch-path");
+    const nestedPath = path.join(fixture.sourceRoot, "orphan");
+    git(fixture.sourceRoot, ["branch", "orphan"]);
+    git(fixture.sourceRoot, ["worktree", "add", "--detach", nestedPath]);
+
+    runMonke({
+      args: ["chop", "orphan"],
+      cwd: fixture.sourceRoot,
+      monkeHome: fixture.home,
+    });
+
+    expect(existsSync(nestedPath)).toBeFalsy();
+    expect(existsSync(fixture.worktreePath)).toBeTruthy();
+    expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/orphan"])).not.toBe("");
+  });
+
   test("rejects a locked Ordinary worktree before removal", () => {
     const fixture = createOrdinaryFixture("chop-locked");
     const binDirectory = path.join(fixture.sandbox, "bin");
