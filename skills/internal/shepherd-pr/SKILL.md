@@ -1,6 +1,6 @@
 ---
 name: shepherd-pr
-description: 'Shepherd a GitHub pull request all the way to merge-ready by relentlessly polling status and only acting once all automatic reviewers have finished. NEVER merges without explicit human approval. Use when the user says things like "shepherd this PR", "babysit this PR", "get this PR merge-ready", "poll for Coderabbit", "wait for Coderabbit", or asks to drive a PR through review.'
+description: 'Shepherd a GitHub pull request all the way to merge-ready by stabilizing CI before driving automatic review to completion. NEVER merges without explicit human approval. Use when the user says things like "shepherd this PR", "babysit this PR", "get this PR merge-ready", "poll for Coderabbit", "wait for Coderabbit", or asks to drive a PR through review.'
 ---
 
 # Shepherd PR
@@ -19,13 +19,9 @@ gh pr view https://github.com/OWNER/REPO/pull/NUMBER --json state,mergedAt,close
 
 If `state` is `MERGED` or `CLOSED`, delete the heartbeat, report the terminal state (including merge time and commit when available), and stop—even if jobs remain active. Only `OPEN` continues.
 
-1. **Wait for reviewers:** Run `/polling` with an eight-minute heartbeat until all automatic reviewers have finished reviewing the latest commit. Do not act on partial feedback.
+1. **Stabilize CI first:** Inspect CI immediately. If the latest commit has a failed check, diagnose and fix it before manually triggering or waiting for automatic reviewers. Reviews that started automatically may continue, but do not spend a manual review request on a commit with unresolved CI because the fix would make that review stale.
 
-2. **Triage their feedback:** Once all reviewers are done, verify each finding against the real code path before acting. Fix everything medium severity and beyond. For low-severity suggestions, fix small local comments that improve repository consistency, naming, style, readability, cleanup, typing, or DRY, especially when they touch code changed by this PR. Reject or skip low-severity suggestions only when they are speculative, depend on an unrealistic/nonexistent scenario, require broad rewrites or extra abstraction, add defensive complexity without a real caller, or address repo-wide/out-of-scope issues not introduced by this PR. When skipping, briefly explain the concrete reason and continue autonomously.
-
-Nitpick is a severity label, not a dismissal. Prefer fixing consistency polish; prefer rejecting imaginary-scenario complexity.
-
-3. **Diagnose CI failures:** Read the failing logs, run the smallest relevant target when practical, and classify each failure as a PR regression, deterministic baseline defect, repo-owned flake, or external infrastructure failure.
+   Read the failing logs, run the smallest relevant target when practical, and classify each failure as a PR regression, deterministic baseline defect, repo-owned flake, or external infrastructure failure.
    - Use retries as diagnostic probes. A passing retry supplies evidence but does not resolve a repo-owned flake.
    - For a suspected flake, locate the unstable boundary and attempt the smallest durable fix: remove the race or shared state, isolate the test, reduce unnecessary work, or calibrate a resource limit to the intended workload. Verify the fix with repeated targeted runs.
    - Rerun without a code change only when evidence identifies an external infrastructure failure, or while diagnosis remains explicitly open.
@@ -33,11 +29,17 @@ Nitpick is a severity label, not a dismissal. Prefer fixing consistency polish; 
 
    This step is complete when every observed CI failure has an evidence-backed classification and either a verified repo-owned fix or a concrete external cause.
 
+2. **Wait for reviewers:** Once the latest commit has no unresolved CI failure, trigger any missing automatic review and run `/polling` with an eight-minute heartbeat until all automatic reviewers have finished reviewing that commit. Do not act on partial feedback.
+
+3. **Triage their feedback:** Once all reviewers are done, verify each finding against the real code path before acting. Fix everything medium severity and beyond. For low-severity suggestions, fix small local comments that improve repository consistency, naming, style, readability, cleanup, typing, or DRY, especially when they touch code changed by this PR. Reject or skip low-severity suggestions only when they are speculative, depend on an unrealistic/nonexistent scenario, require broad rewrites or extra abstraction, add defensive complexity without a real caller, or address repo-wide/out-of-scope issues not introduced by this PR. When skipping, briefly explain the concrete reason and continue autonomously.
+
+Nitpick is a severity label, not a dismissal. Prefer fixing consistency polish; prefer rejecting imaginary-scenario complexity.
+
 4. **Commit and push:** After implementing changes, commit and push. Then go back to step 1 - the reviewers will automatically re-review your new push.
 
 5. **Loop:** Repeat until a full cycle passes with nothing meaningful left to address from either reviewer.
 
-6. **Double-verify merge-ready:** Before declaring the PR merge-ready, verify twice that (a) all reviewers have re-run on the latest commit, (b) no outstanding required changes remain, and (c) every observed CI failure completed step 3, current CI is green, and the PR is mergeable.
+6. **Double-verify merge-ready:** Before declaring the PR merge-ready, verify twice that (a) all reviewers have re-run on the latest commit, (b) no outstanding required changes remain, and (c) every observed CI failure completed step 1, current CI is green, and the PR is mergeable.
 
 7. **Stop. Hand off to human.** Report that the PR is merge-ready and wait. **Do not merge.**
 

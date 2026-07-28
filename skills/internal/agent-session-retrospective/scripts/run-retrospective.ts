@@ -6,7 +6,7 @@
  *                                    [--idle-minutes N] [--run-ts TS]
  *   bun run-retrospective.ts pr-collect --run-ts TS [--repo-cache DIR]
  *   bun run-retrospective.ts pr-aggregate --run-ts TS
- *   bun run-retrospective.ts commit  --run-ts TS [--synthesis FILE]
+ *   bun run-retrospective.ts commit  --run-ts TS --synthesis FILE
  *
  * The middle (per-repo and per-PR subagent fan-out) is fuzzy and host-native;
  * everything here is deterministic and bun-testable. The script owns disk I/O.

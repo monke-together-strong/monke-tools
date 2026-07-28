@@ -145,6 +145,15 @@ export function runCommit(options: RunCommitOptions): CommitResult {
   }
   const prAnalysisValidation = validatePrAnalysis(prAnalysis, readPrManifest(root, options.runTs));
 
+  if (!isNonEmptyString(options.synthesisPath) || !existsSync(options.synthesisPath)) {
+    throw new Error("commit requires a synthesis file matching references/synthesis-contract.md");
+  }
+  const synthesis = readFileSync(options.synthesisPath, "utf-8").trim();
+  const synthesisWarnings = validateSynthesis(synthesis);
+  if (synthesisWarnings.length > 0) {
+    throw new Error(`invalid synthesis: ${synthesisWarnings.join(" ")}`);
+  }
+
   // Freeze each session from its PRIMARY repo's analysis (analyze-once).
   let frozenSessions = 0;
   let appendedSessions = 0;
@@ -189,10 +198,6 @@ export function runCommit(options: RunCommitOptions): CommitResult {
     }
   }
 
-  const synthesis =
-    isNonEmptyString(options.synthesisPath) && existsSync(options.synthesisPath)
-      ? readFileSync(options.synthesisPath, "utf-8").trim()
-      : "";
   const artifacts = buildReportArtifacts(options.runTs, synthesis, slices, {
     prAnalysis,
     prAnalysisWarnings: prAnalysisValidation.warnings,
@@ -388,6 +393,31 @@ const REQUIRED_PR_HEADINGS = [
   "Commit Message Reference",
 ];
 
+const REQUIRED_SYNTHESIS_HEADINGS = [
+  "Active Actions",
+  "Skill & Workflow Opportunities",
+  "Resolved or Superseded",
+];
+
+export function validateSynthesis(content: string | null | undefined): string[] {
+  const text = content?.trim();
+  if (!isNonEmptyString(text)) {
+    return ["Synthesis is empty."];
+  }
+  const warnings = REQUIRED_SYNTHESIS_HEADINGS.flatMap((heading) => {
+    const count = countHeading(text, heading, 3);
+    return count === 1 ? [] : [`Heading \`### ${heading}\` appears ${count} time(s), expected 1.`];
+  });
+  if (warnings.length > 0) {
+    return warnings;
+  }
+  const positions = REQUIRED_SYNTHESIS_HEADINGS.map((heading) => text.indexOf(`### ${heading}`));
+  if (!positions.every((position, index) => index === 0 || position > (positions[index - 1] ?? -1))) {
+    warnings.push("Required synthesis headings are out of order.");
+  }
+  return warnings;
+}
+
 export function validatePrAnalysis(
   content: string | null | undefined,
   manifest?: PrAnalysisManifest | null,
@@ -477,8 +507,12 @@ function findPrAnalysisSection(text: string, item: PrWorkItemSummary): string | 
   return next === -1 ? rest : rest.slice(0, match[0].length + next);
 }
 
-function countHeading(text: string, heading: string): number {
-  return [...text.matchAll(new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "gmu"))].length;
+function countHeading(text: string, heading: string, level = 2): number {
+  return [
+    ...text.matchAll(
+      new RegExp(`^${"#".repeat(level)}\\s+${escapeRegExp(heading)}\\s*$`, "gmu"),
+    ),
+  ].length;
 }
 
 function containsRef(text: string, ref: string): boolean {

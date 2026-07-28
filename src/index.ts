@@ -14,26 +14,13 @@ import type { Runtime } from "./types.ts";
 /** Run the Monke Tools CLI. */
 export function runCli(argv: string[], runtime = createRuntime()): void {
   const program = createProgram(runtime, runSwing);
-  requireSelectedCommand(program, argv);
   program.parse(argv, { from: "user" });
 }
 
 /** Run the Monke Tools CLI with async interactive prompts enabled. */
 export async function runCliAsync(argv: string[], runtime = createRuntime()): Promise<void> {
   const program = createProgram(runtime, runSwingInteractive);
-  requireSelectedCommand(program, argv);
   await program.parseAsync(argv, { from: "user" });
-}
-
-function requireSelectedCommand(program: Command, argv: string[]): void {
-  if (argv.length === 0) {
-    program.error("error: missing command");
-  }
-
-  const selectedCommand = program.commands.find((command) => command.name() === argv[0]);
-  if (selectedCommand !== undefined && selectedCommand.commands.length > 0 && argv.length === 1) {
-    selectedCommand.error("error: missing command");
-  }
 }
 
 function createProgram(
@@ -45,11 +32,7 @@ function createProgram(
   ) => void | Promise<void>,
 ): Command {
   // Subcommands copy these at .command() time, so every subcommand below must be declared after.
-  const program = new Command()
-    .name("mt")
-    .helpOption(false)
-    .helpCommand(false)
-    .allowExcessArguments(false);
+  const program = new Command().name("mt").allowExcessArguments(false);
 
   configureCliParser(program);
 

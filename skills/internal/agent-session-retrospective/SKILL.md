@@ -1,18 +1,19 @@
 ---
 name: agent-session-retrospective
-description: Use only when the user explicitly asks for an agent or session retrospective. Study local Codex + Claude agent transcripts for recurring friction and repeated user asks, then emit report-only, evidence-grounded proposals for the highest-value durable fixes. Never invoke proactively.
+description: Use only when the user explicitly asks for an agent or session retrospective. Review local Codex + Claude sessions and merged PRs, verify current resolution state, and propose evidenced durable fixes plus skill and workflow opportunities. Never invoke proactively.
 disable-model-invocation: true
 ---
 
 # Agent session retrospective
 
 Find where agents hit **friction** — an agent hit an issue, then had to do something
-else — and where the same user ask recurs across sessions, then propose the
-highest-value **durable fixes** a human executes, ranked by **value × recurrence**.
+else — and where the same user ask recurs across sessions. Audit whether each grouped
+problem still exists, then propose the highest-value **durable fixes** a human executes,
+ranked by **value × recurrence**, including explicit skill and workflow opportunities.
 Evidence → recurring friction → durable fix, **wherever it lives**: a missing `mt spawn`
 step the agent works around every run, a flaky query, or a broken setup is as valuable as
 a skill or AGENTS.md change — value, not where the fix lands, decides what leads. Report-only:
-never auto-edit, never draft artifacts.
+return a decision report and leave every proposed change for a human to execute.
 
 The work has two required evidence lanes:
 
@@ -105,11 +106,10 @@ bun scripts/run-retrospective.ts pr-aggregate --run-ts <runTs>
 **Done when** `runs/<runTs>/pr-analysis.md` exists and every in-scope merged PR is represented by
 either a per-PR analysis entry or an explicit PR analysis gap.
 
-## 4. Synthesis — this run plus prior reports
+## 4. Group — this run plus prior reports
 
-Read every per-repo findings file, then synthesize the **Session Actions**: transcript-derived
-cross-repo durable fixes and repeated-ask fixes that recur across repos (e.g. "stop minting
-`codex/` branches everywhere"). Rank them by **value × recurrence**. Also read
+Read every per-repo findings file and group transcript-derived durable fixes and repeated asks into
+run-local candidate actions. Give each candidate a stable id (`A1`, `A2`, …). Also read
 `runs/<runTs>/pr-analysis.md` so you understand the PR lane, but do not fold one-off PR trajectory
 observations into Session Actions. The compact report surfaces recurring PR corrective patterns
 separately from `pr-analysis.md`, and the full PR lane remains available in PR sources.
@@ -124,29 +124,49 @@ sighting was low-signal on its own. Keep PR-only recurrence in the PR repeated-c
 lane unless the same issue also appears in transcript/session findings. Recurrence spans both this
 window and prior report sets.
 
-Write the result as Markdown to a synthesis file (e.g. in the run directory), ranked by **value ×
-recurrence**. Lead each proposal with a `Target:` line — *where the fix lands*: `code` / `tooling`
-/ `setup` / `infra` / `deps` / `docs` / `agent-skill` / `AGENTS.md` / `CLAUDE.md` / `hook` /
-`preflight`, or `already-tracked:<ref>` / `none` only when there is genuinely no new fix to make —
-and a `Confidence:` line. **Done when** the synthesis file is written and any cross-report
-recurrence is promoted into it.
+**Done when** every current per-repo proposal and repeated-ask cluster, plus every prior-report
+thread considered for promotion, is assigned to one candidate or explicitly retained only as
+source evidence.
 
-## 5. Commit
+## 5. Resolution audit — current state before ranking
 
-Run the commit bracket:
+Load [references/synthesis-contract.md](references/synthesis-contract.md). For every candidate,
+inspect the current authoritative surface that could have resolved it. A transcript or old report
+saying a change landed is a lead to verify, not proof that the current state still contains the
+fix. Record the required resolution status and evidence before ranking candidates.
+
+**Done when** every candidate has one resolution status, current-state evidence, and a residual gap;
+any recurrence after a verified resolution is identified as a regression.
+
+## 6. Synthesis — active actions and reusable opportunities
+
+Rank only active candidates by **value × recurrence**. For every active candidate, inspect relevant
+existing skills and workflows, then choose the synthesis contract's `create-skill`,
+`create-workflow`, `update`, `combine`, or `no-skill` disposition. Write the exact three-section
+Markdown shape from [references/synthesis-contract.md](references/synthesis-contract.md) to a
+synthesis file in the run directory.
+
+**Done when** every candidate appears once in the active or resolved section, every active action
+has one skill/workflow disposition, and every recommendation retains its session and resolution
+evidence.
+
+## 7. Commit
+
+Refresh mutable current-state evidence for active candidates as required by the synthesis contract,
+then run the commit bracket:
 
 ```bash
 bun scripts/run-retrospective.ts commit --run-ts <runTs> --synthesis <synthesisFile>
 ```
 
 It validates every cited turn ref and episode ref against the bundle (hallucinated citations are
-dropped and counted), lightly validates PR analysis mechanics when available, freezes each Agent
-transcript's friction, and writes the action-first report. See
+dropped and counted), rejects synthesis missing a required section, lightly validates PR analysis
+mechanics, freezes each Agent transcript's friction, and writes the action-first report. See
 [references/report-contract.md](references/report-contract.md) for the report shape. **Done when**
 commit prints the report path; surface the `dropped` counts — a high drop count means the
 subagents are citing turns that do not exist.
 
-## 6. Hand back
+## 8. Hand back
 
 Read the report and surface the lead proposals to the user. Every proposal is a named, evidenced,
-confidence-tagged thing a human decides on — propose, never apply.
+current-state-checked, confidence-tagged thing a human decides on; leave application to the human.

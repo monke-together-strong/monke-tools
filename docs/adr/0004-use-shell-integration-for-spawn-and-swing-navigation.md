@@ -4,9 +4,9 @@ monke-tools uses a shell adapter to make successful **Spawn** and **Swing** oper
 
 ## Decision
 
-`mt spawn <session>` always emits a **Shell directory request** for the root repo's **Session worktree** after it succeeds. `mt swing <target>` does the same for a resolved root repo **Source checkout** or **Session worktree**.
+`mt spawn <session>` always emits a **Shell directory request** for the root repo's **Session worktree** after it succeeds. `mt swing <target>` does the same for a resolved root repo **Source checkout**, **Session worktree**, or ordinary linked Git worktree.
 
-`Swing` follows Worktrunk's navigation model rather than Git's branch-switching model. It navigates to existing Session worktrees for ordinary targets and never changes which branch an existing worktree has checked out. Pull request targets are the one exception: explicit pull request targets (`mt swing pr:<n>` or a pull request URL) fetch the PR head, create the Session branch and Session worktree through session-branch spawn when missing, and refuse to navigate on every explicit pull request swing when the local Session branch has diverged from the PR head. Plain Session targets, Swing picker selections, and `-` Previous Swing targets do not re-fetch PR heads. Users continue to spawn ordinary sessions with `mt spawn`.
+`Swing` follows Worktrunk's navigation model rather than Git's branch-switching model. It navigates to existing Session worktrees and ordinary linked Git worktrees for branch-name targets, and never changes which branch an existing worktree has checked out. Pull request targets are the one exception: explicit pull request targets (`mt swing pr:<n>` or a pull request URL) fetch the PR head, create the Session branch and Session worktree through session-branch spawn when missing, and refuse to navigate on every explicit pull request swing when the local Session branch diverged from the PR head. Plain branch-name targets, Swing picker selections, and `-` Previous Swing targets do not re-fetch PR heads. Users continue to spawn ordinary sessions with `mt spawn`.
 
 The first Shell integration supports bash and zsh only. `bun run install:local` installs it idempotently as part of the **Local install refresh**, and explicit commands are available to repair or inspect it without reinstalling skills or rebuilding the binary:
 
@@ -16,7 +16,7 @@ mt shell init bash
 mt shell init zsh
 ```
 
-The directive protocol supports only directory changes. It does not include Worktrunk's arbitrary shell execution directive.
+The directive protocol supports only directory changes. It does not include Worktrunk's arbitrary shell execution directive. Like Worktrunk, the shell adapter honors a non-empty directory directive regardless of the `mt` process's exit status and then returns the original nonzero status. A directory-change failure replaces the status only when `mt` itself succeeded. This lets a teardown operation move the parent shell out of a worktree it removed while still reporting a later Cleanup-command failure.
 
 CLI output for these operations goes through a semantic `mt` logger built on `picocolors`. The logger exposes intent-level methods such as `success`, `warning`, `hint`, `info`, and `error`, inspired by Worktrunk's styling layer. It routes all output through `Runtime.writeStdout` and `Runtime.writeStderr`, never through `console.log`.
 
@@ -28,7 +28,7 @@ monke-tools reports navigation honestly:
 - When shell integration is configured but inactive for the current invocation, it reports the target path and explains that the shell must be restarted or `mt` must be invoked through the shell adapter.
 - When shell integration is not configured, it reports the target path and explains how to configure automatic switching.
 
-`Swing` accepts Session names, the source-checkout shortcut `^`, the previous target shortcut `-`, same-repo pull request shortcuts such as `pr:123`, and pull request URLs. The `^` shortcut navigates to the root repo's Source checkout without materializing, setting up, creating, or changing branches. Pull request targets resolve through the pull request's same-repo head branch name, then create-or-validate the Session with that name before navigating to it. Fork pull request targets and merge request targets are outside the first contract.
+`Swing` accepts branch names for Session worktrees and ordinary linked Git worktrees, the source-checkout shortcut `^`, the previous target shortcut `-`, same-repo pull request shortcuts such as `pr:123`, and pull request URLs. The `^` shortcut navigates to the root repo's Source checkout without materializing, setting up, creating, or changing branches. Pull request targets resolve through the pull request's same-repo head branch name, then create-or-validate the Session with that name before navigating to it. Fork pull request targets and merge request targets are outside the first contract.
 
 `mt spawn <session> --codex` and `mt swing <target> --codex` preserve the normal shell navigation behavior and additionally open a new Codex app thread with the resolved absolute checkout path via `codex://threads/new?path=...`. The Codex app launch reports status on stderr so stdout remains reserved for the target path when shell integration is inactive.
 
@@ -44,7 +44,7 @@ monke-tools reports navigation honestly:
 
 ## Consequences
 
-Human users get `mt spawn` and `mt swing` behavior that matches the workflow expectation: after success, the shell lands in the relevant Session worktree for `mt spawn` and in the resolved Source checkout or Session worktree for `mt swing` when integration is active.
+Human users get `mt spawn` and `mt swing` behavior that matches the workflow expectation: after success, the shell lands in the relevant Session worktree for `mt spawn` and in the resolved Source checkout, Session worktree, or ordinary linked Git worktree for `mt swing` when integration is active.
 
 Automation that invokes the binary without shell integration will receive an explicit target path and guidance instead of a misleading "switched" message.
 

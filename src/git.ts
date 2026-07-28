@@ -91,7 +91,7 @@ function inferSessionNameForContext(
     }
 
     createLogger(runtime).warning(
-      `Linked worktree ${worktreeRoot} is outside ${expectedRoot}; using current branch "${branch}" as the Session name`,
+      `Linked worktree ${worktreeRoot} is outside ${expectedRoot}; using current branch "${branch}" as the Swing target`,
     );
     return branch;
   }

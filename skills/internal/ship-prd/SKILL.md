@@ -25,7 +25,7 @@ grill-me session has already completed; do not run grill-me.
      implementation. This is a routing override, not a suggestion.
 4. Spawn the implementation checkout worktree with monke tools:
    `mt spawn <session-name>`
-5. Create a codex thread with path set to that new worktree, with the following message:
+5. Create a Codex thread in that new worktree's Codex project and confirm it is visible there, with the following message:
    `/implement <durable PRD reference>`
    - Do not restate repo, branch, test, or completion instructions already
      owned by `/implement`, repo docs, or the PRD.

@@ -8,6 +8,7 @@ import { MonkeError } from "./errors.ts";
 import {
   branchExists,
   getExpectedWorktreePath,
+  listWorktrees,
   resolveRepoContext,
   validateWorktreeForSession,
 } from "./git.ts";
@@ -23,9 +24,9 @@ const SwingHistoryTargetSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("source") }),
   z.strictObject({ kind: z.literal("session"), session: z.string().min(1) }),
   z.strictObject({
-    kind: z.literal("external-session"),
+    branch: z.string().min(1),
+    kind: z.literal("ordinary-worktree"),
     path: z.string().min(1),
-    session: z.string().min(1),
   }),
 ]);
 
@@ -59,7 +60,6 @@ interface ResolveStoredTargetOptions {
 interface SwingPickerOption {
   rawTarget: string;
   target: SwingHistoryTarget;
-  label: string;
   markers: string[];
 }
 
@@ -150,9 +150,7 @@ async function selectSwingTarget(
   currentTarget: SwingHistoryTarget,
 ): Promise<string> {
   const options = listSwingPickerOptions(runtime, home, rootSourceRoot, currentTarget);
-  const initialValue = options.find((option) => option.markers.includes("current"))?.rawTarget;
   return await runtime.select({
-    initialValue,
     maxItems: Math.min(options.length, 10),
     message: "Swing target",
     options: options.map((option) => ({
@@ -171,10 +169,9 @@ function listSwingPickerOptions(
   const previousTarget = loadSwingHistory(home, rootSourceRoot).previous;
   const options: SwingPickerOption[] = [];
 
-  if (existsSync(rootSourceRoot)) {
+  if (existsSync(rootSourceRoot) && currentTarget.kind !== "source") {
     options.push({
-      label: "Source checkout",
-      markers: formatTargetMarkers({ kind: "source" }, currentTarget, previousTarget),
+      markers: formatTargetMarkers({ kind: "source" }, previousTarget),
       rawTarget: "^",
       target: { kind: "source" },
     });
@@ -200,24 +197,51 @@ function listSwingPickerOptions(
     if (seenSessions.has(state.session)) {
       continue;
     }
-    seenSessions.add(state.session);
 
     const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, state.session);
     if (!existsSync(worktreePath)) {
       continue;
     }
+    seenSessions.add(state.session);
 
     const target: SwingHistoryTarget = { kind: "session", session: state.session };
+    if (isSameSwingTarget(target, currentTarget)) {
+      continue;
+    }
     options.push({
-      label: `Session ${state.session}`,
-      markers: formatTargetMarkers(target, currentTarget, previousTarget),
+      markers: formatTargetMarkers(target, previousTarget),
       rawTarget: state.session,
       target,
     });
   }
 
+  const linkedWorktrees = listLinkedWorktrees(runtime, rootSourceRoot)
+    .filter((entry) => !seenSessions.has(entry.branch))
+    .toSorted(
+      (left, right) =>
+        (branchCommitTimes.get(right.branch) ?? 0) - (branchCommitTimes.get(left.branch) ?? 0) ||
+        left.branch.localeCompare(right.branch),
+    );
+
+  for (const worktree of linkedWorktrees) {
+    const { branch } = worktree;
+    const target: SwingHistoryTarget = {
+      branch,
+      kind: "ordinary-worktree",
+      path: worktree.path,
+    };
+    if (isSameSwingTarget(target, currentTarget)) {
+      continue;
+    }
+    options.push({
+      markers: formatTargetMarkers(target, previousTarget),
+      rawTarget: branch,
+      target,
+    });
+  }
+
   if (options.length === 0) {
-    throw new MonkeError(`No Swing targets found for ${rootSourceRoot}`);
+    throw new MonkeError(`No other Swing targets found for ${rootSourceRoot}`);
   }
 
   return options;
@@ -245,18 +269,14 @@ function listBranchCommitTimes(runtime: Runtime, rootSourceRoot: string): Map<st
 
 function formatSwingPickerLabel(option: SwingPickerOption): string {
   const markers = option.markers.length > 0 ? ` [${option.markers.join(", ")}]` : "";
-  return `${option.rawTarget} ${option.label}${markers}`;
+  return `${option.rawTarget}${markers}`;
 }
 
 function formatTargetMarkers(
   target: SwingHistoryTarget,
-  currentTarget: SwingHistoryTarget,
   previousTarget: SwingHistoryTarget | undefined,
 ): string[] {
   const markers: string[] = [];
-  if (isSameSwingTarget(target, currentTarget)) {
-    markers.push("current");
-  }
   if (previousTarget && isSameSwingTarget(target, previousTarget)) {
     markers.push("previous");
   }
@@ -346,13 +366,26 @@ function resolveStoredTarget(
     return { path: rootSourceRoot, target };
   }
 
-  if (target.kind === "external-session") {
-    validateExternalSessionTarget(runtime, rootSourceRoot, target);
+  if (target.kind === "ordinary-worktree") {
+    validateOrdinaryWorktreeTarget(runtime, rootSourceRoot, target);
     return { path: target.path, target };
   }
 
   const worktreePath = getExpectedWorktreePath(home, rootSourceRoot, target.session);
   if (!existsSync(worktreePath)) {
+    const linkedWorktree = listLinkedWorktrees(runtime, rootSourceRoot).find(
+      (entry) => entry.branch === target.session,
+    );
+    if (linkedWorktree) {
+      const linkedTarget: SwingHistoryTarget = {
+        branch: target.session,
+        kind: "ordinary-worktree",
+        path: linkedWorktree.path,
+      };
+      validateOrdinaryWorktreeTarget(runtime, rootSourceRoot, linkedTarget);
+      return { path: linkedWorktree.path, target: linkedTarget };
+    }
+
     if (options.createIfMissing === true) {
       options.prepareCreate?.();
       spawnSessionFromSourceRootLocked(runtime, home, rootSourceRoot, target.session, {
@@ -361,7 +394,7 @@ function resolveStoredTarget(
       createLogger(runtime).success(`Spawned or updated session ${target.session}`);
     } else {
       throw new MonkeError(
-        `Session "${target.session}" does not exist for ${rootSourceRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn ${target.session} instead.`,
+        `Worktree or Session "${target.session}" does not exist for ${rootSourceRoot}; mt swing only creates Session worktrees for pull request targets -- run mt spawn ${target.session} instead.`,
       );
     }
   }
@@ -517,7 +550,7 @@ function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistory
   }
 
   if (context.sessionName === null || context.sessionName === "") {
-    throw new MonkeError("Unable to infer the current Session for Previous Swing target history");
+    throw new MonkeError("Unable to infer the current worktree for Previous Swing target history");
   }
 
   const expectedPath = getExpectedWorktreePath(home, context.sourceRoot, context.sessionName);
@@ -527,9 +560,9 @@ function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistory
         session: context.sessionName,
       }
     : {
-        kind: "external-session",
+        branch: context.sessionName,
+        kind: "ordinary-worktree",
         path: context.worktreeRoot,
-        session: context.sessionName,
       };
 }
 
@@ -544,35 +577,49 @@ function isSameSwingTarget(left: SwingHistoryTarget, right: SwingHistoryTarget):
     return right.kind === "session" && left.session === right.session;
   }
   return (
-    right.kind === "external-session" &&
-    left.session === right.session &&
+    right.kind === "ordinary-worktree" &&
+    left.branch === right.branch &&
     path.normalize(left.path) === path.normalize(right.path)
   );
 }
 
-function validateExternalSessionTarget(
+function validateOrdinaryWorktreeTarget(
   runtime: Runtime,
   rootSourceRoot: string,
-  target: Extract<SwingHistoryTarget, { kind: "external-session" }>,
+  target: Extract<SwingHistoryTarget, { kind: "ordinary-worktree" }>,
 ): void {
   if (!existsSync(target.path)) {
-    throw new MonkeError(`External Session worktree does not exist at ${target.path}`);
+    throw new MonkeError(`Linked worktree does not exist at ${target.path}`);
   }
 
   const context = resolveRepoContext(runtime, target.path, null, { inferSessionName: false });
   if (context.isSourceCheckout) {
-    throw new MonkeError(`Expected ${target.path} to be a linked session worktree`);
+    throw new MonkeError(`Expected ${target.path} to be a linked worktree`);
   }
   if (path.normalize(context.sourceRoot) !== path.normalize(rootSourceRoot)) {
     throw new MonkeError(
       `Expected worktree ${target.path} to belong to ${rootSourceRoot}, found ${context.sourceRoot}`,
     );
   }
-  if (context.currentBranch !== target.session) {
+  if (context.currentBranch !== target.branch) {
     throw new MonkeError(
-      `Expected worktree ${target.path} to be on branch ${target.session}, found ${context.currentBranch}`,
+      `Expected worktree ${target.path} to be on branch ${target.branch}, found ${context.currentBranch}`,
     );
   }
+}
+
+function listLinkedWorktrees(
+  runtime: Runtime,
+  rootSourceRoot: string,
+): { branch: string; path: string }[] {
+  return listWorktrees(runtime, rootSourceRoot).flatMap((entry) =>
+    entry.branch !== null &&
+    !entry.prunable &&
+    existsSync(entry.path) &&
+    path.normalize(entry.path) !== path.normalize(rootSourceRoot)
+      ? [{ branch: entry.branch, path: entry.path }]
+      : [],
+  );
 }
 
 function loadSwingHistory(home: string, rootSourceRoot: string): SwingHistory {
