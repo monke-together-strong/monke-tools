@@ -15,7 +15,7 @@ import {
   read,
   readSingleYamlFile,
   runMonke,
-  write,
+  write
 } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -41,7 +41,7 @@ describe("multi-repo sessions", () => {
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -61,14 +61,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "swing"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const depWorktree = getExpectedWorktreePath(home, depRoot, "swing");
@@ -101,7 +101,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -121,14 +121,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "swing"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     write(depRoot, "dep.txt", "dirty dep\n");
 
@@ -136,7 +136,7 @@ external:
       args: ["spawn", "swing"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(getExpectedWorktreePath(home, depRoot, "swing"), "dep.txt")).toBe("clean dep\n");
@@ -160,7 +160,7 @@ external:
       - port: CACHE_PORT
         env: PORT
 `,
-        "services/cache/.env.local": "PORT=6379\n",
+        "services/cache/.env.local": "PORT=6379\n"
       });
 
       const dirtyDepRoot = createRepo(path.join(sandbox, "dirty-dep"), {
@@ -172,7 +172,7 @@ external:
       - port: DB_PORT
         env: PORT
 `,
-        "services/db/.env.local": "PORT=5432\n",
+        "services/db/.env.local": "PORT=5432\n"
       });
       write(dirtyDepRoot, "untracked.txt", "dirty\n");
 
@@ -200,7 +200,7 @@ external:
       - port: DB_PORT
         app: api
         env: DATABASE_URL
-`,
+`
       });
 
       expect(() => {
@@ -208,7 +208,7 @@ external:
           args: ["spawn", "dirty-first", "--no-dirty"],
           binDirectory,
           cwd: root,
-          monkeHome: home,
+          monkeHome: home
         });
       }).toThrow(`Source checkout is dirty: ${dirtyDepRoot}`);
 
@@ -245,7 +245,7 @@ external:
       - port: DEP_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -264,7 +264,7 @@ external:
         app: api
         env: DATABASE_URL
 `,
-      "root.txt": "clean root\n",
+      "root.txt": "clean root\n"
     });
     write(depRoot, "dep.txt", "dirty dep\n");
     write(root, "root.txt", "dirty root\n");
@@ -273,7 +273,7 @@ external:
       args: ["spawn", "dirty-graph"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(getExpectedWorktreePath(home, depRoot, "dirty-graph"), "dep.txt")).toBe(
@@ -299,7 +299,7 @@ external:
       - port: DEP_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -318,7 +318,7 @@ external:
         app: api
         env: DATABASE_URL
 `,
-      "root.txt": "clean root\n",
+      "root.txt": "clean root\n"
     });
 
     git(depRoot, ["branch", "banana", "HEAD"]);
@@ -334,7 +334,7 @@ external:
         args: ["spawn", "banana"],
         binDirectory,
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(/Session branch "banana" already exists.*diverged branch is unsafe/su);
 
@@ -360,7 +360,7 @@ apps:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -378,7 +378,7 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
     git(root, ["switch", "-c", "feature"]);
     write(
@@ -398,7 +398,7 @@ external:
       args: ["spawn", "default-graph", "-m"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const rootWorktree = getExpectedWorktreePath(home, root, "default-graph");
@@ -418,7 +418,7 @@ external:
       args: ["materialize"],
       binDirectory,
       cwd: rootWorktree,
-      monkeHome: home,
+      monkeHome: home
     });
     expect(read(rootWorktree, ".env")).toBe(
       `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
@@ -431,7 +431,7 @@ external:
       args: ["cleanup"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
     expect(cleanupResult.stdout).toBe("");
     expect(cleanupResult.stderr).toBe("Removed 1 dead session\n");
@@ -451,7 +451,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\nDEFAULT_ONLY=1\n",
+      "services/db/.env.local": "PORT=5432\nDEFAULT_ONLY=1\n"
     });
     write(depRoot, "services/db/.env.local", "PORT=10000\nLOCAL_ONLY=1\n");
 
@@ -470,7 +470,7 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
     git(root, ["switch", "-c", "feature"]);
 
@@ -478,7 +478,7 @@ external:
       args: ["spawn", "local-env", "-m"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const rootWorktree = getExpectedWorktreePath(home, root, "local-env");
@@ -506,7 +506,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\nMASTER_DEFAULT=1\n",
+      "services/db/.env.local": "PORT=5432\nMASTER_DEFAULT=1\n"
     });
     git(depRoot, ["branch", "-m", "master"]);
 
@@ -525,14 +525,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "mixed-defaults", "-m"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const rootWorktree = getExpectedWorktreePath(home, root, "mixed-defaults");
@@ -557,7 +557,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -575,7 +575,7 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     expect(() =>
@@ -583,7 +583,7 @@ external:
         args: ["spawn", "collision"],
         binDirectory,
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(/Session worktree path collision/u);
     expect(existsSync(path.join(home, "worktrees", "root", "collision"))).toBeFalsy();
@@ -620,7 +620,7 @@ export default function ({ previous }) {
   return { E2E_FLOW1_SYMBOL: value };
 }
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const rootA = createRepo(path.join(sandbox, "root-a"), {
@@ -638,7 +638,7 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
     const rootB = createRepo(path.join(sandbox, "root-b"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
@@ -655,7 +655,7 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     saveSessionState(home, {
@@ -665,22 +665,22 @@ external:
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
-              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }],
-            },
+              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
+            }
           ],
           sourceRoot: depRoot,
-          worktreePath: path.join(sandbox, "missing-alpha-dep"),
-        },
+          worktreePath: path.join(sandbox, "missing-alpha-dep")
+        }
       ],
       rootSourceRoot: rootA,
       session: "alpha",
-      version: 1,
+      version: 1
     });
     runMonke({
       args: ["spawn", "beta"],
       binDirectory,
       cwd: rootB,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const betaDepWorktree = getExpectedWorktreePath(home, depRoot, "beta");
@@ -703,7 +703,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -735,7 +735,7 @@ external:
   console.log("install progress");
   return "not an output record";
 }
-`,
+`
     });
 
     expect(() =>
@@ -743,7 +743,7 @@ external:
         args: ["spawn", "partial"],
         binDirectory,
         cwd: root,
-        monkeHome: home,
+        monkeHome: home
       })
     ).toThrow(/kind: return contract violation/u);
 
@@ -756,7 +756,7 @@ external:
     expect(partialState.repos[1]).toMatchObject({
       materializationComplete: false,
       sourceRoot: root,
-      worktreePath: rootWorktree,
+      worktreePath: rootWorktree
     });
 
     write(
@@ -772,7 +772,7 @@ external:
       args: ["spawn", "partial"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(rootWorktree, ".env")).toBe(
@@ -794,7 +794,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -820,14 +820,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: worker
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "swing"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const rootWorktree = getExpectedWorktreePath(home, root, "swing");
@@ -860,7 +860,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -879,14 +879,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "refresh-env"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const rootWorktree = getExpectedWorktreePath(home, root, "refresh-env");
@@ -897,7 +897,7 @@ external:
       args: ["materialize"],
       binDirectory,
       cwd: rootWorktree,
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(read(rootWorktree, ".env")).toBe(
@@ -919,7 +919,7 @@ external:
       - port: LEAF_PORT
         env: PORT
 `,
-      "services/leaf/.env.local": "PORT=9000\n",
+      "services/leaf/.env.local": "PORT=9000\n"
     });
     const dep = createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `apps:
@@ -938,7 +938,7 @@ external:
         app: dep
         env: LEAF_URL
 `,
-      "services/dep/.env.local": "PORT=5432\nLEAF_URL=http://localhost:9000\n",
+      "services/dep/.env.local": "PORT=5432\nLEAF_URL=http://localhost:9000\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
@@ -955,14 +955,14 @@ external:
       - port: DEP_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "direct-only"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const rootWorktree = getExpectedWorktreePath(home, root, "direct-only");
@@ -986,7 +986,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -1005,14 +1005,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "bootstrap-path"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const rootWorktree = getExpectedWorktreePath(home, root, "bootstrap-path");
@@ -1035,7 +1035,7 @@ apps:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -1054,14 +1054,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "swing"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const depWorktree = getExpectedWorktreePath(home, depRoot, "swing");
@@ -1087,7 +1087,7 @@ external:
         env: PORT
 `,
       "services/db/.env.local": "PORT=5432\n",
-      "services/db/index.js": "// db\n",
+      "services/db/index.js": "// db\n"
     });
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -1109,14 +1109,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "fresh-dep-seeds", "-m"],
       binDirectory,
       cwd: root,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const depWorktree = getExpectedWorktreePath(home, depRoot, "fresh-dep-seeds");

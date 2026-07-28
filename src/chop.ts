@@ -7,7 +7,7 @@ import {
   describeSessionBranchMismatch,
   getExpectedWorktreePath,
   listWorktrees,
-  resolveRepoContext,
+  resolveRepoContext
 } from "./git.ts";
 import type { WorktreeEntry } from "./git.ts";
 import { createLogger } from "./logger.ts";
@@ -15,7 +15,7 @@ import {
   getSessionStateFilePath,
   listSessionStates,
   listSessionStatesRelevantToWorktrees,
-  loadSessionState,
+  loadSessionState
 } from "./registry.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { finalizeSession } from "./session-finalization.ts";
@@ -24,7 +24,7 @@ import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
 import {
   assertCanonicalSourceCheckout,
   assertWorktreeUnlocked,
-  preflightWorktreeRemoval,
+  preflightWorktreeRemoval
 } from "./worktree-safety.ts";
 
 interface OrdinaryChopTarget {
@@ -76,7 +76,7 @@ export function runChop(runtime: Runtime, target: string | undefined, options: C
   const home = getMonkeHome(runtime);
   const removed = withGlobalLock(home, () => {
     const invocation = resolveRepoContext(runtime, runtime.cwd, null, {
-      inferSessionName: false,
+      inferSessionName: false
     });
     const selected = resolveChopTarget(runtime, home, invocation, target);
 
@@ -102,14 +102,14 @@ export function runChop(runtime: Runtime, target: string | undefined, options: C
       );
     }
     removeWorktree(runtime, invocation.sourceRoot, current.worktree.path, {
-      force: current.mode === "stale" || current.forceGitRemoval,
+      force: current.mode === "stale" || current.forceGitRemoval
     });
     return {
       kind: "ordinary" as const,
       removedInvocation:
         path.normalize(invocation.worktreeRoot) === path.normalize(current.worktree.path),
       sourceRoot: invocation.sourceRoot,
-      worktreePath: current.worktree.path,
+      worktreePath: current.worktree.path
     };
   });
 
@@ -135,7 +135,7 @@ function inspectOrdinaryWorktree(
     return {
       forceGitRemoval: checked.forceGitRemoval,
       mode: "live",
-      worktree: checked.worktree,
+      worktree: checked.worktree
     };
   }
 
@@ -149,7 +149,7 @@ function inspectOrdinaryWorktree(
   return {
     forceGitRemoval: false,
     mode: "stale",
-    worktree: exact,
+    worktree: exact
   };
 }
 
@@ -241,7 +241,7 @@ function validateSessionChopTarget(home: string, state: SessionState): SessionCh
       state.repos.map((repo) => repo.worktreePath)
     ),
     kind: "session",
-    state,
+    state
   };
 }
 
@@ -275,7 +275,7 @@ function chopSession(
     }
     if (current.mode !== "gone") {
       removeWorktree(runtime, current.repo.sourceRoot, current.repo.worktreePath, {
-        force: current.mode === "stale" || current.forceGitRemoval,
+        force: current.mode === "stale" || current.forceGitRemoval
       });
     }
     if (samePath(current.repo.worktreePath, invocationWorktreePath)) {
@@ -286,7 +286,7 @@ function chopSession(
   finalizeSession(runtime, home, target.state);
   return {
     kind: "session",
-    session: target.state.session,
+    session: target.state.session
   };
 }
 
@@ -313,7 +313,7 @@ function preflightSession(
     },
     (): void => {
       assertNoOtherStateOwnsSessionRepos(state, allStates);
-    },
+    }
   ];
   for (const check of sessionChecks) {
     try {
@@ -378,7 +378,7 @@ function inspectSessionRepo(
       forceGitRemoval: false,
       mode: exact === undefined ? "gone" : "stale",
       registeredBranch: exact?.branch,
-      repo,
+      repo
     };
   }
 
@@ -390,7 +390,7 @@ function inspectSessionRepo(
     forceGitRemoval: checked.forceGitRemoval,
     mode: "live",
     registeredBranch: exact.branch,
-    repo,
+    repo
   };
 }
 
@@ -605,7 +605,7 @@ function resolveOrdinaryTarget(
   }
   return {
     path: targetPath,
-    registered: false,
+    registered: false
   };
 }
 
@@ -627,7 +627,7 @@ function removeWorktree(
   options: { force: boolean }
 ): void {
   runtime.exec("git", ["worktree", "remove", ...(options.force ? ["--force"] : []), worktreePath], {
-    cwd: sourceRoot,
+    cwd: sourceRoot
   });
 }
 

@@ -33,7 +33,7 @@ export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: stri
   let context: ReturnType<typeof resolveRepoContext>;
   try {
     context = resolveRepoContext(runtime, sourceRoot, null, {
-      inferSessionName: false,
+      inferSessionName: false
     });
   } catch (error) {
     throw new MonkeError(`Cannot verify Source checkout ${sourceRoot}: ${errorMessage(error)}`);
@@ -95,7 +95,7 @@ export function assertCleanWorktree(runtime: Runtime, worktreePath: string): voi
     "git",
     ["status", "--porcelain", "--untracked-files=normal", "--ignore-submodules=none"],
     {
-      cwd: worktreePath,
+      cwd: worktreePath
     }
   ).stdout;
   if (status.trim() !== "") {
@@ -107,7 +107,7 @@ export function assertCleanWorktree(runtime: Runtime, worktreePath: string): voi
 
 function hasInitializedSubmodules(runtime: Runtime, worktreePath: string): boolean {
   const status = runtime.exec("git", ["submodule", "status", "--recursive"], {
-    cwd: worktreePath,
+    cwd: worktreePath
   }).stdout;
   return status.split("\n").some((line) => line !== "" && !line.startsWith("-"));
 }
@@ -116,7 +116,7 @@ function assertWorktreeIdentity(runtime: Runtime, sourceRoot: string, worktreePa
   let context: ReturnType<typeof resolveRepoContext>;
   try {
     context = resolveRepoContext(runtime, worktreePath, null, {
-      inferSessionName: false,
+      inferSessionName: false
     });
   } catch (error) {
     throw new MonkeError(

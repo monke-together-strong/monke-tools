@@ -18,7 +18,7 @@ describe("configuration", () => {
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
@@ -42,14 +42,14 @@ external:
       - port: DEP_POSTGRES_PORT
         app: consumer
         env: DATABASE_URL
-`,
+`
     });
 
     const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
 
     expect(graph.reposInMaterializationOrder.map((repo) => repo.sourceRoot)).toStrictEqual([
       depRoot,
-      root,
+      root
     ]);
     expect(graph.reposByRoot.get(root)?.localPortOrder).toStrictEqual(["API_PORT"]);
     expect(graph.reposByRoot.get(root)?.externalMappingsInOrder).toHaveLength(1);
@@ -69,7 +69,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
@@ -93,14 +93,14 @@ apps:
       - port: API_PORT
         env: PORT
 `,
-      "scripts/bootstrap.sh": "#!/bin/sh\n",
+      "scripts/bootstrap.sh": "#!/bin/sh\n"
     });
 
     const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
 
     expect(graph.reposByRoot.get(root)?.seedPaths).toStrictEqual([
       "apps/frostbite-crawler/data/sessions",
-      "scripts/bootstrap.sh",
+      "scripts/bootstrap.sh"
     ]);
   });
 
@@ -117,7 +117,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -137,7 +137,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -157,7 +157,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -177,7 +177,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -198,7 +198,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -221,7 +221,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -242,7 +242,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -264,7 +264,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -283,7 +283,7 @@ apps:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
@@ -299,7 +299,7 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/pathEnv/u);
@@ -316,7 +316,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
@@ -333,7 +333,7 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -352,7 +352,7 @@ external:
       - port: DEP_A_PORT
         env: PORT
 `,
-      "services/a/.env.local": "PORT=5432\n",
+      "services/a/.env.local": "PORT=5432\n"
     });
     createRepo(path.join(sandbox, "dep-b"), {
       "monke.yml": `apps:
@@ -363,7 +363,7 @@ external:
       - port: DEP_B_PORT
         env: PORT
 `,
-      "services/b/.env.local": "PORT=6432\n",
+      "services/b/.env.local": "PORT=6432\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local":
@@ -388,7 +388,7 @@ external:
       - port: DEP_B_PORT
         app: api
         env: CACHE_URL
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -409,7 +409,7 @@ external:
     path: apps/api
     envFile: .env.local
     mappings: []
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/Invalid/u);
@@ -426,7 +426,7 @@ external:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n",
@@ -445,7 +445,7 @@ external:
       - port: DEP_POSTGRES_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -465,7 +465,7 @@ external:
       - port: LEAF_PORT
         env: PORT
 `,
-      "services/leaf/.env.local": "PORT=9000\n",
+      "services/leaf/.env.local": "PORT=9000\n"
     });
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `apps:
@@ -484,7 +484,7 @@ external:
         app: dep
         env: LEAF_URL
 `,
-      "services/dep/.env.local": "PORT=5432\nLEAF_URL=http://localhost:9000\n",
+      "services/dep/.env.local": "PORT=5432\nLEAF_URL=http://localhost:9000\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
@@ -501,7 +501,7 @@ external:
       - port: LEAF_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -527,7 +527,7 @@ external:
     path: apps/consumer
     envFile: .env.local
     mappings: []
-`,
+`
     });
     write(root, "apps/consumer/.keep", "");
 
@@ -547,7 +547,7 @@ external:
       - port: SHARED_PORT
         env: PORT
 `,
-      "services/db/.env.local": "PORT=5432\n",
+      "services/db/.env.local": "PORT=5432\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
@@ -571,7 +571,7 @@ external:
       - port: SHARED_PORT
         app: consumer
         env: DATABASE_URL
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/owned by both/u);
@@ -595,7 +595,7 @@ external:
     mappings:
       - port: SHARED_PORT
         env: API_URL
-`,
+`
     });
 
     const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
@@ -603,7 +603,7 @@ external:
     expect(repo?.localPortOrder).toStrictEqual(["SHARED_PORT"]);
     expect(repo?.localMappingsByPort.get("SHARED_PORT")).toStrictEqual([
       { portKey: "SHARED_PORT", targetApp: "api", targetEnv: "PORT" },
-      { portKey: "SHARED_PORT", targetApp: "web", targetEnv: "API_URL" },
+      { portKey: "SHARED_PORT", targetApp: "web", targetEnv: "API_URL" }
     ]);
   });
 
@@ -629,7 +629,7 @@ external:
       - port: DEP_PORT
         app: api
         env: DATABASE_URL
-`,
+`
     });
 
     createRepo(dep, {
@@ -649,7 +649,7 @@ external:
       - port: API_PORT
         app: db
         env: DATABASE_URL
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -669,7 +669,7 @@ external:
     mappings:
       - port: DB_PORT
         env: DATABASE_URL
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -688,7 +688,7 @@ external:
     mappings:
       - port: WEB_PORT
         env: PORT
-`,
+`
     });
 
     const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
@@ -710,7 +710,7 @@ external:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);

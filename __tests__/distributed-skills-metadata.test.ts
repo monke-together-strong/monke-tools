@@ -81,7 +81,7 @@ describe("distributed skill metadata", () => {
       "package.json",
       "bun.lock",
       "scripts/install-local.sh",
-      "docs/adr/0001-install-distributed-skills-into-agent-roots.md",
+      "docs/adr/0001-install-distributed-skills-into-agent-roots.md"
     ]
       .map((relativePath) => readFileSync(path.join(projectRoot, relativePath), "utf-8"))
       .join("\n");

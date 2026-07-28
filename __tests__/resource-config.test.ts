@@ -23,7 +23,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
@@ -33,7 +33,7 @@ apps:
       // Exercise the resource-literal interpolation syntax as data.
       // oxlint-disable-next-line no-template-curly-in-string
       { env: "DISCORD_CHANNEL", literal: "mt-${user}-${session}" },
-      { env: "STATIC_HANDLE", literal: "stable" },
+      { env: "STATIC_HANDLE", literal: "stable" }
     ]);
   });
 
@@ -56,7 +56,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
@@ -66,8 +66,8 @@ apps:
         name: "e2e-symbols",
         outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
         run: "scripts/e2e-symbols.ts",
-        timeoutSeconds: 45,
-      },
+        timeoutSeconds: 45
+      }
     ]);
   });
 
@@ -88,7 +88,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
@@ -104,7 +104,7 @@ apps:
     Bad_Name:
       run: ./scripts/e2e-symbols.ts
       outputs:
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /resources\.commands\.e2e-symbols.*command/su,
@@ -113,7 +113,7 @@ apps:
     e2e-symbols:
       command: pnpm e2e:allocate-symbols
       outputs:
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /resources.commands.e2e-symbols.run.*non-empty string/u,
@@ -121,7 +121,7 @@ apps:
       resources: `commands:
     e2e-symbols:
       outputs:
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /resources.commands.e2e-symbols.run.*non-empty string/u,
@@ -130,7 +130,7 @@ apps:
     e2e-symbols:
       run: "   "
       outputs:
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /run.*must be a relative JS\/TS module path/u,
@@ -139,7 +139,7 @@ apps:
     e2e-symbols:
       run: /tmp/e2e-symbols.ts
       outputs:
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /run must resolve inside the session worktree/u,
@@ -148,7 +148,7 @@ apps:
     e2e-symbols:
       run: ../e2e-symbols.ts
       outputs:
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /run.*must be a relative JS\/TS module path/u,
@@ -157,7 +157,7 @@ apps:
     e2e-symbols:
       run: e2e-symbols
       outputs:
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /timeoutSeconds.*positive integer/u,
@@ -167,7 +167,7 @@ apps:
       run: ./scripts/e2e-symbols.ts
       timeoutSeconds: 0
       outputs:
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /outputs.*must be a non-empty array/u,
@@ -175,7 +175,7 @@ apps:
       resources: `commands:
     e2e-symbols:
       run: ./scripts/e2e-symbols.ts
-      outputs: []`,
+      outputs: []`
     },
     {
       expected: /outputs\[0\].*uppercase env name/u,
@@ -184,7 +184,7 @@ apps:
     e2e-symbols:
       run: ./scripts/e2e-symbols.ts
       outputs:
-        - e2e_flow1_symbol`,
+        - e2e_flow1_symbol`
     },
     {
       expected: /Duplicate resource command output E2E_FLOW1_SYMBOL/u,
@@ -194,7 +194,7 @@ apps:
       run: ./scripts/e2e-symbols.ts
       outputs:
         - E2E_FLOW1_SYMBOL
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /Duplicate resource env name E2E_FLOW1_SYMBOL/u,
@@ -205,7 +205,7 @@ apps:
     e2e-symbols:
       run: ./scripts/e2e-symbols.ts
       outputs:
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /Duplicate resource env name E2E_FLOW1_SYMBOL/u,
@@ -218,13 +218,13 @@ apps:
     other-symbols:
       run: ./scripts/e2e-more-symbols.ts
       outputs:
-        - E2E_FLOW1_SYMBOL`,
+        - E2E_FLOW1_SYMBOL`
     },
     {
       expected: /resources\.commands.*must declare at least one command/u,
       name: "empty commands section",
-      resources: `commands: {}`,
-    },
+      resources: `commands: {}`
+    }
   ])("loadResolvedGraph rejects resource commands with $name", ({ resources, expected }) => {
     const sandbox = makeTempDir("config-invalid-resource-command");
     const root = createRepo(path.join(sandbox, "root"), {
@@ -238,7 +238,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(expected);
@@ -257,7 +257,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/DISCORD_CHANNEL/u);
@@ -275,7 +275,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -296,7 +296,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -318,7 +318,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -340,7 +340,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -362,7 +362,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(
@@ -385,7 +385,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
 
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(

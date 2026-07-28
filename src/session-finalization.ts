@@ -43,9 +43,9 @@ export function finalizeSession(runtime: Runtime, home: string, state: SessionSt
           ...resourceCommandEnv,
           MONKE_SESSION: state.session,
           MONKE_SOURCE_ROOT: repoState.sourceRoot,
-          MONKE_WORKTREE_PATH: repoState.worktreePath,
+          MONKE_WORKTREE_PATH: repoState.worktreePath
         },
-        timeoutSeconds: CLEANUP_COMMAND_TIMEOUT_SECONDS,
+        timeoutSeconds: CLEANUP_COMMAND_TIMEOUT_SECONDS
       });
     } catch (error) {
       throw new MonkeError(

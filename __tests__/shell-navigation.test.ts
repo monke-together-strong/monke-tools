@@ -43,7 +43,7 @@ exit ${mtStatus}
   const adapter = runMonke({
     args: ["shell", "init", shell, "--binary", binaryPath],
     cwd: sandbox,
-    monkeHome: path.join(sandbox, "monke-home"),
+    monkeHome: path.join(sandbox, "monke-home")
   }).stdout;
   const result = spawnSync(
     shell,
@@ -53,15 +53,15 @@ exit ${mtStatus}
 mt 2>/dev/null
 mt_status=$?
 printf '%s\\n%s\\n' "$PWD" "$mt_status"
-`,
+`
     ],
     {
       cwd: sandbox,
       encoding: "utf-8",
       env: {
         ...process.env,
-        MONKE_TEST_TARGET: targetPath,
-      },
+        MONKE_TEST_TARGET: targetPath
+      }
     }
   );
   if (result.error !== undefined || result.stdout === null) {
@@ -73,7 +73,7 @@ printf '%s\\n%s\\n' "$PWD" "$mt_status"
     reportedPath,
     reportedStatus,
     sandbox,
-    targetPath,
+    targetPath
   };
 }
 
@@ -84,16 +84,16 @@ describe("shell navigation", () => {
     const directivePath = path.join(sandbox, "directive");
     writeFileSync(directivePath, "", "utf-8");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "hello\n",
+      "README.md": "hello\n"
     });
 
     const result = runMonke({
       args: ["spawn", "banana"],
       cwd: repoRoot,
       extraEnv: {
-        [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath,
+        [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath
       },
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -109,16 +109,16 @@ describe("shell navigation", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "hello\n",
+      "README.md": "hello\n"
     });
 
     runMonke({
       args: ["shell", "install", "--binary", "/opt/monke-tools"],
       cwd: repoRoot,
       extraEnv: {
-        HOME: shellHome,
+        HOME: shellHome
       },
-      monkeHome,
+      monkeHome
     });
 
     const result = runMonke({
@@ -126,9 +126,9 @@ describe("shell navigation", () => {
       cwd: repoRoot,
       extraEnv: {
         HOME: shellHome,
-        SHELL: "/bin/zsh",
+        SHELL: "/bin/zsh"
       },
-      monkeHome,
+      monkeHome
     });
 
     const worktreeRoot = getExpectedWorktreePath(monkeHome, repoRoot, "banana");
@@ -145,7 +145,7 @@ describe("shell navigation", () => {
     const shellHome = path.join(sandbox, "shell-home");
     const startupFile = path.join(shellHome, ".zshrc");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "hello\n",
+      "README.md": "hello\n"
     });
     mkdirSync(shellHome, { recursive: true });
     writeFileSync(startupFile, "# >>> monke-tools shell integration >>>\n", "utf-8");
@@ -157,9 +157,9 @@ describe("shell navigation", () => {
         cwd: repoRoot,
         extraEnv: {
           HOME: shellHome,
-          SHELL: "/bin/zsh",
+          SHELL: "/bin/zsh"
         },
-        monkeHome,
+        monkeHome
       });
 
       const worktreeRoot = getExpectedWorktreePath(monkeHome, repoRoot, "banana");
@@ -188,7 +188,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     });
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -197,9 +197,9 @@ apps:
       args: ["materialize"],
       cwd: worktreeRoot,
       extraEnv: {
-        [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath,
+        [SHELL_DIRECTORY_DIRECTIVE_ENV]: directivePath
       },
-      monkeHome: home,
+      monkeHome: home
     });
 
     expect(readFileSync(directivePath, "utf-8")).toBe("");
@@ -212,12 +212,12 @@ apps:
     const bash = runMonke({
       args: ["shell", "init", "bash", "--binary", "/opt/monke-tools"],
       cwd: sandbox,
-      monkeHome,
+      monkeHome
     });
     const zsh = runMonke({
       args: ["shell", "init", "zsh", "--binary", "/opt/monke-tools"],
       cwd: sandbox,
-      monkeHome,
+      monkeHome
     });
 
     expect(bash.stdout).toContain("# monke-tools shell integration for bash");
@@ -278,9 +278,9 @@ apps:
         args: ["shell", "install", "--binary", "/opt/monke-tools"],
         cwd: sandbox,
         extraEnv: {
-          HOME: shellHome,
+          HOME: shellHome
         },
-        monkeHome,
+        monkeHome
       });
     }
 

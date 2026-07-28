@@ -15,7 +15,7 @@ import {
   read,
   readSingleYamlFile,
   runMonke,
-  write,
+  write
 } from "./helpers.ts";
 
 interface ResourceCommandScenario {
@@ -54,7 +54,7 @@ export default function ({ previous }) {
 }
 `,
       name: "single-repo-resource-commands",
-      outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
+      outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
 
     scenario.spawn("banana");
@@ -63,7 +63,7 @@ export default function ({ previous }) {
     expect(scenario.readWorktree("banana", "command-cwd.log")).toBe(`${worktreeRoot}\n`);
     expect(JSON.parse(scenario.readWorktree("banana", "command-stdin.json"))).toStrictEqual({
       E2E_FLOW1_SYMBOL: [],
-      E2E_FLOW2_SYMBOL: [],
+      E2E_FLOW2_SYMBOL: []
     });
     expect(scenario.readWorktree("banana", ".env")).toBe(
       "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n"
@@ -76,9 +76,9 @@ export default function ({ previous }) {
         name: "e2e-symbols",
         outputs: [
           { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
-          { env: "E2E_FLOW2_SYMBOL", value: "LINK/USDT:USDT" },
-        ],
-      },
+          { env: "E2E_FLOW2_SYMBOL", value: "LINK/USDT:USDT" }
+        ]
+      }
     ]);
   });
 
@@ -104,14 +104,14 @@ resources:
 export default function () {
   return { E2E_FLOW1_SYMBOL: resourceValue };
 }
-`,
+`
     });
 
     runMonke({
       args: ["spawn", "fresh"],
       binDirectory,
       cwd: repoRoot,
-      monkeHome: home,
+      monkeHome: home
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
@@ -138,7 +138,7 @@ resources:
       timeoutSeconds: 60
       outputs:
         - E2E_FLOW1_SYMBOL`),
-      name: "single-repo-resource-command-bootstrap-stale-env",
+      name: "single-repo-resource-command-bootstrap-stale-env"
     });
 
     scenario.spawn("banana");
@@ -174,7 +174,7 @@ export default function ({ previous }) {
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
       // Exercise the resource-literal interpolation syntax as YAML data.
       // oxlint-disable-next-line no-template-curly-in-string
-      resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}",
+      resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}"
     });
     saveSessionState(scenario.home, {
       repos: [
@@ -185,18 +185,18 @@ export default function ({ previous }) {
               name: "e2e-symbols",
               outputs: [
                 { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
-                { env: "E2E_FLOW2_SYMBOL", value: "ATOM/USDT:USDT" },
-              ],
-            },
+                { env: "E2E_FLOW2_SYMBOL", value: "ATOM/USDT:USDT" }
+              ]
+            }
           ],
           resourceValues: [{ env: "DISCORD_CHANNEL", value: "discord-first" }],
           sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "missing-first"),
-        },
+          worktreePath: path.join(scenario.sandbox, "missing-first")
+        }
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "first",
-      version: 1,
+      version: 1
     });
 
     scenario.spawn("second");
@@ -207,7 +207,7 @@ export default function ({ previous }) {
     expect(Object.keys(secondInput)).toStrictEqual(["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]);
     expect(secondInput).toStrictEqual({
       E2E_FLOW1_SYMBOL: ["SOL/USDT:USDT"],
-      E2E_FLOW2_SYMBOL: ["ATOM/USDT:USDT"],
+      E2E_FLOW2_SYMBOL: ["ATOM/USDT:USDT"]
     });
     expect(JSON.stringify(secondInput)).not.toContain("discord-first");
   });
@@ -225,7 +225,7 @@ export default function ({ previous }) {
 }
 `,
       name: "single-repo-resource-command-input-dedupe",
-      outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
+      outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
     saveSessionState(scenario.home, {
       repos: [
@@ -234,21 +234,21 @@ export default function ({ previous }) {
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
-              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }],
+              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
             },
             {
               name: "renamed-symbols",
-              outputs: [{ env: "E2E_FLOW2_SYMBOL", value: "RENAMED_SHOULD_NOT_APPEAR" }],
-            },
+              outputs: [{ env: "E2E_FLOW2_SYMBOL", value: "RENAMED_SHOULD_NOT_APPEAR" }]
+            }
           ],
           resourceValues: [{ env: "E2E_FLOW2_SYMBOL", value: "DETERMINISTIC_SHOULD_NOT_APPEAR" }],
           sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "missing-a"),
-        },
+          worktreePath: path.join(scenario.sandbox, "missing-a")
+        }
       ],
       rootSourceRoot: path.join(scenario.sandbox, "graph-a"),
       session: "retained-a",
-      version: 1,
+      version: 1
     });
     saveSessionState(scenario.home, {
       repos: [
@@ -259,17 +259,17 @@ export default function ({ previous }) {
               name: "e2e-symbols",
               outputs: [
                 { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
-                { env: "E2E_FLOW2_SYMBOL", value: "NEAR/USDT:USDT" },
-              ],
-            },
+                { env: "E2E_FLOW2_SYMBOL", value: "NEAR/USDT:USDT" }
+              ]
+            }
           ],
           sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "missing-b"),
-        },
+          worktreePath: path.join(scenario.sandbox, "missing-b")
+        }
       ],
       rootSourceRoot: path.join(scenario.sandbox, "graph-b"),
       session: "retained-b",
-      version: 1,
+      version: 1
     });
     saveSessionState(scenario.home, {
       repos: [
@@ -278,16 +278,16 @@ export default function ({ previous }) {
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
-              outputs: [{ env: "E2E_FLOW2_SYMBOL", value: "CURRENT_SHOULD_NOT_APPEAR" }],
-            },
+              outputs: [{ env: "E2E_FLOW2_SYMBOL", value: "CURRENT_SHOULD_NOT_APPEAR" }]
+            }
           ],
           sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "current-worktree-from-another-graph"),
-        },
+          worktreePath: path.join(scenario.sandbox, "current-worktree-from-another-graph")
+        }
       ],
       rootSourceRoot: path.join(scenario.sandbox, "graph-c"),
       session: "current",
-      version: 1,
+      version: 1
     });
 
     scenario.spawn("current");
@@ -308,14 +308,14 @@ export default function ({ previous }) {
   return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 }
 `,
-      name: "single-repo-resource-command-current-session-input",
+      name: "single-repo-resource-command-current-session-input"
     });
 
     scenario.spawn("banana");
     scenario.writeRoot(
       "monke.yml",
       singleCommandMonkeYml({
-        outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
+        outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
       })
     );
     scenario.writeWorktree(
@@ -337,7 +337,7 @@ export default function ({ previous }) {
 
     expect(JSON.parse(scenario.readWorktree("banana", "command-stdin-rerun.json"))).toStrictEqual({
       E2E_FLOW1_SYMBOL: [],
-      E2E_FLOW2_SYMBOL: [],
+      E2E_FLOW2_SYMBOL: []
     });
   });
 
@@ -350,7 +350,7 @@ export default function ({ previous }) {
   return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 }
 `,
-      name: "single-repo-resource-command-output-collision",
+      name: "single-repo-resource-command-output-collision"
     });
 
     scenario.spawn("first");
@@ -379,7 +379,7 @@ export default function ({ previous }) {
 }
 `,
       name: "single-repo-resource-command-cross-output",
-      outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
+      outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
     saveSessionState(scenario.home, {
       repos: [
@@ -390,17 +390,17 @@ export default function ({ previous }) {
               name: "e2e-symbols",
               outputs: [
                 { env: "E2E_FLOW1_SYMBOL", value: "ALPHA/USDT:USDT" },
-                { env: "E2E_FLOW2_SYMBOL", value: "SOL/USDT:USDT" },
-              ],
-            },
+                { env: "E2E_FLOW2_SYMBOL", value: "SOL/USDT:USDT" }
+              ]
+            }
           ],
           sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "missing-first"),
-        },
+          worktreePath: path.join(scenario.sandbox, "missing-first")
+        }
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "first",
-      version: 1,
+      version: 1
     });
 
     scenario.spawn("second");
@@ -416,14 +416,14 @@ export default function ({ previous }) {
   return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 }
 `,
-      name: "single-repo-resource-command-rename",
+      name: "single-repo-resource-command-rename"
     });
 
     scenario.spawn("banana");
     scenario.writeRoot(
       "monke.yml",
       singleCommandMonkeYml({
-        commandName: "renamed-symbols",
+        commandName: "renamed-symbols"
       })
     );
     scenario.writeWorktree(
@@ -442,7 +442,7 @@ export default function ({ previous }) {
 
     expect(JSON.parse(scenario.readWorktree("banana", "command-stdin-renamed.json"))).toStrictEqual(
       {
-        E2E_FLOW1_SYMBOL: [],
+        E2E_FLOW1_SYMBOL: []
       }
     );
   });
@@ -463,7 +463,7 @@ export default function () {
   appendFileSync("command-order.log", "second\\n");
   return { SECOND_SYMBOL: "LINK/USDT:USDT" };
 }
-`,
+`
       },
       monkeYml: withDefaultApp(`resources:
   commands:
@@ -475,7 +475,7 @@ export default function () {
       run: ./scripts/second-symbols.ts
       outputs:
         - SECOND_SYMBOL`),
-      name: "single-repo-resource-command-order",
+      name: "single-repo-resource-command-order"
     });
 
     scenario.spawn("banana");
@@ -498,7 +498,7 @@ export default function ({ previous }) {
   return { E2E_FLOW1_SYMBOL: value };
 }
 `,
-      name: "single-repo-resource-command-cleanup-boundary",
+      name: "single-repo-resource-command-cleanup-boundary"
     });
     saveSessionState(scenario.home, {
       repos: [
@@ -507,16 +507,16 @@ export default function ({ previous }) {
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
-              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }],
-            },
+              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
+            }
           ],
           sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "missing-first"),
-        },
+          worktreePath: path.join(scenario.sandbox, "missing-first")
+        }
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "first",
-      version: 1,
+      version: 1
     });
 
     scenario.spawn("second");
@@ -525,7 +525,7 @@ export default function ({ previous }) {
     const secondState = loadSessionState(scenario.home, scenario.repoRoot, "second");
     saveSessionState(scenario.home, {
       ...secondState,
-      repos: secondState.repos.map((repo) => ({ ...repo, assignedPorts: [] })),
+      repos: secondState.repos.map((repo) => ({ ...repo, assignedPorts: [] }))
     });
 
     scenario.cleanup();
@@ -550,7 +550,7 @@ export default function () {
 }
 `,
       name: "single-repo-resource-command-reuse",
-      outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
+      outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
 
     scenario.spawn("banana");
@@ -582,7 +582,7 @@ export default function () {
   return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 }
 `,
-      name: "single-repo-resource-command-incomplete",
+      name: "single-repo-resource-command-incomplete"
     });
 
     scenario.spawn("banana");
@@ -591,7 +591,7 @@ export default function () {
     scenario.writeRoot(
       "monke.yml",
       singleCommandMonkeYml({
-        outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
+        outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
       })
     );
     scenario.writeWorktree(
@@ -629,7 +629,7 @@ export default function () {
   return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 }
 `,
-      name: "single-repo-resource-command-partial",
+      name: "single-repo-resource-command-partial"
     });
 
     expect(() => scenario.spawn("banana")).toThrow(/Missing mapped env vars/u);
@@ -638,8 +638,8 @@ export default function () {
     expect(partialState.repos[0]?.resourceCommandOutputs).toStrictEqual([
       {
         name: "e2e-symbols",
-        outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }],
-      },
+        outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
+      }
     ]);
     expect(partialState.repos[0]?.materializationComplete).toBeFalsy();
 
@@ -664,7 +664,7 @@ export default function () {
 }
 `,
       name: "single-repo-resource-command-prune-after-failure",
-      outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
+      outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
 
     scenario.spawn("banana");
@@ -672,7 +672,7 @@ export default function () {
     scenario.writeRoot(
       "monke.yml",
       singleCommandMonkeYml({
-        outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW3_SYMBOL"],
+        outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW3_SYMBOL"]
       })
     );
     scenario.writeWorktree(
@@ -693,7 +693,7 @@ export default function () {
     expect(partialState.repos[0]?.resourceCommandOutputs?.[0]?.outputs).toStrictEqual([
       { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
       { env: "E2E_FLOW3_SYMBOL", value: "ATOM/USDT:USDT" },
-      { env: "E2E_FLOW2_SYMBOL", value: "LINK/USDT:USDT" },
+      { env: "E2E_FLOW2_SYMBOL", value: "LINK/USDT:USDT" }
     ]);
 
     scenario.writeWorktree("banana", "apps/api/.env.local", "PORT=3000\n");
@@ -712,7 +712,7 @@ export default function () {
   return "not-object";
 }
 `,
-      name: "non-object return",
+      name: "non-object return"
     },
     {
       expected: /kind: return contract violation/u,
@@ -720,7 +720,7 @@ export default function () {
   return {};
 }
 `,
-      name: "missing output",
+      name: "missing output"
     },
     {
       expected: /kind: return contract violation/u,
@@ -728,7 +728,7 @@ export default function () {
   return { E2E_FLOW1_SYMBOL: "SOL", EXTRA: "x" };
 }
 `,
-      name: "extra output",
+      name: "extra output"
     },
     {
       expected: /kind: return contract violation/u,
@@ -736,7 +736,7 @@ export default function () {
   return { E2E_FLOW1_SYMBOL: 42 };
 }
 `,
-      name: "non-string output",
+      name: "non-string output"
     },
     {
       expected: /kind: return contract violation[\s\S]*stdout:/u,
@@ -744,12 +744,12 @@ export default function () {
   return { E2E_FLOW1_SYMBOL: "   " };
 }
 `,
-      name: "empty output",
-    },
+      name: "empty output"
+    }
   ])("spawn rejects resource command returns with $name", ({ module, expected }) => {
     const scenario = createResourceCommandScenario({
       module,
-      name: "single-repo-resource-command-contract",
+      name: "single-repo-resource-command-contract"
     });
 
     expect(() => scenario.spawn("banana")).toThrow(expected);
@@ -760,13 +760,13 @@ export default function () {
       expected: /must export a default function/u,
       module: `export const allocate = () => ({ E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" });
 `,
-      name: "missing default export",
+      name: "missing default export"
     },
     {
       expected: /default export must be a function/u,
       module: `export default { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 `,
-      name: "default export not a function",
+      name: "default export not a function"
     },
     {
       expected: /kind: nonzero exit 1[\s\S]*stderr before failure[\s\S]*allocator boom/u,
@@ -776,7 +776,7 @@ export default function () {
   throw new Error("allocator boom");
 }
 `,
-      name: "thrown error",
+      name: "thrown error"
     },
     {
       expected: /kind: nonzero exit 1[\s\S]*async allocator boom/u,
@@ -784,12 +784,12 @@ export default function () {
   throw new Error("async allocator boom");
 }
 `,
-      name: "rejected error",
-    },
+      name: "rejected error"
+    }
   ])("spawn reports resource command module failures with $name", ({ module, expected }) => {
     const scenario = createResourceCommandScenario({
       module,
-      name: "single-repo-resource-command-module-failure",
+      name: "single-repo-resource-command-module-failure"
     });
 
     expect(() => scenario.spawn("banana")).toThrow(expected);
@@ -798,7 +798,7 @@ export default function () {
   test("spawn reports missing resource command modules", () => {
     const scenario = createResourceCommandScenario({
       monkeYml: singleCommandMonkeYml({ run: "./scripts/missing-module.ts" }),
-      name: "single-repo-resource-command-missing-module",
+      name: "single-repo-resource-command-missing-module"
     });
 
     expect(() => scenario.spawn("banana")).toThrow(
@@ -815,7 +815,7 @@ export default function () {
   return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 }
 `,
-      name: "single-repo-resource-command-async-success",
+      name: "single-repo-resource-command-async-success"
     });
 
     scenario.spawn("banana");
@@ -832,7 +832,7 @@ export default function () {
 }
 `,
       name: "single-repo-resource-command-dot-prefix-path",
-      run: "./..commands/resource-command.ts",
+      run: "./..commands/resource-command.ts"
     });
 
     scenario.spawn("banana");
@@ -859,7 +859,7 @@ function isDirectExecution(importMetaUrl) {
   return Boolean(process.argv[1] && fileURLToPath(importMetaUrl) === resolve(process.argv[1]));
 }
 `,
-      name: "single-repo-resource-command-direct-guard",
+      name: "single-repo-resource-command-direct-guard"
     });
 
     scenario.spawn("banana");
@@ -877,7 +877,7 @@ function isDirectExecution(importMetaUrl) {
   throw new Error("allocator failed");
 }
 `,
-      name: "single-repo-resource-command-throw",
+      name: "single-repo-resource-command-throw"
     });
 
     let message = "";
@@ -901,7 +901,7 @@ function isDirectExecution(importMetaUrl) {
 }
 `,
       name: "single-repo-resource-command-timeout",
-      timeoutSeconds: 1,
+      timeoutSeconds: 1
     });
 
     expect(() => scenario.spawn("banana")).toThrow(
@@ -934,7 +934,7 @@ function createResourceCommandScenario(options: {
     "apps/api/.env.local": options.appEnv ?? "PORT=3000\n",
     "monke.yml": options.monkeYml ?? singleCommandMonkeYml(options),
     ...moduleFiles,
-    ...options.files,
+    ...options.files
   });
 
   const worktree = (session: string): string => getExpectedWorktreePath(home, repoRoot, session);
@@ -945,7 +945,7 @@ function createResourceCommandScenario(options: {
         args: ["cleanup"],
         binDirectory,
         cwd: repoRoot,
-        monkeHome: home,
+        monkeHome: home
       });
     },
     home,
@@ -954,7 +954,7 @@ function createResourceCommandScenario(options: {
         args: ["materialize"],
         binDirectory,
         cwd: worktree(session),
-        monkeHome: home,
+        monkeHome: home
       });
     },
     readSessionState() {
@@ -971,7 +971,7 @@ function createResourceCommandScenario(options: {
         binDirectory,
         cwd: repoRoot,
         extraEnv,
-        monkeHome: home,
+        monkeHome: home
       });
     },
     worktree,
@@ -980,7 +980,7 @@ function createResourceCommandScenario(options: {
     },
     writeWorktree(session, relativePath, contents) {
       write(worktree(session), relativePath, contents);
-    },
+    }
   };
 }
 

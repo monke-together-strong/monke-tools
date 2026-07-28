@@ -7,7 +7,7 @@ import {
   realpathSync,
   rmSync,
   writeFileSync,
-  mkdtempSync,
+  mkdtempSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -56,7 +56,7 @@ export function git(cwd: string, args: string[], env?: Record<string, string>): 
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf-8",
-    env: { ...process.env, ...env },
+    env: { ...process.env, ...env }
   });
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || `git ${args.join(" ")} failed`);
@@ -193,7 +193,7 @@ export function installFakeGh(
         body: issue.body,
         comments: (issue.comments ?? []).map((body) => ({ body })),
         number: Math.trunc(Number(issueNumber)),
-        title: issue.title,
+        title: issue.title
       });
       return `    ${issueNumber}) printf '%s\\n' ${shellQuote(issueJson)}; exit 0 ;;`;
     })
@@ -301,18 +301,18 @@ function captureMonkeRun(options: RunMonkeOptions): {
     env: {
       MONKE_HOME: options.monkeHome,
       PATH: pathSegments.join(path.delimiter),
-      ...options.extraEnv,
+      ...options.extraEnv
     },
     onStderr(text) {
       stderr += text;
     },
     onStdout(text) {
       stdout += text;
-    },
+    }
   });
   return {
     output: () => ({ stderr, stdout }),
-    runtime,
+    runtime
   };
 }
 
@@ -356,7 +356,7 @@ export async function runMonkeAsync(options: {
     env: {
       MONKE_HOME: options.monkeHome,
       PATH: pathSegments.join(path.delimiter),
-      ...options.extraEnv,
+      ...options.extraEnv
     },
     onSelect: options.onSelect,
     onStderr(text) {
@@ -365,7 +365,7 @@ export async function runMonkeAsync(options: {
     onStdout(text) {
       stdout += text;
     },
-    selectValues: options.selectValues,
+    selectValues: options.selectValues
   });
 
   await runCliAsync(options.args, runtime);

@@ -12,7 +12,7 @@ import type {
   RepoConfig,
   RepoReservation,
   SessionRepoState,
-  SessionState,
+  SessionState
 } from "./types.ts";
 import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
 
@@ -24,10 +24,10 @@ const GLOBAL_PORT_FLOOR = 10_000;
 const MIN_REPO_RESERVATION_SIZE = 1000;
 const SessionStateIdentitySchema = z.object({
   rootSourceRoot: z.string(),
-  session: z.string(),
+  session: z.string()
 });
 const SessionStateWorktreePathsSchema = z.object({
-  repos: z.array(z.object({ worktreePath: z.string() })),
+  repos: z.array(z.object({ worktreePath: z.string() }))
 });
 
 export function loadSessionState(
@@ -41,7 +41,7 @@ export function loadSessionState(
       repos: [],
       rootSourceRoot,
       session,
-      version: 1,
+      version: 1
     };
   }
 
@@ -132,7 +132,7 @@ export function getOrCreateReservation(
     blockStart: Math.max(GLOBAL_PORT_FLOOR, highestReservedPort + 1),
     size: Math.max(size, MIN_REPO_RESERVATION_SIZE),
     sourceRoot,
-    version: 1,
+    version: 1
   };
 
   ensureDirectory(path.dirname(filePath));
@@ -227,7 +227,7 @@ export function toAssignedPorts(
 ): AssignedPort[] {
   return repoConfig.localPortOrder.map((key) => ({
     key,
-    value: requireAssignment(assignments, key, repoConfig.sourceRoot),
+    value: requireAssignment(assignments, key, repoConfig.sourceRoot)
   }));
 }
 
@@ -241,7 +241,7 @@ export function recordRepoSuccess(state: SessionState, repoState: SessionRepoSta
 
   return {
     ...state,
-    repos: [...state.repos, repoState],
+    repos: [...state.repos, repoState]
   };
 }
 
@@ -274,7 +274,7 @@ function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: 
     const document = parseDocument(text, {
       merge: false,
       strict: false,
-      uniqueKeys: false,
+      uniqueKeys: false
     });
     let referencesWorktree = false;
     visit(document, {
@@ -288,7 +288,7 @@ function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: 
           referencesWorktree = true;
         }
         return referencesWorktree ? visit.BREAK : visit.SKIP;
-      },
+      }
     });
     return referencesWorktree;
   }
