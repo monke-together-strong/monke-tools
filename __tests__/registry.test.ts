@@ -6,6 +6,7 @@ import {
   allocateLocalPorts,
   getOrCreateReservation,
   getSessionStateFilePath,
+  listSessionStatesRelevantToWorktrees,
   loadSessionState,
   saveSessionState,
 } from "../src/registry.ts";
@@ -94,6 +95,28 @@ repos: []
 
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
       new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*version`, "u"),
+    );
+  });
+
+  test("targeted state checks recognize escaped worktree paths in corrupt YAML", () => {
+    const sandbox = makeTempDir("registry-escaped-corrupt-session");
+    const home = path.join(sandbox, "home");
+    const worktreePath = String.raw`C:\worktrees\banana`;
+    write(
+      home,
+      "sessions/corrupt.yml",
+      `version: 1
+rootSourceRoot: root
+session: banana
+repos:
+  - worktreePath: ${JSON.stringify(worktreePath)}
+    duplicate: first
+    duplicate: second
+`,
+    );
+
+    expect(() => listSessionStatesRelevantToWorktrees(home, [worktreePath])).toThrow(
+      /corrupt\.yml/u,
     );
   });
 

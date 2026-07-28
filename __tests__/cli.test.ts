@@ -13,6 +13,12 @@ describe("CLI", () => {
     }).toThrow("error: option '--dry-run' cannot be used without option '--merged'");
   });
 
+  test("Chop accepts at most one target", () => {
+    expect(() => {
+      runCli(["chop", "first", "second"]);
+    }).toThrow(/too many arguments/u);
+  });
+
   test.each([
     ["main", "src/index.ts", ["cleanup", "extra"]],
     ["skill import", "scripts/import-skills.ts", []],
@@ -39,6 +45,19 @@ describe("CLI", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(usage);
+    expect(result.stderr).toBe("");
+  });
+
+  test("Chop help documents force and ignored-file disposal", () => {
+    const result = spawnSync("bun", ["run", "src/index.ts", "chop", "--help"], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Usage: mt chop [options] [target]");
+    expect(result.stdout).toContain("--force");
+    expect(result.stdout).toMatch(/ignored files are\s+always deleted/u);
     expect(result.stderr).toBe("");
   });
 });

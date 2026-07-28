@@ -1,10 +1,80 @@
 import { describe, expect, test } from "vite-plus/test";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "../src/shell.ts";
 import { createRepo, makeTempDir, read, runMonke } from "./helpers.ts";
+
+type SupportedShell = "bash" | "zsh";
+
+function isShellAvailable(shell: SupportedShell): boolean {
+  return spawnSync(shell, ["-c", "exit 0"], { stdio: "ignore" }).error === undefined;
+}
+
+function runGeneratedAdapter(
+  shell: SupportedShell,
+  mtStatus: number,
+  targetExists: boolean,
+): {
+  processStatus: number | null;
+  reportedPath: string;
+  reportedStatus: string;
+  sandbox: string;
+  targetPath: string;
+} {
+  const sandbox = makeTempDir(`shell-adapter-${shell}-${mtStatus}-${targetExists}`);
+  const targetPath = path.join(sandbox, targetExists ? "target" : "missing");
+  const binaryPath = path.join(sandbox, "fake-mt");
+  if (targetExists) {
+    mkdirSync(targetPath);
+  }
+  writeFileSync(
+    binaryPath,
+    `#!/bin/sh
+printf '%s' "$MONKE_TEST_TARGET" > "$MONKE_SHELL_DIR_DIRECTIVE"
+exit ${mtStatus}
+`,
+    "utf-8",
+  );
+  chmodSync(binaryPath, 0o755);
+  const adapter = runMonke({
+    args: ["shell", "init", shell, "--binary", binaryPath],
+    cwd: sandbox,
+    monkeHome: path.join(sandbox, "monke-home"),
+  }).stdout;
+  const result = spawnSync(
+    shell,
+    [
+      "-c",
+      `${adapter}
+mt 2>/dev/null
+mt_status=$?
+printf '%s\\n%s\\n' "$PWD" "$mt_status"
+`,
+    ],
+    {
+      cwd: sandbox,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        MONKE_TEST_TARGET: targetPath,
+      },
+    },
+  );
+  if (result.error !== undefined || result.stdout === null) {
+    throw new Error(`Could not run ${shell}: ${String(result.error ?? "no output")}`);
+  }
+  const [reportedPath = "", reportedStatus = ""] = result.stdout.trim().split("\n");
+  return {
+    processStatus: result.status,
+    reportedPath,
+    reportedStatus,
+    sandbox,
+    targetPath,
+  };
+}
 
 describe("shell navigation", () => {
   test("spawn writes an active shell directory directive", () => {
@@ -158,6 +228,43 @@ apps:
     expect(zsh.stdout).toContain('monke() {\n  mt "$@"\n}');
     expect(bash.stderr).toBe("");
     expect(zsh.stderr).toBe("");
+  });
+
+  describe.each(["bash", "zsh"] as const)("%s adapter", (shell) => {
+    const available = isShellAvailable(shell);
+    const availability = available ? "" : " (shell unavailable)";
+    test.skipIf(!available)(
+      `honors a directory request and preserves a nonzero mt status${availability}`,
+      () => {
+        const result = runGeneratedAdapter(shell, 23, true);
+
+        expect(result.processStatus).toBe(0);
+        expect(result.reportedPath).toBe(result.targetPath);
+        expect(result.reportedStatus).toBe("23");
+      },
+    );
+
+    test.skipIf(!available)(
+      `handles a failed directory request after mt status 0${availability}`,
+      () => {
+        const result = runGeneratedAdapter(shell, 0, false);
+
+        expect(result.processStatus).toBe(0);
+        expect(result.reportedPath).toBe(result.sandbox);
+        expect(result.reportedStatus).toBe("1");
+      },
+    );
+
+    test.skipIf(!available)(
+      `handles a failed directory request after mt status 23${availability}`,
+      () => {
+        const result = runGeneratedAdapter(shell, 23, false);
+
+        expect(result.processStatus).toBe(0);
+        expect(result.reportedPath).toBe(result.sandbox);
+        expect(result.reportedStatus).toBe("23");
+      },
+    );
   });
 
   test("shell install refreshes bash and zsh startup files idempotently", () => {

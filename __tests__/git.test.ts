@@ -93,8 +93,8 @@ prunable gitdir file points to non-existent location
     };
 
     expect(listWorktrees(runtime, "/tmp/root")).toStrictEqual([
-      { branch: "main", path: "/tmp/root", prunable: false },
-      { branch: "feature/foo", path: "/tmp/worktree", prunable: true },
+      { branch: "main", locked: null, path: "/tmp/root", prunable: false },
+      { branch: "feature/foo", locked: null, path: "/tmp/worktree", prunable: true },
     ]);
   });
 

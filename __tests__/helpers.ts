@@ -73,8 +73,52 @@ export function read(root: string, relativePath: string): string {
   return readFileSync(path.join(root, relativePath), "utf-8");
 }
 
-export function installGitShim(binDirectory: string): string {
+export function installGitShim(
+  binDirectory: string,
+  options?: {
+    afterCommand?: {
+      args: string;
+      cwd?: string;
+      occurrence?: number;
+      script: string;
+    };
+    failCommand?: {
+      args: string;
+      message?: string;
+    };
+  },
+): string {
   const logPath = path.join(binDirectory, "git.log");
+  const failCommand =
+    options?.failCommand === undefined
+      ? ""
+      : `if [ "$*" = ${shellQuote(options.failCommand.args)} ]; then
+  printf '%s\\n' ${shellQuote(options.failCommand.message ?? "injected Git failure")} >&2
+  exit 23
+fi
+`;
+  const afterCommand =
+    options?.afterCommand === undefined
+      ? ""
+      : `if [ "$*" = ${shellQuote(options.afterCommand.args)} ]${
+          options.afterCommand.cwd === undefined
+            ? ""
+            : ` && [ "$(pwd -P)" = ${shellQuote(options.afterCommand.cwd)} ]`
+        }; then
+  "${findExecutableOnPath("git")}" "$@"
+  status=$?
+  MONKE_TEST_REAL_GIT=${shellQuote(findExecutableOnPath("git"))}
+  export MONKE_TEST_REAL_GIT
+  count_file=${shellQuote(path.join(binDirectory, "git-hook-count"))}
+  count="$(cat "$count_file" 2>/dev/null || printf '0')"
+  count=$((count + 1))
+  printf '%s' "$count" > "$count_file"
+  if [ "$count" -eq ${String(options.afterCommand.occurrence ?? 1)} ]; then
+    ${options.afterCommand.script}
+  fi
+  exit "$status"
+fi
+`;
   writeExecutable(
     path.join(binDirectory, "git"),
     `#!/bin/sh
@@ -88,6 +132,8 @@ for arg in "$@"; do
   printf '%s' "$arg" >> ${shellQuote(logPath)}
 done
 printf '\\n' >> ${shellQuote(logPath)}
+${failCommand}
+${afterCommand}
 exec "${findExecutableOnPath("git")}" "$@"
 `,
   );
@@ -233,13 +279,18 @@ exit 1
   return logPath;
 }
 
-export function runMonke(options: {
+interface RunMonkeOptions {
   cwd: string;
   args: string[];
   monkeHome: string;
   binDirectory?: string;
   extraEnv?: Record<string, string | undefined>;
-}): { stdout: string; stderr: string } {
+}
+
+function captureMonkeRun(options: RunMonkeOptions): {
+  output: () => { stdout: string; stderr: string };
+  runtime: ReturnType<typeof createRuntime>;
+} {
   let stdout = "";
   let stderr = "";
   const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
@@ -258,9 +309,32 @@ export function runMonke(options: {
       stdout += text;
     },
   });
+  return {
+    output: () => ({ stderr, stdout }),
+    runtime,
+  };
+}
 
-  runCli(options.args, runtime);
-  return { stderr, stdout };
+export function runMonke(options: RunMonkeOptions): { stdout: string; stderr: string } {
+  const captured = captureMonkeRun(options);
+
+  runCli(options.args, captured.runtime);
+  return captured.output();
+}
+
+export function runMonkeCapturingFailure(options: RunMonkeOptions): {
+  error: unknown;
+  stdout: string;
+  stderr: string;
+} {
+  const captured = captureMonkeRun(options);
+
+  try {
+    runCli(options.args, captured.runtime);
+    return { error: null, ...captured.output() };
+  } catch (error) {
+    return { error, ...captured.output() };
+  }
 }
 
 export async function runMonkeAsync(options: {

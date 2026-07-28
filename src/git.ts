@@ -8,6 +8,8 @@ import type { RepoContext, Runtime } from "./types.ts";
 export interface WorktreeEntry {
   path: string;
   branch: string | null;
+  /** Null when unlocked; otherwise the optional Git worktree lock reason. */
+  locked: string | null;
   prunable: boolean;
 }
 
@@ -145,13 +147,7 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
 
   for (const line of output.split("\n")) {
     if (!line.trim()) {
-      if (current.path !== undefined && current.path !== "") {
-        entries.push({
-          branch: current.branch ?? null,
-          path: current.path,
-          prunable: current.prunable ?? false,
-        });
-      }
+      appendWorktreeEntry(entries, current);
       current = {};
       continue;
     }
@@ -168,18 +164,29 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
 
     if (line.startsWith("prunable")) {
       current.prunable = true;
+      continue;
+    }
+
+    if (line === "locked" || line.startsWith("locked ")) {
+      current.locked = line.slice("locked".length).trim();
     }
   }
 
-  if (current.path !== undefined && current.path !== "") {
-    entries.push({
-      branch: current.branch ?? null,
-      path: current.path,
-      prunable: current.prunable ?? false,
-    });
-  }
+  appendWorktreeEntry(entries, current);
 
   return entries;
+}
+
+function appendWorktreeEntry(entries: WorktreeEntry[], current: Partial<WorktreeEntry>): void {
+  if (current.path === undefined || current.path === "") {
+    return;
+  }
+  entries.push({
+    branch: current.branch ?? null,
+    locked: current.locked ?? null,
+    path: current.path,
+    prunable: current.prunable ?? false,
+  });
 }
 
 export function branchExists(runtime: Runtime, sourceRoot: string, branch: string): boolean {
