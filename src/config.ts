@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+
 import * as z from "zod";
 
-import { resolveGitRepoRoot } from "./git.ts";
 import { MonkeError } from "./errors.ts";
+import { resolveGitRepoRoot } from "./git.ts";
 import type {
   AppConfig,
   ExternalMapping,
@@ -111,7 +112,7 @@ export interface LoadResolvedGraphOptions {
 export function loadResolvedGraph(
   runtime: Runtime,
   rootSourceRoot: string,
-  options: LoadResolvedGraphOptions = {},
+  options: LoadResolvedGraphOptions = {}
 ): ResolvedGraph {
   const readRepoConfig = options.readRepoConfig ?? readRepoConfigFromFilesystem;
   const pathExists = options.pathExists ?? pathExistsOnFilesystem;
@@ -146,7 +147,7 @@ export function loadResolvedGraph(
       const existingOwner = ownerByPortKey.get(portKey);
       if (existingOwner !== undefined && existingOwner !== repo.sourceRoot) {
         throw new MonkeError(
-          `Port key ${portKey} is owned by both ${existingOwner} and ${repo.sourceRoot}`,
+          `Port key ${portKey} is owned by both ${existingOwner} and ${repo.sourceRoot}`
         );
       }
       ownerByPortKey.set(portKey, repo.sourceRoot);
@@ -165,7 +166,7 @@ function loadRepoConfig(
   sourceRoot: string,
   cache: Map<string, RepoConfig>,
   visiting: Set<string>,
-  options: Required<LoadResolvedGraphOptions>,
+  options: Required<LoadResolvedGraphOptions>
 ): RepoConfig {
   if (visiting.has(sourceRoot)) {
     throw new MonkeError(`Dependency cycles are not supported: ${sourceRoot}`);
@@ -190,14 +191,14 @@ function loadRepoConfig(
         externalRepo.absoluteRepoRoot,
         cache,
         visiting,
-        options,
+        options
       );
       const dependencyLocalPorts = new Set(dependency.localPortOrder);
 
       for (const mapping of externalRepo.mappings) {
         if (!dependencyLocalPorts.has(mapping.portKey)) {
           throw new MonkeError(
-            `External mapping ${mapping.portKey} in ${configPath} is not owned locally by ${externalRepo.absoluteRepoRoot}`,
+            `External mapping ${mapping.portKey} in ${configPath} is not owned locally by ${externalRepo.absoluteRepoRoot}`
           );
         }
       }
@@ -215,14 +216,14 @@ function parseRepoConfigObject(
   sourceRoot: string,
   configPath: string,
   config: RawRepoConfig,
-  options: Required<LoadResolvedGraphOptions>,
+  options: Required<LoadResolvedGraphOptions>
 ): RepoConfig {
   const { bootstrapCommand } = config;
   const { cleanupCommand } = config;
   const seedPaths = parseSeedPaths(config.seedPaths, sourceRoot, configPath);
   const { resourceValuesInOrder, resourceCommandsInOrder } = parseResources(
     config.resources,
-    configPath,
+    configPath
   );
 
   const appsByLabel = new Map<string, AppConfig>();
@@ -237,12 +238,12 @@ function parseRepoConfigObject(
     const absoluteAppPath = resolveInside(
       sourceRoot,
       relativePath,
-      `${configPath}#apps.${label}.path`,
+      `${configPath}#apps.${label}.path`
     );
     const absoluteEnvFilePath = resolveInside(
       absoluteAppPath,
       relativeEnvFile,
-      `${configPath}#apps.${label}.envFile`,
+      `${configPath}#apps.${label}.envFile`
     );
 
     if (normalize(absoluteEnvFilePath) === normalize(absoluteAppPath)) {
@@ -297,7 +298,7 @@ function parseRepoConfigObject(
     const existingPathEnvOwner = externalPathEnvOwners.get(pathEnv);
     if (existingPathEnvOwner !== undefined) {
       throw new MonkeError(
-        `Duplicate external pathEnv ${pathEnv} in ${configPath} for ${existingPathEnvOwner} and ${label}`,
+        `Duplicate external pathEnv ${pathEnv} in ${configPath} for ${existingPathEnvOwner} and ${label}`
       );
     }
     externalPathEnvOwners.set(pathEnv, label);
@@ -305,13 +306,13 @@ function parseRepoConfigObject(
     const resolvedRepoRoot = resolveGitRepoRoot(runtime, absoluteRepoRoot);
     if (normalize(resolvedRepoRoot) !== normalize(absoluteRepoRoot)) {
       throw new MonkeError(
-        `External dependency ${label} must point to the dependency repo root exactly: ${absoluteRepoRoot}`,
+        `External dependency ${label} must point to the dependency repo root exactly: ${absoluteRepoRoot}`
       );
     }
 
     if (!options.pathExists(absoluteRepoRoot, "monke.yml")) {
       throw new MonkeError(
-        `External dependency ${label} is missing monke.yml at ${absoluteRepoRoot}`,
+        `External dependency ${label} is missing monke.yml at ${absoluteRepoRoot}`
       );
     }
 
@@ -355,7 +356,7 @@ function parseRepoConfigObject(
   for (const app of appsInOrder) {
     if (app.localMappings.length === 0 && !externalTargetApps.has(app.label)) {
       throw new MonkeError(
-        `App ${app.label} owns no local ports and is not targeted by any external mapping`,
+        `App ${app.label} owns no local ports and is not targeted by any external mapping`
       );
     }
   }
@@ -406,7 +407,7 @@ function normalize(targetPath: string): string {
 function parseSeedPaths(
   rawSeedPaths: string[] | undefined,
   sourceRoot: string,
-  configPath: string,
+  configPath: string
 ): string[] {
   if (rawSeedPaths === undefined) {
     return [];
@@ -419,19 +420,19 @@ function parseSeedPaths(
     const absolutePath = resolveInside(
       sourceRoot,
       relativePath,
-      `${configPath}#seedPaths[${index}]`,
+      `${configPath}#seedPaths[${index}]`
     );
     const normalizedPath = normalize(absolutePath);
     if (relativePath === "." || normalizedPath === normalize(sourceRoot)) {
       throw new MonkeError(
-        `${configPath}#seedPaths[${index}] cannot point at the repo root; seedPath "." is not allowed`,
+        `${configPath}#seedPaths[${index}] cannot point at the repo root; seedPath "." is not allowed`
       );
     }
 
     const existing = seen.get(normalizedPath);
     if (existing !== undefined) {
       throw new MonkeError(
-        `Duplicate seedPath ${relativePath} in ${configPath}; already declared as ${existing}`,
+        `Duplicate seedPath ${relativePath} in ${configPath}; already declared as ${existing}`
       );
     }
 
@@ -444,7 +445,7 @@ function parseSeedPaths(
 
 function parseResources(
   resources: RawResources | undefined,
-  configPath: string,
+  configPath: string
 ): {
   resourceValuesInOrder: ResourceValueConfig[];
   resourceCommandsInOrder: ResourceCommandConfig[];
@@ -473,14 +474,14 @@ function parseResources(
         commandValue.outputs,
         `${configPath}#resources.commands.${name}.outputs`,
         seenEnvNames,
-        configPath,
+        configPath
       );
       resourceCommandsInOrder.push({
         name,
         outputs,
         run: requireResourceCommandRunPath(
           commandValue.run,
-          `${configPath}#resources.commands.${name}.run`,
+          `${configPath}#resources.commands.${name}.run`
         ),
         timeoutSeconds: commandValue.timeoutSeconds,
       });
@@ -501,7 +502,7 @@ function requireResourceCommandOutputs(
   value: string[],
   location: string,
   seenEnvNames: Set<string>,
-  configPath: string,
+  configPath: string
 ): string[] {
   const outputs: string[] = [];
   const seenOutputs = new Set<string>();
@@ -543,14 +544,14 @@ function requireResourceLiteral(literal: string, location: string): string {
     const placeholder = match.groups?.placeholder ?? "";
     if (placeholder !== "session" && placeholder !== "user") {
       throw new MonkeError(
-        `${location} contains unsupported placeholder \${${placeholder}}; supported placeholders are \${session} and \${user}`,
+        `${location} contains unsupported placeholder \${${placeholder}}; supported placeholders are \${session} and \${user}`
       );
     }
   }
 
   if (literal.replaceAll(/\$\{(?:session|user)\}/gu, "").includes("${")) {
     throw new MonkeError(
-      `${location} contains an unsupported placeholder; supported placeholders are \${session} and \${user}`,
+      `${location} contains an unsupported placeholder; supported placeholders are \${session} and \${user}`
     );
   }
 

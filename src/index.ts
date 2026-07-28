@@ -2,8 +2,8 @@
 
 import { Argument, Command } from "@commander-js/extra-typings";
 
-import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runChop } from "./chop.ts";
+import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
@@ -28,8 +28,8 @@ function createProgram(
   swingAction: (
     runtime: Runtime,
     target: string | undefined,
-    options: { codex?: boolean },
-  ) => void | Promise<void>,
+    options: { codex?: boolean }
+  ) => void | Promise<void>
 ): Command {
   // Subcommands copy these at .command() time, so every subcommand below must be declared after.
   const program = new Command().name("mt").allowExcessArguments(false);
@@ -50,7 +50,7 @@ function createProgram(
         options.main || options.master
           ? { mode: "default-branch" }
           : { copyDirty: options.dirty, mode: "current-head" },
-        { codex: options.codex },
+        { codex: options.codex }
       );
     });
 
@@ -71,7 +71,7 @@ function createProgram(
     .argument("[target]")
     .option(
       "--force",
-      "Discard staged, modified, and untracked files; ignored files are always deleted",
+      "Discard staged, modified, and untracked files; ignored files are always deleted"
     )
     .action((target, options) => {
       runChop(runtime, target, { force: options.force === true });
@@ -90,7 +90,7 @@ function createProgram(
         runtime,
         options.merged === true
           ? { dryRun: options.dryRun === true, mode: "merged" }
-          : { mode: "dead-only" },
+          : { mode: "dead-only" }
       );
     });
 

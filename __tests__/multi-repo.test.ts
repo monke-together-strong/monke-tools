@@ -1,7 +1,8 @@
-import { describe, expect, test } from "vite-plus/test";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/registry.ts";
@@ -75,10 +76,10 @@ external:
 
     expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
     expect(read(rootWorktree, "apps/api/.env.local")).toBe(
-      "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n",
+      "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n"
     );
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\n`,
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\n`
     );
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
@@ -140,7 +141,7 @@ external:
 
     expect(read(getExpectedWorktreePath(home, depRoot, "swing"), "dep.txt")).toBe("clean dep\n");
     expect(result.stderr).toContain(
-      `Warning: Session worktree for swing at ${depRoot} already exists; dirty Source checkout changes were not carried into it.`,
+      `Warning: Session worktree for swing at ${depRoot} already exists; dirty Source checkout changes were not carried into it.`
     );
   });
 
@@ -216,13 +217,13 @@ external:
       expect(existsSync(getExpectedWorktreePath(home, root, "dirty-first"))).toBeFalsy();
       expect(existsSync(getSessionStateFilePath(home, root, "dirty-first"))).toBeFalsy();
       expect(() =>
-        git(cleanDepRoot, ["show-ref", "--verify", "--quiet", "refs/heads/dirty-first"]),
+        git(cleanDepRoot, ["show-ref", "--verify", "--quiet", "refs/heads/dirty-first"])
       ).toThrow(/show-ref/u);
       expect(() =>
-        git(dirtyDepRoot, ["show-ref", "--verify", "--quiet", "refs/heads/dirty-first"]),
+        git(dirtyDepRoot, ["show-ref", "--verify", "--quiet", "refs/heads/dirty-first"])
       ).toThrow(/show-ref/u);
       expect(() =>
-        git(root, ["show-ref", "--verify", "--quiet", "refs/heads/dirty-first"]),
+        git(root, ["show-ref", "--verify", "--quiet", "refs/heads/dirty-first"])
       ).toThrow(/show-ref/u);
     } finally {
       rmSync(sandbox, { force: true, recursive: true });
@@ -276,10 +277,10 @@ external:
     });
 
     expect(read(getExpectedWorktreePath(home, depRoot, "dirty-graph"), "dep.txt")).toBe(
-      "dirty dep\n",
+      "dirty dep\n"
     );
     expect(read(getExpectedWorktreePath(home, root, "dirty-graph"), "root.txt")).toBe(
-      "dirty root\n",
+      "dirty root\n"
     );
   });
 
@@ -334,7 +335,7 @@ external:
         binDirectory,
         cwd: root,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/Session branch "banana" already exists.*diverged branch is unsafe/su);
 
     expect(existsSync(getExpectedWorktreePath(home, depRoot, "banana"))).toBeFalsy();
@@ -390,7 +391,7 @@ external:
     mappings:
       - port: API_PORT
         env: DATABASE_URL
-`,
+`
     );
 
     runMonke({
@@ -404,7 +405,7 @@ external:
     const depWorktree = getExpectedWorktreePath(home, depRoot, "default-graph");
     expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
     );
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
@@ -420,7 +421,7 @@ external:
       monkeHome: home,
     });
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
     );
     expect(read(depWorktree, "default-only.txt")).toBe("default dep\n");
 
@@ -484,10 +485,10 @@ external:
     const depWorktree = getExpectedWorktreePath(home, depRoot, "local-env");
     expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
     expect(read(rootWorktree, "apps/api/.env.local")).toBe(
-      "DATABASE_URL=postgres://localhost:10001/app\n",
+      "DATABASE_URL=postgres://localhost:10001/app\n"
     );
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10001\n`,
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10001\n`
     );
   });
 
@@ -538,7 +539,7 @@ external:
     const depWorktree = getExpectedWorktreePath(home, depRoot, "mixed-defaults");
     expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10000\nMASTER_DEFAULT=1\n");
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
     );
   });
 
@@ -583,7 +584,7 @@ external:
         binDirectory,
         cwd: root,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/Session worktree path collision/u);
     expect(existsSync(path.join(home, "worktrees", "root", "collision"))).toBeFalsy();
   });
@@ -743,7 +744,7 @@ external:
         binDirectory,
         cwd: root,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/kind: return contract violation/u);
 
     const rootWorktree = getExpectedWorktreePath(home, root, "partial");
@@ -764,7 +765,7 @@ external:
       `export default function () {
   return { E2E_CHANNEL_ID: "123" };
 }
-`,
+`
     );
 
     runMonke({
@@ -775,7 +776,7 @@ external:
     });
 
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\nE2E_CHANNEL_ID=123\n`,
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\nE2E_CHANNEL_ID=123\n`
     );
   });
 
@@ -833,13 +834,13 @@ external:
     const depWorktree = getExpectedWorktreePath(home, depRoot, "swing");
 
     expect(read(rootWorktree, "apps/api/.env.local")).toBe(
-      "DATABASE_URL=postgres://localhost:10000/api\n",
+      "DATABASE_URL=postgres://localhost:10000/api\n"
     );
     expect(read(rootWorktree, "apps/worker/.env.local")).toBe(
-      "DATABASE_URL=postgres://localhost:10000/worker\n",
+      "DATABASE_URL=postgres://localhost:10000/worker\n"
     );
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
     );
 
     expect(depRoot).toBeTruthy();
@@ -900,7 +901,7 @@ external:
     });
 
     expect(read(rootWorktree, ".env")).toBe(
-      `KEEP_ME=1\nDEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`,
+      `KEEP_ME=1\nDEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
     );
   });
 
@@ -967,7 +968,7 @@ external:
     const rootWorktree = getExpectedWorktreePath(home, root, "direct-only");
     const depWorktree = getExpectedWorktreePath(home, dep, "direct-only");
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_PORT=11000\n`,
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_PORT=11000\n`
     );
   });
 
@@ -1122,7 +1123,7 @@ external:
     const rootWorktree = getExpectedWorktreePath(home, root, "fresh-dep-seeds");
     expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10000\n");
     expect(read(rootWorktree, "apps/api/.env.local")).toBe(
-      "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n",
+      "PORT=11000\nDATABASE_URL=postgres://localhost:10000/app\n"
     );
     expect(read(depRoot, "services/db/.env.local")).toBe("PORT=5432\n");
   });

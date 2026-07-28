@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
+
 import { describe, expect, test } from "vite-plus/test";
 
 import { reconcileSkillNamespaces, resolveSkillInstallTargets } from "../src/skills.ts";
@@ -40,7 +41,7 @@ describe("skills", () => {
         preference: {
           targets: [{ kind: "custom", path: path.join(homeDirectory, "skills", "monke-tools") }],
         },
-      }),
+      })
     ).toThrow(/Agent skill root/u);
   });
 
@@ -51,7 +52,7 @@ describe("skills", () => {
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
 
     reconcileSkillNamespaces({
@@ -76,7 +77,7 @@ describe("skills", () => {
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
     write(sourceCheckout, "skills/imported/tdd/SKILL.md", "---\nname: tdd\n---\n");
 
@@ -110,7 +111,7 @@ describe("skills", () => {
     expect(manifest).not.toHaveProperty("supportingLinks");
     expect(lstatSync(coreLink).isSymbolicLink()).toBeTruthy();
     expect(readlinkSync(coreLink)).toBe(
-      path.join(sourceCheckout, "skills", "internal", "monke-tools-core"),
+      path.join(sourceCheckout, "skills", "internal", "monke-tools-core")
     );
     expect(lstatSync(tddLink).isSymbolicLink()).toBeTruthy();
     expect(readlinkSync(tddLink)).toBe(path.join(sourceCheckout, "skills", "imported", "tdd"));
@@ -132,7 +133,7 @@ describe("skills", () => {
     expect(existsSync(tddLink)).toBeFalsy();
     expect(existsSync(manifestPath)).toBeFalsy();
     expect(
-      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink(),
+      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink()
     ).toBeTruthy();
   });
 
@@ -146,17 +147,17 @@ describe("skills", () => {
     write(
       sourceCheckout,
       wrapperRelativePath,
-      `Use [base](${upstreamRelativePath}) and [standards](${standardsRelativePath}).\n`,
+      `Use [base](${upstreamRelativePath}) and [standards](${standardsRelativePath}).\n`
     );
     write(
       sourceCheckout,
       "skills/references/imported/code-review/MAIN.md",
-      "upstream review workflow\n",
+      "upstream review workflow\n"
     );
     write(
       sourceCheckout,
       "skills/references/internal/CODING_STANDARDS.md",
-      "team coding baseline\n",
+      "team coding baseline\n"
     );
 
     reconcileSkillNamespaces({
@@ -175,19 +176,19 @@ describe("skills", () => {
     ];
     for (const wrapperDirectory of installedWrapperDirectories) {
       expect(readFileSync(path.join(wrapperDirectory, upstreamRelativePath), "utf-8")).toBe(
-        "upstream review workflow\n",
+        "upstream review workflow\n"
       );
       expect(readFileSync(path.join(wrapperDirectory, standardsRelativePath), "utf-8")).toBe(
-        "team coding baseline\n",
+        "team coding baseline\n"
       );
     }
     expect(
       JSON.parse(
         readFileSync(
           path.join(sandbox, ".claude", "skills", ".monke-tools-flat-skills.json"),
-          "utf-8",
-        ),
-      ),
+          "utf-8"
+        )
+      )
     ).toMatchObject({
       supportingLinks: [
         {
@@ -219,12 +220,12 @@ describe("skills", () => {
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
     write(
       claudeSkillRoot,
       ".monke-tools-flat-skills.json",
-      JSON.stringify({ links: [], managedBy: "monke-tools", version: 2 }),
+      JSON.stringify({ links: [], managedBy: "monke-tools", version: 2 })
     );
 
     expect(() => {
@@ -245,7 +246,7 @@ describe("skills", () => {
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
     mkdirSync(path.join(blockedSkillRoot, "monke-tools"), { recursive: true });
 
@@ -272,7 +273,7 @@ describe("skills", () => {
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
     write(path.join(sandbox, ".claude", "skills"), ".monke-tools-flat-skills.json", "{}");
 
@@ -291,7 +292,7 @@ describe("skills", () => {
     }).toThrow(/Failed to reconcile 1 Skill install target/u);
 
     expect(
-      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink(),
+      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink()
     ).toBeTruthy();
   });
 
@@ -302,7 +303,7 @@ describe("skills", () => {
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n",
+      "---\nname: monke-tools-core\n---\n"
     );
     mkdirSync(oldSkillRoot, { recursive: true });
     symlinkSync(path.join(sourceCheckout, "skills"), path.join(oldSkillRoot, "monke-tools"), "dir");
@@ -321,7 +322,7 @@ describe("skills", () => {
 
     expect(existsSync(path.join(oldSkillRoot, "monke-tools"))).toBeFalsy();
     expect(
-      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink(),
+      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink()
     ).toBeTruthy();
   });
 });

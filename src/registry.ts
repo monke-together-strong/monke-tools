@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+
 import { parseDocument, stringify, visit } from "yaml";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { ensureDirectory, hashKey, isPortAvailable } from "./runtime.ts";
 import { RepoReservationSchema, SessionStateSchema } from "./state-schema.ts";
-import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
 import type {
   AssignedPort,
   RepoConfig,
@@ -14,6 +14,7 @@ import type {
   SessionRepoState,
   SessionState,
 } from "./types.ts";
+import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
 
 const GLOBAL_PORT_FLOOR = 10_000;
 // Reserve a generous flat block per repo so multiple concurrent sessions can each allocate
@@ -32,7 +33,7 @@ const SessionStateWorktreePathsSchema = z.object({
 export function loadSessionState(
   home: string,
   rootSourceRoot: string,
-  session: string,
+  session: string
 ): SessionState {
   const filePath = getSessionStateFilePath(home, rootSourceRoot, session);
   if (!existsSync(filePath)) {
@@ -64,7 +65,7 @@ export function removeSessionState(home: string, rootSourceRoot: string, session
 
 export function listSessionStates(home: string): SessionState[] {
   return listSessionStateFiles(home).map((filePath) =>
-    parseOwnedYamlFile(filePath, SessionStateSchema),
+    parseOwnedYamlFile(filePath, SessionStateSchema)
   );
 }
 
@@ -76,7 +77,7 @@ export function listSessionStates(home: string): SessionState[] {
  */
 export function listSessionStatesRelevantToWorktrees(
   home: string,
-  worktreePaths: string[],
+  worktreePaths: string[]
 ): SessionState[] {
   const states: SessionState[] = [];
   for (const filePath of listSessionStateFiles(home)) {
@@ -96,7 +97,7 @@ export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]
   for (const [index, recordedRoot] of recordedRoots.entries()) {
     if (expectedOrder[index] !== recordedRoot) {
       throw new MonkeError(
-        `Session state for ${state.session} is out of sync with the current dependency graph`,
+        `Session state for ${state.session} is out of sync with the current dependency graph`
       );
     }
   }
@@ -105,7 +106,7 @@ export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]
 export function getOrCreateReservation(
   home: string,
   sourceRoot: string,
-  size: number,
+  size: number
 ): RepoReservation | null {
   if (size === 0) {
     return null;
@@ -116,7 +117,7 @@ export function getOrCreateReservation(
     const existing = parseOwnedYamlFile(filePath, RepoReservationSchema);
     if (size > existing.size) {
       throw new MonkeError(
-        `Repo ${sourceRoot} owns ${size} local ports but its reservation only has room for ${existing.size}`,
+        `Repo ${sourceRoot} owns ${size} local ports but its reservation only has room for ${existing.size}`
       );
     }
     return existing;
@@ -150,7 +151,7 @@ export function allocateLocalPorts(options: {
   baselinePorts: Set<number>;
 }): Map<string, number> {
   const assignments = new Map<string, number>(
-    (options.existingRepoState?.assignedPorts ?? []).map((entry) => [entry.key, entry.value]),
+    (options.existingRepoState?.assignedPorts ?? []).map((entry) => [entry.key, entry.value])
   );
   if (options.repoConfig.localPortOrder.length === 0) {
     return assignments;
@@ -209,7 +210,7 @@ export function allocateLocalPorts(options: {
         `No available ports remain inside the reserved block for ${options.repoConfig.sourceRoot} ` +
           `(block holds ${blockSize} ports from ${options.reservation.blockStart}, ${inUse} already held by other sessions). ` +
           `Tear down unused sessions to free ports, or delete the reservation file under ` +
-          `<MONKE_HOME>/repo-reservations and re-run to grow the block.`,
+          `<MONKE_HOME>/repo-reservations and re-run to grow the block.`
       );
     }
 
@@ -222,7 +223,7 @@ export function allocateLocalPorts(options: {
 
 export function toAssignedPorts(
   repoConfig: RepoConfig,
-  assignments: Map<string, number>,
+  assignments: Map<string, number>
 ): AssignedPort[] {
   return repoConfig.localPortOrder.map((key) => ({
     key,
@@ -247,7 +248,7 @@ export function recordRepoSuccess(state: SessionState, repoState: SessionRepoSta
 export function getSessionStateFilePath(
   home: string,
   rootSourceRoot: string,
-  session: string,
+  session: string
 ): string {
   return path.join(home, "sessions", `${hashKey(`${rootSourceRoot}\u0000${session}`)}.yml`);
 }
@@ -266,7 +267,7 @@ function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: 
   try {
     const partial = parseOwnedYamlFile(filePath, SessionStateWorktreePathsSchema);
     return partial.repos.some((repo) =>
-      worktreePaths.some((worktreePath) => sameWorktreePath(repo.worktreePath, worktreePath)),
+      worktreePaths.some((worktreePath) => sameWorktreePath(repo.worktreePath, worktreePath))
     );
   } catch {
     const text = readFileSync(filePath, "utf-8");
@@ -315,7 +316,7 @@ function listReservations(home: string): RepoReservation[] {
 function requireAssignment(
   assignments: Map<string, number>,
   key: string,
-  repoRoot: string,
+  repoRoot: string
 ): number {
   const value = assignments.get(key);
   if (value === undefined) {

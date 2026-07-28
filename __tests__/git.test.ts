@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vite-plus/test";
 import { rmSync } from "node:fs";
 import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
 
 import {
   ensureSessionWorktree,
@@ -10,8 +11,8 @@ import {
   validateWorktreeForSession,
 } from "../src/git.ts";
 import { createRuntime } from "../src/runtime.ts";
-import { createRepo, git, makeTempDir } from "./helpers.ts";
 import type { Runtime } from "../src/types.ts";
+import { createRepo, git, makeTempDir } from "./helpers.ts";
 
 describe("Git operations", () => {
   test("inferSessionName supports slash-delimited session names", () => {
@@ -58,7 +59,7 @@ describe("Git operations", () => {
         home,
         sourceRoot,
         worktreePath,
-        "banana",
+        "banana"
       );
     }).toThrow(/Expected worktree .* to belong to /u);
   });
@@ -145,8 +146,8 @@ prunable gitdir file points to non-existent location
         createRuntime({ cwd: sourceRoot }),
         path.join(sandbox, "home"),
         sourceRoot,
-        "--help",
-      ),
+        "--help"
+      )
     ).toThrow(/Invalid session name "--help"/u);
   });
 });

@@ -12,7 +12,7 @@ export function finalizeSession(runtime: Runtime, home: string, state: SessionSt
   const liveRepo = state.repos.find((repo) => existsSync(repo.worktreePath));
   if (liveRepo !== undefined) {
     throw new MonkeError(
-      `Cannot finalize session ${state.session} while worktree ${liveRepo.worktreePath} exists`,
+      `Cannot finalize session ${state.session} while worktree ${liveRepo.worktreePath} exists`
     );
   }
 
@@ -27,12 +27,12 @@ export function finalizeSession(runtime: Runtime, home: string, state: SessionSt
     }
 
     const resourceEnv = Object.fromEntries(
-      (repoState.resourceValues ?? []).map((resource) => [resource.env, resource.value]),
+      (repoState.resourceValues ?? []).map((resource) => [resource.env, resource.value])
     );
     const resourceCommandEnv = Object.fromEntries(
       (repoState.resourceCommandOutputs ?? []).flatMap((command) =>
-        command.outputs.map((resource) => [resource.env, resource.value]),
-      ),
+        command.outputs.map((resource) => [resource.env, resource.value])
+      )
     );
 
     try {
@@ -49,7 +49,7 @@ export function finalizeSession(runtime: Runtime, home: string, state: SessionSt
       });
     } catch (error) {
       throw new MonkeError(
-        `Cleanup command failed for session ${state.session} repo ${repoState.sourceRoot}: ${cleanupCommand}\n${errorMessage(error)}`,
+        `Cleanup command failed for session ${state.session} repo ${repoState.sourceRoot}: ${cleanupCommand}\n${errorMessage(error)}`
       );
     }
   }

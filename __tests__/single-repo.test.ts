@@ -1,11 +1,12 @@
-import { describe, expect, test } from "vite-plus/test";
 import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
+import { describe, expect, test } from "vite-plus/test";
+
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
 import { spawnSessionFromSourceRootLocked } from "../src/monke.ts";
-import { createRuntime } from "../src/runtime.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/registry.ts";
+import { createRuntime } from "../src/runtime.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
 import {
   createRepo,
@@ -52,14 +53,14 @@ describe("single-repo sessions", () => {
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toBe(
-      `Spawned or updated session banana\nSwitch to ${worktreeRoot}\nEnable automatic switching with: mt shell install\n`,
+      `Spawned or updated session banana\nSwitch to ${worktreeRoot}\nEnable automatic switching with: mt shell install\n`
     );
     expect(read(worktreeRoot, ".env.shared")).toBe("ROOT_ONLY=true\n");
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe(
-      "PORT=10000\nDATABASE_URL=postgres://localhost:10001/app\nOTHER=keep\n",
+      "PORT=10000\nDATABASE_URL=postgres://localhost:10001/app\nOTHER=keep\n"
     );
     expect(read(repoRoot, "apps/api/.env.local")).toBe(
-      "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\nOTHER=keep\n",
+      "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\nOTHER=keep\n"
     );
     expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nDB_PORT=10001\n");
 
@@ -110,7 +111,7 @@ describe("single-repo sessions", () => {
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     );
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
@@ -118,7 +119,7 @@ describe("single-repo sessions", () => {
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
     expect(readFileSync(cmdLogPath, "utf-8")).toBe(
-      `/c\nstart\n\n${codexThreadUrl.replaceAll("%", "^%")}\n`,
+      `/c\nstart\n\n${codexThreadUrl.replaceAll("%", "^%")}\n`
     );
   });
 
@@ -171,7 +172,7 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "README.md")).toBe("hello\n");
     expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("banana");
     expect(result.stderr).toContain(
-      `Warning: no monke.yml found for ${repoRoot}; spawned session worktree without materializing it.`,
+      `Warning: no monke.yml found for ${repoRoot}; spawned session worktree without materializing it.`
     );
     expect(result.stderr).toContain(`Spawned or updated session banana\nSwitch to ${worktreeRoot}`);
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
@@ -232,7 +233,7 @@ describe("single-repo sessions", () => {
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(`Source checkout is dirty: ${repoRoot}`);
   });
 
@@ -254,7 +255,7 @@ describe("single-repo sessions", () => {
     });
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-copy"), "README.md")).toBe(
-      "dirty\n",
+      "dirty\n"
     );
   });
 
@@ -282,9 +283,9 @@ describe("single-repo sessions", () => {
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(
-      /Session branch "banana" already exists.*carrying dirty changes onto a diverged branch is unsafe.*--no-dirty.*align the branch/su,
+      /Session branch "banana" already exists.*carrying dirty changes onto a diverged branch is unsafe.*--no-dirty.*align the branch/su
     );
 
     expect(existsSync(getExpectedWorktreePath(home, repoRoot, "banana"))).toBeFalsy();
@@ -312,7 +313,7 @@ describe("single-repo sessions", () => {
     });
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "banana"), "README.md")).toBe(
-      "dirty source\n",
+      "dirty source\n"
     );
   });
 
@@ -335,7 +336,7 @@ describe("single-repo sessions", () => {
     });
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "dirty-staged"), "README.md")).toBe(
-      "staged\n",
+      "staged\n"
     );
   });
 
@@ -379,7 +380,7 @@ describe("single-repo sessions", () => {
     });
 
     expect(
-      existsSync(path.join(getExpectedWorktreePath(home, repoRoot, "dirty-delete"), "README.md")),
+      existsSync(path.join(getExpectedWorktreePath(home, repoRoot, "dirty-delete"), "README.md"))
     ).toBeFalsy();
   });
 
@@ -401,7 +402,7 @@ describe("single-repo sessions", () => {
     });
 
     expect(
-      read(getExpectedWorktreePath(home, repoRoot, "dirty-untracked"), "notes/nested.txt"),
+      read(getExpectedWorktreePath(home, repoRoot, "dirty-untracked"), "notes/nested.txt")
     ).toBe("carry me\n");
   });
 
@@ -426,7 +427,7 @@ describe("single-repo sessions", () => {
 
     const copiedLink = path.join(
       getExpectedWorktreePath(home, repoRoot, "dirty-untracked-link"),
-      "secret-link",
+      "secret-link"
     );
     expect(lstatSync(copiedLink).isSymbolicLink()).toBeTruthy();
     expect(readlinkSync(copiedLink)).toBe(outsideFile);
@@ -452,9 +453,7 @@ describe("single-repo sessions", () => {
     });
 
     expect(
-      existsSync(
-        path.join(getExpectedWorktreePath(home, repoRoot, "dirty-ignored"), "ignored.txt"),
-      ),
+      existsSync(path.join(getExpectedWorktreePath(home, repoRoot, "dirty-ignored"), "ignored.txt"))
     ).toBeFalsy();
   });
 
@@ -474,7 +473,7 @@ describe("single-repo sessions", () => {
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(`Source checkout is dirty: ${repoRoot}`);
     expect(existsSync(getExpectedWorktreePath(home, repoRoot, "reject-dirty"))).toBeFalsy();
   });
@@ -504,7 +503,7 @@ describe("single-repo sessions", () => {
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "existing"), "README.md")).toBe("clean\n");
     expect(result.stderr).toContain(
-      `Warning: Session worktree for existing at ${repoRoot} already exists; dirty Source checkout changes were not carried into it.`,
+      `Warning: Session worktree for existing at ${repoRoot} already exists; dirty Source checkout changes were not carried into it.`
     );
   });
 
@@ -545,7 +544,7 @@ describe("single-repo sessions", () => {
         binDirectory,
         cwd: secondRepo,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/Session worktree path collision.*already recorded/su);
   });
 
@@ -623,7 +622,7 @@ describe("single-repo sessions", () => {
     });
 
     expect(read(getExpectedWorktreePath(home, repoRoot, "fresh-main-no-dirty"), "README.md")).toBe(
-      "main\n",
+      "main\n"
     );
   });
 
@@ -648,7 +647,7 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "README.md")).toBe("main\n");
     expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("fresh");
     expect(result.stderr).toContain(
-      `Warning: no monke.yml found for ${repoRoot}; spawned session worktree without materializing it.`,
+      `Warning: no monke.yml found for ${repoRoot}; spawned session worktree without materializing it.`
     );
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
@@ -871,14 +870,14 @@ apps:
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/Expected managed env file to exist/u);
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retryable");
     expect(existsSync(worktreeRoot)).toBeFalsy();
     expect(existsSync(getSessionStateFilePath(home, repoRoot, "retryable"))).toBeFalsy();
     expect(() =>
-      git(repoRoot, ["show-ref", "--verify", "--quiet", "refs/heads/retryable"]),
+      git(repoRoot, ["show-ref", "--verify", "--quiet", "refs/heads/retryable"])
     ).toThrow(/show-ref/u);
 
     write(repoRoot, "apps/api/.env.local", "PORT=3000\n");
@@ -923,7 +922,7 @@ apps:
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/Session state already exists for "fresh"/u);
   });
 
@@ -950,7 +949,7 @@ apps:
         binDirectory,
         cwd: repoRoot,
         monkeHome: home,
-      }),
+      })
     ).toThrow(/Session branch "fresh" already exists/u);
   });
 
@@ -1052,7 +1051,7 @@ apps:
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nOTHER=keep\n");
     expect(read(worktreeRoot, ".env")).toBe(
-      "API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\nSTATIC_HANDLE=fixed-banana\n",
+      "API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\nSTATIC_HANDLE=fixed-banana\n"
     );
 
     const initialState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
@@ -1074,7 +1073,7 @@ apps:
     mappings:
       - port: API_PORT
         env: PORT
-`,
+`
     );
 
     runMonke({
@@ -1170,7 +1169,7 @@ apps:
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(inferSessionName(home, repoRoot, worktreeRoot, "banana")).toBe("banana");
     expect(() => inferSessionName(home, repoRoot, worktreeRoot, "wrong")).toThrow(
-      /match current branch/u,
+      /match current branch/u
     );
 
     const before = read(worktreeRoot, ".env");
@@ -1260,10 +1259,10 @@ apps:
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
-      '{ "theme": "dark" }\n',
+      '{ "theme": "dark" }\n'
     );
     expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Cookies")).toBe(
-      "cookie-jar\n",
+      "cookie-jar\n"
     );
     expect(read(worktreeRoot, "scripts/bootstrap.sh")).toBe("#!/bin/sh\necho seeded\n");
   });
@@ -1300,10 +1299,10 @@ apps:
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/.gitkeep")).toBe("");
     expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
-      '{ "theme": "dark" }\n',
+      '{ "theme": "dark" }\n'
     );
     expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Cookies")).toBe(
-      "cookie-jar\n",
+      "cookie-jar\n"
     );
   });
 
@@ -1337,7 +1336,7 @@ apps:
     write(
       worktreeRoot,
       "apps/frostbite-crawler/data/sessions/hoangbn/Preferences",
-      '{ "theme": "light" }\n',
+      '{ "theme": "light" }\n'
     );
 
     runMonke({
@@ -1355,7 +1354,7 @@ apps:
     });
 
     expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
-      '{ "theme": "light" }\n',
+      '{ "theme": "light" }\n'
     );
   });
 
@@ -1385,7 +1384,7 @@ apps:
     });
 
     expect(result.stderr).toContain(
-      "Warning: seedPath apps/frostbite-crawler/data/sessions is missing",
+      "Warning: seedPath apps/frostbite-crawler/data/sessions is missing"
     );
     expect(result.stderr).toContain("Spawned or updated session banana");
   });
@@ -1519,7 +1518,7 @@ external:
         binDirectory,
         cwd: getExpectedWorktreePath(home, root, "banana"),
         monkeHome: home,
-      }),
+      })
     ).toThrow(/must run from the source checkout/u);
   });
 

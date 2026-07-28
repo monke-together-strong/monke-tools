@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vite-plus/test";
 import { chmodSync } from "node:fs";
 import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
 import * as z from "zod";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -23,7 +24,7 @@ interface ResourceCommandScenario {
   repoRoot: string;
   spawn: (
     session: string,
-    extraEnv?: Record<string, string | undefined>,
+    extraEnv?: Record<string, string | undefined>
   ) => { stdout: string; stderr: string };
   materialize: (session: string) => { stdout: string; stderr: string };
   cleanup: () => { stdout: string; stderr: string };
@@ -65,7 +66,7 @@ export default function ({ previous }) {
       E2E_FLOW2_SYMBOL: [],
     });
     expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n",
+      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n"
     );
     expect(scenario.readWorktree("banana", "apps/api/.env.local")).toBe("PORT=10000\n");
 
@@ -147,7 +148,7 @@ resources:
 
     expect(scenario.readWorktree("banana", "bootstrap-saw-command-env")).toBe("");
     expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
+      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n"
     );
   });
 
@@ -201,7 +202,7 @@ export default function ({ previous }) {
     scenario.spawn("second");
 
     const secondInput = ResourceCommandInputSchema.parse(
-      JSON.parse(scenario.readWorktree("second", "command-stdin.json")),
+      JSON.parse(scenario.readWorktree("second", "command-stdin.json"))
     );
     expect(Object.keys(secondInput)).toStrictEqual(["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]);
     expect(secondInput).toStrictEqual({
@@ -292,7 +293,7 @@ export default function ({ previous }) {
     scenario.spawn("current");
 
     const input = ResourceCommandInputSchema.parse(
-      JSON.parse(scenario.readWorktree("current", "command-stdin.json")),
+      JSON.parse(scenario.readWorktree("current", "command-stdin.json"))
     );
     expect(input.E2E_FLOW1_SYMBOL?.toSorted()).toStrictEqual(["SOL/USDT:USDT"]);
     expect(input.E2E_FLOW2_SYMBOL?.toSorted()).toStrictEqual(["NEAR/USDT:USDT"]);
@@ -315,7 +316,7 @@ export default function ({ previous }) {
       "monke.yml",
       singleCommandMonkeYml({
         outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
-      }),
+      })
     );
     scenario.writeWorktree(
       "banana",
@@ -329,7 +330,7 @@ export default function ({ previous }) {
     E2E_FLOW2_SYMBOL: "ATOM/USDT:USDT",
   };
 }
-`,
+`
     );
 
     scenario.materialize("banana");
@@ -355,7 +356,7 @@ export default function ({ previous }) {
     scenario.spawn("first");
 
     expect(() => scenario.spawn("second")).toThrow(
-      /kind: same-output collision for E2E_FLOW1_SYMBOL[\s\S]*stdout:/u,
+      /kind: same-output collision for E2E_FLOW1_SYMBOL[\s\S]*stdout:/u
     );
   });
 
@@ -405,7 +406,7 @@ export default function ({ previous }) {
     scenario.spawn("second");
 
     expect(scenario.readWorktree("second", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n",
+      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n"
     );
   });
 
@@ -423,7 +424,7 @@ export default function ({ previous }) {
       "monke.yml",
       singleCommandMonkeYml({
         commandName: "renamed-symbols",
-      }),
+      })
     );
     scenario.writeWorktree(
       "banana",
@@ -434,7 +435,7 @@ export default function ({ previous }) {
   writeFileSync("command-stdin-renamed.json", JSON.stringify(previous));
   return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 }
-`,
+`
     );
 
     scenario.materialize("banana");
@@ -442,7 +443,7 @@ export default function ({ previous }) {
     expect(JSON.parse(scenario.readWorktree("banana", "command-stdin-renamed.json"))).toStrictEqual(
       {
         E2E_FLOW1_SYMBOL: [],
-      },
+      }
     );
   });
 
@@ -560,7 +561,7 @@ export default function () {
 
     expect(scenario.readWorktree("banana", "command-runs")).toBe("1");
     expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n",
+      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n"
     );
 
     scenario.writeRoot("monke.yml", appOnlyMonkeYml());
@@ -591,7 +592,7 @@ export default function () {
       "monke.yml",
       singleCommandMonkeYml({
         outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"],
-      }),
+      })
     );
     scenario.writeWorktree(
       "banana",
@@ -606,14 +607,14 @@ export default function () {
     E2E_FLOW2_SYMBOL: "ATOM/USDT:USDT",
   };
 }
-`,
+`
     );
 
     scenario.materialize("banana");
 
     expect(scenario.readWorktree("banana", "command-runs")).toBe("2");
     expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=LINK/USDT:USDT\nE2E_FLOW2_SYMBOL=ATOM/USDT:USDT\n",
+      "API_PORT=10000\nE2E_FLOW1_SYMBOL=LINK/USDT:USDT\nE2E_FLOW2_SYMBOL=ATOM/USDT:USDT\n"
     );
   });
 
@@ -649,7 +650,7 @@ export default function () {
 
     expect(scenario.readWorktree("banana", "command-runs")).toBe("1");
     expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
+      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n"
     );
   });
 
@@ -672,7 +673,7 @@ export default function () {
       "monke.yml",
       singleCommandMonkeYml({
         outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW3_SYMBOL"],
-      }),
+      })
     );
     scenario.writeWorktree(
       "banana",
@@ -683,7 +684,7 @@ export default function () {
     E2E_FLOW3_SYMBOL: "ATOM/USDT:USDT",
   };
 }
-`,
+`
     );
 
     expect(() => scenario.materialize("banana")).toThrow(/Missing mapped env vars/u);
@@ -699,7 +700,7 @@ export default function () {
     scenario.materialize("banana");
 
     expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW3_SYMBOL=ATOM/USDT:USDT\n",
+      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW3_SYMBOL=ATOM/USDT:USDT\n"
     );
   });
 
@@ -801,7 +802,7 @@ export default function () {
     });
 
     expect(() => scenario.spawn("banana")).toThrow(
-      /Resource command e2e-symbols failed[\s\S]*(?:Cannot find module|Module not found)/u,
+      /Resource command e2e-symbols failed[\s\S]*(?:Cannot find module|Module not found)/u
     );
   });
 
@@ -820,7 +821,7 @@ export default function () {
     scenario.spawn("banana");
 
     expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
+      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n"
     );
   });
 
@@ -837,7 +838,7 @@ export default function () {
     scenario.spawn("banana");
 
     expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
+      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n"
     );
   });
 
@@ -864,7 +865,7 @@ function isDirectExecution(importMetaUrl) {
     scenario.spawn("banana");
 
     expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n",
+      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n"
     );
   });
 
@@ -886,7 +887,7 @@ function isDirectExecution(importMetaUrl) {
       message = error instanceof Error ? error.message : String(error);
     }
     expect(message).toMatch(
-      /Resource command e2e-symbols failed[\s\S]*kind: nonzero exit 1[\s\S]*allocator stderr/u,
+      /Resource command e2e-symbols failed[\s\S]*kind: nonzero exit 1[\s\S]*allocator stderr/u
     );
     expect(message).not.toContain("stdout:");
     expect(message).not.toContain("secret stdout");
@@ -904,7 +905,7 @@ function isDirectExecution(importMetaUrl) {
     });
 
     expect(() => scenario.spawn("banana")).toThrow(
-      /Resource command e2e-symbols failed[\s\S]*kind: timeout[\s\S]*stderr:[\s\S]*<empty>/u,
+      /Resource command e2e-symbols failed[\s\S]*kind: timeout[\s\S]*stderr:[\s\S]*<empty>/u
     );
   });
 });
@@ -1061,7 +1062,7 @@ fi
 
 echo "unsupported pnpm invocation: $*" >&2
 exit 1
-`,
+`
   );
   chmodSync(executablePath, 0o755);
 }

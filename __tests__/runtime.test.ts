@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
+
 import { describe, expect, test } from "vite-plus/test";
 
 import { createRuntime, withGlobalLock } from "../src/runtime.ts";
@@ -10,7 +11,7 @@ describe("runtime", () => {
     const runtime = createRuntime();
 
     expect(() => runtime.exec("sh", ["-c", "kill -TERM $$"])).toThrow(
-      /terminated by signal SIGTERM/u,
+      /terminated by signal SIGTERM/u
     );
   });
 
@@ -21,7 +22,7 @@ describe("runtime", () => {
       runtime.select({
         message: "Choose one",
         options: [{ label: "One", value: "one" }],
-      }),
+      })
     ).rejects.toThrow(/No scripted select values remain/u);
   });
 
@@ -34,7 +35,7 @@ describe("runtime", () => {
     writeFileSync(
       lockPath,
       JSON.stringify({ acquiredAt: Date.now() - 86_400_000, pid: 999_999 }),
-      "utf-8",
+      "utf-8"
     );
 
     const result = withGlobalLock(home, () => "acquired");
@@ -66,7 +67,7 @@ describe("runtime", () => {
     writeFileSync(
       lockPath,
       JSON.stringify({ acquiredAt: Date.now() - 86_400_000, pid: process.pid }),
-      "utf-8",
+      "utf-8"
     );
 
     expect(() => withGlobalLock(home, () => "acquired")).toThrow(/Timed out waiting for lock/u);
