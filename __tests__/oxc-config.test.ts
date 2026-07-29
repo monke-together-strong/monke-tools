@@ -40,6 +40,7 @@ describe("shared Oxlint config", () => {
     });
     expect(mtsLint.rules).toMatchObject({
       "no-use-before-define": ["error", { functions: false }],
+      "no-warning-comments": "off",
       "prefer-regex-literals": "off",
       "promise/avoid-new": "off",
       "promise/prefer-await-to-callbacks": "off",

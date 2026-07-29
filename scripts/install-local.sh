@@ -5,14 +5,15 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 INSTALL_DIR="$HOME/.local/bin"
 BUILD_DIR="$ROOT_DIR/builds"
+DIST_DIR="$ROOT_DIR/dist"
 LOCAL_BUILD_ARTIFACT_RETENTION=2
-TARGET_SHORT="$INSTALL_DIR/mt"
-TARGET_FULL="$INSTALL_DIR/monke-tools"
-TARGET_LEGACY="$INSTALL_DIR/monke"
+TARGET_MT="$INSTALL_DIR/mt"
+TARGET_MONKE="$INSTALL_DIR/monke"
+REMOVED_TARGET="$INSTALL_DIR/monke-tools"
 
 install_wrapper() {
   target="$1"
-  printf '%s\n' '#!/bin/sh' 'exec "$(dirname "$0")/monke-tools" "$@"' > "$target"
+  printf '%s\n' '#!/bin/sh' 'exec "$(dirname "$0")/mt" "$@"' > "$target"
   chmod +x "$target"
 }
 
@@ -24,17 +25,18 @@ cleanup_old_bun_builds() {
     done
 }
 
-mkdir -p "$INSTALL_DIR" "$ROOT_DIR/dist" "$BUILD_DIR"
+mkdir -p "$INSTALL_DIR" "$DIST_DIR" "$BUILD_DIR"
 
 cd "$BUILD_DIR"
-bun build --compile --outfile "$ROOT_DIR/dist/monke-tools" "$ROOT_DIR/src/index.ts"
-cp "$ROOT_DIR/dist/monke-tools" "$TARGET_FULL"
-install_wrapper "$TARGET_SHORT"
-install_wrapper "$TARGET_LEGACY"
-chmod +x "$TARGET_FULL"
+bun build --compile --outfile "$DIST_DIR/mt" "$ROOT_DIR/src/index.ts"
+rm -f -- "$DIST_DIR/monke-tools" "$DIST_DIR/monke"
+cp "$DIST_DIR/mt" "$TARGET_MT"
+install_wrapper "$TARGET_MONKE"
+chmod +x "$TARGET_MT"
+rm -f -- "$REMOVED_TARGET"
 cleanup_old_bun_builds
 
-"$TARGET_FULL" install-dependencies
-printf 'Installed monke-tools to %s, %s, and %s\n' "$TARGET_FULL" "$TARGET_SHORT" "$TARGET_LEGACY"
-MONKE_TOOLS_BINARY="$TARGET_FULL" "$TARGET_FULL" shell install
-"$TARGET_FULL" skills local-install "$ROOT_DIR"
+"$TARGET_MT" install-dependencies
+printf 'Installed mt and monke to %s and %s\n' "$TARGET_MT" "$TARGET_MONKE"
+MONKE_TOOLS_BINARY="$TARGET_MT" "$TARGET_MT" shell install
+"$TARGET_MT" skills local-install "$ROOT_DIR"

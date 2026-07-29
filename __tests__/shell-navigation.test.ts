@@ -113,7 +113,7 @@ describe("shell navigation", () => {
     });
 
     runMonke({
-      args: ["shell", "install", "--binary", "/opt/monke-tools"],
+      args: ["shell", "install", "--binary", "/opt/mt"],
       cwd: repoRoot,
       extraEnv: {
         HOME: shellHome
@@ -210,19 +210,19 @@ apps:
     const monkeHome = path.join(sandbox, "monke-home");
 
     const bash = runMonke({
-      args: ["shell", "init", "bash", "--binary", "/opt/monke-tools"],
+      args: ["shell", "init", "bash", "--binary", "/opt/mt"],
       cwd: sandbox,
       monkeHome
     });
     const zsh = runMonke({
-      args: ["shell", "init", "zsh", "--binary", "/opt/monke-tools"],
+      args: ["shell", "init", "zsh", "--binary", "/opt/mt"],
       cwd: sandbox,
       monkeHome
     });
 
     expect(bash.stdout).toContain("# monke-tools shell integration for bash");
     expect(bash.stdout).toContain(
-      `${SHELL_DIRECTORY_DIRECTIVE_ENV}="$__monke_mt_directive" '/opt/monke-tools' "$@"`
+      `${SHELL_DIRECTORY_DIRECTIVE_ENV}="$__monke_mt_directive" '/opt/mt' "$@"`
     );
     expect(zsh.stdout).toContain("# monke-tools shell integration for zsh");
     expect(zsh.stdout).toContain('cd -- "$__monke_mt_target"');
@@ -275,7 +275,7 @@ apps:
 
     for (let index = 0; index < 2; index += 1) {
       runMonke({
-        args: ["shell", "install", "--binary", "/opt/monke-tools"],
+        args: ["shell", "install", "--binary", "/opt/mt"],
         cwd: sandbox,
         extraEnv: {
           HOME: shellHome
@@ -287,7 +287,7 @@ apps:
     for (const startupFile of [".bashrc", ".zshrc"]) {
       const contents = read(shellHome, startupFile);
       expect(contents.match(/monke-tools shell integration/gu)).toHaveLength(2);
-      expect(contents).toContain("'/opt/monke-tools' shell init");
+      expect(contents).toContain("'/opt/mt' shell init");
       expect(existsSync(path.join(shellHome, startupFile))).toBeTruthy();
     }
   });

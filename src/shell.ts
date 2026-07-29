@@ -184,10 +184,9 @@ ${INTEGRATION_END}
 }
 
 function resolveAdapterBinary(runtime: Runtime, binary: string | undefined): string {
-  const candidate =
-    binary ?? runtime.env.MONKE_TOOLS_BINARY ?? findExecutable("monke-tools", runtime.env);
+  const candidate = binary ?? runtime.env.MONKE_TOOLS_BINARY ?? findExecutable("mt", runtime.env);
   if (candidate === null || candidate === undefined || candidate === "") {
-    return "monke-tools";
+    return "mt";
   }
 
   return path.isAbsolute(candidate) ? candidate : path.resolve(runtime.cwd, candidate);
