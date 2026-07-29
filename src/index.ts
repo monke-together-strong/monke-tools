@@ -124,16 +124,12 @@ function createProgram(
 
   const skills = program.command("skills");
 
-  skills.command("configure").action(() => {
-    runSkillsConfigure(runtime);
-  });
+  skills.command("configure").action(() => runSkillsConfigure(runtime));
 
   skills
     .command("local-install")
     .argument("<source-checkout>")
-    .action((sourceCheckout) => {
-      runLocalInstallSkills(runtime, sourceCheckout);
-    });
+    .action((sourceCheckout) => runLocalInstallSkills(runtime, sourceCheckout));
 
   return program;
 }

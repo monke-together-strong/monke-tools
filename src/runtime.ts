@@ -16,11 +16,11 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { isCancel, select as clackSelect } from "@clack/prompts";
+import { isCancel, multiselect as clackMultiSelect, select as clackSelect } from "@clack/prompts";
 import * as z from "zod";
 
 import { errorMessage, MonkeError } from "./errors.ts";
-import type { ExecOptions, ExecResult, Runtime, SelectPrompt } from "./types.ts";
+import type { ExecOptions, ExecResult, MultiSelectPrompt, Runtime, SelectPrompt } from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
 const STALE_LOCK_AGE_MS = 60_000;
@@ -41,8 +41,12 @@ export interface RuntimeOptions {
   stdinText?: string;
   /** Scripted selected values used by tests for Clack-style select prompts. */
   selectValues?: string[];
+  /** Scripted selected value sets used by tests for Clack-style multi-select prompts. */
+  multiSelectValues?: string[][];
   /** Optional observer used by tests and embedding callers to inspect select prompts. */
   onSelect?: (prompt: SelectPrompt) => void;
+  /** Optional observer used by tests and embedding callers to inspect multi-select prompts. */
+  onMultiSelect?: (prompt: MultiSelectPrompt) => void;
   /** Optional stdout sink used by tests and embedding callers. */
   onStdout?: (text: string) => void;
   /** Optional stderr sink used by tests and embedding callers. */
@@ -55,6 +59,9 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
   const runtimeCwd = options?.cwd ?? process.cwd();
   const scriptedInput = options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/u);
   const scriptedSelectValues = options?.selectValues ? [...options.selectValues] : null;
+  const scriptedMultiSelectValues = options?.multiSelectValues
+    ? [...options.multiSelectValues]
+    : null;
 
   const writeStdout = (text: string): void => {
     if (options?.onStdout) {
@@ -70,6 +77,30 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     env: runtimeEnv,
     exec(command: string, args: string[] = [], execOptions?: ExecOptions): ExecResult {
       return executeCommand(runtimeEnv, runtimeCwd, command, args, execOptions);
+    },
+    async multiSelect(prompt): Promise<string[]> {
+      options?.onMultiSelect?.(prompt);
+      if (scriptedMultiSelectValues !== null) {
+        const selected = scriptedMultiSelectValues.shift();
+        if (selected === undefined) {
+          throw new MonkeError("No scripted multi-select values remain");
+        }
+        for (const value of selected) {
+          if (!prompt.options.some((option) => option.value === value)) {
+            throw new MonkeError(`Unknown selection: ${value}`);
+          }
+        }
+        if (prompt.required === true && selected.length === 0) {
+          throw new MonkeError(`Select at least one option for ${prompt.message}`);
+        }
+        return selected;
+      }
+
+      const selected = await clackMultiSelect(prompt);
+      if (isCancel(selected)) {
+        throw new MonkeError(`${prompt.message} cancelled`);
+      }
+      return selected;
     },
     readLine(prompt: string): string {
       writeStdout(prompt);

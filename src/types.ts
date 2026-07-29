@@ -9,6 +9,8 @@ export interface Runtime {
   exec: (command: string, args?: string[], options?: ExecOptions) => ExecResult;
   /** Select one value from an interactive terminal picker. */
   select: (prompt: SelectPrompt) => Promise<string>;
+  /** Select multiple values from an interactive terminal picker. */
+  multiSelect: (prompt: MultiSelectPrompt) => Promise<string[]>;
   /** Read one interactive input line after writing a prompt. */
   readLine: (prompt: string) => string;
   /** Write CLI output to stdout. */
@@ -40,6 +42,14 @@ export interface SelectPrompt {
   options: SelectOption[];
   initialValue?: string;
   maxItems?: number;
+}
+
+export interface MultiSelectPrompt {
+  message: string;
+  options: SelectOption[];
+  initialValues?: string[];
+  maxItems?: number;
+  required?: boolean;
 }
 
 export interface SelectOption {

@@ -67,6 +67,9 @@ describe("resources", () => {
           stdout: "progress log\n"
         };
       },
+      multiSelect() {
+        return Promise.reject(new Error("unexpected multiSelect"));
+      },
       readLine() {
         throw new Error("unexpected readLine");
       },
@@ -190,6 +193,9 @@ describe("resources", () => {
           stdout: ""
         };
       },
+      multiSelect() {
+        return Promise.reject(new Error("unexpected multiSelect"));
+      },
       readLine() {
         throw new Error("unexpected readLine");
       },
@@ -261,6 +267,9 @@ describe("resources", () => {
           stderr: "",
           stdout: "pnpm progress log\n"
         };
+      },
+      multiSelect() {
+        return Promise.reject(new Error("unexpected multiSelect"));
       },
       readLine() {
         throw new Error("unexpected readLine");
