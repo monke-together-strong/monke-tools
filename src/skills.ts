@@ -39,11 +39,12 @@ const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
 type SkillInstallLayout = "namespace" | "flat";
 // Flip Claude back to "namespace" to restore the original symlink layout.
 const CLAUDE_SKILL_INSTALL_LAYOUT: SkillInstallLayout = "flat";
-const TARGET_OPTIONS: { kind: SkillInstallTargetKind; label: string; selector: string }[] = [
-  { kind: "codex", label: "Codex", selector: "1" },
-  { kind: "claude", label: "Claude", selector: "2" },
-  { kind: "cursor", label: "Cursor", selector: "3" },
-  { kind: "custom", label: "Custom", selector: "4" }
+const SkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor", "custom"]);
+const TARGET_OPTIONS: { kind: SkillInstallTargetKind; label: string }[] = [
+  { kind: "codex", label: "Codex" },
+  { kind: "claude", label: "Claude" },
+  { kind: "cursor", label: "Cursor" },
+  { kind: "custom", label: "Custom" }
 ];
 
 /** A Skill install target resolved to an Agent skill root on disk. */
@@ -79,7 +80,7 @@ export function resolveSkillInstallTargets(options: {
 }
 
 /** Prompt for a Skill install preference, save it, and reconcile selected Agent skill roots. */
-export function runSkillsConfigure(runtime: Runtime): void {
+export async function runSkillsConfigure(runtime: Runtime): Promise<void> {
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
@@ -92,7 +93,7 @@ export function runSkillsConfigure(runtime: Runtime): void {
   resolveSkillSourceTree(sourceCheckout);
 
   const previousPreference = config.skillInstallPreference ?? null;
-  const nextPreference = promptForSkillInstallPreference(
+  const nextPreference = await promptForSkillInstallPreference(
     runtime,
     previousPreference,
     homeDirectory
@@ -115,7 +116,10 @@ export function runSkillsConfigure(runtime: Runtime): void {
 }
 
 /** Record the Installed source checkout and refresh or configure Distributed skill targets. */
-export function runLocalInstallSkills(runtime: Runtime, sourceCheckout: string): void {
+export async function runLocalInstallSkills(
+  runtime: Runtime,
+  sourceCheckout: string
+): Promise<void> {
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
@@ -128,7 +132,7 @@ export function runLocalInstallSkills(runtime: Runtime, sourceCheckout: string):
   saveGlobalMonkeConfig(monkeHome, nextConfig);
 
   if (!config.skillInstallPreference) {
-    runSkillsConfigure(runtime);
+    await runSkillsConfigure(runtime);
     return;
   }
 
@@ -219,14 +223,24 @@ function normalizeCustomSkillRoot(options: { input: string; homeDirectory: strin
   return normalized;
 }
 
-function promptForSkillInstallPreference(
+async function promptForSkillInstallPreference(
   runtime: Runtime,
   previousPreference: SkillInstallPreference | null,
   homeDirectory: string
-): SkillInstallPreference {
-  runtime.writeStdout(formatTargetPrompt(previousPreference));
-  const targetAnswer = runtime.readLine("Select skill targets: ");
-  const selectedKinds = parseSelectedTargetKinds(targetAnswer, previousPreference);
+): Promise<SkillInstallPreference> {
+  const selectedKinds = parseBoundaryValue(
+    z.array(SkillInstallTargetKindSchema),
+    await runtime.multiSelect({
+      initialValues: previousPreference?.targets.map((target) => target.kind) ?? [],
+      message: "Skill install targets",
+      options: TARGET_OPTIONS.map((option) => ({
+        label: option.label,
+        value: option.kind
+      })),
+      required: true
+    }),
+    "Skill install target selection"
+  );
   const targets: SkillInstallTargetPreference[] = [];
   const previousCustom = previousPreference?.targets.find((target) => target.kind === "custom");
 
@@ -255,23 +269,6 @@ function promptForSkillInstallPreference(
   return { targets };
 }
 
-function formatTargetPrompt(previousPreference: SkillInstallPreference | null): string {
-  const selectedKinds = new Set(previousPreference?.targets.map((target) => target.kind));
-  const lines = ["Skill install targets:"];
-
-  for (const option of TARGET_OPTIONS) {
-    const selected = selectedKinds.has(option.kind) ? " [selected]" : "";
-    lines.push(`  ${option.selector}. ${option.label}${selected}`);
-  }
-
-  lines.push(
-    previousPreference
-      ? "Enter comma-separated numbers or names. Leave blank to keep selected targets."
-      : "Enter comma-separated numbers or names. Select at least one target."
-  );
-  return `${lines.join("\n")}\n`;
-}
-
 function resolveCustomSkillRootAnswer(options: {
   answer: string;
   previousPath: string | undefined;
@@ -289,50 +286,6 @@ function resolveCustomSkillRootAnswer(options: {
     homeDirectory: options.homeDirectory,
     input: options.answer
   });
-}
-
-function parseSelectedTargetKinds(
-  answer: string,
-  previousPreference: SkillInstallPreference | null
-): SkillInstallTargetKind[] {
-  if (answer.trim() === "") {
-    if (!previousPreference) {
-      throw new MonkeError("Select at least one Skill install target");
-    }
-    return previousPreference.targets.map((target) => target.kind);
-  }
-
-  const selectedKinds: SkillInstallTargetKind[] = [];
-  const selectedSet = new Set<SkillInstallTargetKind>();
-  const tokens = answer
-    .toLowerCase()
-    .split(/[\s,]+/u)
-    .map((token) => token.trim())
-    .filter(Boolean);
-
-  for (const token of tokens) {
-    const option = TARGET_OPTIONS.find(
-      (candidate) =>
-        candidate.selector === token ||
-        candidate.kind === token ||
-        candidate.label.toLowerCase() === token
-    );
-    if (!option) {
-      throw new MonkeError(`Unknown Skill install target: ${token}`);
-    }
-    if (selectedSet.has(option.kind)) {
-      continue;
-    }
-
-    selectedSet.add(option.kind);
-    selectedKinds.push(option.kind);
-  }
-
-  if (selectedKinds.length === 0) {
-    throw new MonkeError("Select at least one Skill install target");
-  }
-
-  return selectedKinds;
 }
 
 function resolveSkillSourceTree(sourceCheckout: string): string {

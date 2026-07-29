@@ -4,12 +4,13 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { saveGlobalMonkeConfig, loadGlobalMonkeConfig } from "../src/global-config.ts";
-import { runCli } from "../src/index.ts";
+import { runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
+import type { MultiSelectPrompt } from "../src/types.ts";
 import { makeTempDir, write } from "./helpers.ts";
 
 describe("skills CLI", () => {
-  test("mt skills configure saves selected targets and reconciles them", () => {
+  test("mt skills configure uses a multi-select and reconciles selected targets", async () => {
     const sandbox = makeTempDir("skills-configure");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -26,11 +27,16 @@ describe("skills CLI", () => {
 
     let stdout = "";
     let stderr = "";
+    let prompt: MultiSelectPrompt | undefined;
     const runtime = createRuntime({
       cwd: sandbox,
       env: {
         HOME: osHome,
         MONKE_HOME: monkeHome
+      },
+      multiSelectValues: [["codex", "custom"]],
+      onMultiSelect(value) {
+        prompt = value;
       },
       onStderr(text) {
         stderr += text;
@@ -38,11 +44,22 @@ describe("skills CLI", () => {
       onStdout(text) {
         stdout += text;
       },
-      stdinText: "codex,custom\n~/team-skills\n"
+      stdinText: "~/team-skills\n"
     });
 
-    runCli(["skills", "configure"], runtime);
+    await runCliAsync(["skills", "configure"], runtime);
 
+    expect(prompt).toStrictEqual({
+      initialValues: [],
+      message: "Skill install targets",
+      options: [
+        { label: "Codex", value: "codex" },
+        { label: "Claude", value: "claude" },
+        { label: "Cursor", value: "cursor" },
+        { label: "Custom", value: "custom" }
+      ],
+      required: true
+    });
     expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toStrictEqual({
       targets: [{ kind: "codex" }, { kind: "custom", path: path.join(osHome, "team-skills") }]
     });
@@ -52,11 +69,11 @@ describe("skills CLI", () => {
     expect(
       lstatSync(path.join(osHome, "team-skills", "monke-tools")).isSymbolicLink()
     ).toBeTruthy();
-    expect(stdout).toContain("Skill install targets:");
+    expect(stdout).not.toContain("comma-separated");
     expect(stderr).toContain("Configured monke-tools skills");
   });
 
-  test("mt skills configure can reconfigure all target kinds down to Claude and Codex", () => {
+  test("mt skills configure preselects existing targets when reconfiguring", async () => {
     const sandbox = makeTempDir("skills-configure-e2e");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -72,7 +89,7 @@ describe("skills CLI", () => {
       version: 1
     });
 
-    runCli(
+    await runCliAsync(
       ["skills", "configure"],
       createRuntime({
         cwd: sandbox,
@@ -80,12 +97,14 @@ describe("skills CLI", () => {
           HOME: osHome,
           MONKE_HOME: monkeHome
         },
+        multiSelectValues: [["codex", "claude", "cursor", "custom"]],
         onStderr() {},
         onStdout() {},
-        stdinText: "codex,claude,cursor,custom\n~/custom-skills\n"
+        stdinText: "~/custom-skills\n"
       })
     );
-    runCli(
+    let prompt: MultiSelectPrompt | undefined;
+    await runCliAsync(
       ["skills", "configure"],
       createRuntime({
         cwd: sandbox,
@@ -93,12 +112,16 @@ describe("skills CLI", () => {
           HOME: osHome,
           MONKE_HOME: monkeHome
         },
+        multiSelectValues: [["claude", "codex"]],
+        onMultiSelect(value) {
+          prompt = value;
+        },
         onStderr() {},
-        onStdout() {},
-        stdinText: "claude,codex\n"
+        onStdout() {}
       })
     );
 
+    expect(prompt?.initialValues).toStrictEqual(["codex", "claude", "cursor", "custom"]);
     expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toStrictEqual({
       targets: [{ kind: "claude" }, { kind: "codex" }]
     });
@@ -116,7 +139,7 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(customRoot, "monke-tools"))).toBeFalsy();
   });
 
-  test("mt skills local-install records the source checkout and configures skills when no preference exists", () => {
+  test("mt skills local-install records the source checkout and configures skills when no preference exists", async () => {
     const sandbox = makeTempDir("skills-local-install-first");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -127,7 +150,7 @@ describe("skills CLI", () => {
       "---\nname: monke-tools-core\n---\n"
     );
 
-    runCli(
+    await runCliAsync(
       ["skills", "local-install", sourceCheckout],
       createRuntime({
         cwd: sandbox,
@@ -135,9 +158,9 @@ describe("skills CLI", () => {
           HOME: osHome,
           MONKE_HOME: monkeHome
         },
+        multiSelectValues: [["codex"]],
         onStderr() {},
-        onStdout() {},
-        stdinText: "codex\n"
+        onStdout() {}
       })
     );
 
@@ -153,7 +176,7 @@ describe("skills CLI", () => {
     ).toBeTruthy();
   });
 
-  test("mt skills local-install reuses an existing preference and relinks after a checkout move", () => {
+  test("mt skills local-install reuses an existing preference and relinks after a checkout move", async () => {
     const sandbox = makeTempDir("skills-local-install-refresh");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -180,7 +203,7 @@ describe("skills CLI", () => {
     write(path.dirname(namespacePath), ".keep", "\n");
     symlinkSync(path.join(oldCheckout, "skills"), namespacePath, "dir");
 
-    runCli(
+    await runCliAsync(
       ["skills", "local-install", newCheckout],
       createRuntime({
         cwd: sandbox,
@@ -197,7 +220,7 @@ describe("skills CLI", () => {
     expect(readlinkSync(namespacePath)).toBe(path.join(newCheckout, "skills"));
   });
 
-  test("mt skills configure fails clearly when the installed source checkout is missing", () => {
+  test("mt skills configure fails clearly when the installed source checkout is missing", async () => {
     const sandbox = makeTempDir("skills-configure-missing-source");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -207,8 +230,8 @@ describe("skills CLI", () => {
       version: 1
     });
 
-    expect(() => {
-      runCli(
+    await expect(
+      runCliAsync(
         ["skills", "configure"],
         createRuntime({
           cwd: sandbox,
@@ -217,11 +240,10 @@ describe("skills CLI", () => {
             MONKE_HOME: monkeHome
           },
           onStderr() {},
-          onStdout() {},
-          stdinText: "codex\n"
+          onStdout() {}
         })
-      );
-    }).toThrow(`Installed source checkout is missing: ${missingCheckout}`);
+      )
+    ).rejects.toThrow(`Installed source checkout is missing: ${missingCheckout}`);
     expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();
   });
 });

@@ -83,6 +83,9 @@ prunable gitdir file points to non-existent location
 `
         };
       },
+      multiSelect() {
+        return Promise.reject(new Error("unexpected multiSelect"));
+      },
       readLine() {
         throw new Error("unexpected readLine");
       },
