@@ -1,6 +1,6 @@
 {
   "name": "@monke-together-strong/oxc-config",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared Oxlint and Oxfmt presets.",
   "homepage": "https://github.com/monke-together-strong/monke-tools/tree/main/packages/oxc-config#readme",
   "bugs": {

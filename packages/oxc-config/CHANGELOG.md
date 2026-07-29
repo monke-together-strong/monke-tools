@@ -1,3 +1,9 @@
+## @monke-together-strong/oxc-config@0.1.1
+
+### Allow warning comments in the shared Oxlint config
+
+The shared Oxlint config now permits warning comments such as TODO and FIXME.
+
 ## @monke-together-strong/oxc-config@0.1.0
 
 ### First public release
