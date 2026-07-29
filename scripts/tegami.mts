@@ -3,6 +3,7 @@ import { runCli } from "tegami/cli";
 import { github } from "tegami/plugins/github";
 
 const releaseConfig = tegami({
+  ignore: ["monke-tools"],
   npm: {
     client: "bun",
     trustedPublish: {
