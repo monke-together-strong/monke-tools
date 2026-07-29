@@ -91,6 +91,17 @@ describe("dependency installation", () => {
     chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
     writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
     installFakeBun(binDirectory);
+    const obsoleteCommand = path.join(home, ".local", "bin", "monke-tools");
+    mkdirSync(path.dirname(obsoleteCommand), { recursive: true });
+    writeFileSync(obsoleteCommand, "obsolete", "utf-8");
+    const obsoleteBuilds = [
+      path.join(checkout, "dist", "monke-tools"),
+      path.join(checkout, "dist", "monke")
+    ];
+    for (const obsoleteBuild of obsoleteBuilds) {
+      mkdirSync(path.dirname(obsoleteBuild), { recursive: true });
+      writeFileSync(obsoleteBuild, "obsolete", "utf-8");
+    }
 
     const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
       cwd: checkout,
@@ -110,14 +121,18 @@ describe("dependency installation", () => {
     expect(readFileSync(monkeToolsLog, "utf-8")).toBe(
       `install-dependencies\nshell install\nskills local-install ${checkout}\n`
     );
-    expect(readFileSync(path.join(home, ".local", "bin", "mt"), "utf-8")).toBe(
-      '#!/bin/sh\nexec "$(dirname "$0")/monke-tools" "$@"\n'
-    );
+    const installedMt = readFileSync(path.join(home, ".local", "bin", "mt"), "utf-8");
+    expect(installedMt).toContain("MONKE_TOOLS_LOG");
+    expect(installedMt).not.toContain('exec "$(dirname "$0")/');
     expect(readFileSync(path.join(home, ".local", "bin", "monke"), "utf-8")).toBe(
-      '#!/bin/sh\nexec "$(dirname "$0")/monke-tools" "$@"\n'
+      '#!/bin/sh\nexec "$(dirname "$0")/mt" "$@"\n'
     );
-    expect(existsSync(path.join(home, ".local", "bin", "monke-tools"))).toBeTruthy();
-    expect(result.stdout).toContain("Installed monke-tools");
+    expect(existsSync(obsoleteCommand)).toBeFalsy();
+    for (const obsoleteBuild of obsoleteBuilds) {
+      expect(existsSync(obsoleteBuild)).toBeFalsy();
+    }
+    expect(result.stdout).toContain("Installed mt and monke");
+    expect(result.stdout).toContain(path.join(home, ".local", "bin", "mt"));
     expect(result.stdout).toContain(path.join(home, ".local", "bin", "monke"));
   });
 
