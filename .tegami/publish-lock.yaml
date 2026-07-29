@@ -1,12 +1,12 @@
 core:changelogs:
-  - content: "---\nsubject: First public release\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: minor\n---\n\n## Initial release\n\nPublish shared Oxlint and Oxfmt presets with Ultracite composition, type-aware linting and type checking, shared formatting policy, consumer override factories, and standalone `/oxlint` and `/oxfmt` exports.\n"
-    filename: first-oxc-config-release.md
+  - content: "---\npackages:\n  npm:@monke-together-strong/oxc-config:\n    type: patch\n---\n\n## Allow warning comments in the shared Oxlint config\n\nThe shared Oxlint config now permits warning comments such as TODO and FIXME.\n"
+    filename: 2026-07-29-ms6ndsh9.md
     v: 0.0.0
 core:packages:
   - id: npm:monke-tools
     updated: false
   - changelogIds:
-      - first-oxc-config-release.md
+      - 2026-07-29-ms6ndsh9.md
     id: npm:@monke-together-strong/oxc-config
     updated: true
 npm:packages:
