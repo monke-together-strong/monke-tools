@@ -1,6 +1,5 @@
 {
   "name": "monke-tools",
-  "version": "0.0.0",
   "private": true,
   "description": "Bun CLI for isolated per-session repo worktrees, local env rewrites, and distributed agent skills.",
   "keywords": [
