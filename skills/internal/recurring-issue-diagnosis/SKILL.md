@@ -33,8 +33,15 @@ Classify every earlier intervention as `confirmed`, `failed`, `inconclusive`, or
 `superseded`. State remaining unknowns as hypotheses with evidence that would
 confirm or falsify them. A result on one axis does not settle the others.
 
+For each established failure, reconstruct the deepest supported causal chain:
+trigger -> internal mechanism -> observable failure -> recovery and impact. When
+the initiating root cause remains unknown, name the exact diagnosed boundary and
+the evidence that rules out earlier boundaries.
+
 Completion criterion: every material intervention has a result classification,
-and every remaining hypothesis is testable.
+every remaining hypothesis is testable, and the frontier contains either a
+mechanism-level causal chain or the exact deepest boundary current evidence can
+support.
 
 ## 3. Run The Next Discriminating Check
 
@@ -100,14 +107,30 @@ Completion criterion: a new agent can select the next investigation from the
 tracker body without reconstructing earlier threads and can reach the primary
 evidence through its anchors.
 
-## 5. Report The Advance
+## 5. Deliver The Diagnosis
 
-End with:
+Lead the first user-visible response with the causal diagnosis and place tracker
+maintenance last. Make the response self-contained and detailed enough to
+explain why the system behaved as observed.
 
-- the current operational verdict
-- what this run newly established or ruled out
-- the next discriminating check
-- remaining uncertainty or missing capability
-- whether the canonical frontier was updated
+Report in this order:
 
-Completion criterion: the next run can continue without re-arguing this run.
+1. **Causal diagnosis**: walk from trigger through mechanism to failure,
+   recovery, and impact. Separate confirmed mechanisms from the exact unresolved
+   causal boundary, and state which alternatives the evidence ruled out.
+2. **Decisive evidence**: give the bounded deployment, incident, replay, log, or
+   artifact facts that make the diagnosis true. Explain any boundary that changes
+   how earlier recurrence counts should be interpreted.
+3. **Ordered suggested steps**: start with immediate action justified by confirmed
+   evidence, then the next discriminating check with its decision rule, then any
+   continuity, impact, or missing-capability work. Distinguish recommendations
+   from implementation performed in this run.
+4. **Frontier maintenance**: state whether the canonical tracker was updated and
+   link or name its new evidence anchor.
+
+Use the operational verdict as a recap after the full diagnosis.
+
+Completion criterion: from the final response alone, the user can answer what
+caused what, what remains unknown, what should happen next and why, and whether
+the canonical frontier changed. The response includes at least one explicit
+causal chain and ordered next steps before tracker-update metadata.
