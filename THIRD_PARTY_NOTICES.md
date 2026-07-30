@@ -32,13 +32,6 @@ monke-tools redistributes the Imported guidance listed below. Each upstream lice
 - Copyright: Copyright (c) 2023 shadcn
 - License: MIT
 
-### Archify
-
-- Source: <https://github.com/tt-a1i/archify>
-- Included material: `skills/imported/archify`
-- Copyright: Copyright (c) 2026 tt-a1i (Archify); Copyright (c) 2025 Cocoon AI (original "architecture-diagram-generator")
-- License: MIT; the upstream text is also preserved in `skills/imported/archify/LICENSE`
-
 ### OpenClaw agent skills
 
 - Source: <https://github.com/openclaw/agent-skills>
