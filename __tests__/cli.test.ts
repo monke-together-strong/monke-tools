@@ -1,13 +1,58 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vite-plus/test";
 
 import { runCli } from "../src/index.ts";
+import { makeTempDir } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("CLI", () => {
+  test("Home prints the default Monke home", () => {
+    const env = { ...process.env };
+    delete env.MONKE_HOME;
+
+    const result = spawnSync("bun", ["run", "src/index.ts", "home"], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      env
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(`${path.join(homedir(), ".monke")}\n`);
+    expect(result.stderr).toBe("");
+  });
+
+  test("Home prints the configured Monke home without creating it", () => {
+    const home = path.join(makeTempDir("cli-home"), "custom-monke-home");
+    const result = spawnSync("bun", ["run", "src/index.ts", "home"], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      env: { ...process.env, MONKE_HOME: home }
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(`${home}\n`);
+    expect(result.stderr).toBe("");
+    expect(existsSync(home)).toBeFalsy();
+  });
+
+  test("Home resolves a relative MONKE_HOME against the current directory", () => {
+    const result = spawnSync("bun", ["run", "src/index.ts", "home"], {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      env: { ...process.env, MONKE_HOME: ".custom-monke-home" }
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(`${path.join(projectRoot, ".custom-monke-home")}\n`);
+    expect(result.stderr).toBe("");
+  });
+
   test("runCli enforces cleanup option relationships", () => {
     expect(() => {
       runCli(["cleanup", "--dry-run"]);

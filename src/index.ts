@@ -5,7 +5,7 @@ import { Argument, Command } from "@commander-js/extra-typings";
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
-import { createRuntime } from "./runtime.ts";
+import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
 import { runSwing, runSwingInteractive } from "./swing.ts";
@@ -35,6 +35,13 @@ function createProgram(
   const program = new Command().name("mt").allowExcessArguments(false);
 
   configureCliParser(program);
+
+  program
+    .command("home")
+    .description("Print the resolved Monke home path")
+    .action(() => {
+      runtime.writeStdout(`${getMonkeHome(runtime)}\n`);
+    });
 
   program
     .command("spawn")

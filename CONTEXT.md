@@ -72,6 +72,10 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Consumer repo**: A repo whose developer or agent uses monke-tools as a local workflow tool. _Avoid_: Target repo, downstream repo, using repo
 
+**User PR guidance**: Machine-local PR authoring defaults stored as `instructions/PR.md` under the **Monke home** and applied by the `create-pr` skill when **Repo PR guidance** is absent. _Avoid_: Global monke config, Repo PR guidance, GitHub pull request template
+
+**Repo PR guidance**: Optional agent-facing PR authoring instructions stored as `PR.md` at a **Consumer repo** root; these replace **User PR guidance** and complement the repo's reviewer-facing GitHub pull request template. _Avoid_: User PR guidance, POST_MERGE.md, GitHub pull request template
+
 **Local tool install**: A developer-machine install of monke-tools built from a source checkout and shared by all **Consumer repos** through the `mt` command. _Avoid_: Published package, consumer dependency, package-manager link
 
 **Local install refresh**: The act of rebuilding the **Local tool install** from the current monke-tools source checkout before validating behavior in a **Consumer repo**. _Avoid_: Publish, dependency update, session refresh

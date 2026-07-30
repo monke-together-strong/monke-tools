@@ -33,6 +33,8 @@ On the first local install, monke-tools prompts for one or more skill targets: C
 
 After changing CLI source code, run `vp run install:local` again before testing from another repo. For linked skills, file edits are visible immediately through symlinks. If you add or remove skill directories, rerun reconciliation (`vp run install:local` or `mt skills configure`) so flat Claude links are refreshed.
 
+The `create-pr` skill reads repository-root `PR.md` guidance when present, otherwise falling back to user defaults at `<monke-home>/instructions/PR.md`; use `mt home` to locate them.
+
 ## Distributed Skills
 
 Use `mt skills configure` to change which agents receive monke-tools skills. The command updates `config.yml` under the monke home directory and reconciles selected Agent skill roots immediately.
@@ -53,6 +55,7 @@ The Skill source tree is organized as:
 
 ## Commands
 
+- `mt home` prints the absolute Monke home path, honoring `MONKE_HOME` and defaulting to `~/.monke`, without creating it.
 - `mt spawn <session> [--codex]` creates a Session branch from the source checkout's current HEAD when one does not already exist, reuses an existing Session branch at its current tip, creates or updates the corresponding Session worktrees under `~/.monke/worktrees/<repo-name>/<session>`, and materializes dependency repos first. Dirty source changes are carried into newly created worktrees by default only when that Session branch tip equals source `HEAD`; existing Session worktrees are reused as-is and dirty source changes are not copied into them (a warning says so). Add `--codex` to open a new Codex app thread in the spawned root Session worktree after Spawn succeeds.
 - `mt spawn <session> --no-dirty` preserves the old strict behavior and rejects dirty source checkouts.
 - `mt spawn <session> -m` also accepts `--main` or `--master`. It creates a fresh session from each repo's resolved default branch ref, preferring fetched `origin/main` or `origin/master` before local `main` or `master`, and does not carry dirty source changes.
