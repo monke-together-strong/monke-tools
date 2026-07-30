@@ -146,16 +146,6 @@
       "source": "https://github.com/shadcn-ui/ui"
     },
     {
-      "skills": [
-        {
-          "kind": "skill",
-          "selector": "archify",
-          "slug": "archify"
-        }
-      ],
-      "source": "https://github.com/tt-a1i/archify"
-    },
-    {
       "acceptOpenClawRisks": true,
       "skills": [
         {
