@@ -2,26 +2,26 @@ import { createLogger } from "./logger.ts";
 import { findExecutable } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
-/** Open a new Codex Desktop thread for a local checkout path. */
-export function openCodexThread(runtime: Runtime, targetPath: string): void {
+/** Open a local checkout as a Codex workspace. */
+export function openCodexWorkspace(runtime: Runtime, targetPath: string): void {
   const logger = createLogger(runtime);
-  const url = formatCodexNewThreadUrl(targetPath);
+  const url = formatCodexWorkspaceUrl(targetPath);
   const opener = getUrlOpener(url);
   if (!canRunUrlOpener(runtime, opener.command)) {
-    logger.warning(`Could not open Codex thread: ${opener.command} was not found`);
+    logger.warning(`Could not open workspace in Codex: ${opener.command} was not found`);
     return;
   }
 
   const result = runtime.exec(opener.command, opener.args, { allowFailure: true });
   if (result.exitCode !== 0 || result.timedOut === true) {
-    logger.warning(`Could not open Codex thread: ${formatOpenFailure(result)}`);
+    logger.warning(`Could not open workspace in Codex: ${formatOpenFailure(result)}`);
     return;
   }
 
-  logger.success(`Opened Codex thread for ${targetPath}`);
+  logger.success(`Opened Codex workspace: ${targetPath}`);
 }
 
-function formatCodexNewThreadUrl(targetPath: string): string {
+function formatCodexWorkspaceUrl(targetPath: string): string {
   return `codex://threads/new?path=${encodeURIComponent(targetPath)}`;
 }
 

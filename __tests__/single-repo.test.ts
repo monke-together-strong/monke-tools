@@ -71,7 +71,7 @@ describe("single-repo sessions", () => {
     expect(existsSync(path.join(sandbox, ".monke-worktrees"))).toBeFalsy();
   });
 
-  test("spawn --codex opens a Codex thread for the root Session worktree", () => {
+  test("spawn --codex opens the root Session worktree as a Codex workspace", () => {
     const sandbox = makeTempDir("single-repo-codex");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -88,12 +88,12 @@ describe("single-repo sessions", () => {
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-    const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
+    const codexWorkspaceUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
     expect(result.stderr).toContain(`Spawned or updated session banana`);
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
-    expect(result.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
-    expect(readFileSync(openLogPath, "utf-8")).toBe(`${codexThreadUrl}\n`);
+    expect(result.stderr).toContain(`Opened Codex workspace: ${worktreeRoot}`);
+    expect(readFileSync(openLogPath, "utf-8")).toBe(`${codexWorkspaceUrl}\n`);
   });
 
   test("spawn --codex escapes percent-encoded URLs for the Windows launcher", () => {
@@ -115,11 +115,11 @@ describe("single-repo sessions", () => {
     );
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-    const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
+    const codexWorkspaceUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
-    expect(result.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
+    expect(result.stderr).toContain(`Opened Codex workspace: ${worktreeRoot}`);
     expect(readFileSync(cmdLogPath, "utf-8")).toBe(
-      `/c\nstart\n\n${codexThreadUrl.replaceAll("%", "^%")}\n`
+      `/c\nstart\n\n${codexWorkspaceUrl.replaceAll("%", "^%")}\n`
     );
   });
 

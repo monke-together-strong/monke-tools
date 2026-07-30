@@ -180,7 +180,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Swing picker**: The interactive **Swing** mode used when `mt swing` is run without a **Swing target**, letting a user choose from the current **Root repo**'s existing local **Swing targets**. _Avoid_: Branch picker, create picker, worktree creator
 
-**Codex thread launch**: An optional **Spawn** or **Swing** behavior selected with `--codex` that opens a new Codex app thread in the resolved local checkout after the primary operation succeeds. _Avoid_: Codex create, Codex worktree materialization, remote agent launch
+**Codex workspace launch**: An optional **Spawn** or **Swing** behavior selected with `--codex` that opens the resolved checkout as a Codex workspace. It does not create a thread. _Avoid_: Codex thread launch, Codex create, Codex worktree materialization, remote agent launch
 
 **Previous Swing target**: The last different **Swing target** remembered for one **Root repo**, used by `mt swing -` to return to a previous source, Session, or Ordinary-worktree checkout. _Avoid_: Global previous branch, shell history, last cwd
 
@@ -304,7 +304,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - An explicit Session **Chop target** remains valid while its **Session state** is retained, even when every recorded worktree is already gone; rerunning `mt chop <session>` retries **Session finalization**.
 - **Cleanup** remains the broad operation for discovering and finalizing already-dead Sessions, while **Chop** targets one selected Session. After successful **Session state** removal, a later `mt chop <session>` reports that the target does not exist.
 - **Swing** always emits a **Shell directory request** for a resolved root repo **Source checkout**, **Session worktree**, or **Ordinary worktree**.
-- A **Codex thread launch** preserves normal **Spawn** or **Swing** behavior and additionally opens `codex://threads/new` with the resolved absolute checkout path.
+- A **Codex workspace launch** preserves normal **Spawn** or **Swing** behavior and additionally opens `codex://threads/new` with the resolved absolute checkout path.
 - **Swing** does not create worktrees for ordinary **Session** or **Ordinary worktree** targets, or change which branch an existing worktree has checked out.
 - A **Swing target** may be a **Session** name, an existing **Ordinary worktree** branch, the `^` source-checkout shortcut, the `-` previous-target shortcut, a `pr:<number>` pull request shortcut, or a pull request URL.
 - The `^` **Swing target** resolves to the current **Root repo** **Source checkout** without materializing, setting up, creating, or changing branches.

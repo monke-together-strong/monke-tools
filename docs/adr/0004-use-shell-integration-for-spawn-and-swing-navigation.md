@@ -30,7 +30,7 @@ monke-tools reports navigation honestly:
 
 `Swing` accepts branch names for Session worktrees and ordinary linked Git worktrees, the source-checkout shortcut `^`, the previous target shortcut `-`, same-repo pull request shortcuts such as `pr:123`, and pull request URLs. The `^` shortcut navigates to the root repo's Source checkout without materializing, setting up, creating, or changing branches. Pull request targets resolve through the pull request's same-repo head branch name, then create-or-validate the Session with that name before navigating to it. Fork pull request targets and merge request targets are outside the first contract.
 
-`mt spawn <session> --codex` and `mt swing <target> --codex` preserve the normal shell navigation behavior and additionally open a new Codex app thread with the resolved absolute checkout path via `codex://threads/new?path=...`. The Codex app launch reports status on stderr so stdout remains reserved for the target path when shell integration is inactive.
+`--codex` opens the resolved checkout as a Codex workspace via `codex://threads/new?path=...`; it does not create a thread. The launch reports status on stderr so stdout remains reserved for the target path when shell integration is inactive.
 
 ## Considered Options
 
