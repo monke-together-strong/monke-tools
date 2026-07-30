@@ -217,8 +217,12 @@ export function formatCommand(command: string, args: string[]): string {
   return [command, ...args].join(" ");
 }
 
+/** Resolve the absolute Monke home path for this runtime. */
 export function getMonkeHome(runtime: Runtime): string {
-  return runtime.env.MONKE_HOME ?? path.join(homedir(), ".monke");
+  const configuredHome = runtime.env.MONKE_HOME;
+  return configuredHome === undefined
+    ? path.join(homedir(), ".monke")
+    : path.resolve(runtime.cwd, configuredHome);
 }
 
 /** Resolve the OS home directory used for external Agent skill roots. */

@@ -1,3 +1,5 @@
 # Team Coding Standards Baseline
 
-For TypeScript, follow the [Ultracite coding standards](../imported/ultracite/references/code-standards.md).
+## Typescript
+- Inferred types over annotations
+- Follow the [Ultracite coding standards](../imported/ultracite/references/code-standards.md).
