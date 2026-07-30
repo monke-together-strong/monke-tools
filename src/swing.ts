@@ -4,7 +4,7 @@ import path from "node:path";
 import { stringify } from "yaml";
 import * as z from "zod";
 
-import { openCodexThread } from "./codex.ts";
+import { openCodexWorkspace } from "./codex.ts";
 import { MonkeError } from "./errors.ts";
 import {
   branchExists,
@@ -143,7 +143,7 @@ function navigateToSwingTarget(
   }
   requestShellDirectory(runtime, targetPath);
   if (options.codex === true) {
-    openCodexThread(runtime, targetPath);
+    openCodexWorkspace(runtime, targetPath);
   }
 }
 

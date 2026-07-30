@@ -419,7 +419,7 @@ previous:
     git(repoRoot, ["push", "origin", "refs/heads/feature/pr-125:refs/pull/125/head"]);
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-123");
     const caseFoldedWorktreeRoot = getExpectedWorktreePath(home, repoRoot, "feature/pr-125");
-    const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
+    const codexWorkspaceUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
 
     const byNumber = runMonke({
       args: ["swing", "pr:123"],
@@ -450,8 +450,8 @@ previous:
     expect(byUrl.stdout).toBe(`${worktreeRoot}\n`);
     expect(byCaseFoldedNumber.stdout).toBe(`${caseFoldedWorktreeRoot}\n`);
     expect(byCodexPr.stdout).toBe(`${worktreeRoot}\n`);
-    expect(byCodexPr.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
-    expect(readFileSync(openLogPath, "utf-8")).toBe(`${codexThreadUrl}\n`);
+    expect(byCodexPr.stderr).toContain(`Opened Codex workspace: ${worktreeRoot}`);
+    expect(readFileSync(openLogPath, "utf-8")).toBe(`${codexWorkspaceUrl}\n`);
   });
 
   test("swing reports malformed GitHub PR fields with the response field path", () => {
@@ -712,7 +712,7 @@ apps:
     const cmdLogPath = installWindowsCmdShim(binDirectory);
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
-    const codexThreadUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
+    const codexWorkspaceUrl = `codex://threads/new?path=${encodeURIComponent(worktreeRoot)}`;
 
     const result = withPlatform("win32", () =>
       runMonke({
@@ -724,9 +724,9 @@ apps:
     );
 
     expect(result.stdout).toBe(`${worktreeRoot}\n`);
-    expect(result.stderr).toContain(`Opened Codex thread for ${worktreeRoot}`);
+    expect(result.stderr).toContain(`Opened Codex workspace: ${worktreeRoot}`);
     expect(readFileSync(cmdLogPath, "utf-8")).toBe(
-      `/c\nstart\n\n${codexThreadUrl.replaceAll("%", "^%")}\n`
+      `/c\nstart\n\n${codexWorkspaceUrl.replaceAll("%", "^%")}\n`
     );
   });
 

@@ -16,7 +16,7 @@ import {
   removeMergeCleanableWorktree
 } from "./cleanup-merged.ts";
 import type { MergedCleanupDecision } from "./cleanup-merged.ts";
-import { openCodexThread } from "./codex.ts";
+import { openCodexWorkspace } from "./codex.ts";
 import { loadResolvedGraph } from "./config.ts";
 import {
   syncRootEnvFile,
@@ -86,7 +86,7 @@ export type SpawnOptions =
     };
 
 export interface SpawnRunOptions {
-  /** Open a new Codex Desktop thread after the root Session worktree is ready. */
+  /** Open the root Session worktree in Codex after it is ready. */
   codex?: boolean;
 }
 
@@ -133,7 +133,7 @@ export function runSpawn(
   createLogger(runtime).success(`Spawned or updated session ${session}`);
   requestShellDirectory(runtime, rootWorktreePath);
   if (runOptions.codex === true) {
-    openCodexThread(runtime, rootWorktreePath);
+    openCodexWorkspace(runtime, rootWorktreePath);
   }
 }
 
