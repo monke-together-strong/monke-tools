@@ -39,12 +39,16 @@ describe("shared Oxlint config", () => {
       typeCheck: true
     });
     expect(mtsLint.rules).toMatchObject({
+      "class-methods-use-this": "off",
+      eqeqeq: ["error", "smart"],
+      "no-eq-null": "off",
       "no-use-before-define": ["error", { functions: false }],
       "no-warning-comments": "off",
       "prefer-regex-literals": "off",
       "promise/avoid-new": "off",
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
+      "typescript/parameter-properties": "off",
       "typescript/promise-function-async": "off",
       "typescript/return-await": ["error", "in-try-catch"]
     });

@@ -64,7 +64,10 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       ...overrides
     ],
     rules: {
+      "class-methods-use-this": "off",
+      eqeqeq: ["error", "smart"],
       "func-style": "off",
+      "no-eq-null": "off",
       "no-nested-ternary": "off",
       "no-use-before-define": ["error", { functions: false }],
       "no-warning-comments": "off",
@@ -72,6 +75,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "promise/avoid-new": "off",
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
+      "typescript/parameter-properties": "off",
       "typescript/promise-function-async": "off",
       "typescript/return-await": ["error", "in-try-catch"],
       "unicorn/no-nested-ternary": "off",
