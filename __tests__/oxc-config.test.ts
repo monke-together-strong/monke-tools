@@ -49,10 +49,10 @@ describe("shared Oxlint config", () => {
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
       "typescript/parameter-properties": "off",
-      "typescript/promise-function-async": "off",
-      "typescript/return-await": ["error", "in-try-catch"]
+      "typescript/promise-function-async": "off"
     });
     expect(mtsLint.rules).not.toHaveProperty("no-bitwise");
+    expect(mtsLint.rules).not.toHaveProperty("typescript/return-await");
   });
 
   test("applies TypeScript and test policy only to matching files", () => {

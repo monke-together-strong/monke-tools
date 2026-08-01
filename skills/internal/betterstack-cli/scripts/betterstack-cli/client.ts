@@ -92,7 +92,7 @@ export class BetterStackClient {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return readTextResponse(response);
+    return await readTextResponse(response);
   }
 
   async #requestJsonText(url: string): Promise<string> {
@@ -103,7 +103,7 @@ export class BetterStackClient {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return readTextResponse(response);
+    return await readTextResponse(response);
   }
 }
 
