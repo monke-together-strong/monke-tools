@@ -14,7 +14,7 @@ export function isNonEmptyString(value: unknown): value is string {
 
 /** One-line summary of a tool's input object or string. */
 export function summarizeInput(input: unknown): string {
-  if (input === null || input === undefined) {
+  if (input == null) {
     return "";
   }
   const text = typeof input === "string" ? input : safeStringify(input);
@@ -23,7 +23,7 @@ export function summarizeInput(input: unknown): string {
 
 /** Head + tail of tool output; the middle of long output is elided. */
 export function summarizeOutput(output: unknown): string | undefined {
-  if (output === null || output === undefined) {
+  if (output == null) {
     return undefined;
   }
   const text = typeof output === "string" ? output : safeStringify(output);
