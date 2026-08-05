@@ -85,7 +85,7 @@ export async function runSkillsConfigure(runtime: Runtime): Promise<void> {
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
   const sourceCheckout = config.installedSourceCheckout;
-  if (sourceCheckout === undefined || sourceCheckout === "") {
+  if (!sourceCheckout) {
     throw new MonkeError(
       "Installed source checkout is not configured; run bun run install:local from the monke-tools checkout first"
     );
@@ -252,7 +252,7 @@ async function promptForSkillInstallPreference(
 
     const previousCustomPath = previousCustom?.path;
     const customAnswer = runtime.readLine(
-      previousCustomPath !== undefined && previousCustomPath !== ""
+      previousCustomPath
         ? `Custom Agent skill root [${previousCustomPath}]: `
         : "Custom Agent skill root: "
     );
@@ -274,11 +274,7 @@ function resolveCustomSkillRootAnswer(options: {
   previousPath: string | undefined;
   homeDirectory: string;
 }): string {
-  if (
-    options.answer.trim() === "" &&
-    options.previousPath !== undefined &&
-    options.previousPath !== ""
-  ) {
+  if (options.answer.trim() === "" && options.previousPath) {
     return options.previousPath;
   }
 

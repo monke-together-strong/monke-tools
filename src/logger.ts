@@ -39,5 +39,5 @@ function shouldUseColor(runtime: Runtime): boolean {
   }
 
   const forceColor = runtime.env.FORCE_COLOR;
-  return forceColor !== undefined && forceColor !== "" && forceColor !== "0";
+  return Boolean(forceColor && forceColor !== "0");
 }

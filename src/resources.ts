@@ -574,7 +574,7 @@ function interpolateResourceLiteral(options: {
 function resolveResourceUser(env: Record<string, string | undefined>): string {
   for (const key of ["USER", "LOGNAME", "USERNAME"]) {
     const value = env[key]?.trim();
-    if (value !== undefined && value !== "") {
+    if (value) {
       return value;
     }
   }

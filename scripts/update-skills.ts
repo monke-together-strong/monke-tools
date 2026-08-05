@@ -203,7 +203,7 @@ async function resolveStagedSkillReplacements(options: {
   );
   const replacements = recipe.skills.flatMap((skill): SlugReplacementRequest[] => {
     const stagedSlug = stagedSlugBySelector.get(skill.selector);
-    if (stagedSlug === undefined || stagedSlug === "" || stagedSlug === skill.slug) {
+    if (!stagedSlug || stagedSlug === skill.slug) {
       return [];
     }
 

@@ -1329,7 +1329,7 @@ describe("agent session retrospective", () => {
       expect(result.skipped["duplicate-file"]).toBe(1);
       // The most-complete copy (long.jsonl, 5 turns) must be the one retained.
       const bundlePath = result.bundles[0]?.path;
-      if (bundlePath === undefined || bundlePath === "") {
+      if (!bundlePath) {
         throw new Error("expected one bundle to be written");
       }
       const bundle = readBundle(path.join(dir, "store"), "ts", path.basename(bundlePath, ".json"));

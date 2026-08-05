@@ -22,7 +22,7 @@ export function finalizeSession(runtime: Runtime, home: string, state: SessionSt
 
   for (const repoState of [...state.repos].toReversed()) {
     const { cleanupCommand } = repoState;
-    if (cleanupCommand === undefined || cleanupCommand === "") {
+    if (!cleanupCommand) {
       continue;
     }
 

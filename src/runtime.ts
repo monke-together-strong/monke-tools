@@ -243,7 +243,7 @@ export function findExecutable(
   env: Record<string, string | undefined>
 ): string | null {
   const pathValue = env.PATH;
-  if (pathValue === undefined || pathValue === "") {
+  if (!pathValue) {
     return null;
   }
 

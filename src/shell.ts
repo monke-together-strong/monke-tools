@@ -126,7 +126,7 @@ monke() {
 
 function writeDirectoryDirective(runtime: Runtime, targetPath: string): boolean {
   const directivePath = runtime.env[SHELL_DIRECTORY_DIRECTIVE_ENV];
-  if (directivePath === undefined || directivePath === "") {
+  if (!directivePath) {
     return false;
   }
 
@@ -185,7 +185,7 @@ ${INTEGRATION_END}
 
 function resolveAdapterBinary(runtime: Runtime, binary: string | undefined): string {
   const candidate = binary ?? runtime.env.MONKE_TOOLS_BINARY ?? findExecutable("mt", runtime.env);
-  if (candidate === null || candidate === undefined || candidate === "") {
+  if (!candidate) {
     return "mt";
   }
 
