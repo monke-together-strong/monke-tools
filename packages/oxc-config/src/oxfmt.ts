@@ -8,6 +8,7 @@ export function createOxfmtConfig(options: OxfmtConfig = {}): OxfmtConfig {
 
   return {
     ...ultracite,
+    jsdoc: true,
     printWidth: 100,
     proseWrap: "preserve",
     trailingComma: "none",

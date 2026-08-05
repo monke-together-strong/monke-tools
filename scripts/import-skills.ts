@@ -210,7 +210,7 @@ export function parseAvailableSkillGroups(output: string): AvailableSkillGroup[]
     }
 
     const skillName = parseSkillRow(line);
-    if (skillName !== null && skillName !== "") {
+    if (skillName) {
       if (seenNames.has(skillName)) {
         continue;
       }
@@ -221,7 +221,7 @@ export function parseAvailableSkillGroups(output: string): AvailableSkillGroup[]
     }
 
     const groupName = parseGroupHeader(line);
-    if (groupName !== null && groupName !== "") {
+    if (groupName) {
       currentGroupName = groupName;
       continue;
     }
@@ -602,7 +602,7 @@ export function reportSecurityRiskAssessment(
   writeMessage: (message: string) => unknown
 ): void {
   const assessment = extractSecurityRiskAssessment(output);
-  if (assessment !== null && assessment !== "") {
+  if (assessment) {
     writeMessage(assessment);
   }
 }
@@ -648,7 +648,7 @@ function parseSecurityRiskAssessment(output: string): SecurityRiskAssessment | n
     }
   }
 
-  if (rows.length === 0 && (detailsUrl === null || detailsUrl === "")) {
+  if (rows.length === 0 && !detailsUrl) {
     return null;
   }
 
@@ -862,7 +862,7 @@ function renderSecurityRiskAssessment(assessment: SecurityRiskAssessment): strin
     )
   ];
 
-  if (assessment.detailsUrl !== null && assessment.detailsUrl !== "") {
+  if (assessment.detailsUrl) {
     bodyLines.push("", `${pc.dim("Details:")} ${pc.dim(assessment.detailsUrl)}`);
   }
 
@@ -1167,7 +1167,7 @@ function getVisibleGroupedPromptOptions(options: {
   const cursorOption = options.options[options.cursor];
   const cursorGroupName = typeof cursorOption?.group === "string" ? cursorOption.group : null;
 
-  if (cursorGroupName !== null && cursorGroupName !== "") {
+  if (cursorGroupName) {
     const groupHeaderIndex = options.options.findIndex(
       (option) => option.group === true && option.value === cursorGroupName
     );
@@ -1183,10 +1183,9 @@ function getVisibleGroupedPromptOptions(options: {
 
   const visible = indexedOptions.slice(start, end);
   const hasCurrentGroupHeader =
-    cursorGroupName === null ||
-    cursorGroupName === "" ||
+    !cursorGroupName ||
     visible.some((option) => option.group === true && option.value === cursorGroupName);
-  if (cursorGroupName !== null && cursorGroupName !== "" && !hasCurrentGroupHeader) {
+  if (cursorGroupName && !hasCurrentGroupHeader) {
     visible.unshift({
       group: true,
       index: -1,

@@ -2,7 +2,11 @@ import type { OxlintConfig, OxlintOverride } from "oxlint";
 import core from "ultracite/oxlint/core";
 import vitest from "ultracite/oxlint/vitest";
 
-const defaultTestFiles = ["**/*.{test,spec}.{ts,tsx,js,jsx}", "**/__tests__/**/*.{ts,tsx,js,jsx}"];
+const defaultTestFiles = [
+  "**/*.{test,spec}.{ts,tsx,js,jsx}",
+  "**/__tests__/**/*.{ts,tsx,js,jsx}",
+  "**/{test,tests}/**/*.{ts,tsx,js,jsx}"
+];
 
 export interface CreateOxlintConfigOptions extends OxlintConfig {
   /** Files receiving framework-neutral test policy, including test helpers. */
@@ -52,7 +56,9 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       {
         files: [...testFiles],
         rules: {
-          "no-await-in-loop": "off"
+          "no-await-in-loop": "off",
+          // TODO: Reconsider after test generators and setup provide ergonomic, fully typed mocks and fixtures.
+          "typescript/no-unsafe-type-assertion": "off"
         }
       },
       {
@@ -77,6 +83,14 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "promise/prefer-await-to-then": "off",
       "typescript/parameter-properties": "off",
       "typescript/promise-function-async": "off",
+      "typescript/strict-boolean-expressions": [
+        "error",
+        {
+          allowNullableBoolean: true,
+          allowNullableObject: true,
+          allowNullableString: true
+        }
+      ],
       "unicorn/no-nested-ternary": "off",
       ...rules
     }

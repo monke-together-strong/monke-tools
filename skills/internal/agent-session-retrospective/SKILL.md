@@ -1,6 +1,6 @@
 ---
 name: agent-session-retrospective
-description: Use only when the user explicitly asks for an agent or session retrospective. Review local Codex + Claude sessions and merged PRs, verify current resolution state, and propose evidenced durable fixes plus skill and workflow opportunities. Never invoke proactively.
+description: Use only when the user explicitly asks for an agent or session retrospective, don't run this for follow ups. Review local agent sessions and merged PRs, verify current resolution state, and propose evidenced durable fixes plus skill and workflow opportunities. Never invoke proactively.
 disable-model-invocation: true
 ---
 

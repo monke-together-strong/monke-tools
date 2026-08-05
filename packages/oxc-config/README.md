@@ -48,9 +48,9 @@ export { default } from "@monke-together-strong/oxc-config/oxfmt";
 export { default } from "@monke-together-strong/oxc-config/oxlint";
 ```
 
-The Oxfmt preset uses a print width of 100, ignores team-managed `skills/**` and `AGENTS.md`, and appends consumer `ignorePatterns` after its shared ignores. Other consumer fields override the shared formatter defaults.
+The Oxfmt preset formats JSDoc, uses a print width of 100, ignores team-managed `skills/**` and `AGENTS.md`, and appends consumer `ignorePatterns` after its shared ignores. Other consumer fields override the shared formatter defaults.
 
-The default Oxlint preset composes Ultracite's core and Vitest presets, enables type-aware linting and TypeScript type checking, and assumes files named `*.test.*`, `*.spec.*`, or stored under `__tests__` use Vitest.
+The default Oxlint preset composes Ultracite's core and Vitest presets, enables type-aware linting and TypeScript type checking, and assumes files named `*.test.*`, `*.spec.*`, or stored under `__tests__` use Vitest. Its framework-neutral test policy also covers files under `test/` and `tests/`, where `typescript/no-unsafe-type-assertion` is disabled because typed mock and fixture setup is not yet ergonomic enough to justify the churn.
 
 Mixed-framework repositories can exclude framework-owned paths from the Vitest preset:
 
