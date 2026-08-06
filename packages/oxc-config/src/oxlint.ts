@@ -94,6 +94,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
           "no-await-in-loop": "off",
           "no-inline-comments": "off",
           "no-script-url": "off",
+          "node/no-process-env": "off",
           "require-await": "off",
           // TODO: Reconsider after test generators and setup provide ergonomic, fully typed mocks and fixtures.
           "typescript/no-dynamic-delete": "off",
@@ -102,6 +103,12 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
           "typescript/unbound-method": "off",
           "unicorn/consistent-function-scoping": "off",
           "unicorn/no-object-as-default-parameter": "off"
+        }
+      },
+      {
+        files: ["**/skills/**"],
+        rules: {
+          "node/no-process-env": "off"
         }
       },
       {
@@ -147,6 +154,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "sort-keys": "off",
       // Optional-result helpers read naturally as an early value return followed by implicit undefined.
       "typescript/consistent-return": "off",
+      "typescript/explicit-module-boundary-types": "off",
       "typescript/no-extraneous-class": ["error", { allowWithDecorator: true }],
       "typescript/parameter-properties": "off",
       "typescript/prefer-nullish-coalescing": [

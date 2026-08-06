@@ -55,6 +55,7 @@ export interface RuntimeOptions {
 
 /** Create the default runtime adapter around the current process. */
 export function createRuntime(options?: RuntimeOptions): Runtime {
+  // oxlint-disable-next-line node/no-process-env -- This adapter centralizes access to the process environment.
   const runtimeEnv = { ...process.env, ...options?.env };
   const runtimeCwd = options?.cwd ?? process.cwd();
   const scriptedInput = options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/u);

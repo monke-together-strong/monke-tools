@@ -788,6 +788,7 @@ export function runInstallCommand(repoRoot: string): void {
     ["run", path.join(repoRoot, "src", "index.ts"), "skills", "local-install", repoRoot],
     {
       cwd: repoRoot,
+      // oxlint-disable-next-line node/no-process-env -- The child process must inherit the invoking environment.
       env: process.env,
       stdio: "inherit"
     }
@@ -809,6 +810,7 @@ export function runSkillsCaptured(args: string[], cwd: string): CapturedCommandO
   const result = spawnSync(NPX_COMMAND, args, {
     cwd,
     encoding: "utf-8",
+    // oxlint-disable-next-line node/no-process-env -- The upstream CLI must inherit the invoking environment.
     env: process.env
   });
 
