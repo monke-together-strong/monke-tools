@@ -1,11 +1,11 @@
 ---
-subject: Share JSDoc type validation
+subject: Strengthen shared Oxlint validation
 packages:
   "@monke-together-strong/oxc-config": patch
 ---
 
-## Shared JSDoc validation
+## Stronger shared validation
 
 Load `eslint-plugin-jsdoc` through Oxlint's JavaScript-plugin compatibility layer and reject
 undefined JSDoc types in every consumer while preserving consumer-provided plugins and rule
-overrides.
+overrides. Reject console calls and require explicit module boundary types across consumers.

@@ -17,7 +17,9 @@ describe("shared Oxlint config", () => {
     ).toBeTruthy();
     expect(configuredConsumerPlugin).toStrictEqual(consumerPlugin);
     expect(config.rules).toMatchObject({
-      "jsdoc-js/no-undefined-types": "error"
+      "jsdoc-js/no-undefined-types": "error",
+      "no-console": "error",
+      "typescript/explicit-module-boundary-types": "error"
     });
   });
 });
