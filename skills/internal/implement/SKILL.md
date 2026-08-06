@@ -1,6 +1,6 @@
 ---
 name: implement
-description: "Heavyweight implementation workflow with mandatory closeout. Use only when explicitly requested or for work already scoped by a PRD, issue, or plan; do not use for small direct edits or review feedback."
+description: "Heavyweight implementation workflow with mandatory closeout. Use only when the user explicitly names implement, or when work is already scoped by a PRD, issue, or plan. Never use for small direct edits or review feedback, even when implementation is explicitly requested."
 disable-model-invocation: true
 ---
 

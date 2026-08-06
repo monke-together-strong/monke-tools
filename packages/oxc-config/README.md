@@ -1,6 +1,29 @@
 # `@monke-together-strong/oxc-config`
 
-Shared Oxlint and Oxfmt presets maintained by Monke Together Strong.
+Shared TypeScript, Oxlint, and Oxfmt presets maintained by Monke Together Strong.
+
+## TypeScript
+
+```sh
+bun add -D @monke-together-strong/oxc-config typescript
+```
+
+```json
+{
+  "extends": "@monke-together-strong/oxc-config/base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true
+  }
+}
+```
+
+The base preset contains runtime-neutral correctness and soundness settings. Consumers remain
+responsible for environment-specific options such as `lib`, `module`, `moduleResolution`, JSX,
+runtime types, and emit behavior.
+
+## Oxc
 
 The presets compose Ultracite's native Oxc configuration while allowing repository-specific settings to override shared defaults.
 
@@ -48,9 +71,9 @@ export { default } from "@monke-together-strong/oxc-config/oxfmt";
 export { default } from "@monke-together-strong/oxc-config/oxlint";
 ```
 
-The Oxfmt preset uses a print width of 100, ignores team-managed `skills/**` and `AGENTS.md`, and appends consumer `ignorePatterns` after its shared ignores. Other consumer fields override the shared formatter defaults.
+The Oxfmt preset formats JSDoc, uses a print width of 100, ignores team-managed `skills/**` and `AGENTS.md`, and appends consumer `ignorePatterns` after its shared ignores. Other consumer fields override the shared formatter defaults.
 
-The default Oxlint preset composes Ultracite's core and Vitest presets, enables type-aware linting and TypeScript type checking, and assumes files named `*.test.*`, `*.spec.*`, or stored under `__tests__` use Vitest.
+The default Oxlint preset composes Ultracite's core and Vitest presets, enables type-aware linting and TypeScript type checking, and assumes files named `*.test.*`, `*.spec.*`, or stored under `__tests__` use Vitest. Its framework-neutral test policy also covers files under `test/` and `tests/`, where `typescript/no-unsafe-type-assertion` is disabled because typed mock and fixture setup is not yet ergonomic enough to justify the churn.
 
 Mixed-framework repositories can exclude framework-owned paths from the Vitest preset:
 

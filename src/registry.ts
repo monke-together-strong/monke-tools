@@ -72,8 +72,8 @@ export function listSessionStates(home: string): SessionState[] {
 /**
  * List Session states for targeted ownership checks.
  *
- * Invalid state blocks only when it names a participating worktree; broad
- * maintenance remains responsible for reporting unrelated invalid state.
+ * Invalid state blocks only when it names a participating worktree; broad maintenance remains
+ * responsible for reporting unrelated invalid state.
  */
 export function listSessionStatesRelevantToWorktrees(
   home: string,

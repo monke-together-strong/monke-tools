@@ -172,6 +172,7 @@ function listSwingPickerOptions(
 ): SwingPickerOption[] {
   const previousTarget = loadSwingHistory(home, rootSourceRoot).previous;
   const options: SwingPickerOption[] = [];
+  const candidates: (SwingPickerOption & { updatedAt: number })[] = [];
 
   if (existsSync(rootSourceRoot) && currentTarget.kind !== "source") {
     options.push({
@@ -190,14 +191,10 @@ function listSwingPickerOptions(
         branchCommitTimes.get(state.session) ?? 0,
         statSync(getSessionStateFilePath(home, rootSourceRoot, state.session)).mtimeMs
       )
-    }))
-    .toSorted(
-      (left, right) =>
-        right.updatedAt - left.updatedAt || left.state.session.localeCompare(right.state.session)
-    );
+    }));
   const seenSessions = new Set<string>();
 
-  for (const { state } of sessionStates) {
+  for (const { state, updatedAt } of sessionStates) {
     if (seenSessions.has(state.session)) {
       continue;
     }
@@ -212,20 +209,17 @@ function listSwingPickerOptions(
     if (isSameSwingTarget(target, currentTarget)) {
       continue;
     }
-    options.push({
+    candidates.push({
       markers: formatTargetMarkers(target, previousTarget),
       rawTarget: state.session,
-      target
+      target,
+      updatedAt
     });
   }
 
-  const linkedWorktrees = listLinkedWorktrees(runtime, rootSourceRoot)
-    .filter((entry) => !seenSessions.has(entry.branch))
-    .toSorted(
-      (left, right) =>
-        (branchCommitTimes.get(right.branch) ?? 0) - (branchCommitTimes.get(left.branch) ?? 0) ||
-        left.branch.localeCompare(right.branch)
-    );
+  const linkedWorktrees = listLinkedWorktrees(runtime, rootSourceRoot).filter(
+    (entry) => !seenSessions.has(entry.branch)
+  );
 
   for (const worktree of linkedWorktrees) {
     const { branch } = worktree;
@@ -237,12 +231,20 @@ function listSwingPickerOptions(
     if (isSameSwingTarget(target, currentTarget)) {
       continue;
     }
-    options.push({
+    candidates.push({
       markers: formatTargetMarkers(target, previousTarget),
       rawTarget: branch,
-      target
+      target,
+      updatedAt: branchCommitTimes.get(branch) ?? 0
     });
   }
+
+  options.push(
+    ...candidates.toSorted(
+      (left, right) =>
+        right.updatedAt - left.updatedAt || left.rawTarget.localeCompare(right.rawTarget)
+    )
+  );
 
   if (options.length === 0) {
     throw new MonkeError(`No other Swing targets found for ${rootSourceRoot}`);
@@ -512,7 +514,7 @@ function resolveCurrentGithubRepo(
     : trimmed;
   const [owner, name] = nameWithOwner.split("/");
 
-  if (owner === undefined || owner === "" || name === undefined || name === "") {
+  if (!owner || !name) {
     throw new MonkeError(`Could not resolve current GitHub repo from gh output: ${trimmed}`);
   }
 
@@ -521,7 +523,7 @@ function resolveCurrentGithubRepo(
 
 function parsePullRequestTarget(rawTarget: string): PullRequestSwingTarget | null {
   const prMatch = /^pr:(?<number>\d+)$/u.exec(rawTarget);
-  if (prMatch?.groups?.number !== undefined && prMatch.groups.number !== "") {
+  if (prMatch?.groups?.number) {
     return { number: Math.trunc(Number(prMatch.groups.number)) };
   }
 
@@ -561,7 +563,7 @@ function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistory
     return { kind: "source" };
   }
 
-  if (context.sessionName === null || context.sessionName === "") {
+  if (!context.sessionName) {
     throw new MonkeError("Unable to infer the current worktree for Previous Swing target history");
   }
 

@@ -2194,15 +2194,14 @@ ${
     : `  printf 'new %s' "$staged_slug" > ".agents/skills/$staged_slug/SKILL.md"`
 }
 ${
-  options.mainCollisionSelector !== undefined && options.mainCollisionSelector !== ""
+  options.mainCollisionSelector
     ? `  if [ "$skill" = "${options.mainCollisionSelector}" ]; then
     printf 'upstream collision\\n' > ".agents/skills/$staged_slug/MAIN.md"
   fi`
     : ""
 }
 ${
-  options.stagedSkillEntrySymlinkTarget !== undefined &&
-  options.stagedSkillEntrySymlinkTarget !== ""
+  options.stagedSkillEntrySymlinkTarget
     ? `  rm ".agents/skills/$staged_slug/SKILL.md"
   ln -s '${options.stagedSkillEntrySymlinkTarget}' ".agents/skills/$staged_slug/SKILL.md"`
     : ""

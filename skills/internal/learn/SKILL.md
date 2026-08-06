@@ -81,7 +81,7 @@ structure, tone, and level of detail; make the smallest local edit that fits.
 Change the theme only when the evidence identifies it as the cause or the user
 explicitly asks.
 
-When creating or updating a skill, invoke `/writing-great-skills` before editing
+When creating or updating a skill, invoke `/writing-for-agents` before editing
 and verify the finished skill against it.
 
 Completion criterion: either the fix is implemented and verified when practical,
