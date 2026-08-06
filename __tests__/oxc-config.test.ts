@@ -9,17 +9,20 @@ describe("shared Oxlint config", () => {
       specifier: "consumer-plugin"
     } as const;
     const config = createOxlintConfig({ jsPlugins: [consumerPlugin] });
-    const [sharedPlugin, configuredConsumerPlugin] = config.jsPlugins ?? [];
+    const [jsdocPlugin, perfectionistPlugin, configuredConsumerPlugin] = config.jsPlugins ?? [];
 
-    expect(sharedPlugin).toMatchObject({ name: "jsdoc-js" });
+    expect(jsdocPlugin).toMatchObject({ name: "jsdoc-js" });
     expect(
-      typeof sharedPlugin === "object" && sharedPlugin.specifier.includes("eslint-plugin-jsdoc")
+      typeof jsdocPlugin === "object" && jsdocPlugin.specifier.includes("eslint-plugin-jsdoc")
     ).toBeTruthy();
+    expect(perfectionistPlugin).toMatchObject({ name: "perfectionist" });
     expect(configuredConsumerPlugin).toStrictEqual(consumerPlugin);
     expect(config.rules).toMatchObject({
       "jsdoc-js/no-undefined-types": "error",
       "no-console": "error",
       "node/no-process-env": "error",
+      "perfectionist/sort-objects": ["error", { partitionByComment: true }],
+      "sort-keys": "off",
       "typescript/explicit-module-boundary-types": "error"
     });
   });

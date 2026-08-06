@@ -142,13 +142,13 @@ export function getOrCreateReservation(
 }
 
 export function allocateLocalPorts(options: {
+  baselinePorts: Set<number>;
+  existingRepoState: SessionRepoState | undefined;
   home: string;
+  repoConfig: RepoConfig;
+  reservation: RepoReservation | null;
   rootSourceRoot: string;
   session: string;
-  repoConfig: RepoConfig;
-  existingRepoState: SessionRepoState | undefined;
-  reservation: RepoReservation | null;
-  baselinePorts: Set<number>;
 }): Map<string, number> {
   const assignments = new Map<string, number>(
     (options.existingRepoState?.assignedPorts ?? []).map((entry) => [entry.key, entry.value])

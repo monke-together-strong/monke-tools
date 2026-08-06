@@ -1844,8 +1844,8 @@ apps: {}
   test("Ordinary Chop does not run Cleanup commands or mutate Session state", () => {
     const fixture = createOrdinaryFixture("chop-no-session-state", {
       files: {
-        "README.md": "source\n",
-        "monke.yml": "cleanupCommand: 'touch cleanup-ran'\n"
+        "monke.yml": "cleanupCommand: 'touch cleanup-ran'\n",
+        "README.md": "source\n"
       }
     });
     const statePath = path.join(fixture.home, "sessions", "sentinel.yml");

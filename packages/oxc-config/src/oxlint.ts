@@ -4,9 +4,16 @@ import type { OxlintConfig, OxlintOverride } from "oxlint";
 import core from "ultracite/oxlint/core";
 import vitest from "ultracite/oxlint/vitest";
 
+const localRequire = createRequire(import.meta.url);
+
 const jsdocPlugin = {
   name: "jsdoc-js",
-  specifier: createRequire(import.meta.url).resolve("eslint-plugin-jsdoc")
+  specifier: localRequire.resolve("eslint-plugin-jsdoc")
+} as const;
+
+const perfectionistPlugin = {
+  name: "perfectionist",
+  specifier: localRequire.resolve("eslint-plugin-perfectionist")
 } as const;
 
 const defaultTestFiles = [
@@ -67,7 +74,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       ...generatedFileIgnorePatterns,
       ...ignorePatterns
     ],
-    jsPlugins: [jsdocPlugin, ...(jsPlugins ?? [])],
+    jsPlugins: [jsdocPlugin, perfectionistPlugin, ...(jsPlugins ?? [])],
     options: {
       typeAware: true,
       typeCheck: true,
@@ -121,10 +128,23 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "no-warning-comments": "off",
       // Read and validate environment variables through a centralized configuration boundary.
       "node/no-process-env": "error",
+      "perfectionist/sort-enums": [
+        "error",
+        {
+          partitionByComment: true,
+          sortByValue: "always"
+        }
+      ],
+      "perfectionist/sort-heritage-clauses": "error",
+      "perfectionist/sort-interfaces": "error",
+      "perfectionist/sort-jsx-props": "error",
+      "perfectionist/sort-object-types": "error",
+      "perfectionist/sort-objects": ["error", { partitionByComment: true }],
       "prefer-regex-literals": "off",
       "promise/avoid-new": "off",
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
+      "sort-keys": "off",
       // Optional-result helpers read naturally as an early value return followed by implicit undefined.
       "typescript/consistent-return": "off",
       "typescript/explicit-module-boundary-types": "error",

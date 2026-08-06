@@ -581,8 +581,8 @@ name: outside-entry
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
-      stagedSkillEntrySymlinkTarget: outsideEntryPath
+      stagedSkillEntrySymlinkTarget: outsideEntryPath,
+      stageReferenceFixture: true
     });
 
     try {
@@ -1455,10 +1455,10 @@ name: outside-entry
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
       stagedSlugBySelector: {
         alpha: "renamed-alpha"
-      }
+      },
+      stageReferenceFixture: true
     });
     writeImportRecipeStore(sandbox, {
       recipes: [
@@ -1516,10 +1516,10 @@ name: outside-entry
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
       stagedSlugBySelector: {
         alpha: "renamed-alpha"
-      }
+      },
+      stageReferenceFixture: true
     });
     writeImportRecipeStore(sandbox, originalStore);
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
@@ -1569,10 +1569,10 @@ name: outside-entry
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
       stagedSlugBySelector: {
         alpha: "renamed-alpha"
-      }
+      },
+      stageReferenceFixture: true
     });
     writeImportRecipeStore(sandbox, originalStore);
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
@@ -1623,10 +1623,10 @@ name: outside-entry
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
       stagedSlugBySelector: {
         alpha: "renamed-alpha"
-      }
+      },
+      stageReferenceFixture: true
     });
     writeImportRecipeStore(sandbox, originalStore);
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
@@ -1679,10 +1679,10 @@ name: outside-entry
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
-      stageReferenceFixture: true,
       stagedSlugBySelector: {
         alpha: "renamed-alpha"
-      }
+      },
+      stageReferenceFixture: true
     });
     writeImportRecipeStore(sandbox, originalStore);
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
@@ -1733,7 +1733,7 @@ name: outside-entry
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
     const originalCwd = process.cwd();
     const originalPath = process.env.PATH;
-    const confirmations: { selector: string; recordedSlug: string; stagedSlug: string }[] = [];
+    const confirmations: { recordedSlug: string; selector: string; stagedSlug: string }[] = [];
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
@@ -2067,14 +2067,14 @@ name: outside-entry
 function installFakeNpx(
   sandbox: string,
   options: {
-    skillsLogPath: string;
-    skillsCwdLogPath: string;
     failInstallSources?: string[];
+    mainCollisionSelector?: string;
+    skillsCwdLogPath: string;
+    skillsLogPath: string;
+    stagedSkillEntrySymlinkTarget?: string;
     stagedSlugBySelector?: Record<string, string>;
     stageReferenceFixture?: boolean;
     stageSupportingSymlink?: boolean;
-    mainCollisionSelector?: string;
-    stagedSkillEntrySymlinkTarget?: string;
   }
 ): string {
   const binDirectory = path.join(sandbox, "fake-bin");

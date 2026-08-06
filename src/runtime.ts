@@ -37,20 +37,20 @@ export interface RuntimeOptions {
   cwd?: string;
   /** Environment overrides merged over the process environment. */
   env?: Record<string, string | undefined>;
-  /** Scripted stdin lines used by tests for interactive prompts. */
-  stdinText?: string;
-  /** Scripted selected values used by tests for Clack-style select prompts. */
-  selectValues?: string[];
   /** Scripted selected value sets used by tests for Clack-style multi-select prompts. */
   multiSelectValues?: string[][];
-  /** Optional observer used by tests and embedding callers to inspect select prompts. */
-  onSelect?: (prompt: SelectPrompt) => void;
   /** Optional observer used by tests and embedding callers to inspect multi-select prompts. */
   onMultiSelect?: (prompt: MultiSelectPrompt) => void;
-  /** Optional stdout sink used by tests and embedding callers. */
-  onStdout?: (text: string) => void;
+  /** Optional observer used by tests and embedding callers to inspect select prompts. */
+  onSelect?: (prompt: SelectPrompt) => void;
   /** Optional stderr sink used by tests and embedding callers. */
   onStderr?: (text: string) => void;
+  /** Optional stdout sink used by tests and embedding callers. */
+  onStdout?: (text: string) => void;
+  /** Scripted selected values used by tests for Clack-style select prompts. */
+  selectValues?: string[];
+  /** Scripted stdin lines used by tests for interactive prompts. */
+  stdinText?: string;
 }
 
 /** Create the default runtime adapter around the current process. */

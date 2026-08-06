@@ -30,10 +30,10 @@ import { MonkeError } from "../src/errors.ts";
 import { parseBoundaryValue } from "../src/validation.ts";
 
 interface ImportCommandOptions {
-  source: string;
-  install: boolean;
   acceptOpenClawRisks: boolean;
+  install: boolean;
   kind: ImportedGuidanceKind;
+  source: string;
 }
 
 /** Group of upstream Skill import selectors parsed from `skills add -l` output. */
@@ -48,23 +48,23 @@ export interface AvailableSkillGroup {
 export type GroupedSkillOptions = Record<string, p.Option<string>[]>;
 
 interface ImportSkillsDependencies {
+  runInstallCommand?: (repoRoot: string) => void;
   selectSkills?: (
     availableSkillGroups: readonly AvailableSkillGroup[]
   ) => Promise<string[]> | string[];
-  runInstallCommand?: (repoRoot: string) => void;
   writeMessage?: (message: string) => void;
 }
 
 interface SecurityRiskAssessment {
-  rows: SecurityRiskRow[];
   detailsUrl: string | null;
+  rows: SecurityRiskRow[];
 }
 
 interface SecurityRiskRow {
-  skillName: string;
   gen: string;
-  socket: string;
+  skillName: string;
   snyk: string;
+  socket: string;
 }
 
 const NPX_COMMAND = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -146,42 +146,42 @@ export type StagedSkillSelection = Omit<SkillImportRecipeSkill, "kind">;
 
 /** Input for recording newly imported skills in the recipe store. */
 export interface RecordImportedGuidanceInput {
-  /** Human-facing source string passed through to upstream `skills add`. */
-  source: string;
   /** Whether the dedicated OpenClaw risk acceptance flag was used. */
   acceptOpenClawRisks: boolean;
   /** Import kind applied to every selection in this invocation. */
   kind: ImportedGuidanceKind;
   /** Selector-to-slug ownership entries created by the import. */
   skills: StagedSkillSelection[];
+  /** Human-facing source string passed through to upstream `skills add`. */
+  source: string;
 }
 
 /** Captured output from an upstream `skills` CLI invocation. */
 export interface CapturedCommandOutput {
-  /** Captured standard output text. */
-  stdout: string;
   /** Captured standard error text. */
   stderr: string;
+  /** Captured standard output text. */
+  stdout: string;
 }
 
 /** Options for building an upstream staged Skill install command. */
 export interface BuildSkillsInstallArgsOptions {
-  /** Source string passed through to upstream `skills add`. */
-  source: string;
   /** Whether to pass the dedicated OpenClaw risk acceptance flag. */
   acceptOpenClawRisks: boolean;
   /** Upstream Skill import selectors to install. */
   selectors: readonly string[];
+  /** Source string passed through to upstream `skills add`. */
+  source: string;
 }
 
 /** Options for resolving exact selector-to-slug mappings with isolated installs. */
 export interface ResolveSkillSelectorSlugMappingsOptions {
-  /** Source string passed through to upstream `skills add`. */
-  source: string;
   /** Whether to pass the dedicated OpenClaw risk acceptance flag. */
   acceptOpenClawRisks: boolean;
   /** Upstream Skill import selectors to install one at a time. */
   selectors: readonly string[];
+  /** Source string passed through to upstream `skills add`. */
+  source: string;
 }
 
 /** Parses upstream skill selectors from grouped `skills add -l` output. */
@@ -314,11 +314,11 @@ export function listStagedSkillSlugs(stagingDirectory: string): string[] {
 
 /** Materializes staged upstream guidance using its recorded local Import kind. */
 export function copyStagedGuidanceToManagedRoots(options: {
-  stagingDirectory: string;
-  repoRoot: string;
+  commitState?: () => void;
   guidance: readonly SkillImportRecipeSkill[];
   obsoleteGuidance?: readonly SkillImportRecipeSkill[];
-  commitState?: () => void;
+  repoRoot: string;
+  stagingDirectory: string;
 }): void {
   const stagedSkillsRoot = path.join(options.stagingDirectory, ".agents", "skills");
   const preparedRoot = mkdtempSync(path.join(tmpdir(), "monke-guidance-prepared-"));
@@ -663,7 +663,7 @@ export async function runImportSkills(
   argv: string[] = process.argv.slice(2),
   dependencies: ImportSkillsDependencies = {}
 ): Promise<void> {
-  const { source, install, acceptOpenClawRisks, kind } = parseCommand(argv);
+  const { acceptOpenClawRisks, install, kind, source } = parseCommand(argv);
   const repoRoot = process.cwd();
   const normalizedSource = normalizeSourceForStaging(source, repoRoot);
   const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-import-"));
@@ -731,9 +731,9 @@ export async function runImportSkills(
 }
 
 function findMigratedGuidanceCopies(options: {
-  source: string;
   importedGuidance: readonly SkillImportRecipeSkill[];
   previousStore: SkillImportRecipeStore;
+  source: string;
 }): SkillImportRecipeSkill[] {
   const previousRecipe = options.previousStore.recipes.find(
     (recipe) => recipe.source === options.source
@@ -1019,10 +1019,10 @@ export function buildGroupedSkillOptions(
 }
 
 async function groupedSkillMultiselect(options: {
-  message: string;
-  options: GroupedSkillOptions;
   cursorAt?: string;
   maxItems: number;
+  message: string;
+  options: GroupedSkillOptions;
   required: boolean;
 }): Promise<string[] | symbol> {
   const result: unknown = await new GroupMultiSelectPrompt<p.Option<string>>({
@@ -1121,11 +1121,11 @@ type GroupedPromptOptionState =
   | "cancelled";
 
 function renderVisibleGroupedPromptOptions(options: {
-  options: readonly GroupedPromptOption[];
-  cursor: number;
-  selectedValues: readonly string[];
-  maxItems: number;
   bar: string;
+  cursor: number;
+  maxItems: number;
+  options: readonly GroupedPromptOption[];
+  selectedValues: readonly string[];
 }): string {
   const visibleOptions = getVisibleGroupedPromptOptions({
     cursor: options.cursor,
@@ -1151,9 +1151,9 @@ function renderVisibleGroupedPromptOptions(options: {
 }
 
 function getVisibleGroupedPromptOptions(options: {
-  options: readonly GroupedPromptOption[];
   cursor: number;
   maxItems: number;
+  options: readonly GroupedPromptOption[];
 }): (GroupedPromptOption & { index: number })[] {
   const terminalRows =
     process.stdout.rows !== undefined && process.stdout.rows > 0 ? process.stdout.rows - 4 : 10;
@@ -1385,10 +1385,10 @@ function assertSkillCanBeOwnedByRecipe(
 }
 
 function mapSelectedSkillsToImportedSlugs(options: {
-  source: string;
   acceptOpenClawRisks: boolean;
-  selectors: readonly string[];
   importedSkillSlugs: readonly string[];
+  selectors: readonly string[];
+  source: string;
 }): StagedSkillSelection[] {
   try {
     return mapSelectedSkillsToImportedSlugsFromSet(options.selectors, options.importedSkillSlugs);

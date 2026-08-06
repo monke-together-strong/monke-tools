@@ -50,8 +50,8 @@ type SwingHistoryTarget = z.output<typeof SwingHistoryTargetSchema>;
 type SwingHistory = z.output<typeof SwingHistorySchema>;
 
 interface ResolvedSwingTarget {
-  target: SwingHistoryTarget;
   path: string;
+  target: SwingHistoryTarget;
 }
 
 interface ResolveStoredTargetOptions {
@@ -60,16 +60,16 @@ interface ResolveStoredTargetOptions {
 }
 
 interface SwingPickerOption {
+  markers: string[];
   rawTarget: string;
   target: SwingHistoryTarget;
-  markers: string[];
 }
 
 interface PullRequestSwingTarget {
   number: number;
   repo?: {
-    owner: string;
     name: string;
+    owner: string;
   };
 }
 
@@ -504,7 +504,7 @@ function ensurePullRequestSessionBranch(
 function resolveCurrentGithubRepo(
   runtime: Runtime,
   rootSourceRoot: string
-): { owner: string; name: string } {
+): { name: string; owner: string } {
   const output = runtime.exec("gh", ["repo", "view", "--json", "nameWithOwner"], {
     cwd: rootSourceRoot
   }).stdout;
@@ -549,8 +549,8 @@ function parsePullRequestTarget(rawTarget: string): PullRequestSwingTarget | nul
 }
 
 function isSameGithubRepo(
-  left: { owner: string; name: string },
-  right: { owner: string; name: string }
+  left: { name: string; owner: string },
+  right: { name: string; owner: string }
 ): boolean {
   return (
     left.owner.toLowerCase() === right.owner.toLowerCase() &&

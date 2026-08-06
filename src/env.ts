@@ -298,10 +298,10 @@ function readActiveAssignments(filePath: string): Map<string, string[]> {
 }
 
 interface ParsedAssignmentLine {
+  comment: string;
   key: string;
   prefix: string;
   rawValue: string;
-  comment: string;
 }
 
 function parseAssignmentLine(line: string): ParsedAssignmentLine | null {
@@ -318,7 +318,7 @@ function parseAssignmentLine(line: string): ParsedAssignmentLine | null {
   }
 
   const { key = "", prefixStart = "", remainder = "", separator = "=" } = match.groups;
-  const { value, comment } = splitValueAndComment(remainder);
+  const { comment, value } = splitValueAndComment(remainder);
   return {
     comment,
     key,
@@ -331,7 +331,7 @@ function stripTrailingNewline(text: string): string {
   return text.endsWith("\n") ? text.slice(0, -1) : text;
 }
 
-function splitValueAndComment(value: string): { value: string; comment: string } {
+function splitValueAndComment(value: string): { comment: string; value: string } {
   let quote: "'" | '"' | null = null;
 
   for (let index = 0; index < value.length; index += 1) {

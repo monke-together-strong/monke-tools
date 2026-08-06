@@ -7,22 +7,22 @@ export interface Runtime {
   readonly env: Record<string, string | undefined>;
   /** Run a command with the runtime environment. */
   exec: (command: string, args?: string[], options?: ExecOptions) => ExecResult;
-  /** Select one value from an interactive terminal picker. */
-  select: (prompt: SelectPrompt) => Promise<string>;
   /** Select multiple values from an interactive terminal picker. */
   multiSelect: (prompt: MultiSelectPrompt) => Promise<string[]>;
   /** Read one interactive input line after writing a prompt. */
   readLine: (prompt: string) => string;
-  /** Write CLI output to stdout. */
-  writeStdout: (text: string) => void;
+  /** Select one value from an interactive terminal picker. */
+  select: (prompt: SelectPrompt) => Promise<string>;
   /** Write CLI output to stderr. */
   writeStderr: (text: string) => void;
+  /** Write CLI output to stdout. */
+  writeStdout: (text: string) => void;
 }
 
 export interface ExecOptions {
+  allowFailure?: boolean;
   cwd?: string;
   env?: Record<string, string | undefined>;
-  allowFailure?: boolean;
   /** Text passed to the child process on stdin. */
   stdin?: string;
   /** Positive timeout in seconds before the child process is terminated. */
@@ -30,48 +30,48 @@ export interface ExecOptions {
 }
 
 export interface ExecResult {
-  stdout: string;
-  stderr: string;
   exitCode: number;
+  stderr: string;
+  stdout: string;
   /** True when the process was terminated because its timeout elapsed. */
   timedOut?: boolean;
 }
 
 export interface SelectPrompt {
-  message: string;
-  options: SelectOption[];
   initialValue?: string;
   maxItems?: number;
+  message: string;
+  options: SelectOption[];
 }
 
 export interface MultiSelectPrompt {
-  message: string;
-  options: SelectOption[];
   initialValues?: string[];
   maxItems?: number;
+  message: string;
+  options: SelectOption[];
   required?: boolean;
 }
 
 export interface SelectOption {
-  value: string;
-  label: string;
   hint?: string;
+  label: string;
+  value: string;
 }
 
 export interface RepoContext {
-  cwd: string;
-  worktreeRoot: string;
-  sourceRoot: string;
-  gitCommonDir: string;
   currentBranch: string;
+  cwd: string;
+  gitCommonDir: string;
   isSourceCheckout: boolean;
   sessionName: string | null;
+  sourceRoot: string;
+  worktreeRoot: string;
 }
 
 export interface LocalMapping {
+  portKey: string;
   targetApp: string;
   targetEnv: string;
-  portKey: string;
 }
 
 export interface ExternalMapping {
@@ -83,19 +83,19 @@ export interface ExternalMapping {
 }
 
 export interface AppConfig {
-  label: string;
-  relativePath: string;
-  relativeEnvFile: string;
   absoluteAppPath: string;
+  label: string;
   localMappings: LocalMapping[];
+  relativeEnvFile: string;
+  relativePath: string;
 }
 
 export interface ExternalRepoConfig {
-  label: string;
-  relativePath: string;
-  pathEnv: string;
   absoluteRepoRoot: string;
+  label: string;
   mappings: ExternalMapping[];
+  pathEnv: string;
+  relativePath: string;
 }
 
 /** A deterministic Resource value declared by one repo in monke.yml. */
@@ -110,43 +110,43 @@ export interface ResourceValueConfig {
 export interface ResourceCommandConfig {
   /** Lowercase command label used as the Resource command namespace. */
   name: string;
+  /** Uppercase environment variable names the function must return. */
+  outputs: string[];
   /** Repo-relative JS/TS module path run from the target session worktree. */
   run: string;
   /** Positive timeout in seconds for the Resource command. */
   timeoutSeconds: number;
-  /** Uppercase environment variable names the function must return. */
-  outputs: string[];
 }
 
 export interface RepoConfig {
-  sourceRoot: string;
-  configPath: string;
+  appsByLabel: Map<string, AppConfig>;
+  appsInOrder: AppConfig[];
   bootstrapCommand?: string;
   /** Repo-owned command run during Cleanup for dead session worktrees. */
   cleanupCommand?: string;
-  seedPaths: string[];
-  /** Deterministic Resource values declared by this repo, in YAML order. */
-  resourceValuesInOrder: ResourceValueConfig[];
-  /** Dynamic Resource commands declared by this repo, in YAML order. */
-  resourceCommandsInOrder: ResourceCommandConfig[];
-  appsInOrder: AppConfig[];
-  appsByLabel: Map<string, AppConfig>;
+  configPath: string;
   externalInOrder: ExternalRepoConfig[];
-  localPortOrder: string[];
-  localMappingsByPort: Map<string, LocalMapping[]>;
   externalMappingsInOrder: ExternalMapping[];
   externalTargetApps: Set<string>;
+  localMappingsByPort: Map<string, LocalMapping[]>;
+  localPortOrder: string[];
+  /** Dynamic Resource commands declared by this repo, in YAML order. */
+  resourceCommandsInOrder: ResourceCommandConfig[];
+  /** Deterministic Resource values declared by this repo, in YAML order. */
+  resourceValuesInOrder: ResourceValueConfig[];
+  seedPaths: string[];
+  sourceRoot: string;
 }
 
 export interface ResolvedGraph {
-  rootSourceRoot: string;
-  reposInMaterializationOrder: RepoConfig[];
   reposByRoot: Map<string, RepoConfig>;
+  reposInMaterializationOrder: RepoConfig[];
+  rootSourceRoot: string;
 }
 
 export interface RepoMaterializationResult {
-  state: SessionRepoState;
   localAssignments: Map<string, number>;
+  state: SessionRepoState;
 }
 
 export type {

@@ -12,33 +12,33 @@ export { BetterStackApiError } from "./api-error";
 
 export interface BetterStackSourceResponse {
   data: {
-    id: string;
-    type: string;
     attributes: {
-      team_id: number;
-      team_name: string;
-      table_name: string;
       data_region: string;
       name: string;
+      table_name: string;
+      team_id: number;
+      team_name: string;
     };
+    id: string;
+    type: string;
   };
 }
 
 export interface BetterStackConnectionsResponse {
   data: {
-    id: string;
-    type: string;
     attributes: {
-      id: number;
       client_type: string;
-      note: string;
-      host: string;
-      port: number;
-      username: string;
       data_region: string;
+      host: string;
+      id: number;
+      note: string;
+      port: number;
       team_ids: number[];
       team_names: string[];
+      username: string;
     };
+    id: string;
+    type: string;
   }[];
 }
 
