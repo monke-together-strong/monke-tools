@@ -18,6 +18,23 @@ const mtsLint = createOxlintConfig({
       specifier: "vite-plus/oxlint-plugin"
     }
   ],
+  overrides: [
+    {
+      // Tests deliberately manipulate environment state; the remaining files are the centralized
+      // environment boundaries for their respective Monke CLIs.
+      files: [
+        "__tests__/**/*.ts",
+        "src/runtime.ts",
+        "scripts/import-skills.ts",
+        "skills/internal/agent-session-retrospective/scripts/lib/store.ts",
+        "skills/internal/betterstack-cli/scripts/betterstack-cli/env.ts",
+        "skills/internal/betterstack-cli/scripts/betterstack-cli/index.ts"
+      ],
+      rules: {
+        "node/no-process-env": "off"
+      }
+    }
+  ],
   rules: {
     "vite-plus/prefer-vite-plus-imports": "error"
   },

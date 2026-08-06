@@ -19,6 +19,7 @@ describe("shared Oxlint config", () => {
     expect(config.rules).toMatchObject({
       "jsdoc-js/no-undefined-types": "error",
       "no-console": "error",
+      "node/no-process-env": "error",
       "typescript/explicit-module-boundary-types": "error"
     });
   });

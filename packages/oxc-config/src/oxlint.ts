@@ -119,6 +119,8 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       // Declaration order is a readability choice; TypeScript catches unsafe temporal-dead-zone access.
       "no-use-before-define": ["error", { classes: false, functions: false, variables: false }],
       "no-warning-comments": "off",
+      // Read and validate environment variables through a centralized configuration boundary.
+      "node/no-process-env": "error",
       "prefer-regex-literals": "off",
       "promise/avoid-new": "off",
       "promise/prefer-await-to-callbacks": "off",
