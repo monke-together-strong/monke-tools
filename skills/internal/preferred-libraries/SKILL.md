@@ -12,7 +12,7 @@ Use the listed default unless an exception applies. Completion requires one of t
 ## Project Tooling
 
 - `vite-plus`: Use Vite+ as the default toolchain for new JavaScript and TypeScript projects. Scaffold with `vp create`, keep formatter and linter settings in `vite.config.ts`, and use `vp check` for formatting, linting, and type checking.
-- `@monke-together-strong/oxc-config`: Use as the default Oxfmt and Oxlint config for new team-owned JavaScript and TypeScript projects.
+- `@monke-together-strong/oxc-config`: Use as the default TypeScript, Oxfmt, and Oxlint config for new team-owned JavaScript and TypeScript projects.
 
 ## CLI And Terminal UX
 

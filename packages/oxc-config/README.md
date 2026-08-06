@@ -1,6 +1,29 @@
 # `@monke-together-strong/oxc-config`
 
-Shared Oxlint and Oxfmt presets maintained by Monke Together Strong.
+Shared TypeScript, Oxlint, and Oxfmt presets maintained by Monke Together Strong.
+
+## TypeScript
+
+```sh
+bun add -D @monke-together-strong/oxc-config typescript
+```
+
+```json
+{
+  "extends": "@monke-together-strong/oxc-config/base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true
+  }
+}
+```
+
+The base preset contains runtime-neutral correctness and soundness settings. Consumers remain
+responsible for environment-specific options such as `lib`, `module`, `moduleResolution`, JSX,
+runtime types, and emit behavior.
+
+## Oxc
 
 The presets compose Ultracite's native Oxc configuration while allowing repository-specific settings to override shared defaults.
 

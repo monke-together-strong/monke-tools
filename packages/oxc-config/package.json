@@ -1,7 +1,7 @@
 {
   "name": "@monke-together-strong/oxc-config",
   "version": "0.1.1",
-  "description": "Shared Oxlint and Oxfmt presets.",
+  "description": "Shared TypeScript, Oxlint, and Oxfmt presets.",
   "homepage": "https://github.com/monke-together-strong/monke-tools/tree/main/packages/oxc-config#readme",
   "bugs": {
     "url": "https://github.com/monke-together-strong/monke-tools/issues"
@@ -13,12 +13,14 @@
     "directory": "packages/oxc-config"
   },
   "files": [
+    "base.json",
     "dist",
     "LICENSE",
     "README.md"
   ],
   "type": "module",
   "exports": {
+    "./base.json": "./base.json",
     "./oxfmt": {
       "types": "./dist/oxfmt.d.mts",
       "import": "./dist/oxfmt.mjs"
@@ -38,12 +40,12 @@
     "ultracite": "7.9.4"
   },
   "devDependencies": {
-    "oxfmt": "0.60.0",
-    "oxlint": "1.75.0"
+    "oxfmt": "0.62.0",
+    "oxlint": "1.77.0"
   },
   "peerDependencies": {
-    "oxfmt": "^0.60.0",
-    "oxlint": "^1.75.0",
+    "oxfmt": "^0.62.0",
+    "oxlint": "^1.77.0",
     "oxlint-tsgolint": ">=7.0.2001"
   }
 }
