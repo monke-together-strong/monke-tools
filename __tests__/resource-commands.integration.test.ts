@@ -19,20 +19,20 @@ import {
 } from "./helpers.ts";
 
 interface ResourceCommandScenario {
-  sandbox: string;
+  cleanup: () => { stderr: string; stdout: string };
   home: string;
+  materialize: (session: string) => { stderr: string; stdout: string };
+  readSessionState: () => SessionState;
+  readWorktree: (session: string, relativePath: string) => string;
   repoRoot: string;
+  sandbox: string;
   spawn: (
     session: string,
     extraEnv?: Record<string, string | undefined>
-  ) => { stdout: string; stderr: string };
-  materialize: (session: string) => { stdout: string; stderr: string };
-  cleanup: () => { stdout: string; stderr: string };
-  readSessionState: () => SessionState;
-  readWorktree: (session: string, relativePath: string) => string;
+  ) => { stderr: string; stdout: string };
+  worktree: (session: string) => string;
   writeRoot: (relativePath: string, contents: string) => void;
   writeWorktree: (session: string, relativePath: string, contents: string) => void;
-  worktree: (session: string) => string;
 }
 
 const ResourceCommandInputSchema = z.record(z.string(), z.array(z.string()));
@@ -746,7 +746,7 @@ export default function () {
 `,
       name: "empty output"
     }
-  ])("spawn rejects resource command returns with $name", ({ module, expected }) => {
+  ])("spawn rejects resource command returns with $name", ({ expected, module }) => {
     const scenario = createResourceCommandScenario({
       module,
       name: "single-repo-resource-command-contract"
@@ -786,7 +786,7 @@ export default function () {
 `,
       name: "rejected error"
     }
-  ])("spawn reports resource command module failures with $name", ({ module, expected }) => {
+  ])("spawn reports resource command module failures with $name", ({ expected, module }) => {
     const scenario = createResourceCommandScenario({
       module,
       name: "single-repo-resource-command-module-failure"
@@ -911,12 +911,12 @@ function isDirectExecution(importMetaUrl) {
 });
 
 function createResourceCommandScenario(options: {
-  name: string;
   appEnv?: string;
   commandName?: string;
   files?: Record<string, string>;
-  monkeYml?: string;
   module?: string;
+  monkeYml?: string;
+  name: string;
   outputs?: string[];
   resourceValuesYaml?: string;
   run?: string;

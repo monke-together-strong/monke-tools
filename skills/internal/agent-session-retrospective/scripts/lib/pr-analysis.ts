@@ -15,108 +15,108 @@ import {
 import type { RetrospectiveWindow } from "./types.ts";
 
 export interface CommandResult {
-  status: number | null;
-  stdout: string;
-  stderr: string;
   error?: string;
+  status: number | null;
+  stderr: string;
+  stdout: string;
 }
 
 export type CommandRunner = (command: string, args: string[], options?: { cwd?: string }) => CommandResult;
 
 export interface PrAnalysisGap {
-  repo: string;
+  impact: string;
   number?: number;
   reason: string;
-  impact: string;
+  repo: string;
 }
 
 export interface PrCommitReference {
-  sha: string;
   committedDate?: string;
   message: string;
+  sha: string;
 }
 
 export interface PrWorkItemSummary {
-  repo: string;
-  number: number;
-  url: string;
-  title: string;
-  createdAt: string;
-  mergedAt: string;
-  workItemPath: string;
   analysisPath: string;
-  openingSnapshot: {
-    confidence: "exact" | "inferred" | "unknown";
-    ref?: string;
-    reason: string;
-  };
+  commitShas: string[];
+  createdAt: string;
   finalHeadSha?: string;
   mergeCommitSha?: string;
-  commitShas: string[];
+  mergedAt: string;
+  number: number;
+  openingSnapshot: {
+    confidence: "exact" | "inferred" | "unknown";
+    reason: string;
+    ref?: string;
+  };
+  repo: string;
+  title: string;
+  url: string;
+  workItemPath: string;
 }
 
 export interface PrAnalysisManifest {
-  version: 1;
-  runTs: string;
-  window: RetrospectiveWindow;
-  org: string;
   author: string;
-  generatedAt: string;
-  workItems: PrWorkItemSummary[];
   gaps: PrAnalysisGap[];
+  generatedAt: string;
+  org: string;
+  runTs: string;
+  version: 1;
+  window: RetrospectiveWindow;
+  workItems: PrWorkItemSummary[];
 }
 
 export interface PrWorkItem extends PrWorkItemSummary {
-  version: 1;
-  runTs: string;
   baseBranch?: string;
-  headBranch?: string;
   changedFiles: string[];
   commitMessages: PrCommitReference[];
+  headBranch?: string;
   postOpeningDelta: {
-    source: "local-git" | "github-pr-diff-fallback" | "unavailable";
-    confidence: "primary" | "lower" | "none";
     body: string;
+    confidence: "primary" | "lower" | "none";
     note?: string;
+    source: "local-git" | "github-pr-diff-fallback" | "unavailable";
   };
+  runTs: string;
+  version: 1;
 }
 
 export interface RunPrCollectOptions {
-  retroRoot?: string;
+  exec?: CommandRunner;
   home?: string;
-  runTs: string;
   nowIso?: string;
   repoCacheRoot?: string;
-  exec?: CommandRunner;
+  retroRoot?: string;
+  runTs: string;
 }
 
 export interface RunPrAggregateOptions {
-  retroRoot?: string;
   home?: string;
+  retroRoot?: string;
   runTs: string;
 }
 
 interface GhRepo {
-  nameWithOwner: string;
   isArchived?: boolean;
+  nameWithOwner: string;
 }
 
 interface GhPr {
-  number: number;
-  url: string;
-  title: string;
+  baseRefName?: string;
+  commits?: unknown[];
   createdAt: string;
-  mergedAt: string;
-  openingSnapshotOid?: string;
-  openingSnapshotRef?: string;
   createdHeadRefOid?: string;
   creationHeadRefOid?: string;
-  baseRefName?: string;
+  files?: unknown[];
   headRefName?: string;
   headRefOid?: string;
   mergeCommit?: unknown;
-  commits?: unknown[];
-  files?: unknown[];
+  mergedAt: string;
+  number: number;
+  openingSnapshotOid?: string;
+  openingSnapshotRef?: string;
+  title: string;
+  url: string;
 }
 
 const GhRepoSchema: z.ZodType<GhRepo> = z.object({
@@ -280,7 +280,7 @@ function collectRepoPrs(
   author: string,
   window: RetrospectiveWindow,
   exec: CommandRunner,
-): { prs: GhPr[]; gaps: PrAnalysisGap[] } {
+): { gaps: PrAnalysisGap[]; prs: GhPr[]; } {
   const gaps: PrAnalysisGap[] = [];
   const summariesByNumber = new Map<number, GhPr>();
 
@@ -381,7 +381,7 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
   };
 }
 
-export function runPrAggregate(options: RunPrAggregateOptions): { path: string; gaps: PrAnalysisGap[] } {
+export function runPrAggregate(options: RunPrAggregateOptions): { gaps: PrAnalysisGap[]; path: string; } {
   const root = options.retroRoot ?? retroHome(options.home);
   const manifest = readPrManifest(root, options.runTs);
   if (!manifest) {
@@ -423,7 +423,7 @@ export function runPrAggregate(options: RunPrAggregateOptions): { path: string; 
   }
   out.push("");
 
-  for (const { item, body } of analyses) {
+  for (const { body, item } of analyses) {
     if (!body && !gaps.some((gap) => gap.repo === item.repo && gap.number === item.number)) {
       gaps.push({
         impact: "This PR is represented as a gap instead of an analyzed trajectory.",
@@ -448,7 +448,7 @@ export function runPrAggregate(options: RunPrAggregateOptions): { path: string; 
   if (represented.length === 0) {
     out.push("_No per-PR analyses were written._");
   }
-  for (const { item, body } of represented) {
+  for (const { body, item } of represented) {
     out.push(`### ${item.repo}#${item.number}`, "", `URL: ${item.url}`, `Opening snapshot: ${item.openingSnapshot.confidence}${
         isNonEmptyString(item.openingSnapshot.ref) ? ` ${item.openingSnapshot.ref}` : ""
       }`);
@@ -733,10 +733,10 @@ function extractCorrectivePatternLines(body: string): string[] {
 }
 
 function groupCorrectivePatterns(
-  analyses: { item: PrWorkItemSummary; body: string }[],
-): { label: string; items: string[] }[] {
-  const byPattern = new Map<string, { label: string; items: string[] }>();
-  for (const { item, body } of analyses) {
+  analyses: { body: string; item: PrWorkItemSummary; }[],
+): { items: string[]; label: string; }[] {
+  const byPattern = new Map<string, { items: string[]; label: string; }>();
+  for (const { body, item } of analyses) {
     if (!body) {
       continue;
     }

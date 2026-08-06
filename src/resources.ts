@@ -18,10 +18,10 @@ import type {
 
 /** Result of resolving deterministic Resource values for one repo/session pair. */
 export interface ResolvedResourceValues {
-  /** Declared Resource values to persist and write to the session root .env. */
-  values: ResourceValueState[];
   /** Previously remembered Resource env names no longer declared by the repo. */
   removedEnvNames: string[];
+  /** Declared Resource values to persist and write to the session root .env. */
+  values: ResourceValueState[];
 }
 
 /** Result of resolving Resource command outputs for one repo/session pair. */
@@ -80,12 +80,12 @@ const RESOURCE_COMMAND_MODULE_RUNNER = [
 
 /** Resolve, reuse, prune, and collision-check deterministic Resource values. */
 export function resolveResourceValues(options: {
+  env: Record<string, string | undefined>;
+  existingRepoState: SessionRepoState | undefined;
   home: string;
+  repoConfig: RepoConfig;
   rootSourceRoot: string;
   session: string;
-  repoConfig: RepoConfig;
-  existingRepoState: SessionRepoState | undefined;
-  env: Record<string, string | undefined>;
 }): ResolvedResourceValues {
   const declaredEnvNames = new Set(
     options.repoConfig.resourceValuesInOrder.map((resource) => resource.env)
@@ -138,14 +138,14 @@ export function resolveResourceValues(options: {
 
 /** Resolve, reuse, prune, execute, and validate Resource command outputs. */
 export function resolveResourceCommands(options: {
-  runtime: Runtime;
-  home: string;
-  session: string;
-  repoConfig: RepoConfig;
   existingRepoState: SessionRepoState | undefined;
-  worktreePath: string;
-  resourceValues: ResourceValueState[];
+  home: string;
   onResolvedCommandOutputs: (commands: ResourceCommandState[]) => void;
+  repoConfig: RepoConfig;
+  resourceValues: ResourceValueState[];
+  runtime: Runtime;
+  session: string;
+  worktreePath: string;
 }): ResolvedResourceCommands {
   const existingCommands = options.existingRepoState?.resourceCommandOutputs ?? [];
   const existingByName = new Map(existingCommands.map((command) => [command.name, command]));
@@ -232,11 +232,11 @@ function getReusableResourceCommand(
 }
 
 function runResourceCommand(options: {
-  runtime: Runtime;
   command: ResourceCommandConfig;
-  worktreePath: string;
-  stdin: ResourceCommandInput;
   resourceValues: ResourceValueState[];
+  runtime: Runtime;
+  stdin: ResourceCommandInput;
+  worktreePath: string;
 }): ResourceCommandState {
   const stdin = JSON.stringify(options.stdin);
   const outputDirectory = mkdtempSync(path.join(tmpdir(), "monke-resource-command-"));
@@ -294,8 +294,8 @@ function runResourceCommand(options: {
 }
 
 function resolveResourceCommandRunner(worktreePath: string): {
-  command: string;
   args: (modulePath: string, outputPath: string) => string[];
+  command: string;
 } {
   if (existsSync(path.join(worktreePath, "pnpm-lock.yaml"))) {
     return {
@@ -336,10 +336,10 @@ function withResourceCommandLock<T>(
 }
 
 function buildResourceCommandInput(options: {
+  command: ResourceCommandConfig;
   home: string;
   session: string;
   sourceRoot: string;
-  command: ResourceCommandConfig;
 }): ResourceCommandInput {
   const valuesByEnv = new Map(options.command.outputs.map((env) => [env, new Set<string>()]));
 
@@ -380,8 +380,8 @@ function buildResourceCommandInput(options: {
 function readResourceCommandRunnerOutput(options: {
   command: ResourceCommandConfig;
   outputPath: string;
-  stdout: string;
   stderr: string;
+  stdout: string;
 }): unknown {
   let outputText: string;
   try {
@@ -490,8 +490,8 @@ function resolveResourceCommandRunPath(
 function resourceCommandFailure(options: {
   command: ResourceCommandConfig;
   kind: string;
-  stdout?: string;
   stderr: string;
+  stdout?: string;
 }): MonkeError {
   const stderr = options.stderr.trim() || "<empty>";
   const stdout =
@@ -543,9 +543,9 @@ function toImmediateResourceCommandStates(
 
 function interpolateResourceLiteral(options: {
   literal: string;
+  location: string;
   session: string;
   user: string;
-  location: string;
 }): string {
   const value = options.literal.replaceAll(
     /\$\{(?<name>[^}]*)\}/gu,

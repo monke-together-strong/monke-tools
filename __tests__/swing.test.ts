@@ -808,9 +808,9 @@ function pushReadmePullRequestHead(
   repoRoot: string,
   options: {
     branch: string;
-    number: number;
     contents: string;
     message: string;
+    number: number;
   }
 ): void {
   git(repoRoot, ["switch", "-c", options.branch]);

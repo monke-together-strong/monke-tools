@@ -34,12 +34,12 @@ interface UpdateCommandOptions {
 
 /** Details for an interactive staged Skill slug replacement. */
 export interface SlugReplacementRequest {
-  /** Human-facing source string from the owning Skill import recipe. */
-  source: string;
-  /** Upstream-facing selector that produced the staged slug. */
-  selector: string;
   /** Local Skill slug currently recorded in the recipe store. */
   recordedSlug: string;
+  /** Upstream-facing selector that produced the staged slug. */
+  selector: string;
+  /** Human-facing source string from the owning Skill import recipe. */
+  source: string;
   /** Newly staged Skill slug produced by the upstream import. */
   stagedSlug: string;
 }
@@ -171,12 +171,12 @@ function validateImportedGuidanceDirectoriesAreTracked(
 }
 
 async function resolveStagedSkillReplacements(options: {
+  acceptOpenClawRisks: boolean;
+  confirmSlugReplacement: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
+  interactive: boolean;
   recipe: SkillImportRecipe;
   source: string;
-  acceptOpenClawRisks: boolean;
   stagingDirectory: string;
-  interactive: boolean;
-  confirmSlugReplacement: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
 }): Promise<SlugReplacementRequest[]> {
   const { recipe, stagingDirectory } = options;
   const recordedSlugs = recipe.skills.map((skill) => skill.slug).toSorted();

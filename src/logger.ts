@@ -4,11 +4,11 @@ import type { Runtime } from "./types.ts";
 
 /** Intent-level CLI logger that keeps status output on stderr. */
 export interface Logger {
-  success: (message: string) => void;
-  warning: (message: string) => void;
+  error: (message: string) => void;
   hint: (message: string) => void;
   info: (message: string) => void;
-  error: (message: string) => void;
+  success: (message: string) => void;
+  warning: (message: string) => void;
 }
 
 export function createLogger(runtime: Runtime): Logger {

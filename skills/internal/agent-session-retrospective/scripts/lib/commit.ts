@@ -31,11 +31,11 @@ import type {
 } from "./types.ts";
 
 export interface ValidatedFindings {
-  repoKey: string;
+  dropped: { episodes: number; fixes: number };
   episodes: FrictionEpisode[];
   fixes: DurableFixProposal[];
   repeatedAsks: RepeatedAskCluster[];
-  dropped: { episodes: number; fixes: number };
+  repoKey: string;
 }
 
 /**
@@ -102,23 +102,23 @@ interface RepoSlice {
 }
 
 export interface RunCommitOptions {
-  retroRoot?: string;
   home?: string;
+  nowIso: string;
+  retroRoot?: string;
   runTs: string;
   synthesisPath?: string;
-  nowIso: string;
 }
 
 export interface CommitResult {
-  reportPath: string;
-  sourcePaths: {
-    session: string;
-    pr: string;
-  };
-  frozenSessions: number;
   appendedSessions: number;
   dropped: { episodes: number; fixes: number };
+  frozenSessions: number;
   prAnalysis: { present: boolean; warnings: string[] };
+  reportPath: string;
+  sourcePaths: {
+    pr: string;
+    session: string;
+  };
 }
 
 export function runCommit(options: RunCommitOptions): CommitResult {
@@ -241,9 +241,9 @@ function secondaryRootsOf(session: BundleSession, slices: RepoSlice[]): string[]
 // --- report (action-first, design decision 16) -------------------------------
 
 interface ReportContext {
-  window?: RetrospectiveWindow | null;
   prAnalysis?: string | null;
   prAnalysisWarnings?: string[];
+  window?: RetrospectiveWindow | null;
 }
 
 export function buildReport(
@@ -260,7 +260,7 @@ export function buildReportArtifacts(
   synthesis: string,
   slices: RepoSlice[],
   context: ReportContext = {},
-): { report: string; sessionSources: string; prSources: string } {
+): { prSources: string; report: string; sessionSources: string; } {
   const out: string[] = [
     `# Agent session retrospective — ${runTs}`,
     "",
@@ -315,7 +315,7 @@ function buildSessionSources(
   for (const slice of reposWithSignal) {
     out.push(`### ${slice.validated.repoKey}`, "");
     for (const fix of slice.validated.fixes) {
-      const { target, confidence, rest } = parseFixHeader(fix.body);
+      const { confidence, rest, target } = parseFixHeader(fix.body);
       out.push(`- Target: ${target}; Confidence: ${confidence} — ${indentBody(rest)}`);
       const evidence = episodesFor(fix, slice.validated.episodes).flatMap((episode) =>
         renderEvidence(episode, slice.bundle),
@@ -566,7 +566,7 @@ function extractMarkdownSection(markdown: string, heading: string): string | nul
 }
 
 /** Pull the leading `Target:` / `Confidence:` lines out of a free-form fix body. */
-export function parseFixHeader(body: string): { target: string; confidence: string; rest: string } {
+export function parseFixHeader(body: string): { confidence: string; rest: string; target: string; } {
   let target = "unspecified";
   let confidence = "unspecified";
   const kept: string[] = [];

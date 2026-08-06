@@ -25,7 +25,7 @@ function formatCodexWorkspaceUrl(targetPath: string): string {
   return `codex://threads/new?path=${encodeURIComponent(targetPath)}`;
 }
 
-function getUrlOpener(url: string): { command: string; args: string[] } {
+function getUrlOpener(url: string): { args: string[]; command: string } {
   if (process.platform === "darwin") {
     return { args: [url], command: "open" };
   }
@@ -49,9 +49,9 @@ function canRunUrlOpener(runtime: Runtime, command: string): boolean {
 }
 
 function formatOpenFailure(result: {
-  stdout: string;
-  stderr: string;
   exitCode: number;
+  stderr: string;
+  stdout: string;
   timedOut?: boolean;
 }): string {
   if (result.timedOut === true) {

@@ -184,7 +184,7 @@ printf '%s\\n' "$@" >> ${shellQuote(logPath)}
 
 export function installFakeGh(
   binDirectory: string,
-  issues: Record<number, { title: string; body: string; comments?: readonly string[] }>
+  issues: Record<number, { body: string; comments?: readonly string[]; title: string }>
 ): string {
   const logPath = path.join(binDirectory, "gh.log");
   const issueCases = Object.entries(issues)
@@ -232,8 +232,8 @@ exit 1
 export function installFakeGhForMergedPrs(
   binDirectory: string,
   options: {
-    repo: string;
     prsByHead: Record<string, unknown[]>;
+    repo: string;
   }
 ): string {
   const logPath = path.join(binDirectory, "gh.log");
@@ -281,15 +281,15 @@ exit 1
 }
 
 interface RunMonkeOptions {
-  cwd: string;
   args: string[];
-  monkeHome: string;
   binDirectory?: string;
+  cwd: string;
   extraEnv?: Record<string, string | undefined>;
+  monkeHome: string;
 }
 
 function captureMonkeRun(options: RunMonkeOptions): {
-  output: () => { stdout: string; stderr: string };
+  output: () => { stderr: string; stdout: string };
   runtime: ReturnType<typeof createRuntime>;
 } {
   let stdout = "";
@@ -316,7 +316,7 @@ function captureMonkeRun(options: RunMonkeOptions): {
   };
 }
 
-export function runMonke(options: RunMonkeOptions): { stdout: string; stderr: string } {
+export function runMonke(options: RunMonkeOptions): { stderr: string; stdout: string } {
   const captured = captureMonkeRun(options);
 
   runCli(options.args, captured.runtime);
@@ -325,8 +325,8 @@ export function runMonke(options: RunMonkeOptions): { stdout: string; stderr: st
 
 export function runMonkeCapturingFailure(options: RunMonkeOptions): {
   error: unknown;
-  stdout: string;
   stderr: string;
+  stdout: string;
 } {
   const captured = captureMonkeRun(options);
 
@@ -339,14 +339,14 @@ export function runMonkeCapturingFailure(options: RunMonkeOptions): {
 }
 
 export async function runMonkeAsync(options: {
-  cwd: string;
   args: string[];
-  monkeHome: string;
   binDirectory?: string;
+  cwd: string;
   extraEnv?: Record<string, string | undefined>;
-  selectValues?: string[];
+  monkeHome: string;
   onSelect?: (prompt: SelectPrompt) => void;
-}): Promise<{ stdout: string; stderr: string }> {
+  selectValues?: string[];
+}): Promise<{ stderr: string; stdout: string }> {
   let stdout = "";
   let stderr = "";
   const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);

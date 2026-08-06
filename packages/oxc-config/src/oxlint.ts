@@ -1,6 +1,20 @@
+import { createRequire } from "node:module";
+
 import type { OxlintConfig, OxlintOverride } from "oxlint";
 import core from "ultracite/oxlint/core";
 import vitest from "ultracite/oxlint/vitest";
+
+const localRequire = createRequire(import.meta.url);
+
+const jsdocPlugin = {
+  name: "jsdoc-js",
+  specifier: localRequire.resolve("eslint-plugin-jsdoc")
+} as const;
+
+const perfectionistPlugin = {
+  name: "perfectionist",
+  specifier: localRequire.resolve("eslint-plugin-perfectionist")
+} as const;
 
 const defaultTestFiles = [
   "**/*.{test,spec}.{ts,tsx,js,jsx}",
@@ -27,6 +41,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
   const {
     extends: extensions = [],
     ignorePatterns = [],
+    jsPlugins = [],
     options: lintOptions = {},
     overrides = [],
     rules = {},
@@ -59,6 +74,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       ...generatedFileIgnorePatterns,
       ...ignorePatterns
     ],
+    jsPlugins: [jsdocPlugin, perfectionistPlugin, ...(jsPlugins ?? [])],
     options: {
       typeAware: true,
       typeCheck: true,
@@ -76,8 +92,10 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
         files: [...testFiles],
         rules: {
           "no-await-in-loop": "off",
+          "no-console": "off",
           "no-inline-comments": "off",
           "no-script-url": "off",
+          "node/no-process-env": "off",
           "require-await": "off",
           // TODO: Reconsider after test generators and setup provide ergonomic, fully typed mocks and fixtures.
           "typescript/no-dynamic-delete": "off",
@@ -86,6 +104,12 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
           "typescript/unbound-method": "off",
           "unicorn/consistent-function-scoping": "off",
           "unicorn/no-object-as-default-parameter": "off"
+        }
+      },
+      {
+        files: ["**/skills/**"],
+        rules: {
+          "node/no-process-env": "off"
         }
       },
       {
@@ -100,7 +124,9 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "class-methods-use-this": "off",
       eqeqeq: ["error", "smart"],
       "func-style": "off",
+      "jsdoc-js/no-undefined-types": "error",
       "max-classes-per-file": "off",
+      "no-console": "error",
       "no-eq-null": "off",
       // Negated branches are often clearest for guard clauses and explicit definedness checks.
       "no-negated-condition": "off",
@@ -108,12 +134,28 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       // Declaration order is a readability choice; TypeScript catches unsafe temporal-dead-zone access.
       "no-use-before-define": ["error", { classes: false, functions: false, variables: false }],
       "no-warning-comments": "off",
+      // Read and validate environment variables through a centralized configuration boundary.
+      "node/no-process-env": "error",
+      "perfectionist/sort-enums": [
+        "error",
+        {
+          partitionByComment: true,
+          sortByValue: "always"
+        }
+      ],
+      "perfectionist/sort-heritage-clauses": "error",
+      "perfectionist/sort-interfaces": "error",
+      "perfectionist/sort-jsx-props": "error",
+      "perfectionist/sort-object-types": "error",
+      "perfectionist/sort-objects": ["error", { partitionByComment: true }],
       "prefer-regex-literals": "off",
       "promise/avoid-new": "off",
       "promise/prefer-await-to-callbacks": "off",
       "promise/prefer-await-to-then": "off",
+      "sort-keys": "off",
       // Optional-result helpers read naturally as an early value return followed by implicit undefined.
       "typescript/consistent-return": "off",
+      "typescript/explicit-module-boundary-types": "off",
       "typescript/no-extraneous-class": ["error", { allowWithDecorator: true }],
       "typescript/parameter-properties": "off",
       "typescript/prefer-nullish-coalescing": [

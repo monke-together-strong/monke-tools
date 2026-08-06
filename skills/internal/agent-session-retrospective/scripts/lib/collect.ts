@@ -22,16 +22,16 @@ import type {
 } from "./types.ts";
 
 export interface EligibilityInput {
-  nowMs: number;
-  idleMs: number;
   activityMs: number;
+  idleMs: number;
+  nowMs: number;
   sinceMs?: number;
   untilMs?: number;
 }
 
 export type Eligibility =
   | { include: false; reason: string }
-  | { include: true; firstNewTurnIndex: number; priorFindingCount: number };
+  | { firstNewTurnIndex: number; include: true; priorFindingCount: number };
 
 /**
  * Decide whether a session is eligible for analysis this run: inside the window,
@@ -68,10 +68,10 @@ export function decideEligibility(
 }
 
 export interface EligibleSession {
-  session: CanonicalSession;
-  primaryRepo: string;
   firstNewTurnIndex: number;
+  primaryRepo: string;
   priorFindingCount: number;
+  session: CanonicalSession;
 }
 
 const PRIOR_DIGEST_LIMIT = 20;
@@ -141,25 +141,25 @@ function firstLine(text: string): string {
 }
 
 export interface RunCollectOptions extends DiscoverOptions {
-  retroRoot?: string;
-  nowMs?: number;
   idleMinutes?: number;
+  nowMs?: number;
+  retroRoot?: string;
+  runTs: string;
   sinceMs?: number;
   untilMs?: number;
-  runTs: string;
 }
 
 export interface CollectResult {
+  bundles: { path: string; repoHash: string; repoKey: string; sessionCount: number; }[];
   runTs: string;
-  window: RetrospectiveWindow;
-  bundles: { repoKey: string; repoHash: string; sessionCount: number; path: string }[];
   skipped: Record<string, number>;
+  window: RetrospectiveWindow;
 }
 
 interface ResolvedWindow {
-  window: RetrospectiveWindow;
   sinceMs: number;
   untilMs: number;
+  window: RetrospectiveWindow;
 }
 
 const FIRST_RUN_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;

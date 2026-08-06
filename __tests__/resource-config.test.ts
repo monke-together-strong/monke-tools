@@ -225,7 +225,7 @@ apps:
       name: "empty commands section",
       resources: `commands: {}`
     }
-  ])("loadResolvedGraph rejects resource commands with $name", ({ resources, expected }) => {
+  ])("loadResolvedGraph rejects resource commands with $name", ({ expected, resources }) => {
     const sandbox = makeTempDir("config-invalid-resource-command");
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",

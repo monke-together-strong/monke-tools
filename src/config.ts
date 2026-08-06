@@ -102,10 +102,10 @@ type RawResources = z.output<typeof ResourcesSchema>;
 
 /** Alternate repo-content readers used when resolving a Session graph. */
 export interface LoadResolvedGraphOptions {
-  /** Read the repo's `monke.yml` content from a source other than the working tree. */
-  readRepoConfig?: (sourceRoot: string) => string;
   /** Check whether a repo-relative path exists in the same content source as config. */
   pathExists?: (sourceRoot: string, relativePath: string) => boolean;
+  /** Read the repo's `monke.yml` content from a source other than the working tree. */
+  readRepoConfig?: (sourceRoot: string) => string;
 }
 
 /** Load the resolved Session graph from repo configuration. */
@@ -221,7 +221,7 @@ function parseRepoConfigObject(
   const { bootstrapCommand } = config;
   const { cleanupCommand } = config;
   const seedPaths = parseSeedPaths(config.seedPaths, sourceRoot, configPath);
-  const { resourceValuesInOrder, resourceCommandsInOrder } = parseResources(
+  const { resourceCommandsInOrder, resourceValuesInOrder } = parseResources(
     config.resources,
     configPath
   );
@@ -447,8 +447,8 @@ function parseResources(
   resources: RawResources | undefined,
   configPath: string
 ): {
-  resourceValuesInOrder: ResourceValueConfig[];
   resourceCommandsInOrder: ResourceCommandConfig[];
+  resourceValuesInOrder: ResourceValueConfig[];
 } {
   if (resources === undefined) {
     return { resourceCommandsInOrder: [], resourceValuesInOrder: [] };

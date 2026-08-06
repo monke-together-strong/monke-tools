@@ -67,12 +67,12 @@ export interface SkillInstallPreference {
 
 /** Versioned machine-local monke-tools configuration stored under the monke home directory. */
 export interface GlobalMonkeConfig {
-  /** Global config schema version. */
-  version: 1;
   /** Source checkout used by the current local monke-tools install. */
   installedSourceCheckout?: string;
   /** Current Skill install target selection. */
   skillInstallPreference?: SkillInstallPreference;
+  /** Global config schema version. */
+  version: 1;
 }
 
 /** Load versioned Global monke config from `config.yml`, returning migration-safe defaults. */

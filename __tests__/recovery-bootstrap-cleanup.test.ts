@@ -20,10 +20,10 @@ import {
 } from "./helpers.ts";
 
 function mergedPr(options: {
-  number: number;
-  head: string;
   base: string;
+  head: string;
   headRefOid: string;
+  number: number;
 }): Record<string, unknown> {
   return {
     baseRefName: options.base,
