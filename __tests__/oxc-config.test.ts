@@ -22,8 +22,7 @@ describe("shared Oxlint config", () => {
       "no-console": "error",
       "node/no-process-env": "error",
       "perfectionist/sort-objects": ["error", { partitionByComment: true }],
-      "sort-keys": "off",
-      "typescript/explicit-module-boundary-types": "error"
+      "sort-keys": "off"
     });
   });
 });

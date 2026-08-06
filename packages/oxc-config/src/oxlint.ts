@@ -147,7 +147,6 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "sort-keys": "off",
       // Optional-result helpers read naturally as an early value return followed by implicit undefined.
       "typescript/consistent-return": "off",
-      "typescript/explicit-module-boundary-types": "error",
       "typescript/no-extraneous-class": ["error", { allowWithDecorator: true }],
       "typescript/parameter-properties": "off",
       "typescript/prefer-nullish-coalescing": [
