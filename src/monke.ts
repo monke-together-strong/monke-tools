@@ -71,10 +71,10 @@ import type {
 /** Options controlling how `mt spawn` chooses source content. */
 export type SpawnOptions =
   | {
-      /** Spawn from the source checkout's current HEAD. */
-      mode: "current-head";
       /** Whether dirty source state is copied into newly created Session worktrees. */
       copyDirty: boolean;
+      /** Spawn from the source checkout's current HEAD. */
+      mode: "current-head";
     }
   | {
       /** Spawn from an existing branch named after the Session. */
@@ -103,10 +103,10 @@ export type CleanupOptions =
       mode: "dead-only";
     }
   | {
-      /** Inspect merge-cleanable Session worktrees before dead-state cleanup. */
-      mode: "merged";
       /** Whether to report merge-cleanable decisions without removing worktrees or state. */
       dryRun: boolean;
+      /** Inspect merge-cleanable Session worktrees before dead-state cleanup. */
+      mode: "merged";
     };
 
 /** Spawn or refresh a Session from the source checkout. */
@@ -209,7 +209,7 @@ export function spawnSessionFromSourceRootLocked(
         continue;
       }
 
-      let worktree: { path: string; created: boolean };
+      let worktree: { created: boolean; path: string };
       const isSessionBranchRoot =
         spawnFromSessionBranch && repoConfig.sourceRoot === rootSourceRoot;
       if (spawnFromDefaultBranch) {
@@ -597,11 +597,11 @@ function copyUntrackedPaths(
 }
 
 function rollbackDefaultBranchSpawn(options: {
-  runtime: Runtime;
+  createdWorktrees: { sourceRoot: string; worktreePath: string }[];
   home: string;
   rootSourceRoot: string;
+  runtime: Runtime;
   session: string;
-  createdWorktrees: { sourceRoot: string; worktreePath: string }[];
 }): void {
   let fullyRolledBack = true;
   for (const created of [...options.createdWorktrees].toReversed()) {
@@ -778,11 +778,11 @@ export function runCleanup(runtime: Runtime, options: CleanupOptions): void {
 }
 
 interface MergedCleanupResult {
+  decision: MergedCleanupDecision;
+  removed: boolean;
   session: string;
   sourceRoot: string;
   worktreePath: string;
-  decision: MergedCleanupDecision;
-  removed: boolean;
 }
 
 function cleanupMergedWorktrees(
@@ -831,7 +831,7 @@ function cleanupMergedWorktrees(
 
 function removeDeadSessionStates(runtime: Runtime, home: string, rootSourceRoot: string): number {
   let removed = 0;
-  const failures: { session: string; detail: string; stateFile: string }[] = [];
+  const failures: { detail: string; session: string; stateFile: string }[] = [];
 
   for (const state of listSessionStates(home)) {
     if (state.rootSourceRoot !== rootSourceRoot) {
@@ -947,28 +947,28 @@ export function runSetup(runtime: Runtime): void {
 }
 
 function materializeRepo(options: {
-  runtime: Runtime;
-  home: string;
-  rootSourceRoot: string;
-  session: string;
-  repoConfig: RepoConfig;
-  worktreePath: string;
   baselinePortsRoot: string;
-  worktreeCreated: boolean;
-  existingState: SessionRepoState | undefined;
   dependencyResults: Map<string, RepoMaterializationResult>;
+  existingState: SessionRepoState | undefined;
+  home: string;
   persistRepoState: (repoState: SessionRepoState) => void;
+  repoConfig: RepoConfig;
+  rootSourceRoot: string;
+  runtime: Runtime;
+  session: string;
+  worktreeCreated: boolean;
+  worktreePath: string;
 }): RepoMaterializationResult {
   const {
+    baselinePortsRoot,
+    dependencyResults,
+    existingState,
     home,
+    repoConfig,
     rootSourceRoot,
     session,
-    repoConfig,
-    worktreePath,
-    baselinePortsRoot,
     worktreeCreated,
-    existingState,
-    dependencyResults
+    worktreePath
   } = options;
   const hasBootstrapCommand = repoHasBootstrapCommand(repoConfig);
 
@@ -1236,13 +1236,13 @@ function toResourceCommandEnvNames(commands: ResourceCommandState[]): string[] {
 }
 
 function buildSessionRepoState(options: {
-  sourceRoot: string;
-  worktreePath: string;
   assignedPorts: AssignedPort[];
   cleanupCommand?: string;
-  resourceValues: ResourceValueState[];
-  resourceCommandOutputs: ResourceCommandState[];
   isComplete: boolean;
+  resourceCommandOutputs: ResourceCommandState[];
+  resourceValues: ResourceValueState[];
+  sourceRoot: string;
+  worktreePath: string;
 }): SessionRepoState {
   const state: SessionRepoState = {
     assignedPorts: options.assignedPorts,

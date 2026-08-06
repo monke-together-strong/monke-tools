@@ -10,13 +10,13 @@ export type AgentKind = "codex" | "claude";
 
 /** A normalized tool call: name + summarized input + collapsed output. */
 export interface CanonicalToolCall {
-  kind: "tool_call";
-  ref: string;
-  name: string;
-  inputSummary: string;
-  exitCode?: number;
   error?: string;
+  exitCode?: number;
+  inputSummary: string;
+  kind: "tool_call";
+  name: string;
   outputHeadTail?: string;
+  ref: string;
 }
 
 /** A normalized prose turn (genuine human input or assistant text). */
@@ -31,74 +31,74 @@ export type CanonicalTurn = CanonicalToolCall | CanonicalProse;
 /** A single agent transcript normalized into ordered, citable turns. */
 export interface CanonicalSession {
   agent: AgentKind;
-  sessionId: string;
-  filePath: string;
-  /** Working directory the transcript ran in; null when unrecoverable. */
-  cwd: string | null;
-  startedAt: string | null;
-  lastActivityAt: string | null;
-  /** Count of source JSONL lines (informational; the cursor is turn-based). */
-  sourceLineCount: number;
   /** Hash of the raw source bytes; detects resume growth. */
   contentHash: string;
+  /** Working directory the transcript ran in; null when unrecoverable. */
+  cwd: string | null;
+  filePath: string;
+  lastActivityAt: string | null;
+  /** Genuine human turns only (tool-result + injected-context envelopes dropped). */
+  rawUserMessages: string[];
+  sessionId: string;
+  /** Count of source JSONL lines (informational; the cursor is turn-based). */
+  sourceLineCount: number;
+  startedAt: string | null;
   /** sourceRoots the session's tool calls touched, excluding the primary. */
   touchedRoots: string[];
   turns: CanonicalTurn[];
-  /** Genuine human turns only (tool-result + injected-context envelopes dropped). */
-  rawUserMessages: string[];
 }
 
 /** One session as it appears inside a per-repo bundle handed to a subagent. */
 export interface BundleSession {
   agent: AgentKind;
-  sessionId: string;
-  sessionHash: string;
-  role: "primary" | "secondary";
+  /** Real hash of the source transcript bytes; frozen for resume-growth detection. */
+  contentHash: string;
   /** Index of the first turn not covered by a prior frozen analysis. */
   firstNewTurnIndex: number;
   priorFindingCount: number;
-  /** Real hash of the source transcript bytes; frozen for resume-growth detection. */
-  contentHash: string;
-  turns: CanonicalTurn[];
   rawUserMessages: string[];
+  role: "primary" | "secondary";
+  sessionHash: string;
+  sessionId: string;
+  turns: CanonicalTurn[];
 }
 
 /** Per-repo work unit the host fans out over, one subagent each. */
 export interface RepoBundle {
-  runTs: string;
-  repoKey: string;
-  repoHash: string;
-  sessions: BundleSession[];
   /** One-line summaries of prior frozen friction, for cross-run context. */
   priorFrictionDigest: string[];
+  repoHash: string;
+  repoKey: string;
+  runTs: string;
+  sessions: BundleSession[];
 }
 
 /** A friction episode the subagent authored; identity/citations script-owned. */
 export interface FrictionEpisode {
+  body: string;
+  citedTurnRefs: string[];
   /** Within-response id (e.g. "e1") so durable fixes can cite it. */
   id: string;
   sessionId: string;
-  citedTurnRefs: string[];
-  body: string;
 }
 
 export interface DurableFixProposal {
-  citedEpisodeRefs: string[];
   body: string;
+  citedEpisodeRefs: string[];
 }
 
 export interface RepeatedAskCluster {
-  label: string;
-  exampleSessionIds: string[];
   body: string;
+  exampleSessionIds: string[];
+  label: string;
 }
 
 /** What a per-repo subagent returns; validated by commit. */
 export interface RepoFindings {
-  repoKey: string;
-  frictionEpisodes: FrictionEpisode[];
   durableFixProposals: DurableFixProposal[];
+  frictionEpisodes: FrictionEpisode[];
   repeatedAsks: RepeatedAskCluster[];
+  repoKey: string;
 }
 
 export type RetrospectiveSinceSource = "explicit" | "previous-report" | "first-run-default";
@@ -107,35 +107,35 @@ export type RetrospectiveUntilSource = "explicit" | "now";
 /** Resolved once by collect, then read by PR analysis and commit. */
 export interface RetrospectiveWindow {
   since: string;
-  until: string;
   sinceSource: RetrospectiveSinceSource;
+  until: string;
   untilSource: RetrospectiveUntilSource;
 }
 
 /** FROZEN per-session record — written once, appended on resume, never recomputed. */
 export interface FrozenSessionRecord {
-  version: 1;
-  sessionId: string;
   agent: AgentKind;
-  repoKey: string;
-  secondary: string[];
+  analyzedAt: string;
+  contentHash: string;
+  friction: FrozenFriction[];
   /** Turn-count cursor: turns before this index are already frozen (design `last_line`). */
   lastTurnIndex: number;
-  contentHash: string;
-  analyzedAt: string;
-  friction: FrozenFriction[];
   rawUserMessages: string[];
+  repoKey: string;
+  secondary: string[];
+  sessionId: string;
+  version: 1;
 }
 
 export interface FrozenFriction {
-  id: string;
-  citedTurnRefs: string[];
   body: string;
+  citedTurnRefs: string[];
+  id: string;
 }
 
 export interface RepoMeta {
-  version: 1;
-  repoKey: string;
   firstSeenAt: string;
   lastAnalyzedAt: string;
+  repoKey: string;
+  version: 1;
 }

@@ -250,7 +250,7 @@ describe("resources", () => {
       seedPaths: [],
       sourceRoot
     };
-    const invocations: { command: string; args: string[] | undefined }[] = [];
+    const invocations: { args: string[] | undefined; command: string }[] = [];
 
     const runtime: Runtime = {
       cwd: sourceRoot,

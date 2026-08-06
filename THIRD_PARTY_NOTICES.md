@@ -21,7 +21,7 @@ monke-tools redistributes the Imported guidance listed below. Each upstream lice
 ### Matt Pocock skills
 
 - Source: <https://github.com/mattpocock/skills>
-- Included material: `skills/imported/code-review`, `skills/imported/codebase-design`, `skills/imported/diagnosing-bugs`, `skills/imported/domain-modeling`, `skills/imported/grill-with-docs`, `skills/imported/grilling`, `skills/imported/handoff`, `skills/imported/improve-codebase-architecture`, `skills/imported/prototype`, `skills/imported/research`, `skills/imported/resolving-merge-conflicts`, `skills/imported/setup-matt-pocock-skills`, `skills/imported/tdd`, `skills/imported/teach`, `skills/imported/to-spec`, `skills/imported/to-tickets`, `skills/imported/triage`, `skills/imported/wayfinder`, `skills/imported/wizard`, and `skills/imported/writing-for-agents`
+- Included material: `skills/imported/code-review`, `skills/imported/codebase-design`, `skills/imported/diagnosing-bugs`, `skills/imported/domain-modeling`, `skills/imported/grill-with-docs`, `skills/imported/grilling`, `skills/imported/handoff`, `skills/imported/improve-codebase-architecture`, `skills/imported/prototype`, `skills/imported/research`, `skills/imported/resolving-merge-conflicts`, `skills/imported/setup-matt-pocock-skills`, `skills/imported/tdd`, `skills/imported/teach`, `skills/imported/to-questionnaire`, `skills/imported/to-spec`, `skills/imported/to-tickets`, `skills/imported/triage`, `skills/imported/wayfinder`, `skills/imported/wait-what`, `skills/imported/wizard`, and `skills/imported/writing-for-agents`
 - Copyright: Copyright (c) 2026 Matt Pocock
 - License: MIT
 

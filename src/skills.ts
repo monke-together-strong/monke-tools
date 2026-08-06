@@ -49,18 +49,18 @@ const TARGET_OPTIONS: { kind: SkillInstallTargetKind; label: string }[] = [
 
 /** A Skill install target resolved to an Agent skill root on disk. */
 export interface ResolvedSkillInstallTarget {
-  /** Configured target kind that produced this resolved root. */
-  kind: SkillInstallTargetKind;
   /** Concrete Agent skill root directory on disk. */
   agentSkillRoot: string;
+  /** Configured target kind that produced this resolved root. */
+  kind: SkillInstallTargetKind;
   /** Managed monke-tools namespace path inside the Agent skill root. */
   namespacePath: string;
 }
 
 /** Resolve stored Skill install target preferences into concrete Agent skill root paths. */
 export function resolveSkillInstallTargets(options: {
-  preference: SkillInstallPreference;
   homeDirectory: string;
+  preference: SkillInstallPreference;
 }): ResolvedSkillInstallTarget[] {
   return options.preference.targets.map((target) => {
     const agentSkillRoot =
@@ -150,10 +150,10 @@ export async function runLocalInstallSkills(
 
 /** Reconcile selected Agent skill roots with the monke-tools Skill source tree. */
 export function reconcileSkillNamespaces(options: {
-  sourceCheckout: string;
-  previousPreference: SkillInstallPreference | null;
-  nextPreference: SkillInstallPreference;
   homeDirectory: string;
+  nextPreference: SkillInstallPreference;
+  previousPreference: SkillInstallPreference | null;
+  sourceCheckout: string;
   writeMessage: (message: string) => void;
 }): void {
   const skillSourceTree = resolveSkillSourceTree(options.sourceCheckout);
@@ -202,7 +202,7 @@ export function reconcileSkillNamespaces(options: {
 }
 
 /** Normalize one custom Agent skill root path for storage in Global monke config. */
-function normalizeCustomSkillRoot(options: { input: string; homeDirectory: string }): string {
+function normalizeCustomSkillRoot(options: { homeDirectory: string; input: string }): string {
   const trimmed = options.input.trim();
   if (!trimmed) {
     throw new MonkeError("Custom Skill install target path must be a non-empty absolute path");
@@ -271,8 +271,8 @@ async function promptForSkillInstallPreference(
 
 function resolveCustomSkillRootAnswer(options: {
   answer: string;
-  previousPath: string | undefined;
   homeDirectory: string;
+  previousPath: string | undefined;
 }): string {
   if (options.answer.trim() === "" && options.previousPath) {
     return options.previousPath;

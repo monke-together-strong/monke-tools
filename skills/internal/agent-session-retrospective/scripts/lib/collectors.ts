@@ -13,7 +13,7 @@ interface DiscoveredFile {
   filePath: string;
 }
 
-function readJsonlLines(filePath: string): { records: unknown[]; lineCount: number; hash: string } {
+function readJsonlLines(filePath: string): { hash: string; lineCount: number; records: unknown[]; } {
   const raw = readFileSync(filePath, "utf-8");
   const hash = createHash("sha256").update(raw).digest("hex");
   const lines = raw.split("\n");
@@ -448,7 +448,7 @@ function parseSessionWithAdapter(
   filePath: string,
   adapter: SessionAdapter,
 ): CanonicalSession | null {
-  const { records, lineCount, hash } = readJsonlLines(filePath);
+  const { hash, lineCount, records } = readJsonlLines(filePath);
   if (records.length === 0) {
     return null;
   }
@@ -484,9 +484,9 @@ function noteActivity(session: DecodedSession, record: Record<string, unknown>):
 // ---------------------------------------------------------------------------
 
 export interface DiscoverOptions {
-  home?: string;
-  codexRoot?: string;
   claudeRoot?: string;
+  codexRoot?: string;
+  home?: string;
 }
 
 /** Enumerate Codex + Claude transcript files on disk. */

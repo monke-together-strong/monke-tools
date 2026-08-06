@@ -242,8 +242,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
     });
     write(repoRoot, "README.md", "dirty\n");
 
@@ -264,8 +264,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
     });
 
     git(repoRoot, ["branch", "banana", "HEAD"]);
@@ -298,8 +298,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
     });
 
     git(repoRoot, ["branch", "banana", "HEAD"]);
@@ -322,8 +322,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
     });
     write(repoRoot, "README.md", "staged\n");
     git(repoRoot, ["add", "README.md"]);
@@ -345,8 +345,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "a\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "a\n"
     });
     write(repoRoot, "README.md", "b\n");
     git(repoRoot, ["add", "README.md"]);
@@ -367,8 +367,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
     });
     rmSync(path.join(repoRoot, "README.md"));
 
@@ -389,8 +389,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
     });
     write(repoRoot, "notes/nested.txt", "carry me\n");
 
@@ -411,8 +411,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
     });
     const outsideFile = path.join(sandbox, "outside-secret.txt");
     write(sandbox, "outside-secret.txt", "do not copy\n");
@@ -440,8 +440,8 @@ describe("single-repo sessions", () => {
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "ignored.txt\n",
-      "README.md": "clean\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
     });
     write(repoRoot, "ignored.txt", "leave behind\n");
 
@@ -462,8 +462,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
     });
     write(repoRoot, "README.md", "dirty\n");
 
@@ -483,8 +483,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "clean\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
     });
 
     runMonke({
@@ -584,8 +584,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "main\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "main\n"
     });
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "README.md", "dirty feature\n");
@@ -608,8 +608,8 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "README.md": "main\n",
-      "monke.yml": "apps: {}\n"
+      "monke.yml": "apps: {}\n",
+      "README.md": "main\n"
     });
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "README.md", "dirty feature\n");

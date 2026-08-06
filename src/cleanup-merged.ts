@@ -29,20 +29,12 @@ const MergedPrInputSchema = z.object({
 
 /** GitHub metadata used to prove that one Session branch was merged. */
 export interface MergedPrMatch {
-  /** Pull request number. */
-  number: number;
-  /** Pull request head branch name. */
-  headRefName: string;
   /** Pull request base branch name. */
   baseRefName: string;
+  /** Pull request head branch name. */
+  headRefName: string;
   /** Commit OID of the pull request head at merge time. */
   headRefOid: string | null;
-  /** Pull request merged timestamp. */
-  mergedAt?: string;
-  /** Pull request URL. */
-  url?: string;
-  /** Whether GitHub reports that the PR head came from another repository. */
-  isCrossRepository?: boolean;
   /** GitHub head repository metadata. */
   headRepository?: {
     /** Repository name without owner. */
@@ -55,63 +47,71 @@ export interface MergedPrMatch {
     /** Repository owner login. */
     login?: string;
   } | null;
+  /** Whether GitHub reports that the PR head came from another repository. */
+  isCrossRepository?: boolean;
+  /** Pull request merged timestamp. */
+  mergedAt?: string;
+  /** Pull request number. */
+  number: number;
+  /** Pull request URL. */
+  url?: string;
 }
 
 /** Inputs that identify one recorded Session worktree cleanup candidate. */
 export interface MergedCleanupCandidate {
-  /** Source checkout root for the recorded Session repo. */
-  sourceRoot: string;
   /** Session branch name recorded in Session state. */
   session: string;
+  /** Source checkout root for the recorded Session repo. */
+  sourceRoot: string;
   /** Recorded Session worktree path. */
   worktreePath: string;
 }
 
 /** Local and GitHub evidence collected for one merge-cleanable worktree decision. */
 export interface MergedCleanupSnapshot {
-  /** Session branch name recorded in Session state. */
-  session: string;
+  /** Branch currently checked out in the worktree, or null for detached HEAD. */
+  branch: string | null;
   /** Default branch name used as the required PR base. */
   defaultBranch: string;
-  /** Source checkout root for the recorded Session repo. */
-  sourceRoot: string;
+  /** Whether the path points at the source checkout rather than a Session worktree. */
+  isSourceCheckout: boolean;
+  /** Local HEAD OID for the worktree. */
+  localHead: string | null;
+  /** Safe failure reason from default branch resolution or GitHub lookup. */
+  lookupError: string | null;
+  /** Matching merged PR metadata returned by GitHub. */
+  matchingMergedPrs: MergedPrMatch[];
   /** GitHub owner/repository name for the source checkout. */
   repositoryFullName: string | null;
-  /** Recorded Session worktree path. */
-  worktreePath: string;
+  /** Whether the worktree belongs to the expected source repository. */
+  sameGitRepository: boolean;
+  /** Session branch name recorded in Session state. */
+  session: string;
+  /** Source checkout root for the recorded Session repo. */
+  sourceRoot: string;
+  /** Failure reason when normal Git status could not prove the worktree clean. */
+  statusError: string | null;
+  /** Normal Git status lines, including untracked files and excluding ignored files. */
+  statusLines: string[];
   /** Whether the recorded worktree path exists on disk. */
   worktreeExists: boolean;
   /** Whether the path is itself the root of a Git worktree. */
   worktreeIsGitRoot: boolean;
-  /** Whether the path points at the source checkout rather than a Session worktree. */
-  isSourceCheckout: boolean;
-  /** Whether the worktree belongs to the expected source repository. */
-  sameGitRepository: boolean;
-  /** Branch currently checked out in the worktree, or null for detached HEAD. */
-  branch: string | null;
-  /** Local HEAD OID for the worktree. */
-  localHead: string | null;
-  /** Normal Git status lines, including untracked files and excluding ignored files. */
-  statusLines: string[];
-  /** Failure reason when normal Git status could not prove the worktree clean. */
-  statusError: string | null;
-  /** Matching merged PR metadata returned by GitHub. */
-  matchingMergedPrs: MergedPrMatch[];
-  /** Safe failure reason from default branch resolution or GitHub lookup. */
-  lookupError: string | null;
+  /** Recorded Session worktree path. */
+  worktreePath: string;
 }
 
 /** Decision for one recorded Session worktree. */
 export interface MergedCleanupDecision {
   /** Whether the worktree satisfies the full merge-cleanable predicate. */
   eligible: boolean;
-  /** Reasons that blocked cleanup when the worktree was not eligible. */
-  reasons: string[];
   /** Positive evidence collected for eligible or partially validated candidates. */
   evidence: string[];
+  /** Reasons that blocked cleanup when the worktree was not eligible. */
+  reasons: string[];
 }
 
-type LookupResult = { ok: true; value: string } | { ok: false; error: string };
+type LookupResult = { ok: true; value: string } | { error: string; ok: false };
 
 /** Per-run cache for repo-scoped merged-cleanup lookups. */
 export interface MergedCleanupLookupCache {
@@ -130,7 +130,7 @@ export function createMergedCleanupLookupCache(): MergedCleanupLookupCache {
 export function inspectMergedWorktreeCleanup(
   runtime: Runtime,
   candidate: MergedCleanupCandidate,
-  options: { refreshDefaultBranch?: boolean; cache?: MergedCleanupLookupCache } = {}
+  options: { cache?: MergedCleanupLookupCache; refreshDefaultBranch?: boolean } = {}
 ): MergedCleanupDecision {
   let defaultBranch = options.cache?.defaultBranchBySourceRoot.get(candidate.sourceRoot);
   if (!defaultBranch) {
@@ -319,9 +319,9 @@ function buildMergedCleanupSnapshot(
   runtime: Runtime,
   options: MergedCleanupCandidate & {
     defaultBranch: string;
-    repositoryFullName: string | null;
-    matchingMergedPrs: MergedPrMatch[];
     lookupError: string | null;
+    matchingMergedPrs: MergedPrMatch[];
+    repositoryFullName: string | null;
   }
 ): MergedCleanupSnapshot {
   const worktree = inspectWorktree(runtime, options);
@@ -437,7 +437,7 @@ function getDefaultBranch(
   runtime: Runtime,
   sourceRoot: string,
   options: { refresh: boolean }
-): { ok: true; value: string } | { ok: false; error: string } {
+): { ok: true; value: string } | { error: string; ok: false } {
   try {
     return {
       ok: true,
@@ -454,7 +454,7 @@ function getDefaultBranch(
 function getGithubRepositoryFullName(
   runtime: Runtime,
   sourceRoot: string
-): { ok: true; value: string } | { ok: false; error: string } {
+): { ok: true; value: string } | { error: string; ok: false } {
   try {
     const result = runtime.exec("gh", ["repo", "view", "--json", "nameWithOwner"], {
       allowFailure: true,
@@ -478,12 +478,12 @@ function getGithubRepositoryFullName(
 function queryMergedPrs(
   runtime: Runtime,
   options: {
-    sourceRoot: string;
+    defaultBranch: string;
     repositoryFullName: string;
     session: string;
-    defaultBranch: string;
+    sourceRoot: string;
   }
-): { ok: true; value: MergedPrMatch[] } | { ok: false; error: string } {
+): { ok: true; value: MergedPrMatch[] } | { error: string; ok: false } {
   try {
     const result = runtime.exec(
       "gh",
@@ -560,7 +560,7 @@ function tryGit(
   runtime: Runtime,
   cwd: string,
   args: string[]
-): { ok: true; value: string } | { ok: false; error: string } {
+): { ok: true; value: string } | { error: string; ok: false } {
   try {
     const result = runtime.exec("git", args, { allowFailure: true, cwd });
     if (result.exitCode !== 0) {
@@ -587,7 +587,7 @@ function realpathOrNull(targetPath: string): string | null {
   }
 }
 
-function commandDetail(result: { stdout: string; stderr: string; exitCode: number }): string {
+function commandDetail(result: { exitCode: number; stderr: string; stdout: string }): string {
   return result.stderr.trim() || result.stdout.trim() || `exit code ${result.exitCode}`;
 }
 

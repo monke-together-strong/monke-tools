@@ -6,10 +6,10 @@ import { createLogger } from "./logger.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 
 export interface WorktreeEntry {
-  path: string;
   branch: string | null;
   /** Null when unlocked; otherwise the optional Git worktree lock reason. */
   locked: string | null;
+  path: string;
   prunable: boolean;
 }
 
@@ -34,9 +34,9 @@ export interface DefaultBranchRef {
 }
 
 interface ResolveRepoContextOptions {
-  inferSessionName?: boolean;
   allowExternalSessionWorktree?: boolean;
   allowSessionBranchMismatch?: boolean;
+  inferSessionName?: boolean;
 }
 
 export function resolveRepoContext(
@@ -287,7 +287,7 @@ export function ensureSessionWorktree(
   sourceRoot: string,
   session: string,
   options: { skipCleanCheck?: boolean } = {}
-): { path: string; created: boolean } {
+): { created: boolean; path: string } {
   validateSessionBranchName(runtime, sourceRoot, session);
 
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
@@ -349,7 +349,7 @@ export function ensureFreshSessionWorktreeFromRef(
   sourceRoot: string,
   session: string,
   startRef: string
-): { path: string; created: boolean } {
+): { created: boolean; path: string } {
   assertFreshSessionWorktreeAvailable(runtime, home, sourceRoot, session);
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
 
@@ -512,7 +512,7 @@ function refExists(runtime: Runtime, sourceRoot: string, ref: string): boolean {
   return result.exitCode === 0;
 }
 
-function formatCommandDetail(result: { stdout: string; stderr: string }): string {
+function formatCommandDetail(result: { stderr: string; stdout: string }): string {
   const detail = (result.stderr || result.stdout).trim();
   return detail ? `: ${detail}` : "";
 }
