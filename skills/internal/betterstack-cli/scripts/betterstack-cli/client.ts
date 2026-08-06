@@ -43,11 +43,7 @@ export interface BetterStackConnectionsResponse {
 }
 
 export class BetterStackClient {
-  readonly #token: string;
-
-  constructor(token: string) {
-    this.#token = token;
-  }
+  constructor(private readonly token: string) {}
 
   getSource(id: number): Promise<string> {
     return this.#requestJsonText(`https://telemetry.betterstack.com/api/v1/sources/${id}`);
@@ -92,18 +88,18 @@ export class BetterStackClient {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return readTextResponse(response);
+    return await readTextResponse(response);
   }
 
   async #requestJsonText(url: string): Promise<string> {
     const response = await fetch(url, {
       headers: {
-        Authorization: `Bearer ${this.#token}`
+        Authorization: `Bearer ${this.token}`
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    return readTextResponse(response);
+    return await readTextResponse(response);
   }
 }
 

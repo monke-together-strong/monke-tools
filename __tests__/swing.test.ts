@@ -182,6 +182,38 @@ describe("Swing", () => {
     expect(prompt?.options.every((option) => option.hint === undefined)).toBeTruthy();
   });
 
+  test("swing picker sorts Sessions and ordinary worktrees by shared recency", async () => {
+    const sandbox = makeTempDir("swing-picker-shared-recency");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n"
+    });
+    runMonke({ args: ["spawn", "managed-older"], cwd: repoRoot, monkeHome: home });
+    const worktreeRoot = path.join(sandbox, "ordinary-worktrees", "ordinary-newer");
+    git(repoRoot, ["branch", "ordinary-newer"]);
+    git(repoRoot, ["worktree", "add", worktreeRoot, "ordinary-newer"]);
+    git(worktreeRoot, ["commit", "--allow-empty", "-m", "newer"], {
+      GIT_AUTHOR_DATE: "2035-01-02T00:00:00Z",
+      GIT_COMMITTER_DATE: "2035-01-02T00:00:00Z"
+    });
+    let prompt: SelectPrompt | undefined;
+
+    await runMonkeAsync({
+      args: ["swing"],
+      cwd: repoRoot,
+      monkeHome: home,
+      onSelect(value) {
+        prompt = value;
+      },
+      selectValues: ["managed-older"]
+    });
+
+    expect(prompt?.options.map((option) => option.value)).toStrictEqual([
+      "ordinary-newer",
+      "managed-older"
+    ]);
+  });
+
   test("swing picker can select the Source checkout from a Session worktree", async () => {
     const sandbox = makeTempDir("swing-picker-source");
     const home = path.join(sandbox, "home");

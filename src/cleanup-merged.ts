@@ -224,7 +224,7 @@ function validateSessionBranch(
   reasons: string[],
   evidence: string[]
 ): boolean {
-  if (snapshot.branch === null || snapshot.branch === "") {
+  if (!snapshot.branch) {
     reasons.push("worktree is detached");
   } else if (snapshot.branch === snapshot.session) {
     evidence.push(`branch matches session: ${snapshot.branch}`);
@@ -240,7 +240,7 @@ function validateMergedPr(
   reasons: string[],
   evidence: string[]
 ): void {
-  if (snapshot.lookupError !== null && snapshot.lookupError !== "") {
+  if (snapshot.lookupError) {
     reasons.push(snapshot.lookupError);
     return;
   }
@@ -277,9 +277,9 @@ function validateMergedPrHead(
   reasons: string[],
   evidence: string[]
 ): void {
-  if (match.headRefOid === null || match.headRefOid === "") {
+  if (!match.headRefOid) {
     reasons.push("merged PR match did not include headRefOid");
-  } else if (localHead === null || localHead === "") {
+  } else if (!localHead) {
     reasons.push("unable to read local worktree HEAD");
   } else if (localHead === match.headRefOid) {
     evidence.push(`local HEAD matches merged PR head: ${shortSha(localHead)}`);
@@ -295,7 +295,7 @@ function validateCleanWorktree(
   reasons: string[],
   evidence: string[]
 ): void {
-  if (snapshot.statusError !== null && snapshot.statusError !== "") {
+  if (snapshot.statusError) {
     reasons.push(snapshot.statusError);
   } else if (snapshot.statusLines.length > 0) {
     reasons.push(`worktree has ${snapshot.statusLines.length} dirty/untracked status line(s)`);
@@ -537,7 +537,7 @@ function normalizeMergedPrMatch(value: unknown): MergedPrMatch {
 }
 
 function isSameRepositoryPr(match: MergedPrMatch, repositoryFullName: string | null): boolean {
-  if (repositoryFullName === null || repositoryFullName === "") {
+  if (!repositoryFullName) {
     return false;
   }
 
@@ -545,19 +545,11 @@ function isSameRepositoryPr(match: MergedPrMatch, repositoryFullName: string | n
     return false;
   }
 
-  if (
-    match.headRepository?.nameWithOwner !== undefined &&
-    match.headRepository.nameWithOwner !== ""
-  ) {
+  if (match.headRepository?.nameWithOwner) {
     return match.headRepository.nameWithOwner === repositoryFullName;
   }
 
-  if (
-    match.headRepositoryOwner?.login !== undefined &&
-    match.headRepositoryOwner.login !== "" &&
-    match.headRepository?.name !== undefined &&
-    match.headRepository.name !== ""
-  ) {
+  if (match.headRepositoryOwner?.login && match.headRepository?.name) {
     return `${match.headRepositoryOwner.login}/${match.headRepository.name}` === repositoryFullName;
   }
 

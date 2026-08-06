@@ -57,7 +57,7 @@ export function resolveRepoContext(
   const shouldInferSessionName = options.inferSessionName ?? true;
   let sessionName: string | null = null;
   if (!isSourceCheckout && shouldInferSessionName) {
-    if (home === null || home === undefined || home === "") {
+    if (!home) {
       throw new MonkeError("Unable to infer the current session without a Monke home");
     }
     sessionName = inferSessionNameForContext(
@@ -196,7 +196,7 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
 }
 
 function appendWorktreeEntry(entries: WorktreeEntry[], current: Partial<WorktreeEntry>): void {
-  if (current.path === undefined || current.path === "") {
+  if (!current.path) {
     return;
   }
   entries.push({

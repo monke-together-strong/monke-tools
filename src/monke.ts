@@ -688,7 +688,7 @@ export function runMaterialize(runtime: Runtime): void {
   if (context.isSourceCheckout) {
     throw new MonkeError("mt materialize must run inside a session worktree");
   }
-  if (context.sessionName === null || context.sessionName === "") {
+  if (!context.sessionName) {
     throw new MonkeError("Unable to infer the current session");
   }
   const session = context.sessionName;
@@ -1146,7 +1146,7 @@ function materializeRepo(options: {
 }
 
 function repoHasBootstrapCommand(repoConfig: RepoConfig): boolean {
-  return repoConfig.bootstrapCommand !== undefined && repoConfig.bootstrapCommand !== "";
+  return Boolean(repoConfig.bootstrapCommand);
 }
 
 function resolveExternalAssignments(
@@ -1250,7 +1250,7 @@ function buildSessionRepoState(options: {
     worktreePath: options.worktreePath
   };
 
-  if (options.cleanupCommand !== undefined && options.cleanupCommand !== "") {
+  if (options.cleanupCommand) {
     state.cleanupCommand = options.cleanupCommand;
   }
 
@@ -1287,7 +1287,7 @@ function runBootstrapCommand(
   externalPathAssignments: { env: string; value: string }[],
   session: string
 ): void {
-  if (repoConfig.bootstrapCommand === undefined || repoConfig.bootstrapCommand === "") {
+  if (!repoConfig.bootstrapCommand) {
     return;
   }
 

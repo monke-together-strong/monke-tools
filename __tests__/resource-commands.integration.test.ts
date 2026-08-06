@@ -926,10 +926,7 @@ function createResourceCommandScenario(options: {
   const binDirectory = path.join(sandbox, "bin");
   installShShim(binDirectory);
   const home = path.join(sandbox, "home");
-  const moduleFiles =
-    options.module !== undefined && options.module !== ""
-      ? { [moduleFilePath(options.run)]: options.module }
-      : {};
+  const moduleFiles = options.module ? { [moduleFilePath(options.run)]: options.module } : {};
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "apps/api/.env.local": options.appEnv ?? "PORT=3000\n",
     "monke.yml": options.monkeYml ?? singleCommandMonkeYml(options),
@@ -991,10 +988,9 @@ function singleCommandMonkeYml(options: {
   run?: string;
   timeoutSeconds?: number;
 }): string {
-  const resourceValues =
-    options.resourceValuesYaml !== undefined && options.resourceValuesYaml !== ""
-      ? `  values:\n${indentBlock(options.resourceValuesYaml, 4)}\n`
-      : "";
+  const resourceValues = options.resourceValuesYaml
+    ? `  values:\n${indentBlock(options.resourceValuesYaml, 4)}\n`
+    : "";
   const outputs = options.outputs ?? ["E2E_FLOW1_SYMBOL"];
   return withDefaultApp(`resources:
 ${resourceValues}  commands:

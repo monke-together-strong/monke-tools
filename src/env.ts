@@ -343,7 +343,7 @@ function splitValueAndComment(value: string): { value: string; comment: string }
 
     if (char === "#" && quote === null) {
       const previous = index === 0 ? "" : value[index - 1];
-      if (previous === undefined || previous === "" || /\s/u.test(previous)) {
+      if (!previous || /\s/u.test(previous)) {
         return {
           comment: value.slice(index),
           value: value.slice(0, index)
