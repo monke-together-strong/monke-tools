@@ -1,6 +1,13 @@
+import { createRequire } from "node:module";
+
 import type { OxlintConfig, OxlintOverride } from "oxlint";
 import core from "ultracite/oxlint/core";
 import vitest from "ultracite/oxlint/vitest";
+
+const jsdocPlugin = {
+  name: "jsdoc-js",
+  specifier: createRequire(import.meta.url).resolve("eslint-plugin-jsdoc")
+} as const;
 
 const defaultTestFiles = [
   "**/*.{test,spec}.{ts,tsx,js,jsx}",
@@ -27,6 +34,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
   const {
     extends: extensions = [],
     ignorePatterns = [],
+    jsPlugins = [],
     options: lintOptions = {},
     overrides = [],
     rules = {},
@@ -59,6 +67,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       ...generatedFileIgnorePatterns,
       ...ignorePatterns
     ],
+    jsPlugins: [jsdocPlugin, ...(jsPlugins ?? [])],
     options: {
       typeAware: true,
       typeCheck: true,
@@ -100,6 +109,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "class-methods-use-this": "off",
       eqeqeq: ["error", "smart"],
       "func-style": "off",
+      "jsdoc-js/no-undefined-types": "error",
       "max-classes-per-file": "off",
       "no-eq-null": "off",
       // Negated branches are often clearest for guard clauses and explicit definedness checks.
