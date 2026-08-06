@@ -92,6 +92,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
         files: [...testFiles],
         rules: {
           "no-await-in-loop": "off",
+          "no-console": "off",
           "no-inline-comments": "off",
           "no-script-url": "off",
           "node/no-process-env": "off",
