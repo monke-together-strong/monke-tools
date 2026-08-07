@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -33,6 +33,8 @@ const LockTimestampSchema = z.number();
 
 /** Runtime construction options for CLI commands and integration-style tests. */
 export interface RuntimeOptions {
+  /** Make the next select prompt follow the normal cancellation path in tests. */
+  cancelSelect?: boolean;
   /** Current working directory used by command execution. */
   cwd?: string;
   /** Environment overrides merged over the process environment. */
@@ -79,6 +81,13 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     exec(command: string, args: string[] = [], execOptions?: ExecOptions): ExecResult {
       return executeCommand(runtimeEnv, runtimeCwd, command, args, execOptions);
     },
+    execAsync(
+      command: string,
+      args: string[] = [],
+      execOptions?: ExecOptions
+    ): Promise<ExecResult> {
+      return executeCommandAsync(runtimeEnv, runtimeCwd, command, args, execOptions);
+    },
     async multiSelect(prompt): Promise<string[]> {
       options?.onMultiSelect?.(prompt);
       if (scriptedMultiSelectValues !== null) {
@@ -113,6 +122,9 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     },
     async select(prompt): Promise<string> {
       options?.onSelect?.(prompt);
+      if (options?.cancelSelect === true) {
+        throwSelectionCancelled(prompt.message);
+      }
       if (scriptedSelectValues !== null) {
         const selected = scriptedSelectValues.shift();
         if (selected === undefined) {
@@ -126,7 +138,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
 
       const selected = await clackSelect(prompt);
       if (isCancel(selected)) {
-        throw new MonkeError(`${prompt.message} cancelled`);
+        throwSelectionCancelled(prompt.message);
       }
       return selected;
     },
@@ -142,6 +154,10 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       writeStdout(text);
     }
   };
+}
+
+function throwSelectionCancelled(message: string): never {
+  throw new MonkeError(`${message} cancelled`);
 }
 
 function executeCommand(
@@ -166,6 +182,68 @@ function executeCommand(
     return handleSpawnError(result, command, args, options?.allowFailure === true);
   }
   return handleCompletedCommand(result, command, args, options?.allowFailure === true);
+}
+
+function executeCommandAsync(
+  runtimeEnv: Record<string, string | undefined>,
+  runtimeCwd: string,
+  command: string,
+  args: string[],
+  options: ExecOptions | undefined
+): Promise<ExecResult> {
+  const childEnv = { ...runtimeEnv, ...options?.env };
+  delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options?.cwd ?? runtimeCwd,
+      env: childEnv,
+      stdio: "pipe"
+    });
+    let stderr = "";
+    let stdout = "";
+    let timedOut = false;
+    const timeout =
+      options?.timeoutSeconds === undefined
+        ? undefined
+        : setTimeout(() => {
+            timedOut = true;
+            child.kill("SIGTERM");
+          }, options.timeoutSeconds * 1000);
+
+    child.stdout.setEncoding("utf-8");
+    child.stderr.setEncoding("utf-8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.once("error", (error) => {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+      reject(new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`));
+    });
+    child.once("close", (code, signal) => {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+      const exitCode = timedOut ? -1 : (code ?? -1);
+      if (timedOut && options?.allowFailure === true) {
+        resolve({ exitCode, stderr, stdout, timedOut: true });
+        return;
+      }
+      if (code !== 0 && options?.allowFailure !== true) {
+        const reason =
+          stderr.trim() || stdout.trim() || `terminated by signal ${signal ?? "unknown"}`;
+        reject(new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`));
+        return;
+      }
+      resolve({ exitCode, stderr, stdout });
+    });
+    child.stdin.end(options?.stdin);
+  });
 }
 
 function handleSpawnError(

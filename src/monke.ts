@@ -209,36 +209,28 @@ export function spawnSessionFromSourceRootLocked(
         continue;
       }
 
-      let worktree: { created: boolean; path: string };
-      const isSessionBranchRoot =
-        spawnFromSessionBranch && repoConfig.sourceRoot === rootSourceRoot;
-      if (spawnFromDefaultBranch) {
-        worktree = ensureFreshSessionWorktreeFromRef(
-          runtime,
+      const { createdDiffBaseRef, createdFromDefault, isSessionBranchRoot, worktree } =
+        ensureSpawnWorktree({
+          dirtySnapshot: dirtySnapshots.get(repoConfig.sourceRoot),
+          getDefaultRef,
           home,
-          repoConfig.sourceRoot,
-          session,
-          getDefaultRef(repoConfig.sourceRoot).ref
-        );
+          options,
+          repoConfig,
+          rootSourceRoot,
+          runtime,
+          session
+        });
+      if (createdFromDefault) {
         createdDefaultWorktrees.push({
           sourceRoot: repoConfig.sourceRoot,
           worktreePath: worktree.path
         });
-      } else {
-        worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session, {
-          skipCleanCheck: shouldCopyDirty(options)
-        });
-        const dirtySnapshot = dirtySnapshots.get(repoConfig.sourceRoot);
-        if (dirtySnapshot && worktree.created) {
-          applyDirtySnapshot(runtime, repoConfig.sourceRoot, worktree.path, dirtySnapshot);
-        } else if (dirtySnapshot && dirtySnapshotHasContent(dirtySnapshot)) {
-          warnDirtyStateNotCarried(runtime, repoConfig.sourceRoot, session);
-        }
       }
 
       const materialized = materializeRepo({
         baselinePortsRoot: isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
         dependencyResults: results,
+        diffBaseRef: existingState?.diffBaseRef ?? createdDiffBaseRef,
         existingState,
         home,
         persistRepoState,
@@ -268,6 +260,64 @@ export function spawnSessionFromSourceRootLocked(
   }
 
   return rootWorktreePath;
+}
+
+function ensureSpawnWorktree(options: {
+  dirtySnapshot?: DirtySnapshot;
+  getDefaultRef: (sourceRoot: string) => DefaultBranchRef;
+  home: string;
+  options: SpawnOptions;
+  repoConfig: RepoConfig;
+  rootSourceRoot: string;
+  runtime: Runtime;
+  session: string;
+}): {
+  createdDiffBaseRef?: string;
+  createdFromDefault: boolean;
+  isSessionBranchRoot: boolean;
+  worktree: { created: boolean; path: string };
+} {
+  const { home, repoConfig, rootSourceRoot, runtime, session } = options;
+  const isSessionBranchRoot =
+    options.options.mode === "session-branch" && repoConfig.sourceRoot === rootSourceRoot;
+  if (options.options.mode === "default-branch") {
+    const defaultRef = options.getDefaultRef(repoConfig.sourceRoot).ref;
+    return {
+      createdDiffBaseRef: defaultRef,
+      createdFromDefault: true,
+      isSessionBranchRoot,
+      worktree: ensureFreshSessionWorktreeFromRef(
+        runtime,
+        home,
+        repoConfig.sourceRoot,
+        session,
+        defaultRef
+      )
+    };
+  }
+
+  const sessionBranchExisted = branchExists(runtime, repoConfig.sourceRoot, session);
+  const sourceHeadRef = resolveAttachedHeadRef(runtime, repoConfig.sourceRoot);
+  const worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session, {
+    skipCleanCheck: shouldCopyDirty(options.options)
+  });
+  if (options.dirtySnapshot && worktree.created) {
+    applyDirtySnapshot(runtime, repoConfig.sourceRoot, worktree.path, options.dirtySnapshot);
+  } else if (options.dirtySnapshot && dirtySnapshotHasContent(options.dirtySnapshot)) {
+    warnDirtyStateNotCarried(runtime, repoConfig.sourceRoot, session);
+  }
+  return {
+    createdDiffBaseRef:
+      options.options.mode === "current-head" &&
+      worktree.created &&
+      !sessionBranchExisted &&
+      sourceHeadRef !== undefined
+        ? sourceHeadRef
+        : undefined,
+    createdFromDefault: false,
+    isSessionBranchRoot,
+    worktree
+  };
 }
 
 function assertSpawnRequest(
@@ -333,6 +383,11 @@ function spawnWithoutConfig(
   rootDefaultRef: DefaultBranchRef | null
 ): string {
   assertNoGlobalWorktreePathStateCollisions(home, session, [{ sourceRoot: rootSourceRoot }]);
+  const priorSessionState = loadSessionState(home, rootSourceRoot, session);
+  const existingRepoState = priorSessionState.repos.find(
+    (repo) => repo.sourceRoot === rootSourceRoot
+  );
+  const sessionBranchExisted = branchExists(runtime, rootSourceRoot, session);
   if (options.mode === "current-head" && !options.copyDirty) {
     ensureCleanCheckout(runtime, rootSourceRoot);
   }
@@ -354,13 +409,23 @@ function spawnWithoutConfig(
           session,
           rootDefaultRef.ref
         );
+  const sourceHeadRef = resolveAttachedHeadRef(runtime, rootSourceRoot);
+  const diffBaseRef =
+    existingRepoState?.diffBaseRef ??
+    rootDefaultRef?.ref ??
+    (worktree.created &&
+    !sessionBranchExisted &&
+    sourceHeadRef !== undefined &&
+    options.mode === "current-head"
+      ? sourceHeadRef
+      : undefined);
   if (dirtySnapshot !== null && worktree.created) {
     applyDirtySnapshot(runtime, rootSourceRoot, worktree.path, dirtySnapshot);
   } else if (dirtySnapshot !== null && dirtySnapshotHasContent(dirtySnapshot)) {
     warnDirtyStateNotCarried(runtime, rootSourceRoot, session);
   }
   const sessionState = {
-    ...loadSessionState(home, rootSourceRoot, session),
+    ...priorSessionState,
     graphSource: options.mode === "current-head" ? undefined : ("session-branch" as const)
   };
   saveSessionState(
@@ -369,6 +434,7 @@ function spawnWithoutConfig(
       sessionState,
       buildSessionRepoState({
         assignedPorts: [],
+        diffBaseRef,
         isComplete: false,
         resourceCommandOutputs: [],
         resourceValues: [],
@@ -949,6 +1015,7 @@ export function runSetup(runtime: Runtime): void {
 function materializeRepo(options: {
   baselinePortsRoot: string;
   dependencyResults: Map<string, RepoMaterializationResult>;
+  diffBaseRef?: string;
   existingState: SessionRepoState | undefined;
   home: string;
   persistRepoState: (repoState: SessionRepoState) => void;
@@ -971,6 +1038,7 @@ function materializeRepo(options: {
     worktreePath
   } = options;
   const hasBootstrapCommand = repoHasBootstrapCommand(repoConfig);
+  const diffBaseRef = options.diffBaseRef || existingState?.diffBaseRef;
 
   if (worktreeCreated) {
     seedWorktreeFiles(repoConfig, worktreePath, (message) => {
@@ -982,6 +1050,7 @@ function materializeRepo(options: {
     buildSessionRepoState({
       assignedPorts: existingState?.assignedPorts ?? [],
       cleanupCommand: repoConfig.cleanupCommand,
+      diffBaseRef,
       isComplete: false,
       resourceCommandOutputs: existingState?.resourceCommandOutputs ?? [],
       resourceValues: existingState?.resourceValues ?? [],
@@ -1006,6 +1075,7 @@ function materializeRepo(options: {
       buildSessionRepoState({
         assignedPorts,
         cleanupCommand: repoConfig.cleanupCommand,
+        diffBaseRef,
         isComplete: false,
         resourceCommandOutputs,
         resourceValues: preserveStaleResourceValues(
@@ -1078,6 +1148,7 @@ function materializeRepo(options: {
       buildSessionRepoState({
         assignedPorts: localAssignedPorts,
         cleanupCommand: repoConfig.cleanupCommand,
+        diffBaseRef,
         isComplete: false,
         resourceCommandOutputs: existingState?.resourceCommandOutputs ?? [],
         resourceValues: preserveStaleResourceValues(
@@ -1136,6 +1207,7 @@ function materializeRepo(options: {
     state: buildSessionRepoState({
       assignedPorts: localAssignedPorts,
       cleanupCommand: repoConfig.cleanupCommand,
+      diffBaseRef,
       isComplete: true,
       resourceCommandOutputs: resolvedResourceCommands.commands,
       resourceValues: resolvedResourceValues.values,
@@ -1238,6 +1310,7 @@ function toResourceCommandEnvNames(commands: ResourceCommandState[]): string[] {
 function buildSessionRepoState(options: {
   assignedPorts: AssignedPort[];
   cleanupCommand?: string;
+  diffBaseRef?: string;
   isComplete: boolean;
   resourceCommandOutputs: ResourceCommandState[];
   resourceValues: ResourceValueState[];
@@ -1252,6 +1325,10 @@ function buildSessionRepoState(options: {
 
   if (options.cleanupCommand) {
     state.cleanupCommand = options.cleanupCommand;
+  }
+
+  if (options.diffBaseRef) {
+    state.diffBaseRef = options.diffBaseRef;
   }
 
   if (options.resourceValues.length > 0) {
@@ -1337,6 +1414,14 @@ function readGitPathAtRef(
 
 function runGit(runtime: Runtime, cwd: string, args: string[]): string {
   return runtime.exec("git", args, { cwd }).stdout;
+}
+
+function resolveAttachedHeadRef(runtime: Runtime, sourceRoot: string): string | undefined {
+  const result = runtime.exec("git", ["symbolic-ref", "--quiet", "HEAD"], {
+    allowFailure: true,
+    cwd: sourceRoot
+  });
+  return result.exitCode === 0 ? result.stdout.trim() : undefined;
 }
 
 function gitPathExistsAtRef(

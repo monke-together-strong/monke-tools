@@ -12,7 +12,7 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
-import { getSessionStateFilePath } from "../src/registry.ts";
+import { getSessionStateFilePath, loadSessionState } from "../src/registry.ts";
 import { hashKey } from "../src/runtime.ts";
 import type { SelectPrompt } from "../src/types.ts";
 import {
@@ -570,6 +570,7 @@ apps:
     expect(result.stderr).toContain(`Spawned or updated session ${prBranch}`);
     expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
+    expect(loadSessionState(home, repoRoot, prBranch).repos[0]?.diffBaseRef).toBeUndefined();
   });
 
   test("swing rejects an invalid existing PR Session path without creating the PR branch", () => {
