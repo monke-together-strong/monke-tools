@@ -1,12 +1,16 @@
 core:changelogs:
-  - content: "---\npackages:\n  npm:@monke-together-strong/oxc-config:\n    type: patch\n---\n\n## Allow warning comments in the shared Oxlint config\n\nThe shared Oxlint config now permits warning comments such as TODO and FIXME.\n"
-    filename: 2026-07-29-ms6ndsh9.md
+  - content: "---\nsubject: Add a shared TypeScript preset\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: minor\n---\n\n## Shared TypeScript configuration\n\nAdd a runtime-neutral TypeScript base preset with strict checking, checked indexed\naccess, explicit override markers, consistent returns, and unused-code checks.\n"
+    filename: first-typescript-config-release.md
+    v: 0.0.0
+  - content: "---\nsubject: Strengthen shared Oxlint validation\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: patch\n---\n\n## Stronger shared validation\n\nLoad `eslint-plugin-jsdoc` through Oxlint's JavaScript-plugin compatibility layer and reject\nundefined JSDoc types in every consumer while preserving consumer-provided plugins and rule\noverrides. Reject console calls and direct environment access, and require explicit module boundary\ntypes across consumers. Replace Ultracite's `sort-keys` rule with comment-aware Perfectionist\nsorting.\n"
+    filename: 2026-08-06-shared-jsdoc-validation.md
     v: 0.0.0
 core:packages:
   - id: npm:monke-tools
     updated: false
   - changelogIds:
-      - 2026-07-29-ms6ndsh9.md
+      - first-typescript-config-release.md
+      - 2026-08-06-shared-jsdoc-validation.md
     id: npm:@monke-together-strong/oxc-config
     updated: true
 npm:packages:
