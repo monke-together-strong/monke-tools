@@ -7,6 +7,8 @@ export interface Runtime {
   readonly env: Record<string, string | undefined>;
   /** Run a command with the runtime environment. */
   exec: (command: string, args?: string[], options?: ExecOptions) => ExecResult;
+  /** Run a command without blocking independent startup work. */
+  execAsync: (command: string, args?: string[], options?: ExecOptions) => Promise<ExecResult>;
   /** Select multiple values from an interactive terminal picker. */
   multiSelect: (prompt: MultiSelectPrompt) => Promise<string[]>;
   /** Read one interactive input line after writing a prompt. */

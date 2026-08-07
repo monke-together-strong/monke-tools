@@ -67,6 +67,9 @@ describe("resources", () => {
           stdout: "progress log\n"
         };
       },
+      execAsync() {
+        return Promise.reject(new Error("unexpected execAsync"));
+      },
       multiSelect() {
         return Promise.reject(new Error("unexpected multiSelect"));
       },
@@ -193,6 +196,9 @@ describe("resources", () => {
           stdout: ""
         };
       },
+      execAsync() {
+        return Promise.reject(new Error("unexpected execAsync"));
+      },
       multiSelect() {
         return Promise.reject(new Error("unexpected multiSelect"));
       },
@@ -267,6 +273,9 @@ describe("resources", () => {
           stderr: "",
           stdout: "pnpm progress log\n"
         };
+      },
+      execAsync() {
+        return Promise.reject(new Error("unexpected execAsync"));
       },
       multiSelect() {
         return Promise.reject(new Error("unexpected multiSelect"));

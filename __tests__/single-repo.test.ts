@@ -182,6 +182,7 @@ describe("single-repo sessions", () => {
     expect(sessionState.repos).toStrictEqual([
       {
         assignedPorts: [],
+        diffBaseRef: "refs/heads/main",
         materializationComplete: false,
         sourceRoot: repoRoot,
         worktreePath: worktreeRoot

@@ -29,6 +29,7 @@ const ResourceCommandStateSchema = z.strictObject({
 const SessionRepoStateSchema = z.strictObject({
   assignedPorts: z.array(AssignedPortSchema),
   cleanupCommand: NonEmptyStringSchema.optional(),
+  diffBaseRef: NonEmptyStringSchema.optional(),
   materializationComplete: z.boolean().optional(),
   resourceCommandOutputs: z.array(ResourceCommandStateSchema).optional(),
   resourceValues: z.array(ResourceValueStateSchema).optional(),
