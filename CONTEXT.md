@@ -180,6 +180,12 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Swing picker**: The interactive **Swing** mode used when `mt swing` is run without a **Swing target**, letting a user choose from the current **Root repo**'s existing local **Swing targets**. _Avoid_: Branch picker, create picker, worktree creator
 
+**Diff**: The operation that opens Codiff for the current checkout in one repo, showing either local changes alone or changes relative to a **Diff base**. _Avoid_: Review, comparison session, cross-repo diff
+
+**Diff base**: The Git branch ref used as the committed side of a Diff, resolved through its merge-base with the reviewed checkout. A Session repo may remember one in Session state. _Avoid_: Parent worktree, spawn commit, origin
+
+**Diff picker**: The interactive Diff mode that selects the committed **Diff base** from local **Swing targets** without changing the reviewed checkout or navigating the shell. _Avoid_: Head picker, worktree navigator, endpoint picker
+
 **Codex workspace launch**: An optional **Spawn** or **Swing** behavior selected with `--codex` that opens the resolved checkout as a Codex workspace. It does not create a thread. _Avoid_: Codex thread launch, Codex create, Codex worktree materialization, remote agent launch
 
 **Previous Swing target**: The last different **Swing target** remembered for one **Root repo**, used by `mt swing -` to return to a previous source, Session, or Ordinary-worktree checkout. _Avoid_: Global previous branch, shell history, last cwd

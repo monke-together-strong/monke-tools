@@ -15,6 +15,49 @@ import type { RepoConfig, RepoReservation } from "../src/types.ts";
 import { makeTempDir, write } from "./helpers.ts";
 
 describe("session registry", () => {
+  test("loadSessionState keeps legacy repo entries without an optional Diff base compatible", () => {
+    const sandbox = makeTempDir("registry-legacy-diff-base");
+    const home = path.join(sandbox, "home");
+    const sourceRoot = path.join(sandbox, "root");
+    const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
+    write(
+      home,
+      path.relative(home, statePath),
+      `version: 1
+rootSourceRoot: ${sourceRoot}
+session: banana
+repos:
+  - sourceRoot: ${sourceRoot}
+    worktreePath: /worktree
+    assignedPorts: []
+`
+    );
+
+    expect(loadSessionState(home, sourceRoot, "banana").repos[0]?.diffBaseRef).toBeUndefined();
+  });
+
+  test("loadSessionState rejects an externally persisted empty Diff base", () => {
+    const sandbox = makeTempDir("registry-invalid-diff-base");
+    const home = path.join(sandbox, "home");
+    const sourceRoot = path.join(sandbox, "root");
+    const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
+    write(
+      home,
+      path.relative(home, statePath),
+      `version: 1
+rootSourceRoot: ${sourceRoot}
+session: banana
+repos:
+  - sourceRoot: ${sourceRoot}
+    worktreePath: /worktree
+    assignedPorts: []
+    diffBaseRef: ""
+`
+    );
+
+    expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(/diffBaseRef/u);
+  });
+
   test("loadSessionState rejects corrupt persisted state with the file and field path", () => {
     const sandbox = makeTempDir("registry-corrupt-session");
     const home = path.join(sandbox, "home");

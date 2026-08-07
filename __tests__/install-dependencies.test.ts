@@ -18,6 +18,12 @@ import { makeTempDir, runMonke } from "./helpers.ts";
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("dependency installation", () => {
+  test("Brewfile declares the narrowly trusted Codiff cask", () => {
+    expect(readFileSync(path.join(projectRoot, "Brewfile"), "utf-8")).toBe(
+      'cask_args require_sha: true\ncask "nkzw-tech/tap/codiff", greedy: true, trusted: true\n'
+    );
+  });
+
   test("install-dependencies remains a compatibility no-op", () => {
     const sandbox = makeTempDir("install-dependencies-noop");
     const binDirectory = path.join(sandbox, "bin");
@@ -34,6 +40,77 @@ describe("dependency installation", () => {
 
     expect(result.stdout).toBe("");
     expect(result.stderr).toBe("Verified monke-tools runtime dependencies\n");
+  });
+
+  test("install-local installs or upgrades Brewfile dependencies", () => {
+    const sandbox = makeTempDir("install-local-homebrew-dependencies");
+    const checkout = path.join(sandbox, "checkout");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const brewLog = path.join(sandbox, "brew.log");
+    const bunLog = path.join(sandbox, "bun.log");
+    const monkeToolsLog = path.join(sandbox, "monke-tools.log");
+
+    prepareInstallFixture(checkout, binDirectory);
+    installFakePlatform(binDirectory, "Darwin", "arm64");
+    installFakeBrew(binDirectory);
+
+    const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
+      cwd: checkout,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        BREW_CHECK_EXIT: "1",
+        BREW_INSTALL_EXIT: "0",
+        BREW_LOG: brewLog,
+        BUN_LOG: bunLog,
+        HOME: home,
+        INSTALL_DEPENDENCIES_EXIT: "0",
+        MONKE_TOOLS_LOG: monkeToolsLog,
+        PATH: `${binDirectory}:/usr/bin:/bin`
+      }
+    });
+
+    expect(result.status).toBe(0);
+    expect(readFileSync(brewLog, "utf-8")).toBe(
+      `bundle check --file=${path.join(checkout, "Brewfile")}\n` +
+        `bundle install --file=${path.join(checkout, "Brewfile")}\n`
+    );
+    expect(result.stdout).toContain("Installing Homebrew dependencies...");
+  });
+
+  test("install-local stops before building when Homebrew dependency installation fails", () => {
+    const sandbox = makeTempDir("install-local-homebrew-failure");
+    const checkout = path.join(sandbox, "checkout");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const brewLog = path.join(sandbox, "brew.log");
+    const bunLog = path.join(sandbox, "bun.log");
+    const monkeToolsLog = path.join(sandbox, "monke-tools.log");
+
+    prepareInstallFixture(checkout, binDirectory);
+    installFakePlatform(binDirectory, "Darwin", "arm64");
+    installFakeBrew(binDirectory);
+
+    const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
+      cwd: checkout,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        BREW_CHECK_EXIT: "1",
+        BREW_INSTALL_EXIT: "23",
+        BREW_LOG: brewLog,
+        BUN_LOG: bunLog,
+        HOME: home,
+        INSTALL_DEPENDENCIES_EXIT: "0",
+        MONKE_TOOLS_LOG: monkeToolsLog,
+        PATH: `${binDirectory}:/usr/bin:/bin`
+      }
+    });
+
+    expect(result.status).toBe(23);
+    expect(existsSync(bunLog)).toBeFalsy();
+    expect(existsSync(monkeToolsLog)).toBeFalsy();
   });
 
   test("install-local runs dependency installation before skill installation and stops on dependency failure", () => {
@@ -192,6 +269,54 @@ function listBuildArtifacts(buildDirectory: string): string[] {
   return readdirSync(buildDirectory)
     .filter((entry) => entry.startsWith(".") && entry.endsWith(".bun-build"))
     .toSorted();
+}
+
+function prepareInstallFixture(checkout: string, binDirectory: string): void {
+  mkdirSync(path.join(checkout, "scripts"), { recursive: true });
+  mkdirSync(path.join(checkout, "src"), { recursive: true });
+  writeFileSync(
+    path.join(checkout, "scripts", "install-local.sh"),
+    readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf-8"),
+    "utf-8"
+  );
+  chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
+  writeFileSync(
+    path.join(checkout, "Brewfile"),
+    readFileSync(path.join(projectRoot, "Brewfile"), "utf-8"),
+    "utf-8"
+  );
+  writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
+  installFakeBun(binDirectory);
+}
+
+function installFakePlatform(binDirectory: string, system: string, architecture: string): void {
+  const unamePath = path.join(binDirectory, "uname");
+  writeFileSync(
+    unamePath,
+    `#!/bin/sh\nif [ "\${1:-}" = "-s" ]; then printf '%s\\n' '${system}'; else printf '%s\\n' '${architecture}'; fi\n`,
+    "utf-8"
+  );
+  chmodSync(unamePath, 0o755);
+}
+
+function installFakeBrew(binDirectory: string): void {
+  const brewPath = path.join(binDirectory, "brew");
+  writeFileSync(
+    brewPath,
+    `#!/bin/sh
+set -eu
+printf '%s\\n' "$*" >> "$BREW_LOG"
+if [ "\${1:-}" = "bundle" ] && [ "\${2:-}" = "check" ]; then
+  exit "$BREW_CHECK_EXIT"
+fi
+if [ "\${1:-}" = "bundle" ] && [ "\${2:-}" = "install" ]; then
+  exit "$BREW_INSTALL_EXIT"
+fi
+exit 2
+`,
+    "utf-8"
+  );
+  chmodSync(brewPath, 0o755);
 }
 
 function installFakeBun(binDirectory: string): void {

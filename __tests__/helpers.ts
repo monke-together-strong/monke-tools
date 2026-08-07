@@ -170,6 +170,79 @@ printf '%s\\n' "$@" >> ${shellQuote(logPath)}
   return logPath;
 }
 
+export function installFakeCodiff(
+  binDirectory: string,
+  options: {
+    delayByBase?: Record<string, number>;
+    exitCode?: number;
+    version?: string;
+    versionCoordination?: { discovery: string; started: string };
+    waitForBases?: string[];
+  } = {}
+): string {
+  const logPath = path.join(binDirectory, "codiff.log");
+  const coordinationDirectory = path.join(binDirectory, "codiff-coordination");
+  const coordinatedBases = options.waitForBases ?? [];
+  const markLaunch = coordinatedBases
+    .map(
+      (base, index) =>
+        `[ "\${2:-}" = ${shellQuote(base)} ] && touch ${shellQuote(path.join(coordinationDirectory, `started-${index}`))}`
+    )
+    .join("\n");
+  const waitForLaunches = coordinatedBases
+    .map(
+      (_base, index) =>
+        `while [ ! -f ${shellQuote(path.join(coordinationDirectory, `started-${index}`))} ]; do /bin/sleep 0.02; done`
+    )
+    .join("\n");
+  const delays = Object.entries(options.delayByBase ?? {})
+    .map(
+      ([base, seconds]) =>
+        `[ "\${2:-}" = ${shellQuote(base)} ] && /bin/sleep ${shellQuote(String(seconds))}`
+    )
+    .join("\n");
+  writeExecutable(
+    path.join(binDirectory, "codiff"),
+    `#!/bin/sh
+set -eu
+if [ "\${1:-}" = "--version" ]; then
+  ${
+    options.versionCoordination === undefined
+      ? ""
+      : `touch ${shellQuote(options.versionCoordination.started)}
+  count=0
+  while [ ! -f ${shellQuote(options.versionCoordination.discovery)} ]; do
+    count=$((count + 1))
+    [ "$count" -lt 200 ] || exit 91
+    /bin/sleep 0.01
+  done`
+  }
+  printf '%s\\n' ${shellQuote(options.version ?? "codiff v1.9.0")}
+  exit 0
+fi
+mkdir -p ${shellQuote(coordinationDirectory)}
+${markLaunch}
+${waitForLaunches}
+${delays}
+printf '%s\\n' "$@" >> ${shellQuote(logPath)}
+exit ${String(options.exitCode ?? 0)}
+`
+  );
+  return logPath;
+}
+
+export function installBrewShim(binDirectory: string): string {
+  const logPath = path.join(binDirectory, "brew.log");
+  writeExecutable(
+    path.join(binDirectory, "brew"),
+    `#!/bin/sh
+printf '%s\\n' "$@" >> ${shellQuote(logPath)}
+exit 99
+`
+  );
+  return logPath;
+}
+
 export function installWindowsCmdShim(binDirectory: string): string {
   const logPath = path.join(binDirectory, "cmd.log");
   writeExecutable(
@@ -341,6 +414,7 @@ export function runMonkeCapturingFailure(options: RunMonkeOptions): {
 export async function runMonkeAsync(options: {
   args: string[];
   binDirectory?: string;
+  cancelSelect?: boolean;
   cwd: string;
   extraEnv?: Record<string, string | undefined>;
   monkeHome: string;
@@ -352,6 +426,7 @@ export async function runMonkeAsync(options: {
   const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
 
   const runtime = createRuntime({
+    cancelSelect: options.cancelSelect,
     cwd: options.cwd,
     env: {
       MONKE_HOME: options.monkeHome,

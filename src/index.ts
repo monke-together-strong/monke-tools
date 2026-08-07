@@ -4,6 +4,7 @@ import { Argument, Command } from "@commander-js/extra-typings";
 
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
+import { runDiff, runDiffInteractive } from "./diff.ts";
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
@@ -13,13 +14,13 @@ import type { Runtime } from "./types.ts";
 
 /** Run the Monke Tools CLI. */
 export function runCli(argv: string[], runtime = createRuntime()): void {
-  const program = createProgram(runtime, runSwing);
+  const program = createProgram(runtime, runSwing, runDiff);
   program.parse(argv, { from: "user" });
 }
 
 /** Run the Monke Tools CLI with async interactive prompts enabled. */
 export async function runCliAsync(argv: string[], runtime = createRuntime()): Promise<void> {
-  const program = createProgram(runtime, runSwingInteractive);
+  const program = createProgram(runtime, runSwingInteractive, runDiffInteractive);
   await program.parseAsync(argv, { from: "user" });
 }
 
@@ -29,7 +30,8 @@ function createProgram(
     runtime: Runtime,
     target: string | undefined,
     options: { codex?: boolean }
-  ) => void | Promise<void>
+  ) => void | Promise<void>,
+  diffAction: (runtime: Runtime, options: { pick?: boolean }) => void | Promise<void>
 ): Command {
   // Subcommands copy these at .command() time, so every subcommand below must be declared after.
   const program = new Command().name("mt").allowExcessArguments(false);
@@ -66,6 +68,11 @@ function createProgram(
     .argument("[target]")
     .option("--codex")
     .action((target, options) => swingAction(runtime, target, options));
+
+  program
+    .command("diff")
+    .option("-p, --pick")
+    .action((options) => diffAction(runtime, options));
 
   program.command("materialize").action(() => {
     runMaterialize(runtime);
