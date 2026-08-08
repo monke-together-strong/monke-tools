@@ -96,6 +96,12 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Agent skill name**: The name declared inside a **Distributed skill** for agent-facing selection and display. _Avoid_: Skill slug, folder name, package skill name
 
+**Model-invoked skill**: A **Distributed skill** whose agent metadata permits the model to select it automatically from its description. This capability is independent of whether a human may invoke the skill explicitly. _Avoid_: User-invoked skill, always-loaded guidance
+
+**User-invoked skill**: A **Distributed skill** whose agent metadata permits a human to invoke it explicitly. This capability is independent of whether the model may select the skill automatically. _Avoid_: Model-invoked skill, manual-only skill
+
+**Model invocation override**: The optional agent-neutral `disableModelInvocation` value in a **Skill import recipe**. An absent value preserves upstream metadata, `true` disables model invocation, and `false` enables it when the **Imported skill** is materialized. _Avoid_: Claude metadata, Codex policy, User-invoked skill
+
 **Core distributed skill**: The monke-tools-owned **Distributed skill** covering the local install, consumer setup, session operations, and repo configuration. _Avoid_: Skill family, split skill set, command reference
 
 **Internal skill**: A monke-tools-owned **Distributed skill** distributed with the local install, whether it helps agents work on monke-tools itself or use monke-tools from a **Consumer repo**. _Avoid_: Repo skill, local skill, source-only skill

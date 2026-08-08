@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vite-plus/test";
+import { parse } from "yaml";
 
 import { normalizeImportRecipeStore } from "../scripts/import-skills.ts";
 
@@ -62,7 +63,7 @@ describe("distributed skill metadata", () => {
       recipe.skills.map((guidance) => ({ source: recipe.source, ...guidance }))
     );
 
-    expect(store.version).toBe(2);
+    expect(store.version).toBe(3);
     expect(
       importedGuidance.every((guidance) => ["skill", "reference"].includes(guidance.kind))
     ).toBeTruthy();
@@ -73,6 +74,44 @@ describe("distributed skill metadata", () => {
           guidance.selector === "code-review"
       )?.kind
     ).toBe("reference");
+    expect(
+      importedGuidance
+        .filter((guidance) => guidance.disableModelInvocation !== undefined)
+        .map(({ disableModelInvocation, slug }) => ({ disableModelInvocation, slug }))
+        .toSorted((left, right) => left.slug.localeCompare(right.slug))
+    ).toStrictEqual([
+      { disableModelInvocation: true, slug: "improve" },
+      { disableModelInvocation: true, slug: "thermo-nuclear-code-quality-review" },
+      { disableModelInvocation: false, slug: "writing-for-agents" }
+    ]);
+  });
+
+  test("tracked model invocation overrides are materialized for Claude and Codex", () => {
+    const expectedPolicies = [
+      { allowImplicitInvocation: false, disableModelInvocation: true, slug: "improve" },
+      {
+        allowImplicitInvocation: false,
+        disableModelInvocation: true,
+        slug: "thermo-nuclear-code-quality-review"
+      },
+      {
+        allowImplicitInvocation: true,
+        disableModelInvocation: false,
+        slug: "writing-for-agents"
+      }
+    ];
+
+    for (const expected of expectedPolicies) {
+      const skillRoot = path.join(projectRoot, "skills", "imported", expected.slug);
+      expect(readFileSync(path.join(skillRoot, "SKILL.md"), "utf-8")).toContain(
+        `disable-model-invocation: ${String(expected.disableModelInvocation)}`
+      );
+      expect(
+        parse(readFileSync(path.join(skillRoot, "agents", "openai.yaml"), "utf-8"))
+      ).toMatchObject({
+        policy: { allow_implicit_invocation: expected.allowImplicitInvocation }
+      });
+    }
   });
 
   test("metadata and install docs do not reference the retired package discovery path", () => {
