@@ -439,12 +439,18 @@ function transformPreparedSkillInvocationPolicy(
       throw new MonkeError(`Expected staged Codex metadata to be a regular file`);
     }
   }
-  if (!existsSync(openaiMetadataPath) && existsSync(legacyOpenaiMetadataPath)) {
-    renameSync(legacyOpenaiMetadataPath, openaiMetadataPath);
+  if (existsSync(legacyOpenaiMetadataPath)) {
+    if (existsSync(openaiMetadataPath)) {
+      unlinkSync(legacyOpenaiMetadataPath);
+    } else {
+      renameSync(legacyOpenaiMetadataPath, openaiMetadataPath);
+    }
   }
   const openaiMetadataLabel = `Codex metadata at ${openaiMetadataPath}`;
   const openaiMetadata = parseMutableYamlDocument(
-    existsSync(openaiMetadataPath) ? readFileSync(openaiMetadataPath, "utf-8") : "{}\n",
+    existsSync(openaiMetadataPath)
+      ? readFileSync(openaiMetadataPath, "utf-8")
+      : "policy:\n  allow_implicit_invocation: false\n",
     openaiMetadataLabel
   );
   parseBoundaryValue(CodexSkillMetadataSchema, openaiMetadata.toJS(), openaiMetadataLabel);

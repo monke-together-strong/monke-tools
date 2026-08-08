@@ -1378,9 +1378,9 @@ name: alpha
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toContain(
       "disable-model-invocation: true"
     );
-    expect(parse(read(sandbox, "skills/imported/alpha/agents/openai.yaml"))).toStrictEqual({
-      policy: { allow_implicit_invocation: false }
-    });
+    expect(read(sandbox, "skills/imported/alpha/agents/openai.yaml")).toBe(
+      "policy:\n  allow_implicit_invocation: false\n"
+    );
   });
 
   test("skills update normalizes legacy Codex metadata before applying an invocation override", async () => {
@@ -1431,6 +1431,55 @@ name: alpha
         allow_implicit_invocation: true,
         network: false
       }
+    });
+  });
+
+  test("skills update removes duplicate legacy Codex metadata", async () => {
+    const sandbox = makeTempDir("skill-update-invocation-remove-legacy-codex");
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log"),
+      stagedGuidance: {
+        alpha: {
+          "agents/openai.yaml": `interface:
+  display_name: Canonical Alpha
+`,
+          "agents/openai.yml": `interface:
+  display_name: Legacy Alpha
+`,
+          "SKILL.md": `---
+name: alpha
+---
+
+# Alpha
+`
+        }
+      }
+    });
+    writeImportRecipeStore(sandbox, {
+      recipes: [
+        {
+          skills: [
+            {
+              disableModelInvocation: true,
+              kind: "skill",
+              selector: "alpha",
+              slug: "alpha"
+            }
+          ],
+          source: "owner/repo"
+        }
+      ],
+      version: 3
+    });
+    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+
+    await withFakeNpx(sandbox, fakeBinDirectory, () => runUpdateSkills([], { writeMessage() {} }));
+
+    expect(existsSync(path.join(sandbox, "skills/imported/alpha/agents/openai.yml"))).toBeFalsy();
+    expect(parse(read(sandbox, "skills/imported/alpha/agents/openai.yaml"))).toStrictEqual({
+      interface: { display_name: "Canonical Alpha" },
+      policy: { allow_implicit_invocation: false }
     });
   });
 
