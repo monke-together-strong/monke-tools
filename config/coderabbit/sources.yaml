@@ -1,0 +1,5 @@
+excerpts:
+  - source: skills/references/imported/code-review/MAIN.md
+    anchor: the smell baseline below
+    heading: Code-smell review baseline
+    stopAtHeadingDepth: 3

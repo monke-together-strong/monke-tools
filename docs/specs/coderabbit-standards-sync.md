@@ -8,11 +8,14 @@ Publish the **Team coding baseline** from monke-tools to CodeRabbit's organizati
 
 - `skills/references/internal/CODING_STANDARDS.md` is the authoritative root document.
 - The renderer recursively follows repository-relative Markdown links that remain inside `skills/references/`.
+- `config/coderabbit/sources.yaml` declares additional excerpt sources without changing or linking them from the authoritative root document.
+- The code-review reference remains immutable. Its configured excerpt begins at the unique paragraph whose normalized Markdown text contains `the smell baseline below` and ends before the next heading at depth three or less.
+- Configured excerpts render under their synthetic heading without source-path or extraction-anchor metadata, while their source paths remain internal synchronization inputs.
 - External links are preserved but never fetched.
 - Images, anchors, and non-Markdown links are not traversed.
 - Missing or out-of-bound local Markdown links fail generation.
 - Already visited documents are emitted once, terminating cycles deterministically.
-- The root document is emitted first. Each dependency follows with its repository path as provenance.
+- The root document is emitted first. Each linked dependency follows with its repository path as provenance; configured excerpts do not emit provenance.
 - Repo coding standards and `AGENTS.md` override conflicting Team coding baseline rules.
 
 ## Configuration ownership
@@ -50,7 +53,7 @@ Publish the **Team coding baseline** from monke-tools to CodeRabbit's organizati
 
 ## Verification
 
-- Unit tests cover recursive rendering, provenance, cycles, missing and out-of-bound links, instruction-size enforcement, template collision, deterministic output, and relevant-change detection.
+- Unit tests cover recursive rendering, linked-document provenance, semantic excerpt extraction, missing and ambiguous excerpt anchors, cycles, missing and out-of-bound links, instruction-size enforcement, template collision, deterministic output, and relevant-change detection.
 - `vp check` and the complete test suite pass.
 - The generated file passes `cr config validate`.
 - Rollout checks CodeRabbit's resolved configuration in one Consumer repo with Repo coding standards and one without them.

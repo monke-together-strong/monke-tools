@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { Command } from "@commander-js/extra-typings";
 import { fromMarkdown } from "mdast-util-from-markdown";
+import { toString as markdownToString } from "mdast-util-to-string";
 import { visit } from "unist-util-visit";
 import { parse, stringify } from "yaml";
 import * as z from "zod";
@@ -15,11 +16,13 @@ import { MonkeError } from "../src/errors.ts";
 
 const SOURCE_ROOT = path.join("skills", "references");
 const ROOT_DOCUMENT = path.join(SOURCE_ROOT, "internal", "CODING_STANDARDS.md");
+const SOURCES_PATH = path.join("config", "coderabbit", "sources.yaml");
 const TEMPLATE_PATH = path.join("config", "coderabbit", "template.yaml");
 const MAX_INSTRUCTION_CHARACTERS = 20_000;
 export const CODE_RABBIT_SYNC_INPUTS = new Set([
   ".github/workflows/sync-coderabbit.yaml",
   "bun.lock",
+  "config/coderabbit/sources.yaml",
   "config/coderabbit/template.yaml",
   "package.json",
   "scripts/generate-coderabbit-config.ts"
@@ -48,6 +51,17 @@ const CodeRabbitTemplateSchema = z.looseObject({
         .optional()
     })
     .optional()
+});
+
+const SourceManifestSchema = z.object({
+  excerpts: z.array(
+    z.object({
+      anchor: z.string().min(1),
+      heading: z.string().min(1),
+      source: z.string().min(1),
+      stopAtHeadingDepth: z.number().int().min(1).max(6)
+    })
+  )
 });
 
 export function isCodeRabbitSyncRelevant(rawOptions: unknown) {
@@ -84,14 +98,19 @@ export function listChangedPaths(repoRoot: string, before: string, after: string
 
 export function renderCodeRabbitConfig(rawOptions: unknown) {
   const options = RenderOptionsSchema.parse(rawOptions);
-  const documents = readLinkedDocuments(options.repoRoot);
+  const documents = [
+    ...readLinkedDocuments(options.repoRoot),
+    ...readConfiguredExcerpts(options.repoRoot)
+  ];
   const templatePath = path.join(options.repoRoot, TEMPLATE_PATH);
   const template = CodeRabbitTemplateSchema.parse(parse(readFileSync(templatePath, "utf-8")));
   const instructions = [
     "This is the Team coding baseline and applies as a fallback.",
     "Repository AGENTS.md and CODING_STANDARDS.md rules override conflicting baseline rules.",
     ...documents.map((document, index) =>
-      index === 0 ? document.contents : `Source: ${document.source}\n\n${document.contents}`
+      index === 0 || !document.showSource
+        ? document.contents
+        : `Source: ${document.source}\n\n${document.contents}`
     )
   ].join("\n\n");
   if (instructions.length > MAX_INSTRUCTION_CHARACTERS) {
@@ -114,7 +133,7 @@ export function renderCodeRabbitConfig(rawOptions: unknown) {
 
   const generated = stringify(template, { lineWidth: 0 });
   return {
-    sources: documents.map((document) => document.source),
+    sources: [...new Set(documents.map((document) => document.source))],
     yaml: `# Generated from monke-together-strong/monke-tools@${options.sourceCommit}. Do not edit.\n${generated}`
   };
 }
@@ -124,22 +143,17 @@ function readLinkedDocuments(repoRoot: string) {
   const documents = new Map<string, ReturnType<typeof createSourceDocument>>();
 
   const readDocument = (relativePath: string) => {
-    const candidatePath = path.resolve(repoRoot, relativePath);
-    const normalizedSource = toRepoPath(repoRoot, candidatePath);
-    if (!existsSync(candidatePath)) {
-      throw new Error(`Linked Markdown file does not exist: ${normalizedSource}`);
-    }
-    const absolutePath = realpathSync.native(candidatePath);
+    const { absolutePath, contents, source } = readOwnedMarkdown(
+      repoRoot,
+      sourceRoot,
+      relativePath,
+      "Linked"
+    );
     if (documents.has(absolutePath)) {
       return;
     }
-    if (absolutePath !== sourceRoot && !absolutePath.startsWith(`${sourceRoot}${path.sep}`)) {
-      throw new Error(`Linked Markdown file is outside ${SOURCE_ROOT}: ${relativePath}`);
-    }
 
-    const contents = readFileSync(absolutePath, "utf-8").trimEnd();
-    const source = toRepoPath(repoRoot, absolutePath);
-    documents.set(absolutePath, createSourceDocument(contents, source));
+    documents.set(absolutePath, createSourceDocument(contents, source, true));
 
     const tree = fromMarkdown(contents);
     const definitions = new Map<string, string>();
@@ -164,8 +178,86 @@ function readLinkedDocuments(repoRoot: string) {
   return [...documents.values()];
 }
 
-function createSourceDocument(contents: string, source: string) {
-  return { contents, source };
+function readConfiguredExcerpts(repoRoot: string) {
+  const sourceRoot = realpathSync.native(path.join(repoRoot, SOURCE_ROOT));
+  const manifestPath = path.join(repoRoot, SOURCES_PATH);
+  const manifest = SourceManifestSchema.parse(parse(readFileSync(manifestPath, "utf-8")));
+
+  return manifest.excerpts.map((excerpt) => {
+    const { contents, source } = readOwnedMarkdown(
+      repoRoot,
+      sourceRoot,
+      excerpt.source,
+      "Configured excerpt"
+    );
+    const tree = fromMarkdown(contents);
+    const normalizedAnchor = normalizeSemanticText(excerpt.anchor);
+    const matches = tree.children
+      .map((node, index) => ({ index, node }))
+      .filter(
+        ({ node }) =>
+          node.type === "paragraph" &&
+          normalizeSemanticText(markdownToString(node)).includes(normalizedAnchor)
+      );
+    if (matches.length !== 1) {
+      throw new MonkeError(
+        `Configured excerpt anchor must match exactly one paragraph in ${excerpt.source}: ${JSON.stringify(excerpt.anchor)} (matched ${matches.length})`
+      );
+    }
+
+    const [match] = matches;
+    if (!match) {
+      throw new MonkeError(`Configured excerpt anchor was not found in ${excerpt.source}`);
+    }
+    const endIndex = tree.children.findIndex(
+      (node, index) =>
+        index > match.index && node.type === "heading" && node.depth <= excerpt.stopAtHeadingDepth
+    );
+    const excerptNodes = tree.children.slice(match.index, endIndex === -1 ? undefined : endIndex);
+    const [firstNode] = excerptNodes;
+    const lastNode = excerptNodes.at(-1);
+    const startOffset = firstNode?.position?.start.offset;
+    const endOffset = lastNode?.position?.end.offset;
+    if (startOffset === undefined || endOffset === undefined) {
+      throw new MonkeError(`Could not locate configured excerpt in ${excerpt.source}`);
+    }
+
+    return createSourceDocument(
+      `## ${excerpt.heading}\n\n${contents.slice(startOffset, endOffset).trim()}`,
+      source,
+      false
+    );
+  });
+}
+
+function readOwnedMarkdown(
+  repoRoot: string,
+  sourceRoot: string,
+  relativePath: string,
+  description: string
+) {
+  const candidatePath = path.resolve(repoRoot, relativePath);
+  const normalizedSource = toRepoPath(repoRoot, candidatePath);
+  if (!existsSync(candidatePath)) {
+    throw new MonkeError(`${description} Markdown file does not exist: ${normalizedSource}`);
+  }
+  const absolutePath = realpathSync.native(candidatePath);
+  if (absolutePath !== sourceRoot && !absolutePath.startsWith(`${sourceRoot}${path.sep}`)) {
+    throw new MonkeError(`${description} Markdown file is outside ${SOURCE_ROOT}: ${relativePath}`);
+  }
+  return {
+    absolutePath,
+    contents: readFileSync(absolutePath, "utf-8").trimEnd(),
+    source: toRepoPath(repoRoot, absolutePath)
+  };
+}
+
+function normalizeSemanticText(value: string) {
+  return value.replaceAll(/\s+/gu, " ").trim().toLowerCase();
+}
+
+function createSourceDocument(contents: string, source: string, showSource: boolean) {
+  return { contents, showSource, source };
 }
 
 function toRepoPath(repoRoot: string, absolutePath: string) {

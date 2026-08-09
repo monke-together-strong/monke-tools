@@ -25,7 +25,8 @@ const WorkflowSchema = z.looseObject({
   }),
   on: z.strictObject({
     push: z.looseObject({
-      branches: z.array(z.string())
+      branches: z.array(z.string()),
+      paths: z.array(z.string())
     })
   }),
   permissions: z.strictObject({
@@ -47,11 +48,19 @@ describe("CodeRabbit synchronization workflow", () => {
     const parsed = WorkflowSchema.parse(parse(workflow));
     expect(Object.keys(parsed.on)).toStrictEqual(["push"]);
     expect(parsed.on.push.branches).toStrictEqual(["main"]);
+    expect(parsed.on.push.paths).toContain("config/coderabbit/sources.yaml");
     expect(parsed.permissions).toStrictEqual({ contents: "read" });
 
     expect(parsed.jobs.publish.if).toBe("needs.prepare.outputs.relevant == 'true'");
     expect(parsed.jobs.prepare.environment).toBeUndefined();
     expect(workflow.match(/CODERABBIT_SYNC_APP_PRIVATE_KEY/gu) ?? []).toHaveLength(1);
+
+    for (const job of [parsed.jobs.prepare, parsed.jobs.publish]) {
+      const installStep = WorkflowStepSchema.parse(
+        job.steps.find((step) => step.name === "Install pinned CodeRabbit CLI")
+      );
+      expect(installStep.run).toContain('chmod 755 "$RUNNER_TEMP/coderabbit-cli/coderabbit"');
+    }
 
     const tokenStep = WorkflowStepSchema.parse(
       parsed.jobs.publish.steps.find((step) => step.name === "Create destination token")

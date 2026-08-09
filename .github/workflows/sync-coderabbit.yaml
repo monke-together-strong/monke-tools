@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/sync-coderabbit.yaml"
       - "bun.lock"
+      - "config/coderabbit/sources.yaml"
       - "config/coderabbit/template.yaml"
       - "package.json"
       - "scripts/generate-coderabbit-config.ts"
@@ -73,6 +74,7 @@ jobs:
             "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip" \
             -d "$RUNNER_TEMP/coderabbit-cli"
+          chmod 755 "$RUNNER_TEMP/coderabbit-cli/coderabbit"
 
       - name: Validate configuration
         if: steps.relevance.outputs.relevant == 'true'
@@ -124,6 +126,7 @@ jobs:
             "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip" \
             -d "$RUNNER_TEMP/coderabbit-cli"
+          chmod 755 "$RUNNER_TEMP/coderabbit-cli/coderabbit"
 
       - name: Validate configuration
         run: |

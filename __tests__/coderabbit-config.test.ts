@@ -47,9 +47,128 @@ const CustomizedConfigSchema = z.looseObject({
   })
 });
 
+function makeCodeRabbitRepo(name: string) {
+  const repoRoot = makeTempDir(name);
+  write(repoRoot, "config/coderabbit/sources.yaml", "excerpts: []\n");
+  return repoRoot;
+}
+
 describe("CodeRabbit central configuration", () => {
+  test("renders the complete repository code-smell review baseline", () => {
+    const repoRoot = path.join(import.meta.dirname, "..");
+    const [baseline] = BaselineConfigSchema.parse(
+      parse(renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" }).yaml)
+    ).reviews.path_instructions;
+
+    expect(baseline?.instructions).toContain("## Code-smell review baseline");
+    expect(baseline?.instructions).toContain("**The repo overrides.**");
+    expect(baseline?.instructions).toContain("**Always a judgement call.**");
+    for (const smell of [
+      "Mysterious Name",
+      "Duplicated Code",
+      "Feature Envy",
+      "Data Clumps",
+      "Primitive Obsession",
+      "Repeated Switches",
+      "Shotgun Surgery",
+      "Divergent Change",
+      "Speculative Generality",
+      "Message Chains",
+      "Middle Man",
+      "Refused Bequest"
+    ]) {
+      expect(baseline?.instructions).toContain(`**${smell}**`);
+    }
+    expect(baseline?.instructions).not.toContain(
+      "Anything in the repo that documents how code should be written"
+    );
+    expect(baseline?.instructions).not.toContain("### 4. Spawn both sub-agents in parallel");
+    expect(baseline?.instructions).not.toContain(
+      "Source: skills/references/imported/code-review/MAIN.md"
+    );
+    expect(baseline?.instructions).not.toContain("Excerpt anchor:");
+  });
+
+  test("renders configured Markdown excerpts without source metadata", () => {
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-excerpt");
+    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
+    write(
+      repoRoot,
+      "config/coderabbit/sources.yaml",
+      `excerpts:
+  - source: skills/references/imported/code-review/MAIN.md
+    anchor: the smell baseline below
+    heading: Code-smell review baseline
+    stopAtHeadingDepth: 3
+`
+    );
+    write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
+    write(
+      repoRoot,
+      "skills/references/imported/code-review/MAIN.md",
+      `### 3. Identify the standards sources
+
+Anything in the repo that documents how code should be written.
+
+On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below — it applies everywhere. Two rules bind it:
+
+- **The repo overrides.** A documented repo standard always wins.
+- **Always a judgement call.** Each smell is a labelled heuristic.
+
+- **Mysterious Name** — rename unclear names.
+- **Feature Envy** — move behavior to the data it envies.
+
+### 4. Spawn both sub-agents in parallel
+
+Do not include these sub-agent instructions.
+`
+    );
+
+    const rendered = renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" });
+    const [baseline] = BaselineConfigSchema.parse(parse(rendered.yaml)).reviews.path_instructions;
+
+    expect(rendered.sources).toContain("skills/references/imported/code-review/MAIN.md");
+    expect(baseline?.instructions).toContain("## Code-smell review baseline");
+    expect(baseline?.instructions).toContain("**The repo overrides.**");
+    expect(baseline?.instructions).toContain("**Always a judgement call.**");
+    expect(baseline?.instructions).toContain("**Mysterious Name**");
+    expect(baseline?.instructions).toContain("**Feature Envy**");
+    expect(baseline?.instructions).not.toContain(
+      "Anything in the repo that documents how code should be written"
+    );
+    expect(baseline?.instructions).not.toContain("Spawn both sub-agents");
+    expect(baseline?.instructions).not.toContain("Source:");
+    expect(baseline?.instructions).not.toContain("Excerpt anchor:");
+  });
+
+  test.each([
+    ["missing", "No matching paragraph.\n", "matched 0"],
+    [
+      "ambiguous",
+      "The **smell baseline** below is first.\n\nThe smell baseline below is second.\n",
+      "matched 2"
+    ]
+  ])("fails clearly when a configured excerpt anchor is %s", (_, source, expected) => {
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-excerpt-anchor");
+    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
+    write(
+      repoRoot,
+      "config/coderabbit/sources.yaml",
+      `excerpts:
+  - source: skills/references/imported/code-review/MAIN.md
+    anchor: the smell baseline below
+    heading: Code-smell review baseline
+    stopAtHeadingDepth: 3
+`
+    );
+    write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
+    write(repoRoot, "skills/references/imported/code-review/MAIN.md", source);
+
+    expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).toThrow(expected);
+  });
+
   test("renders recursively linked Team coding baseline documents with provenance", () => {
-    const repoRoot = makeTempDir("coderabbit-config-recursive");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-recursive");
     write(
       repoRoot,
       "config/coderabbit/template.yaml",
@@ -97,7 +216,7 @@ Follow the [shared rules](../imported/shared.md).
   });
 
   test("terminates cycles and follows used reference-style Markdown links once", () => {
-    const repoRoot = makeTempDir("coderabbit-config-cycle");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-cycle");
     write(repoRoot, "config/coderabbit/template.yaml", "reviews:\n  path_instructions: []\n");
     write(
       repoRoot,
@@ -119,7 +238,7 @@ Follow the [shared rules](../imported/shared.md).
   });
 
   test("fails clearly when a linked local Markdown file is missing", () => {
-    const repoRoot = makeTempDir("coderabbit-config-missing");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-missing");
     write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(
       repoRoot,
@@ -133,7 +252,7 @@ Follow the [shared rules](../imported/shared.md).
   });
 
   test("rejects Markdown dependencies outside skills/references", () => {
-    const repoRoot = makeTempDir("coderabbit-config-boundary");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-boundary");
     write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(repoRoot, "outside.md", "Not an owned reference.\n");
     write(
@@ -148,7 +267,7 @@ Follow the [shared rules](../imported/shared.md).
   });
 
   test("rejects symlinked Markdown dependencies that escape skills/references", () => {
-    const repoRoot = makeTempDir("coderabbit-config-symlink-boundary");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-symlink-boundary");
     write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(repoRoot, "outside.md", "Not an owned reference.\n");
     write(repoRoot, "skills/references/imported/.keep", "");
@@ -168,7 +287,7 @@ Follow the [shared rules](../imported/shared.md).
   });
 
   test("does not traverse external, image, anchor, or non-Markdown links", () => {
-    const repoRoot = makeTempDir("coderabbit-config-non-dependencies");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-non-dependencies");
     write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(
       repoRoot,
@@ -187,7 +306,7 @@ Follow the [shared rules](../imported/shared.md).
   });
 
   test("rejects a hand-authored path instruction that collides with the generated path", () => {
-    const repoRoot = makeTempDir("coderabbit-config-template-collision");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-template-collision");
     write(
       repoRoot,
       "config/coderabbit/template.yaml",
@@ -205,7 +324,7 @@ Follow the [shared rules](../imported/shared.md).
   });
 
   test("preserves hand-authored settings and narrower path instructions", () => {
-    const repoRoot = makeTempDir("coderabbit-config-customization");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-customization");
     write(
       repoRoot,
       "config/coderabbit/template.yaml",
@@ -240,7 +359,7 @@ reviews:
   });
 
   test("rejects a generated instruction over CodeRabbit's 20,000-character limit", () => {
-    const repoRoot = makeTempDir("coderabbit-config-size-limit");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-size-limit");
     write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "a".repeat(20_000));
 
@@ -250,7 +369,7 @@ reviews:
   });
 
   test("accepts a generated instruction at CodeRabbit's 20,000-character limit", () => {
-    const repoRoot = makeTempDir("coderabbit-config-exact-size-limit");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-exact-size-limit");
     write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "");
     const [emptyBaseline] = BaselineConfigSchema.parse(
@@ -267,7 +386,7 @@ reviews:
   });
 
   test("renders deterministically for the same source tree and commit", () => {
-    const repoRoot = makeTempDir("coderabbit-config-deterministic");
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-deterministic");
     write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
     const options = { repoRoot, sourceCommit: "abc123" };
@@ -278,6 +397,7 @@ reviews:
   test("syncs only for renderer inputs or a document in the current dependency graph", () => {
     const sources = [
       "skills/references/internal/CODING_STANDARDS.md",
+      "skills/references/imported/code-review/MAIN.md",
       "skills/references/imported/ultracite.md"
     ];
 
@@ -289,6 +409,7 @@ reviews:
     ).toBeFalsy();
     for (const changedPath of [
       "skills/references/internal/CODING_STANDARDS.md",
+      "skills/references/imported/code-review/MAIN.md",
       "skills/references/imported/ultracite.md",
       ...CODE_RABBIT_SYNC_INPUTS
     ]) {
@@ -298,6 +419,7 @@ reviews:
 
   test("reports push relevance from the current graph and Git commit range", async () => {
     const repoRoot = createRepo(makeTempDir("coderabbit-config-relevance-cli"), {
+      "config/coderabbit/sources.yaml": "excerpts: []\n",
       "config/coderabbit/template.yaml": "reviews: {}\n",
       "skills/references/imported/shared.md": "# Shared\n",
       "skills/references/imported/unrelated.md": "# Unrelated\n",
