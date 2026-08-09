@@ -1,0 +1,11 @@
+inheritance: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - files: "**/CODING_STANDARDS.md"
+        applyTo: "**/*"
+
+reviews:
+  path_instructions: []

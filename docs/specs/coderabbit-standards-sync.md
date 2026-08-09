@@ -1,0 +1,56 @@
+# CodeRabbit team coding baseline synchronization
+
+## Objective
+
+Publish the **Team coding baseline** from monke-tools to CodeRabbit's organization-wide central configuration without moving its source of truth out of this repository.
+
+## Source ownership
+
+- `skills/references/internal/CODING_STANDARDS.md` is the authoritative root document.
+- The renderer recursively follows repository-relative Markdown links that remain inside `skills/references/`.
+- External links are preserved but never fetched.
+- Images, anchors, and non-Markdown links are not traversed.
+- Missing or out-of-bound local Markdown links fail generation.
+- Already visited documents are emitted once, terminating cycles deterministically.
+- The root document is emitted first. Each dependency follows with its repository path as provenance.
+- Repo coding standards and `AGENTS.md` override conflicting Team coding baseline rules.
+
+## Configuration ownership
+
+- `config/coderabbit/template.yaml` is the hand-edited source for central CodeRabbit customization outside the baseline.
+- The renderer owns the global `reviews.path_instructions` entry whose path is `**/*` and rejects a template collision on that path.
+- Narrower hand-authored path instructions remain supported.
+- The template enables repository-local `**/CODING_STANDARDS.md` discovery. CodeRabbit already discovers `AGENTS.md`.
+- monke-tools does not add a repository-local `.coderabbit.yaml`.
+- The downstream `monke-together-strong/coderabbit/.coderabbit.yaml` is entirely generated and must not be edited manually.
+
+## Publishing
+
+- A workflow runs after relevant pushes to `monke-tools/main`.
+- The unprivileged portion discovers the current dependency graph and compares it with paths changed by the push.
+- Irrelevant changes exit before the publishing credential is loaded.
+- Relevant changes render the configuration, enforce CodeRabbit's 20,000-character instruction limit, and validate it with a pinned CodeRabbit CLI.
+- A private, organization-owned GitHub App installed only on `monke-together-strong/coderabbit` supplies a short-lived token with Contents write access.
+- The workflow clones the current downstream `main`, overwrites only `.coderabbit.yaml`, creates a normal fast-forward commit containing the monke-tools source SHA, and pushes directly.
+- Identical output produces no downstream commit.
+- Publishing never force-pushes.
+- A failed publication is retried through the failed GitHub Actions run.
+- Downstream drift remains until the next triggered synchronization, which restores the generated file.
+- Rollback happens by reverting `monke-tools/main`.
+
+## Repository and policy setup
+
+- The central repository is the private GitHub repository `monke-together-strong/coderabbit`.
+- Its `main` branch is intentionally unprotected while the organization remains on GitHub Free.
+- The GitHub App ID is a non-secret Actions environment variable.
+- The App PEM private key is an Actions environment secret and is never logged or committed.
+- CodeRabbit is installed on the central repository after its initial configuration exists.
+- If available, CodeRabbit Global Overrides contains only `inheritance: true` so future repository configs cannot suppress the central fallback.
+- Without Global Overrides, current repositories consume central configuration directly; future local `.coderabbit.yaml` files must set `inheritance: true`.
+
+## Verification
+
+- Unit tests cover recursive rendering, provenance, cycles, missing and out-of-bound links, instruction-size enforcement, template collision, deterministic output, and relevant-change detection.
+- `vp check` and the complete test suite pass.
+- The generated file passes `cr config validate`.
+- Rollout checks CodeRabbit's resolved configuration in one Consumer repo with Repo coding standards and one without them.

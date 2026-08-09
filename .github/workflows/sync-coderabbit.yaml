@@ -1,0 +1,175 @@
+name: Sync CodeRabbit Standards
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/sync-coderabbit.yaml"
+      - "bun.lock"
+      - "config/coderabbit/template.yaml"
+      - "package.json"
+      - "scripts/generate-coderabbit-config.ts"
+      - "skills/references/**/*.md"
+
+concurrency:
+  group: sync-coderabbit-standards
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Detect And Validate
+    runs-on: ubuntu-24.04
+    outputs:
+      relevant: ${{ steps.relevance.outputs.relevant }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          cache: true
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Detect relevant changes
+        id: relevance
+        env:
+          AFTER_SHA: ${{ github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          relevant="$(bun run scripts/generate-coderabbit-config.ts relevant \
+            --before "$BEFORE_SHA" \
+            --after "$AFTER_SHA")"
+          printf 'relevant=%s\n' "$relevant" >> "$GITHUB_OUTPUT"
+
+      - name: Generate configuration
+        if: steps.relevance.outputs.relevant == 'true'
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          install -d "$RUNNER_TEMP/coderabbit-generated"
+          bun run scripts/generate-coderabbit-config.ts render \
+            --source-commit "$SOURCE_SHA" \
+            --output "$RUNNER_TEMP/coderabbit-generated/.coderabbit.yaml"
+
+      - name: Install pinned CodeRabbit CLI
+        if: steps.relevance.outputs.relevant == 'true'
+        run: |
+          install -d "$RUNNER_TEMP/coderabbit-cli"
+          curl --fail --silent --show-error --location \
+            https://cli.coderabbit.ai/releases/0.7.2/coderabbit-linux-x64.zip \
+            --output "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip"
+          printf '%s  %s\n' \
+            '32dd3a5a1238fa68eb7cfa95cc19cf6ad4980882589c616c0e300b920f1bb865' \
+            "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip" \
+            -d "$RUNNER_TEMP/coderabbit-cli"
+
+      - name: Validate configuration
+        if: steps.relevance.outputs.relevant == 'true'
+        run: |
+          "$RUNNER_TEMP/coderabbit-cli/coderabbit" config validate \
+            "$RUNNER_TEMP/coderabbit-generated/.coderabbit.yaml"
+
+  publish:
+    name: Publish Central Configuration
+    needs: prepare
+    if: needs.prepare.outputs.relevant == 'true'
+    runs-on: ubuntu-24.04
+    environment: coderabbit-sync
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: source
+          persist-credentials: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          cache: true
+
+      - name: Install dependencies
+        working-directory: source
+        run: vp install --frozen-lockfile
+
+      - name: Generate configuration
+        working-directory: source
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          install -d "$RUNNER_TEMP/coderabbit-generated"
+          bun run scripts/generate-coderabbit-config.ts render \
+            --source-commit "$SOURCE_SHA" \
+            --output "$RUNNER_TEMP/coderabbit-generated/.coderabbit.yaml"
+
+      - name: Install pinned CodeRabbit CLI
+        run: |
+          install -d "$RUNNER_TEMP/coderabbit-cli"
+          curl --fail --silent --show-error --location \
+            https://cli.coderabbit.ai/releases/0.7.2/coderabbit-linux-x64.zip \
+            --output "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip"
+          printf '%s  %s\n' \
+            '32dd3a5a1238fa68eb7cfa95cc19cf6ad4980882589c616c0e300b920f1bb865' \
+            "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/coderabbit-cli/coderabbit.zip" \
+            -d "$RUNNER_TEMP/coderabbit-cli"
+
+      - name: Validate configuration
+        run: |
+          "$RUNNER_TEMP/coderabbit-cli/coderabbit" config validate \
+            "$RUNNER_TEMP/coderabbit-generated/.coderabbit.yaml"
+
+      - name: Create destination token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.CODERABBIT_SYNC_APP_ID }}
+          private-key: ${{ secrets.CODERABBIT_SYNC_APP_PRIVATE_KEY }}
+          owner: monke-together-strong
+          repositories: coderabbit
+          permission-contents: write
+
+      - name: Checkout central configuration
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: monke-together-strong/coderabbit
+          ref: main
+          path: coderabbit
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Commit and push generated configuration
+        working-directory: coderabbit
+        env:
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          cp "$RUNNER_TEMP/coderabbit-generated/.coderabbit.yaml" .coderabbit.yaml
+          git add -- .coderabbit.yaml
+          if git diff --cached --quiet; then
+            echo "Central CodeRabbit configuration is already current."
+            exit 0
+          fi
+
+          changed_paths="$(git diff --cached --name-only)"
+          if [ "$changed_paths" != ".coderabbit.yaml" ]; then
+            echo "Refusing to publish unexpected paths: $changed_paths" >&2
+            exit 1
+          fi
+
+          bot_id="$(gh api "users/$APP_SLUG%5Bbot%5D" --jq .id)"
+          git config user.name "$APP_SLUG[bot]"
+          git config user.email "$bot_id+$APP_SLUG[bot]@users.noreply.github.com"
+          git commit -m "chore: sync team coding standards from monke-tools@${SOURCE_SHA:0:12}"
+          git push origin HEAD:main
