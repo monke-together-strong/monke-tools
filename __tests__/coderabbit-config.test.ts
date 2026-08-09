@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 import { parse } from "yaml";
-import * as z from "zod";
+import { array as arraySchema, looseObject, string as stringSchema } from "zod";
 
 import {
   CODE_RABBIT_SYNC_INPUTS,
@@ -13,43 +13,45 @@ import {
 } from "../scripts/generate-coderabbit-config.ts";
 import { createRepo, git, makeTempDir, write } from "./helpers.ts";
 
-const BaselineConfigSchema = z.looseObject({
-  reviews: z.looseObject({
-    path_instructions: z.array(
-      z.looseObject({
-        instructions: z.string(),
-        path: z.string()
+const BaselineConfigSchema = looseObject({
+  reviews: looseObject({
+    path_instructions: arraySchema(
+      looseObject({
+        instructions: stringSchema(),
+        path: stringSchema()
       })
     )
   })
 });
 
-const CustomizedConfigSchema = z.looseObject({
-  knowledge_base: z.looseObject({
-    code_guidelines: z.looseObject({
-      filePatterns: z.array(
-        z.looseObject({
-          applyTo: z.string(),
-          files: z.string()
+const CustomizedConfigSchema = looseObject({
+  knowledge_base: looseObject({
+    code_guidelines: looseObject({
+      filePatterns: arraySchema(
+        looseObject({
+          applyTo: stringSchema(),
+          files: stringSchema()
         })
       )
     })
   }),
-  language: z.string(),
-  reviews: z.looseObject({
-    path_instructions: z.array(
-      z.looseObject({
-        instructions: z.string(),
-        path: z.string()
+  language: stringSchema(),
+  reviews: looseObject({
+    path_instructions: arraySchema(
+      looseObject({
+        instructions: stringSchema(),
+        path: stringSchema()
       })
     ),
-    profile: z.string()
+    profile: stringSchema()
   })
 });
 
 function makeCodeRabbitRepo(name: string) {
   const repoRoot = makeTempDir(name);
   write(repoRoot, "config/coderabbit/sources.yaml", "excerpts: []\n");
+  write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
+  write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
   return repoRoot;
 }
 
@@ -91,7 +93,6 @@ describe("CodeRabbit central configuration", () => {
 
   test("renders configured Markdown excerpts without source metadata", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-excerpt");
-    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(
       repoRoot,
       "config/coderabbit/sources.yaml",
@@ -102,7 +103,6 @@ describe("CodeRabbit central configuration", () => {
     stopAtHeadingDepth: 3
 `
     );
-    write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
     write(
       repoRoot,
       "skills/references/imported/code-review/MAIN.md",
@@ -150,7 +150,6 @@ Do not include these sub-agent instructions.
     ]
   ])("fails clearly when a configured excerpt anchor is %s", (_, source, expected) => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-excerpt-anchor");
-    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(
       repoRoot,
       "config/coderabbit/sources.yaml",
@@ -161,7 +160,6 @@ Do not include these sub-agent instructions.
     stopAtHeadingDepth: 3
 `
     );
-    write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
     write(repoRoot, "skills/references/imported/code-review/MAIN.md", source);
 
     expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).toThrow(expected);
@@ -239,7 +237,6 @@ Follow the [shared rules](../imported/shared.md).
 
   test("fails clearly when a linked local Markdown file is missing", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-missing");
-    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(
       repoRoot,
       "skills/references/internal/CODING_STANDARDS.md",
@@ -253,7 +250,6 @@ Follow the [shared rules](../imported/shared.md).
 
   test("rejects Markdown dependencies outside skills/references", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-boundary");
-    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(repoRoot, "outside.md", "Not an owned reference.\n");
     write(
       repoRoot,
@@ -268,7 +264,6 @@ Follow the [shared rules](../imported/shared.md).
 
   test("rejects symlinked Markdown dependencies that escape skills/references", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-symlink-boundary");
-    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(repoRoot, "outside.md", "Not an owned reference.\n");
     write(repoRoot, "skills/references/imported/.keep", "");
     write(
@@ -288,7 +283,6 @@ Follow the [shared rules](../imported/shared.md).
 
   test("does not traverse external, image, anchor, or non-Markdown links", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-non-dependencies");
-    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(
       repoRoot,
       "skills/references/internal/CODING_STANDARDS.md",
@@ -316,7 +310,6 @@ Follow the [shared rules](../imported/shared.md).
       instructions: Do something else.
 `
     );
-    write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
 
     expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).toThrow(
       'Template reviews.path_instructions must not contain the generated path "**/*"'
@@ -341,7 +334,6 @@ reviews:
       instructions: Keep API handlers thin.
 `
     );
-    write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
 
     const parsed = CustomizedConfigSchema.parse(
       parse(renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" }).yaml)
@@ -360,7 +352,6 @@ reviews:
 
   test("rejects a generated instruction over CodeRabbit's 20,000-character limit", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-size-limit");
-    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "a".repeat(20_000));
 
     expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).toThrow(
@@ -370,7 +361,6 @@ reviews:
 
   test("accepts a generated instruction at CodeRabbit's 20,000-character limit", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-exact-size-limit");
-    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
     write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "");
     const [emptyBaseline] = BaselineConfigSchema.parse(
       parse(renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" }).yaml)
@@ -387,8 +377,6 @@ reviews:
 
   test("renders deterministically for the same source tree and commit", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-deterministic");
-    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
-    write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
     const options = { repoRoot, sourceCommit: "abc123" };
 
     expect(renderCodeRabbitConfig(options)).toStrictEqual(renderCodeRabbitConfig(options));
@@ -456,8 +444,12 @@ reviews:
 
     expect(output).toBe("false\n");
 
+    const fallbackBeforeCommits = [
+      "0".repeat(beforeRelevant.length),
+      "f".repeat(beforeRelevant.length)
+    ];
     const fallbackOutputs = await Promise.all(
-      ["0".repeat(40), "f".repeat(40)].map(async (before) => {
+      fallbackBeforeCommits.map(async (before) => {
         let fallbackOutput = "";
         await runCodeRabbitConfigGenerator(
           ["relevant", "--repo-root", repoRoot, "--before", before, "--after", afterIrrelevant],

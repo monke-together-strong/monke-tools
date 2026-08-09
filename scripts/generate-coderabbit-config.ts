@@ -9,7 +9,13 @@ import { fromMarkdown } from "mdast-util-from-markdown";
 import { toString as markdownToString } from "mdast-util-to-string";
 import { visit } from "unist-util-visit";
 import { parse, stringify } from "yaml";
-import * as z from "zod";
+import {
+  array as arraySchema,
+  looseObject,
+  number as numberSchema,
+  object,
+  string as stringSchema
+} from "zod";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
 import { MonkeError } from "../src/errors.ts";
@@ -28,38 +34,34 @@ export const CODE_RABBIT_SYNC_INPUTS = new Set([
   "scripts/generate-coderabbit-config.ts"
 ]);
 
-const RenderOptionsSchema = z.object({
-  repoRoot: z.string(),
-  sourceCommit: z.string()
+const RenderOptionsSchema = object({
+  repoRoot: stringSchema(),
+  sourceCommit: stringSchema()
 });
 
-const RelevanceOptionsSchema = z.object({
-  changedPaths: z.array(z.string()),
-  sources: z.array(z.string())
+const RelevanceOptionsSchema = object({
+  changedPaths: arraySchema(stringSchema()),
+  sources: arraySchema(stringSchema())
 });
 
-const CodeRabbitTemplateSchema = z.looseObject({
-  reviews: z
-    .looseObject({
-      path_instructions: z
-        .array(
-          z.looseObject({
-            instructions: z.string(),
-            path: z.string()
-          })
-        )
-        .optional()
-    })
-    .optional()
+const CodeRabbitTemplateSchema = looseObject({
+  reviews: looseObject({
+    path_instructions: arraySchema(
+      looseObject({
+        instructions: stringSchema(),
+        path: stringSchema()
+      })
+    ).optional()
+  }).optional()
 });
 
-const SourceManifestSchema = z.object({
-  excerpts: z.array(
-    z.object({
-      anchor: z.string().min(1),
-      heading: z.string().min(1),
-      source: z.string().min(1),
-      stopAtHeadingDepth: z.number().int().min(1).max(6)
+const SourceManifestSchema = object({
+  excerpts: arraySchema(
+    object({
+      anchor: stringSchema().min(1),
+      heading: stringSchema().min(1),
+      source: stringSchema().min(1),
+      stopAtHeadingDepth: numberSchema().int().min(1).max(6)
     })
   )
 });
@@ -160,16 +162,23 @@ function readLinkedDocuments(repoRoot: string) {
     visit(tree, "definition", (node) => {
       definitions.set(node.identifier, node.url);
     });
+    const readLinkedDocument = (url: string) => {
+      if (!isTraversableMarkdownLink(url)) {
+        return;
+      }
+      const linkedPath = url.split(/[?#]/u, 1)[0] ?? url;
+      readDocument(path.join(path.dirname(relativePath), decodeURIComponent(linkedPath)));
+    };
     visit(tree, (node) => {
-      const url =
-        node.type === "link"
-          ? node.url
-          : node.type === "linkReference"
-            ? definitions.get(node.identifier)
-            : undefined;
-      if (url && isTraversableMarkdownLink(url)) {
-        const linkedPath = url.split(/[?#]/u, 1)[0] ?? url;
-        readDocument(path.join(path.dirname(relativePath), decodeURIComponent(linkedPath)));
+      if (node.type === "link") {
+        readLinkedDocument(node.url);
+        return;
+      }
+      if (node.type === "linkReference") {
+        const url = definitions.get(node.identifier);
+        if (url) {
+          readLinkedDocument(url);
+        }
       }
     });
   };
