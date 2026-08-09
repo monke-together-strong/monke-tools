@@ -1,0 +1,5 @@
+interface:
+  display_name: "Agent Session Retrospective"
+  short_description: "Review agent sessions for durable improvements"
+policy:
+  allow_implicit_invocation: false

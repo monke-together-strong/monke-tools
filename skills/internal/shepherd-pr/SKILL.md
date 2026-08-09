@@ -1,11 +1,11 @@
 ---
 name: shepherd-pr
-description: 'Shepherd a GitHub pull request all the way to merge-ready by stabilizing CI before driving automatic review to completion. NEVER merges without explicit human approval. Use when the user says things like "shepherd this PR", "babysit this PR", "get this PR merge-ready", "poll for Coderabbit", "wait for Coderabbit", or asks to drive a PR through review.'
+description: 'Shepherd a GitHub pull request all the way to merge-ready by stabilizing CI before driving automatic review to completion. Merge only when the request explicitly authorizes it. Use when the user says things like "shepherd this PR", "babysit this PR", "get this PR merge-ready", "poll for Coderabbit", "wait for Coderabbit", or asks to drive a PR through review.'
 ---
 
 # Shepherd PR
 
-Your job is to shepherd this PR all the way to **merge-ready** - reviewed, addressed, verified, and CI green. **Not merged.** Merging is a human decision.
+Your job is to shepherd this PR all the way to **merge-ready** - reviewed, addressed, verified, and CI green. Merge after readiness only when the user explicitly authorized that terminal action; otherwise hand off at merge-ready.
 
 Create the PR (or pick up the one just created), then mark it as ready for review if needed.
 
@@ -29,7 +29,9 @@ If `state` is `MERGED` or `CLOSED`, delete the heartbeat, report the terminal st
 
    This step is complete when every observed CI failure has an evidence-backed classification and either a verified repo-owned fix or a concrete external cause.
 
-2. **Wait for reviewers:** Once the latest commit has no unresolved CI failure, trigger any missing automatic review and run `/polling` with an eight-minute heartbeat until all automatic reviewers have finished reviewing that commit. Do not act on partial feedback.
+2. **Wait for reviewers:** Once the latest commit has no unresolved CI failure, trigger any missing automatic review and run `/polling` with an eight-minute heartbeat until every required reviewer and every automatic reviewer that started on the latest commit has finished. Do not act on partial feedback.
+
+   Treat non-required reviewer integrations as best-effort. Inspect and triage any comments they already produced, but when a latest-commit suite never starts after two heartbeat intervals, record the integration as unavailable and continue. Do not create empty commits or toggle PR state solely to wake an optional reviewer.
 
 3. **Triage their feedback:** Once all reviewers are done, verify each finding against the real code path before acting. Fix everything medium severity and beyond. For low-severity suggestions, fix small local comments that improve repository consistency, naming, style, readability, cleanup, typing, or DRY, especially when they touch code changed by this PR. Reject or skip low-severity suggestions only when they are speculative, depend on an unrealistic/nonexistent scenario, require broad rewrites or extra abstraction, add defensive complexity without a real caller, or address repo-wide/out-of-scope issues not introduced by this PR. When skipping, briefly explain the concrete reason and continue autonomously.
 
@@ -39,20 +41,18 @@ Nitpick is a severity label, not a dismissal. Prefer fixing consistency polish; 
 
 5. **Loop:** Repeat until a full cycle passes with nothing meaningful left to address from either reviewer.
 
-6. **Double-verify merge-ready:** Before declaring the PR merge-ready, verify twice that (a) all reviewers have re-run on the latest commit, (b) no outstanding required changes remain, and (c) every observed CI failure completed step 1, current CI is green, and the PR is mergeable.
+6. **Double-verify merge-ready:** Before declaring the PR merge-ready, verify twice that (a) every required reviewer and every automatic reviewer that started on the latest commit has finished, while unavailable best-effort reviewers are recorded and their existing comments are triaged, (b) no outstanding required changes remain, and (c) every observed CI failure completed step 1, current CI is green, and the PR is mergeable.
 
-7. **Stop. Hand off to human.** Report that the PR is merge-ready and wait. **Do not merge.**
+7. **Complete the authorized terminal action.** When the current request explicitly authorizes merging after readiness, invoke `/merge-pr` and follow it through terminal verification. Otherwise report merge-ready and wait.
 
-## Hard rule: never merge without explicit approval
+## Hard rule: merge only with explicit approval
 
-- NEVER run `gh pr merge`, the GitHub merge API, or any equivalent action on your own.
-- "All checks green" is NOT permission to merge. It is permission to stop and report.
-- Even if the user originally said "get this PR merged", treat that as "get this PR merge-ready" and ask for explicit confirmation before merging.
-- Only merge if the user replies with an explicit, unambiguous YES to merge after you've reported merge-ready (e.g. "yes merge it", "go ahead and merge"). A thumbs-up or "ok" is not enough - ask again if unclear.
-- If in doubt, do not merge. Ask.
+- Approval may be fresh or standing. Treat a direct instruction such as "merge when ready", "merge once green", or "shepherd and merge; don't ask again" as standing approval. After step 6 passes, merge without asking again.
+- Generic shepherding, merge-readiness requests, status acknowledgements, thumbs-up reactions, and "all checks green" do not authorize merging.
+- If approval is absent or ambiguous, report merge-ready and ask for an explicit merge instruction.
 
-"Pushed a fix" is not done. "All green" is not done either - it's the handoff point.
+"Pushed a fix" is not done. "All green" reaches the terminal-action decision in step 7.
 
-**Do not stop early while the PR remains open. Do not merge on your own.**
+**Do not stop early while the PR remains open.**
 
-Done means the PR is externally terminal (monitor removed and state reported) or open and merge-ready (double-checked and handed off).
+Done means the PR is externally terminal (monitor removed and state reported) or open and merge-ready because merge authorization was absent.
