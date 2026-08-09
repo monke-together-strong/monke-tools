@@ -165,6 +165,27 @@ Do not include these sub-agent instructions.
     expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).toThrow(expected);
   });
 
+  test.each([
+    ["manifest", "excerpts: []\nunexpected: true\n"],
+    [
+      "excerpt",
+      `excerpts:
+  - source: skills/references/imported/code-review/MAIN.md
+    anchor: the smell baseline below
+    heading: Code-smell review baseline
+    stopAtHeadingDepth: 3
+    unexpected: true
+`
+    ]
+  ])("rejects an unexpected %s field", (_, manifest) => {
+    const repoRoot = makeCodeRabbitRepo("coderabbit-config-unexpected-manifest-field");
+    write(repoRoot, "config/coderabbit/sources.yaml", manifest);
+
+    expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).toThrow(
+      "Unrecognized key"
+    );
+  });
+
   test("renders recursively linked Team coding baseline documents with provenance", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-recursive");
     write(

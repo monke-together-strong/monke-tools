@@ -14,6 +14,7 @@ import {
   looseObject,
   number as numberSchema,
   object,
+  strictObject,
   string as stringSchema
 } from "zod";
 
@@ -55,9 +56,9 @@ const CodeRabbitTemplateSchema = looseObject({
   }).optional()
 });
 
-const SourceManifestSchema = object({
+const SourceManifestSchema = strictObject({
   excerpts: arraySchema(
-    object({
+    strictObject({
       anchor: stringSchema().min(1),
       heading: stringSchema().min(1),
       source: stringSchema().min(1),
