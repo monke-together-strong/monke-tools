@@ -12,7 +12,7 @@ const WorkflowStepSchema = z.looseObject({
 });
 
 const WorkflowSchema = z.looseObject({
-  jobs: z.object({
+  jobs: z.looseObject({
     prepare: z.looseObject({
       environment: z.never().optional(),
       steps: z.array(WorkflowStepSchema)
@@ -23,12 +23,12 @@ const WorkflowSchema = z.looseObject({
       steps: z.array(WorkflowStepSchema)
     })
   }),
-  on: z.object({
+  on: z.strictObject({
     push: z.looseObject({
       branches: z.array(z.string())
     })
   }),
-  permissions: z.object({
+  permissions: z.strictObject({
     contents: z.literal("read")
   })
 });
@@ -49,16 +49,16 @@ describe("CodeRabbit synchronization workflow", () => {
     expect(parsed.on.push.branches).toStrictEqual(["main"]);
     expect(parsed.permissions).toStrictEqual({ contents: "read" });
 
-    expect(parsed.jobs.publish.if).toContain("needs.prepare.outputs.relevant");
+    expect(parsed.jobs.publish.if).toBe("needs.prepare.outputs.relevant == 'true'");
     expect(parsed.jobs.prepare.environment).toBeUndefined();
-    expect(JSON.stringify(parsed.jobs.prepare.steps)).not.toContain(
-      "CODERABBIT_SYNC_APP_PRIVATE_KEY"
-    );
+    expect(workflow.match(/CODERABBIT_SYNC_APP_PRIVATE_KEY/gu) ?? []).toHaveLength(1);
 
     const tokenStep = WorkflowStepSchema.parse(
       parsed.jobs.publish.steps.find((step) => step.name === "Create destination token")
     );
-    expect(tokenStep.with).toMatchObject({
+    expect(tokenStep.with).toStrictEqual({
+      "app-id": `\${{ vars.CODERABBIT_SYNC_APP_ID }}`,
+      owner: "monke-together-strong",
       "permission-contents": "write",
       "private-key": `\${{ secrets.CODERABBIT_SYNC_APP_PRIVATE_KEY }}`,
       repositories: "coderabbit"
@@ -67,8 +67,11 @@ describe("CodeRabbit synchronization workflow", () => {
     const checkoutStep = WorkflowStepSchema.parse(
       parsed.jobs.publish.steps.find((step) => step.name === "Checkout central configuration")
     );
-    expect(checkoutStep.with).toMatchObject({
-      repository: "monke-together-strong/coderabbit"
+    expect(checkoutStep.with).toStrictEqual({
+      path: "coderabbit",
+      ref: "main",
+      repository: "monke-together-strong/coderabbit",
+      token: `\${{ steps.app-token.outputs.token }}`
     });
 
     const publishStep = WorkflowStepSchema.parse(
@@ -77,6 +80,10 @@ describe("CodeRabbit synchronization workflow", () => {
       )
     );
     expect(publishStep.run).toContain("if bot_id=");
+    expect(publishStep.run).toContain("git add -- .coderabbit.yaml");
+    expect(publishStep.run).toContain('changed_paths="$(git diff --cached --name-only)"');
+    expect(publishStep.run).toContain('if [ "$changed_paths" != ".coderabbit.yaml" ]; then');
+    expect(publishStep.run).toContain("git push origin HEAD:main");
     expect(workflow).not.toContain("--force");
   });
 });
