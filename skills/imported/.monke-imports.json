@@ -13,6 +13,7 @@
     {
       "skills": [
         {
+          "disableModelInvocation": true,
           "kind": "skill",
           "selector": "thermo-nuclear-code-quality-review",
           "slug": "thermo-nuclear-code-quality-review"
@@ -138,6 +139,7 @@
           "slug": "wizard"
         },
         {
+          "disableModelInvocation": false,
           "kind": "skill",
           "selector": "writing-for-agents",
           "slug": "writing-for-agents"
@@ -174,6 +176,7 @@
     {
       "skills": [
         {
+          "disableModelInvocation": true,
           "kind": "skill",
           "selector": "improve",
           "slug": "improve"
@@ -182,5 +185,5 @@
       "source": "shadcn/improve"
     }
   ],
-  "version": 2
+  "version": 3
 }
