@@ -12,4 +12,4 @@ Use the base workflow unchanged. When it identifies coding-standards sources, in
 - Repo coding standards discovered by the base workflow
 - [the Team coding baseline](../../references/internal/CODING_STANDARDS.md)
 
-Apply every non-conflicting rule from both. Repo coding standards override conflicting Team coding baseline rules.
+Apply every Team coding baseline rule, then apply compatible repo coding standards as additions. The Team coding baseline takes precedence on conflicts.
