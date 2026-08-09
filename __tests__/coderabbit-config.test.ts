@@ -249,6 +249,23 @@ reviews:
     );
   });
 
+  test("accepts a generated instruction at CodeRabbit's 20,000-character limit", () => {
+    const repoRoot = makeTempDir("coderabbit-config-exact-size-limit");
+    write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
+    write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "");
+    const [emptyBaseline] = BaselineConfigSchema.parse(
+      parse(renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" }).yaml)
+    ).reviews.path_instructions;
+    expect(emptyBaseline).toBeDefined();
+    write(
+      repoRoot,
+      "skills/references/internal/CODING_STANDARDS.md",
+      "a".repeat(20_000 - (emptyBaseline?.instructions.length ?? 0))
+    );
+
+    expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).not.toThrow();
+  });
+
   test("renders deterministically for the same source tree and commit", () => {
     const repoRoot = makeTempDir("coderabbit-config-deterministic");
     write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
@@ -316,5 +333,19 @@ reviews:
     );
 
     expect(output).toBe("false\n");
+
+    const fallbackOutputs = await Promise.all(
+      ["0".repeat(40), "f".repeat(40)].map(async (before) => {
+        let fallbackOutput = "";
+        await runCodeRabbitConfigGenerator(
+          ["relevant", "--repo-root", repoRoot, "--before", before, "--after", afterIrrelevant],
+          (message) => {
+            fallbackOutput += message;
+          }
+        );
+        return fallbackOutput;
+      })
+    );
+    expect(fallbackOutputs).toStrictEqual(["true\n", "true\n"]);
   });
 });

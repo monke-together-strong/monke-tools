@@ -31,10 +31,10 @@ Publish the **Team coding baseline** from monke-tools to CodeRabbit's organizati
 - Irrelevant changes exit before the publishing credential is loaded.
 - Relevant changes render the configuration, enforce CodeRabbit's 20,000-character instruction limit, and validate it with a pinned CodeRabbit CLI.
 - A private, organization-owned GitHub App installed only on `monke-together-strong/coderabbit` supplies a short-lived token with Contents write access.
-- The workflow clones the current downstream `main`, overwrites only `.coderabbit.yaml`, creates a normal fast-forward commit containing the monke-tools source SHA, and pushes directly.
+- The workflow clones the current downstream `main`, overwrites only `.coderabbit.yaml`, creates a commit containing the monke-tools source SHA, and pushes it as a fast-forward to `main`.
 - Identical output produces no downstream commit.
 - Publishing never force-pushes.
-- A failed publication is retried through the failed GitHub Actions run.
+- To retry a failed publication, an operator re-runs the failed GitHub Actions workflow run.
 - Downstream drift remains until the next triggered synchronization, which restores the generated file.
 - Rollback happens by reverting `monke-tools/main`.
 

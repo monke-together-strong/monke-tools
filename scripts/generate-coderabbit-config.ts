@@ -59,10 +59,14 @@ export function isCodeRabbitSyncRelevant(rawOptions: unknown) {
 }
 
 export function listChangedPaths(repoRoot: string, before: string, after: string) {
-  const isInitialPush = /^0+$/u.test(before);
-  const args = isInitialPush
-    ? ["ls-tree", "-r", "-z", "--name-only", after]
-    : ["diff", "--name-only", "--no-renames", "-z", before, after, "--"];
+  const beforeCommit = spawnSync("git", ["cat-file", "-e", `${before}^{commit}`], {
+    cwd: repoRoot,
+    stdio: "ignore"
+  });
+  const hasBeforeCommit = !/^0+$/u.test(before) && !beforeCommit.error && beforeCommit.status === 0;
+  const args = hasBeforeCommit
+    ? ["diff", "--name-only", "--no-renames", "-z", before, after, "--"]
+    : ["ls-tree", "-r", "-z", "--name-only", after];
   const result = spawnSync("git", args, {
     cwd: repoRoot,
     encoding: "utf-8"
@@ -91,7 +95,7 @@ export function renderCodeRabbitConfig(rawOptions: unknown) {
     )
   ].join("\n\n");
   if (instructions.length > MAX_INSTRUCTION_CHARACTERS) {
-    throw new Error(
+    throw new MonkeError(
       "Generated reviews.path_instructions instructions exceed CodeRabbit's 20,000-character limit"
     );
   }
@@ -99,7 +103,7 @@ export function renderCodeRabbitConfig(rawOptions: unknown) {
   template.reviews ??= {};
   template.reviews.path_instructions ??= [];
   if (template.reviews.path_instructions.some((instruction) => instruction.path === "**/*")) {
-    throw new Error(
+    throw new MonkeError(
       'Template reviews.path_instructions must not contain the generated path "**/*"'
     );
   }

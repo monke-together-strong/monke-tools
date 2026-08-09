@@ -168,8 +168,12 @@ jobs:
             exit 1
           fi
 
-          bot_id="$(gh api "users/$APP_SLUG%5Bbot%5D" --jq .id)"
           git config user.name "$APP_SLUG[bot]"
-          git config user.email "$bot_id+$APP_SLUG[bot]@users.noreply.github.com"
+          if bot_id="$(gh api "users/$APP_SLUG%5Bbot%5D" --jq .id)"; then
+            git config user.email "$bot_id+$APP_SLUG[bot]@users.noreply.github.com"
+          else
+            echo "Could not resolve the bot user id; using a generic committer email." >&2
+            git config user.email "$APP_SLUG[bot]@users.noreply.github.com"
+          fi
           git commit -m "chore: sync team coding standards from monke-tools@${SOURCE_SHA:0:12}"
           git push origin HEAD:main
