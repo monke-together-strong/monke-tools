@@ -29,8 +29,9 @@ Publish the **Team coding baseline** from monke-tools to CodeRabbit's organizati
 
 ## Publishing
 
-- A workflow runs after relevant pushes to `monke-tools/main`.
-- The unprivileged portion discovers the current dependency graph and compares it with paths changed by the push.
+- The unprivileged detection and validation job runs for relevant pull requests and pushes to `monke-tools/main`.
+- The credentialed publishing job runs only after a relevant push to `main`; pull requests cannot load its environment or destination credential.
+- The unprivileged portion discovers the current dependency graph and compares it with paths changed by the triggering event.
 - Irrelevant changes exit before the publishing credential is loaded.
 - Relevant changes render the configuration, enforce CodeRabbit's 20,000-character instruction limit, and validate it with a pinned CodeRabbit CLI.
 - A private, organization-owned GitHub App installed only on `monke-together-strong/coderabbit` supplies a short-lived token with Contents write access.

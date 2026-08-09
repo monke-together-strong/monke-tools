@@ -6,6 +6,7 @@ import { parse } from "yaml";
 import * as z from "zod";
 
 const WorkflowStepSchema = z.looseObject({
+  env: z.record(z.string(), z.unknown()).optional(),
   name: z.string(),
   run: z.string().optional(),
   with: z.record(z.string(), z.unknown()).optional()
@@ -24,6 +25,9 @@ const WorkflowSchema = z.looseObject({
     })
   }),
   on: z.strictObject({
+    pull_request: z.looseObject({
+      paths: z.array(z.string())
+    }),
     push: z.looseObject({
       branches: z.array(z.string()),
       paths: z.array(z.string())
@@ -46,14 +50,25 @@ describe("CodeRabbit synchronization workflow", () => {
   test("keeps the destination credential in the relevant publish job", () => {
     const workflow = readFileSync(workflowPath, "utf-8");
     const parsed = WorkflowSchema.parse(parse(workflow));
-    expect(Object.keys(parsed.on)).toStrictEqual(["push"]);
+    expect(Object.keys(parsed.on)).toStrictEqual(["pull_request", "push"]);
+    expect(parsed.on.pull_request.paths).toStrictEqual(parsed.on.push.paths);
     expect(parsed.on.push.branches).toStrictEqual(["main"]);
     expect(parsed.on.push.paths).toContain("config/coderabbit/sources.yaml");
     expect(parsed.permissions).toStrictEqual({ contents: "read" });
 
-    expect(parsed.jobs.publish.if).toBe("needs.prepare.outputs.relevant == 'true'");
+    expect(parsed.jobs.publish.if).toBe(
+      "github.event_name == 'push' && needs.prepare.outputs.relevant == 'true'"
+    );
     expect(parsed.jobs.prepare.environment).toBeUndefined();
     expect(workflow.match(/CODERABBIT_SYNC_APP_PRIVATE_KEY/gu) ?? []).toHaveLength(1);
+
+    const relevanceStep = WorkflowStepSchema.parse(
+      parsed.jobs.prepare.steps.find((step) => step.name === "Detect relevant changes")
+    );
+    expect(relevanceStep.env).toStrictEqual({
+      AFTER_SHA: `\${{ github.sha }}`,
+      BEFORE_SHA: `\${{ github.event.pull_request.base.sha || github.event.before }}`
+    });
 
     for (const job of [parsed.jobs.prepare, parsed.jobs.publish]) {
       const installStep = WorkflowStepSchema.parse(

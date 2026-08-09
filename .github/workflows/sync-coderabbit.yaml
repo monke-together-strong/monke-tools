@@ -1,6 +1,15 @@
 name: Sync CodeRabbit Standards
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/sync-coderabbit.yaml"
+      - "bun.lock"
+      - "config/coderabbit/sources.yaml"
+      - "config/coderabbit/template.yaml"
+      - "package.json"
+      - "scripts/generate-coderabbit-config.ts"
+      - "skills/references/**/*.md"
   push:
     branches: ["main"]
     paths:
@@ -45,7 +54,7 @@ jobs:
         id: relevance
         env:
           AFTER_SHA: ${{ github.sha }}
-          BEFORE_SHA: ${{ github.event.before }}
+          BEFORE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           relevant="$(bun run scripts/generate-coderabbit-config.ts relevant \
             --before "$BEFORE_SHA" \
@@ -85,7 +94,7 @@ jobs:
   publish:
     name: Publish Central Configuration
     needs: prepare
-    if: needs.prepare.outputs.relevant == 'true'
+    if: github.event_name == 'push' && needs.prepare.outputs.relevant == 'true'
     runs-on: ubuntu-24.04
     environment: coderabbit-sync
 
