@@ -9,6 +9,7 @@ const WorkflowStepSchema = z.looseObject({
   env: z.record(z.string(), z.unknown()).optional(),
   name: z.string(),
   run: z.string().optional(),
+  uses: z.string().optional(),
   with: z.record(z.string(), z.unknown()).optional()
 });
 
@@ -70,7 +71,19 @@ describe("CodeRabbit synchronization workflow", () => {
       BEFORE_SHA: `\${{ github.event.pull_request.base.sha || github.event.before }}`
     });
 
-    for (const job of [parsed.jobs.prepare, parsed.jobs.publish]) {
+    for (const [job, bunVersionFile] of [
+      [parsed.jobs.prepare, "package.json"],
+      [parsed.jobs.publish, "source/package.json"]
+    ] as const) {
+      const setupBunIndex = job.steps.findIndex((step) => step.name === "Setup Bun");
+      const installDependenciesIndex = job.steps.findIndex(
+        (step) => step.name === "Install dependencies"
+      );
+      const setupBunStep = WorkflowStepSchema.parse(job.steps[setupBunIndex]);
+      expect(setupBunStep.uses).toBe("oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6");
+      expect(setupBunStep.with).toStrictEqual({ "bun-version-file": bunVersionFile });
+      expect(setupBunIndex).toBeLessThan(installDependenciesIndex);
+
       const installStep = WorkflowStepSchema.parse(
         job.steps.find((step) => step.name === "Install pinned CodeRabbit CLI")
       );
