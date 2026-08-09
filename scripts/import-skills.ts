@@ -23,6 +23,7 @@ import { GroupMultiSelectPrompt } from "@clack/core";
 import * as p from "@clack/prompts";
 import { Command } from "@commander-js/extra-typings";
 import pc from "picocolors";
+import { parseDocument } from "yaml";
 import * as z from "zod";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
@@ -69,6 +70,7 @@ interface SecurityRiskRow {
 
 const NPX_COMMAND = process.platform === "win32" ? "npx.cmd" : "npx";
 const SKILLS_CLI_ARGS = ["--yes", "skills", "add"];
+const SKILL_IMPORT_RECIPE_STORE_VERSION = 3;
 export const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
 export const IMPORTED_REFERENCES_ROOT = path.join("skills", "references", "imported");
 const INTERNAL_SKILLS_ROOT = path.join("skills", "internal");
@@ -87,8 +89,20 @@ const CONTROL_RE = new RegExp(
   "gu"
 );
 
+const SkillInvocationFrontmatterSchema = z.looseObject({
+  "disable-model-invocation": z.boolean().optional()
+});
+const CodexSkillMetadataSchema = z.looseObject({
+  policy: z
+    .looseObject({
+      allow_implicit_invocation: z.boolean().optional()
+    })
+    .optional()
+});
+
 const SkillImportRecipeSkillSchema = z.strictObject(
   {
+    disableModelInvocation: z.boolean().optional(),
     kind: z.enum(["skill", "reference"], {
       error: "Import kind must be skill or reference"
     }),
@@ -124,7 +138,9 @@ const SkillImportRecipeStoreSchema = z.strictObject(
     recipes: z.array(SkillImportRecipeSchema, {
       error: "Skill import recipe store recipes must be an array"
     }),
-    version: z.literal(2, { error: "Skill import recipe store version must be 2" })
+    version: z.literal(SKILL_IMPORT_RECIPE_STORE_VERSION, {
+      error: `Skill import recipe store version must be ${String(SKILL_IMPORT_RECIPE_STORE_VERSION)}`
+    })
   },
   { error: "Skill import recipe store must be a JSON object" }
 );
@@ -268,7 +284,7 @@ export function readImportRecipeStore(repoRoot: string): SkillImportRecipeStore 
   if (!existsSync(storePath)) {
     return {
       recipes: [],
-      version: 2
+      version: SKILL_IMPORT_RECIPE_STORE_VERSION
     };
   }
 
@@ -340,6 +356,8 @@ export function copyStagedGuidanceToManagedRoots(options: {
       cpSync(sourcePath, preparedPath, { recursive: true, verbatimSymlinks: true });
       if (item.kind === "reference") {
         transformPreparedReference(preparedPath);
+      } else if (item.disableModelInvocation !== undefined) {
+        transformPreparedSkillInvocationPolicy(preparedPath, item.disableModelInvocation);
       }
     }
 
@@ -379,6 +397,80 @@ export function copyStagedGuidanceToManagedRoots(options: {
     rmSync(preparedRoot, { force: true, recursive: true });
     rmSync(backupRoot, { force: true, recursive: true });
   }
+}
+
+function transformPreparedSkillInvocationPolicy(
+  skillPath: string,
+  disableModelInvocation: boolean
+) {
+  const skillEntryPath = path.join(skillPath, "SKILL.md");
+  if (!existsSync(skillEntryPath) || !lstatSync(skillEntryPath).isFile()) {
+    throw new MonkeError(`Expected staged Skill entry document to be a regular file`);
+  }
+  const skillMarkdown = readFileSync(skillEntryPath, "utf-8");
+  const frontmatterMatch = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
+    skillMarkdown
+  );
+  if (!frontmatterMatch) {
+    throw new MonkeError(`Expected leading YAML frontmatter at ${skillEntryPath}`);
+  }
+
+  const frontmatterLabel = `Skill frontmatter at ${skillEntryPath}`;
+  const frontmatter = parseMutableYamlDocument(
+    frontmatterMatch.groups?.frontmatter ?? "",
+    frontmatterLabel
+  );
+  parseBoundaryValue(SkillInvocationFrontmatterSchema, frontmatter.toJS(), frontmatterLabel);
+  frontmatter.set("disable-model-invocation", disableModelInvocation);
+  writeFileSync(
+    skillEntryPath,
+    `---\n${frontmatter.toString()}---\n${skillMarkdown.slice(frontmatterMatch[0].length)}`,
+    "utf-8"
+  );
+
+  const agentsPath = path.join(skillPath, "agents");
+  const openaiMetadataPath = path.join(skillPath, "agents", "openai.yaml");
+  const legacyOpenaiMetadataPath = path.join(skillPath, "agents", "openai.yml");
+  if (existsSync(agentsPath) && !lstatSync(agentsPath).isDirectory()) {
+    throw new MonkeError(`Expected staged Skill agents path to be a regular directory`);
+  }
+  for (const metadataPath of [openaiMetadataPath, legacyOpenaiMetadataPath]) {
+    if (existsSync(metadataPath) && !lstatSync(metadataPath).isFile()) {
+      throw new MonkeError(`Expected staged Codex metadata to be a regular file`);
+    }
+  }
+  if (existsSync(legacyOpenaiMetadataPath)) {
+    if (existsSync(openaiMetadataPath)) {
+      unlinkSync(legacyOpenaiMetadataPath);
+    } else {
+      renameSync(legacyOpenaiMetadataPath, openaiMetadataPath);
+    }
+  }
+  const openaiMetadataLabel = `Codex metadata at ${openaiMetadataPath}`;
+  const openaiMetadata = parseMutableYamlDocument(
+    existsSync(openaiMetadataPath)
+      ? readFileSync(openaiMetadataPath, "utf-8")
+      : "policy:\n  allow_implicit_invocation: false\n",
+    openaiMetadataLabel
+  );
+  parseBoundaryValue(CodexSkillMetadataSchema, openaiMetadata.toJS(), openaiMetadataLabel);
+  openaiMetadata.setIn(["policy", "allow_implicit_invocation"], !disableModelInvocation);
+  mkdirSync(agentsPath, { recursive: true });
+  writeFileSync(openaiMetadataPath, openaiMetadata.toString(), "utf-8");
+}
+
+function parseMutableYamlDocument(text: string, label: string) {
+  const document = parseDocument(text, {
+    merge: false,
+    strict: true,
+    uniqueKeys: true
+  });
+  if (document.errors.length > 0) {
+    throw new MonkeError(
+      `Invalid ${label}:\n${document.errors.map((error) => error.message).join("\n")}`
+    );
+  }
+  return document;
 }
 
 function transformPreparedReference(referencePath: string): void {
@@ -699,9 +791,9 @@ export async function runImportSkills(
       source: normalizedSource
     });
     const previousRecipeStore = readImportRecipeStore(repoRoot);
-    const importedGuidance = stagedSelections.map((selection) => ({ ...selection, kind }));
+    const selectedGuidance = stagedSelections.map((selection) => ({ ...selection, kind }));
     const obsoleteGuidance = findMigratedGuidanceCopies({
-      importedGuidance,
+      importedGuidance: selectedGuidance,
       previousStore: previousRecipeStore,
       source
     });
@@ -710,6 +802,18 @@ export async function runImportSkills(
       kind,
       skills: stagedSelections,
       source
+    });
+    const recordedRecipe = nextRecipeStore.recipes.find((recipe) => recipe.source === source);
+    const importedGuidance = selectedGuidance.map((selection) => {
+      const recordedGuidance = recordedRecipe?.skills.find(
+        (guidance) => guidance.selector === selection.selector
+      );
+      if (!recordedGuidance) {
+        throw new MonkeError(
+          `Recorded Skill import recipe for ${source} is missing selector ${selection.selector}`
+        );
+      }
+      return recordedGuidance;
     });
     copyStagedGuidanceToManagedRoots({
       commitState() {
@@ -1292,7 +1396,7 @@ export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeSto
     };
   });
   assertUniqueRecipeSources(recipes);
-  assertUniqueImportedSkillOwners({ recipes, version: 2 });
+  assertUniqueImportedSkillOwners({ recipes, version: SKILL_IMPORT_RECIPE_STORE_VERSION });
 
   return {
     recipes: recipes.toSorted((left, right) => {
@@ -1303,7 +1407,7 @@ export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeSto
 
       return Number(Boolean(left.acceptOpenClawRisks)) - Number(Boolean(right.acceptOpenClawRisks));
     }),
-    version: 2
+    version: SKILL_IMPORT_RECIPE_STORE_VERSION
   };
 }
 

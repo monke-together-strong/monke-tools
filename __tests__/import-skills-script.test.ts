@@ -11,6 +11,7 @@ import path from "node:path";
 
 import pc from "picocolors";
 import { describe, expect, test } from "vite-plus/test";
+import { parse } from "yaml";
 
 import {
   buildGroupedSkillOptions,
@@ -143,6 +144,7 @@ describe("skill importing", () => {
           acceptOpenClawRisks: true,
           skills: [
             {
+              disableModelInvocation: false,
               kind: "skill",
               selector: "bravo",
               slug: "bravo"
@@ -166,7 +168,7 @@ describe("skill importing", () => {
           source: "a-owner/a-repo"
         }
       ],
-      version: 2
+      version: 3
     });
 
     expect(read(sandbox, "skills/imported/.monke-imports.json")).toBe(`{
@@ -190,6 +192,7 @@ describe("skill importing", () => {
           "slug": "alpha"
         },
         {
+          "disableModelInvocation": false,
           "kind": "skill",
           "selector": "bravo",
           "slug": "bravo"
@@ -198,7 +201,7 @@ describe("skill importing", () => {
       "source": "z-owner/z-repo"
     }
   ],
-  "version": 2
+  "version": 3
 }
 `);
     expect(readImportRecipeStore(sandbox)).toStrictEqual({
@@ -222,6 +225,7 @@ describe("skill importing", () => {
               slug: "alpha"
             },
             {
+              disableModelInvocation: false,
               kind: "skill",
               selector: "bravo",
               slug: "bravo"
@@ -230,7 +234,7 @@ describe("skill importing", () => {
           source: "z-owner/z-repo"
         }
       ],
-      version: 2
+      version: 3
     });
   });
 
@@ -262,7 +266,7 @@ describe("skill importing", () => {
             source: "owner/repo"
           }
         ],
-        version: 2
+        version: 3
       })
     );
 
@@ -276,10 +280,36 @@ describe("skill importing", () => {
     write(
       sandbox,
       "skills/imported/.monke-imports.json",
-      JSON.stringify({ recipes: [], version: 3 })
+      JSON.stringify({ recipes: [], version: 4 })
     );
 
-    expect(() => readImportRecipeStore(sandbox)).toThrow(/version.*must be 2/u);
+    expect(() => readImportRecipeStore(sandbox)).toThrow(/version.*must be 3/u);
+  });
+
+  test("skill import recipe store rejects non-boolean model invocation overrides", () => {
+    const sandbox = makeTempDir("skill-import-recipes-invalid-invocation-override");
+    write(
+      sandbox,
+      "skills/imported/.monke-imports.json",
+      JSON.stringify({
+        recipes: [
+          {
+            skills: [
+              {
+                disableModelInvocation: "yes",
+                kind: "skill",
+                selector: "alpha",
+                slug: "alpha"
+              }
+            ],
+            source: "owner/repo"
+          }
+        ],
+        version: 3
+      })
+    );
+
+    expect(() => readImportRecipeStore(sandbox)).toThrow(/disableModelInvocation.*boolean/u);
   });
 
   test("skill import recipe store rejects duplicate selectors in one recipe", () => {
@@ -305,7 +335,7 @@ describe("skill importing", () => {
             source: "owner/repo"
           }
         ],
-        version: 2
+        version: 3
       })
     );
 
@@ -342,7 +372,7 @@ describe("skill importing", () => {
             source: "owner/second"
           }
         ],
-        version: 2
+        version: 3
       })
     );
 
@@ -364,7 +394,7 @@ describe("skill importing", () => {
           source: "owner/skill"
         }
       ],
-      version: 2
+      version: 3
     });
 
     expect(readImportRecipeStore(sandbox).recipes).toStrictEqual([
@@ -413,7 +443,7 @@ describe("skill importing", () => {
           source: "owner/first"
         }
       ],
-      version: 2
+      version: 3
     });
 
     expect(() => {
@@ -442,7 +472,7 @@ describe("skill importing", () => {
           source: "owner/first"
         }
       ],
-      version: 2
+      version: 3
     });
   });
 
@@ -560,7 +590,7 @@ describe("skill importing", () => {
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
   });
 
@@ -661,7 +691,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old skill");
 
@@ -711,7 +741,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2 as const
+      version: 3 as const
     };
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
     writeImportRecipeStore(sandbox, originalStore);
@@ -766,7 +796,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2 as const
+      version: 3 as const
     };
     writeImportRecipeStore(sandbox, originalStore);
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
@@ -843,7 +873,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
   });
 
@@ -897,7 +927,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
 
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
@@ -956,7 +986,7 @@ name: outside-entry
           source: "openclaw/agent-skills"
         }
       ],
-      version: 2
+      version: 3
     });
   });
 
@@ -1029,7 +1059,7 @@ name: outside-entry
           source: "owner/first"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
@@ -1064,7 +1094,7 @@ name: outside-entry
           source: "owner/first"
         }
       ],
-      version: 2
+      version: 3
     });
   });
 
@@ -1125,7 +1155,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
@@ -1154,6 +1184,305 @@ name: outside-entry
     expect(skillsLog).not.toContain("-l");
   });
 
+  test("skills update preserves upstream invocation metadata when no override is recorded", async () => {
+    const sandbox = makeTempDir("skill-update-invocation-preserve");
+    const skillMarkdown = `---
+name: alpha
+disable-model-invocation: true
+metadata:
+  owner: upstream
+---
+
+# Alpha
+`;
+    const openaiYaml = `interface:
+  display_name: Alpha
+policy:
+  allow_implicit_invocation: false
+`;
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log"),
+      stagedGuidance: {
+        alpha: {
+          "agents/openai.yaml": openaiYaml,
+          "SKILL.md": skillMarkdown
+        }
+      }
+    });
+    writeImportRecipeStore(sandbox, {
+      recipes: [
+        {
+          skills: [{ kind: "skill", selector: "alpha", slug: "alpha" }],
+          source: "owner/repo"
+        }
+      ],
+      version: 3
+    });
+    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+
+    await withFakeNpx(sandbox, fakeBinDirectory, () => runUpdateSkills([], { writeMessage() {} }));
+
+    expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe(skillMarkdown);
+    expect(read(sandbox, "skills/imported/alpha/agents/openai.yaml")).toBe(openaiYaml);
+  });
+
+  test("skills update disables model invocation on Claude and Codex when explicitly requested", async () => {
+    const sandbox = makeTempDir("skill-update-invocation-disabled");
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log"),
+      stagedGuidance: {
+        alpha: {
+          "agents/openai.yaml": `interface:
+  display_name: Alpha
+  short_description: Upstream description
+policy:
+  allow_implicit_invocation: true
+  network: false
+`,
+          "SKILL.md": `---
+name: alpha
+disable-model-invocation: false
+user-invocable: true
+metadata:
+  owner: upstream
+---
+
+# Alpha
+`
+        }
+      }
+    });
+    writeImportRecipeStore(sandbox, {
+      recipes: [
+        {
+          skills: [
+            {
+              disableModelInvocation: true,
+              kind: "skill",
+              selector: "alpha",
+              slug: "alpha"
+            }
+          ],
+          source: "owner/repo"
+        }
+      ],
+      version: 3
+    });
+    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+
+    await withFakeNpx(sandbox, fakeBinDirectory, () => runUpdateSkills([], { writeMessage() {} }));
+
+    const skillMarkdown = read(sandbox, "skills/imported/alpha/SKILL.md");
+    expect(skillMarkdown).toContain("disable-model-invocation: true");
+    expect(skillMarkdown).toContain("user-invocable: true");
+    expect(skillMarkdown).toContain("owner: upstream");
+    expect(skillMarkdown).toContain("# Alpha");
+    expect(parse(read(sandbox, "skills/imported/alpha/agents/openai.yaml"))).toStrictEqual({
+      interface: {
+        display_name: "Alpha",
+        short_description: "Upstream description"
+      },
+      policy: {
+        allow_implicit_invocation: false,
+        network: false
+      }
+    });
+  });
+
+  test("skills update enables model invocation on Claude and Codex when explicitly requested", async () => {
+    const sandbox = makeTempDir("skill-update-invocation-enabled");
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log"),
+      stagedGuidance: {
+        alpha: {
+          "agents/openai.yaml": `policy:
+  allow_implicit_invocation: false
+`,
+          "SKILL.md": `---
+name: alpha
+disable-model-invocation: true
+---
+
+# Alpha
+`
+        }
+      }
+    });
+    writeImportRecipeStore(sandbox, {
+      recipes: [
+        {
+          skills: [
+            {
+              disableModelInvocation: false,
+              kind: "skill",
+              selector: "alpha",
+              slug: "alpha"
+            }
+          ],
+          source: "owner/repo"
+        }
+      ],
+      version: 3
+    });
+    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+
+    await withFakeNpx(sandbox, fakeBinDirectory, () => runUpdateSkills([], { writeMessage() {} }));
+
+    expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toContain(
+      "disable-model-invocation: false"
+    );
+    expect(parse(read(sandbox, "skills/imported/alpha/agents/openai.yaml"))).toStrictEqual({
+      policy: { allow_implicit_invocation: true }
+    });
+  });
+
+  test("skills update creates canonical Codex metadata for an explicit invocation override", async () => {
+    const sandbox = makeTempDir("skill-update-invocation-create-codex");
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log"),
+      stagedGuidance: {
+        alpha: {
+          "SKILL.md": `---
+name: alpha
+---
+
+# Alpha
+`
+        }
+      }
+    });
+    writeImportRecipeStore(sandbox, {
+      recipes: [
+        {
+          skills: [
+            {
+              disableModelInvocation: true,
+              kind: "skill",
+              selector: "alpha",
+              slug: "alpha"
+            }
+          ],
+          source: "owner/repo"
+        }
+      ],
+      version: 3
+    });
+    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+
+    await withFakeNpx(sandbox, fakeBinDirectory, () => runUpdateSkills([], { writeMessage() {} }));
+
+    expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toContain(
+      "disable-model-invocation: true"
+    );
+    expect(read(sandbox, "skills/imported/alpha/agents/openai.yaml")).toBe(
+      "policy:\n  allow_implicit_invocation: false\n"
+    );
+  });
+
+  test("skills update normalizes legacy Codex metadata before applying an invocation override", async () => {
+    const sandbox = makeTempDir("skill-update-invocation-normalize-codex");
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log"),
+      stagedGuidance: {
+        alpha: {
+          "agents/openai.yml": `interface:
+  display_name: Legacy Alpha
+policy:
+  network: false
+`,
+          "SKILL.md": `---
+name: alpha
+---
+
+# Alpha
+`
+        }
+      }
+    });
+    writeImportRecipeStore(sandbox, {
+      recipes: [
+        {
+          skills: [
+            {
+              disableModelInvocation: false,
+              kind: "skill",
+              selector: "alpha",
+              slug: "alpha"
+            }
+          ],
+          source: "owner/repo"
+        }
+      ],
+      version: 3
+    });
+    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+
+    await withFakeNpx(sandbox, fakeBinDirectory, () => runUpdateSkills([], { writeMessage() {} }));
+
+    expect(existsSync(path.join(sandbox, "skills/imported/alpha/agents/openai.yml"))).toBeFalsy();
+    expect(parse(read(sandbox, "skills/imported/alpha/agents/openai.yaml"))).toStrictEqual({
+      interface: { display_name: "Legacy Alpha" },
+      policy: {
+        allow_implicit_invocation: true,
+        network: false
+      }
+    });
+  });
+
+  test("skills update removes duplicate legacy Codex metadata", async () => {
+    const sandbox = makeTempDir("skill-update-invocation-remove-legacy-codex");
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log"),
+      stagedGuidance: {
+        alpha: {
+          "agents/openai.yaml": `interface:
+  display_name: Canonical Alpha
+`,
+          "agents/openai.yml": `interface:
+  display_name: Legacy Alpha
+`,
+          "SKILL.md": `---
+name: alpha
+---
+
+# Alpha
+`
+        }
+      }
+    });
+    writeImportRecipeStore(sandbox, {
+      recipes: [
+        {
+          skills: [
+            {
+              disableModelInvocation: true,
+              kind: "skill",
+              selector: "alpha",
+              slug: "alpha"
+            }
+          ],
+          source: "owner/repo"
+        }
+      ],
+      version: 3
+    });
+    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+
+    await withFakeNpx(sandbox, fakeBinDirectory, () => runUpdateSkills([], { writeMessage() {} }));
+
+    expect(existsSync(path.join(sandbox, "skills/imported/alpha/agents/openai.yml"))).toBeFalsy();
+    expect(parse(read(sandbox, "skills/imported/alpha/agents/openai.yaml"))).toStrictEqual({
+      interface: { display_name: "Canonical Alpha" },
+      policy: { allow_implicit_invocation: false }
+    });
+  });
+
   test("skills update refreshes an Imported reference without recreating an Imported skill", async () => {
     const sandbox = makeTempDir("skill-update-reference");
     const skillsLogPath = path.join(sandbox, "skills.log");
@@ -1168,11 +1497,18 @@ name: outside-entry
     writeImportRecipeStore(sandbox, {
       recipes: [
         {
-          skills: [{ kind: "reference", selector: "alpha", slug: "alpha" }],
+          skills: [
+            {
+              disableModelInvocation: true,
+              kind: "reference",
+              selector: "alpha",
+              slug: "alpha"
+            }
+          ],
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
 
@@ -1195,6 +1531,54 @@ name: outside-entry
     expect(read(sandbox, "skills/references/imported/alpha/references/details.md")).toBe(
       "supporting details\n"
     );
+    expect(existsSync(path.join(sandbox, "skills/references/imported/alpha/agents"))).toBeFalsy();
+  });
+
+  test("skills update keeps previous guidance and its recipe when invocation metadata is invalid", async () => {
+    const sandbox = makeTempDir("skill-update-invocation-atomic-failure");
+    const originalStore = {
+      recipes: [
+        {
+          skills: [
+            {
+              disableModelInvocation: true,
+              kind: "skill" as const,
+              selector: "alpha",
+              slug: "alpha"
+            }
+          ],
+          source: "owner/repo"
+        }
+      ],
+      version: 3 as const
+    };
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log"),
+      stagedGuidance: {
+        alpha: {
+          "agents/openai.yaml": "interface:\n  display_name: Alpha\n",
+          "SKILL.md": `---
+name: alpha
+metadata: [unterminated
+---
+
+# Alpha
+`
+        }
+      }
+    });
+    writeImportRecipeStore(sandbox, originalStore);
+    write(sandbox, "skills/imported/alpha/SKILL.md", "previous alpha");
+
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
+      await expect(runUpdateSkills([], { writeMessage() {} })).rejects.toThrow(
+        /Invalid Skill frontmatter/u
+      );
+    });
+
+    expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("previous alpha");
+    expect(readImportRecipeStore(sandbox)).toStrictEqual(originalStore);
   });
 
   test("skills update continues through later recipes after one recipe fails", async () => {
@@ -1232,7 +1616,7 @@ name: outside-entry
           source: "owner/works"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/references/imported/bravo/MAIN.md", "old bravo");
@@ -1284,7 +1668,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/orphan/SKILL.md", "unknown");
@@ -1334,7 +1718,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
@@ -1367,7 +1751,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
   });
 
@@ -1398,7 +1782,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
@@ -1442,7 +1826,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
   });
 
@@ -1467,7 +1851,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
 
@@ -1511,7 +1895,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2 as const
+      version: 3 as const
     };
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
@@ -1564,7 +1948,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2 as const
+      version: 3 as const
     };
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
@@ -1618,7 +2002,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2 as const
+      version: 3 as const
     };
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
@@ -1674,7 +2058,7 @@ name: outside-entry
           source: "owner/z-bravo"
         }
       ],
-      version: 2 as const
+      version: 3 as const
     };
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
@@ -1760,7 +2144,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
@@ -1819,7 +2203,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
 
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
@@ -1858,7 +2242,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
@@ -1924,7 +2308,7 @@ name: outside-entry
           source: "z/other"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/beta/SKILL.md", "old beta");
@@ -1971,7 +2355,7 @@ name: outside-entry
           source: "z/other"
         }
       ],
-      version: 2
+      version: 3
     });
   });
 
@@ -1996,7 +2380,7 @@ name: outside-entry
           source: "owner/repo"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
@@ -2040,7 +2424,7 @@ name: outside-entry
           source: "openclaw/agent-skills"
         }
       ],
-      version: 2
+      version: 3
     });
     write(sandbox, "skills/imported/autoreview/SKILL.md", "old autoreview");
 
@@ -2064,6 +2448,19 @@ name: outside-entry
   });
 });
 
+async function withFakeNpx(sandbox: string, fakeBinDirectory: string, action: () => Promise<void>) {
+  const originalCwd = process.cwd();
+  const originalPath = process.env.PATH;
+  try {
+    process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+    process.chdir(sandbox);
+    await action();
+  } finally {
+    process.chdir(originalCwd);
+    process.env.PATH = originalPath;
+  }
+}
+
 function installFakeNpx(
   sandbox: string,
   options: {
@@ -2071,6 +2468,7 @@ function installFakeNpx(
     mainCollisionSelector?: string;
     skillsCwdLogPath: string;
     skillsLogPath: string;
+    stagedGuidance?: Record<string, Record<string, string>>;
     stagedSkillEntrySymlinkTarget?: string;
     stagedSlugBySelector?: Record<string, string>;
     stageReferenceFixture?: boolean;
@@ -2078,7 +2476,13 @@ function installFakeNpx(
   }
 ): string {
   const binDirectory = path.join(sandbox, "fake-bin");
+  const guidanceFixturesDirectory = path.join(sandbox, "fake-upstream-guidance");
   mkdirSync(binDirectory, { recursive: true });
+  for (const [selector, files] of Object.entries(options.stagedGuidance ?? {})) {
+    for (const [relativePath, contents] of Object.entries(files)) {
+      write(sandbox, path.join("fake-upstream-guidance", selector, relativePath), contents);
+    }
+  }
   const scriptPath = path.join(binDirectory, "npx");
   writeFileSync(
     scriptPath,
@@ -2170,6 +2574,9 @@ ${Object.entries(options.stagedSlugBySelector ?? {})
     *) ;;
   esac
   mkdir -p ".agents/skills/$staged_slug"
+  if [ -d '${guidanceFixturesDirectory}'/"$skill" ]; then
+    cp -R '${guidanceFixturesDirectory}'/"$skill"/. ".agents/skills/$staged_slug/"
+  else
 ${
   options.stageReferenceFixture === true
     ? `  cat > ".agents/skills/$staged_slug/SKILL.md" <<'SKILL'
@@ -2193,6 +2600,7 @@ ${
 }`
     : `  printf 'new %s' "$staged_slug" > ".agents/skills/$staged_slug/SKILL.md"`
 }
+  fi
 ${
   options.mainCollisionSelector
     ? `  if [ "$skill" = "${options.mainCollisionSelector}" ]; then
