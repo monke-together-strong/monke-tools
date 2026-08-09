@@ -224,6 +224,12 @@ Follow the [shared rules](../imported/shared.md).
     ]);
     const parsed = BaselineConfigSchema.parse(parse(rendered.yaml));
     const [baseline] = parsed.reviews.path_instructions;
+    expect(
+      baseline?.instructions.startsWith(
+        "This Team coding baseline is required for all reviews.\n\n" +
+          "Repository AGENTS.md and CODING_STANDARDS.md may add stricter or more specific rules; the Team baseline takes precedence on conflicts."
+      )
+    ).toBeTruthy();
     expect(baseline?.instructions).toContain("# Team baseline");
     expect(baseline?.instructions).toContain(
       "Source: skills/references/imported/shared.md\n\n# Shared rules"

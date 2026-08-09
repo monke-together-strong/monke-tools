@@ -118,9 +118,9 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Reference-backed skill**: An invocable **Distributed skill** that loads an unchanged **Distributed reference** as its base behavior and applies additional guidance with explicit precedence. _Avoid_: Forked skill, patched imported skill, copied skill
 
-**Team coding baseline**: Team-owned coding guidance applied across **Consumer repos** as a fallback when a repo does not define a conflicting standard. _Avoid_: Repo coding standards, personal preferences, lint rules
+**Team coding baseline**: Minimum Team-owned coding guidance required across all **Consumer repos**; repo rules may add stricter or more specific guidance. _Avoid_: Repo coding standards, personal preferences, lint rules
 
-**Repo coding standards**: Authoritative coding guidance documented by a **Consumer repo**; it overrides conflicting team or imported review baselines. _Avoid_: Team coding baseline, formatter config, inferred conventions
+**Repo coding standards**: Repository-owned coding guidance documented by a **Consumer repo**; it supplements the **Team coding baseline** and may override conflicting imported review guidance. _Avoid_: Team coding baseline, formatter config, inferred conventions
 
 **Shared Oxc presets**: Team-owned lint and format policy distributed for consistent use across **Consumer repos**. _Avoid_: Oxc package, rules package, repo quality config
 
