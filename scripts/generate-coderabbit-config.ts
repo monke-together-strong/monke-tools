@@ -108,8 +108,8 @@ export function renderCodeRabbitConfig(rawOptions: unknown) {
   const templatePath = path.join(options.repoRoot, TEMPLATE_PATH);
   const template = CodeRabbitTemplateSchema.parse(parse(readFileSync(templatePath, "utf-8")));
   const instructions = [
-    "This is the Team coding baseline and applies as a fallback.",
-    "Repository AGENTS.md and CODING_STANDARDS.md rules override conflicting baseline rules.",
+    "This Team coding baseline is required for all reviews.",
+    "Repository AGENTS.md and CODING_STANDARDS.md may add stricter or more specific rules; the Team baseline takes precedence on conflicts.",
     ...documents.map((document, index) =>
       index === 0 || !document.showSource
         ? document.contents
