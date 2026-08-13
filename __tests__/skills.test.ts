@@ -107,6 +107,30 @@ describe("skills", () => {
     }
   );
 
+  test("skill reconciliation resolves symlinks before parent path segments", () => {
+    const sandbox = makeTempDir("skill-reconcile-component-order-alias");
+    const homeDirectory = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    const customSkillRoot = path.join(sandbox, "codex-skills-alias");
+    writeCoreSkill(sourceCheckout);
+    mkdirSync(path.join(homeDirectory, "nested"), { recursive: true });
+    symlinkSync(path.join(homeDirectory, "nested"), path.join(sandbox, "hop"), "dir");
+    symlinkSync("hop/../.codex/skills", customSkillRoot, "dir");
+
+    expect(() => {
+      reconcileSkillNamespaces({
+        homeDirectory,
+        nextPreference: {
+          targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
+        },
+        previousPreference: null,
+        sourceCheckout,
+        writeMessage() {}
+      });
+    }).toThrow(/same Agent skill root/u);
+    expect(existsSync(path.join(homeDirectory, ".codex", "skills"))).toBeFalsy();
+  });
+
   test("skill namespace reconciliation projects Codex-only skills only into Codex", () => {
     const sandbox = makeTempDir("skill-reconcile-create");
     const sourceCheckout = path.join(sandbox, "source");

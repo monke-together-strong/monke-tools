@@ -822,13 +822,38 @@ function assertUniqueTargetRoots(targets: ResolvedSkillInstallTarget[]) {
 }
 
 function resolveFilesystemIdentity(targetPath: string) {
-  let unresolvedPath = path.resolve(targetPath);
+  const absoluteTargetPath = path.resolve(targetPath);
+  const targetRoot = path.parse(absoluteTargetPath).root;
+  let resolvedPath = targetRoot;
+  const pendingSegments = splitPathSegments(absoluteTargetPath.slice(targetRoot.length));
   const missingSegments: string[] = [];
   let symlinkCount = 0;
 
-  while (true) {
-    const unresolvedStat = lstatIfExists(unresolvedPath);
-    if (unresolvedStat?.isSymbolicLink()) {
+  while (pendingSegments.length > 0) {
+    const segment = pendingSegments.shift();
+    if (!segment || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      if (missingSegments.length > 0) {
+        missingSegments.pop();
+      } else {
+        resolvedPath = path.dirname(resolvedPath);
+      }
+      continue;
+    }
+    if (missingSegments.length > 0) {
+      missingSegments.push(segment);
+      continue;
+    }
+
+    const candidatePath = path.join(resolvedPath, segment);
+    const candidateStat = lstatIfExists(candidatePath);
+    if (!candidateStat) {
+      missingSegments.push(segment);
+      continue;
+    }
+    if (candidateStat.isSymbolicLink()) {
       symlinkCount += 1;
       if (symlinkCount > MAX_SYMLINK_RESOLUTION_COUNT) {
         throw new MonkeError(
@@ -836,55 +861,76 @@ function resolveFilesystemIdentity(targetPath: string) {
         );
       }
 
-      unresolvedPath = path.resolve(path.dirname(unresolvedPath), readlinkSync(unresolvedPath));
+      const symlinkTarget = readlinkSync(candidatePath);
+      const symlinkRoot = path.parse(symlinkTarget).root;
+      if (symlinkRoot) {
+        resolvedPath = symlinkRoot;
+      }
+      pendingSegments.unshift(...splitPathSegments(symlinkTarget.slice(symlinkRoot.length)));
       continue;
     }
 
-    if (unresolvedStat) {
-      const canonicalAncestor = realpathSync.native(unresolvedPath);
-      const ancestorStat = statSync(canonicalAncestor);
-      if (missingSegments.length === 0) {
-        return `node:${String(ancestorStat.dev)}:${String(ancestorStat.ino)}`;
-      }
-
-      const missingPath = missingSegments.join(path.sep);
-      const normalizedMissingPath = isCaseInsensitiveFilesystem(canonicalAncestor, ancestorStat.dev)
-        ? missingPath.toLowerCase()
-        : missingPath;
-      return `descendant:${String(ancestorStat.dev)}:${String(ancestorStat.ino)}:${normalizedMissingPath}`;
-    }
-
-    const parentPath = path.dirname(unresolvedPath);
-    if (parentPath === unresolvedPath) {
-      throw new MonkeError(`Cannot resolve Agent skill root: ${targetPath}`);
-    }
-    missingSegments.unshift(path.basename(unresolvedPath));
-    unresolvedPath = parentPath;
+    resolvedPath = realpathSync.native(candidatePath);
   }
+
+  const ancestorStat = statSync(resolvedPath);
+  if (missingSegments.length === 0) {
+    return `node:${String(ancestorStat.dev)}:${String(ancestorStat.ino)}`;
+  }
+
+  const missingPath = missingSegments.join(path.sep);
+  const normalizedMissingPath = isCaseInsensitiveFilesystem(resolvedPath, ancestorStat.dev)
+    ? missingPath.toLowerCase()
+    : missingPath;
+  return `descendant:${String(ancestorStat.dev)}:${String(ancestorStat.ino)}:${normalizedMissingPath}`;
+}
+
+function splitPathSegments(value: string) {
+  return value.split(path.sep).filter(Boolean);
 }
 
 function isCaseInsensitiveFilesystem(existingPath: string, device: number) {
   let currentPath = existingPath;
 
   while (true) {
-    const currentStat = lstatSync(currentPath);
+    const currentStat = statSync(currentPath);
     if (currentStat.dev !== device) {
       return false;
     }
 
-    const currentName = path.basename(currentPath);
-    const toggledName = toggleFirstLetterCase(currentName);
-    if (toggledName !== currentName) {
-      const aliasStat = lstatIfExists(path.join(path.dirname(currentPath), toggledName));
-      return aliasStat?.dev === currentStat.dev && aliasStat.ino === currentStat.ino;
+    const caseInsensitive = inferCaseInsensitiveDirectory(currentPath);
+    if (caseInsensitive !== null) {
+      return caseInsensitive;
     }
 
     const parentPath = path.dirname(currentPath);
     if (parentPath === currentPath) {
       return false;
     }
+    const parentStat = statSync(parentPath);
+    if (parentStat.dev !== device) {
+      return false;
+    }
     currentPath = parentPath;
   }
+}
+
+function inferCaseInsensitiveDirectory(directoryPath: string) {
+  for (const entryName of readdirSync(directoryPath)) {
+    const toggledName = toggleFirstLetterCase(entryName);
+    if (toggledName === entryName) {
+      continue;
+    }
+
+    const entryStat = lstatIfExists(path.join(directoryPath, entryName));
+    if (!entryStat) {
+      continue;
+    }
+    const aliasStat = lstatIfExists(path.join(directoryPath, toggledName));
+    return aliasStat?.dev === entryStat.dev && aliasStat.ino === entryStat.ino;
+  }
+
+  return null;
 }
 
 function toggleFirstLetterCase(value: string) {

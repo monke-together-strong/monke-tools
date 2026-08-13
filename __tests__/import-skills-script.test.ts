@@ -728,51 +728,54 @@ name: outside-entry
     ]);
   });
 
-  test("re-import rejects migrating an Imported reference used by a Reference-backed skill", async () => {
-    const sandbox = makeTempDir("skill-import-consumed-reference");
-    const skillsLogPath = path.join(sandbox, "skills.log");
-    const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
-    const originalStore = {
-      recipes: [
-        {
-          skills: [{ kind: "reference" as const, selector: "alpha", slug: "alpha" }],
-          source: "owner/repo"
-        }
-      ],
-      version: 3 as const
-    };
-    const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
-    writeImportRecipeStore(sandbox, originalStore);
-    write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
-    write(
-      sandbox,
-      "skills/internal/reviewer/SKILL.md",
-      "[Base](../../references/imported/alpha/MAIN.md)\n"
-    );
+  test.each(["internal", "codex"])(
+    "re-import rejects migrating an Imported reference used by a %s skill",
+    async (skillFolder) => {
+      const sandbox = makeTempDir("skill-import-consumed-reference");
+      const skillsLogPath = path.join(sandbox, "skills.log");
+      const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+      const originalCwd = process.cwd();
+      const originalPath = process.env.PATH;
+      const originalStore = {
+        recipes: [
+          {
+            skills: [{ kind: "reference" as const, selector: "alpha", slug: "alpha" }],
+            source: "owner/repo"
+          }
+        ],
+        version: 3 as const
+      };
+      const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
+      writeImportRecipeStore(sandbox, originalStore);
+      write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
+      write(
+        sandbox,
+        `skills/${skillFolder}/reviewer/SKILL.md`,
+        "[Base](../../references/imported/alpha/MAIN.md)\n"
+      );
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
+      try {
+        process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
+        process.chdir(sandbox);
 
-      await expect(
-        runImportSkills(["owner/repo"], {
-          selectSkills() {
-            return ["alpha"];
-          },
-          writeMessage() {}
-        })
-      ).rejects.toThrow(/used by skills\/internal\/reviewer\/SKILL\.md/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
+        await expect(
+          runImportSkills(["owner/repo"], {
+            selectSkills() {
+              return ["alpha"];
+            },
+            writeMessage() {}
+          })
+        ).rejects.toThrow(`used by skills/${skillFolder}/reviewer/SKILL.md`);
+      } finally {
+        process.chdir(originalCwd);
+        process.env.PATH = originalPath;
+      }
+
+      expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe("old reference");
+      expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBeFalsy();
+      expect(readImportRecipeStore(sandbox)).toStrictEqual(originalStore);
     }
-
-    expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe("old reference");
-    expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBeFalsy();
-    expect(readImportRecipeStore(sandbox)).toStrictEqual(originalStore);
-  });
+  );
 
   test("a reference MAIN.md collision leaves every selected managed copy and recipe unchanged", async () => {
     const sandbox = makeTempDir("skill-import-reference-collision");

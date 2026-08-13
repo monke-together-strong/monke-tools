@@ -158,6 +158,45 @@ describe("skills CLI", () => {
     }
   );
 
+  test("mt skills configure resolves symlinks before parent path segments", async () => {
+    const sandbox = makeTempDir("skills-configure-component-order-alias");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    const customSkillRoot = path.join(sandbox, "codex-skills-alias");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    mkdirSync(path.join(osHome, "nested"), { recursive: true });
+    symlinkSync(path.join(osHome, "nested"), path.join(sandbox, "hop"), "dir");
+    symlinkSync("hop/../.codex/skills", customSkillRoot, "dir");
+    saveGlobalMonkeConfig(monkeHome, {
+      installedSourceCheckout: sourceCheckout,
+      version: 1
+    });
+
+    await expect(
+      runCliAsync(
+        ["skills", "configure"],
+        createRuntime({
+          cwd: sandbox,
+          env: {
+            HOME: osHome,
+            MONKE_HOME: monkeHome
+          },
+          multiSelectValues: [["codex", "custom"]],
+          onStderr() {},
+          onStdout() {},
+          stdinText: `${customSkillRoot}\n`
+        })
+      )
+    ).rejects.toThrow(/same Agent skill root/u);
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();
+    expect(existsSync(path.join(osHome, ".codex", "skills"))).toBeFalsy();
+  });
+
   test("mt skills configure preselects existing targets when reconfiguring", async () => {
     const sandbox = makeTempDir("skills-configure-e2e");
     const monkeHome = path.join(sandbox, "monke-home");

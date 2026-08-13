@@ -38,7 +38,7 @@ export function makeTempDir(prefix: string): string {
   return directory;
 }
 
-export function isCaseInsensitiveFilesystem(): boolean {
+export function isCaseInsensitiveFilesystem() {
   const directory = makeTempDir("case-sensitivity");
   mkdirSync(path.join(directory, "CaseProbe"));
   return existsSync(path.join(directory, "caseprobe"));
