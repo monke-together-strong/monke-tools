@@ -351,9 +351,11 @@ touch "${discoveryReached}"`
     const sessionSide = git(sessionWorktree, ["rev-parse", "HEAD"]);
     git(repoRoot, ["merge", sessionSide, "-m", "main-merge"]);
     git(sessionWorktree, ["merge", mainSide, "-m", "session-merge"]);
+    git(repoRoot, ["branch", "master", mainSide]);
     expect(git(sessionWorktree, ["merge-base", "--all", "main", "HEAD"]).split("\n")).toHaveLength(
       2
     );
+    expect(git(sessionWorktree, ["merge-base", "--all", "master", "HEAD"])).toBe(mainSide);
     const codiffLog = installFakeCodiff(binDirectory);
 
     await runMonkeAsync({

@@ -51,7 +51,11 @@ export function findNewerDefaultBranchBase(
   context: RepoContext,
   rememberedBaseRef: string
 ): string | undefined {
-  const rememberedMergeBase = resolveUniqueMergeBase(runtime, context, rememberedBaseRef);
+  const rememberedMergeBases = resolveMergeBases(runtime, context, rememberedBaseRef);
+  if (rememberedMergeBases?.length !== 1) {
+    return undefined;
+  }
+  const [rememberedMergeBase] = rememberedMergeBases;
   if (rememberedMergeBase === undefined) {
     return undefined;
   }
@@ -64,14 +68,25 @@ export function findNewerDefaultBranchBase(
     .stdout.trim()
     .split("\n")
     .filter((ref) => isDefaultBranchRef(ref) && ref !== rememberedBaseRef);
-  const candidates = refs.flatMap((ref) => {
-    const mergeBase = resolveUniqueMergeBase(runtime, context, ref);
-    return mergeBase !== undefined &&
-      mergeBase !== rememberedMergeBase &&
-      isAncestor(runtime, context, rememberedMergeBase, mergeBase)
-      ? [{ mergeBase, ref }]
-      : [];
-  });
+  const candidates: { mergeBase: string; ref: string }[] = [];
+  for (const ref of refs) {
+    const mergeBases = resolveMergeBases(runtime, context, ref);
+    if (
+      mergeBases === undefined ||
+      !mergeBases.some((mergeBase) =>
+        hasNewerSharedHistory(runtime, context, rememberedMergeBase, mergeBase)
+      )
+    ) {
+      continue;
+    }
+    if (mergeBases.length !== 1) {
+      return undefined;
+    }
+    const [mergeBase] = mergeBases;
+    if (mergeBase !== undefined) {
+      candidates.push({ mergeBase, ref });
+    }
+  }
   const maximalCandidates = candidates.filter((candidate) =>
     candidates.every(
       (other) =>
@@ -105,17 +120,28 @@ export function hasWorkingTreeChanges(runtime: Runtime, worktreePath: string): b
   );
 }
 
-function resolveUniqueMergeBase(
+function resolveMergeBases(
   runtime: Runtime,
   context: RepoContext,
   baseRef: string
-): string | undefined {
+): string[] | undefined {
   const result = runtime.exec("git", ["merge-base", "--all", baseRef, "HEAD"], {
     allowFailure: true,
     cwd: context.worktreeRoot
   });
-  const mergeBases = result.stdout.trim().split("\n").filter(Boolean);
-  return result.exitCode === 0 && mergeBases.length === 1 ? mergeBases[0] : undefined;
+  return result.exitCode === 0 ? result.stdout.trim().split("\n").filter(Boolean) : undefined;
+}
+
+function hasNewerSharedHistory(
+  runtime: Runtime,
+  context: RepoContext,
+  rememberedMergeBase: string,
+  candidateMergeBase: string
+): boolean {
+  return (
+    candidateMergeBase !== rememberedMergeBase &&
+    isAncestor(runtime, context, rememberedMergeBase, candidateMergeBase)
+  );
 }
 
 function isAncestor(
