@@ -176,6 +176,41 @@ touch "${discoveryReached}"`
     expect(readFileSync(codiffLog, "utf-8")).toBe(`--branch\nrefs/heads/main\n${worktreeRoot}\n`);
   });
 
+  test("plain Diff follows its remembered source branch after the Session is rebased onto its advanced tip", async () => {
+    const sandbox = makeTempDir("diff-rebased-remembered-base");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
+    const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
+
+    writeFileSync(path.join(sessionWorktree, "feature.txt"), "feature\n", "utf-8");
+    git(sessionWorktree, ["add", "feature.txt"]);
+    git(sessionWorktree, ["commit", "-m", "feature"]);
+    writeFileSync(path.join(repoRoot, "upstream.txt"), "upstream\n", "utf-8");
+    git(repoRoot, ["add", "upstream.txt"]);
+    git(repoRoot, ["commit", "-m", "upstream"]);
+    git(sessionWorktree, ["rebase", "main"]);
+
+    const mainHead = git(repoRoot, ["rev-parse", "refs/heads/main"]);
+    expect(git(sessionWorktree, ["merge-base", "refs/heads/main", "HEAD"])).toBe(mainHead);
+    const codiffLog = installFakeCodiff(binDirectory);
+
+    await runMonkeAsync({
+      args: ["diff"],
+      binDirectory,
+      cwd: sessionWorktree,
+      monkeHome: home
+    });
+
+    expect(readFileSync(codiffLog, "utf-8")).toBe(
+      `--branch\nrefs/heads/main\n${sessionWorktree}\n`
+    );
+    expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBe(
+      "refs/heads/main"
+    );
+  });
+
   test("forced Diff picker preserves local target ordering and launches the selected committed branch", async () => {
     const sandbox = makeTempDir("diff-picker-order");
     const binDirectory = path.join(sandbox, "bin");
