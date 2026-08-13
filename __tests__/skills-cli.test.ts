@@ -197,6 +197,44 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(osHome, ".codex", "skills"))).toBeFalsy();
   });
 
+  test("mt skills configure does not save a root inside a planned projection", async () => {
+    const sandbox = makeTempDir("skills-configure-planned-alias");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    const customSkillRoot = path.join(osHome, ".codex", "skills", "monke-tools", "codex");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    write(sourceCheckout, "skills/codex/codex-only/SKILL.md", "---\nname: codex-only\n---\n");
+    saveGlobalMonkeConfig(monkeHome, {
+      installedSourceCheckout: sourceCheckout,
+      version: 1
+    });
+
+    await expect(
+      runCliAsync(
+        ["skills", "configure"],
+        createRuntime({
+          cwd: sandbox,
+          env: {
+            HOME: osHome,
+            MONKE_HOME: monkeHome
+          },
+          multiSelectValues: [["codex", "custom"]],
+          onStderr() {},
+          onStdout() {},
+          stdinText: `${customSkillRoot}\n`
+        })
+      )
+    ).rejects.toThrow(/managed Skill projection/u);
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();
+    expect(existsSync(path.join(osHome, ".codex", "skills"))).toBeFalsy();
+    expect(existsSync(path.join(sourceCheckout, "skills", "codex", "monke-tools"))).toBeFalsy();
+  });
+
   test("mt skills configure preselects existing targets when reconfiguring", async () => {
     const sandbox = makeTempDir("skills-configure-e2e");
     const monkeHome = path.join(sandbox, "monke-home");

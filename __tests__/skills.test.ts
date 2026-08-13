@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
@@ -7,6 +8,16 @@ import { reconcileSkillNamespaces, resolveSkillInstallTargets } from "../src/ski
 import { isCaseInsensitiveFilesystem, makeTempDir, write } from "./helpers.ts";
 
 const CASE_INSENSITIVE_FILESYSTEM = isCaseInsensitiveFilesystem();
+const HFS_ATTACH_DEVICE_PATTERN = /^(?<device>\/dev\/disk\d+s\d+)\s+Apple_HFS\s+/mu;
+const RUN_EMPTY_VOLUME_TEST = process.platform === "darwin";
+
+function runSystemCommand(command: string, args: string[]) {
+  const result = spawnSync(command, args, { encoding: "utf-8" });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || `${command} ${args.join(" ")} failed`);
+  }
+  return result.stdout;
+}
 
 function writeCoreSkill(sourceCheckout: string) {
   write(
@@ -107,6 +118,77 @@ describe("skills", () => {
     }
   );
 
+  test.runIf(RUN_EMPTY_VOLUME_TEST).each([
+    { aliasesRoot: true, filesystem: "HFS+" },
+    { aliasesRoot: false, filesystem: "Case-sensitive HFS+" }
+  ])(
+    "skill reconciliation resolves case aliases on an empty $filesystem volume",
+    ({ aliasesRoot, filesystem }) => {
+      const sandbox = makeTempDir("skill-reconcile-empty-case-volume");
+      const sourceCheckout = path.join(sandbox, "source");
+      const imagePath = path.join(sandbox, "case-insensitive");
+      const mountPath = path.join(sandbox, "mount");
+      writeCoreSkill(sourceCheckout);
+      mkdirSync(mountPath);
+      runSystemCommand("/usr/bin/hdiutil", [
+        "create",
+        "-quiet",
+        "-type",
+        "SPARSE",
+        "-size",
+        "10m",
+        "-fs",
+        filesystem,
+        "-volname",
+        "MonkeCaseProbe",
+        imagePath
+      ]);
+      const attachOutput = runSystemCommand("/usr/bin/hdiutil", [
+        "attach",
+        "-nobrowse",
+        "-mountpoint",
+        mountPath,
+        `${imagePath}.sparseimage`
+      ]);
+      const mountedDevice = HFS_ATTACH_DEVICE_PATTERN.exec(attachOutput)?.groups?.device;
+
+      try {
+        if (!mountedDevice) {
+          throw new Error(`Could not identify mounted test volume from: ${attachOutput}`);
+        }
+        let reconciliationError: unknown;
+        try {
+          reconcileSkillNamespaces({
+            homeDirectory: mountPath,
+            nextPreference: {
+              targets: [
+                { kind: "codex" },
+                { kind: "custom", path: path.join(mountPath, ".CODEX", "skills") }
+              ]
+            },
+            previousPreference: null,
+            sourceCheckout,
+            writeMessage() {}
+          });
+        } catch (error) {
+          reconciliationError = error;
+        }
+        expect(
+          reconciliationError instanceof Error &&
+            reconciliationError.message.includes("same Agent skill root")
+        ).toBe(aliasesRoot);
+        expect(existsSync(path.join(mountPath, ".codex", "skills", "monke-tools"))).toBe(
+          !aliasesRoot
+        );
+        expect(existsSync(path.join(mountPath, ".CODEX", "skills", "monke-tools"))).toBe(
+          !aliasesRoot
+        );
+      } finally {
+        runSystemCommand("/usr/bin/hdiutil", ["detach", mountedDevice ?? mountPath]);
+      }
+    }
+  );
+
   test("skill reconciliation resolves symlinks before parent path segments", () => {
     const sandbox = makeTempDir("skill-reconcile-component-order-alias");
     const homeDirectory = path.join(sandbox, "home");
@@ -130,6 +212,47 @@ describe("skills", () => {
     }).toThrow(/same Agent skill root/u);
     expect(existsSync(path.join(homeDirectory, ".codex", "skills"))).toBeFalsy();
   });
+
+  test.each([
+    {
+      customSkillRoot(relativeHome: string) {
+        return path.join(relativeHome, ".codex", "skills", "monke-tools", "codex");
+      },
+      target: "codex" as const
+    },
+    {
+      customSkillRoot(relativeHome: string) {
+        return path.join(relativeHome, ".claude", "references");
+      },
+      target: "claude" as const
+    }
+  ])(
+    "skill reconciliation rejects a custom root inside a planned $target projection",
+    ({ customSkillRoot, target }) => {
+      const sandbox = makeTempDir("skill-reconcile-planned-alias");
+      const sourceCheckout = path.join(sandbox, "source");
+      const sourceSkillTree = path.join(sourceCheckout, "skills");
+      const customRoot = customSkillRoot(sandbox);
+      writeCoreSkill(sourceCheckout);
+      write(sourceCheckout, "skills/codex/codex-only/SKILL.md", "---\nname: codex-only\n---\n");
+      write(sourceCheckout, "skills/references/internal/README.md", "shared reference\n");
+
+      expect(() => {
+        reconcileSkillNamespaces({
+          homeDirectory: sandbox,
+          nextPreference: {
+            targets: [{ kind: target }, { kind: "custom", path: customRoot }]
+          },
+          previousPreference: null,
+          sourceCheckout,
+          writeMessage() {}
+        });
+      }).toThrow(/managed Skill projection/u);
+      expect(existsSync(customRoot)).toBeFalsy();
+      expect(existsSync(path.join(sourceSkillTree, "codex", "monke-tools"))).toBeFalsy();
+      expect(existsSync(path.join(sourceSkillTree, "references", "monke-tools"))).toBeFalsy();
+    }
+  );
 
   test("skill namespace reconciliation projects Codex-only skills only into Codex", () => {
     const sandbox = makeTempDir("skill-reconcile-create");

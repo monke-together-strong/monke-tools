@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
@@ -40,6 +41,9 @@ const CODEX_SKILL_SOURCE_FOLDER = "codex";
 const NAMESPACE_SOURCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
 const MAX_SYMLINK_RESOLUTION_COUNT = 40;
 const SKILL_FRONTMATTER_PATTERN = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u;
+const ASCII_LETTER_PATTERN = /[A-Za-z]/u;
+const MACOS_FILESYSTEM_NAME_PATTERN =
+  /<key>FilesystemName<\/key>\s*<string>(?<name>[^<]+)<\/string>/u;
 
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
   claude: path.join(".claude", "skills"),
@@ -100,7 +104,7 @@ export async function runSkillsConfigure(runtime: Runtime): Promise<void> {
       "Installed source checkout is not configured; run bun run install:local from the monke-tools checkout first"
     );
   }
-  resolveSkillSourceTree(sourceCheckout);
+  const skillSourceTree = resolveSkillSourceTree(sourceCheckout);
 
   const previousPreference = config.skillInstallPreference ?? null;
   const nextPreference = await promptForSkillInstallPreference(
@@ -108,11 +112,12 @@ export async function runSkillsConfigure(runtime: Runtime): Promise<void> {
     previousPreference,
     homeDirectory
   );
-  assertUniqueTargetRoots(
+  assertTargetRootsCanBeReconciled(
     resolveSkillInstallTargets({
       homeDirectory,
       preference: nextPreference
-    })
+    }),
+    skillSourceTree
   );
   saveGlobalMonkeConfig(monkeHome, {
     ...config,
@@ -185,7 +190,7 @@ export function reconcileSkillNamespaces(options: {
     homeDirectory: options.homeDirectory,
     preference: options.nextPreference
   });
-  assertUniqueTargetRoots(nextTargets);
+  assertTargetRootsCanBeReconciled(nextTargets, skillSourceTree);
   const nextKeys = new Set(nextTargets.map(targetKey));
   const failures: string[] = [];
 
@@ -821,7 +826,91 @@ function assertUniqueTargetRoots(targets: ResolvedSkillInstallTarget[]) {
   }
 }
 
+function assertTargetRootsCanBeReconciled(
+  targets: ResolvedSkillInstallTarget[],
+  skillSourceTree: string
+) {
+  assertUniqueTargetRoots(targets);
+
+  const projections = targets.flatMap((target) => {
+    if (skillInstallLayoutForTarget(target) === "namespace") {
+      return [{ owner: target, path: target.namespacePath }];
+    }
+
+    return [
+      { owner: target, path: target.agentSkillRoot },
+      ...discoverFlatSupportingLinks(target, skillSourceTree).map((link) => ({
+        owner: target,
+        path: link.targetPath
+      }))
+    ];
+  });
+
+  for (const target of targets) {
+    if (isProspectivePathWithin(skillSourceTree, target.agentSkillRoot)) {
+      throw new MonkeError(
+        `Skill install target ${target.kind} falls within the Skill source tree: ${target.agentSkillRoot}`
+      );
+    }
+
+    for (const projection of projections) {
+      if (
+        projection.owner !== target &&
+        isProspectivePathWithin(projection.path, target.agentSkillRoot)
+      ) {
+        throw new MonkeError(
+          `Skill install target ${target.kind} falls within the managed Skill projection for ${projection.owner.kind}: ${target.agentSkillRoot}`
+        );
+      }
+    }
+  }
+}
+
 function resolveFilesystemIdentity(targetPath: string) {
+  const location = resolveFilesystemLocation(targetPath);
+  if (location.missingSegments.length === 0) {
+    return `node:${String(location.ancestorStat.dev)}:${String(location.ancestorStat.ino)}`;
+  }
+
+  const missingPath = location.missingSegments.join(path.sep);
+  const normalizedMissingPath = isCaseInsensitiveFilesystem(
+    location.ancestorPath,
+    location.ancestorStat.dev
+  )
+    ? missingPath.toLowerCase()
+    : missingPath;
+  return `descendant:${String(location.ancestorStat.dev)}:${String(location.ancestorStat.ino)}:${normalizedMissingPath}`;
+}
+
+function resolveProspectiveFilesystemPath(targetPath: string) {
+  const location = resolveFilesystemLocation(targetPath);
+  if (location.missingSegments.length === 0) {
+    return location.ancestorPath;
+  }
+
+  const missingSegments = isCaseInsensitiveFilesystem(
+    location.ancestorPath,
+    location.ancestorStat.dev
+  )
+    ? location.missingSegments.map((segment) => segment.toLowerCase())
+    : location.missingSegments;
+  return path.join(location.ancestorPath, ...missingSegments);
+}
+
+function isProspectivePathWithin(parentPath: string, candidatePath: string) {
+  const relativePath = path.relative(
+    resolveProspectiveFilesystemPath(parentPath),
+    resolveProspectiveFilesystemPath(candidatePath)
+  );
+  return (
+    relativePath.length === 0 ||
+    (!relativePath.startsWith(`..${path.sep}`) &&
+      relativePath !== ".." &&
+      !path.isAbsolute(relativePath))
+  );
+}
+
+function resolveFilesystemLocation(targetPath: string) {
   const absoluteTargetPath = path.resolve(targetPath);
   const targetRoot = path.parse(absoluteTargetPath).root;
   let resolvedPath = targetRoot;
@@ -873,16 +962,11 @@ function resolveFilesystemIdentity(targetPath: string) {
     resolvedPath = realpathSync.native(candidatePath);
   }
 
-  const ancestorStat = statSync(resolvedPath);
-  if (missingSegments.length === 0) {
-    return `node:${String(ancestorStat.dev)}:${String(ancestorStat.ino)}`;
-  }
-
-  const missingPath = missingSegments.join(path.sep);
-  const normalizedMissingPath = isCaseInsensitiveFilesystem(resolvedPath, ancestorStat.dev)
-    ? missingPath.toLowerCase()
-    : missingPath;
-  return `descendant:${String(ancestorStat.dev)}:${String(ancestorStat.ino)}:${normalizedMissingPath}`;
+  return {
+    ancestorPath: resolvedPath,
+    ancestorStat: statSync(resolvedPath),
+    missingSegments
+  };
 }
 
 function splitPathSegments(value: string) {
@@ -905,11 +989,11 @@ function isCaseInsensitiveFilesystem(existingPath: string, device: number) {
 
     const parentPath = path.dirname(currentPath);
     if (parentPath === currentPath) {
-      return false;
+      return inferVolumeIsCaseInsensitive(currentPath) ?? false;
     }
     const parentStat = statSync(parentPath);
     if (parentStat.dev !== device) {
-      return false;
+      return inferVolumeIsCaseInsensitive(currentPath) ?? false;
     }
     currentPath = parentPath;
   }
@@ -933,21 +1017,53 @@ function inferCaseInsensitiveDirectory(directoryPath: string) {
   return null;
 }
 
-function toggleFirstLetterCase(value: string) {
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index];
-    if (!character) {
-      continue;
-    }
-    if (character >= "A" && character <= "Z") {
-      return `${value.slice(0, index)}${character.toLowerCase()}${value.slice(index + 1)}`;
-    }
-    if (character >= "a" && character <= "z") {
-      return `${value.slice(0, index)}${character.toUpperCase()}${value.slice(index + 1)}`;
-    }
+function inferVolumeIsCaseInsensitive(mountPath: string) {
+  if (process.platform === "win32") {
+    return true;
+  }
+  if (process.platform !== "darwin") {
+    return null;
   }
 
-  return value;
+  const result = spawnSync("/usr/sbin/diskutil", ["info", "-plist", mountPath], {
+    encoding: "utf-8"
+  });
+  if (result.status !== 0) {
+    return null;
+  }
+
+  const filesystemName = MACOS_FILESYSTEM_NAME_PATTERN.exec(result.stdout)?.groups?.name;
+  if (!filesystemName) {
+    return null;
+  }
+
+  const normalizedName = filesystemName.toLowerCase();
+  if (normalizedName.includes("case-sensitive")) {
+    return false;
+  }
+  if (
+    normalizedName === "apfs" ||
+    normalizedName.includes("hfs+") ||
+    normalizedName.includes("fat")
+  ) {
+    return true;
+  }
+  return null;
+}
+
+function toggleFirstLetterCase(value: string) {
+  const letterIndex = value.search(ASCII_LETTER_PATTERN);
+  if (letterIndex === -1) {
+    return value;
+  }
+
+  const letter = value[letterIndex];
+  if (!letter) {
+    return value;
+  }
+  const toggledLetter =
+    letter === letter.toUpperCase() ? letter.toLowerCase() : letter.toUpperCase();
+  return `${value.slice(0, letterIndex)}${toggledLetter}${value.slice(letterIndex + 1)}`;
 }
 
 function targetKey(target: ResolvedSkillInstallTarget): string {

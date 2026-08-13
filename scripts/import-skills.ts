@@ -10,6 +10,7 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -545,16 +546,28 @@ function assertObsoleteReferencesAreUnconsumed(
 function listReferenceConsumers(
   root: string,
   obsoleteReferenceRoot: string,
-  referencePathPrefix: string
+  referencePathPrefix: string,
+  activeDirectories = new Set<string>()
 ): string[] {
   if (!existsSync(root) || isPathWithin(obsoleteReferenceRoot, root)) {
     return [];
   }
 
-  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+  const resolvedRoot = realpathSync.native(root);
+  if (isPathWithin(obsoleteReferenceRoot, resolvedRoot) || activeDirectories.has(resolvedRoot)) {
+    return [];
+  }
+  activeDirectories.add(resolvedRoot);
+
+  const consumers = readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      return listReferenceConsumers(entryPath, obsoleteReferenceRoot, referencePathPrefix);
+      return listReferenceConsumers(
+        entryPath,
+        obsoleteReferenceRoot,
+        referencePathPrefix,
+        activeDirectories
+      );
     }
     if (entry.isFile()) {
       const content = readFileSync(entryPath, "utf-8");
@@ -565,14 +578,29 @@ function listReferenceConsumers(
     }
     if (entry.isSymbolicLink()) {
       const linkTarget = readlinkSync(entryPath);
-      const resolvedTarget = path.resolve(path.dirname(entryPath), linkTarget);
-      return linkTarget.includes(referencePathPrefix) ||
+      const resolvedTarget = existsSync(entryPath)
+        ? realpathSync.native(entryPath)
+        : path.resolve(path.dirname(entryPath), linkTarget);
+      if (
+        linkTarget.includes(referencePathPrefix) ||
         isPathWithin(obsoleteReferenceRoot, resolvedTarget)
-        ? [entryPath]
-        : [];
+      ) {
+        return [entryPath];
+      }
+      if (existsSync(entryPath) && statSync(entryPath).isDirectory()) {
+        return listReferenceConsumers(
+          entryPath,
+          obsoleteReferenceRoot,
+          referencePathPrefix,
+          activeDirectories
+        );
+      }
+      return [];
     }
     return [];
   });
+  activeDirectories.delete(resolvedRoot);
+  return consumers;
 }
 
 function contentContainsRelativePathInto(

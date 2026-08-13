@@ -728,9 +728,13 @@ name: outside-entry
     ]);
   });
 
-  test.each(["internal", "codex"])(
-    "re-import rejects migrating an Imported reference used by a %s skill",
-    async (skillFolder) => {
+  test.each([
+    { label: "internal", skillFolder: "internal", symlinked: false },
+    { label: "codex", skillFolder: "codex", symlinked: false },
+    { label: "symlinked codex", skillFolder: "codex", symlinked: true }
+  ])(
+    "re-import rejects migrating an Imported reference used by a $label skill",
+    async ({ skillFolder, symlinked }) => {
       const sandbox = makeTempDir("skill-import-consumed-reference");
       const skillsLogPath = path.join(sandbox, "skills.log");
       const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
@@ -748,11 +752,22 @@ name: outside-entry
       const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
       writeImportRecipeStore(sandbox, originalStore);
       write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
-      write(
-        sandbox,
-        `skills/${skillFolder}/reviewer/SKILL.md`,
-        "[Base](../../references/imported/alpha/MAIN.md)\n"
-      );
+      const consumerPath = `skills/${skillFolder}/reviewer/SKILL.md`;
+      if (symlinked) {
+        write(
+          sandbox,
+          "linked-skills/reviewer/SKILL.md",
+          "[Base](../../references/imported/alpha/MAIN.md)\n"
+        );
+        mkdirSync(path.join(sandbox, "skills", skillFolder), { recursive: true });
+        symlinkSync(
+          path.join(sandbox, "linked-skills", "reviewer"),
+          path.join(sandbox, "skills", skillFolder, "reviewer"),
+          "dir"
+        );
+      } else {
+        write(sandbox, consumerPath, "[Base](../../references/imported/alpha/MAIN.md)\n");
+      }
 
       try {
         process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
@@ -765,7 +780,7 @@ name: outside-entry
             },
             writeMessage() {}
           })
-        ).rejects.toThrow(`used by skills/${skillFolder}/reviewer/SKILL.md`);
+        ).rejects.toThrow(`used by ${consumerPath}`);
       } finally {
         process.chdir(originalCwd);
         process.env.PATH = originalPath;
