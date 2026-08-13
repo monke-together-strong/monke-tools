@@ -1,9 +1,18 @@
+import { resolveDefaultBranchRef } from "./git.ts";
 import type { RepoContext, Runtime } from "./types.ts";
+
+const LOCAL_DEFAULT_BRANCH_REF_PATTERN = /^refs\/heads\/(?:main|master)$/u;
+const REMOTE_DEFAULT_BRANCH_REF_PATTERN = /^refs\/remotes\/[^/]+\/(?:main|master)$/u;
 
 export interface BranchComparisonPlan {
   baseRef: string;
   kind: "branch-working-tree";
   worktreePath: string;
+}
+
+interface DefaultBranchCandidate {
+  mergeBase: string;
+  ref: string;
 }
 
 export type ComparisonPlan = { kind: "working-tree"; worktreePath: string } | BranchComparisonPlan;
@@ -41,6 +50,70 @@ export function planBranchComparison(
   return { baseRef, kind: "branch-working-tree", worktreePath: context.worktreeRoot };
 }
 
+/** Find an unambiguous main/master ref with newer shared history than a remembered base. */
+export function findNewerDefaultBranchBase(
+  runtime: Runtime,
+  context: RepoContext,
+  rememberedBaseRef: string
+): string | undefined {
+  const rememberedMergeBases = resolveMergeBases(runtime, context, rememberedBaseRef);
+  if (rememberedMergeBases?.length !== 1) {
+    return undefined;
+  }
+  const [rememberedMergeBase] = rememberedMergeBases;
+  if (rememberedMergeBase === undefined) {
+    return undefined;
+  }
+
+  const refs = runtime
+    .exec("git", ["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"], {
+      allowFailure: true,
+      cwd: context.worktreeRoot
+    })
+    .stdout.trim()
+    .split("\n")
+    .filter((ref) => isDefaultBranchRef(ref) && ref !== rememberedBaseRef);
+  const candidates: DefaultBranchCandidate[] = [];
+  for (const ref of refs) {
+    const mergeBases = resolveMergeBases(runtime, context, ref);
+    if (
+      mergeBases === undefined ||
+      !mergeBases.some((mergeBase) =>
+        hasNewerSharedHistory(runtime, context, rememberedMergeBase, mergeBase)
+      )
+    ) {
+      continue;
+    }
+    if (mergeBases.length !== 1) {
+      return undefined;
+    }
+    const [mergeBase] = mergeBases;
+    if (mergeBase !== undefined) {
+      candidates.push({ mergeBase, ref });
+    }
+  }
+  const maximalCandidates = candidates.filter((candidate) =>
+    candidates.every(
+      (other) =>
+        candidate.mergeBase === other.mergeBase ||
+        !isAncestor(runtime, context, candidate.mergeBase, other.mergeBase)
+    )
+  );
+  if (new Set(maximalCandidates.map((candidate) => candidate.mergeBase)).size !== 1) {
+    return undefined;
+  }
+  const preferredRef = resolvePreferredDefaultBranchRef(runtime, context);
+  return maximalCandidates.toSorted((left, right) => {
+    if (left.ref === preferredRef) {
+      return -1;
+    }
+    if (right.ref === preferredRef) {
+      return 1;
+    }
+    return left.ref.localeCompare(right.ref);
+  })[0]?.ref;
+}
+
 /** Report whether one checkout contains staged, unstaged, or untracked changes. */
 export function hasWorkingTreeChanges(runtime: Runtime, worktreePath: string): boolean {
   return Boolean(
@@ -50,4 +123,57 @@ export function hasWorkingTreeChanges(runtime: Runtime, worktreePath: string): b
       })
       .stdout.trim()
   );
+}
+
+function resolveMergeBases(
+  runtime: Runtime,
+  context: RepoContext,
+  baseRef: string
+): string[] | undefined {
+  const result = runtime.exec("git", ["merge-base", "--all", baseRef, "HEAD"], {
+    allowFailure: true,
+    cwd: context.worktreeRoot
+  });
+  return result.exitCode === 0 ? result.stdout.trim().split("\n").filter(Boolean) : undefined;
+}
+
+function hasNewerSharedHistory(
+  runtime: Runtime,
+  context: RepoContext,
+  rememberedMergeBase: string,
+  candidateMergeBase: string
+): boolean {
+  return (
+    candidateMergeBase !== rememberedMergeBase &&
+    isAncestor(runtime, context, rememberedMergeBase, candidateMergeBase)
+  );
+}
+
+function isAncestor(
+  runtime: Runtime,
+  context: RepoContext,
+  ancestor: string,
+  descendant: string
+): boolean {
+  return (
+    runtime.exec("git", ["merge-base", "--is-ancestor", ancestor, descendant], {
+      allowFailure: true,
+      cwd: context.worktreeRoot
+    }).exitCode === 0
+  );
+}
+
+function isDefaultBranchRef(ref: string): boolean {
+  return LOCAL_DEFAULT_BRANCH_REF_PATTERN.test(ref) || REMOTE_DEFAULT_BRANCH_REF_PATTERN.test(ref);
+}
+
+function resolvePreferredDefaultBranchRef(
+  runtime: Runtime,
+  context: RepoContext
+): string | undefined {
+  try {
+    return resolveDefaultBranchRef(runtime, context.sourceRoot, { refresh: false }).ref;
+  } catch {
+    return undefined;
+  }
 }
