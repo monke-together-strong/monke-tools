@@ -144,6 +144,18 @@ export async function runLocalInstallSkills(
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
   const installedSourceCheckout = path.resolve(sourceCheckout);
+  const skillSourceTree = resolveSkillSourceTree(installedSourceCheckout);
+  if (config.skillInstallPreference) {
+    assertSkillInstallCanBeReconciled(
+      resolveSkillInstallTargets({
+        homeDirectory,
+        preference: config.skillInstallPreference
+      }),
+      skillSourceTree
+    );
+  } else {
+    assertUniqueSkillIdentities(skillSourceTree);
+  }
   const nextConfig = {
     ...config,
     installedSourceCheckout

@@ -427,6 +427,58 @@ describe("skills CLI", () => {
     );
   });
 
+  test("mt skills local-install preserves existing config and links when the new checkout is invalid", async () => {
+    const sandbox = makeTempDir("skills-local-install-invalid-checkout");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const oldCheckout = path.join(sandbox, "old-source");
+    const invalidCheckout = path.join(sandbox, "invalid-source");
+    const namespacePath = path.join(osHome, ".codex", "skills", "monke-tools");
+    write(
+      oldCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    write(
+      invalidCheckout,
+      "skills/internal/browser-control/SKILL.md",
+      "---\nname: browser-control\n---\n"
+    );
+    write(
+      invalidCheckout,
+      "skills/codex/codex-browser/SKILL.md",
+      "---\nname: browser-control\n---\n"
+    );
+    const originalConfig = {
+      installedSourceCheckout: oldCheckout,
+      skillInstallPreference: {
+        targets: [{ kind: "codex" as const }]
+      },
+      version: 1 as const
+    };
+    saveGlobalMonkeConfig(monkeHome, originalConfig);
+    mkdirSync(path.dirname(namespacePath), { recursive: true });
+    symlinkSync(path.join(oldCheckout, "skills"), namespacePath, "dir");
+
+    await expect(
+      runCliAsync(
+        ["skills", "local-install", invalidCheckout],
+        createRuntime({
+          cwd: sandbox,
+          env: {
+            HOME: osHome,
+            MONKE_HOME: monkeHome
+          },
+          onStderr() {},
+          onStdout() {}
+        })
+      )
+    ).rejects.toThrow(/duplicate Agent skill name browser-control/u);
+    expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual(originalConfig);
+    expect(lstatSync(namespacePath).isSymbolicLink()).toBeTruthy();
+    expect(readlinkSync(namespacePath)).toBe(path.join(oldCheckout, "skills"));
+  });
+
   test("mt skills configure fails clearly when the installed source checkout is missing", async () => {
     const sandbox = makeTempDir("skills-configure-missing-source");
     const monkeHome = path.join(sandbox, "monke-home");
