@@ -3,7 +3,7 @@
 The PR lane's operational details live in [pr-analysis.md](pr-analysis.md). This file owns only the
 final report shape and disk layout.
 
-## Report shape (action-first)
+## Report shape (problem-first)
 
 `commit` writes a compact action report at `reports/<runTs>-retrospective.md` and two adjacent
 source files:
@@ -17,7 +17,8 @@ The main report has a report title, a `Window:` line showing the resolved retros
 1. **Session Actions** — the transcript-derived synthesis passed via `--synthesis`, with the exact
    subsections defined by [synthesis-contract.md](synthesis-contract.md):
    - **Active Actions** — unresolved, partially resolved, or unknown candidates ranked by **value ×
-     recurrence**.
+     recurrence**. Every action uses the problem-first field order from the synthesis contract;
+     status and evidence follow.
    - **Skill & Workflow Opportunities** — one `create-skill`, `create-workflow`, `update`,
      `combine`, or `no-skill` decision for every active action.
    - **Resolved or Superseded** — current-state-verified candidates suppressed from active ranking
@@ -32,8 +33,9 @@ The source files hold the bulky evidence:
 - **PR sources** — the full PR trajectory aggregate, including one-off patterns, explicit gaps, and
   per-PR analyses.
 
-A reader should be able to act from the main report alone, see why stale candidates were suppressed,
-and drill into linked sources only when they need transcript provenance.
+A reader should be able to identify each problem and its impact immediately, act from the main
+report alone, see why stale candidates were suppressed, and drill into linked sources only when
+they need transcript provenance.
 
 ## Report sets are the cross-run memory
 

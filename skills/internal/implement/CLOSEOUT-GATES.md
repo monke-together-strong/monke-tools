@@ -9,9 +9,16 @@ Inputs:
 
 - Work target: primary PRD, issue, plan, summary of a direct request, or `none`
 - Review fixed point
+- Review candidate: full commit SHA expected at `HEAD`
 - Background context: parent PRD, supporting docs, or `none`
 - Whether PRD orchestration was used
 - PRD closeout list, when orchestration was used
+
+## Candidate Gate
+
+At entry, immediately before and after the Review gate, and before the Final
+Report, require `git rev-parse HEAD^{commit}` to equal the Review candidate. A
+mismatch is `FAIL`: the recorded candidate did not pass closeout.
 
 The work target is the single closeout target. Background context is read-only
 intent and constraint material; it never changes the review target or comment
@@ -19,8 +26,7 @@ target. If the work target is a tracker issue, including a PRD issue, post
 closeout evidence on that same issue. If the work target is a subissue of a PRD,
 the parent PRD remains background unless this is an orchestrated PRD closeout.
 
-If a gate blocks, report it to the implementation thread. After the fix or
-explicit acceptance, rerun the affected gate.
+If a gate blocks, report it to the implementation thread.
 
 ## Evidence Ledger
 
@@ -72,9 +78,9 @@ Run this gate when the Work target is a tracker issue. If the Work target is not
 a tracker issue, skip this gate unless the implementation thread gave an
 explicit comment target.
 
-Post the review fixed point, testing evidence ledger, and review command as a
-Work target comment. The work is incomplete until the comment is posted or
-tracker write access is reported blocked.
+Post the review fixed point, review candidate, testing evidence ledger, and
+review command as a Work target comment. The work is incomplete until the
+comment is posted or tracker write access is reported blocked.
 
 If PRD orchestration was used, reconcile the PRD closeout list against the final
 review before posting. Add the deferred-finding dispositions to the Work target
@@ -86,5 +92,6 @@ comment. Every deferred finding must have one disposition:
 
 ## Final Report
 
-Report `PASS` when every required gate completed, `BLOCKED` when implementation
-action or explicit acceptance is needed, and `FAIL` when closeout cannot run.
+Include the Review fixed point and Review candidate in the report. Report `PASS`
+when every required gate completed, `BLOCKED` when implementation action or
+explicit acceptance is needed, and `FAIL` when closeout cannot run.

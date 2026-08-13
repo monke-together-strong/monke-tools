@@ -2,9 +2,7 @@
 
 Use this when /implement is given a PRD that has implementation issues attached.
 
-The PRD `/implement` thread is a coordinator. Do not continue implementation for
-attached issues in that same conversation thread; create a separate thread for
-each attached issue.
+The PRD `/implement` thread is a coordinator.
 
 A separate thread is only a conversation boundary. Keep work in the current
 checkout/worktree by default. Do not create or switch branches/worktrees unless
@@ -16,8 +14,8 @@ the user explicitly asks for filesystem isolation.
 2. Find implementation issues attached to the PRD.
 3. Record the final-review fixed point before any attached-issue work starts.
    Prefer the branch point from the target integration branch; if the user
-   supplied a review base, use that. Verify it with `git rev-parse <fixed point>`
-   and stop to ask if no stable fixed point can be identified.
+   supplied a review base, use that. Resolve and record its full commit SHA with
+   `git rev-parse <fixed point>^{commit}`; stop to ask if none can be identified.
 4. Order the issues by their `Blocked by` relationships.
 5. For each attached issue, create a fresh separate thread, not a fork, using
    the delegation prompt template below.
@@ -28,9 +26,8 @@ the user explicitly asks for filesystem isolation.
    or final integration, add it to a PRD closeout list in the orchestrator
    thread. Include the source issue, the finding, and the expected later issue
    or gate.
-8. After all issues are complete, delegate closeout for the parent PRD as the
-   Work target described in `SKILL.md`; the closeout procedure lives in
-   `CLOSEOUT-GATES.md`.
+8. After all issues are complete, return to `SKILL.md` and close out the parent
+   PRD as the Work target.
 
 ## Delegation prompt
 
@@ -42,7 +39,3 @@ not add generic repo/process reminders.
 
 Parent PRD: <parent PRD URL>. Use it as background context for product intent and constraints only, do not implement the entire PRD.
 ```
-
-This template intentionally leaves the attached issue as the Work target and the
-parent PRD as Background context; attached-issue closeout follows
-`CLOSEOUT-GATES.md`.
