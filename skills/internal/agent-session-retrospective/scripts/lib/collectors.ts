@@ -115,6 +115,20 @@ function readCodexSessionMetadata(session: DecodedSession, payload: Record<strin
   if (typeof payload.cwd === "string") {
     session.cwd = payload.cwd;
   }
+  if (typeof payload.thread_source === "string") {
+    session.threadSource = payload.thread_source;
+  }
+  session.parentSessionId = readCodexParentSessionId(payload);
+}
+
+function readCodexParentSessionId(payload: Record<string, unknown>): string | null {
+  const source = asRecord(payload.source);
+  const subagent = source && asRecord(source.subagent);
+  const threadSpawn = subagent && asRecord(subagent.thread_spawn);
+  if (typeof threadSpawn?.parent_thread_id === "string") {
+    return threadSpawn.parent_thread_id;
+  }
+  return typeof payload.parent_thread_id === "string" ? payload.parent_thread_id : null;
 }
 
 function readCodexTurnContext(session: DecodedSession, payload: Record<string, unknown>): void {
@@ -466,8 +480,10 @@ function createDecodedSession(): DecodedSession {
     cwd: null,
     events: [],
     lastActivityAt: null,
+    parentSessionId: null,
     sessionId: "",
     startedAt: null,
+    threadSource: null,
   };
 }
 
