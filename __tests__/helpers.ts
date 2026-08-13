@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
-  existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -36,12 +35,6 @@ export function makeTempDir(prefix: string): string {
   const directory = realpathSync.native(mkdtempSync(path.join(tmpdir(), `${prefix}-`)));
   tempDirectories.push(directory);
   return directory;
-}
-
-export function isCaseInsensitiveFilesystem() {
-  const directory = makeTempDir("case-sensitivity");
-  mkdirSync(path.join(directory, "CaseProbe"));
-  return existsSync(path.join(directory, "caseprobe"));
 }
 
 export function createRepo(root: string, files: Record<string, string>): string {

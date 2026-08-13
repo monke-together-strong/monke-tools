@@ -10,7 +10,6 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
-  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -546,28 +545,16 @@ function assertObsoleteReferencesAreUnconsumed(
 function listReferenceConsumers(
   root: string,
   obsoleteReferenceRoot: string,
-  referencePathPrefix: string,
-  activeDirectories = new Set<string>()
+  referencePathPrefix: string
 ): string[] {
   if (!existsSync(root) || isPathWithin(obsoleteReferenceRoot, root)) {
     return [];
   }
 
-  const resolvedRoot = realpathSync.native(root);
-  if (isPathWithin(obsoleteReferenceRoot, resolvedRoot) || activeDirectories.has(resolvedRoot)) {
-    return [];
-  }
-  activeDirectories.add(resolvedRoot);
-
-  const consumers = readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      return listReferenceConsumers(
-        entryPath,
-        obsoleteReferenceRoot,
-        referencePathPrefix,
-        activeDirectories
-      );
+      return listReferenceConsumers(entryPath, obsoleteReferenceRoot, referencePathPrefix);
     }
     if (entry.isFile()) {
       const content = readFileSync(entryPath, "utf-8");
@@ -578,36 +565,14 @@ function listReferenceConsumers(
     }
     if (entry.isSymbolicLink()) {
       const linkTarget = readlinkSync(entryPath);
-      const resolvedTarget = existsSync(entryPath)
-        ? realpathSync.native(entryPath)
-        : path.resolve(path.dirname(entryPath), linkTarget);
-      if (
-        linkTarget.includes(referencePathPrefix) ||
+      const resolvedTarget = path.resolve(path.dirname(entryPath), linkTarget);
+      return linkTarget.includes(referencePathPrefix) ||
         isPathWithin(obsoleteReferenceRoot, resolvedTarget)
-      ) {
-        return [entryPath];
-      }
-      if (existsSync(path.join(entryPath, "SKILL.md")) && statSync(entryPath).isDirectory()) {
-        return listReferenceConsumers(
-          entryPath,
-          obsoleteReferenceRoot,
-          referencePathPrefix,
-          activeDirectories
-        );
-      }
-      if (entry.name === "SKILL.md" && existsSync(entryPath) && statSync(entryPath).isFile()) {
-        const content = readFileSync(entryPath, "utf-8");
-        const consumesReference =
-          content.includes(referencePathPrefix) ||
-          contentContainsRelativePathInto(content, path.dirname(entryPath), obsoleteReferenceRoot);
-        return consumesReference ? [entryPath] : [];
-      }
-      return [];
+        ? [entryPath]
+        : [];
     }
     return [];
   });
-  activeDirectories.delete(resolvedRoot);
-  return consumers;
 }
 
 function contentContainsRelativePathInto(

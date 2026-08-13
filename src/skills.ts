@@ -1,9 +1,7 @@
-import { spawnSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
-  realpathSync,
   readdirSync,
   readFileSync,
   readlinkSync,
@@ -11,12 +9,10 @@ import {
   rmSync,
   rmdirSync,
   symlinkSync,
-  statSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
 
-import { parse as parseYaml } from "yaml";
 import * as z from "zod";
 
 import { errorMessage, MonkeError } from "./errors.ts";
@@ -35,14 +31,9 @@ import { parseBoundaryValue } from "./validation.ts";
 /** Directory name monke-tools owns inside each selected Agent skill root. */
 const SKILL_NAMESPACE = "monke-tools";
 const FLAT_SKILL_MANIFEST = ".monke-tools-flat-skills.json";
-const NAMESPACE_SKILL_MANIFEST = ".monke-tools-namespace-skills.json";
 const SHARED_SKILL_SOURCE_FOLDERS = ["internal", "imported"] as const;
-const CODEX_SKILL_SOURCE_FOLDER = "codex";
-const NAMESPACE_SOURCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
-const MAX_SYMLINK_RESOLUTION_COUNT = 40;
-const SKILL_FRONTMATTER_PATTERN = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u;
-const ASCII_LETTER_PATTERN = /[A-Za-z]/u;
-const MacOSFilesystemNameSchema = z.string().trim().min(1);
+const SHARED_NAMESPACE_SOURCE_FOLDERS = ["imported", "internal", "references"] as const;
+const CODEX_NAMESPACE_SOURCE_FOLDERS = ["codex", ...SHARED_NAMESPACE_SOURCE_FOLDERS] as const;
 
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
   claude: path.join(".claude", "skills"),
@@ -103,20 +94,13 @@ export async function runSkillsConfigure(runtime: Runtime): Promise<void> {
       "Installed source checkout is not configured; run bun run install:local from the monke-tools checkout first"
     );
   }
-  const skillSourceTree = resolveSkillSourceTree(sourceCheckout);
+  resolveSkillSourceTree(sourceCheckout);
 
   const previousPreference = config.skillInstallPreference ?? null;
   const nextPreference = await promptForSkillInstallPreference(
     runtime,
     previousPreference,
     homeDirectory
-  );
-  assertSkillInstallCanBeReconciled(
-    resolveSkillInstallTargets({
-      homeDirectory,
-      preference: nextPreference
-    }),
-    skillSourceTree
   );
   saveGlobalMonkeConfig(monkeHome, {
     ...config,
@@ -144,18 +128,6 @@ export async function runLocalInstallSkills(
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
   const installedSourceCheckout = path.resolve(sourceCheckout);
-  const skillSourceTree = resolveSkillSourceTree(installedSourceCheckout);
-  if (config.skillInstallPreference) {
-    assertSkillInstallCanBeReconciled(
-      resolveSkillInstallTargets({
-        homeDirectory,
-        preference: config.skillInstallPreference
-      }),
-      skillSourceTree
-    );
-  } else {
-    assertUniqueSkillIdentities(skillSourceTree);
-  }
   const nextConfig = {
     ...config,
     installedSourceCheckout
@@ -200,7 +172,6 @@ export function reconcileSkillNamespaces(options: {
     homeDirectory: options.homeDirectory,
     preference: options.nextPreference
   });
-  assertSkillInstallCanBeReconciled(nextTargets, skillSourceTree);
   const nextKeys = new Set(nextTargets.map(targetKey));
   const failures: string[] = [];
 
@@ -352,29 +323,33 @@ function reconcileNamespaceTarget(
   const namespaceStat = lstatIfExists(target.namespacePath);
   if (namespaceStat?.isSymbolicLink()) {
     rmSync(target.namespacePath);
-  } else if (namespaceStat) {
-    const previousManifest = readNamespaceManifest(target);
-    if (previousManifest === null) {
-      throw new MonkeError(
-        `Refusing to overwrite non-managed Skill namespace at ${target.namespacePath}`
-      );
-    }
-    removeNamespaceProjection(target, previousManifest);
+    mkdirSync(target.namespacePath);
+  } else if (namespaceStat && !namespaceStat.isDirectory()) {
+    throw new MonkeError(`Refusing to overwrite Skill namespace at ${target.namespacePath}`);
+  } else if (!namespaceStat) {
+    mkdirSync(target.namespacePath);
   }
 
-  mkdirSync(target.namespacePath);
-  const links = discoverNamespaceLinks(target, skillSourceTree);
-  const createdLinks: NamespaceSkillLink[] = [];
-  try {
-    for (const link of links) {
-      symlinkSync(link.sourcePath, path.join(target.namespacePath, link.name), "dir");
-      createdLinks.push(link);
+  const sourceFolders =
+    target.kind === "codex" ? CODEX_NAMESPACE_SOURCE_FOLDERS : SHARED_NAMESPACE_SOURCE_FOLDERS;
+  for (const name of sourceFolders) {
+    const linkPath = path.join(target.namespacePath, name);
+    const linkStat = lstatIfExists(linkPath);
+    if (linkStat && !linkStat.isSymbolicLink()) {
+      throw new MonkeError(`Refusing to overwrite non-managed Skill folder at ${linkPath}`);
     }
-  } catch (error) {
-    writeNamespaceManifest(target, createdLinks);
-    throw error;
   }
-  writeNamespaceManifest(target, links);
+
+  for (const name of sourceFolders) {
+    const sourcePath = path.join(skillSourceTree, name);
+    const linkPath = path.join(target.namespacePath, name);
+    if (lstatIfExists(linkPath)) {
+      rmSync(linkPath);
+    }
+    if (existsSync(sourcePath)) {
+      symlinkSync(sourcePath, linkPath, "dir");
+    }
+  }
 }
 
 function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string): void {
@@ -432,171 +407,19 @@ function removeManagedNamespace(target: ResolvedSkillInstallTarget): void {
     rmSync(target.namespacePath);
     return;
   }
-
-  const manifest = readNamespaceManifest(target);
-  if (manifest) {
-    removeNamespaceProjection(target, manifest);
-  }
-}
-
-const NamespaceSkillLinkSchema = z.strictObject({
-  name: z.enum(NAMESPACE_SOURCE_FOLDERS),
-  sourcePath: z.string().min(1)
-});
-const NamespaceSkillManifestSchema = z.strictObject({
-  links: z.array(NamespaceSkillLinkSchema),
-  managedBy: z.literal("monke-tools"),
-  version: z.literal(1)
-});
-
-type NamespaceSkillLink = z.output<typeof NamespaceSkillLinkSchema>;
-type NamespaceSkillManifest = z.output<typeof NamespaceSkillManifestSchema>;
-
-function discoverNamespaceLinks(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
-  const sourceFolders: NamespaceSkillLink["name"][] = [
-    ...SHARED_SKILL_SOURCE_FOLDERS,
-    "references"
-  ];
-  if (target.kind === "codex") {
-    sourceFolders.push(CODEX_SKILL_SOURCE_FOLDER);
+  if (!namespaceStat.isDirectory()) {
+    return;
   }
 
-  return sourceFolders.flatMap((name) => {
-    const sourcePath = path.join(skillSourceTree, name);
-    return existsSync(sourcePath) ? [{ name, sourcePath }] : [];
-  });
-}
-
-const SkillFrontmatterSchema = z.looseObject({
-  name: z.string().trim().min(1)
-});
-
-function assertUniqueSkillIdentities(skillSourceTree: string) {
-  const pathsByAgentSkillName = new Map<string, string>();
-  const pathsBySlug = new Map<string, string>();
-
-  for (const sourceFolder of [...SHARED_SKILL_SOURCE_FOLDERS, CODEX_SKILL_SOURCE_FOLDER]) {
-    const sourceFolderPath = path.join(skillSourceTree, sourceFolder);
-    if (!existsSync(sourceFolderPath)) {
-      continue;
-    }
-
-    for (const entry of readdirSync(sourceFolderPath, { withFileTypes: true })) {
-      if (!entry.isDirectory() && !entry.isSymbolicLink()) {
-        continue;
-      }
-      const skillPath = path.join(sourceFolderPath, entry.name);
-      if (!existsSync(path.join(skillPath, "SKILL.md"))) {
-        continue;
-      }
-
-      const previousPath = pathsBySlug.get(entry.name);
-      if (previousPath) {
-        throw new MonkeError(
-          `Cannot install duplicate Skill slug ${entry.name} from ${previousPath} and ${skillPath}`
-        );
-      }
-      pathsBySlug.set(entry.name, skillPath);
-
-      const agentSkillName = readAgentSkillName(skillPath);
-      const previousAgentSkillPath = pathsByAgentSkillName.get(agentSkillName);
-      if (previousAgentSkillPath) {
-        throw new MonkeError(
-          `Cannot install duplicate Agent skill name ${agentSkillName} from ${previousAgentSkillPath} and ${skillPath}`
-        );
-      }
-      pathsByAgentSkillName.set(agentSkillName, skillPath);
+  for (const name of CODEX_NAMESPACE_SOURCE_FOLDERS) {
+    const linkPath = path.join(target.namespacePath, name);
+    if (lstatIfExists(linkPath)?.isSymbolicLink()) {
+      rmSync(linkPath);
     }
   }
-}
-
-function readAgentSkillName(skillPath: string) {
-  const skillEntryPath = path.join(skillPath, "SKILL.md");
-  const skillMarkdown = readFileSync(skillEntryPath, "utf-8");
-  const frontmatterMatch = SKILL_FRONTMATTER_PATTERN.exec(skillMarkdown);
-  if (!frontmatterMatch) {
-    throw new MonkeError(`Expected leading YAML frontmatter at ${skillEntryPath}`);
+  if (readdirSync(target.namespacePath).length === 0) {
+    rmdirSync(target.namespacePath);
   }
-
-  let rawFrontmatter: unknown;
-  try {
-    rawFrontmatter = parseYaml(frontmatterMatch.groups?.frontmatter ?? "");
-  } catch {
-    throw new MonkeError(`Invalid Skill frontmatter at ${skillEntryPath}`);
-  }
-  return parseBoundaryValue(
-    SkillFrontmatterSchema,
-    rawFrontmatter,
-    `Skill frontmatter at ${skillEntryPath}`
-  ).name;
-}
-
-function readNamespaceManifest(target: ResolvedSkillInstallTarget) {
-  const manifestPath = namespaceManifestPath(target);
-  if (!existsSync(manifestPath)) {
-    return null;
-  }
-
-  let rawManifest: unknown;
-  try {
-    rawManifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-  } catch {
-    throw new MonkeError(`Invalid monke-tools Skill namespace manifest at ${manifestPath}`);
-  }
-
-  return parseBoundaryValue(
-    NamespaceSkillManifestSchema,
-    rawManifest,
-    `monke-tools Skill namespace manifest at ${manifestPath}`
-  );
-}
-
-function removeNamespaceProjection(
-  target: ResolvedSkillInstallTarget,
-  manifest: NamespaceSkillManifest
-) {
-  const managedNames = new Set<string>(manifest.links.map((link) => link.name));
-  const unexpectedEntries = readdirSync(target.namespacePath).filter(
-    (entry) => entry !== NAMESPACE_SKILL_MANIFEST && !managedNames.has(entry)
-  );
-  if (unexpectedEntries.length > 0) {
-    throw new MonkeError(
-      `Refusing to remove Skill namespace with non-managed entries at ${target.namespacePath}`
-    );
-  }
-
-  for (const link of manifest.links) {
-    const linkPath = path.join(target.namespacePath, link.name);
-    const linkStat = lstatIfExists(linkPath);
-    if (!linkStat) {
-      continue;
-    }
-    if (!linkStat.isSymbolicLink() || readlinkSync(linkPath) !== link.sourcePath) {
-      throw new MonkeError(`Refusing to remove non-managed Skill namespace link at ${linkPath}`);
-    }
-  }
-
-  for (const link of manifest.links) {
-    rmSync(path.join(target.namespacePath, link.name), { force: true });
-  }
-  rmSync(namespaceManifestPath(target));
-  rmdirSync(target.namespacePath);
-}
-
-function writeNamespaceManifest(target: ResolvedSkillInstallTarget, links: NamespaceSkillLink[]) {
-  const manifest = NamespaceSkillManifestSchema.parse({
-    links,
-    managedBy: "monke-tools",
-    version: 1
-  });
-  const manifestPath = namespaceManifestPath(target);
-
-  writeFileSync(`${manifestPath}.tmp`, `${JSON.stringify(manifest, null, 2)}\n`);
-  renameSync(`${manifestPath}.tmp`, manifestPath);
-}
-
-function namespaceManifestPath(target: ResolvedSkillInstallTarget) {
-  return path.join(target.namespacePath, NAMESPACE_SKILL_MANIFEST);
 }
 
 const FlatSkillLinkSchema = z.strictObject({
@@ -819,336 +642,6 @@ function lstatIfExists(targetPath: string): ReturnType<typeof lstatSync> | null 
 
     throw error;
   }
-}
-
-function assertUniqueTargetRoots(targets: ResolvedSkillInstallTarget[]) {
-  const targetsByRoot = new Map<string, ResolvedSkillInstallTarget>();
-
-  for (const target of targets) {
-    const rootIdentity = resolveFilesystemIdentity(target.agentSkillRoot);
-    const previousTarget = targetsByRoot.get(rootIdentity);
-    if (previousTarget) {
-      throw new MonkeError(
-        `Skill install targets ${previousTarget.kind} and ${target.kind} resolve to the same Agent skill root: ${target.agentSkillRoot}`
-      );
-    }
-    targetsByRoot.set(rootIdentity, target);
-  }
-}
-
-function assertSkillInstallCanBeReconciled(
-  targets: ResolvedSkillInstallTarget[],
-  skillSourceTree: string
-) {
-  assertUniqueSkillIdentities(skillSourceTree);
-  assertTargetRootsCanBeReconciled(targets, skillSourceTree);
-}
-
-function assertTargetRootsCanBeReconciled(
-  targets: ResolvedSkillInstallTarget[],
-  skillSourceTree: string
-) {
-  assertUniqueTargetRoots(targets);
-
-  const projections = targets.flatMap((target) => {
-    if (skillInstallLayoutForTarget(target) === "namespace") {
-      return [{ owner: target, path: target.namespacePath }];
-    }
-
-    return [
-      { owner: target, path: target.agentSkillRoot },
-      ...discoverFlatSupportingLinks(target, skillSourceTree).map((link) => ({
-        owner: target,
-        path: link.targetPath
-      }))
-    ];
-  });
-
-  for (const projection of projections) {
-    if (pathResolutionTraversesEntry(skillSourceTree, projection.path)) {
-      throw new MonkeError(
-        `Skill source tree falls within the managed Skill projection for ${projection.owner.kind}: ${skillSourceTree}`
-      );
-    }
-  }
-
-  for (const target of targets) {
-    if (isProspectivePathWithin(skillSourceTree, target.agentSkillRoot)) {
-      throw new MonkeError(
-        `Skill install target ${target.kind} falls within the Skill source tree: ${target.agentSkillRoot}`
-      );
-    }
-
-    for (const projection of projections) {
-      const projectionEntryPath = resolveProspectiveFilesystemPath(projection.path, {
-        followTerminalSymlink: false
-      });
-      if (
-        projection.owner !== target &&
-        isPathContained(
-          projectionEntryPath,
-          resolveProspectiveFilesystemPath(target.agentSkillRoot)
-        )
-      ) {
-        throw new MonkeError(
-          `Skill install target ${target.kind} falls within the managed Skill projection for ${projection.owner.kind}: ${target.agentSkillRoot}`
-        );
-      }
-    }
-  }
-}
-
-function resolveFilesystemIdentity(targetPath: string) {
-  const location = resolveFilesystemLocation(targetPath);
-  return filesystemLocationIdentity(location);
-}
-
-function resolveFilesystemEntryIdentity(targetPath: string) {
-  return filesystemLocationIdentity(
-    resolveFilesystemLocation(targetPath, { followTerminalSymlink: false })
-  );
-}
-
-function filesystemLocationIdentity(location: ReturnType<typeof resolveFilesystemLocation>) {
-  if (location.missingSegments.length === 0) {
-    return `node:${String(location.ancestorStat.dev)}:${String(location.ancestorStat.ino)}`;
-  }
-
-  const missingPath = location.missingSegments.join(path.sep);
-  const normalizedMissingPath = isCaseInsensitiveFilesystem(
-    location.ancestorPath,
-    location.ancestorStat.dev
-  )
-    ? missingPath.toLowerCase()
-    : missingPath;
-  return `descendant:${String(location.ancestorStat.dev)}:${String(location.ancestorStat.ino)}:${normalizedMissingPath}`;
-}
-
-function resolveProspectiveFilesystemPath(
-  targetPath: string,
-  options?: { followTerminalSymlink: boolean }
-) {
-  const location = resolveFilesystemLocation(targetPath, options);
-  if (location.missingSegments.length === 0) {
-    return location.ancestorPath;
-  }
-
-  const missingSegments = isCaseInsensitiveFilesystem(
-    location.ancestorPath,
-    location.ancestorStat.dev
-  )
-    ? location.missingSegments.map((segment) => segment.toLowerCase())
-    : location.missingSegments;
-  return path.join(location.ancestorPath, ...missingSegments);
-}
-
-function isProspectivePathWithin(parentPath: string, candidatePath: string) {
-  return isPathContained(
-    resolveProspectiveFilesystemPath(parentPath),
-    resolveProspectiveFilesystemPath(candidatePath)
-  );
-}
-
-function isPathContained(parentPath: string, candidatePath: string) {
-  const relativePath = path.relative(parentPath, candidatePath);
-  return (
-    relativePath.length === 0 ||
-    (!relativePath.startsWith(`..${path.sep}`) &&
-      relativePath !== ".." &&
-      !path.isAbsolute(relativePath))
-  );
-}
-
-function pathResolutionTraversesEntry(targetPath: string, entryPath: string) {
-  const traversedEntryIdentities = new Set<string>();
-  resolveFilesystemLocation(targetPath, { traversedEntryIdentities });
-  return traversedEntryIdentities.has(resolveFilesystemEntryIdentity(entryPath));
-}
-
-function resolveFilesystemLocation(
-  targetPath: string,
-  options?: {
-    followTerminalSymlink?: boolean;
-    traversedEntryIdentities?: Set<string>;
-  }
-) {
-  const absoluteTargetPath = path.resolve(targetPath);
-  const targetRoot = path.parse(absoluteTargetPath).root;
-  let resolvedPath = targetRoot;
-  const pendingSegments = splitPathSegments(absoluteTargetPath.slice(targetRoot.length));
-  const missingSegments: string[] = [];
-  let symlinkCount = 0;
-
-  while (pendingSegments.length > 0) {
-    const segment = pendingSegments.shift();
-    if (!segment || segment === ".") {
-      continue;
-    }
-    if (segment === "..") {
-      if (missingSegments.length > 0) {
-        missingSegments.pop();
-      } else {
-        resolvedPath = path.dirname(resolvedPath);
-      }
-      continue;
-    }
-    if (missingSegments.length > 0) {
-      missingSegments.push(segment);
-      continue;
-    }
-
-    const candidatePath = path.join(resolvedPath, segment);
-    const candidateStat = lstatIfExists(candidatePath);
-    if (!candidateStat) {
-      missingSegments.push(segment);
-      continue;
-    }
-    const parentStat = statSync(resolvedPath);
-    const normalizedSegment = isCaseInsensitiveFilesystem(resolvedPath, parentStat.dev)
-      ? segment.toLowerCase()
-      : segment;
-    options?.traversedEntryIdentities?.add(
-      candidateStat.isSymbolicLink()
-        ? `descendant:${String(parentStat.dev)}:${String(parentStat.ino)}:${normalizedSegment}`
-        : `node:${String(candidateStat.dev)}:${String(candidateStat.ino)}`
-    );
-    if (
-      candidateStat.isSymbolicLink() &&
-      pendingSegments.length === 0 &&
-      options?.followTerminalSymlink === false
-    ) {
-      missingSegments.push(segment);
-      continue;
-    }
-    if (candidateStat.isSymbolicLink()) {
-      symlinkCount += 1;
-      if (symlinkCount > MAX_SYMLINK_RESOLUTION_COUNT) {
-        throw new MonkeError(
-          `Too many symbolic links while resolving Agent skill root: ${targetPath}`
-        );
-      }
-
-      const symlinkTarget = readlinkSync(candidatePath);
-      const symlinkRoot = path.parse(symlinkTarget).root;
-      if (symlinkRoot) {
-        resolvedPath = symlinkRoot;
-      }
-      pendingSegments.unshift(...splitPathSegments(symlinkTarget.slice(symlinkRoot.length)));
-      continue;
-    }
-
-    resolvedPath = realpathSync.native(candidatePath);
-  }
-
-  return {
-    ancestorPath: resolvedPath,
-    ancestorStat: statSync(resolvedPath),
-    missingSegments
-  };
-}
-
-function splitPathSegments(value: string) {
-  return value.split(path.sep).filter(Boolean);
-}
-
-function isCaseInsensitiveFilesystem(existingPath: string, device: number) {
-  let currentPath = existingPath;
-
-  while (true) {
-    const currentStat = statSync(currentPath);
-    if (currentStat.dev !== device) {
-      return false;
-    }
-
-    const caseInsensitive = inferCaseInsensitiveDirectory(currentPath);
-    if (caseInsensitive !== null) {
-      return caseInsensitive;
-    }
-
-    const parentPath = path.dirname(currentPath);
-    if (parentPath === currentPath) {
-      return inferVolumeIsCaseInsensitive(currentPath) ?? false;
-    }
-    const parentStat = statSync(parentPath);
-    if (parentStat.dev !== device) {
-      return inferVolumeIsCaseInsensitive(currentPath) ?? false;
-    }
-    currentPath = parentPath;
-  }
-}
-
-function inferCaseInsensitiveDirectory(directoryPath: string) {
-  for (const entryName of readdirSync(directoryPath)) {
-    const toggledName = toggleFirstLetterCase(entryName);
-    if (toggledName === entryName) {
-      continue;
-    }
-
-    const entryStat = lstatIfExists(path.join(directoryPath, entryName));
-    if (!entryStat) {
-      continue;
-    }
-    const aliasStat = lstatIfExists(path.join(directoryPath, toggledName));
-    return aliasStat?.dev === entryStat.dev && aliasStat.ino === entryStat.ino;
-  }
-
-  return null;
-}
-
-function inferVolumeIsCaseInsensitive(mountPath: string) {
-  if (process.platform === "win32") {
-    return true;
-  }
-  if (process.platform !== "darwin") {
-    return null;
-  }
-
-  const diskutilResult = spawnSync("/usr/sbin/diskutil", ["info", "-plist", mountPath], {
-    encoding: "utf-8"
-  });
-  if (diskutilResult.status !== 0) {
-    return null;
-  }
-
-  const plutilResult = spawnSync("/usr/bin/plutil", ["-extract", "FilesystemName", "raw", "-"], {
-    encoding: "utf-8",
-    input: diskutilResult.stdout
-  });
-  if (plutilResult.status !== 0) {
-    return null;
-  }
-  const filesystemName = MacOSFilesystemNameSchema.safeParse(plutilResult.stdout);
-  if (!filesystemName.success) {
-    return null;
-  }
-
-  const normalizedName = filesystemName.data.toLowerCase();
-  if (normalizedName.includes("case-sensitive")) {
-    return false;
-  }
-  if (
-    normalizedName === "apfs" ||
-    normalizedName.includes("hfs+") ||
-    normalizedName.includes("fat")
-  ) {
-    return true;
-  }
-  return null;
-}
-
-function toggleFirstLetterCase(value: string) {
-  const letterIndex = value.search(ASCII_LETTER_PATTERN);
-  if (letterIndex === -1) {
-    return value;
-  }
-
-  const letter = value[letterIndex];
-  if (!letter) {
-    return value;
-  }
-  const toggledLetter =
-    letter === letter.toUpperCase() ? letter.toLowerCase() : letter.toUpperCase();
-  return `${value.slice(0, letterIndex)}${toggledLetter}${value.slice(letterIndex + 1)}`;
 }
 
 function targetKey(target: ResolvedSkillInstallTarget): string {

@@ -45,7 +45,7 @@ Built-in targets resolve against the OS home directory:
 - Claude: `~/.claude/skills`
 - Cursor: `~/.cursor/skills`
 
-Codex, Cursor, and custom targets receive a managed `monke-tools` namespace containing symlinks to compatible source folders. Codex receives shared skills plus Codex-only skills; Cursor and custom targets receive shared skills only. Claude receives flat root-level symlinks for each shared source skill because Claude does not discover nested skill directories. monke-tools refuses to overwrite non-managed namespace content or root-level skills in either layout.
+Codex, Cursor, and custom targets receive a managed `monke-tools` namespace containing symlinks to compatible source folders. Codex receives shared skills plus Codex-only skills; Cursor and custom targets receive shared skills only. Claude receives flat root-level symlinks for each shared source skill because Claude does not discover nested skill directories. monke-tools refuses to overwrite non-symlinks at managed folder names or root-level skills.
 
 The Skill source tree is organized as:
 
@@ -53,8 +53,6 @@ The Skill source tree is organized as:
 - `skills/imported`: discoverable Imported skills preserved from outside projects
 - `skills/codex`: monke-tools-owned skills installed only for the built-in Codex target
 - `skills/references`: non-invocable Internal and Imported references used by Distributed skills
-
-Each immediate child of these skill folders is identified by its Skill slug. Slugs and agent-facing skill names must remain unique across the shared and Codex-only skills that Codex receives. A local install validates those identities before reconciling any target.
 
 ## Commands
 
