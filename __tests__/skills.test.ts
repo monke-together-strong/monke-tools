@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
@@ -8,16 +8,7 @@ import { reconcileSkillNamespaces, resolveSkillInstallTargets } from "../src/ski
 import { isCaseInsensitiveFilesystem, makeTempDir, write } from "./helpers.ts";
 
 const CASE_INSENSITIVE_FILESYSTEM = isCaseInsensitiveFilesystem();
-const HFS_ATTACH_DEVICE_PATTERN = /^(?<device>\/dev\/disk\d+s\d+)\s+Apple_HFS\s+/mu;
 const RUN_EMPTY_VOLUME_TEST = process.platform === "darwin";
-
-function runSystemCommand(command: string, args: string[]) {
-  const result = spawnSync(command, args, { encoding: "utf-8" });
-  if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || `${command} ${args.join(" ")} failed`);
-  }
-  return result.stdout;
-}
 
 function writeCoreSkill(sourceCheckout: string) {
   write(
@@ -130,7 +121,7 @@ describe("skills", () => {
       const mountPath = path.join(sandbox, "mount");
       writeCoreSkill(sourceCheckout);
       mkdirSync(mountPath);
-      runSystemCommand("/usr/bin/hdiutil", [
+      execFileSync("/usr/bin/hdiutil", [
         "create",
         "-quiet",
         "-type",
@@ -143,19 +134,15 @@ describe("skills", () => {
         "MonkeCaseProbe",
         imagePath
       ]);
-      const attachOutput = runSystemCommand("/usr/bin/hdiutil", [
+      execFileSync("/usr/bin/hdiutil", [
         "attach",
         "-nobrowse",
         "-mountpoint",
         mountPath,
         `${imagePath}.sparseimage`
       ]);
-      const mountedDevice = HFS_ATTACH_DEVICE_PATTERN.exec(attachOutput)?.groups?.device;
 
       try {
-        if (!mountedDevice) {
-          throw new Error(`Could not identify mounted test volume from: ${attachOutput}`);
-        }
         let reconciliationError: unknown;
         try {
           reconcileSkillNamespaces({
@@ -184,7 +171,7 @@ describe("skills", () => {
           !aliasesRoot
         );
       } finally {
-        runSystemCommand("/usr/bin/hdiutil", ["detach", mountedDevice ?? mountPath]);
+        execFileSync("/usr/bin/hdiutil", ["detach", mountPath]);
       }
     }
   );
@@ -253,6 +240,60 @@ describe("skills", () => {
       expect(existsSync(path.join(sourceSkillTree, "references", "monke-tools"))).toBeFalsy();
     }
   );
+
+  test("skill reconciliation migrates a legacy namespace symlink without treating its target as the planned output", () => {
+    const sandbox = makeTempDir("skill-reconcile-legacy-projection-target");
+    const sourceCheckout = path.join(sandbox, "source");
+    const codexSkillRoot = path.join(sandbox, ".codex", "skills");
+    const codexNamespace = path.join(codexSkillRoot, "monke-tools");
+    const customSkillRoot = path.join(sandbox, "custom-skills");
+    writeCoreSkill(sourceCheckout);
+    mkdirSync(codexSkillRoot, { recursive: true });
+    mkdirSync(customSkillRoot);
+    symlinkSync(customSkillRoot, codexNamespace, "dir");
+
+    expect(() => {
+      reconcileSkillNamespaces({
+        homeDirectory: sandbox,
+        nextPreference: {
+          targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
+        },
+        previousPreference: null,
+        sourceCheckout,
+        writeMessage() {}
+      });
+    }).not.toThrow();
+    expect(lstatSync(codexNamespace).isDirectory()).toBeTruthy();
+    expect(lstatSync(path.join(customSkillRoot, "monke-tools")).isDirectory()).toBeTruthy();
+  });
+
+  test("skill reconciliation preserves a source checkout reached through a managed output", () => {
+    const sandbox = makeTempDir("skill-reconcile-source-through-projection");
+    const physicalSourceParent = path.join(sandbox, "physical-source-parent");
+    const physicalSourceCheckout = path.join(physicalSourceParent, "source");
+    const codexSkillRoot = path.join(sandbox, ".codex", "skills");
+    const codexNamespace = path.join(codexSkillRoot, "monke-tools");
+    const sourceAlias = path.join(sandbox, "source-alias");
+    const linkedSourceCheckout = path.join(codexNamespace, "source");
+    const aliasedSourceCheckout = path.join(sourceAlias, "source");
+    writeCoreSkill(physicalSourceCheckout);
+    mkdirSync(codexSkillRoot, { recursive: true });
+    symlinkSync(physicalSourceParent, codexNamespace, "dir");
+    symlinkSync(codexNamespace, sourceAlias, "dir");
+
+    expect(() => {
+      reconcileSkillNamespaces({
+        homeDirectory: sandbox,
+        nextPreference: { targets: [{ kind: "codex" }] },
+        previousPreference: null,
+        sourceCheckout: aliasedSourceCheckout,
+        writeMessage() {}
+      });
+    }).toThrow(/source tree.*managed Skill projection/iu);
+    expect(lstatSync(codexNamespace).isSymbolicLink()).toBeTruthy();
+    expect(existsSync(linkedSourceCheckout)).toBeTruthy();
+    expect(existsSync(path.join(physicalSourceCheckout, "skills", "internal"))).toBeTruthy();
+  });
 
   test("skill namespace reconciliation projects Codex-only skills only into Codex", () => {
     const sandbox = makeTempDir("skill-reconcile-create");

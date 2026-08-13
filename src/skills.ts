@@ -42,8 +42,7 @@ const NAMESPACE_SOURCE_FOLDERS = ["codex", "imported", "internal", "references"]
 const MAX_SYMLINK_RESOLUTION_COUNT = 40;
 const SKILL_FRONTMATTER_PATTERN = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u;
 const ASCII_LETTER_PATTERN = /[A-Za-z]/u;
-const MACOS_FILESYSTEM_NAME_PATTERN =
-  /<key>FilesystemName<\/key>\s*<string>(?<name>[^<]+)<\/string>/u;
+const MacOSFilesystemNameSchema = z.string().trim().min(1);
 
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
   claude: path.join(".claude", "skills"),
@@ -846,6 +845,14 @@ function assertTargetRootsCanBeReconciled(
     ];
   });
 
+  for (const projection of projections) {
+    if (pathResolutionTraversesEntry(skillSourceTree, projection.path)) {
+      throw new MonkeError(
+        `Skill source tree falls within the managed Skill projection for ${projection.owner.kind}: ${skillSourceTree}`
+      );
+    }
+  }
+
   for (const target of targets) {
     if (isProspectivePathWithin(skillSourceTree, target.agentSkillRoot)) {
       throw new MonkeError(
@@ -854,9 +861,15 @@ function assertTargetRootsCanBeReconciled(
     }
 
     for (const projection of projections) {
+      const projectionEntryPath = resolveProspectiveFilesystemPath(projection.path, {
+        followTerminalSymlink: false
+      });
       if (
         projection.owner !== target &&
-        isProspectivePathWithin(projection.path, target.agentSkillRoot)
+        isPathContained(
+          projectionEntryPath,
+          resolveProspectiveFilesystemPath(target.agentSkillRoot)
+        )
       ) {
         throw new MonkeError(
           `Skill install target ${target.kind} falls within the managed Skill projection for ${projection.owner.kind}: ${target.agentSkillRoot}`
@@ -868,6 +881,16 @@ function assertTargetRootsCanBeReconciled(
 
 function resolveFilesystemIdentity(targetPath: string) {
   const location = resolveFilesystemLocation(targetPath);
+  return filesystemLocationIdentity(location);
+}
+
+function resolveFilesystemEntryIdentity(targetPath: string) {
+  return filesystemLocationIdentity(
+    resolveFilesystemLocation(targetPath, { followTerminalSymlink: false })
+  );
+}
+
+function filesystemLocationIdentity(location: ReturnType<typeof resolveFilesystemLocation>) {
   if (location.missingSegments.length === 0) {
     return `node:${String(location.ancestorStat.dev)}:${String(location.ancestorStat.ino)}`;
   }
@@ -882,8 +905,11 @@ function resolveFilesystemIdentity(targetPath: string) {
   return `descendant:${String(location.ancestorStat.dev)}:${String(location.ancestorStat.ino)}:${normalizedMissingPath}`;
 }
 
-function resolveProspectiveFilesystemPath(targetPath: string) {
-  const location = resolveFilesystemLocation(targetPath);
+function resolveProspectiveFilesystemPath(
+  targetPath: string,
+  options?: { followTerminalSymlink: boolean }
+) {
+  const location = resolveFilesystemLocation(targetPath, options);
   if (location.missingSegments.length === 0) {
     return location.ancestorPath;
   }
@@ -898,10 +924,14 @@ function resolveProspectiveFilesystemPath(targetPath: string) {
 }
 
 function isProspectivePathWithin(parentPath: string, candidatePath: string) {
-  const relativePath = path.relative(
+  return isPathContained(
     resolveProspectiveFilesystemPath(parentPath),
     resolveProspectiveFilesystemPath(candidatePath)
   );
+}
+
+function isPathContained(parentPath: string, candidatePath: string) {
+  const relativePath = path.relative(parentPath, candidatePath);
   return (
     relativePath.length === 0 ||
     (!relativePath.startsWith(`..${path.sep}`) &&
@@ -910,7 +940,19 @@ function isProspectivePathWithin(parentPath: string, candidatePath: string) {
   );
 }
 
-function resolveFilesystemLocation(targetPath: string) {
+function pathResolutionTraversesEntry(targetPath: string, entryPath: string) {
+  const traversedEntryIdentities = new Set<string>();
+  resolveFilesystemLocation(targetPath, { traversedEntryIdentities });
+  return traversedEntryIdentities.has(resolveFilesystemEntryIdentity(entryPath));
+}
+
+function resolveFilesystemLocation(
+  targetPath: string,
+  options?: {
+    followTerminalSymlink?: boolean;
+    traversedEntryIdentities?: Set<string>;
+  }
+) {
   const absoluteTargetPath = path.resolve(targetPath);
   const targetRoot = path.parse(absoluteTargetPath).root;
   let resolvedPath = targetRoot;
@@ -939,6 +981,23 @@ function resolveFilesystemLocation(targetPath: string) {
     const candidatePath = path.join(resolvedPath, segment);
     const candidateStat = lstatIfExists(candidatePath);
     if (!candidateStat) {
+      missingSegments.push(segment);
+      continue;
+    }
+    const parentStat = statSync(resolvedPath);
+    const normalizedSegment = isCaseInsensitiveFilesystem(resolvedPath, parentStat.dev)
+      ? segment.toLowerCase()
+      : segment;
+    options?.traversedEntryIdentities?.add(
+      candidateStat.isSymbolicLink()
+        ? `descendant:${String(parentStat.dev)}:${String(parentStat.ino)}:${normalizedSegment}`
+        : `node:${String(candidateStat.dev)}:${String(candidateStat.ino)}`
+    );
+    if (
+      candidateStat.isSymbolicLink() &&
+      pendingSegments.length === 0 &&
+      options?.followTerminalSymlink === false
+    ) {
       missingSegments.push(segment);
       continue;
     }
@@ -1025,19 +1084,26 @@ function inferVolumeIsCaseInsensitive(mountPath: string) {
     return null;
   }
 
-  const result = spawnSync("/usr/sbin/diskutil", ["info", "-plist", mountPath], {
+  const diskutilResult = spawnSync("/usr/sbin/diskutil", ["info", "-plist", mountPath], {
     encoding: "utf-8"
   });
-  if (result.status !== 0) {
+  if (diskutilResult.status !== 0) {
     return null;
   }
 
-  const filesystemName = MACOS_FILESYSTEM_NAME_PATTERN.exec(result.stdout)?.groups?.name;
-  if (!filesystemName) {
+  const plutilResult = spawnSync("/usr/bin/plutil", ["-extract", "FilesystemName", "raw", "-"], {
+    encoding: "utf-8",
+    input: diskutilResult.stdout
+  });
+  if (plutilResult.status !== 0) {
+    return null;
+  }
+  const filesystemName = MacOSFilesystemNameSchema.safeParse(plutilResult.stdout);
+  if (!filesystemName.success) {
     return null;
   }
 
-  const normalizedName = filesystemName.toLowerCase();
+  const normalizedName = filesystemName.data.toLowerCase();
   if (normalizedName.includes("case-sensitive")) {
     return false;
   }

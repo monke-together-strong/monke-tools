@@ -729,9 +729,10 @@ name: outside-entry
   });
 
   test.each([
-    { label: "internal", skillFolder: "internal", symlinked: false },
-    { label: "codex", skillFolder: "codex", symlinked: false },
-    { label: "symlinked codex", skillFolder: "codex", symlinked: true }
+    { label: "internal", skillFolder: "internal", symlinked: null },
+    { label: "codex", skillFolder: "codex", symlinked: null },
+    { label: "directory-symlinked codex", skillFolder: "codex", symlinked: "directory" },
+    { label: "file-symlinked codex", skillFolder: "codex", symlinked: "file" }
   ])(
     "re-import rejects migrating an Imported reference used by a $label skill",
     async ({ skillFolder, symlinked }) => {
@@ -753,7 +754,7 @@ name: outside-entry
       writeImportRecipeStore(sandbox, originalStore);
       write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
       const consumerPath = `skills/${skillFolder}/reviewer/SKILL.md`;
-      if (symlinked) {
+      if (symlinked === "directory") {
         write(
           sandbox,
           "linked-skills/reviewer/SKILL.md",
@@ -764,6 +765,17 @@ name: outside-entry
           path.join(sandbox, "linked-skills", "reviewer"),
           path.join(sandbox, "skills", skillFolder, "reviewer"),
           "dir"
+        );
+      } else if (symlinked === "file") {
+        write(
+          sandbox,
+          "linked-skills/reviewer/SKILL.md",
+          "[Base](../../references/imported/alpha/MAIN.md)\n"
+        );
+        mkdirSync(path.dirname(path.join(sandbox, consumerPath)), { recursive: true });
+        symlinkSync(
+          path.join(sandbox, "linked-skills", "reviewer", "SKILL.md"),
+          path.join(sandbox, consumerPath)
         );
       } else {
         write(sandbox, consumerPath, "[Base](../../references/imported/alpha/MAIN.md)\n");

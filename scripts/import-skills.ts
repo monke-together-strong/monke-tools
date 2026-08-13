@@ -587,13 +587,20 @@ function listReferenceConsumers(
       ) {
         return [entryPath];
       }
-      if (existsSync(entryPath) && statSync(entryPath).isDirectory()) {
+      if (existsSync(path.join(entryPath, "SKILL.md")) && statSync(entryPath).isDirectory()) {
         return listReferenceConsumers(
           entryPath,
           obsoleteReferenceRoot,
           referencePathPrefix,
           activeDirectories
         );
+      }
+      if (entry.name === "SKILL.md" && existsSync(entryPath) && statSync(entryPath).isFile()) {
+        const content = readFileSync(entryPath, "utf-8");
+        const consumesReference =
+          content.includes(referencePathPrefix) ||
+          contentContainsRelativePathInto(content, path.dirname(entryPath), obsoleteReferenceRoot);
+        return consumesReference ? [entryPath] : [];
       }
       return [];
     }
