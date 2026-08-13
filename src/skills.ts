@@ -7,11 +7,13 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
+  rmdirSync,
   symlinkSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
 
+import { parse as parseYaml } from "yaml";
 import * as z from "zod";
 
 import { errorMessage, MonkeError } from "./errors.ts";
@@ -30,6 +32,10 @@ import { parseBoundaryValue } from "./validation.ts";
 /** Directory name monke-tools owns inside each selected Agent skill root. */
 const SKILL_NAMESPACE = "monke-tools";
 const FLAT_SKILL_MANIFEST = ".monke-tools-flat-skills.json";
+const NAMESPACE_SKILL_MANIFEST = ".monke-tools-namespace-skills.json";
+const SHARED_SKILL_SOURCE_FOLDERS = ["internal", "imported"] as const;
+const CODEX_SKILL_SOURCE_FOLDER = "codex";
+const NAMESPACE_SOURCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
 
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
   claude: path.join(".claude", "skills"),
@@ -157,6 +163,7 @@ export function reconcileSkillNamespaces(options: {
   writeMessage: (message: string) => void;
 }): void {
   const skillSourceTree = resolveSkillSourceTree(options.sourceCheckout);
+  assertUniqueSkillIdentities(skillSourceTree);
   const previousTargets =
     options.previousPreference === null
       ? []
@@ -317,22 +324,36 @@ function reconcileNamespaceTarget(
   }
 
   const namespaceStat = lstatIfExists(target.namespacePath);
-  if (namespaceStat && !namespaceStat.isSymbolicLink()) {
-    throw new MonkeError(
-      `Refusing to overwrite non-managed Skill namespace at ${target.namespacePath}`
-    );
-  }
-
-  if (namespaceStat) {
+  if (namespaceStat?.isSymbolicLink()) {
     rmSync(target.namespacePath);
+  } else if (namespaceStat) {
+    const previousManifest = readNamespaceManifest(target);
+    if (previousManifest === null) {
+      throw new MonkeError(
+        `Refusing to overwrite non-managed Skill namespace at ${target.namespacePath}`
+      );
+    }
+    removeNamespaceProjection(target, previousManifest);
   }
 
-  symlinkSync(skillSourceTree, target.namespacePath, "dir");
+  mkdirSync(target.namespacePath);
+  const links = discoverNamespaceLinks(target, skillSourceTree);
+  const createdLinks: NamespaceSkillLink[] = [];
+  try {
+    for (const link of links) {
+      symlinkSync(link.sourcePath, path.join(target.namespacePath, link.name), "dir");
+      createdLinks.push(link);
+    }
+  } catch (error) {
+    writeNamespaceManifest(target, createdLinks);
+    throw error;
+  }
+  writeNamespaceManifest(target, links);
 }
 
 function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string): void {
   mkdirSync(target.agentSkillRoot, { recursive: true });
-  removeManagedNamespace(target.namespacePath);
+  removeManagedNamespace(target);
 
   const links = discoverFlatSkillLinks(skillSourceTree);
   const supportingLinks = discoverFlatSupportingLinks(target, skillSourceTree);
@@ -373,16 +394,191 @@ function removeManagedTarget(target: ResolvedSkillInstallTarget): void {
   if (target.kind === "claude") {
     removeFlatManagedLinks(target);
   }
-  removeManagedNamespace(target.namespacePath);
+  removeManagedNamespace(target);
 }
 
-function removeManagedNamespace(namespacePath: string): void {
-  const namespaceStat = lstatIfExists(namespacePath);
-  if (namespaceStat?.isSymbolicLink() !== true) {
+function removeManagedNamespace(target: ResolvedSkillInstallTarget): void {
+  const namespaceStat = lstatIfExists(target.namespacePath);
+  if (!namespaceStat) {
+    return;
+  }
+  if (namespaceStat.isSymbolicLink()) {
+    rmSync(target.namespacePath);
     return;
   }
 
-  rmSync(namespacePath);
+  const manifest = readNamespaceManifest(target);
+  if (manifest) {
+    removeNamespaceProjection(target, manifest);
+  }
+}
+
+const NamespaceSkillLinkSchema = z.strictObject({
+  name: z.enum(NAMESPACE_SOURCE_FOLDERS),
+  sourcePath: z.string().min(1)
+});
+const NamespaceSkillManifestSchema = z.strictObject({
+  links: z.array(NamespaceSkillLinkSchema),
+  managedBy: z.literal("monke-tools"),
+  version: z.literal(1)
+});
+
+type NamespaceSkillLink = z.output<typeof NamespaceSkillLinkSchema>;
+type NamespaceSkillManifest = z.output<typeof NamespaceSkillManifestSchema>;
+
+function discoverNamespaceLinks(
+  target: ResolvedSkillInstallTarget,
+  skillSourceTree: string
+): NamespaceSkillLink[] {
+  const sourceFolders: NamespaceSkillLink["name"][] = [
+    ...SHARED_SKILL_SOURCE_FOLDERS,
+    "references"
+  ];
+  if (target.kind === "codex") {
+    sourceFolders.push(CODEX_SKILL_SOURCE_FOLDER);
+  }
+
+  return sourceFolders.flatMap((name) => {
+    const sourcePath = path.join(skillSourceTree, name);
+    return existsSync(sourcePath) ? [{ name, sourcePath }] : [];
+  });
+}
+
+const SkillFrontmatterSchema = z.looseObject({
+  name: z.string().trim().min(1)
+});
+
+function assertUniqueSkillIdentities(skillSourceTree: string): void {
+  const pathsByAgentSkillName = new Map<string, string>();
+  const pathsBySlug = new Map<string, string>();
+
+  for (const sourceFolder of [...SHARED_SKILL_SOURCE_FOLDERS, CODEX_SKILL_SOURCE_FOLDER]) {
+    const sourceFolderPath = path.join(skillSourceTree, sourceFolder);
+    if (!existsSync(sourceFolderPath)) {
+      continue;
+    }
+
+    for (const entry of readdirSync(sourceFolderPath, { withFileTypes: true })) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) {
+        continue;
+      }
+      const skillPath = path.join(sourceFolderPath, entry.name);
+      if (!existsSync(path.join(skillPath, "SKILL.md"))) {
+        continue;
+      }
+
+      const previousPath = pathsBySlug.get(entry.name);
+      if (previousPath) {
+        throw new MonkeError(
+          `Cannot install duplicate Skill slug ${entry.name} from ${previousPath} and ${skillPath}`
+        );
+      }
+      pathsBySlug.set(entry.name, skillPath);
+
+      const agentSkillName = readAgentSkillName(skillPath);
+      const previousAgentSkillPath = pathsByAgentSkillName.get(agentSkillName);
+      if (previousAgentSkillPath) {
+        throw new MonkeError(
+          `Cannot install duplicate Agent skill name ${agentSkillName} from ${previousAgentSkillPath} and ${skillPath}`
+        );
+      }
+      pathsByAgentSkillName.set(agentSkillName, skillPath);
+    }
+  }
+}
+
+function readAgentSkillName(skillPath: string): string {
+  const skillEntryPath = path.join(skillPath, "SKILL.md");
+  const skillMarkdown = readFileSync(skillEntryPath, "utf-8");
+  const frontmatterMatch = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
+    skillMarkdown
+  );
+  if (!frontmatterMatch) {
+    throw new MonkeError(`Expected leading YAML frontmatter at ${skillEntryPath}`);
+  }
+
+  let rawFrontmatter: unknown;
+  try {
+    rawFrontmatter = parseYaml(frontmatterMatch.groups?.frontmatter ?? "");
+  } catch {
+    throw new MonkeError(`Invalid Skill frontmatter at ${skillEntryPath}`);
+  }
+  return parseBoundaryValue(
+    SkillFrontmatterSchema,
+    rawFrontmatter,
+    `Skill frontmatter at ${skillEntryPath}`
+  ).name;
+}
+
+function readNamespaceManifest(target: ResolvedSkillInstallTarget): NamespaceSkillManifest | null {
+  const manifestPath = namespaceManifestPath(target);
+  if (!existsSync(manifestPath)) {
+    return null;
+  }
+
+  let rawManifest: unknown;
+  try {
+    rawManifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+  } catch {
+    throw new MonkeError(`Invalid monke-tools Skill namespace manifest at ${manifestPath}`);
+  }
+
+  return parseBoundaryValue(
+    NamespaceSkillManifestSchema,
+    rawManifest,
+    `monke-tools Skill namespace manifest at ${manifestPath}`
+  );
+}
+
+function removeNamespaceProjection(
+  target: ResolvedSkillInstallTarget,
+  manifest: NamespaceSkillManifest
+): void {
+  const managedNames = new Set<string>(manifest.links.map((link) => link.name));
+  const unexpectedEntries = readdirSync(target.namespacePath).filter(
+    (entry) => entry !== NAMESPACE_SKILL_MANIFEST && !managedNames.has(entry)
+  );
+  if (unexpectedEntries.length > 0) {
+    throw new MonkeError(
+      `Refusing to remove Skill namespace with non-managed entries at ${target.namespacePath}`
+    );
+  }
+
+  for (const link of manifest.links) {
+    const linkPath = path.join(target.namespacePath, link.name);
+    const linkStat = lstatIfExists(linkPath);
+    if (!linkStat) {
+      continue;
+    }
+    if (!linkStat.isSymbolicLink() || readlinkSync(linkPath) !== link.sourcePath) {
+      throw new MonkeError(`Refusing to remove non-managed Skill namespace link at ${linkPath}`);
+    }
+  }
+
+  for (const link of manifest.links) {
+    rmSync(path.join(target.namespacePath, link.name), { force: true });
+  }
+  rmSync(namespaceManifestPath(target));
+  rmdirSync(target.namespacePath);
+}
+
+function writeNamespaceManifest(
+  target: ResolvedSkillInstallTarget,
+  links: NamespaceSkillLink[]
+): void {
+  const manifest = NamespaceSkillManifestSchema.parse({
+    links,
+    managedBy: "monke-tools",
+    version: 1
+  });
+  const manifestPath = namespaceManifestPath(target);
+
+  writeFileSync(`${manifestPath}.tmp`, `${JSON.stringify(manifest, null, 2)}\n`);
+  renameSync(`${manifestPath}.tmp`, manifestPath);
+}
+
+function namespaceManifestPath(target: ResolvedSkillInstallTarget): string {
+  return path.join(target.namespacePath, NAMESPACE_SKILL_MANIFEST);
 }
 
 const FlatSkillLinkSchema = z.strictObject({
@@ -412,7 +608,7 @@ type FlatSkillManifest = z.output<typeof FlatSkillManifestSchema>;
 function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
   const links = new Map<string, FlatSkillLink>();
 
-  for (const categoryName of ["internal", "imported"]) {
+  for (const categoryName of SHARED_SKILL_SOURCE_FOLDERS) {
     const categoryPath = path.join(skillSourceTree, categoryName);
     if (!existsSync(categoryPath)) {
       continue;

@@ -29,7 +29,7 @@ mt spawn banana -m
 
 `vp run install:local` installs or upgrades the dependencies declared in `Brewfile` on Apple Silicon Macs, rebuilds the local executable from the current checkout, installs it as `~/.local/bin/mt`, and installs `~/.local/bin/monke` as a wrapper that invokes it. It removes the obsolete `~/.local/bin/monke-tools` command, installs shell integration for bash and zsh, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots. The current Homebrew dependency is the Codiff developer tool; other platforms skip Homebrew dependency installation.
 
-On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and relink the managed skills to the current checkout.
+On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and refresh the managed skills from the current checkout.
 
 After changing CLI source code, run `vp run install:local` again before testing from another repo. For linked skills, file edits are visible immediately through symlinks. If you add or remove skill directories, rerun reconciliation (`vp run install:local` or `mt skills configure`) so flat Claude links are refreshed.
 
@@ -45,13 +45,16 @@ Built-in targets resolve against the OS home directory:
 - Claude: `~/.claude/skills`
 - Cursor: `~/.cursor/skills`
 
-Codex, Cursor, and custom targets receive one managed `monke-tools` namespace symlink inside the Agent skill root. Claude receives flat root-level symlinks for each source skill because Claude does not discover nested skill directories. monke-tools refuses to overwrite real files or directories in either layout.
+Codex, Cursor, and custom targets receive a managed `monke-tools` namespace containing symlinks to compatible source folders. Codex receives shared skills plus Codex-only skills; Cursor and custom targets receive shared skills only. Claude receives flat root-level symlinks for each shared source skill because Claude does not discover nested skill directories. monke-tools refuses to overwrite non-managed namespace content or root-level skills in either layout.
 
 The Skill source tree is organized as:
 
 - `skills/internal`: monke-tools-owned Distributed skills, including `monke-tools-core`
 - `skills/imported`: discoverable Imported skills preserved from outside projects
+- `skills/codex`: monke-tools-owned skills installed only for the built-in Codex target
 - `skills/references`: non-invocable Internal and Imported references used by Distributed skills
+
+Each immediate child of these skill folders is identified by its Skill slug. Slugs and agent-facing skill names must remain unique across the shared and Codex-only skills that Codex receives. A local install validates those identities before reconciling any target.
 
 ## Commands
 
