@@ -9,7 +9,7 @@ Before starting a review, read and follow:
 
 Use the base workflow unchanged. When it identifies coding-standards sources, include both:
 
-- Repo coding standards discovered by the base workflow
 - [the Team coding baseline](../../references/internal/CODING_STANDARDS.md)
+- Repo coding standards discovered by the base workflow
 
-Apply every Team coding baseline rule, then apply compatible repo coding standards as additions. The Team coding baseline takes precedence on conflicts.
+Apply the Team coding baseline as defaults. Repo coding standards take precedence on conflicts.
