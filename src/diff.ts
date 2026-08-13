@@ -2,6 +2,7 @@ import path from "node:path";
 
 import { launchCodiff, verifyCodiff, verifyCodiffAsync } from "./codiff.ts";
 import {
+  findNewerDefaultBranchBase,
   hasWorkingTreeChanges,
   planBranchComparison,
   planWorkingTreeComparison
@@ -84,12 +85,18 @@ function launchRememberedDiff(
   if (options.pick === true || remembered.baseRef === undefined) {
     return false;
   }
-  const plan = planBranchComparison(runtime, remembered.context, remembered.baseRef);
+  const baseRef =
+    findNewerDefaultBranchBase(runtime, remembered.context, remembered.baseRef) ??
+    remembered.baseRef;
+  const plan = planBranchComparison(runtime, remembered.context, baseRef);
   if (plan === undefined) {
     return false;
   }
-  warnDirtyRememberedBase(runtime, remembered.context, remembered.baseRef);
+  warnDirtyRememberedBase(runtime, remembered.context, baseRef);
   launchCodiff(runtime, executable, plan);
+  if (baseRef !== remembered.baseRef) {
+    persistDiffBase(runtime, remembered, baseRef);
+  }
   return true;
 }
 

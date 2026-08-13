@@ -176,6 +176,203 @@ touch "${discoveryReached}"`
     expect(readFileSync(codiffLog, "utf-8")).toBe(`--branch\nrefs/heads/main\n${worktreeRoot}\n`);
   });
 
+  test("plain Diff follows its remembered source branch after the Session is rebased onto its advanced tip", async () => {
+    const sandbox = makeTempDir("diff-rebased-remembered-base");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
+    const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
+
+    writeFileSync(path.join(sessionWorktree, "feature.txt"), "feature\n", "utf-8");
+    git(sessionWorktree, ["add", "feature.txt"]);
+    git(sessionWorktree, ["commit", "-m", "feature"]);
+    writeFileSync(path.join(repoRoot, "upstream.txt"), "upstream\n", "utf-8");
+    git(repoRoot, ["add", "upstream.txt"]);
+    git(repoRoot, ["commit", "-m", "upstream"]);
+    git(sessionWorktree, ["rebase", "main"]);
+
+    const mainHead = git(repoRoot, ["rev-parse", "refs/heads/main"]);
+    expect(git(sessionWorktree, ["merge-base", "refs/heads/main", "HEAD"])).toBe(mainHead);
+    const codiffLog = installFakeCodiff(binDirectory);
+
+    await runMonkeAsync({
+      args: ["diff"],
+      binDirectory,
+      cwd: sessionWorktree,
+      monkeHome: home
+    });
+
+    expect(readFileSync(codiffLog, "utf-8")).toBe(
+      `--branch\nrefs/heads/main\n${sessionWorktree}\n`
+    );
+    expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBe(
+      "refs/heads/main"
+    );
+  });
+
+  test("plain Diff replaces a stale remembered base after the Session is rebased onto newer upstream default-branch history", async () => {
+    const sandbox = makeTempDir("diff-rebased-new-default-base");
+    const binDirectory = path.join(sandbox, "bin");
+    const failingBinDirectory = path.join(sandbox, "failing-bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    git(repoRoot, ["switch", "-c", "source-base"]);
+    runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
+    const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
+
+    writeFileSync(path.join(sessionWorktree, "feature.txt"), "feature\n", "utf-8");
+    git(sessionWorktree, ["add", "feature.txt"]);
+    git(sessionWorktree, ["commit", "-m", "feature"]);
+    git(repoRoot, ["switch", "-c", "upstream-line", "main"]);
+    writeFileSync(path.join(repoRoot, "upstream-before.txt"), "upstream before rebase\n", "utf-8");
+    git(repoRoot, ["add", "upstream-before.txt"]);
+    git(repoRoot, ["commit", "-m", "upstream-before"]);
+    git(repoRoot, ["update-ref", "refs/remotes/upstream/master", "HEAD"]);
+    git(sessionWorktree, ["rebase", "refs/remotes/upstream/master"]);
+    writeFileSync(path.join(repoRoot, "upstream-after.txt"), "upstream after rebase\n", "utf-8");
+    git(repoRoot, ["add", "upstream-after.txt"]);
+    git(repoRoot, ["commit", "-m", "upstream-after"]);
+    git(repoRoot, ["update-ref", "refs/remotes/upstream/master", "HEAD"]);
+
+    installFakeCodiff(failingBinDirectory, { exitCode: 23 });
+    await expect(
+      runMonkeAsync({
+        args: ["diff"],
+        binDirectory: failingBinDirectory,
+        cwd: sessionWorktree,
+        monkeHome: home
+      })
+    ).rejects.toThrow("Codiff launch failed with exit code 23");
+    expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBe(
+      "refs/heads/source-base"
+    );
+
+    const codiffLog = installFakeCodiff(binDirectory);
+    await runMonkeAsync({
+      args: ["diff"],
+      binDirectory,
+      cwd: sessionWorktree,
+      monkeHome: home
+    });
+
+    expect(readFileSync(codiffLog, "utf-8")).toBe(
+      `--branch\nrefs/remotes/upstream/master\n${sessionWorktree}\n`
+    );
+    expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBe(
+      "refs/remotes/upstream/master"
+    );
+  });
+
+  test("plain Diff preserves its remembered base when the default branch has no newer shared history", async () => {
+    const sandbox = makeTempDir("diff-equal-default-merge-base");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    git(repoRoot, ["switch", "-c", "source-base"]);
+    runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
+    const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
+    writeFileSync(path.join(sessionWorktree, "feature.txt"), "feature\n", "utf-8");
+    git(sessionWorktree, ["add", "feature.txt"]);
+    git(sessionWorktree, ["commit", "-m", "feature"]);
+    git(repoRoot, ["switch", "main"]);
+    writeFileSync(path.join(repoRoot, "upstream.txt"), "not in the Session\n", "utf-8");
+    git(repoRoot, ["add", "upstream.txt"]);
+    git(repoRoot, ["commit", "-m", "upstream"]);
+    const codiffLog = installFakeCodiff(binDirectory);
+
+    await runMonkeAsync({
+      args: ["diff"],
+      binDirectory,
+      cwd: sessionWorktree,
+      monkeHome: home
+    });
+
+    expect(readFileSync(codiffLog, "utf-8")).toBe(
+      `--branch\nrefs/heads/source-base\n${sessionWorktree}\n`
+    );
+    expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBe(
+      "refs/heads/source-base"
+    );
+  });
+
+  test("plain Diff preserves its remembered base when default-branch history is incomparable", async () => {
+    const sandbox = makeTempDir("diff-incomparable-default-merge-base");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    git(repoRoot, ["switch", "-c", "source-base"]);
+    writeFileSync(path.join(repoRoot, "parent.txt"), "parent feature\n", "utf-8");
+    git(repoRoot, ["add", "parent.txt"]);
+    git(repoRoot, ["commit", "-m", "parent-feature"]);
+    runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
+    const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
+    writeFileSync(path.join(sessionWorktree, "feature.txt"), "session feature\n", "utf-8");
+    git(sessionWorktree, ["add", "feature.txt"]);
+    git(sessionWorktree, ["commit", "-m", "session-feature"]);
+    git(repoRoot, ["switch", "main"]);
+    writeFileSync(path.join(repoRoot, "upstream.txt"), "upstream\n", "utf-8");
+    git(repoRoot, ["add", "upstream.txt"]);
+    git(repoRoot, ["commit", "-m", "upstream"]);
+    git(sessionWorktree, ["merge", "main", "-m", "merge-main"]);
+    const codiffLog = installFakeCodiff(binDirectory);
+
+    await runMonkeAsync({
+      args: ["diff"],
+      binDirectory,
+      cwd: sessionWorktree,
+      monkeHome: home
+    });
+
+    expect(readFileSync(codiffLog, "utf-8")).toBe(
+      `--branch\nrefs/heads/source-base\n${sessionWorktree}\n`
+    );
+    expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBe(
+      "refs/heads/source-base"
+    );
+  });
+
+  test("plain Diff preserves its remembered base when default-branch history has multiple best merge bases", async () => {
+    const sandbox = makeTempDir("diff-ambiguous-default-merge-base");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    git(repoRoot, ["switch", "-c", "source-base"]);
+    runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
+    const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
+    git(repoRoot, ["switch", "main"]);
+    writeFileSync(path.join(repoRoot, "main.txt"), "main\n", "utf-8");
+    git(repoRoot, ["add", "main.txt"]);
+    git(repoRoot, ["commit", "-m", "main-side"]);
+    const mainSide = git(repoRoot, ["rev-parse", "HEAD"]);
+    writeFileSync(path.join(sessionWorktree, "session.txt"), "session\n", "utf-8");
+    git(sessionWorktree, ["add", "session.txt"]);
+    git(sessionWorktree, ["commit", "-m", "session-side"]);
+    const sessionSide = git(sessionWorktree, ["rev-parse", "HEAD"]);
+    git(repoRoot, ["merge", sessionSide, "-m", "main-merge"]);
+    git(sessionWorktree, ["merge", mainSide, "-m", "session-merge"]);
+    git(repoRoot, ["branch", "master", mainSide]);
+    expect(git(sessionWorktree, ["merge-base", "--all", "main", "HEAD"]).split("\n")).toHaveLength(
+      2
+    );
+    expect(git(sessionWorktree, ["merge-base", "--all", "master", "HEAD"])).toBe(mainSide);
+    const codiffLog = installFakeCodiff(binDirectory);
+
+    await runMonkeAsync({
+      args: ["diff"],
+      binDirectory,
+      cwd: sessionWorktree,
+      monkeHome: home
+    });
+
+    expect(readFileSync(codiffLog, "utf-8")).toBe(
+      `--branch\nrefs/heads/source-base\n${sessionWorktree}\n`
+    );
+    expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBe(
+      "refs/heads/source-base"
+    );
+  });
+
   test("forced Diff picker preserves local target ordering and launches the selected committed branch", async () => {
     const sandbox = makeTempDir("diff-picker-order");
     const binDirectory = path.join(sandbox, "bin");
