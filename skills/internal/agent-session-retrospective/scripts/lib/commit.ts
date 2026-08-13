@@ -238,7 +238,7 @@ function secondaryRootsOf(session: BundleSession, slices: RepoSlice[]): string[]
   return [...roots].toSorted();
 }
 
-// --- report (action-first, design decision 16) -------------------------------
+// --- report (problem-first, design decision 16) ------------------------------
 
 interface ReportContext {
   prAnalysis?: string | null;
@@ -399,6 +399,21 @@ const REQUIRED_SYNTHESIS_HEADINGS = [
   "Resolved or Superseded",
 ];
 
+const REQUIRED_ACTIVE_ACTION_FIELDS = [
+  "Problem",
+  "Impact",
+  "Cause",
+  "Proposed fix",
+  "Target",
+  "Confidence",
+  "Resolution",
+  "Checked-at",
+  "Checked-against",
+  "Current-state evidence",
+  "Remaining gap",
+  "Session evidence",
+];
+
 export function validateSynthesis(content: string | null | undefined): string[] {
   const text = content?.trim();
   if (!isNonEmptyString(text)) {
@@ -414,6 +429,45 @@ export function validateSynthesis(content: string | null | undefined): string[] 
   const positions = REQUIRED_SYNTHESIS_HEADINGS.map((heading) => text.indexOf(`### ${heading}`));
   if (!positions.every((position, index) => index === 0 || position > (positions[index - 1] ?? -1))) {
     warnings.push("Required synthesis headings are out of order.");
+  }
+  const activeActions = extractMarkdownSection(text, "Active Actions", 3);
+  if (isNonEmptyString(activeActions)) {
+    warnings.push(...validateActiveActions(activeActions));
+  }
+  return warnings;
+}
+
+function validateActiveActions(section: string): string[] {
+  const headings = [...section.matchAll(/^####\s+(?<title>.+)$/gmu)];
+  const warnings: string[] = [];
+  for (const [index, heading] of headings.entries()) {
+    const title = heading.groups?.title?.trim() || `action ${index + 1}`;
+    const start = (heading.index ?? 0) + heading[0].length;
+    const end = headings[index + 1]?.index ?? section.length;
+    const lines = section.slice(start, end).split("\n");
+    const firstContentLine = lines.find((line) => line.trim() !== "")?.trim();
+    if (!firstContentLine?.startsWith("Problem:")) {
+      warnings.push(`Active action \`${title}\` must start with \`Problem:\`.`);
+    }
+
+    const fieldPositions = REQUIRED_ACTIVE_ACTION_FIELDS.map((field) => ({
+      field,
+      position: lines.findIndex((line) =>
+        new RegExp(`^${escapeRegExp(field)}:\\s+\\S`, "u").test(line)
+      ),
+    }));
+    for (const { field, position } of fieldPositions) {
+      if (position === -1) {
+        warnings.push(`Active action \`${title}\` is missing \`${field}:\`.`);
+      }
+    }
+    const presentPositions = fieldPositions.filter(({ position }) => position !== -1);
+    if (!presentPositions.every(
+      ({ position }, fieldIndex) =>
+        fieldIndex === 0 || position > (presentPositions[fieldIndex - 1]?.position ?? -1),
+    )) {
+      warnings.push(`Active action \`${title}\` fields are out of order.`);
+    }
   }
   return warnings;
 }
@@ -553,15 +607,16 @@ function extractPrRepeatedPatterns(prAnalysis: string): string {
   return section ?? "_No recurring corrective-change patterns were extracted from per-PR analyses._";
 }
 
-function extractMarkdownSection(markdown: string, heading: string): string | null {
-  const pattern = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "mu");
+function extractMarkdownSection(markdown: string, heading: string, level = 2): string | null {
+  const prefix = "#".repeat(level);
+  const pattern = new RegExp(`^${prefix}\\s+${escapeRegExp(heading)}\\s*$`, "mu");
   const match = markdown.match(pattern);
   if (!match || match.index === undefined) {
     return null;
   }
   const start = match.index + match[0].length;
   const rest = markdown.slice(start);
-  const next = rest.search(/^##\s+/mu);
+  const next = rest.search(new RegExp(`^${prefix}\\s+`, "mu"));
   return (next === -1 ? rest : rest.slice(0, next)).trim();
 }
 

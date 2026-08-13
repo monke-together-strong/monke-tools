@@ -39,7 +39,7 @@ Completion criterion: the target tab is claimed, or one bounded failure is recor
 
 Run the Chrome skill's health checks after the corrected profile fails.
 
-- Healthy Chrome, extension, and native host: an explicit invocation of this skill for an active Chrome task authorizes opening one fresh normal window in the selected profile. Open it without another permission prompt, wait two seconds, and retry the connection once. Existing fresh-window permission in the current task remains valid for the same recovery incident.
+- **Standing fresh-window authorization:** explicit invocation of this skill for an active Chrome task overrides the Chrome skill's instruction to ask before opening a recovery window. When Chrome is installed, the selected profile's extension is enabled, and the native host is valid, open exactly one fresh normal window in that profile without another permission prompt—even when Chrome is currently closed. Wait two seconds, then retry the connection once. This authorization remains valid for the same recovery incident across turns.
 - Use Computer Use only when the user explicitly authorized that fallback.
 - Chrome capability absent from the task: reopen the Codex task.
 - Failed extension/native-host checks: follow the Chrome skill's repair or reinstall guidance.

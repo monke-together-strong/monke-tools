@@ -17,8 +17,8 @@ Record:
 - `Resolution: unresolved | partially-resolved | resolved | superseded | unknown`
 - `Checked-at:` timestamp
 - `Checked-against:` concrete paths, refs, issues, PRs, or commands
-- `Resolution evidence:` what the current state proves
-- `Residual gap:` the remaining problem, or `none`
+- `Current-state evidence:` what the current state proves
+- `Remaining gap:` the remaining problem, or `none`
 
 An open tracker is `unresolved`, not resolved. A completed change is `resolved` only when the
 current authoritative state contains it and the relevant behavior is verified where practical.
@@ -33,23 +33,36 @@ The synthesis file contains these three level-three headings exactly once and in
 ### Active Actions
 
 Include only `unresolved`, `partially-resolved`, and `unknown` candidates, ranked by **value ×
-recurrence**. For a partially resolved candidate, recommend only its residual gap. Keep an unknown
+recurrence**. For a partially resolved candidate, recommend only its remaining gap. Keep an unknown
 candidate's uncertainty visible rather than presenting its recommendation as settled.
 
-Each action begins with `#### <id> — <name>` and includes:
+Each action begins with `#### <id> — <problem-focused name>`. Name the failure or risk a reader
+needs to understand, not the fix they should apply. Put the decision summary before audit metadata
+so the problem is understandable without reverse-engineering the evidence. Include these fields in
+this exact order:
 
 ```text
+Problem: <plain-language statement of what is wrong now>
+Impact: <the concrete cost, failure, or risk>
+Cause: <why the current system permits the problem>
+Proposed fix: <the concrete durable fix>
+
 Target: <code | tooling | setup | infra | deps | docs | agent-skill | AGENTS.md | CLAUDE.md | hook | preflight>
 Confidence: <high | medium | low>
 Resolution: <unresolved | partially-resolved | unknown>
 Checked-at: <timestamp>
 Checked-against: <current-state evidence inspected>
-Resolution evidence: <what that evidence proves>
-Residual gap: <what remains>
+Current-state evidence: <what that evidence proves>
+Remaining gap: <what remains>
 Session evidence: <repo/session/episode refs supporting recurrence>
-
-<concrete durable fix>
 ```
+
+The first nonblank line after the action heading must be `Problem:`. Make its first sentence
+understandable without the metadata or source files. Lead with the observable mismatch or failure;
+introduce specialized terms only after the plain-language statement and define them when needed.
+Keep `Problem`, `Impact`, and `Cause` distinct. For a partially resolved candidate, all four summary
+fields describe only the remaining gap. Keep an unknown candidate's uncertainty visible rather than
+presenting its cause or fix as settled.
 
 Write `_No active actions._` when empty.
 
@@ -82,7 +95,7 @@ Preserve candidates suppressed from active ranking:
 Resolution: <resolved | superseded>
 Checked-at: <timestamp>
 Checked-against: <current-state evidence inspected>
-Resolution evidence: <what fixed it or what replaced it>
+Current-state evidence: <what fixed it or what replaced it>
 Session evidence: <the historical evidence retained for recurrence memory>
 ```
 
@@ -92,5 +105,6 @@ Write `_No resolved or superseded candidates._` when empty.
 
 The synthesis is complete when every grouped candidate appears exactly once in **Active Actions**
 or **Resolved or Superseded**, and every active action has exactly one entry in **Skill & Workflow
-Opportunities**. Immediately before commit, refresh any active candidate whose issue, PR, branch,
-or installed-guidance evidence may have changed during the run.
+Opportunities**. Every active action starts with a plain-language problem and includes the required
+summary and audit fields in order. Immediately before commit, refresh any active candidate whose
+issue, PR, branch, or installed-guidance evidence may have changed during the run.

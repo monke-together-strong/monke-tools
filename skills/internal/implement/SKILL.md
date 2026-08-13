@@ -3,8 +3,8 @@ name: implement
 description: "Heavyweight implementation workflow with mandatory closeout. Use only when the user explicitly names implement, or when work is already scoped by a PRD, issue, or plan. Never use for small direct edits or review feedback, even when implementation is explicitly requested."
 ---
 
-Implement the work described by the user in the PRD, issue, plan, or direct
-request.
+The user's primary PRD, issue, plan, or direct request is the Work target.
+Implement it.
 
 If the work is a PRD, run the PRD gate before branch creation, code exploration, or edits.
 
@@ -39,39 +39,41 @@ Exit:
 - If one or more implementation slices are found, read the sibling file [PRD-ORCHESTRATION.md](./PRD-ORCHESTRATION.md) and orchestrate the slices.
 - If no slices are found, state exactly which sources were checked, then implement the PRD directly.
 
+## Direct implementation
+
+For every run not routed to PRD orchestration, resolve the user-supplied review
+base or current `HEAD` to its full commit SHA before implementation starts and
+record it as the final-review fixed point. Keep it unchanged through every
+closeout rerun.
+
 Use /tdd where possible, at pre-agreed seams.
 
 Run typechecking regularly, single test files regularly, and the full test suite once at the end.
 
 ## Closeout
 
-After implementation and verification, run a closeout verifier subagent in the
-same checkout for every `/implement` run. Use
-[CLOSEOUT-GATES.md](./CLOSEOUT-GATES.md).
-
-The implementation thread owns fixes and the final commit. Do not commit until
-the closeout verifier reports that all gates are complete.
-
-When filling the prompt, set `Work target` to the primary `/implement` request.
-Put parent PRDs and supporting docs only in `Background context`.
-
-Use this closeout prompt:
+After implementation and verification, stage every checkout change, including
+untracked paths, and commit them; if already clean, use `HEAD`. Record the full
+`HEAD` SHA as the review candidate, then run a closeout verifier subagent in the
+same checkout with this prompt:
 
 ```text
 Run the implement closeout procedure in this checkout.
 
 Procedure: skills/internal/implement/CLOSEOUT-GATES.md
-Work target: <primary PRD, issue, plan, summary of direct request, or "none">
-Review fixed point: <fixed point or "ask if needed">
-Background context: <parent PRD URL/path, supporting docs, or "none">
+Work target: <Work target or "none">
+Review fixed point: <recorded fixed point>
+Review candidate: <recorded candidate>
+Background context: <parent PRD and supporting docs or "none">
 Orchestrated PRD: <yes/no>
 
 Read the procedure file and follow it exactly. Report missing evidence, review
 findings, and the final gate result back to the implementation thread.
 ```
 
-If closeout reports a missing-evidence blocker or a review finding that requires
-code changes, fix it in this implementation thread, then rerun the closeout
-verifier on the affected gate.
-
-Commit your work to the current branch.
+If closeout blocks, supply missing evidence, obtain explicit acceptance, or fix
+the code. If the checkout changes, rerun verification—including the full test
+suite for code changes—commit every checkout change, update the review candidate,
+then rerun the Review gate and affected evidence gates against the same fixed
+point. Otherwise rerun only the affected gates. Finish only after closeout passes
+with a clean checkout.

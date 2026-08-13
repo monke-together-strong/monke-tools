@@ -626,10 +626,51 @@ describe("agent session retrospective", () => {
         )
       ).toStrictEqual(["Required synthesis headings are out of order."]);
     });
+
+    test("requires active actions to explain the problem before metadata and evidence", () => {
+      const synthesis = [
+        "### Active Actions",
+        "",
+        "#### A1 — Reviews can approve the wrong tree",
+        "Problem: Review approval can describe different code than the delivered commit.",
+        "Impact: Unreviewed changes can ship despite a passing verdict.",
+        "Cause: The workflows do not share an immutable pre-commit snapshot.",
+        "Proposed fix: Review one fingerprinted Git tree and verify the final commit matches it.",
+        "",
+        "Target: agent-skill",
+        "Confidence: high",
+        "Resolution: unresolved",
+        "Checked-at: 2026-08-10T00:00:00Z",
+        "Checked-against: current skill sources",
+        "Current-state evidence: Each workflow still identifies candidates differently.",
+        "Remaining gap: No shared snapshot or final identity check exists.",
+        "Session evidence: repo e1",
+        "",
+        "### Skill & Workflow Opportunities",
+        "",
+        "_No skill or workflow opportunities._",
+        "",
+        "### Resolved or Superseded",
+        "",
+        "_No resolved or superseded candidates._"
+      ].join("\n");
+
+      expect(validateSynthesis(synthesis)).toStrictEqual([]);
+      expect(
+        validateSynthesis(
+          synthesis.replace(
+            "Problem: Review approval can describe different code than the delivered commit.\n",
+            ""
+          )
+        )
+      ).toContain(
+        "Active action `A1 — Reviews can approve the wrong tree` must start with `Problem:`."
+      );
+    });
   });
 
   describe("buildReport", () => {
-    test("keeps the main report action-focused and moves evidence to session sources", () => {
+    test("keeps the main report problem-focused and moves evidence to session sources", () => {
       const bundle = bundleWith(["t0"]);
       const synthesis = [
         "### Active Actions",
@@ -746,9 +787,20 @@ describe("agent session retrospective", () => {
         [
           "### Active Actions",
           "",
+          "#### A1 — A global problem",
+          "Problem: The global workflow has a problem.",
+          "Impact: The problem affects delivery.",
+          "Cause: The workflow lacks a durable guard.",
+          "Proposed fix: Add the durable guard.",
+          "",
           "Target: preflight",
           "Confidence: medium",
-          "GLOBAL",
+          "Resolution: unresolved",
+          "Checked-at: 2026-06-01T00:00:00.000Z",
+          "Checked-against: current workflow",
+          "Current-state evidence: The guard is absent.",
+          "Remaining gap: The workflow remains unguarded.",
+          "Session evidence: repo e1",
           "",
           "### Skill & Workflow Opportunities",
           "",
