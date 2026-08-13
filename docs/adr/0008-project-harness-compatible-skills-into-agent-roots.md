@@ -4,7 +4,7 @@ The whole-tree namespace symlink chosen in [ADR 0001](./0001-install-distributed
 
 Harness scope is expressed by source location rather than skill frontmatter or import-recipe metadata. The first supported scoped location is `skills/codex/<skill-slug>`, and Imported skills remain shared under `skills/imported`. Before changing any target, reconciliation requires Skill slugs and agent-facing skill names to be unique across the shared and Codex-only skills that Codex would receive.
 
-Each selected target must resolve to a distinct Agent skill root. This prevents a custom target from sharing a root with Codex and overwriting or inheriting the Codex-specific projection according to reconciliation order; invalid interactive selections fail before the preference is saved.
+Each selected target must resolve to a distinct physical Agent skill root, including through filesystem aliases. This prevents a custom target from sharing a root with Codex and overwriting or inheriting the Codex-specific projection according to reconciliation order; invalid interactive selections fail before the preference is saved.
 
 Each namespaced projection is a managed directory of source-folder symlinks recorded by a versioned manifest. This preserves live source edits while allowing each target to expose a different folder set. Existing whole-tree namespace symlinks are treated as legacy managed installs and migrated automatically; real unowned namespaces, modified managed links, and unexpected namespace entries are preserved and cause that target to fail safely.
 

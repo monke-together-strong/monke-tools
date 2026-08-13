@@ -53,17 +53,24 @@ describe("skills", () => {
     ).toThrow(/Agent skill root/u);
   });
 
-  test("skill reconciliation rejects targets that resolve to the same Agent skill root", () => {
+  test.each([
+    { label: "lexical path", useAlias: false },
+    { label: "symlink alias", useAlias: true }
+  ])("skill reconciliation rejects a duplicate Agent skill root through $label", ({ useAlias }) => {
     const sandbox = makeTempDir("skill-reconcile-duplicate-root");
     const sourceCheckout = path.join(sandbox, "source");
     const codexSkillRoot = path.join(sandbox, ".codex", "skills");
+    const customSkillRoot = useAlias ? path.join(sandbox, "codex-skills-alias") : codexSkillRoot;
     writeCoreSkill(sourceCheckout);
+    if (useAlias) {
+      symlinkSync(codexSkillRoot, customSkillRoot, "dir");
+    }
 
     expect(() => {
       reconcileSkillNamespaces({
         homeDirectory: sandbox,
         nextPreference: {
-          targets: [{ kind: "codex" }, { kind: "custom", path: codexSkillRoot }]
+          targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
         },
         previousPreference: null,
         sourceCheckout,

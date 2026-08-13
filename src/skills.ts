@@ -808,14 +808,56 @@ function assertUniqueTargetRoots(targets: ResolvedSkillInstallTarget[]) {
   const targetsByRoot = new Map<string, ResolvedSkillInstallTarget>();
 
   for (const target of targets) {
-    const previousTarget = targetsByRoot.get(target.agentSkillRoot);
+    const rootIdentity = resolveFilesystemIdentity(target.agentSkillRoot);
+    const previousTarget = targetsByRoot.get(rootIdentity);
     if (previousTarget) {
       throw new MonkeError(
         `Skill install targets ${previousTarget.kind} and ${target.kind} resolve to the same Agent skill root: ${target.agentSkillRoot}`
       );
     }
-    targetsByRoot.set(target.agentSkillRoot, target);
+    targetsByRoot.set(rootIdentity, target);
   }
+}
+
+function resolveFilesystemIdentity(targetPath: string) {
+  const absolutePath = path.resolve(targetPath);
+  const parsedPath = path.parse(absolutePath);
+  const pendingSegments = absolutePath
+    .slice(parsedPath.root.length)
+    .split(path.sep)
+    .filter(Boolean);
+  let resolvedPath = parsedPath.root;
+  let symlinkCount = 0;
+
+  while (pendingSegments.length > 0) {
+    const segment = pendingSegments.shift();
+    if (!segment) {
+      continue;
+    }
+
+    const candidatePath = path.join(resolvedPath, segment);
+    const candidateStat = lstatIfExists(candidatePath);
+    if (!candidateStat?.isSymbolicLink()) {
+      resolvedPath = candidatePath;
+      continue;
+    }
+
+    symlinkCount += 1;
+    if (symlinkCount > 40) {
+      throw new MonkeError(
+        `Too many symbolic links while resolving Agent skill root: ${targetPath}`
+      );
+    }
+
+    const linkTarget = path.resolve(path.dirname(candidatePath), readlinkSync(candidatePath));
+    const parsedTarget = path.parse(linkTarget);
+    resolvedPath = parsedTarget.root;
+    pendingSegments.unshift(
+      ...linkTarget.slice(parsedTarget.root.length).split(path.sep).filter(Boolean)
+    );
+  }
+
+  return path.normalize(resolvedPath);
 }
 
 function targetKey(target: ResolvedSkillInstallTarget): string {

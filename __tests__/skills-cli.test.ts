@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readlinkSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -71,12 +71,16 @@ describe("skills CLI", () => {
     expect(stderr).toContain("Configured monke-tools skills");
   });
 
-  test("mt skills configure does not save targets that resolve to the same root", async () => {
+  test.each([
+    { label: "lexical path", useAlias: false },
+    { label: "symlink alias", useAlias: true }
+  ])("mt skills configure does not save a duplicate root through $label", async ({ useAlias }) => {
     const sandbox = makeTempDir("skills-configure-duplicate-root");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     const codexSkillRoot = path.join(osHome, ".codex", "skills");
+    const customSkillRoot = useAlias ? path.join(osHome, "codex-skills-alias") : codexSkillRoot;
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
@@ -86,6 +90,10 @@ describe("skills CLI", () => {
       installedSourceCheckout: sourceCheckout,
       version: 1
     });
+    if (useAlias) {
+      mkdirSync(osHome, { recursive: true });
+      symlinkSync(codexSkillRoot, customSkillRoot, "dir");
+    }
 
     await expect(
       runCliAsync(
@@ -99,7 +107,7 @@ describe("skills CLI", () => {
           multiSelectValues: [["codex", "custom"]],
           onStderr() {},
           onStdout() {},
-          stdinText: `${codexSkillRoot}\n`
+          stdinText: `${customSkillRoot}\n`
         })
       )
     ).rejects.toThrow(/same Agent skill root/u);
