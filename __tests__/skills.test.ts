@@ -6,6 +6,14 @@ import { describe, expect, test } from "vite-plus/test";
 import { reconcileSkillNamespaces, resolveSkillInstallTargets } from "../src/skills.ts";
 import { makeTempDir, write } from "./helpers.ts";
 
+function writeCoreSkill(sourceCheckout: string) {
+  write(
+    sourceCheckout,
+    "skills/internal/monke-tools-core/SKILL.md",
+    "---\nname: monke-tools-core\n---\n"
+  );
+}
+
 describe("skills", () => {
   test("skill install targets resolve built-ins against OS home and normalize custom skill roots", () => {
     const homeDirectory = makeTempDir("skill-target-home");
@@ -45,15 +53,31 @@ describe("skills", () => {
     ).toThrow(/Agent skill root/u);
   });
 
+  test("skill reconciliation rejects targets that resolve to the same Agent skill root", () => {
+    const sandbox = makeTempDir("skill-reconcile-duplicate-root");
+    const sourceCheckout = path.join(sandbox, "source");
+    const codexSkillRoot = path.join(sandbox, ".codex", "skills");
+    writeCoreSkill(sourceCheckout);
+
+    expect(() => {
+      reconcileSkillNamespaces({
+        homeDirectory: sandbox,
+        nextPreference: {
+          targets: [{ kind: "codex" }, { kind: "custom", path: codexSkillRoot }]
+        },
+        previousPreference: null,
+        sourceCheckout,
+        writeMessage() {}
+      });
+    }).toThrow(/same Agent skill root/u);
+    expect(existsSync(codexSkillRoot)).toBeFalsy();
+  });
+
   test("skill namespace reconciliation projects Codex-only skills only into Codex", () => {
     const sandbox = makeTempDir("skill-reconcile-create");
     const sourceCheckout = path.join(sandbox, "source");
     const customSkillRoot = path.join(sandbox, "custom", "skills");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
+    writeCoreSkill(sourceCheckout);
     write(sourceCheckout, "skills/imported/tdd/SKILL.md", "---\nname: tdd\n---\n");
     write(
       sourceCheckout,
@@ -98,11 +122,7 @@ describe("skills", () => {
     const cursorSkillRoot = path.join(sandbox, ".cursor", "skills");
     const namespacePath = path.join(cursorSkillRoot, "monke-tools");
     for (const sourceCheckout of [firstSourceCheckout, nextSourceCheckout]) {
-      write(
-        sourceCheckout,
-        "skills/internal/monke-tools-core/SKILL.md",
-        "---\nname: monke-tools-core\n---\n"
-      );
+      writeCoreSkill(sourceCheckout);
     }
     mkdirSync(cursorSkillRoot, { recursive: true });
     symlinkSync(path.join(firstSourceCheckout, "skills"), namespacePath, "dir");
@@ -184,11 +204,7 @@ describe("skills", () => {
   test("Claude skill reconciliation flattens source categories into the Agent skill root", () => {
     const sandbox = makeTempDir("skill-reconcile-claude-flat");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
+    writeCoreSkill(sourceCheckout);
     write(sourceCheckout, "skills/imported/tdd/SKILL.md", "---\nname: tdd\n---\n");
     write(
       sourceCheckout,
@@ -336,11 +352,7 @@ describe("skills", () => {
     const sandbox = makeTempDir("skill-reconcile-future-manifest");
     const sourceCheckout = path.join(sandbox, "source");
     const claudeSkillRoot = path.join(sandbox, ".claude", "skills");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
+    writeCoreSkill(sourceCheckout);
     write(
       claudeSkillRoot,
       ".monke-tools-flat-skills.json",
@@ -362,11 +374,7 @@ describe("skills", () => {
     const sandbox = makeTempDir("skill-reconcile-future-namespace-manifest");
     const sourceCheckout = path.join(sandbox, "source");
     const cursorNamespace = path.join(sandbox, ".cursor", "skills", "monke-tools");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
+    writeCoreSkill(sourceCheckout);
     write(
       cursorNamespace,
       ".monke-tools-namespace-skills.json",
@@ -391,11 +399,7 @@ describe("skills", () => {
     const sandbox = makeTempDir("skill-reconcile-partial");
     const sourceCheckout = path.join(sandbox, "source");
     const blockedSkillRoot = path.join(sandbox, "blocked", "skills");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
+    writeCoreSkill(sourceCheckout);
     mkdirSync(path.join(blockedSkillRoot, "monke-tools"), { recursive: true });
 
     expect(() => {
@@ -418,11 +422,7 @@ describe("skills", () => {
   test("skill namespace reconciliation continues after deselected target cleanup failures", () => {
     const sandbox = makeTempDir("skill-reconcile-cleanup-partial");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
+    writeCoreSkill(sourceCheckout);
     write(path.join(sandbox, ".claude", "skills"), ".monke-tools-flat-skills.json", "{}");
 
     expect(() => {
@@ -448,11 +448,7 @@ describe("skills", () => {
     const sandbox = makeTempDir("skill-reconcile-deselect-projection");
     const sourceCheckout = path.join(sandbox, "source");
     const oldSkillRoot = path.join(sandbox, "old", "skills");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
+    writeCoreSkill(sourceCheckout);
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
       nextPreference: { targets: [{ kind: "custom", path: oldSkillRoot }] },
@@ -479,11 +475,7 @@ describe("skills", () => {
     const sandbox = makeTempDir("skill-reconcile-deselect");
     const sourceCheckout = path.join(sandbox, "source");
     const oldSkillRoot = path.join(sandbox, "old", "skills");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
+    writeCoreSkill(sourceCheckout);
     mkdirSync(oldSkillRoot, { recursive: true });
     symlinkSync(path.join(sourceCheckout, "skills"), path.join(oldSkillRoot, "monke-tools"), "dir");
 
@@ -510,11 +502,7 @@ describe("skills", () => {
     const sourceCheckout = path.join(sandbox, "source");
     const customSkillRoot = path.join(sandbox, "custom", "skills");
     const customNamespace = path.join(customSkillRoot, "monke-tools");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
+    writeCoreSkill(sourceCheckout);
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
       nextPreference: { targets: [{ kind: "custom", path: customSkillRoot }] },

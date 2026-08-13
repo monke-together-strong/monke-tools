@@ -411,6 +411,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - A **Skill install preference** belongs to **Global monke config**.
 - A **Skill install preference** contains one or more **Skill install targets** selected by the user.
 - A **Skill install preference** must contain at least one **Skill install target**.
+- No two **Skill install targets** in one **Skill install preference** may resolve to the same **Agent skill root**.
 - **Global monke config** keeps the current **Skill install preference**, not historical preferences.
 - A **Skill install target** resolves to one **Agent skill root** during **Local install refresh**.
 - The built-in **Skill install targets** are Codex, Claude, and Cursor.

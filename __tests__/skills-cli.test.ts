@@ -71,6 +71,42 @@ describe("skills CLI", () => {
     expect(stderr).toContain("Configured monke-tools skills");
   });
 
+  test("mt skills configure does not save targets that resolve to the same root", async () => {
+    const sandbox = makeTempDir("skills-configure-duplicate-root");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    const codexSkillRoot = path.join(osHome, ".codex", "skills");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    saveGlobalMonkeConfig(monkeHome, {
+      installedSourceCheckout: sourceCheckout,
+      version: 1
+    });
+
+    await expect(
+      runCliAsync(
+        ["skills", "configure"],
+        createRuntime({
+          cwd: sandbox,
+          env: {
+            HOME: osHome,
+            MONKE_HOME: monkeHome
+          },
+          multiSelectValues: [["codex", "custom"]],
+          onStderr() {},
+          onStdout() {},
+          stdinText: `${codexSkillRoot}\n`
+        })
+      )
+    ).rejects.toThrow(/same Agent skill root/u);
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();
+    expect(existsSync(codexSkillRoot)).toBeFalsy();
+  });
+
   test("mt skills configure preselects existing targets when reconfiguring", async () => {
     const sandbox = makeTempDir("skills-configure-e2e");
     const monkeHome = path.join(sandbox, "monke-home");

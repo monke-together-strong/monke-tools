@@ -104,6 +104,12 @@ export async function runSkillsConfigure(runtime: Runtime): Promise<void> {
     previousPreference,
     homeDirectory
   );
+  assertUniqueTargetRoots(
+    resolveSkillInstallTargets({
+      homeDirectory,
+      preference: nextPreference
+    })
+  );
   saveGlobalMonkeConfig(monkeHome, {
     ...config,
     skillInstallPreference: nextPreference
@@ -175,6 +181,7 @@ export function reconcileSkillNamespaces(options: {
     homeDirectory: options.homeDirectory,
     preference: options.nextPreference
   });
+  assertUniqueTargetRoots(nextTargets);
   const nextKeys = new Set(nextTargets.map(targetKey));
   const failures: string[] = [];
 
@@ -426,10 +433,7 @@ const NamespaceSkillManifestSchema = z.strictObject({
 type NamespaceSkillLink = z.output<typeof NamespaceSkillLinkSchema>;
 type NamespaceSkillManifest = z.output<typeof NamespaceSkillManifestSchema>;
 
-function discoverNamespaceLinks(
-  target: ResolvedSkillInstallTarget,
-  skillSourceTree: string
-): NamespaceSkillLink[] {
+function discoverNamespaceLinks(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
   const sourceFolders: NamespaceSkillLink["name"][] = [
     ...SHARED_SKILL_SOURCE_FOLDERS,
     "references"
@@ -448,7 +452,7 @@ const SkillFrontmatterSchema = z.looseObject({
   name: z.string().trim().min(1)
 });
 
-function assertUniqueSkillIdentities(skillSourceTree: string): void {
+function assertUniqueSkillIdentities(skillSourceTree: string) {
   const pathsByAgentSkillName = new Map<string, string>();
   const pathsBySlug = new Map<string, string>();
 
@@ -487,7 +491,7 @@ function assertUniqueSkillIdentities(skillSourceTree: string): void {
   }
 }
 
-function readAgentSkillName(skillPath: string): string {
+function readAgentSkillName(skillPath: string) {
   const skillEntryPath = path.join(skillPath, "SKILL.md");
   const skillMarkdown = readFileSync(skillEntryPath, "utf-8");
   const frontmatterMatch = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
@@ -510,7 +514,7 @@ function readAgentSkillName(skillPath: string): string {
   ).name;
 }
 
-function readNamespaceManifest(target: ResolvedSkillInstallTarget): NamespaceSkillManifest | null {
+function readNamespaceManifest(target: ResolvedSkillInstallTarget) {
   const manifestPath = namespaceManifestPath(target);
   if (!existsSync(manifestPath)) {
     return null;
@@ -533,7 +537,7 @@ function readNamespaceManifest(target: ResolvedSkillInstallTarget): NamespaceSki
 function removeNamespaceProjection(
   target: ResolvedSkillInstallTarget,
   manifest: NamespaceSkillManifest
-): void {
+) {
   const managedNames = new Set<string>(manifest.links.map((link) => link.name));
   const unexpectedEntries = readdirSync(target.namespacePath).filter(
     (entry) => entry !== NAMESPACE_SKILL_MANIFEST && !managedNames.has(entry)
@@ -562,10 +566,7 @@ function removeNamespaceProjection(
   rmdirSync(target.namespacePath);
 }
 
-function writeNamespaceManifest(
-  target: ResolvedSkillInstallTarget,
-  links: NamespaceSkillLink[]
-): void {
+function writeNamespaceManifest(target: ResolvedSkillInstallTarget, links: NamespaceSkillLink[]) {
   const manifest = NamespaceSkillManifestSchema.parse({
     links,
     managedBy: "monke-tools",
@@ -577,7 +578,7 @@ function writeNamespaceManifest(
   renameSync(`${manifestPath}.tmp`, manifestPath);
 }
 
-function namespaceManifestPath(target: ResolvedSkillInstallTarget): string {
+function namespaceManifestPath(target: ResolvedSkillInstallTarget) {
   return path.join(target.namespacePath, NAMESPACE_SKILL_MANIFEST);
 }
 
@@ -800,6 +801,20 @@ function lstatIfExists(targetPath: string): ReturnType<typeof lstatSync> | null 
     }
 
     throw error;
+  }
+}
+
+function assertUniqueTargetRoots(targets: ResolvedSkillInstallTarget[]) {
+  const targetsByRoot = new Map<string, ResolvedSkillInstallTarget>();
+
+  for (const target of targets) {
+    const previousTarget = targetsByRoot.get(target.agentSkillRoot);
+    if (previousTarget) {
+      throw new MonkeError(
+        `Skill install targets ${previousTarget.kind} and ${target.kind} resolve to the same Agent skill root: ${target.agentSkillRoot}`
+      );
+    }
+    targetsByRoot.set(target.agentSkillRoot, target);
   }
 }
 
