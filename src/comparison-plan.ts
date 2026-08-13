@@ -10,6 +10,11 @@ export interface BranchComparisonPlan {
   worktreePath: string;
 }
 
+interface DefaultBranchCandidate {
+  mergeBase: string;
+  ref: string;
+}
+
 export type ComparisonPlan = { kind: "working-tree"; worktreePath: string } | BranchComparisonPlan;
 
 /** Plan a local-working-tree comparison without inspecting Codiff behavior. */
@@ -68,7 +73,7 @@ export function findNewerDefaultBranchBase(
     .stdout.trim()
     .split("\n")
     .filter((ref) => isDefaultBranchRef(ref) && ref !== rememberedBaseRef);
-  const candidates: { mergeBase: string; ref: string }[] = [];
+  const candidates: DefaultBranchCandidate[] = [];
   for (const ref of refs) {
     const mergeBases = resolveMergeBases(runtime, context, ref);
     if (
