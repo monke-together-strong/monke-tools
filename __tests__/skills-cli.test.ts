@@ -235,6 +235,48 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(sourceCheckout, "skills", "codex", "monke-tools"))).toBeFalsy();
   });
 
+  test("mt skills configure preserves the previous preference when skill identities collide", async () => {
+    const sandbox = makeTempDir("skills-configure-identity-collision");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    write(
+      sourceCheckout,
+      "skills/internal/browser-control/SKILL.md",
+      "---\nname: browser-control\n---\n"
+    );
+    write(
+      sourceCheckout,
+      "skills/codex/codex-browser/SKILL.md",
+      "---\nname: browser-control\n---\n"
+    );
+    saveGlobalMonkeConfig(monkeHome, {
+      installedSourceCheckout: sourceCheckout,
+      skillInstallPreference: { targets: [{ kind: "cursor" }] },
+      version: 1
+    });
+
+    await expect(
+      runCliAsync(
+        ["skills", "configure"],
+        createRuntime({
+          cwd: sandbox,
+          env: {
+            HOME: osHome,
+            MONKE_HOME: monkeHome
+          },
+          multiSelectValues: [["codex"]],
+          onStderr() {},
+          onStdout() {}
+        })
+      )
+    ).rejects.toThrow(/duplicate Agent skill name browser-control/u);
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toStrictEqual({
+      targets: [{ kind: "cursor" }]
+    });
+    expect(existsSync(path.join(osHome, ".codex", "skills"))).toBeFalsy();
+  });
+
   test("mt skills configure preselects existing targets when reconfiguring", async () => {
     const sandbox = makeTempDir("skills-configure-e2e");
     const monkeHome = path.join(sandbox, "monke-home");

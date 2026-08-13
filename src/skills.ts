@@ -111,7 +111,7 @@ export async function runSkillsConfigure(runtime: Runtime): Promise<void> {
     previousPreference,
     homeDirectory
   );
-  assertTargetRootsCanBeReconciled(
+  assertSkillInstallCanBeReconciled(
     resolveSkillInstallTargets({
       homeDirectory,
       preference: nextPreference
@@ -177,7 +177,6 @@ export function reconcileSkillNamespaces(options: {
   writeMessage: (message: string) => void;
 }): void {
   const skillSourceTree = resolveSkillSourceTree(options.sourceCheckout);
-  assertUniqueSkillIdentities(skillSourceTree);
   const previousTargets =
     options.previousPreference === null
       ? []
@@ -189,7 +188,7 @@ export function reconcileSkillNamespaces(options: {
     homeDirectory: options.homeDirectory,
     preference: options.nextPreference
   });
-  assertTargetRootsCanBeReconciled(nextTargets, skillSourceTree);
+  assertSkillInstallCanBeReconciled(nextTargets, skillSourceTree);
   const nextKeys = new Set(nextTargets.map(targetKey));
   const failures: string[] = [];
 
@@ -823,6 +822,14 @@ function assertUniqueTargetRoots(targets: ResolvedSkillInstallTarget[]) {
     }
     targetsByRoot.set(rootIdentity, target);
   }
+}
+
+function assertSkillInstallCanBeReconciled(
+  targets: ResolvedSkillInstallTarget[],
+  skillSourceTree: string
+) {
+  assertUniqueSkillIdentities(skillSourceTree);
+  assertTargetRootsCanBeReconciled(targets, skillSourceTree);
 }
 
 function assertTargetRootsCanBeReconciled(
