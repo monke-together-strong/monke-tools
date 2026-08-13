@@ -36,8 +36,10 @@ export interface DecodedSession {
   cwd: string | null;
   events: SessionEvent[];
   lastActivityAt: string | null;
+  parentSessionId: string | null;
   sessionId: string;
   startedAt: string | null;
+  threadSource: string | null;
 }
 
 export interface SessionAdapter {
@@ -93,7 +95,7 @@ export function buildCanonicalSession(
 
   for (const event of options.events) {
     if (event.kind === "prose") {
-      if (event.captureRawUserMessage) {
+      if (event.captureRawUserMessage && isHumanPromptSource(options.threadSource)) {
         rawUserMessages.push(event.text.trim());
       }
       builder.prose(event.role, event.text);
@@ -122,13 +124,19 @@ export function buildCanonicalSession(
     cwd: options.cwd,
     filePath: options.filePath,
     lastActivityAt: options.lastActivityAt,
+    parentSessionId: options.parentSessionId,
     rawUserMessages,
     sessionId: options.sessionId,
     sourceLineCount: options.sourceLineCount,
     startedAt: options.startedAt,
+    threadSource: options.threadSource,
     touchedRoots: [...touched].filter((root) => root !== primary).toSorted(),
     turns: builder.turns,
   };
+}
+
+function isHumanPromptSource(threadSource: string | null): boolean {
+  return threadSource !== "subagent" && threadSource !== "automation";
 }
 
 function applyToolResult(

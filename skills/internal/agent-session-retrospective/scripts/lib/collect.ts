@@ -71,7 +71,13 @@ export interface EligibleSession {
   firstNewTurnIndex: number;
   primaryRepo: string;
   priorFindingCount: number;
+  secondaryRepos: string[];
   session: CanonicalSession;
+}
+
+export interface SessionMembership {
+  primaryRepo: string;
+  secondaryRepos: string[];
 }
 
 const PRIOR_DIGEST_LIMIT = 20;
@@ -105,14 +111,16 @@ export function buildBundles(
       agent: session.agent,
       contentHash: session.contentHash,
       firstNewTurnIndex: eligible.firstNewTurnIndex,
+      parentSessionId: session.parentSessionId,
       priorFindingCount: eligible.priorFindingCount,
       rawUserMessages: session.rawUserMessages,
       sessionHash: sessionHashKey(session.agent, session.sessionId),
       sessionId: session.sessionId,
+      threadSource: session.threadSource,
       turns: session.turns,
     };
     bundleFor(eligible.primaryRepo).sessions.push({ ...base, role: "primary" });
-    for (const secondary of session.touchedRoots) {
+    for (const secondary of eligible.secondaryRepos) {
       if (secondary !== eligible.primaryRepo) {
         bundleFor(secondary).sessions.push({ ...base, role: "secondary" });
       }
@@ -120,6 +128,62 @@ export function buildBundles(
   }
 
   return [...byRepo.values()].toSorted((a, b) => a.repoKey.localeCompare(b.repoKey));
+}
+
+/** Resolve each transcript's repo membership, including inherited parent membership. */
+export function resolveSessionMembership(
+  sessions: CanonicalSession[],
+): Map<string, SessionMembership> {
+  const bySession = new Map(sessions.map((session) => [sessionKey(session), session]));
+  const resolved = new Map<string, SessionMembership>();
+  const resolving = new Set<string>();
+
+  const resolve = (session: CanonicalSession): SessionMembership => {
+    const key = sessionKey(session);
+    const existing = resolved.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const ownPrimary = isNonEmptyString(session.cwd) ? resolveRepoKey(session.cwd) : "unknown";
+    let primaryRepo = ownPrimary;
+    const secondaryRepos = new Set(session.touchedRoots);
+    if (!resolving.has(key) && isNonEmptyString(session.parentSessionId)) {
+      resolving.add(key);
+      const parent = bySession.get(`${session.agent}\u0000${session.parentSessionId}`);
+      if (parent) {
+        const parentMembership = resolve(parent);
+        const {
+          primaryRepo: parentPrimaryRepo,
+          secondaryRepos: parentSecondaryRepos,
+        } = parentMembership;
+        if (primaryRepo === "unknown") {
+          primaryRepo = parentPrimaryRepo;
+        } else if (parentPrimaryRepo !== "unknown") {
+          secondaryRepos.add(parentPrimaryRepo);
+        }
+        for (const repo of parentSecondaryRepos) {
+          secondaryRepos.add(repo);
+        }
+      }
+      resolving.delete(key);
+    }
+
+    secondaryRepos.delete(primaryRepo);
+    secondaryRepos.delete("unknown");
+    const membership = { primaryRepo, secondaryRepos: [...secondaryRepos].toSorted() };
+    resolved.set(key, membership);
+    return membership;
+  };
+
+  for (const session of sessions) {
+    resolve(session);
+  }
+  return resolved;
+}
+
+function sessionKey(session: Pick<CanonicalSession, "agent" | "sessionId">): string {
+  return `${session.agent}\u0000${session.sessionId}`;
 }
 
 function digestFor(repoKey: string, frozen: FrozenSessionRecord[]): string[] {
@@ -304,6 +368,7 @@ export function runCollect(options: RunCollectOptions): CollectResult {
     }
   }
 
+  const memberships = resolveSessionMembership([...bySession.values()]);
   const eligibles: EligibleSession[] = [];
   for (const session of bySession.values()) {
     const activityMs = sessionActivityMs(session);
@@ -319,12 +384,16 @@ export function runCollect(options: RunCollectOptions): CollectResult {
       bump(decision.reason);
       continue;
     }
+    const membership = memberships.get(sessionKey(session));
+    if (!membership) {
+      bump("missing-membership");
+      continue;
+    }
     eligibles.push({
       firstNewTurnIndex: decision.firstNewTurnIndex,
-      primaryRepo: isNonEmptyString(session.cwd)
-        ? resolveRepoKey(session.cwd)
-        : "unknown",
+      primaryRepo: membership.primaryRepo,
       priorFindingCount: decision.priorFindingCount,
+      secondaryRepos: membership.secondaryRepos,
       session,
     });
   }

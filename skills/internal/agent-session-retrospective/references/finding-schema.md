@@ -17,6 +17,8 @@ envelope thin and grounded; write free-form prose in `body`.
     {
       "agent": "codex" | "claude",
       "sessionId": "…",
+      "threadSource": "user" | "subagent" | "automation" | "…" | null,
+      "parentSessionId": "…" | null,
       "role": "primary" | "secondary",
       "firstNewTurnIndex": 0,        // analyze turns at this index and after
       "priorFindingCount": 0,
@@ -32,8 +34,11 @@ envelope thin and grounded; write free-form prose in `body`.
 }
 ```
 
-Every turn has a stable `ref` (`t<n>`). Cite turns by their `ref`. A `primary` session is one
-whose cwd is this repo; a `secondary` session merely touched this repo.
+Every turn has a stable `ref` (`t<n>`). Cite turns by their `ref`. `threadSource` identifies the
+native origin category; `parentSessionId` links a delegated transcript to its parent when Codex
+recorded one. A `primary` session is one whose cwd resolves to this repo, or whose missing cwd
+inherits this repo from its parent. A `secondary` session touched this repo directly or inherited
+it through its parent.
 
 **Author friction episodes only for `primary` sessions.** A secondary session's friction belongs
 to its own primary repo and is authored there — commit drops any episode citing a secondary
@@ -86,4 +91,7 @@ episode sources.
 - On a resumed session, analyze from `firstNewTurnIndex` onward. If a friction arc began earlier,
   cite the new turns that show it and summarize the earlier setup in prose — do not cite turns
   below `firstNewTurnIndex`.
+- Treat parent and child transcripts as one task lineage when clustering repeated asks.
+  `rawUserMessages` is empty for subagent and automation transcripts because their user-role prompt
+  is machine-authored delegation, not a repeated human ask.
 - Found nothing? Write the file with empty arrays. Do not invent friction to fill it.

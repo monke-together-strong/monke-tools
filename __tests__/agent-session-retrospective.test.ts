@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import {
   buildBundles,
   decideEligibility,
+  resolveSessionMembership,
   runCollect
 } from "../skills/internal/agent-session-retrospective/scripts/lib/collect.ts";
 import type { EligibleSession } from "../skills/internal/agent-session-retrospective/scripts/lib/collect.ts";
@@ -57,10 +58,12 @@ function fakeSession(overrides: Partial<CanonicalSession> = {}): CanonicalSessio
     cwd: "/repo",
     filePath: "/x.jsonl",
     lastActivityAt: "2026-05-26T10:00:00Z",
+    parentSessionId: null,
     rawUserMessages: ["hi"],
     sessionId: "s1",
     sourceLineCount: 10,
     startedAt: "2026-05-26T10:00:00Z",
+    threadSource: "user",
     touchedRoots: [],
     turns: [{ kind: "user", ref: "t0", text: "hi" }],
     ...overrides
@@ -78,11 +81,13 @@ function bundleWith(refs: string[]): RepoBundle {
         agent: "codex",
         contentHash: "ch",
         firstNewTurnIndex: 0,
+        parentSessionId: null,
         priorFindingCount: 0,
         rawUserMessages: [],
         role: "primary",
         sessionHash: "sh",
         sessionId: "s1",
+        threadSource: "user",
         turns: refs.map((ref) => ({ kind: "user", ref, text: ref }))
       }
     ]
@@ -235,6 +240,55 @@ describe("agent session retrospective", () => {
       const tool = parseCodexSession(filePath)?.turns[0];
       expect(tool?.kind).toBe("tool_call");
       expect(tool?.kind === "tool_call" && tool.outputHeadTail).toBeUndefined();
+    });
+
+    test("retains subagent lineage and excludes its delegated prompt from human asks", () => {
+      const filePath = jsonl([
+        {
+          payload: {
+            cwd: dir,
+            id: "child-session",
+            source: {
+              subagent: {
+                thread_spawn: { parent_thread_id: "parent-session" }
+              }
+            },
+            thread_source: "subagent"
+          },
+          timestamp: "2026-05-26T10:00:00Z",
+          type: "session_meta"
+        },
+        {
+          payload: { message: "delegated task", type: "user_message" },
+          timestamp: "2026-05-26T10:00:01Z",
+          type: "event_msg"
+        }
+      ]);
+
+      const session = parseCodexSession(filePath);
+      expect(session?.threadSource).toBe("subagent");
+      expect(session?.parentSessionId).toBe("parent-session");
+      expect(session?.turns[0]).toMatchObject({ kind: "user", text: "delegated task" });
+      expect(session?.rawUserMessages).toStrictEqual([]);
+    });
+
+    test("keeps an older unlinked subagent explicit instead of guessing a parent", () => {
+      const filePath = jsonl([
+        {
+          payload: {
+            cwd: dir,
+            id: "unlinked-child",
+            source: "vscode",
+            thread_source: "subagent"
+          },
+          timestamp: "2026-05-26T10:00:00Z",
+          type: "session_meta"
+        }
+      ]);
+
+      const session = parseCodexSession(filePath);
+      expect(session?.threadSource).toBe("subagent");
+      expect(session?.parentSessionId).toBeNull();
     });
   });
 
@@ -466,12 +520,48 @@ describe("agent session retrospective", () => {
         firstNewTurnIndex: 0,
         primaryRepo: "/repo",
         priorFindingCount: 0,
+        secondaryRepos: ["/other"],
         session: fakeSession({ touchedRoots: ["/other"] })
       };
       const bundles = buildBundles("ts", [eligible], []);
       const byRepo = Object.fromEntries(bundles.map((bundle) => [bundle.repoKey, bundle]));
       expect(byRepo["/repo"]?.sessions[0]?.role).toBe("primary");
       expect(byRepo["/other"]?.sessions[0]?.role).toBe("secondary");
+    });
+
+    test("a child inherits parent repo membership without losing its own primary", () => {
+      const parent = fakeSession({
+        cwd: "/parent",
+        sessionId: "parent",
+        touchedRoots: ["/shared"]
+      });
+      const child = fakeSession({
+        cwd: "/child",
+        parentSessionId: "parent",
+        sessionId: "child",
+        threadSource: "subagent",
+        touchedRoots: ["/child-secondary"]
+      });
+
+      expect(resolveSessionMembership([parent, child]).get("codex\u0000child")).toStrictEqual({
+        primaryRepo: "/child",
+        secondaryRepos: ["/child-secondary", "/parent", "/shared"]
+      });
+    });
+
+    test("a child with no cwd inherits its parent's primary repo", () => {
+      const parent = fakeSession({ cwd: "/parent", sessionId: "parent" });
+      const child = fakeSession({
+        cwd: null,
+        parentSessionId: "parent",
+        sessionId: "child",
+        threadSource: "subagent"
+      });
+
+      expect(resolveSessionMembership([parent, child]).get("codex\u0000child")).toStrictEqual({
+        primaryRepo: "/parent",
+        secondaryRepos: []
+      });
     });
   });
 

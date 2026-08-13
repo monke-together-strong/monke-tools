@@ -44,7 +44,8 @@ stop with "nothing eligible" only when neither lane has evidence available.
 
 For every bundle, concurrently dispatch one subagent with the bundle path and
 [the finding contract](references/finding-schema.md). Each subagent writes the required sibling
-`<repoHash>.findings.json`, including empty arrays when it finds nothing.
+`<repoHash>.findings.json`, including empty arrays when it finds nothing. Use each transcript's
+origin and parent link to read delegated side chats as part of their task lineage.
 
 **Done when** every bundle has one schema-conforming findings file.
 

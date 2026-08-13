@@ -32,11 +32,13 @@ const BundleSessionSchema: z.ZodType<BundleSession> = z.strictObject({
   agent: AgentKindSchema,
   contentHash: z.string(),
   firstNewTurnIndex: z.number(),
+  parentSessionId: z.string().nullable(),
   priorFindingCount: z.number(),
   rawUserMessages: z.array(z.string()),
   role: z.enum(["primary", "secondary"]),
   sessionHash: z.string(),
   sessionId: z.string(),
+  threadSource: z.string().nullable(),
   turns: z.array(CanonicalTurnSchema),
 });
 
