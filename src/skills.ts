@@ -2,6 +2,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  realpathSync,
   readdirSync,
   readFileSync,
   readlinkSync,
@@ -9,6 +10,7 @@ import {
   rmSync,
   rmdirSync,
   symlinkSync,
+  statSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
@@ -36,6 +38,8 @@ const NAMESPACE_SKILL_MANIFEST = ".monke-tools-namespace-skills.json";
 const SHARED_SKILL_SOURCE_FOLDERS = ["internal", "imported"] as const;
 const CODEX_SKILL_SOURCE_FOLDER = "codex";
 const NAMESPACE_SOURCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
+const MAX_SYMLINK_RESOLUTION_COUNT = 40;
+const SKILL_FRONTMATTER_PATTERN = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u;
 
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
   claude: path.join(".claude", "skills"),
@@ -494,9 +498,7 @@ function assertUniqueSkillIdentities(skillSourceTree: string) {
 function readAgentSkillName(skillPath: string) {
   const skillEntryPath = path.join(skillPath, "SKILL.md");
   const skillMarkdown = readFileSync(skillEntryPath, "utf-8");
-  const frontmatterMatch = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
-    skillMarkdown
-  );
+  const frontmatterMatch = SKILL_FRONTMATTER_PATTERN.exec(skillMarkdown);
   if (!frontmatterMatch) {
     throw new MonkeError(`Expected leading YAML frontmatter at ${skillEntryPath}`);
   }
@@ -820,44 +822,86 @@ function assertUniqueTargetRoots(targets: ResolvedSkillInstallTarget[]) {
 }
 
 function resolveFilesystemIdentity(targetPath: string) {
-  const absolutePath = path.resolve(targetPath);
-  const parsedPath = path.parse(absolutePath);
-  const pendingSegments = absolutePath
-    .slice(parsedPath.root.length)
-    .split(path.sep)
-    .filter(Boolean);
-  let resolvedPath = parsedPath.root;
+  let unresolvedPath = path.resolve(targetPath);
+  const missingSegments: string[] = [];
   let symlinkCount = 0;
 
-  while (pendingSegments.length > 0) {
-    const segment = pendingSegments.shift();
-    if (!segment) {
+  while (true) {
+    const unresolvedStat = lstatIfExists(unresolvedPath);
+    if (unresolvedStat?.isSymbolicLink()) {
+      symlinkCount += 1;
+      if (symlinkCount > MAX_SYMLINK_RESOLUTION_COUNT) {
+        throw new MonkeError(
+          `Too many symbolic links while resolving Agent skill root: ${targetPath}`
+        );
+      }
+
+      unresolvedPath = path.resolve(path.dirname(unresolvedPath), readlinkSync(unresolvedPath));
       continue;
     }
 
-    const candidatePath = path.join(resolvedPath, segment);
-    const candidateStat = lstatIfExists(candidatePath);
-    if (!candidateStat?.isSymbolicLink()) {
-      resolvedPath = candidatePath;
+    if (unresolvedStat) {
+      const canonicalAncestor = realpathSync.native(unresolvedPath);
+      const ancestorStat = statSync(canonicalAncestor);
+      if (missingSegments.length === 0) {
+        return `node:${String(ancestorStat.dev)}:${String(ancestorStat.ino)}`;
+      }
+
+      const missingPath = missingSegments.join(path.sep);
+      const normalizedMissingPath = isCaseInsensitiveFilesystem(canonicalAncestor, ancestorStat.dev)
+        ? missingPath.toLowerCase()
+        : missingPath;
+      return `descendant:${String(ancestorStat.dev)}:${String(ancestorStat.ino)}:${normalizedMissingPath}`;
+    }
+
+    const parentPath = path.dirname(unresolvedPath);
+    if (parentPath === unresolvedPath) {
+      throw new MonkeError(`Cannot resolve Agent skill root: ${targetPath}`);
+    }
+    missingSegments.unshift(path.basename(unresolvedPath));
+    unresolvedPath = parentPath;
+  }
+}
+
+function isCaseInsensitiveFilesystem(existingPath: string, device: number) {
+  let currentPath = existingPath;
+
+  while (true) {
+    const currentStat = lstatSync(currentPath);
+    if (currentStat.dev !== device) {
+      return false;
+    }
+
+    const currentName = path.basename(currentPath);
+    const toggledName = toggleFirstLetterCase(currentName);
+    if (toggledName !== currentName) {
+      const aliasStat = lstatIfExists(path.join(path.dirname(currentPath), toggledName));
+      return aliasStat?.dev === currentStat.dev && aliasStat.ino === currentStat.ino;
+    }
+
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) {
+      return false;
+    }
+    currentPath = parentPath;
+  }
+}
+
+function toggleFirstLetterCase(value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (!character) {
       continue;
     }
-
-    symlinkCount += 1;
-    if (symlinkCount > 40) {
-      throw new MonkeError(
-        `Too many symbolic links while resolving Agent skill root: ${targetPath}`
-      );
+    if (character >= "A" && character <= "Z") {
+      return `${value.slice(0, index)}${character.toLowerCase()}${value.slice(index + 1)}`;
     }
-
-    const linkTarget = path.resolve(path.dirname(candidatePath), readlinkSync(candidatePath));
-    const parsedTarget = path.parse(linkTarget);
-    resolvedPath = parsedTarget.root;
-    pendingSegments.unshift(
-      ...linkTarget.slice(parsedTarget.root.length).split(path.sep).filter(Boolean)
-    );
+    if (character >= "a" && character <= "z") {
+      return `${value.slice(0, index)}${character.toUpperCase()}${value.slice(index + 1)}`;
+    }
   }
 
-  return path.normalize(resolvedPath);
+  return value;
 }
 
 function targetKey(target: ResolvedSkillInstallTarget): string {

@@ -4,7 +4,9 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { reconcileSkillNamespaces, resolveSkillInstallTargets } from "../src/skills.ts";
-import { makeTempDir, write } from "./helpers.ts";
+import { isCaseInsensitiveFilesystem, makeTempDir, write } from "./helpers.ts";
+
+const CASE_INSENSITIVE_FILESYSTEM = isCaseInsensitiveFilesystem();
 
 function writeCoreSkill(sourceCheckout: string) {
   write(
@@ -79,6 +81,31 @@ describe("skills", () => {
     }).toThrow(/same Agent skill root/u);
     expect(existsSync(codexSkillRoot)).toBeFalsy();
   });
+
+  test.runIf(CASE_INSENSITIVE_FILESYSTEM)(
+    "skill reconciliation rejects a case-insensitive Agent skill root alias",
+    () => {
+      const sandbox = makeTempDir("skill-reconcile-case-alias");
+      const sourceCheckout = path.join(sandbox, "source");
+      const codexSkillRoot = path.join(sandbox, ".codex", "skills");
+      const customSkillRoot = path.join(sandbox, ".CODEX", "skills");
+      writeCoreSkill(sourceCheckout);
+      mkdirSync(codexSkillRoot, { recursive: true });
+
+      expect(() => {
+        reconcileSkillNamespaces({
+          homeDirectory: sandbox,
+          nextPreference: {
+            targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
+          },
+          previousPreference: null,
+          sourceCheckout,
+          writeMessage() {}
+        });
+      }).toThrow(/same Agent skill root/u);
+      expect(existsSync(path.join(codexSkillRoot, "monke-tools"))).toBeFalsy();
+    }
+  );
 
   test("skill namespace reconciliation projects Codex-only skills only into Codex", () => {
     const sandbox = makeTempDir("skill-reconcile-create");
