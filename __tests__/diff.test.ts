@@ -332,6 +332,45 @@ touch "${discoveryReached}"`
     );
   });
 
+  test("plain Diff preserves its remembered base when default-branch history has multiple best merge bases", async () => {
+    const sandbox = makeTempDir("diff-ambiguous-default-merge-base");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    git(repoRoot, ["switch", "-c", "source-base"]);
+    runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
+    const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
+    git(repoRoot, ["switch", "main"]);
+    writeFileSync(path.join(repoRoot, "main.txt"), "main\n", "utf-8");
+    git(repoRoot, ["add", "main.txt"]);
+    git(repoRoot, ["commit", "-m", "main-side"]);
+    const mainSide = git(repoRoot, ["rev-parse", "HEAD"]);
+    writeFileSync(path.join(sessionWorktree, "session.txt"), "session\n", "utf-8");
+    git(sessionWorktree, ["add", "session.txt"]);
+    git(sessionWorktree, ["commit", "-m", "session-side"]);
+    const sessionSide = git(sessionWorktree, ["rev-parse", "HEAD"]);
+    git(repoRoot, ["merge", sessionSide, "-m", "main-merge"]);
+    git(sessionWorktree, ["merge", mainSide, "-m", "session-merge"]);
+    expect(git(sessionWorktree, ["merge-base", "--all", "main", "HEAD"]).split("\n")).toHaveLength(
+      2
+    );
+    const codiffLog = installFakeCodiff(binDirectory);
+
+    await runMonkeAsync({
+      args: ["diff"],
+      binDirectory,
+      cwd: sessionWorktree,
+      monkeHome: home
+    });
+
+    expect(readFileSync(codiffLog, "utf-8")).toBe(
+      `--branch\nrefs/heads/source-base\n${sessionWorktree}\n`
+    );
+    expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBe(
+      "refs/heads/source-base"
+    );
+  });
+
   test("forced Diff picker preserves local target ordering and launches the selected committed branch", async () => {
     const sandbox = makeTempDir("diff-picker-order");
     const binDirectory = path.join(sandbox, "bin");

@@ -1,4 +1,8 @@
+import { resolveDefaultBranchRef } from "./git.ts";
 import type { RepoContext, Runtime } from "./types.ts";
+
+const LOCAL_DEFAULT_BRANCH_REF_PATTERN = /^refs\/heads\/(?:main|master)$/u;
+const REMOTE_DEFAULT_BRANCH_REF_PATTERN = /^refs\/remotes\/[^/]+\/(?:main|master)$/u;
 
 export interface BranchComparisonPlan {
   baseRef: string;
@@ -7,11 +11,6 @@ export interface BranchComparisonPlan {
 }
 
 export type ComparisonPlan = { kind: "working-tree"; worktreePath: string } | BranchComparisonPlan;
-
-interface DefaultBranchCandidate {
-  mergeBase: string;
-  ref: string;
-}
 
 /** Plan a local-working-tree comparison without inspecting Codiff behavior. */
 export function planWorkingTreeComparison(context: RepoContext): ComparisonPlan {
@@ -52,7 +51,7 @@ export function findNewerDefaultBranchBase(
   context: RepoContext,
   rememberedBaseRef: string
 ): string | undefined {
-  const rememberedMergeBase = resolveMergeBase(runtime, context, rememberedBaseRef);
+  const rememberedMergeBase = resolveUniqueMergeBase(runtime, context, rememberedBaseRef);
   if (rememberedMergeBase === undefined) {
     return undefined;
   }
@@ -65,8 +64,8 @@ export function findNewerDefaultBranchBase(
     .stdout.trim()
     .split("\n")
     .filter((ref) => isDefaultBranchRef(ref) && ref !== rememberedBaseRef);
-  const candidates = refs.flatMap((ref): DefaultBranchCandidate[] => {
-    const mergeBase = resolveMergeBase(runtime, context, ref);
+  const candidates = refs.flatMap((ref) => {
+    const mergeBase = resolveUniqueMergeBase(runtime, context, ref);
     return mergeBase !== undefined &&
       mergeBase !== rememberedMergeBase &&
       isAncestor(runtime, context, rememberedMergeBase, mergeBase)
@@ -83,7 +82,16 @@ export function findNewerDefaultBranchBase(
   if (new Set(maximalCandidates.map((candidate) => candidate.mergeBase)).size !== 1) {
     return undefined;
   }
-  return maximalCandidates.toSorted(compareDefaultBranchCandidates)[0]?.ref;
+  const preferredRef = resolvePreferredDefaultBranchRef(runtime, context);
+  return maximalCandidates.toSorted((left, right) => {
+    if (left.ref === preferredRef) {
+      return -1;
+    }
+    if (right.ref === preferredRef) {
+      return 1;
+    }
+    return left.ref.localeCompare(right.ref);
+  })[0]?.ref;
 }
 
 /** Report whether one checkout contains staged, unstaged, or untracked changes. */
@@ -97,16 +105,17 @@ export function hasWorkingTreeChanges(runtime: Runtime, worktreePath: string): b
   );
 }
 
-function resolveMergeBase(
+function resolveUniqueMergeBase(
   runtime: Runtime,
   context: RepoContext,
   baseRef: string
 ): string | undefined {
-  const result = runtime.exec("git", ["merge-base", baseRef, "HEAD"], {
+  const result = runtime.exec("git", ["merge-base", "--all", baseRef, "HEAD"], {
     allowFailure: true,
     cwd: context.worktreeRoot
   });
-  return result.exitCode === 0 ? result.stdout.trim() || undefined : undefined;
+  const mergeBases = result.stdout.trim().split("\n").filter(Boolean);
+  return result.exitCode === 0 && mergeBases.length === 1 ? mergeBases[0] : undefined;
 }
 
 function isAncestor(
@@ -124,34 +133,16 @@ function isAncestor(
 }
 
 function isDefaultBranchRef(ref: string): boolean {
-  return (
-    /^refs\/heads\/(?:main|master)$/u.test(ref) ||
-    /^refs\/remotes\/[^/]+\/(?:main|master)$/u.test(ref)
-  );
+  return LOCAL_DEFAULT_BRANCH_REF_PATTERN.test(ref) || REMOTE_DEFAULT_BRANCH_REF_PATTERN.test(ref);
 }
 
-function compareDefaultBranchCandidates(
-  left: DefaultBranchCandidate,
-  right: DefaultBranchCandidate
-): number {
-  return (
-    defaultBranchRefPriority(left.ref) - defaultBranchRefPriority(right.ref) ||
-    left.ref.localeCompare(right.ref)
-  );
-}
-
-function defaultBranchRefPriority(ref: string): number {
-  if (ref === "refs/remotes/origin/main") {
-    return 0;
+function resolvePreferredDefaultBranchRef(
+  runtime: Runtime,
+  context: RepoContext
+): string | undefined {
+  try {
+    return resolveDefaultBranchRef(runtime, context.sourceRoot, { refresh: false }).ref;
+  } catch {
+    return undefined;
   }
-  if (ref === "refs/remotes/origin/master") {
-    return 1;
-  }
-  if (ref === "refs/heads/main") {
-    return 2;
-  }
-  if (ref === "refs/heads/master") {
-    return 3;
-  }
-  return ref.endsWith("/main") ? 4 : 5;
 }
