@@ -27,11 +27,6 @@ import {
 } from "./import-skills.ts";
 import type { SkillImportRecipe, SkillImportRecipeStore } from "./import-skills.ts";
 
-interface UpdateCommandOptions {
-  install: boolean;
-  interactive: boolean;
-}
-
 /** Details for an interactive staged Skill slug replacement. */
 export interface SlugReplacementRequest {
   /** Local Skill slug currently recorded in the recipe store. */
@@ -58,7 +53,7 @@ export interface UpdateSkillsDependencies {
 export async function runUpdateSkills(
   argv: string[] = process.argv.slice(2),
   dependencies: UpdateSkillsDependencies = {}
-): Promise<void> {
+) {
   const { install, interactive } = parseCommand(argv);
   const repoRoot = process.cwd();
   let store = readImportRecipeStore(repoRoot);
@@ -133,7 +128,7 @@ export async function runUpdateSkills(
   }
 }
 
-function parseCommand(argv: string[]): UpdateCommandOptions {
+function parseCommand(argv: string[]) {
   const program = new Command()
     .name("bun run skills:update")
     .description("Update imported agent guidance from recorded recipes")
@@ -154,7 +149,7 @@ function parseCommand(argv: string[]): UpdateCommandOptions {
 function validateImportedGuidanceDirectoriesAreTracked(
   repoRoot: string,
   store: SkillImportRecipeStore
-): void {
+) {
   const ownedGuidance = new Set(
     store.recipes.flatMap((recipe) => recipe.skills.map((skill) => `${skill.kind}:${skill.slug}`))
   );
@@ -177,7 +172,7 @@ async function resolveStagedSkillReplacements(options: {
   recipe: SkillImportRecipe;
   source: string;
   stagingDirectory: string;
-}): Promise<SlugReplacementRequest[]> {
+}) {
   const { recipe, stagingDirectory } = options;
   const recordedSlugs = recipe.skills.map((skill) => skill.slug).toSorted();
   const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
@@ -201,7 +196,7 @@ async function resolveStagedSkillReplacements(options: {
   const stagedSlugBySelector = new Map(
     selectorMappings.map((mapping) => [mapping.selector, mapping.slug])
   );
-  const replacements = recipe.skills.flatMap((skill): SlugReplacementRequest[] => {
+  const replacements = recipe.skills.flatMap((skill) => {
     const stagedSlug = stagedSlugBySelector.get(skill.selector);
     if (!stagedSlug || stagedSlug === skill.slug) {
       return [];
@@ -237,7 +232,7 @@ function applySlugReplacementsToStore(
   store: SkillImportRecipeStore,
   source: string,
   guidance: SkillImportRecipe["skills"]
-): SkillImportRecipeStore {
+) {
   return normalizeImportRecipeStore({
     ...store,
     recipes: store.recipes.map((recipe) =>
@@ -249,7 +244,7 @@ function applySlugReplacementsToStore(
 function applySlugReplacementsToGuidance(
   recipe: SkillImportRecipe,
   replacements: readonly SlugReplacementRequest[]
-): SkillImportRecipe["skills"] {
+) {
   const stagedSlugBySelector = new Map(
     replacements.map((replacement) => [replacement.selector, replacement.stagedSlug])
   );
@@ -262,7 +257,7 @@ function applySlugReplacementsToGuidance(
 function guidanceReplacedBySlugChanges(
   recipe: SkillImportRecipe,
   replacements: readonly SlugReplacementRequest[]
-): SkillImportRecipe["skills"] {
+) {
   const replacedSelectors = new Set(replacements.map((replacement) => replacement.selector));
   return recipe.skills.filter((skill) => replacedSelectors.has(skill.selector));
 }
@@ -271,7 +266,7 @@ function renderSlugMismatchMessage(
   source: string,
   missingSlugs: readonly string[],
   unexpectedSlugs: readonly string[]
-): string {
+) {
   return [
     `Skill slug mismatch for ${source}:`,
     `recorded ${missingSlugs.join(", ") || "(none)"}`,
@@ -279,7 +274,7 @@ function renderSlugMismatchMessage(
   ].join(" ");
 }
 
-async function promptForSlugReplacement(request: SlugReplacementRequest): Promise<boolean> {
+async function promptForSlugReplacement(request: SlugReplacementRequest) {
   const accepted = await p.confirm({
     initialValue: false,
     message: `Staged Skill slug changed for ${request.source}: ${request.recordedSlug} -> ${request.stagedSlug}. Replace the recorded slug and imported directory?`
@@ -292,7 +287,7 @@ async function promptForSlugReplacement(request: SlugReplacementRequest): Promis
   return accepted;
 }
 
-function listGuidanceDirectories(root: string): string[] {
+function listGuidanceDirectories(root: string) {
   if (!existsSync(root)) {
     return [];
   }

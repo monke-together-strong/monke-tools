@@ -66,7 +66,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     ? [...options.multiSelectValues]
     : null;
 
-  const writeStdout = (text: string): void => {
+  const writeStdout = (text: string) => {
     if (options?.onStdout) {
       options.onStdout(text);
       return;
@@ -78,17 +78,13 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
   return {
     cwd: runtimeCwd,
     env: runtimeEnv,
-    exec(command: string, args: string[] = [], execOptions?: ExecOptions): ExecResult {
+    exec(command: string, args: string[] = [], execOptions?: ExecOptions) {
       return executeCommand(runtimeEnv, runtimeCwd, command, args, execOptions);
     },
-    execAsync(
-      command: string,
-      args: string[] = [],
-      execOptions?: ExecOptions
-    ): Promise<ExecResult> {
+    execAsync(command: string, args: string[] = [], execOptions?: ExecOptions) {
       return executeCommandAsync(runtimeEnv, runtimeCwd, command, args, execOptions);
     },
-    async multiSelect(prompt): Promise<string[]> {
+    async multiSelect(prompt) {
       options?.onMultiSelect?.(prompt);
       if (scriptedMultiSelectValues !== null) {
         const selected = scriptedMultiSelectValues.shift();
@@ -112,7 +108,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
-    readLine(prompt: string): string {
+    readLine(prompt: string) {
       writeStdout(prompt);
       if (scriptedInput !== null) {
         return scriptedInput.shift() ?? "";
@@ -120,7 +116,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
 
       return readLineFromStdin();
     },
-    async select(prompt): Promise<string> {
+    async select(prompt) {
       options?.onSelect?.(prompt);
       if (options?.cancelSelect === true) {
         throwSelectionCancelled(prompt.message);
@@ -142,7 +138,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
-    writeStderr(text: string): void {
+    writeStderr(text: string) {
       if (options?.onStderr) {
         options.onStderr(text);
         return;
@@ -150,7 +146,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
 
       process.stderr.write(text);
     },
-    writeStdout(text: string): void {
+    writeStdout(text: string) {
       writeStdout(text);
     }
   };
@@ -166,7 +162,7 @@ function executeCommand(
   command: string,
   args: string[],
   options: ExecOptions | undefined
-): ExecResult {
+) {
   const childEnv = { ...runtimeEnv, ...options?.env };
   delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
 
@@ -251,7 +247,7 @@ function handleSpawnError(
   command: string,
   args: string[],
   allowFailure: boolean
-): ExecResult {
+) {
   const { error } = result;
   if (error === undefined) {
     throw new MonkeError(`Expected ${formatCommand(command, args)} to have a spawn error`);
@@ -272,7 +268,7 @@ function handleCompletedCommand(
   command: string,
   args: string[],
   allowFailure: boolean
-): ExecResult {
+) {
   const stdout = result.stdout ?? "";
   const stderr = result.stderr ?? "";
   const exitCode = result.status ?? -1;
@@ -288,16 +284,16 @@ function handleCompletedCommand(
   return { exitCode, stderr, stdout };
 }
 
-function isTimeoutError(error: Error): boolean {
+function isTimeoutError(error: Error) {
   return "code" in error && error.code === "ETIMEDOUT";
 }
 
-export function formatCommand(command: string, args: string[]): string {
+export function formatCommand(command: string, args: string[]) {
   return [command, ...args].join(" ");
 }
 
 /** Resolve the absolute Monke home path for this runtime. */
-export function getMonkeHome(runtime: Runtime): string {
+export function getMonkeHome(runtime: Runtime) {
   const configuredHome = runtime.env.MONKE_HOME;
   return configuredHome === undefined
     ? path.join(homedir(), ".monke")
@@ -305,22 +301,19 @@ export function getMonkeHome(runtime: Runtime): string {
 }
 
 /** Resolve the OS home directory used for external Agent skill roots. */
-export function getHomeDirectory(runtime: Runtime): string {
+export function getHomeDirectory(runtime: Runtime) {
   return runtime.env.HOME ?? homedir();
 }
 
-export function ensureDirectory(directoryPath: string): void {
+export function ensureDirectory(directoryPath: string) {
   mkdirSync(directoryPath, { recursive: true });
 }
 
-export function hashKey(value: string): string {
+export function hashKey(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-export function findExecutable(
-  command: string,
-  env: Record<string, string | undefined>
-): string | null {
+export function findExecutable(command: string, env: Record<string, string | undefined>) {
   const pathValue = env.PATH;
   if (!pathValue) {
     return null;
@@ -347,16 +340,16 @@ export function findExecutable(
   return null;
 }
 
-export function withGlobalLock<T>(home: string, callback: () => T): T {
+export function withGlobalLock<T>(home: string, callback: () => T) {
   return withLockPath(path.join(home, "lock"), callback);
 }
 
 /** Run a synchronous callback while holding a lock scoped inside the monke home directory. */
-export function withScopedLock<T>(home: string, namespace: string, callback: () => T): T {
+export function withScopedLock<T>(home: string, namespace: string, callback: () => T) {
   return withLockPath(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
 }
 
-function withLockPath<T>(lockPath: string, callback: () => T): T {
+function withLockPath<T>(lockPath: string, callback: () => T) {
   ensureDirectory(path.dirname(lockPath));
   const deadline = Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
   let fileDescriptor: number | null = null;
@@ -397,7 +390,7 @@ function withLockPath<T>(lockPath: string, callback: () => T): T {
   }
 }
 
-export function isPortAvailable(port: number): boolean {
+export function isPortAvailable(port: number) {
   let server: { stop: (closeActiveConnections?: boolean) => void } | null = null;
 
   try {
@@ -430,11 +423,11 @@ export function isPortAvailable(port: number): boolean {
   }
 }
 
-function sleep(milliseconds: number): void {
+function sleep(milliseconds: number) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
-function readLineFromStdin(): string {
+function readLineFromStdin() {
   const chunks: string[] = [];
   const buffer = Buffer.alloc(1);
 
@@ -456,7 +449,7 @@ function readLineFromStdin(): string {
   return chunks.join("");
 }
 
-function tryEvictStaleLock(lockPath: string): boolean {
+function tryEvictStaleLock(lockPath: string) {
   const staleSince = Date.now() - STALE_LOCK_AGE_MS;
 
   let fileTimestamp = 0;
@@ -499,7 +492,7 @@ function tryEvictStaleLock(lockPath: string): boolean {
   return true;
 }
 
-function isProcessRunning(pid: number): boolean {
+function isProcessRunning(pid: number) {
   try {
     process.kill(pid, 0);
     return true;

@@ -13,7 +13,6 @@ import type {
   RepoConfig,
   ResourceCommandConfig,
   ResourceValueConfig,
-  ResolvedGraph,
   Runtime
 } from "./types.ts";
 import { parseOwnedYamlText } from "./validation.ts";
@@ -113,7 +112,7 @@ export function loadResolvedGraph(
   runtime: Runtime,
   rootSourceRoot: string,
   options: LoadResolvedGraphOptions = {}
-): ResolvedGraph {
+) {
   const readRepoConfig = options.readRepoConfig ?? readRepoConfigFromFilesystem;
   const pathExists = options.pathExists ?? pathExistsOnFilesystem;
   const configCache = new Map<string, RepoConfig>();
@@ -121,7 +120,7 @@ export function loadResolvedGraph(
   const reposInOrder: RepoConfig[] = [];
   const visited = new Set<string>();
 
-  function visit(sourceRoot: string): RepoConfig {
+  function visit(sourceRoot: string) {
     const config = loadRepoConfig(runtime, sourceRoot, configCache, visiting, {
       pathExists,
       readRepoConfig
@@ -167,7 +166,7 @@ function loadRepoConfig(
   cache: Map<string, RepoConfig>,
   visiting: Set<string>,
   options: Required<LoadResolvedGraphOptions>
-): RepoConfig {
+) {
   if (visiting.has(sourceRoot)) {
     throw new MonkeError(`Dependency cycles are not supported: ${sourceRoot}`);
   }
@@ -217,7 +216,7 @@ function parseRepoConfigObject(
   configPath: string,
   config: RawRepoConfig,
   options: Required<LoadResolvedGraphOptions>
-): RepoConfig {
+) {
   const { bootstrapCommand } = config;
   const { cleanupCommand } = config;
   const seedPaths = parseSeedPaths(config.seedPaths, sourceRoot, configPath);
@@ -379,7 +378,7 @@ function parseRepoConfigObject(
   };
 }
 
-function readRepoConfigFromFilesystem(sourceRoot: string): string {
+function readRepoConfigFromFilesystem(sourceRoot: string) {
   const configPath = path.join(sourceRoot, "monke.yml");
   if (!existsSync(configPath)) {
     throw new MonkeError(`Expected monke.yml at ${configPath}`);
@@ -387,11 +386,11 @@ function readRepoConfigFromFilesystem(sourceRoot: string): string {
   return readFileSync(configPath, "utf-8");
 }
 
-function pathExistsOnFilesystem(sourceRoot: string, relativePath: string): boolean {
+function pathExistsOnFilesystem(sourceRoot: string, relativePath: string) {
   return existsSync(path.join(sourceRoot, relativePath));
 }
 
-function resolveInside(root: string, relativePath: string, location: string): string {
+function resolveInside(root: string, relativePath: string, location: string) {
   const resolved = path.resolve(root, relativePath);
   const relative = path.relative(root, resolved);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
@@ -400,7 +399,7 @@ function resolveInside(root: string, relativePath: string, location: string): st
   return resolved;
 }
 
-function normalize(targetPath: string): string {
+function normalize(targetPath: string) {
   return path.normalize(targetPath);
 }
 
@@ -408,7 +407,7 @@ function parseSeedPaths(
   rawSeedPaths: string[] | undefined,
   sourceRoot: string,
   configPath: string
-): string[] {
+) {
   if (rawSeedPaths === undefined) {
     return [];
   }
@@ -443,13 +442,7 @@ function parseSeedPaths(
   return seedPaths;
 }
 
-function parseResources(
-  resources: RawResources | undefined,
-  configPath: string
-): {
-  resourceCommandsInOrder: ResourceCommandConfig[];
-  resourceValuesInOrder: ResourceValueConfig[];
-} {
+function parseResources(resources: RawResources | undefined, configPath: string) {
   if (resources === undefined) {
     return { resourceCommandsInOrder: [], resourceValuesInOrder: [] };
   }
@@ -491,7 +484,7 @@ function parseResources(
   return { resourceCommandsInOrder, resourceValuesInOrder };
 }
 
-function claimResourceEnvName(seenEnvNames: Set<string>, env: string, configPath: string): void {
+function claimResourceEnvName(seenEnvNames: Set<string>, env: string, configPath: string) {
   if (seenEnvNames.has(env)) {
     throw new MonkeError(`Duplicate resource env name ${env} in ${configPath}`);
   }
@@ -503,7 +496,7 @@ function requireResourceCommandOutputs(
   location: string,
   seenEnvNames: Set<string>,
   configPath: string
-): string[] {
+) {
   const outputs: string[] = [];
   const seenOutputs = new Set<string>();
   for (const env of value) {
@@ -517,7 +510,7 @@ function requireResourceCommandOutputs(
   return outputs;
 }
 
-function requireResourceCommandRunPath(relativePath: string, location: string): string {
+function requireResourceCommandRunPath(relativePath: string, location: string) {
   if (path.isAbsolute(relativePath)) {
     throw new MonkeError(`${location} must be a relative JS/TS module path`);
   }
@@ -539,7 +532,7 @@ function requireResourceCommandRunPath(relativePath: string, location: string): 
   return normalizedPath;
 }
 
-function requireResourceLiteral(literal: string, location: string): string {
+function requireResourceLiteral(literal: string, location: string) {
   for (const match of literal.matchAll(/\$\{(?<placeholder>[^}]*)\}/gu)) {
     const placeholder = match.groups?.placeholder ?? "";
     if (placeholder !== "session" && placeholder !== "user") {

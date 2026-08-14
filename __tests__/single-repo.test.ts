@@ -1608,7 +1608,7 @@ apps:
   });
 });
 
-function captureThrowMessage(action: () => void): string {
+function captureThrowMessage(action: () => void) {
   try {
     action();
   } catch (error) {

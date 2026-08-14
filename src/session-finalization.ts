@@ -8,7 +8,7 @@ import { assertCanonicalSourceCheckout } from "./worktree-safety.ts";
 const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
 
 /** Finalize one already-dead Session using only lifecycle data saved in its state. */
-export function finalizeSession(runtime: Runtime, home: string, state: SessionState): void {
+export function finalizeSession(runtime: Runtime, home: string, state: SessionState) {
   const liveRepo = state.repos.find((repo) => existsSync(repo.worktreePath));
   if (liveRepo !== undefined) {
     throw new MonkeError(

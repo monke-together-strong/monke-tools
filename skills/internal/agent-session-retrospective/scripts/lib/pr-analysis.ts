@@ -1,7 +1,17 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import * as z from "zod";
+import {
+  array,
+  boolean,
+  enum as enumSchema,
+  literal,
+  number as numberSchema,
+  object,
+  strictObject,
+  string,
+} from "zod";
+import type { output, ZodType } from "zod";
 
 import { hashKey } from "./identity.ts";
 import { isNonEmptyString } from "./normalize.ts";
@@ -96,88 +106,87 @@ export interface RunPrAggregateOptions {
   runTs: string;
 }
 
-interface GhRepo {
-  isArchived?: boolean;
-  nameWithOwner: string;
-}
+const GhRepoSchema = object({
+  isArchived: boolean().optional(),
+  nameWithOwner: string(),
+});
+const GhCommitSchema = object({
+  committedDate: string().optional(),
+  message: string().optional(),
+  messageBody: string().optional(),
+  messageHeadline: string().optional(),
+  oid: string().optional(),
+  sha: string().optional(),
+});
+const GhFileSchema = object({
+  filename: string().optional(),
+  path: string().optional(),
+});
+const GhMergeCommitSchema = object({
+  oid: string().optional(),
+  sha: string().optional(),
+});
+const GhPrSchema = object({
+  baseRefName: string().optional(),
+  commits: array(GhCommitSchema).optional(),
+  createdAt: string(),
+  createdHeadRefOid: string().optional(),
+  creationHeadRefOid: string().optional(),
+  files: array(GhFileSchema).optional(),
+  headRefName: string().optional(),
+  headRefOid: string().optional(),
+  mergeCommit: GhMergeCommitSchema.nullish(),
+  mergedAt: string(),
+  number: numberSchema(),
+  openingSnapshotOid: string().optional(),
+  openingSnapshotRef: string().optional(),
+  title: string(),
+  url: string(),
+});
+const GhRepoListSchema = array(GhRepoSchema);
+const GhPrListSchema = array(GhPrSchema);
+const GhPrFilesResponseSchema = object({
+  files: array(GhFileSchema),
+});
+type GhCommit = output<typeof GhCommitSchema>;
+type GhFile = output<typeof GhFileSchema>;
+type GhMergeCommit = output<typeof GhMergeCommitSchema>;
+type GhPr = output<typeof GhPrSchema>;
+type GhRepo = output<typeof GhRepoSchema>;
 
-interface GhPr {
-  baseRefName?: string;
-  commits?: unknown[];
-  createdAt: string;
-  createdHeadRefOid?: string;
-  creationHeadRefOid?: string;
-  files?: unknown[];
-  headRefName?: string;
-  headRefOid?: string;
-  mergeCommit?: unknown;
-  mergedAt: string;
-  number: number;
-  openingSnapshotOid?: string;
-  openingSnapshotRef?: string;
-  title: string;
-  url: string;
-}
-
-const GhRepoSchema: z.ZodType<GhRepo> = z.object({
-  isArchived: z.boolean().optional(),
-  nameWithOwner: z.string(),
-});
-const GhPrSchema: z.ZodType<GhPr> = z.object({
-  baseRefName: z.string().optional(),
-  commits: z.array(z.unknown()).optional(),
-  createdAt: z.string(),
-  createdHeadRefOid: z.string().optional(),
-  creationHeadRefOid: z.string().optional(),
-  files: z.array(z.unknown()).optional(),
-  headRefName: z.string().optional(),
-  headRefOid: z.string().optional(),
-  mergeCommit: z.unknown().optional(),
-  mergedAt: z.string(),
-  number: z.number(),
-  openingSnapshotOid: z.string().optional(),
-  openingSnapshotRef: z.string().optional(),
-  title: z.string(),
-  url: z.string(),
-});
-const GhRepoListSchema = z.array(GhRepoSchema);
-const GhPrListSchema = z.array(GhPrSchema);
-const GhPrFilesResponseSchema = z.object({
-  files: z.array(z.unknown()),
-});
-const PrAnalysisManifestSchema: z.ZodType<PrAnalysisManifest> = z.strictObject({
-  author: z.string(),
-  gaps: z.array(
-    z.strictObject({
-      impact: z.string(),
-      number: z.number().optional(),
-      reason: z.string(),
-      repo: z.string(),
+const PrAnalysisManifestSchema: ZodType<PrAnalysisManifest> = strictObject({
+  author: string(),
+  gaps: array(
+    strictObject({
+      impact: string(),
+      number: numberSchema().optional(),
+      reason: string(),
+      repo: string(),
     }),
   ),
-  generatedAt: z.string(),
-  org: z.string(),
-  runTs: z.string(),
-  version: z.literal(1),
+  generatedAt: string(),
+  org: string(),
+  runTs: string(),
+  version: literal(1),
   window: RetrospectiveWindowSchema,
-  workItems: z.array(
-    z.strictObject({
-      analysisPath: z.string(),
-      commitShas: z.array(z.string()),
-      createdAt: z.string(),
-      finalHeadSha: z.string().optional(),
-      mergeCommitSha: z.string().optional(),
-      mergedAt: z.string(),
-      number: z.number(),
-      openingSnapshot: z.strictObject({
-        confidence: z.enum(["exact", "inferred", "unknown"]),
-        reason: z.string(),
-        ref: z.string().optional(),
+  workItems: array(
+    strictObject({
+      analysisPath: string(),
+      commitShas: array(string()),
+      createdAt: string(),
+      finalHeadSha: string().optional(),
+      mergeCommitSha: string().optional(),
+      mergedAt: string(),
+      number: numberSchema(),
+      openingSnapshot: strictObject({
+        confidence: enumSchema(["exact", "inferred", "unknown"]),
+        reason: string(),
+        ref: string().optional(),
       }),
-      repo: z.string(),
-      title: z.string(),
-      url: z.string(),
-      workItemPath: z.string(),
+      repo: string(),
+      title: string(),
+      url: string(),
+      workItemPath: string(),
     }),
   ),
 });
@@ -199,7 +208,7 @@ const PR_DETAIL_FIELDS = [
   "commits",
 ].join(",");
 
-export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
+export function runPrCollect(options: RunPrCollectOptions) {
   const root = options.retroRoot ?? retroHome(options.home);
   const window = readRunWindow(root, options.runTs);
   if (!window) {
@@ -280,7 +289,7 @@ function collectRepoPrs(
   author: string,
   window: RetrospectiveWindow,
   exec: CommandRunner,
-): { gaps: PrAnalysisGap[]; prs: GhPr[]; } {
+) {
   const gaps: PrAnalysisGap[] = [];
   const summariesByNumber = new Map<number, GhPr>();
 
@@ -345,7 +354,7 @@ function collectRepoPrs(
   return { gaps, prs };
 }
 
-function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAnalysisGap[]): GhPr {
+function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAnalysisGap[]) {
   const detail = parseJson(
     runText(exec, "gh", [
       "pr",
@@ -358,14 +367,13 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
     ]),
     GhPrSchema,
   );
-  let files: unknown[] = [];
+  let files: GhFile[] = [];
   try {
-    files = normalizePrFilesResponse(
-      parseJson(
-        runText(exec, "gh", ["pr", "view", String(summary.number), "--repo", repo, "--json", "files"]),
-        GhPrFilesResponseSchema,
-      ),
+    const response = parseJson(
+      runText(exec, "gh", ["pr", "view", String(summary.number), "--repo", repo, "--json", "files"]),
+      GhPrFilesResponseSchema,
     );
+    ({ files } = response);
   } catch (error) {
     gaps.push({
       impact: "Changed-file context is missing, but post-opening delta analysis can still proceed.",
@@ -381,7 +389,7 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
   };
 }
 
-export function runPrAggregate(options: RunPrAggregateOptions): { gaps: PrAnalysisGap[]; path: string; } {
+export function runPrAggregate(options: RunPrAggregateOptions) {
   const root = options.retroRoot ?? retroHome(options.home);
   const manifest = readPrManifest(root, options.runTs);
   if (!manifest) {
@@ -470,11 +478,11 @@ export function runPrAggregate(options: RunPrAggregateOptions): { gaps: PrAnalys
   return { gaps: uniqueGaps, path: filePath };
 }
 
-export function prManifestPath(root: string, runTs: string): string {
+export function prManifestPath(root: string, runTs: string) {
   return path.join(runDir(root, runTs), "pr-analysis", "manifest.json");
 }
 
-export function readPrManifest(root: string, runTs: string): PrAnalysisManifest | null {
+export function readPrManifest(root: string, runTs: string) {
   const filePath = prManifestPath(root, runTs);
   if (!existsSync(filePath)) {
     return null;
@@ -486,7 +494,7 @@ export function readPrManifest(root: string, runTs: string): PrAnalysisManifest 
   }
 }
 
-function writePrManifest(root: string, runTs: string, manifest: PrAnalysisManifest): void {
+function writePrManifest(root: string, runTs: string, manifest: PrAnalysisManifest) {
   const filePath = prManifestPath(root, runTs);
   mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, JSON.stringify(manifest, null, 2), "utf-8");
@@ -533,12 +541,12 @@ function buildWorkItem(
   };
 }
 
-function writeWorkItem(item: PrWorkItem): void {
+function writeWorkItem(item: PrWorkItem) {
   mkdirSync(path.dirname(item.workItemPath), { recursive: true });
   writeFileSync(item.workItemPath, JSON.stringify(item, null, 2), "utf-8");
 }
 
-function summaryOf(item: PrWorkItem): PrWorkItemSummary {
+function summaryOf(item: PrWorkItem) {
   return {
     analysisPath: item.analysisPath,
     commitShas: item.commitShas,
@@ -648,7 +656,7 @@ function materializeDelta(
   }
 }
 
-function ensureRepoCache(repo: string, repoDir: string, exec: CommandRunner): void {
+function ensureRepoCache(repo: string, repoDir: string, exec: CommandRunner) {
   if (existsSync(path.join(repoDir, ".git"))) {
     return;
   }
@@ -656,70 +664,48 @@ function ensureRepoCache(repo: string, repoDir: string, exec: CommandRunner): vo
   runText(exec, "gh", ["repo", "clone", repo, repoDir, "--", "--filter=blob:none", "--no-checkout"]);
 }
 
-function normalizeCommits(value: unknown): PrCommitReference[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((entry) => {
-      const record = asRecord(entry);
-      const sha = asString(record?.oid) ?? asString(record?.sha);
+function normalizeCommits(commits: GhCommit[] | undefined) {
+  return (commits ?? [])
+    .map((commit) => {
+      const sha = commit.oid ?? commit.sha;
       if (!isNonEmptyString(sha)) {
         return null;
       }
-      const headline = asString(record?.messageHeadline) ?? asString(record?.message) ?? "";
-      const body = asString(record?.messageBody);
-      const committedDate = asString(record?.committedDate);
-      const commit: PrCommitReference = {
-        message: isNonEmptyString(body) ? `${headline}\n\n${body}` : headline,
+      const headline = commit.messageHeadline ?? commit.message ?? "";
+      const normalized: PrCommitReference = {
+        committedDate: commit.committedDate,
+        message: isNonEmptyString(commit.messageBody)
+          ? `${headline}\n\n${commit.messageBody}`
+          : headline,
         sha,
       };
-      if (isNonEmptyString(committedDate)) {
-        commit.committedDate = committedDate;
-      }
-      return commit;
+      return normalized;
     })
     .filter((entry): entry is PrCommitReference => entry !== null);
 }
 
-function normalizeFiles(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((entry) => {
-      const record = asRecord(entry);
-      return asString(record?.path) ?? asString(record?.filename);
-    })
+function normalizeFiles(files: GhFile[] | undefined) {
+  return (files ?? [])
+    .map((file) => file.path ?? file.filename)
     .filter((entry): entry is string => Boolean(entry))
     .toSorted();
 }
 
-function normalizePrFilesResponse(value: unknown): unknown[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
-  const record = asRecord(value);
-  const files = record?.files;
-  return Array.isArray(files) ? files : [];
+function normalizeMergeCommit(commit: GhMergeCommit | null | undefined) {
+  return commit?.oid ?? commit?.sha;
 }
 
-function normalizeMergeCommit(value: unknown): string | undefined {
-  const record = asRecord(value);
-  return asString(record?.oid) ?? asString(record?.sha);
-}
-
-function parseJson<T extends z.ZodType>(text: string, schema: T): z.output<T> {
+function parseJson<T extends ZodType>(text: string, schema: T) {
   const value: unknown = JSON.parse(text);
   return schema.parse(value);
 }
 
-function prInWindow(pr: GhPr, window: RetrospectiveWindow): boolean {
+function prInWindow(pr: GhPr, window: RetrospectiveWindow) {
   const mergedAt = Date.parse(pr.mergedAt);
   return !Number.isNaN(mergedAt) && mergedAt >= Date.parse(window.since) && mergedAt <= Date.parse(window.until);
 }
 
-function extractCorrectivePatternLines(body: string): string[] {
+function extractCorrectivePatternLines(body: string) {
   const section = extractSection(body, "Corrective Patterns");
   if (!isNonEmptyString(section)) {
     return [];
@@ -734,7 +720,7 @@ function extractCorrectivePatternLines(body: string): string[] {
 
 function groupCorrectivePatterns(
   analyses: { body: string; item: PrWorkItemSummary; }[],
-): { items: string[]; label: string; }[] {
+) {
   const byPattern = new Map<string, { items: string[]; label: string; }>();
   for (const { body, item } of analyses) {
     if (!body) {
@@ -753,7 +739,7 @@ function groupCorrectivePatterns(
   return [...byPattern.values()].toSorted((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label));
 }
 
-function normalizePattern(value: string): string {
+function normalizePattern(value: string) {
   return value
     .toLowerCase()
     .replaceAll(/`[^`]+`/gu, "")
@@ -763,7 +749,7 @@ function normalizePattern(value: string): string {
     .trim();
 }
 
-function dedupeGaps(gaps: PrAnalysisGap[]): PrAnalysisGap[] {
+function dedupeGaps(gaps: PrAnalysisGap[]) {
   const byKey = new Map<string, PrAnalysisGap>();
   for (const gap of gaps) {
     byKey.set(`${gap.repo}#${gap.number ?? ""}#${gap.reason}`, gap);
@@ -771,11 +757,11 @@ function dedupeGaps(gaps: PrAnalysisGap[]): PrAnalysisGap[] {
   return [...byKey.values()].toSorted((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number));
 }
 
-function comparePrLabels(repoA: string, numberA: number | undefined, repoB: string, numberB: number | undefined): number {
+function comparePrLabels(repoA: string, numberA: number | undefined, repoB: string, numberB: number | undefined) {
   return repoA.localeCompare(repoB) || (numberA ?? 0) - (numberB ?? 0);
 }
 
-export function extractSection(body: string, heading: string): string | null {
+export function extractSection(body: string, heading: string) {
   const pattern = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "mu");
   const match = body.match(pattern);
   if (!match || match.index === undefined) {
@@ -787,24 +773,24 @@ export function extractSection(body: string, heading: string): string | null {
   return (next === -1 ? rest : rest.slice(0, next)).trim();
 }
 
-function formatPrLabel(gap: PrAnalysisGap): string {
+function formatPrLabel(gap: PrAnalysisGap) {
   return gap.number === undefined ? gap.repo : `${gap.repo}#${gap.number}`;
 }
 
-function sentence(value: string): string {
+function sentence(value: string) {
   return /[.!?]\s*$/u.test(value) ? `${value} ` : `${value}. `;
 }
 
-function workItemId(repo: string, number: number): string {
+function workItemId(repo: string, number: number) {
   const readable = repo.replaceAll("/", "__").replaceAll(/[^a-zA-Z0-9_.-]/gu, "-");
   return `${readable}__${number}__${hashKey(`${repo}#${number}`).slice(0, 12)}`;
 }
 
-function dateOnly(value: string): string {
+function dateOnly(value: string) {
   return value.slice(0, 10);
 }
 
-function eachDateOnly(since: string, until: string): string[] {
+function eachDateOnly(since: string, until: string) {
   const days: string[] = [];
   const cursor = new Date(`${dateOnly(since)}T00:00:00.000Z`);
   const end = new Date(`${dateOnly(until)}T00:00:00.000Z`);
@@ -815,7 +801,7 @@ function eachDateOnly(since: string, until: string): string[] {
   return days;
 }
 
-function clipDelta(value: string): string {
+function clipDelta(value: string) {
   const limit = 100_000;
   if (value.length <= limit) {
     return value;
@@ -824,7 +810,7 @@ function clipDelta(value: string): string {
   return `${value.slice(0, keep)}\n\n[${value.length - keep * 2} chars elided]\n\n${value.slice(-keep)}`;
 }
 
-function defaultRunner(command: string, args: string[], options: { cwd?: string } = {}): CommandResult {
+function defaultRunner(command: string, args: string[], options: { cwd?: string } = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
     encoding: "utf-8",
@@ -843,7 +829,7 @@ function runText(
   command: string,
   args: string[],
   options?: { cwd?: string },
-): string {
+) {
   const result = exec(command, args, options);
   if (result.status !== 0) {
     const detail =
@@ -853,22 +839,10 @@ function runText(
   return result.stdout;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return isRecord(value) ? value : null;
+function errorMessage(cause: unknown) {
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function asString(value: unknown): string | undefined {
-  return isNonEmptyString(value) ? value : undefined;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function escapeRegExp(value: string): string {
+function escapeRegExp(value: string) {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

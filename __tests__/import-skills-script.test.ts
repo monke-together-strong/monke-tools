@@ -2477,7 +2477,7 @@ function installFakeNpx(
     stageReferenceFixture?: boolean;
     stageSupportingSymlink?: boolean;
   }
-): string {
+) {
   const binDirectory = path.join(sandbox, "fake-bin");
   const guidanceFixturesDirectory = path.join(sandbox, "fake-upstream-guidance");
   mkdirSync(binDirectory, { recursive: true });
@@ -2627,7 +2627,7 @@ exit 0
   return binDirectory;
 }
 
-function stripAnsiForTest(value: string): string {
+function stripAnsiForTest(value: string) {
   const escapeCharacter = String.fromCodePoint(27);
   return value.replaceAll(new RegExp(`${escapeCharacter}\\[[0-9;]*m`, "gu"), "");
 }

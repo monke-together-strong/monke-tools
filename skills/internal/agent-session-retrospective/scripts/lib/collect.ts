@@ -87,10 +87,10 @@ export function buildBundles(
   runTs: string,
   eligibles: EligibleSession[],
   frozen: FrozenSessionRecord[],
-): RepoBundle[] {
+) {
   const byRepo = new Map<string, RepoBundle>();
 
-  const bundleFor = (repoKey: string): RepoBundle => {
+  const bundleFor = (repoKey: string) => {
     let bundle = byRepo.get(repoKey);
     if (!bundle) {
       bundle = {
@@ -133,12 +133,12 @@ export function buildBundles(
 /** Resolve each transcript's repo membership, including inherited parent membership. */
 export function resolveSessionMembership(
   sessions: CanonicalSession[],
-): Map<string, SessionMembership> {
+) {
   const bySession = new Map(sessions.map((session) => [sessionKey(session), session]));
   const resolved = new Map<string, SessionMembership>();
   const resolving = new Set<string>();
 
-  const resolve = (session: CanonicalSession): SessionMembership => {
+  const resolve = (session: CanonicalSession) => {
     const key = sessionKey(session);
     const existing = resolved.get(key);
     if (existing) {
@@ -182,11 +182,11 @@ export function resolveSessionMembership(
   return resolved;
 }
 
-function sessionKey(session: Pick<CanonicalSession, "agent" | "sessionId">): string {
+function sessionKey(session: Pick<CanonicalSession, "agent" | "sessionId">) {
   return `${session.agent}\u0000${session.sessionId}`;
 }
 
-function digestFor(repoKey: string, frozen: FrozenSessionRecord[]): string[] {
+function digestFor(repoKey: string, frozen: FrozenSessionRecord[]) {
   const lines: string[] = [];
   for (const record of frozen) {
     if (record.repoKey !== repoKey) {
@@ -199,7 +199,7 @@ function digestFor(repoKey: string, frozen: FrozenSessionRecord[]): string[] {
   return lines.slice(-PRIOR_DIGEST_LIMIT);
 }
 
-function firstLine(text: string): string {
+function firstLine(text: string) {
   const line = text.split("\n").find((entry) => entry.trim()) ?? "";
   return line.length > 140 ? `${line.slice(0, 140)}…` : line;
 }
@@ -211,13 +211,6 @@ export interface RunCollectOptions extends DiscoverOptions {
   runTs: string;
   sinceMs?: number;
   untilMs?: number;
-}
-
-export interface CollectResult {
-  bundles: { path: string; repoHash: string; repoKey: string; sessionCount: number; }[];
-  runTs: string;
-  skipped: Record<string, number>;
-  window: RetrospectiveWindow;
 }
 
 interface ResolvedWindow {
@@ -272,42 +265,36 @@ export function resolveRetrospectiveWindow(
   };
 }
 
-function newestReportCursorMs(root: string): number | undefined {
+function newestReportCursorMs(root: string) {
   const reports = listReportPaths(root).toSorted((a, b) => path.basename(b).localeCompare(path.basename(a)));
-  for (const reportPath of reports) {
-    const fromWindow = parseReportWindowUntilMs(reportPath);
-    if (fromWindow !== undefined) {
-      return fromWindow;
-    }
-    const basename = path.basename(reportPath, "-retrospective.md");
-    const fromName = parseRunTimestampMs(basename);
-    if (fromName !== undefined) {
-      return fromName;
-    }
-  }
-  return undefined;
+  return reports
+    .map((reportPath) => {
+      const fromWindow = parseReportWindowUntilMs(reportPath);
+      return fromWindow ?? parseRunTimestampMs(path.basename(reportPath, "-retrospective.md"));
+    })
+    .find((candidate) => candidate !== undefined);
 }
 
-function parseReportWindowUntilMs(reportPath: string): number | undefined {
+function parseReportWindowUntilMs(reportPath: string) {
   let content: string;
   try {
     content = readFileSync(reportPath, "utf-8");
   } catch {
-    return undefined;
+    return;
   }
   const match = /^Window:\s+\S+\s+to\s+(?<until>\S+)/mu.exec(content);
   if (!match?.groups) {
-    return undefined;
+    return;
   }
   const { until } = match.groups;
   if (!isNonEmptyString(until)) {
-    return undefined;
+    return;
   }
   const parsed = Date.parse(until);
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
-function parseRunTimestampMs(value: string): number | undefined {
+function parseRunTimestampMs(value: string) {
   const direct = Date.parse(value);
   if (!Number.isNaN(direct)) {
     return direct;
@@ -317,7 +304,7 @@ function parseRunTimestampMs(value: string): number | undefined {
       value,
     );
   if (!match?.groups) {
-    return undefined;
+    return;
   }
   const { date, hour, millisecond = "000", minute, second } = match.groups;
   const iso = `${date}${hour}:${minute}:${second}.${millisecond}Z`;
@@ -326,7 +313,7 @@ function parseRunTimestampMs(value: string): number | undefined {
 }
 
 /** Disk-driven collect: discover, normalize, gate, group, write bundles. */
-export function runCollect(options: RunCollectOptions): CollectResult {
+export function runCollect(options: RunCollectOptions) {
   const root = options.retroRoot ?? retroHome(options.home);
   const nowMs = options.nowMs ?? Date.now();
   const idleMs = (options.idleMinutes ?? 45) * 60_000;
@@ -336,7 +323,7 @@ export function runCollect(options: RunCollectOptions): CollectResult {
     untilMs: options.untilMs,
   });
   const skipped: Record<string, number> = {};
-  const bump = (reason: string): void => {
+  const bump = (reason: string) => {
     skipped[reason] = (skipped[reason] ?? 0) + 1;
   };
 
@@ -413,7 +400,7 @@ export function runCollect(options: RunCollectOptions): CollectResult {
   };
 }
 
-function sessionActivityMs(session: CanonicalSession): number {
+function sessionActivityMs(session: CanonicalSession) {
   if (isNonEmptyString(session.lastActivityAt)) {
     const parsed = Date.parse(session.lastActivityAt);
     if (!Number.isNaN(parsed)) {

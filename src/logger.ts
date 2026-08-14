@@ -33,7 +33,7 @@ export function createLogger(runtime: Runtime): Logger {
   };
 }
 
-function shouldUseColor(runtime: Runtime): boolean {
+function shouldUseColor(runtime: Runtime) {
   if (runtime.env.NO_COLOR !== undefined) {
     return false;
   }

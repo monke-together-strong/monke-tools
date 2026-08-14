@@ -15,11 +15,7 @@ export interface LocalWorktreeTarget {
 }
 
 /** Discover existing local checkout targets in Swing's deterministic order. */
-export function listLocalWorktreeTargets(
-  runtime: Runtime,
-  home: string,
-  sourceRoot: string
-): LocalWorktreeTarget[] {
+export function listLocalWorktreeTargets(runtime: Runtime, home: string, sourceRoot: string) {
   const worktrees = listWorktrees(runtime, sourceRoot).filter(
     (entry) => !entry.prunable && existsSync(entry.path)
   );
@@ -97,43 +93,42 @@ export function resolveLocalWorktreeTarget(
   sourceRoot: string,
   gitCommonDir: string,
   selected: Pick<LocalWorktreeTarget, "branch" | "path">
-): LocalWorktreeTarget | undefined {
+) {
+  let resolvedTarget: LocalWorktreeTarget | undefined;
   try {
     const context = resolveRepoContext(runtime, selected.path, null, { inferSessionName: false });
     if (
       path.normalize(context.gitCommonDir) !== path.normalize(gitCommonDir) ||
       context.currentBranch !== (selected.branch ?? "HEAD")
     ) {
-      return undefined;
+      return;
     }
-    return listLocalWorktreeTargets(runtime, home, sourceRoot).find(
+    resolvedTarget = listLocalWorktreeTargets(runtime, home, sourceRoot).find(
       (target) =>
         path.normalize(target.path) === path.normalize(selected.path) &&
         target.branch === selected.branch
     );
   } catch {
-    return undefined;
+    // A stale or missing worktree has no resolvable target.
   }
+  return resolvedTarget;
 }
 
 /** Resolve an attached target to a full ref and a detached target to its exact commit. */
-export function resolveLocalWorktreeTargetBase(
-  runtime: Runtime,
-  target: LocalWorktreeTarget
-): string {
+export function resolveLocalWorktreeTargetBase(runtime: Runtime, target: LocalWorktreeTarget) {
   return target.branch === null
     ? runtime.exec("git", ["rev-parse", "HEAD"], { cwd: target.path }).stdout.trim()
     : `refs/heads/${target.branch}`;
 }
 
-function listBranchCommitTimes(runtime: Runtime, sourceRoot: string): Map<string, number> {
+function listBranchCommitTimes(runtime: Runtime, sourceRoot: string) {
   const result = runtime.exec(
     "git",
     ["for-each-ref", "--format=%(refname:lstrip=2)\t%(committerdate:unix)", "refs/heads"],
     { allowFailure: true, cwd: sourceRoot }
   );
   if (result.exitCode !== 0) {
-    return new Map();
+    return new Map<string, number>();
   }
 
   const activityByBranch = new Map<string, number>();
@@ -146,7 +141,7 @@ function listBranchCommitTimes(runtime: Runtime, sourceRoot: string): Map<string
   return activityByBranch;
 }
 
-function detachedLabel(runtime: Runtime, worktreePath: string): string {
+function detachedLabel(runtime: Runtime, worktreePath: string) {
   const commit = runtime
     .exec("git", ["rev-parse", "--short=8", "HEAD"], {
       cwd: worktreePath

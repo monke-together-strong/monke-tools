@@ -376,6 +376,6 @@ function makeReservation(sourceRoot: string, blockStart: number, size: number): 
   };
 }
 
-function escapeRegExp(value: string): string {
+function escapeRegExp(value: string) {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

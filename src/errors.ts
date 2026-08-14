@@ -6,6 +6,6 @@ export class MonkeError extends Error {
 }
 
 /** Read a displayable message off an unknown thrown value. */
-export function errorMessage(error: unknown): string {
+export function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }

@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 
-function trimWhitespace(value: string): string {
+function trimWhitespace(value: string) {
   return value.trim();
 }
 
-function unwrapQuotedValue(value: string): string {
+function unwrapQuotedValue(value: string) {
   if (value.length >= 2) {
     const [first] = value;
     const last = value.at(-1);
@@ -17,13 +17,13 @@ function unwrapQuotedValue(value: string): string {
   return value;
 }
 
-export function loadEnvFileIfPresent(filePath: string): void {
+export function loadEnvFileIfPresent(filePath: string) {
   let content: string;
 
   try {
     content = readFileSync(filePath, "utf-8");
   } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return;
     }
 
@@ -50,14 +50,6 @@ export function loadEnvFileIfPresent(filePath: string): void {
   }
 }
 
-export function getFirstEnvValue(names: string[]): string | undefined {
-  for (const name of names) {
-    const value = process.env[name];
-
-    if (value !== undefined && value !== "") {
-      return value;
-    }
-  }
-
-  return undefined;
+export function getFirstEnvValue(names: string[]) {
+  return names.map((name) => process.env[name]).find((value) => value !== undefined && value !== "");
 }

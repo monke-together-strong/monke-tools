@@ -6,18 +6,39 @@ import path from "node:path";
 import { summarizeInput } from "./normalize.ts";
 import { buildCanonicalSession } from "./session-events.ts";
 import type { DecodedSession, SessionAdapter, SessionEvent } from "./session-events.ts";
-import type { AgentKind, CanonicalSession } from "./types.ts";
+import {
+  ClaudeContentBlockSchema,
+  ClaudeTranscriptEnvelopeSchema,
+  ClaudeTranscriptRecordSchema,
+  CodexTranscriptRecordSchema,
+  extractClaudeTextBlocks,
+  JsonValueSchema,
+  TranscriptEnvelopeSchema,
+} from "./transcript-schemas.ts";
+import type {
+  ClaudeTranscriptEnvelope,
+  ClaudeTranscriptRecord,
+  CodexTranscriptRecord,
+  JsonValue,
+} from "./transcript-schemas.ts";
+import type { AgentKind } from "./types.ts";
 
 interface DiscoveredFile {
   agent: AgentKind;
   filePath: string;
 }
 
-function readJsonlLines(filePath: string): { hash: string; lineCount: number; records: unknown[]; } {
+type CodexEventPayload = Extract<CodexTranscriptRecord, { type: "event_msg" }>["payload"];
+type CodexMessagePayload = Extract<CodexResponsePayload, { type: "message" }>;
+type CodexResponsePayload = Extract<CodexTranscriptRecord, { type: "response_item" }>["payload"];
+type CodexSessionMetaPayload = Extract<CodexTranscriptRecord, { type: "session_meta" }>["payload"];
+type CodexTurnContextPayload = Extract<CodexTranscriptRecord, { type: "turn_context" }>["payload"];
+
+function readJsonlLines(filePath: string) {
   const raw = readFileSync(filePath, "utf-8");
   const hash = createHash("sha256").update(raw).digest("hex");
   const lines = raw.split("\n");
-  const records: unknown[] = [];
+  const records: JsonValue[] = [];
   let lineCount = 0;
   for (const line of lines) {
     if (!line.trim()) {
@@ -25,20 +46,16 @@ function readJsonlLines(filePath: string): { hash: string; lineCount: number; re
     }
     lineCount += 1;
     try {
-      records.push(JSON.parse(line));
+      const value: unknown = JSON.parse(line);
+      const parsed = JsonValueSchema.safeParse(value);
+      if (parsed.success) {
+        records.push(parsed.data);
+      }
     } catch {
       // Skip malformed lines; transcripts are occasionally truncated mid-write.
     }
   }
   return { hash, lineCount, records };
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return isRecord(value) ? value : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 const EXIT_CODE_PATTERNS = [
@@ -48,14 +65,11 @@ const EXIT_CODE_PATTERNS = [
   /process exited with status (?<exitCode>\d+)/iu,
 ];
 
-function parseExitCode(output: string): number | undefined {
-  for (const pattern of EXIT_CODE_PATTERNS) {
-    const match = output.match(pattern);
-    if (match?.groups?.exitCode !== undefined && match.groups.exitCode !== "") {
-      return Number(match.groups.exitCode);
-    }
-  }
-  return undefined;
+function parseExitCode(output: string) {
+  const exitCode = EXIT_CODE_PATTERNS.map(
+    (pattern) => output.match(pattern)?.groups?.exitCode
+  ).find((value) => value !== undefined && value !== "");
+  return exitCode === undefined ? undefined : Number(exitCode);
 }
 
 // ---------------------------------------------------------------------------
@@ -67,100 +81,84 @@ const codexSessionAdapter: SessionAdapter = {
   decode: decodeCodexSession,
 };
 
-export function parseCodexSession(filePath: string): CanonicalSession | null {
+export function parseCodexSession(filePath: string) {
   return parseSessionWithAdapter(filePath, codexSessionAdapter);
 }
 
-function decodeCodexSession(records: unknown[]): DecodedSession {
+function decodeCodexSession(rawRecords: JsonValue[]) {
   const session = createDecodedSession();
-  const hasEventProse = records.some(hasCodexEventProse);
+  const records = parseCodexTranscript(rawRecords);
+  const hasEventProse = records.some((record) => record.type === "event_msg");
 
-  for (const entry of records) {
-    const record = asRecord(entry);
-    if (!record) {
-      continue;
+  for (const rawRecord of rawRecords) {
+    const envelope = TranscriptEnvelopeSchema.safeParse(rawRecord);
+    if (envelope.success) {
+      noteActivity(session, envelope.data.timestamp);
     }
-    noteActivity(session, record);
-    const payload = asRecord(record.payload);
-    if (!payload) {
-      continue;
+  }
+  for (const record of records) {
+    switch (record.type) {
+      case "event_msg": {
+        const event = decodeCodexEventMessage(record.payload, hasEventProse);
+        if (event) {
+          session.events.push(event);
+        }
+        break;
+      }
+      case "response_item": {
+        const event = decodeCodexResponseItem(record.payload, hasEventProse, session.cwd);
+        if (event) {
+          session.events.push(event);
+        }
+        break;
+      }
+      case "session_meta": {
+        readCodexSessionMetadata(session, record.payload);
+        break;
+      }
+      case "turn_context": {
+        readCodexTurnContext(session, record.payload);
+        break;
+      }
+      default: {
+        break;
+      }
     }
-
-    if (record.type === "session_meta") {
-      readCodexSessionMetadata(session, payload);
-      continue;
-    }
-    if (record.type === "turn_context") {
-      readCodexTurnContext(session, payload);
-      continue;
-    }
-
-    session.events.push(...decodeCodexPayload(record.type, payload, hasEventProse, session.cwd));
   }
 
   return session;
 }
 
-function hasCodexEventProse(entry: unknown): boolean {
-  const record = asRecord(entry);
-  const payload = record && asRecord(record.payload);
-  const type = payload?.type;
-  return record?.type === "event_msg" && (type === "user_message" || type === "agent_message");
-}
-
-function readCodexSessionMetadata(session: DecodedSession, payload: Record<string, unknown>): void {
-  if (typeof payload.id === "string") {
+function readCodexSessionMetadata(
+  session: DecodedSession,
+  payload: CodexSessionMetaPayload,
+) {
+  if (payload.id !== undefined) {
     session.sessionId = payload.id;
   }
-  if (typeof payload.cwd === "string") {
+  if (payload.cwd !== undefined) {
     session.cwd = payload.cwd;
   }
-  if (typeof payload.thread_source === "string") {
+  if (payload.thread_source !== undefined) {
     session.threadSource = payload.thread_source;
   }
-  session.parentSessionId = readCodexParentSessionId(payload);
+  session.parentSessionId =
+    payload.source?.subagent?.thread_spawn?.parent_thread_id ?? payload.parent_thread_id ?? null;
 }
 
-function readCodexParentSessionId(payload: Record<string, unknown>): string | null {
-  const source = asRecord(payload.source);
-  const subagent = source && asRecord(source.subagent);
-  const threadSpawn = subagent && asRecord(subagent.thread_spawn);
-  if (typeof threadSpawn?.parent_thread_id === "string") {
-    return threadSpawn.parent_thread_id;
-  }
-  return typeof payload.parent_thread_id === "string" ? payload.parent_thread_id : null;
-}
-
-function readCodexTurnContext(session: DecodedSession, payload: Record<string, unknown>): void {
-  if ((session.cwd === null || session.cwd === "") && typeof payload.cwd === "string") {
+function readCodexTurnContext(
+  session: DecodedSession,
+  payload: CodexTurnContextPayload,
+) {
+  if ((session.cwd === null || session.cwd === "") && payload.cwd !== undefined) {
     session.cwd = payload.cwd;
   }
-}
-
-function decodeCodexPayload(
-  recordType: unknown,
-  payload: Record<string, unknown>,
-  hasEventProse: boolean,
-  cwd: string | null,
-): SessionEvent[] {
-  if (recordType === "event_msg") {
-    const event = decodeCodexEventMessage(payload, hasEventProse);
-    return event ? [event] : [];
-  }
-  if (recordType === "response_item") {
-    const event = decodeCodexResponseItem(payload, hasEventProse, cwd);
-    return event ? [event] : [];
-  }
-  return [];
 }
 
 function decodeCodexEventMessage(
-  payload: Record<string, unknown>,
+  payload: CodexEventPayload,
   hasEventProse: boolean,
 ): SessionEvent | null {
-  if (typeof payload.message !== "string") {
-    return null;
-  }
   if (payload.type === "user_message") {
     return {
       captureRawUserMessage: true,
@@ -169,104 +167,125 @@ function decodeCodexEventMessage(
       text: payload.message,
     };
   }
-  if (payload.type === "agent_message" && hasEventProse) {
-    return {
-      captureRawUserMessage: false,
-      kind: "prose",
-      role: "assistant",
-      text: payload.message,
-    };
-  }
-  return null;
+  return hasEventProse
+    ? {
+        captureRawUserMessage: false,
+        kind: "prose",
+        role: "assistant",
+        text: payload.message,
+      }
+    : null;
 }
 
 function decodeCodexResponseItem(
-  payload: Record<string, unknown>,
+  payload: CodexResponsePayload,
   hasEventProse: boolean,
   cwd: string | null,
 ): SessionEvent | null {
-  if (payload.type === "message" && !hasEventProse) {
-    return decodeCodexResponseMessage(payload);
+  if (payload.type === "message") {
+    if (hasEventProse) {
+      return null;
+    }
+    const text = extractCodexMessageText(payload.content);
+    if (payload.role === "user" && isInjectedUserText(text)) {
+      return null;
+    }
+    return {
+      captureRawUserMessage: payload.role === "user" && text.trim() !== "",
+      kind: "prose",
+      role: payload.role,
+      text,
+    };
   }
   if (payload.type === "function_call") {
-    return decodeCodexFunctionCall(payload, cwd);
+    const input = parseCodexArguments(payload.arguments);
+    return {
+      callId: payload.call_id ?? null,
+      cwd,
+      inputSummary: summarizeInput(input),
+      kind: "tool-call",
+      name: payload.name ?? "tool",
+      pathCandidates: collectToolPathCandidates(input),
+    };
   }
-  if (payload.type === "function_call_output") {
-    return decodeCodexFunctionResult(payload);
-  }
-  return null;
-}
 
-function decodeCodexResponseMessage(payload: Record<string, unknown>): SessionEvent | null {
-  const { role } = payload;
-  if (role !== "user" && role !== "assistant") {
-    return null;
-  }
-  const text = extractCodexMessageText(payload.content);
-  if (role === "user" && isInjectedUserText(text)) {
-    return null;
-  }
-  return {
-    captureRawUserMessage: role === "user" && text.trim() !== "",
-    kind: "prose",
-    role,
-    text,
-  };
-}
-
-function decodeCodexFunctionCall(
-  payload: Record<string, unknown>,
-  cwd: string | null,
-): SessionEvent {
-  return {
-    callId: typeof payload.call_id === "string" ? payload.call_id : null,
-    cwd,
-    input: parseCodexArguments(payload.arguments),
-    kind: "tool-call",
-    name: typeof payload.name === "string" ? payload.name : "tool",
-  };
-}
-
-function decodeCodexFunctionResult(payload: Record<string, unknown>): SessionEvent {
-  const output =
-    typeof payload.output === "string" ? payload.output : summarizeInput(payload.output);
+  const output = summarizeInput(payload.output);
   const exitCode = parseExitCode(output);
-  return {
-    callId: typeof payload.call_id === "string" ? payload.call_id : "",
-    ...(exitCode === undefined ? {} : { exitCode }),
+  const event: SessionEvent & { kind: "tool-result" } = {
+    callId: payload.call_id ?? "",
     kind: "tool-result",
     output,
   };
+  if (exitCode !== undefined) {
+    event.exitCode = exitCode;
+  }
+  return event;
 }
 
-function parseCodexArguments(value: unknown): unknown {
-  if (typeof value !== "string") {
-    return value;
+function parseCodexTranscript(records: JsonValue[]) {
+  const parsedRecords: CodexTranscriptRecord[] = [];
+  for (const record of records) {
+    const parsed = CodexTranscriptRecordSchema.safeParse(record);
+    if (parsed.success) {
+      parsedRecords.push(parsed.data);
+    }
+  }
+  return parsedRecords;
+}
+
+function parseCodexArguments(value: JsonValue | undefined) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The response schema already validated this recursive JSON value; Codex alone may encode its tool arguments as a JSON string.
+  if (value === undefined || typeof value !== "string") {
+    return value ?? null;
   }
   try {
-    return JSON.parse(value);
+    const decoded: unknown = JSON.parse(value);
+    const parsed = JsonValueSchema.safeParse(decoded);
+    return parsed.success ? parsed.data : value;
   } catch {
     return value;
   }
 }
 
-function extractCodexMessageText(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-  if (!Array.isArray(content)) {
-    return "";
-  }
-  return content
-    .map((block) => {
-      const record = asRecord(block);
-      return record && typeof record.text === "string" ? record.text : "";
-    })
-    .filter(Boolean)
-    .join("\n");
+function extractCodexMessageText(content: CodexMessagePayload["content"]) {
+  return Array.isArray(content)
+    ? content
+        .map((block) => block?.text ?? "")
+        .filter(Boolean)
+        .join("\n")
+    : content;
 }
 
-function isInjectedUserText(text: string): boolean {
+function collectToolPathCandidates(input: JsonValue) {
+  const candidates: string[] = [];
+  const visit = (value: JsonValue) => {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The transcript schema already validated this recursive JSON value; string members are candidate filesystem paths.
+    if (typeof value === "string") {
+      candidates.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item);
+      }
+      return;
+    }
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- After JSON validation, this distinguishes the object member from null, booleans, and numbers for keyed traversal.
+    if (value === null || typeof value !== "object") {
+      return;
+    }
+    for (const key of ["workdir", "cwd", "path", "file_path", "absolute_path"]) {
+      const candidate = value[key];
+      if (candidate !== undefined) {
+        visit(candidate);
+      }
+    }
+  };
+  visit(input);
+  return candidates;
+}
+
+function isInjectedUserText(text: string) {
   const head = text.trimStart().slice(0, 40);
   return (
     head.startsWith("# AGENTS.md") ||
@@ -286,41 +305,38 @@ const claudeSessionAdapter: SessionAdapter = {
   decode: decodeClaudeSession,
 };
 
-export function parseClaudeSession(filePath: string): CanonicalSession | null {
+export function parseClaudeSession(filePath: string) {
   return parseSessionWithAdapter(filePath, claudeSessionAdapter);
 }
 
-function decodeClaudeSession(records: unknown[]): DecodedSession {
+function decodeClaudeSession(rawRecords: JsonValue[]) {
   const session = createDecodedSession();
+  const records = parseClaudeTranscript(rawRecords);
   const toolResults = collectClaudeToolResults(records);
 
-  for (const entry of records) {
-    const record = asRecord(entry);
-    if (!record) {
-      continue;
+  for (const rawRecord of rawRecords) {
+    const envelope = ClaudeTranscriptEnvelopeSchema.safeParse(rawRecord);
+    if (envelope.success) {
+      noteActivity(session, envelope.data.timestamp);
+      readClaudeSessionMetadata(session, envelope.data);
     }
-    noteActivity(session, record);
-    readClaudeSessionMetadata(session, record);
-    const message = asRecord(record.message);
-    if (message) {
-      session.events.push(...decodeClaudeMessage(record, message, session.cwd, toolResults));
-    }
+  }
+  for (const record of records) {
+    session.events.push(...decodeClaudeMessage(record, session.cwd, toolResults));
   }
 
   return session;
 }
 
 function collectClaudeToolResults(
-  records: unknown[],
-): Map<string, SessionEvent & { kind: "tool-result" }> {
+  records: ClaudeTranscriptRecord[],
+) {
   const results = new Map<string, SessionEvent & { kind: "tool-result" }>();
-  for (const entry of records) {
-    const record = asRecord(entry);
-    const message = record && asRecord(record.message);
-    if (!Array.isArray(message?.content)) {
+  for (const record of records) {
+    if (!Array.isArray(record.message.content)) {
       continue;
     }
-    for (const block of message.content) {
+    for (const block of record.message.content) {
       const result = decodeClaudeToolResult(block);
       if (result) {
         results.set(result.callId, result);
@@ -330,23 +346,36 @@ function collectClaudeToolResults(
   return results;
 }
 
-function readClaudeSessionMetadata(session: DecodedSession, record: Record<string, unknown>): void {
-  if (session.sessionId === "" && typeof record.sessionId === "string") {
+function parseClaudeTranscript(records: JsonValue[]) {
+  const parsedRecords: ClaudeTranscriptRecord[] = [];
+  for (const record of records) {
+    const parsed = ClaudeTranscriptRecordSchema.safeParse(record);
+    if (parsed.success) {
+      parsedRecords.push(parsed.data);
+    }
+  }
+  return parsedRecords;
+}
+
+function readClaudeSessionMetadata(
+  session: DecodedSession,
+  record: ClaudeTranscriptEnvelope,
+) {
+  if (session.sessionId === "" && record.sessionId !== undefined) {
     session.sessionId = record.sessionId;
   }
-  if (session.cwd === null && typeof record.cwd === "string") {
+  if (session.cwd === null && record.cwd !== undefined) {
     session.cwd = record.cwd;
   }
 }
 
 function decodeClaudeMessage(
-  record: Record<string, unknown>,
-  message: Record<string, unknown>,
+  record: ClaudeTranscriptRecord,
   cwd: string | null,
   toolResults: Map<string, SessionEvent & { kind: "tool-result" }>,
 ): SessionEvent[] {
-  const { content } = message;
-  if (typeof content === "string") {
+  const { content } = record.message;
+  if (!Array.isArray(content)) {
     return record.type === "user" && record.isMeta !== true
       ? [
           {
@@ -358,9 +387,6 @@ function decodeClaudeMessage(
         ]
       : [];
   }
-  if (!Array.isArray(content)) {
-    return [];
-  }
 
   const events: SessionEvent[] = [];
   for (const block of content) {
@@ -370,23 +396,23 @@ function decodeClaudeMessage(
 }
 
 function decodeClaudeBlock(
-  record: Record<string, unknown>,
-  block: unknown,
+  record: ClaudeTranscriptRecord,
+  block: JsonValue,
   cwd: string | null,
   toolResults: Map<string, SessionEvent & { kind: "tool-result" }>,
 ): SessionEvent[] {
-  const content = asRecord(block);
-  if (!content) {
+  const parsed = ClaudeContentBlockSchema.safeParse(block);
+  if (!parsed.success) {
     return [];
   }
+  const content = parsed.data;
   if (content.type === "tool_result") {
     return [];
   }
   if (
     record.type === "user" &&
     record.isMeta !== true &&
-    content.type === "text" &&
-    typeof content.text === "string"
+    content.type === "text"
   ) {
     return [
       {
@@ -400,7 +426,7 @@ function decodeClaudeBlock(
   if (record.type !== "assistant") {
     return [];
   }
-  if (content.type === "text" && typeof content.text === "string") {
+  if (content.type === "text") {
     return [
       {
         captureRawUserMessage: false,
@@ -411,12 +437,14 @@ function decodeClaudeBlock(
     ];
   }
   if (content.type === "tool_use") {
+    const input = content.input ?? null;
     const call: SessionEvent = {
-      callId: typeof content.id === "string" ? content.id : null,
+      callId: content.id ?? null,
       cwd,
-      input: content.input,
+      inputSummary: summarizeInput(input),
       kind: "tool-call",
-      name: typeof content.name === "string" ? content.name : "tool",
+      name: content.name ?? "tool",
+      pathCandidates: collectToolPathCandidates(input),
     };
     const result = call.callId === null ? undefined : toolResults.get(call.callId);
     return result ? [call, result] : [call];
@@ -425,43 +453,39 @@ function decodeClaudeBlock(
 }
 
 function decodeClaudeToolResult(
-  block: unknown,
-): (SessionEvent & { kind: "tool-result" }) | null {
-  const content = asRecord(block);
-  if (content?.type !== "tool_result" || typeof content.tool_use_id !== "string") {
+  block: JsonValue,
+) {
+  const parsed = ClaudeContentBlockSchema.safeParse(block);
+  if (!parsed.success || parsed.data.type !== "tool_result") {
     return null;
   }
-  return {
+  const content = parsed.data;
+  const event: SessionEvent & { kind: "tool-result" } = {
     callId: content.tool_use_id,
-    ...(content.is_error === true ? { error: "tool error" } : {}),
     kind: "tool-result",
     output: extractClaudeText(content.content),
   };
+  if (content.is_error === true) {
+    event.error = "tool error";
+  }
+  return event;
 }
 
-function extractClaudeText(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-  if (!Array.isArray(content)) {
+function extractClaudeText(content: JsonValue | undefined) {
+  if (content === undefined) {
     return "";
   }
-  return content
-    .map((block) => {
-      const record = asRecord(block);
-      if (record && typeof record.text === "string") {
-        return record.text;
-      }
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n");
+  if (Array.isArray(content)) {
+    return extractClaudeTextBlocks(content);
+  }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The block schema already validated this recursive JSON value; only its string member is textual tool output.
+  return typeof content === "string" ? content : "";
 }
 
 function parseSessionWithAdapter(
   filePath: string,
   adapter: SessionAdapter,
-): CanonicalSession | null {
+) {
   const { hash, lineCount, records } = readJsonlLines(filePath);
   if (records.length === 0) {
     return null;
@@ -487,12 +511,12 @@ function createDecodedSession(): DecodedSession {
   };
 }
 
-function noteActivity(session: DecodedSession, record: Record<string, unknown>): void {
-  if (typeof record.timestamp !== "string") {
+function noteActivity(session: DecodedSession, timestamp: string | undefined) {
+  if (timestamp === undefined) {
     return;
   }
-  session.startedAt ??= record.timestamp;
-  session.lastActivityAt = record.timestamp;
+  session.startedAt ??= timestamp;
+  session.lastActivityAt = timestamp;
 }
 
 // ---------------------------------------------------------------------------
@@ -506,7 +530,7 @@ export interface DiscoverOptions {
 }
 
 /** Enumerate Codex + Claude transcript files on disk. */
-export function discoverSessionFiles(options: DiscoverOptions = {}): DiscoveredFile[] {
+export function discoverSessionFiles(options: DiscoverOptions = {}) {
   const home = options.home ?? homedir();
   const codexRoot = options.codexRoot ?? path.join(home, ".codex");
   const claudeRoot = options.claudeRoot ?? path.join(home, ".claude", "projects");
@@ -523,7 +547,7 @@ export function discoverSessionFiles(options: DiscoverOptions = {}): DiscoveredF
   return files;
 }
 
-function walkJsonl(dir: string): string[] {
+function walkJsonl(dir: string) {
   if (!existsSync(dir)) {
     return [];
   }
@@ -539,6 +563,6 @@ function walkJsonl(dir: string): string[] {
   return out;
 }
 
-export function parseSessionFile(file: DiscoveredFile): CanonicalSession | null {
+export function parseSessionFile(file: DiscoveredFile) {
   return file.agent === "codex" ? parseCodexSession(file.filePath) : parseClaudeSession(file.filePath);
 }

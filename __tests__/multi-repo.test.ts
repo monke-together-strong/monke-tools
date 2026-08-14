@@ -20,7 +20,7 @@ import {
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
-function makeRepoTempDir(prefix: string): string {
+function makeRepoTempDir(prefix: string) {
   const testTempRoot = path.join(projectRoot, "tmp", "tests");
   mkdirSync(testTempRoot, { recursive: true });
   return realpathSync.native(mkdtempSync(path.join(testTempRoot, `${prefix}-`)));

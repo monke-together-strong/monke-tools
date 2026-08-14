@@ -11,7 +11,7 @@ interface ConfigurableCliParser {
 }
 
 /** Configure a testable CLI parser whose executable boundary owns error output. */
-export function configureCliParser<T extends ConfigurableCliParser>(program: T): T {
+export function configureCliParser<T extends ConfigurableCliParser>(program: T) {
   let errorOutput = "";
 
   program.showSuggestionAfterError(false);
@@ -27,7 +27,7 @@ export function configureCliParser<T extends ConfigurableCliParser>(program: T):
 }
 
 /** Render one failure at an executable boundary. */
-export function reportCliFailure(error: unknown): void {
+export function reportCliFailure(error: unknown) {
   if (error instanceof CommanderError && error.exitCode === 0) {
     return;
   }
@@ -36,7 +36,7 @@ export function reportCliFailure(error: unknown): void {
   process.exitCode = 1;
 }
 
-function formatCliFailure(error: unknown): string {
+function formatCliFailure(error: unknown) {
   if (error instanceof z.ZodError) {
     return `error: invalid input\n${z.prettifyError(error)}`;
   }

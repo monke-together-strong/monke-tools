@@ -1,3 +1,5 @@
+import { array, number, object, string } from "zod";
+
 import { BetterStackApiError } from "./api-error";
 
 interface QueryCredentials {
@@ -10,46 +12,42 @@ const REQUEST_TIMEOUT_MS = 30_000;
 
 export { BetterStackApiError } from "./api-error";
 
-export interface BetterStackSourceResponse {
-  data: {
-    attributes: {
-      data_region: string;
-      name: string;
-      table_name: string;
-      team_id: number;
-      team_name: string;
-    };
-    id: string;
-    type: string;
-  };
-}
+export const BetterStackSourceResponseSchema = object({
+  data: object({
+    attributes: object({
+      data_region: string(),
+      name: string(),
+      table_name: string(),
+      team_id: number(),
+      team_name: string()
+    }),
+    id: string()
+  })
+});
 
-export interface BetterStackConnectionsResponse {
-  data: {
-    attributes: {
-      client_type: string;
-      data_region: string;
-      host: string;
-      id: number;
-      note: string;
-      port: number;
-      team_ids: number[];
-      team_names: string[];
-      username: string;
-    };
-    id: string;
-    type: string;
-  }[];
-}
+export const BetterStackConnectionsResponseSchema = object({
+  data: array(
+    object({
+      attributes: object({
+        data_region: string(),
+        host: string(),
+        port: number(),
+        team_ids: array(number()),
+        team_names: array(string()),
+        username: string()
+      })
+    })
+  )
+});
 
 export class BetterStackClient {
   constructor(private readonly token: string) {}
 
-  getSource(id: number): Promise<string> {
+  getSource(id: number) {
     return this.#requestJsonText(`https://telemetry.betterstack.com/api/v1/sources/${id}`);
   }
 
-  listSources(page?: number, perPage?: number): Promise<string> {
+  listSources(page?: number, perPage?: number) {
     const url = new URL("https://telemetry.betterstack.com/api/v1/sources");
 
     if (page !== undefined) {
@@ -63,7 +61,7 @@ export class BetterStackClient {
     return this.#requestJsonText(url.toString());
   }
 
-  listConnections(page?: number, perPage?: number): Promise<string> {
+  listConnections(page?: number, perPage?: number) {
     const url = new URL("https://telemetry.betterstack.com/api/v1/connections");
 
     if (page !== undefined) {
@@ -77,7 +75,7 @@ export class BetterStackClient {
     return this.#requestJsonText(url.toString());
   }
 
-  static async runQuery(credentials: QueryCredentials, query: string): Promise<string> {
+  static async runQuery(credentials: QueryCredentials, query: string) {
     const response = await fetch(credentials.url, {
       body: query,
       headers: {
@@ -91,7 +89,7 @@ export class BetterStackClient {
     return await readTextResponse(response);
   }
 
-  async #requestJsonText(url: string): Promise<string> {
+  async #requestJsonText(url: string) {
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${this.token}`
@@ -103,7 +101,7 @@ export class BetterStackClient {
   }
 }
 
-export function normalizeQueryUrl(input: string): string {
+export function normalizeQueryUrl(input: string) {
   const schemeMatch = /^(?<scheme>[a-z][a-z\d+.-]*):\/\//iu.exec(input);
 
   if (schemeMatch) {
@@ -118,7 +116,7 @@ export function normalizeQueryUrl(input: string): string {
   return `https://${input}${separator}output_format_pretty_row_numbers=0`;
 }
 
-async function readTextResponse(response: Response): Promise<string> {
+async function readTextResponse(response: Response) {
   const body = await response.text();
 
   if (!response.ok) {

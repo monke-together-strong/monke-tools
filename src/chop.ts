@@ -9,7 +9,6 @@ import {
   listWorktrees,
   resolveRepoContext
 } from "./git.ts";
-import type { WorktreeEntry } from "./git.ts";
 import { createLogger } from "./logger.ts";
 import {
   getSessionStateFilePath,
@@ -51,12 +50,6 @@ interface SessionRepoPreflight {
   repo: SessionRepoState;
 }
 
-interface OrdinaryPreflight {
-  forceGitRemoval: boolean;
-  mode: "live" | "stale";
-  worktree: WorktreeEntry;
-}
-
 interface OrdinaryChopResult {
   kind: "ordinary";
   removedInvocation: boolean;
@@ -72,7 +65,7 @@ interface SessionChopResult {
 type ChopResult = OrdinaryChopResult | SessionChopResult;
 
 /** Remove one selected Session or Ordinary worktree while preserving local branches. */
-export function runChop(runtime: Runtime, target: string | undefined, options: ChopOptions): void {
+export function runChop(runtime: Runtime, target: string | undefined, options: ChopOptions) {
   const home = getMonkeHome(runtime);
   const removed = withGlobalLock(home, () => {
     const invocation = resolveRepoContext(runtime, runtime.cwd, null, {
@@ -128,7 +121,7 @@ function inspectOrdinaryWorktree(
   sourceRoot: string,
   worktreePath: string,
   options: ChopOptions
-): OrdinaryPreflight {
+) {
   assertCanonicalSourceCheckout(runtime, sourceRoot);
   if (existsSync(worktreePath)) {
     const checked = preflightWorktreeRemoval(runtime, sourceRoot, worktreePath, options);
@@ -296,22 +289,22 @@ function preflightSession(
   state: SessionState,
   allStates: SessionState[],
   options: ChopOptions
-): SessionRepoPreflight[] {
+) {
   const failures: string[] = [];
   const sessionChecks = [
-    (): void => {
+    () => {
       assertSessionIdentity(home, state);
     },
-    (): void => {
+    () => {
       assertCanonicalSourceCheckout(runtime, state.rootSourceRoot);
     },
-    (): void => {
+    () => {
       assertUniqueSessionRecords(state);
     },
-    (): void => {
+    () => {
       assertSessionMaterializationOrder(state);
     },
-    (): void => {
+    () => {
       assertNoOtherStateOwnsSessionRepos(state, allStates);
     }
   ];
@@ -398,7 +391,7 @@ function warnSessionBranchMismatch(
   runtime: Runtime,
   state: SessionState,
   candidate: SessionRepoPreflight
-): void {
+) {
   if (candidate.registeredBranch === undefined) {
     return;
   }
@@ -412,7 +405,7 @@ function warnSessionBranchMismatch(
   );
 }
 
-function formatWorktreeBranch(branch: string | null): string {
+function formatWorktreeBranch(branch: string | null) {
   return branch ?? "detached";
 }
 
@@ -420,7 +413,7 @@ function assertSessionIdentity(
   home: string,
   state: SessionState,
   expected: { rootSourceRoot: string; session: string } = state
-): void {
+) {
   if (
     !samePath(state.rootSourceRoot, expected.rootSourceRoot) ||
     state.session !== expected.session ||
@@ -430,7 +423,7 @@ function assertSessionIdentity(
   }
 }
 
-function assertSessionMaterializationOrder(state: SessionState): void {
+function assertSessionMaterializationOrder(state: SessionState) {
   const rootIndex = state.repos.findIndex((repo) =>
     samePath(repo.sourceRoot, state.rootSourceRoot)
   );
@@ -446,7 +439,7 @@ function assertInvocationSessionScope(
   home: string,
   invocation: ReturnType<typeof resolveRepoContext>,
   state: SessionState
-): void {
+) {
   assertSessionIdentity(home, state);
   assertCanonicalSourceCheckout(runtime, state.rootSourceRoot);
   const repo = state.repos.find(
@@ -464,7 +457,7 @@ function assertInvocationSessionScope(
   }
 }
 
-function assertUniqueSessionRecords(state: SessionState): void {
+function assertUniqueSessionRecords(state: SessionState) {
   const sourceRoots = new Set<string>();
   const worktreePaths = new Set<string>();
   for (const repo of state.repos) {
@@ -485,7 +478,7 @@ function assertUniqueSessionRecords(state: SessionState): void {
   }
 }
 
-function assertNoOtherStateOwnsSessionRepos(state: SessionState, allStates: SessionState[]): void {
+function assertNoOtherStateOwnsSessionRepos(state: SessionState, allStates: SessionState[]) {
   const paths = new Set(state.repos.map((repo) => path.normalize(repo.worktreePath)));
   for (const other of allStates) {
     if (
@@ -507,7 +500,7 @@ function orderSessionRemovals(
   repos: SessionRepoPreflight[],
   invocationWorktreePath: string,
   rootSourceRoot: string
-): SessionRepoPreflight[] {
+) {
   return [...repos].toSorted((left, right) => {
     const leftRank = removalRank(left.repo, invocationWorktreePath, rootSourceRoot);
     const rightRank = removalRank(right.repo, invocationWorktreePath, rootSourceRoot);
@@ -519,7 +512,7 @@ function removalRank(
   repo: SessionRepoState,
   invocationWorktreePath: string,
   rootSourceRoot: string
-): number {
+) {
   if (samePath(repo.worktreePath, invocationWorktreePath)) {
     return 2;
   }
@@ -529,11 +522,7 @@ function removalRank(
   return 0;
 }
 
-function findSessionOwner(
-  states: SessionState[],
-  worktreePath: string,
-  sourceRoot?: string
-): SessionState | null {
+function findSessionOwner(states: SessionState[], worktreePath: string, sourceRoot?: string) {
   const matches = states.filter((state) =>
     state.repos.some(
       (repo) =>
@@ -547,11 +536,7 @@ function findSessionOwner(
   return matches[0] ?? null;
 }
 
-function findRetainedSessionForSource(
-  states: SessionState[],
-  session: string,
-  sourceRoot: string
-): SessionState | null {
+function findRetainedSessionForSource(states: SessionState[], session: string, sourceRoot: string) {
   const matches = states.filter(
     (state) =>
       state.session === session &&
@@ -570,7 +555,7 @@ function resolveOrdinaryTarget(
   runtime: Runtime,
   invocation: ReturnType<typeof resolveRepoContext>,
   target: string | undefined
-): { path: string; registered: boolean } {
+) {
   if (target === undefined) {
     return { path: invocation.worktreeRoot, registered: true };
   }
@@ -609,13 +594,13 @@ function resolveOrdinaryTarget(
   };
 }
 
-function assertOutsideManagedWorktrees(home: string, worktreePath: string): void {
+function assertOutsideManagedWorktrees(home: string, worktreePath: string) {
   if (isManagedWorktreePath(home, worktreePath)) {
     throw new MonkeError(`Cannot Chop managed worktree ${worktreePath} as an Ordinary worktree`);
   }
 }
 
-function isManagedWorktreePath(home: string, worktreePath: string): boolean {
+function isManagedWorktreePath(home: string, worktreePath: string) {
   const relative = path.relative(path.join(home, "worktrees"), worktreePath);
   return !(path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`));
 }
@@ -625,12 +610,12 @@ function removeWorktree(
   sourceRoot: string,
   worktreePath: string,
   options: { force: boolean }
-): void {
+) {
   runtime.exec("git", ["worktree", "remove", ...(options.force ? ["--force"] : []), worktreePath], {
     cwd: sourceRoot
   });
 }
 
-function samePath(left: string, right: string): boolean {
+function samePath(left: string, right: string) {
   return path.normalize(left) === path.normalize(right);
 }

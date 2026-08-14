@@ -13,13 +13,13 @@ import { runSwing, runSwingInteractive } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 
 /** Run the Monke Tools CLI. */
-export function runCli(argv: string[], runtime = createRuntime()): void {
+export function runCli(argv: string[], runtime = createRuntime()) {
   const program = createProgram(runtime, runSwing, runDiff);
   program.parse(argv, { from: "user" });
 }
 
 /** Run the Monke Tools CLI with async interactive prompts enabled. */
-export async function runCliAsync(argv: string[], runtime = createRuntime()): Promise<void> {
+export async function runCliAsync(argv: string[], runtime = createRuntime()) {
   const program = createProgram(runtime, runSwingInteractive, runDiffInteractive);
   await program.parseAsync(argv, { from: "user" });
 }
@@ -32,7 +32,7 @@ function createProgram(
     options: { codex?: boolean }
   ) => void | Promise<void>,
   diffAction: (runtime: Runtime, options: { pick?: boolean }) => void | Promise<void>
-): Command {
+) {
   // Subcommands copy these at .command() time, so every subcommand below must be declared after.
   const program = new Command().name("mt").allowExcessArguments(false);
 

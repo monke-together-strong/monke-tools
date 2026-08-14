@@ -119,7 +119,7 @@ export interface MergedCleanupLookupCache {
   repositoryBySourceRoot: Map<string, LookupResult>;
 }
 
-export function createMergedCleanupLookupCache(): MergedCleanupLookupCache {
+export function createMergedCleanupLookupCache() {
   return {
     defaultBranchBySourceRoot: new Map(),
     repositoryBySourceRoot: new Map()
@@ -131,7 +131,7 @@ export function inspectMergedWorktreeCleanup(
   runtime: Runtime,
   candidate: MergedCleanupCandidate,
   options: { cache?: MergedCleanupLookupCache; refreshDefaultBranch?: boolean } = {}
-): MergedCleanupDecision {
+) {
   let defaultBranch = options.cache?.defaultBranchBySourceRoot.get(candidate.sourceRoot);
   if (!defaultBranch) {
     defaultBranch = getDefaultBranch(runtime, candidate.sourceRoot, {
@@ -173,9 +173,7 @@ export function inspectMergedWorktreeCleanup(
 }
 
 /** Decide whether a collected worktree snapshot satisfies the merge-cleanable predicate. */
-export function decideMergedWorktreeCleanup(
-  snapshot: MergedCleanupSnapshot
-): MergedCleanupDecision {
+export function decideMergedWorktreeCleanup(snapshot: MergedCleanupSnapshot) {
   const reasons: string[] = [];
   const evidence: string[] = [];
 
@@ -199,7 +197,7 @@ function validateWorktreeIdentity(
   snapshot: MergedCleanupSnapshot,
   reasons: string[],
   evidence: string[]
-): boolean {
+) {
   if (!snapshot.worktreeExists) {
     reasons.push("session worktree path is missing");
   } else if (!snapshot.worktreeIsGitRoot) {
@@ -223,7 +221,7 @@ function validateSessionBranch(
   snapshot: MergedCleanupSnapshot,
   reasons: string[],
   evidence: string[]
-): boolean {
+) {
   if (!snapshot.branch) {
     reasons.push("worktree is detached");
   } else if (snapshot.branch === snapshot.session) {
@@ -235,11 +233,7 @@ function validateSessionBranch(
   return false;
 }
 
-function validateMergedPr(
-  snapshot: MergedCleanupSnapshot,
-  reasons: string[],
-  evidence: string[]
-): void {
+function validateMergedPr(snapshot: MergedCleanupSnapshot, reasons: string[], evidence: string[]) {
   if (snapshot.lookupError) {
     reasons.push(snapshot.lookupError);
     return;
@@ -276,7 +270,7 @@ function validateMergedPrHead(
   match: MergedPrMatch,
   reasons: string[],
   evidence: string[]
-): void {
+) {
   if (!match.headRefOid) {
     reasons.push("merged PR match did not include headRefOid");
   } else if (!localHead) {
@@ -294,7 +288,7 @@ function validateCleanWorktree(
   snapshot: MergedCleanupSnapshot,
   reasons: string[],
   evidence: string[]
-): void {
+) {
   if (snapshot.statusError) {
     reasons.push(snapshot.statusError);
   } else if (snapshot.statusLines.length > 0) {
@@ -305,10 +299,7 @@ function validateCleanWorktree(
 }
 
 /** Remove one worktree after its merge-cleanable decision has already passed. */
-export function removeMergeCleanableWorktree(
-  runtime: Runtime,
-  candidate: MergedCleanupCandidate
-): void {
+export function removeMergeCleanableWorktree(runtime: Runtime, candidate: MergedCleanupCandidate) {
   // Plain remove deletes ignored artifacts while still refusing dirty/untracked race additions.
   runtime.exec("git", ["worktree", "remove", candidate.worktreePath], {
     cwd: candidate.sourceRoot
@@ -323,7 +314,7 @@ function buildMergedCleanupSnapshot(
     matchingMergedPrs: MergedPrMatch[];
     repositoryFullName: string | null;
   }
-): MergedCleanupSnapshot {
+) {
   const worktree = inspectWorktree(runtime, options);
 
   return {
@@ -338,20 +329,7 @@ function buildMergedCleanupSnapshot(
   };
 }
 
-function inspectWorktree(
-  runtime: Runtime,
-  options: MergedCleanupCandidate
-): Pick<
-  MergedCleanupSnapshot,
-  | "branch"
-  | "isSourceCheckout"
-  | "localHead"
-  | "sameGitRepository"
-  | "statusError"
-  | "statusLines"
-  | "worktreeExists"
-  | "worktreeIsGitRoot"
-> {
+function inspectWorktree(runtime: Runtime, options: MergedCleanupCandidate) {
   const identity = inspectWorktreeIdentity(runtime, options);
   return {
     ...identity,
@@ -359,13 +337,7 @@ function inspectWorktree(
   };
 }
 
-function inspectWorktreeIdentity(
-  runtime: Runtime,
-  options: MergedCleanupCandidate
-): Pick<
-  MergedCleanupSnapshot,
-  "isSourceCheckout" | "sameGitRepository" | "worktreeExists" | "worktreeIsGitRoot"
-> {
+function inspectWorktreeIdentity(runtime: Runtime, options: MergedCleanupCandidate) {
   const worktreeExists = existsSync(options.worktreePath);
   const expectedCommonDir = tryGit(runtime, options.sourceRoot, [
     "rev-parse",
@@ -407,11 +379,7 @@ function inspectWorktreeIdentity(
   };
 }
 
-function inspectWorktreeState(
-  runtime: Runtime,
-  worktreePath: string,
-  worktreeIsGitRoot: boolean
-): Pick<MergedCleanupSnapshot, "branch" | "localHead" | "statusError" | "statusLines"> {
+function inspectWorktreeState(runtime: Runtime, worktreePath: string, worktreeIsGitRoot: boolean) {
   const branchResult = worktreeIsGitRoot
     ? tryGit(runtime, worktreePath, ["rev-parse", "--abbrev-ref", "HEAD"])
     : null;
@@ -520,7 +488,7 @@ function queryMergedPrs(
   }
 }
 
-function normalizeMergedPrMatch(value: unknown): MergedPrMatch {
+function normalizeMergedPrMatch(value: unknown) {
   const parsed = MergedPrInputSchema.safeParse(value);
   const record = parsed.success ? parsed.data : {};
   return {
@@ -536,7 +504,7 @@ function normalizeMergedPrMatch(value: unknown): MergedPrMatch {
   };
 }
 
-function isSameRepositoryPr(match: MergedPrMatch, repositoryFullName: string | null): boolean {
+function isSameRepositoryPr(match: MergedPrMatch, repositoryFullName: string | null) {
   if (!repositoryFullName) {
     return false;
   }
@@ -572,14 +540,14 @@ function tryGit(
   }
 }
 
-function splitLines(value: string): string[] {
+function splitLines(value: string) {
   return value
     .split("\n")
     .map((line) => line.trimEnd())
     .filter(Boolean);
 }
 
-function realpathOrNull(targetPath: string): string | null {
+function realpathOrNull(targetPath: string) {
   try {
     return realpathSync(targetPath);
   } catch {
@@ -587,10 +555,10 @@ function realpathOrNull(targetPath: string): string | null {
   }
 }
 
-function commandDetail(result: { exitCode: number; stderr: string; stdout: string }): string {
+function commandDetail(result: { exitCode: number; stderr: string; stdout: string }) {
   return result.stderr.trim() || result.stdout.trim() || `exit code ${result.exitCode}`;
 }
 
-function shortSha(sha: string): string {
+function shortSha(sha: string) {
   return sha.slice(0, 8);
 }

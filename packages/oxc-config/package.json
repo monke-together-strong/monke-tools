@@ -39,7 +39,7 @@
   "dependencies": {
     "eslint-plugin-jsdoc": "63.3.3",
     "eslint-plugin-perfectionist": "5.10.1",
-    "ultracite": "7.9.4"
+    "ultracite": "7.10.4"
   },
   "devDependencies": {
     "oxfmt": "0.62.0",

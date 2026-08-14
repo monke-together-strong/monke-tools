@@ -95,7 +95,7 @@ DATABASE_URL=${malformedDsn}
   });
 });
 
-function captureThrowMessage(action: () => void): string {
+function captureThrowMessage(action: () => void) {
   try {
     action();
   } catch (error) {

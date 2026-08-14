@@ -934,7 +934,7 @@ function createResourceCommandScenario(options: {
     ...options.files
   });
 
-  const worktree = (session: string): string => getExpectedWorktreePath(home, repoRoot, session);
+  const worktree = (session: string) => getExpectedWorktreePath(home, repoRoot, session);
 
   return {
     cleanup() {
@@ -987,7 +987,7 @@ function singleCommandMonkeYml(options: {
   resourceValuesYaml?: string;
   run?: string;
   timeoutSeconds?: number;
-}): string {
+}) {
   const resourceValues = options.resourceValuesYaml
     ? `  values:\n${indentBlock(options.resourceValuesYaml, 4)}\n`
     : "";
@@ -1001,20 +1001,20 @@ ${resourceValues}  commands:
 ${outputs.map((output) => `        - ${output}`).join("\n")}`);
 }
 
-function moduleFilePath(run = "./scripts/resource-command.ts"): string {
+function moduleFilePath(run = "./scripts/resource-command.ts") {
   return path.normalize(run);
 }
 
-function appOnlyMonkeYml(): string {
+function appOnlyMonkeYml() {
   return defaultAppYaml();
 }
 
-function withDefaultApp(prefix: string): string {
+function withDefaultApp(prefix: string) {
   return `${prefix}
 ${defaultAppYaml()}`;
 }
 
-function defaultAppYaml(): string {
+function defaultAppYaml() {
   return `apps:
   api:
     path: apps/api
@@ -1025,7 +1025,7 @@ function defaultAppYaml(): string {
 `;
 }
 
-function indentBlock(value: string, spaces: number): string {
+function indentBlock(value: string, spaces: number) {
   const indentation = " ".repeat(spaces);
   return value
     .split("\n")
@@ -1033,7 +1033,7 @@ function indentBlock(value: string, spaces: number): string {
     .join("\n");
 }
 
-function installFakePnpmBootstrapper(binDirectory: string): void {
+function installFakePnpmBootstrapper(binDirectory: string) {
   const executablePath = path.join(binDirectory, "pnpm");
   write(
     binDirectory,

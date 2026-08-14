@@ -35,11 +35,11 @@ const SHARED_SKILL_SOURCE_FOLDERS = ["internal", "imported"] as const;
 const SHARED_NAMESPACE_SOURCE_FOLDERS = ["imported", "internal", "references"] as const;
 const CODEX_NAMESPACE_SOURCE_FOLDERS = ["codex", ...SHARED_NAMESPACE_SOURCE_FOLDERS] as const;
 
-const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
+const BUILT_IN_TARGET_ROOTS = {
   claude: path.join(".claude", "skills"),
   codex: path.join(".codex", "skills"),
   cursor: path.join(".cursor", "skills")
-};
+} satisfies Record<BuiltInSkillInstallTargetKind, string>;
 type SkillInstallLayout = "namespace" | "flat";
 // Flip Claude back to "namespace" to restore the original symlink layout.
 const CLAUDE_SKILL_INSTALL_LAYOUT: SkillInstallLayout = "flat";
@@ -65,7 +65,7 @@ export interface ResolvedSkillInstallTarget {
 export function resolveSkillInstallTargets(options: {
   homeDirectory: string;
   preference: SkillInstallPreference;
-}): ResolvedSkillInstallTarget[] {
+}) {
   return options.preference.targets.map((target) => {
     const agentSkillRoot =
       target.kind === "custom"
@@ -84,7 +84,7 @@ export function resolveSkillInstallTargets(options: {
 }
 
 /** Prompt for a Skill install preference, save it, and reconcile selected Agent skill roots. */
-export async function runSkillsConfigure(runtime: Runtime): Promise<void> {
+export async function runSkillsConfigure(runtime: Runtime) {
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
@@ -120,10 +120,7 @@ export async function runSkillsConfigure(runtime: Runtime): Promise<void> {
 }
 
 /** Record the Installed source checkout and refresh or configure Distributed skill targets. */
-export async function runLocalInstallSkills(
-  runtime: Runtime,
-  sourceCheckout: string
-): Promise<void> {
+export async function runLocalInstallSkills(runtime: Runtime, sourceCheckout: string) {
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
@@ -159,7 +156,7 @@ export function reconcileSkillNamespaces(options: {
   previousPreference: SkillInstallPreference | null;
   sourceCheckout: string;
   writeMessage: (message: string) => void;
-}): void {
+}) {
   const skillSourceTree = resolveSkillSourceTree(options.sourceCheckout);
   const previousTargets =
     options.previousPreference === null
@@ -206,7 +203,7 @@ export function reconcileSkillNamespaces(options: {
 }
 
 /** Normalize one custom Agent skill root path for storage in Global monke config. */
-function normalizeCustomSkillRoot(options: { homeDirectory: string; input: string }): string {
+function normalizeCustomSkillRoot(options: { homeDirectory: string; input: string }) {
   const trimmed = options.input.trim();
   if (!trimmed) {
     throw new MonkeError("Custom Skill install target path must be a non-empty absolute path");
@@ -231,7 +228,7 @@ async function promptForSkillInstallPreference(
   runtime: Runtime,
   previousPreference: SkillInstallPreference | null,
   homeDirectory: string
-): Promise<SkillInstallPreference> {
+) {
   const selectedKinds = parseBoundaryValue(
     z.array(SkillInstallTargetKindSchema),
     await runtime.multiSelect({
@@ -277,7 +274,7 @@ function resolveCustomSkillRootAnswer(options: {
   answer: string;
   homeDirectory: string;
   previousPath: string | undefined;
-}): string {
+}) {
   if (options.answer.trim() === "" && options.previousPath) {
     return options.previousPath;
   }
@@ -288,7 +285,7 @@ function resolveCustomSkillRootAnswer(options: {
   });
 }
 
-function resolveSkillSourceTree(sourceCheckout: string): string {
+function resolveSkillSourceTree(sourceCheckout: string) {
   const resolvedCheckout = path.resolve(sourceCheckout);
   if (!existsSync(resolvedCheckout)) {
     throw new MonkeError(`Installed source checkout is missing: ${resolvedCheckout}`);
@@ -302,7 +299,7 @@ function resolveSkillSourceTree(sourceCheckout: string): string {
   return skillSourceTree;
 }
 
-function reconcileOneTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string): void {
+function reconcileOneTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
   if (skillInstallLayoutForTarget(target) === "flat") {
     reconcileFlatTarget(target, skillSourceTree);
     return;
@@ -311,10 +308,7 @@ function reconcileOneTarget(target: ResolvedSkillInstallTarget, skillSourceTree:
   reconcileNamespaceTarget(target, skillSourceTree);
 }
 
-function reconcileNamespaceTarget(
-  target: ResolvedSkillInstallTarget,
-  skillSourceTree: string
-): void {
+function reconcileNamespaceTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
   mkdirSync(target.agentSkillRoot, { recursive: true });
   if (target.kind === "claude") {
     removeFlatManagedLinks(target);
@@ -352,7 +346,7 @@ function reconcileNamespaceTarget(
   }
 }
 
-function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string): void {
+function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
   mkdirSync(target.agentSkillRoot, { recursive: true });
   removeManagedNamespace(target);
 
@@ -391,14 +385,14 @@ function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree
   writeFlatManifest(target, links, supportingLinks);
 }
 
-function removeManagedTarget(target: ResolvedSkillInstallTarget): void {
+function removeManagedTarget(target: ResolvedSkillInstallTarget) {
   if (target.kind === "claude") {
     removeFlatManagedLinks(target);
   }
   removeManagedNamespace(target);
 }
 
-function removeManagedNamespace(target: ResolvedSkillInstallTarget): void {
+function removeManagedNamespace(target: ResolvedSkillInstallTarget) {
   const namespaceStat = lstatIfExists(target.namespacePath);
   if (!namespaceStat) {
     return;
@@ -446,7 +440,7 @@ type FlatSupportingLink = NonNullable<
 >[number];
 type FlatSkillManifest = z.output<typeof FlatSkillManifestSchema>;
 
-function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
+function discoverFlatSkillLinks(skillSourceTree: string) {
   const links = new Map<string, FlatSkillLink>();
 
   for (const categoryName of SHARED_SKILL_SOURCE_FOLDERS) {
@@ -477,10 +471,7 @@ function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
   return [...links.values()].toSorted((left, right) => left.name.localeCompare(right.name));
 }
 
-function discoverFlatSupportingLinks(
-  target: ResolvedSkillInstallTarget,
-  skillSourceTree: string
-): FlatSupportingLink[] {
+function discoverFlatSupportingLinks(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
   const referenceSourceTree = path.join(skillSourceTree, "references");
   if (!existsSync(referenceSourceTree)) {
     return [];
@@ -498,7 +489,7 @@ function assertFlatLinksCanBeManaged(
   target: ResolvedSkillInstallTarget,
   links: FlatSkillLink[],
   previousManifest: FlatSkillManifest | null
-): void {
+) {
   const previousLinks = new Map(
     previousManifest?.links.map((link) => [link.name, link.sourcePath])
   );
@@ -523,7 +514,7 @@ function assertFlatLinksCanBeManaged(
 function assertFlatSupportingLinksCanBeManaged(
   links: FlatSupportingLink[],
   previousManifest: FlatSkillManifest | null
-): void {
+) {
   const previousLinks = new Map(
     previousManifest?.supportingLinks?.map((link) => [link.targetPath, link.sourcePath])
   );
@@ -548,7 +539,7 @@ function assertFlatSupportingLinksCanBeManaged(
   }
 }
 
-function removeFlatManagedLinks(target: ResolvedSkillInstallTarget): void {
+function removeFlatManagedLinks(target: ResolvedSkillInstallTarget) {
   const manifest = readFlatManifest(target);
   if (manifest === null) {
     return;
@@ -574,7 +565,7 @@ function removeFlatManagedLinks(target: ResolvedSkillInstallTarget): void {
   rmSync(flatManifestPath(target), { force: true });
 }
 
-function readFlatManifest(target: ResolvedSkillInstallTarget): FlatSkillManifest | null {
+function readFlatManifest(target: ResolvedSkillInstallTarget) {
   const manifestPath = flatManifestPath(target);
   if (!existsSync(manifestPath)) {
     return null;
@@ -598,7 +589,7 @@ function writeFlatManifest(
   target: ResolvedSkillInstallTarget,
   links: FlatSkillLink[],
   supportingLinks: FlatSupportingLink[]
-): void {
+) {
   const manifest: FlatSkillManifest = {
     links,
     managedBy: "monke-tools",
@@ -612,11 +603,11 @@ function writeFlatManifest(
   renameSync(`${manifestPath}.tmp`, manifestPath);
 }
 
-function flatManifestPath(target: ResolvedSkillInstallTarget): string {
+function flatManifestPath(target: ResolvedSkillInstallTarget) {
   return path.join(target.agentSkillRoot, FLAT_SKILL_MANIFEST);
 }
 
-function skillInstallLayoutForTarget(target: ResolvedSkillInstallTarget): SkillInstallLayout {
+function skillInstallLayoutForTarget(target: ResolvedSkillInstallTarget) {
   if (target.kind === "claude") {
     return CLAUDE_SKILL_INSTALL_LAYOUT;
   }
@@ -624,7 +615,7 @@ function skillInstallLayoutForTarget(target: ResolvedSkillInstallTarget): SkillI
   return "namespace";
 }
 
-function managedLocation(target: ResolvedSkillInstallTarget): string {
+function managedLocation(target: ResolvedSkillInstallTarget) {
   if (skillInstallLayoutForTarget(target) === "flat") {
     return target.agentSkillRoot;
   }
@@ -632,7 +623,7 @@ function managedLocation(target: ResolvedSkillInstallTarget): string {
   return target.namespacePath;
 }
 
-function lstatIfExists(targetPath: string): ReturnType<typeof lstatSync> | null {
+function lstatIfExists(targetPath: string) {
   try {
     return lstatSync(targetPath);
   } catch (error) {
@@ -644,11 +635,11 @@ function lstatIfExists(targetPath: string): ReturnType<typeof lstatSync> | null 
   }
 }
 
-function targetKey(target: ResolvedSkillInstallTarget): string {
+function targetKey(target: ResolvedSkillInstallTarget) {
   return `${target.kind}:${target.agentSkillRoot}`;
 }
 
-function expandHomeDirectory(input: string, homeDirectory: string): string {
+function expandHomeDirectory(input: string, homeDirectory: string) {
   if (input === "~") {
     return homeDirectory;
   }

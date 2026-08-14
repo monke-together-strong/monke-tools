@@ -94,7 +94,7 @@ function bundleWith(refs: string[]): RepoBundle {
   };
 }
 
-function writeWindow(root: string, runTs = "ts"): void {
+function writeWindow(root: string, runTs = "ts") {
   const runDir = path.join(root, "runs", runTs);
   mkdirSync(runDir, { recursive: true });
   writeFileSync(
@@ -122,7 +122,7 @@ describe("agent session retrospective", () => {
     rmSync(dir, { force: true, recursive: true });
   });
 
-  function jsonl(lines: unknown[]): string {
+  function jsonl(lines: unknown[]) {
     const filePath = path.join(dir, "transcript.jsonl");
     writeFileSync(filePath, lines.map((line) => JSON.stringify(line)).join("\n"), "utf-8");
     return filePath;
@@ -290,6 +290,24 @@ describe("agent session retrospective", () => {
       expect(session?.threadSource).toBe("subagent");
       expect(session?.parentSessionId).toBeNull();
     });
+
+    test("keeps activity from unknown record kinds", () => {
+      const filePath = jsonl([
+        {
+          payload: { cwd: dir, id: "session-with-unknown-activity" },
+          timestamp: "2026-05-26T10:00:00Z",
+          type: "session_meta"
+        },
+        {
+          payload: { type: "context_compacted" },
+          timestamp: "2026-05-26T10:05:00Z",
+          type: "event_msg"
+        }
+      ]);
+
+      const session = parseCodexSession(filePath);
+      expect(session?.lastActivityAt).toBe("2026-05-26T10:05:00Z");
+    });
   });
 
   describe("Claude collector", () => {
@@ -372,6 +390,27 @@ describe("agent session retrospective", () => {
       const tool = parseClaudeSession(filePath)?.turns[0];
       expect(tool?.kind).toBe("tool_call");
       expect(tool?.kind === "tool_call" && tool.outputHeadTail).toBe("already finished");
+    });
+
+    test("keeps metadata and activity from unknown record kinds", () => {
+      const filePath = jsonl([
+        {
+          cwd: dir,
+          sessionId: "claude-metadata-envelope",
+          timestamp: "2026-05-26T10:00:00Z",
+          type: "progress"
+        },
+        {
+          message: { content: [{ text: "continuing", type: "text" }] },
+          timestamp: "2026-05-26T10:05:00Z",
+          type: "assistant"
+        }
+      ]);
+
+      const session = parseClaudeSession(filePath);
+      expect(session?.sessionId).toBe("claude-metadata-envelope");
+      expect(session?.cwd).toBe(dir);
+      expect(session?.lastActivityAt).toBe("2026-05-26T10:05:00Z");
     });
   });
 
@@ -1060,7 +1099,7 @@ describe("agent session retrospective", () => {
             throw new Error(`unexpected pr list fields: ${args.at(-1)}`);
           }
           const search = args[args.indexOf("--search") + 1] ?? "";
-          const byDay: Record<string, unknown[]> = {
+          const byDay = {
             "merged:2026-05-21..2026-05-21": [
               {
                 createdAt: "2026-05-20T10:00:00Z",
@@ -1098,18 +1137,20 @@ describe("agent session retrospective", () => {
               }
             ]
           };
-          return { status: 0, stderr: "", stdout: JSON.stringify(byDay[search] ?? []) };
+          const response = Object.entries(byDay).find(([key]) => key === search)?.[1] ?? [];
+          return { status: 0, stderr: "", stdout: JSON.stringify(response) };
         }
         if (command === "gh" && args[0] === "pr" && args[1] === "view") {
           const number = args[2] ?? "";
           const fields = args.at(-1);
           if (fields === "files") {
-            const filesByNumber: Record<string, unknown> = {
+            const filesByNumber = {
               "10": { files: [{ path: "docs.md" }] },
               "7": { files: [{ path: "setup.ts" }] },
               "9": { files: [] }
             };
-            return { status: 0, stderr: "", stdout: JSON.stringify(filesByNumber[number]) };
+            const response = Object.entries(filesByNumber).find(([key]) => key === number)?.[1];
+            return { status: 0, stderr: "", stdout: JSON.stringify(response) };
           }
           if (
             fields !==
@@ -1117,7 +1158,7 @@ describe("agent session retrospective", () => {
           ) {
             throw new Error(`unexpected pr view fields: ${fields}`);
           }
-          const detailsByNumber: Record<string, unknown> = {
+          const detailsByNumber = {
             "10": {
               baseRefName: "main",
               commits: [
@@ -1173,7 +1214,8 @@ describe("agent session retrospective", () => {
               url: "https://github.com/monke-together-strong/alpha/pull/9"
             }
           };
-          return { status: 0, stderr: "", stdout: JSON.stringify(detailsByNumber[number]) };
+          const response = Object.entries(detailsByNumber).find(([key]) => key === number)?.[1];
+          return { status: 0, stderr: "", stdout: JSON.stringify(response) };
         }
         if (command === "gh" && args[0] === "pr" && args[1] === "diff") {
           return {
@@ -1434,7 +1476,7 @@ describe("agent session retrospective", () => {
       const codexRoot = path.join(dir, "codex");
       const dayDir = path.join(codexRoot, "sessions", "2026", "05", "26");
       mkdirSync(dayDir, { recursive: true });
-      const writeCodex = (name: string, turns: number): void => {
+      const writeCodex = (name: string, turns: number) => {
         const lines: unknown[] = [
           {
             payload: { cwd: dir, id: "dup-1" },

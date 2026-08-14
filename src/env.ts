@@ -26,7 +26,7 @@ export function seedWorktreeFiles(
   config: RepoConfig,
   worktreeRoot: string,
   onWarning?: (message: string) => void
-): void {
+) {
   const seededPaths = new Set<string>();
 
   for (const relativePath of listEnvFiles(config.sourceRoot)) {
@@ -39,9 +39,7 @@ export function seedWorktreeFiles(
 }
 
 /** Collect content-root ports that local session allocations should avoid. */
-export function collectBaselinePortsFromRoot(
-  options: CollectBaselinePortsFromRootOptions
-): Set<number> {
+export function collectBaselinePortsFromRoot(options: CollectBaselinePortsFromRootOptions) {
   const ports = new Set<number>();
 
   for (const app of options.config.appsInOrder) {
@@ -74,7 +72,7 @@ export function rewriteManagedEnvFiles(
   worktreeRoot: string,
   localAssignments: Map<string, number>,
   externalAssignments: AssignedPort[]
-): void {
+) {
   const externalValuesByKey = new Map(
     externalAssignments.map((assignment) => [assignment.key, assignment.value])
   );
@@ -119,7 +117,7 @@ export function rewriteManagedEnvFiles(
 export function syncRootEnvFile(
   worktreeRoot: string,
   assignments: { env: string; value: string }[]
-): void {
+) {
   syncRootEnvFileWithRemovals(worktreeRoot, assignments, []);
 }
 
@@ -128,7 +126,7 @@ export function syncRootEnvFileWithRemovals(
   worktreeRoot: string,
   assignments: { env: string; value: string }[],
   removedEnvNames: string[]
-): void {
+) {
   if (assignments.length === 0 && removedEnvNames.length === 0) {
     return;
   }
@@ -173,7 +171,7 @@ export function syncRootEnvFileWithRemovals(
   writeFileSync(envPath, rewritten.length > 0 ? `${rewritten.join("\n")}\n` : "", "utf-8");
 }
 
-export function rewriteEnvFile(filePath: string, requests: Map<string, number>): void {
+export function rewriteEnvFile(filePath: string, requests: Map<string, number>) {
   const original = readFileSync(filePath, "utf-8");
   const lines = original.split("\n");
   const touched = new Set<string>();
@@ -202,7 +200,7 @@ export function rewriteEnvFile(filePath: string, requests: Map<string, number>):
   writeFileSync(filePath, rewritten.join("\n"), "utf-8");
 }
 
-function listEnvFiles(root: string, relativeRoot = ""): string[] {
+function listEnvFiles(root: string, relativeRoot = "") {
   const absoluteRoot = path.join(root, relativeRoot);
   const results: string[] = [];
 
@@ -225,7 +223,7 @@ function listEnvFiles(root: string, relativeRoot = ""): string[] {
   return results;
 }
 
-function isEnvSeedFile(fileName: string): boolean {
+function isEnvSeedFile(fileName: string) {
   return fileName === ".env" || fileName.startsWith(".env.");
 }
 
@@ -236,7 +234,7 @@ function seedRelativePath(
   warnIfMissing: boolean,
   seededPaths: Set<string>,
   onWarning?: (message: string) => void
-): void {
+) {
   const normalizedRelativePath = path.normalize(relativePath);
   if (seededPaths.has(normalizedRelativePath)) {
     return;
@@ -283,7 +281,7 @@ function seedRelativePath(
   copyFileSync(sourcePath, targetPath);
 }
 
-function readActiveAssignments(filePath: string): Map<string, string[]> {
+function readActiveAssignments(filePath: string) {
   const values = new Map<string, string[]>();
   for (const line of readFileSync(filePath, "utf-8").split("\n")) {
     const parsed = parseAssignmentLine(line);
@@ -297,14 +295,7 @@ function readActiveAssignments(filePath: string): Map<string, string[]> {
   return values;
 }
 
-interface ParsedAssignmentLine {
-  comment: string;
-  key: string;
-  prefix: string;
-  rawValue: string;
-}
-
-function parseAssignmentLine(line: string): ParsedAssignmentLine | null {
+function parseAssignmentLine(line: string) {
   if (!line.trim() || /^\s*#/u.test(line)) {
     return null;
   }
@@ -327,11 +318,11 @@ function parseAssignmentLine(line: string): ParsedAssignmentLine | null {
   };
 }
 
-function stripTrailingNewline(text: string): string {
+function stripTrailingNewline(text: string) {
   return text.endsWith("\n") ? text.slice(0, -1) : text;
 }
 
-function splitValueAndComment(value: string): { comment: string; value: string } {
+function splitValueAndComment(value: string) {
   let quote: "'" | '"' | null = null;
 
   for (let index = 0; index < value.length; index += 1) {
@@ -355,11 +346,11 @@ function splitValueAndComment(value: string): { comment: string; value: string }
   return { comment: "", value };
 }
 
-function describeRedactedValue(value: string): string {
+function describeRedactedValue(value: string) {
   return `<redacted length=${value.length}>`;
 }
 
-function replacePortInValue(rawValue: string, newPort: number, location: string): string {
+function replacePortInValue(rawValue: string, newPort: number, location: string) {
   const leadingWhitespace = /^\s*/u.exec(rawValue)?.[0] ?? "";
   const trailingWhitespace = /\s*$/u.exec(rawValue)?.[0] ?? "";
   const trimmed = rawValue.trim();
@@ -393,7 +384,7 @@ function replacePortInValue(rawValue: string, newPort: number, location: string)
   return `${leadingWhitespace}${nextCore}${trailingWhitespace}`;
 }
 
-function replaceUrlPort(value: string, newPort: number, location: string): string {
+function replaceUrlPort(value: string, newPort: number, location: string) {
   let parsed: URL;
   try {
     parsed = new URL(value);
@@ -448,7 +439,7 @@ function replaceUrlPort(value: string, newPort: number, location: string): strin
   return `${value.slice(0, absolutePortStart)}${newPort}${value.slice(absolutePortEnd)}`;
 }
 
-function extractPort(rawValue: string, location: string): number {
+function extractPort(rawValue: string, location: string) {
   const trimmed = rawValue.trim();
   if (!trimmed) {
     throw new MonkeError(`Empty env value at ${location}`);
@@ -488,11 +479,7 @@ function extractPort(rawValue: string, location: string): number {
   return Number(parsed.port);
 }
 
-function requireAssignedPort(
-  assignments: Map<string, number>,
-  key: string,
-  appLabel: string
-): number {
+function requireAssignedPort(assignments: Map<string, number>, key: string, appLabel: string) {
   const value = assignments.get(key);
   if (value === undefined) {
     throw new MonkeError(`Missing assigned local port ${key} for ${appLabel}`);

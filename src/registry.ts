@@ -7,13 +7,7 @@ import * as z from "zod";
 import { MonkeError } from "./errors.ts";
 import { ensureDirectory, hashKey, isPortAvailable } from "./runtime.ts";
 import { RepoReservationSchema, SessionStateSchema } from "./state-schema.ts";
-import type {
-  AssignedPort,
-  RepoConfig,
-  RepoReservation,
-  SessionRepoState,
-  SessionState
-} from "./types.ts";
+import type { RepoConfig, RepoReservation, SessionRepoState, SessionState } from "./types.ts";
 import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
 
 const GLOBAL_PORT_FLOOR = 10_000;
@@ -48,7 +42,7 @@ export function loadSessionState(
   return parseOwnedYamlFile(filePath, SessionStateSchema);
 }
 
-export function saveSessionState(home: string, state: unknown): void {
+export function saveSessionState(home: string, state: unknown) {
   const identity = SessionStateIdentitySchema.safeParse(state);
   const label = identity.success
     ? getSessionStateFilePath(home, identity.data.rootSourceRoot, identity.data.session)
@@ -59,11 +53,11 @@ export function saveSessionState(home: string, state: unknown): void {
   writeFileSync(filePath, stringify(parsed), "utf-8");
 }
 
-export function removeSessionState(home: string, rootSourceRoot: string, session: string): void {
+export function removeSessionState(home: string, rootSourceRoot: string, session: string) {
   rmSync(getSessionStateFilePath(home, rootSourceRoot, session), { force: true });
 }
 
-export function listSessionStates(home: string): SessionState[] {
+export function listSessionStates(home: string) {
   return listSessionStateFiles(home).map((filePath) =>
     parseOwnedYamlFile(filePath, SessionStateSchema)
   );
@@ -75,10 +69,7 @@ export function listSessionStates(home: string): SessionState[] {
  * Invalid state blocks only when it names a participating worktree; broad maintenance remains
  * responsible for reporting unrelated invalid state.
  */
-export function listSessionStatesRelevantToWorktrees(
-  home: string,
-  worktreePaths: string[]
-): SessionState[] {
+export function listSessionStatesRelevantToWorktrees(home: string, worktreePaths: string[]) {
   const states: SessionState[] = [];
   for (const filePath of listSessionStateFiles(home)) {
     try {
@@ -92,7 +83,7 @@ export function listSessionStatesRelevantToWorktrees(
   return states;
 }
 
-export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]): void {
+export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]) {
   const recordedRoots = state.repos.map((repo) => repo.sourceRoot);
   for (const [index, recordedRoot] of recordedRoots.entries()) {
     if (expectedOrder[index] !== recordedRoot) {
@@ -103,11 +94,7 @@ export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]
   }
 }
 
-export function getOrCreateReservation(
-  home: string,
-  sourceRoot: string,
-  size: number
-): RepoReservation | null {
+export function getOrCreateReservation(home: string, sourceRoot: string, size: number) {
   if (size === 0) {
     return null;
   }
@@ -149,7 +136,7 @@ export function allocateLocalPorts(options: {
   reservation: RepoReservation | null;
   rootSourceRoot: string;
   session: string;
-}): Map<string, number> {
+}) {
   const assignments = new Map<string, number>(
     (options.existingRepoState?.assignedPorts ?? []).map((entry) => [entry.key, entry.value])
   );
@@ -221,17 +208,14 @@ export function allocateLocalPorts(options: {
   return assignments;
 }
 
-export function toAssignedPorts(
-  repoConfig: RepoConfig,
-  assignments: Map<string, number>
-): AssignedPort[] {
+export function toAssignedPorts(repoConfig: RepoConfig, assignments: Map<string, number>) {
   return repoConfig.localPortOrder.map((key) => ({
     key,
     value: requireAssignment(assignments, key, repoConfig.sourceRoot)
   }));
 }
 
-export function recordRepoSuccess(state: SessionState, repoState: SessionRepoState): SessionState {
+export function recordRepoSuccess(state: SessionState, repoState: SessionRepoState) {
   const existingIndex = state.repos.findIndex((repo) => repo.sourceRoot === repoState.sourceRoot);
   if (existingIndex !== -1) {
     const nextRepos = [...state.repos];
@@ -245,15 +229,11 @@ export function recordRepoSuccess(state: SessionState, repoState: SessionRepoSta
   };
 }
 
-export function getSessionStateFilePath(
-  home: string,
-  rootSourceRoot: string,
-  session: string
-): string {
+export function getSessionStateFilePath(home: string, rootSourceRoot: string, session: string) {
   return path.join(home, "sessions", `${hashKey(`${rootSourceRoot}\u0000${session}`)}.yml`);
 }
 
-function listSessionStateFiles(home: string): string[] {
+function listSessionStateFiles(home: string) {
   const directoryPath = path.join(home, "sessions");
   if (!existsSync(directoryPath)) {
     return [];
@@ -263,7 +243,7 @@ function listSessionStateFiles(home: string): string[] {
     .map((entry) => path.join(directoryPath, entry));
 }
 
-function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: string[]): boolean {
+function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: string[]) {
   try {
     const partial = parseOwnedYamlFile(filePath, SessionStateWorktreePathsSchema);
     return partial.repos.some((repo) =>
@@ -294,15 +274,15 @@ function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: 
   }
 }
 
-function sameWorktreePath(left: string, right: string): boolean {
+function sameWorktreePath(left: string, right: string) {
   return path.normalize(left) === path.normalize(right);
 }
 
-function getReservationFilePath(home: string, sourceRoot: string): string {
+function getReservationFilePath(home: string, sourceRoot: string) {
   return path.join(home, "repo-reservations", `${hashKey(sourceRoot)}.yml`);
 }
 
-function listReservations(home: string): RepoReservation[] {
+function listReservations(home: string) {
   const directoryPath = path.join(home, "repo-reservations");
   if (!existsSync(directoryPath)) {
     return [];
@@ -313,11 +293,7 @@ function listReservations(home: string): RepoReservation[] {
     .map((entry) => parseOwnedYamlFile(path.join(directoryPath, entry), RepoReservationSchema));
 }
 
-function requireAssignment(
-  assignments: Map<string, number>,
-  key: string,
-  repoRoot: string
-): number {
+function requireAssignment(assignments: Map<string, number>, key: string, repoRoot: string) {
   const value = assignments.get(key);
   if (value === undefined) {
     throw new MonkeError(`Missing assigned port ${key} for ${repoRoot}`);

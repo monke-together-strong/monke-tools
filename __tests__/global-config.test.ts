@@ -73,6 +73,6 @@ skillInstallPreference:
   });
 });
 
-function writeInvalidConfig(home: string, contents: string): void {
+function writeInvalidConfig(home: string, contents: string) {
   write(home, "config.yml", contents);
 }

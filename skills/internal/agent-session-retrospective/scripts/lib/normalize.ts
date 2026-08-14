@@ -4,32 +4,30 @@
  * error?, output_head_tail}; elide big payloads. No triviality gate.
  */
 
+import type { JsonValue } from "./transcript-schemas.ts";
+
 const INPUT_SUMMARY_MAX = 200;
 const OUTPUT_HEAD_TAIL_MAX = 600;
 const PROSE_MAX = 4000;
 
-export function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value !== "";
-}
-
 /** One-line summary of a tool's input object or string. */
-export function summarizeInput(input: unknown): string {
+export function summarizeInput(input: JsonValue | undefined) {
   if (input == null) {
     return "";
   }
-  const text = typeof input === "string" ? input : safeStringify(input);
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The transcript adapter already validated this recursive JSON value; this selects its string member for readable summaries.
+  const text = typeof input === "string" ? input : (JSON.stringify(input) ?? "");
   return clip(collapseWhitespace(text), INPUT_SUMMARY_MAX);
 }
 
 /** Head + tail of tool output; the middle of long output is elided. */
-export function summarizeOutput(output: unknown): string | undefined {
+export function summarizeOutput(output: string | undefined) {
   if (output == null) {
-    return undefined;
+    return;
   }
-  const text = typeof output === "string" ? output : safeStringify(output);
-  const trimmed = text.trim();
+  const trimmed = output.trim();
   if (!trimmed) {
-    return undefined;
+    return;
   }
   if (trimmed.length <= OUTPUT_HEAD_TAIL_MAX) {
     return trimmed;
@@ -42,33 +40,29 @@ export function summarizeOutput(output: unknown): string | undefined {
 }
 
 /** Keep assistant/human prose, but cap pathological lengths. */
-export function clipProse(text: string): string {
+export function clipProse(text: string) {
   return clip(text.trim(), PROSE_MAX);
 }
 
 /** Collapse a file-read tool result to {path, size} when the body is large. */
-export function elideFilePayload(filePath: string, body: string): string {
+export function elideFilePayload(filePath: string, body: string) {
   if (body.length <= OUTPUT_HEAD_TAIL_MAX) {
     return body.trim();
   }
   return `{path: ${filePath}, size: ${body.length} chars}`;
 }
 
-function clip(text: string, max: number): string {
+function clip(text: string, max: number) {
   if (text.length <= max) {
     return text;
   }
   return `${text.slice(0, max)}…`;
 }
 
-function collapseWhitespace(text: string): string {
+function collapseWhitespace(text: string) {
   return text.replaceAll(/\s+/gu, " ").trim();
 }
 
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
+export function isNonEmptyString(value: string | null | undefined): value is string {
+  return value !== undefined && value !== null && value !== "";
 }
