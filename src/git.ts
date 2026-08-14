@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
-import type { RepoContext, Runtime } from "./types.ts";
+import type { Runtime } from "./types.ts";
 
 export interface WorktreeEntry {
   branch: string | null;
@@ -13,10 +13,7 @@ export interface WorktreeEntry {
   prunable: boolean;
 }
 
-export function describeSessionBranchMismatch(
-  session: string,
-  branch: string | null
-): string | null {
+export function describeSessionBranchMismatch(session: string, branch: string | null) {
   if (branch === session) {
     return null;
   }
@@ -44,7 +41,7 @@ export function resolveRepoContext(
   cwd: string = runtime.cwd,
   home?: string | null,
   options: ResolveRepoContextOptions = {}
-): RepoContext {
+) {
   const worktreeRoot = trim(
     runGit(runtime, cwd, ["rev-parse", "--path-format=absolute", "--show-toplevel"])
   );
@@ -94,7 +91,7 @@ function inferSessionNameForContext(
     allowExternalSessionWorktree: boolean;
     allowSessionBranchMismatch: boolean;
   }
-): string {
+) {
   const expectedRoot = getExpectedSessionRoot(home, sourceRoot);
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
 
@@ -123,7 +120,7 @@ export function inferSessionName(
   worktreeRoot: string,
   branch: string,
   options: { allowBranchMismatch?: boolean } = {}
-): string {
+) {
   const expectedRoot = getExpectedSessionRoot(home, sourceRoot);
   const relativeSessionPath = path.relative(expectedRoot, worktreeRoot);
   const sessionName = toSessionPath(relativeSessionPath);
@@ -140,11 +137,11 @@ export function inferSessionName(
   return sessionName;
 }
 
-function getExpectedSessionRoot(home: string, sourceRoot: string): string {
+function getExpectedSessionRoot(home: string, sourceRoot: string) {
   return path.join(home, "worktrees", path.basename(sourceRoot));
 }
 
-function isOutsideExpectedRoot(relativeSessionPath: string): boolean {
+function isOutsideExpectedRoot(relativeSessionPath: string) {
   return (
     !relativeSessionPath ||
     relativeSessionPath.startsWith("..") ||
@@ -152,13 +149,13 @@ function isOutsideExpectedRoot(relativeSessionPath: string): boolean {
   );
 }
 
-export function resolveGitRepoRoot(runtime: Runtime, checkoutPath: string): string {
+export function resolveGitRepoRoot(runtime: Runtime, checkoutPath: string) {
   return trim(
     runGit(runtime, checkoutPath, ["rev-parse", "--path-format=absolute", "--show-toplevel"])
   );
 }
 
-export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEntry[] {
+export function listWorktrees(runtime: Runtime, sourceRoot: string) {
   const output = runGit(runtime, sourceRoot, ["worktree", "list", "--porcelain"]);
   const entries: WorktreeEntry[] = [];
   let current: Partial<WorktreeEntry> = {};
@@ -195,7 +192,7 @@ export function listWorktrees(runtime: Runtime, sourceRoot: string): WorktreeEnt
   return entries;
 }
 
-function appendWorktreeEntry(entries: WorktreeEntry[], current: Partial<WorktreeEntry>): void {
+function appendWorktreeEntry(entries: WorktreeEntry[], current: Partial<WorktreeEntry>) {
   if (!current.path) {
     return;
   }
@@ -207,7 +204,7 @@ function appendWorktreeEntry(entries: WorktreeEntry[], current: Partial<Worktree
   });
 }
 
-export function branchExists(runtime: Runtime, sourceRoot: string, branch: string): boolean {
+export function branchExists(runtime: Runtime, sourceRoot: string, branch: string) {
   const result = runtime.exec("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
     allowFailure: true,
     cwd: sourceRoot
@@ -220,7 +217,7 @@ export function resolveDefaultBranchRef(
   runtime: Runtime,
   sourceRoot: string,
   options: { refresh?: boolean } = {}
-): DefaultBranchRef {
+) {
   const shouldRefresh = options.refresh ?? true;
   const localCandidates: DefaultBranchRef[] = [
     { branch: "main", ref: "refs/heads/main", source: "local" },
@@ -252,7 +249,7 @@ export function resolveDefaultBranchRef(
   throw new MonkeError(`Could not resolve a default branch ref for ${sourceRoot}`);
 }
 
-export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string): void {
+export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string) {
   const status = trim(
     runGit(runtime, sourceRoot, ["status", "--porcelain", "--untracked-files=normal"])
   );
@@ -268,7 +265,7 @@ export function assertCleanCheckoutForSessionBranchCreation(
   runtime: Runtime,
   sourceRoot: string,
   session: string
-): void {
+) {
   validateSessionBranchName(runtime, sourceRoot, session);
   if (!branchExists(runtime, sourceRoot, session)) {
     ensureCleanCheckout(runtime, sourceRoot);
@@ -276,7 +273,7 @@ export function assertCleanCheckoutForSessionBranchCreation(
 }
 
 /** Return the canonical Session worktree path for one repo under Monke home. */
-export function getExpectedWorktreePath(home: string, sourceRoot: string, session: string): string {
+export function getExpectedWorktreePath(home: string, sourceRoot: string, session: string) {
   return path.join(home, "worktrees", path.basename(sourceRoot), session);
 }
 
@@ -287,7 +284,7 @@ export function ensureSessionWorktree(
   sourceRoot: string,
   session: string,
   options: { skipCleanCheck?: boolean } = {}
-): { created: boolean; path: string } {
+) {
   validateSessionBranchName(runtime, sourceRoot, session);
 
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
@@ -349,7 +346,7 @@ export function ensureFreshSessionWorktreeFromRef(
   sourceRoot: string,
   session: string,
   startRef: string
-): { created: boolean; path: string } {
+) {
   assertFreshSessionWorktreeAvailable(runtime, home, sourceRoot, session);
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
 
@@ -365,7 +362,7 @@ export function removeSessionWorktreeAndBranch(
   worktreePath: string,
   session: string,
   onWarning: (message: string) => void
-): boolean {
+) {
   let removed = true;
   const removeWorktree = runtime.exec("git", ["worktree", "remove", "--force", worktreePath], {
     allowFailure: true,
@@ -398,7 +395,7 @@ export function assertFreshSessionWorktreeAvailable(
   home: string,
   sourceRoot: string,
   session: string
-): void {
+) {
   validateSessionBranchName(runtime, sourceRoot, session);
 
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
@@ -438,7 +435,7 @@ export function validateWorktreeForSession(
   worktreePath: string,
   session: string,
   options: { allowBranchMismatch?: boolean } = {}
-): RepoContext {
+) {
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
   if (normalize(worktreePath) !== normalize(expectedPath)) {
     throw new MonkeError(
@@ -469,11 +466,11 @@ export function validateWorktreeForSession(
   return context;
 }
 
-function runGit(runtime: Runtime, cwd: string, args: string[]): string {
+function runGit(runtime: Runtime, cwd: string, args: string[]) {
   return runtime.exec("git", args, { cwd }).stdout;
 }
 
-function validateSessionBranchName(runtime: Runtime, sourceRoot: string, session: string): void {
+function validateSessionBranchName(runtime: Runtime, sourceRoot: string, session: string) {
   const result = runtime.exec("git", ["check-ref-format", "--branch", session], {
     allowFailure: true,
     cwd: sourceRoot
@@ -488,7 +485,7 @@ function listWorktreesAfterPruningSession(
   sourceRoot: string,
   session: string,
   expectedPath: string
-): WorktreeEntry[] {
+) {
   let worktrees = listWorktrees(runtime, sourceRoot);
 
   const shouldPruneCachedEntries = worktrees.some(
@@ -504,7 +501,7 @@ function listWorktreesAfterPruningSession(
   return worktrees;
 }
 
-function refExists(runtime: Runtime, sourceRoot: string, ref: string): boolean {
+function refExists(runtime: Runtime, sourceRoot: string, ref: string) {
   const result = runtime.exec("git", ["show-ref", "--verify", "--quiet", ref], {
     allowFailure: true,
     cwd: sourceRoot
@@ -512,19 +509,19 @@ function refExists(runtime: Runtime, sourceRoot: string, ref: string): boolean {
   return result.exitCode === 0;
 }
 
-function formatCommandDetail(result: { stderr: string; stdout: string }): string {
+function formatCommandDetail(result: { stderr: string; stdout: string }) {
   const detail = (result.stderr || result.stdout).trim();
   return detail ? `: ${detail}` : "";
 }
 
-function normalize(targetPath: string): string {
+function normalize(targetPath: string) {
   return path.normalize(targetPath);
 }
 
-function toSessionPath(targetPath: string): string {
+function toSessionPath(targetPath: string) {
   return targetPath.split(path.sep).join("/");
 }
 
-function trim(value: string): string {
+function trim(value: string) {
   return value.trim();
 }

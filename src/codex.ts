@@ -3,7 +3,7 @@ import { findExecutable } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
 /** Open a local checkout as a Codex workspace. */
-export function openCodexWorkspace(runtime: Runtime, targetPath: string): void {
+export function openCodexWorkspace(runtime: Runtime, targetPath: string) {
   const logger = createLogger(runtime);
   const url = formatCodexWorkspaceUrl(targetPath);
   const opener = getUrlOpener(url);
@@ -21,11 +21,11 @@ export function openCodexWorkspace(runtime: Runtime, targetPath: string): void {
   logger.success(`Opened Codex workspace: ${targetPath}`);
 }
 
-function formatCodexWorkspaceUrl(targetPath: string): string {
+function formatCodexWorkspaceUrl(targetPath: string) {
   return `codex://threads/new?path=${encodeURIComponent(targetPath)}`;
 }
 
-function getUrlOpener(url: string): { args: string[]; command: string } {
+function getUrlOpener(url: string) {
   if (process.platform === "darwin") {
     return { args: [url], command: "open" };
   }
@@ -37,12 +37,12 @@ function getUrlOpener(url: string): { args: string[]; command: string } {
   return { args: [url], command: "xdg-open" };
 }
 
-function escapeWindowsCmdUrl(url: string): string {
+function escapeWindowsCmdUrl(url: string) {
   // cmd expands %NAME% before start sees the URL; preserve percent-encoded paths.
   return url.replaceAll("%", "^%");
 }
 
-function canRunUrlOpener(runtime: Runtime, command: string): boolean {
+function canRunUrlOpener(runtime: Runtime, command: string) {
   return process.platform === "win32" && command === "cmd"
     ? true
     : findExecutable(command, runtime.env) !== null;
@@ -53,7 +53,7 @@ function formatOpenFailure(result: {
   stderr: string;
   stdout: string;
   timedOut?: boolean;
-}): string {
+}) {
   if (result.timedOut === true) {
     return "timed out";
   }

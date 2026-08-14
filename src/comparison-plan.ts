@@ -37,7 +37,7 @@ export function planBranchComparison(
     }
   );
   if (resolved.exitCode !== 0) {
-    return undefined;
+    return;
   }
   if (
     runtime.exec("git", ["merge-base", baseRef, "HEAD"], {
@@ -45,7 +45,7 @@ export function planBranchComparison(
       cwd: context.worktreeRoot
     }).exitCode !== 0
   ) {
-    return undefined;
+    return;
   }
   return { baseRef, kind: "branch-working-tree", worktreePath: context.worktreeRoot };
 }
@@ -55,14 +55,14 @@ export function findNewerDefaultBranchBase(
   runtime: Runtime,
   context: RepoContext,
   rememberedBaseRef: string
-): string | undefined {
+) {
   const rememberedMergeBases = resolveMergeBases(runtime, context, rememberedBaseRef);
   if (rememberedMergeBases?.length !== 1) {
-    return undefined;
+    return;
   }
   const [rememberedMergeBase] = rememberedMergeBases;
   if (rememberedMergeBase === undefined) {
-    return undefined;
+    return;
   }
 
   const refs = runtime
@@ -85,7 +85,7 @@ export function findNewerDefaultBranchBase(
       continue;
     }
     if (mergeBases.length !== 1) {
-      return undefined;
+      return;
     }
     const [mergeBase] = mergeBases;
     if (mergeBase !== undefined) {
@@ -100,7 +100,7 @@ export function findNewerDefaultBranchBase(
     )
   );
   if (new Set(maximalCandidates.map((candidate) => candidate.mergeBase)).size !== 1) {
-    return undefined;
+    return;
   }
   const preferredRef = resolvePreferredDefaultBranchRef(runtime, context);
   return maximalCandidates.toSorted((left, right) => {
@@ -115,7 +115,7 @@ export function findNewerDefaultBranchBase(
 }
 
 /** Report whether one checkout contains staged, unstaged, or untracked changes. */
-export function hasWorkingTreeChanges(runtime: Runtime, worktreePath: string): boolean {
+export function hasWorkingTreeChanges(runtime: Runtime, worktreePath: string) {
   return Boolean(
     runtime
       .exec("git", ["status", "--porcelain", "--untracked-files=normal"], {
@@ -125,11 +125,7 @@ export function hasWorkingTreeChanges(runtime: Runtime, worktreePath: string): b
   );
 }
 
-function resolveMergeBases(
-  runtime: Runtime,
-  context: RepoContext,
-  baseRef: string
-): string[] | undefined {
+function resolveMergeBases(runtime: Runtime, context: RepoContext, baseRef: string) {
   const result = runtime.exec("git", ["merge-base", "--all", baseRef, "HEAD"], {
     allowFailure: true,
     cwd: context.worktreeRoot
@@ -142,19 +138,14 @@ function hasNewerSharedHistory(
   context: RepoContext,
   rememberedMergeBase: string,
   candidateMergeBase: string
-): boolean {
+) {
   return (
     candidateMergeBase !== rememberedMergeBase &&
     isAncestor(runtime, context, rememberedMergeBase, candidateMergeBase)
   );
 }
 
-function isAncestor(
-  runtime: Runtime,
-  context: RepoContext,
-  ancestor: string,
-  descendant: string
-): boolean {
+function isAncestor(runtime: Runtime, context: RepoContext, ancestor: string, descendant: string) {
   return (
     runtime.exec("git", ["merge-base", "--is-ancestor", ancestor, descendant], {
       allowFailure: true,
@@ -163,17 +154,16 @@ function isAncestor(
   );
 }
 
-function isDefaultBranchRef(ref: string): boolean {
+function isDefaultBranchRef(ref: string) {
   return LOCAL_DEFAULT_BRANCH_REF_PATTERN.test(ref) || REMOTE_DEFAULT_BRANCH_REF_PATTERN.test(ref);
 }
 
-function resolvePreferredDefaultBranchRef(
-  runtime: Runtime,
-  context: RepoContext
-): string | undefined {
+function resolvePreferredDefaultBranchRef(runtime: Runtime, context: RepoContext) {
+  let ref: string | undefined;
   try {
-    return resolveDefaultBranchRef(runtime, context.sourceRoot, { refresh: false }).ref;
+    ({ ref } = resolveDefaultBranchRef(runtime, context.sourceRoot, { refresh: false }));
   } catch {
-    return undefined;
+    // A repository without a resolvable default branch has no preferred ref.
   }
+  return ref;
 }

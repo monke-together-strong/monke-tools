@@ -8,14 +8,14 @@ const MINIMUM_CODIFF_VERSION_TEXT = MINIMUM_CODIFF_VERSION.join(".");
 const INSTALL_CODIFF = "brew install --cask nkzw-tech/tap/codiff";
 
 /** Verify and resolve the supported Codiff executable synchronously. */
-export function verifyCodiff(runtime: Runtime): string {
+export function verifyCodiff(runtime: Runtime) {
   const executable = resolveCodiff(runtime);
   validateCodiffVersion(runtime.exec(executable, ["--version"], { allowFailure: true }));
   return executable;
 }
 
 /** Verify Codiff while independent Diff discovery continues. */
-export async function verifyCodiffAsync(runtime: Runtime): Promise<string> {
+export async function verifyCodiffAsync(runtime: Runtime) {
   const executable = resolveCodiff(runtime);
   const result = await runtime.execAsync(executable, ["--version"], { allowFailure: true });
   validateCodiffVersion(result);
@@ -23,7 +23,7 @@ export async function verifyCodiffAsync(runtime: Runtime): Promise<string> {
 }
 
 /** Map one comparison plan to Codiff's public CLI contract. */
-export function launchCodiff(runtime: Runtime, executable: string, plan: ComparisonPlan): void {
+export function launchCodiff(runtime: Runtime, executable: string, plan: ComparisonPlan) {
   const args =
     plan.kind === "branch-working-tree"
       ? ["--branch", plan.baseRef, plan.worktreePath]
@@ -40,7 +40,7 @@ export function launchCodiff(runtime: Runtime, executable: string, plan: Compari
   }
 }
 
-function resolveCodiff(runtime: Runtime): string {
+function resolveCodiff(runtime: Runtime) {
   const executable = findExecutable("codiff", runtime.env);
   if (executable === null) {
     throwCodiffInstallError();
@@ -48,7 +48,7 @@ function resolveCodiff(runtime: Runtime): string {
   return executable;
 }
 
-function validateCodiffVersion(result: ExecResult): void {
+function validateCodiffVersion(result: ExecResult) {
   const plainOutput = `${result.stdout}\n${result.stderr}`.replaceAll(
     // oxlint-disable-next-line no-control-regex -- External CLI output may contain ANSI color codes.
     /\u001B\[[0-?]*[ -/]*[@-~]/gu,
@@ -73,7 +73,7 @@ function validateCodiffVersion(result: ExecResult): void {
   }
 }
 
-function compareVersions(left: readonly number[], right: readonly number[]): number {
+function compareVersions(left: readonly number[], right: readonly number[]) {
   for (const [index, expected] of right.entries()) {
     const difference = (left[index] ?? 0) - expected;
     if (difference !== 0) {

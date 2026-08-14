@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
 import { decideMergedWorktreeCleanup } from "../src/cleanup-merged.ts";
-import type { MergedCleanupSnapshot, MergedPrMatch } from "../src/cleanup-merged.ts";
+import type { MergedCleanupSnapshot } from "../src/cleanup-merged.ts";
 
 const SESSION = "feature/done";
 const DEFAULT_BRANCH = "main";
@@ -101,7 +101,7 @@ describe("merged worktree cleanup", () => {
     expect(decision.reasons).toContain(reason);
   });
 
-  function baseSnapshot(patch: Partial<MergedCleanupSnapshot> = {}): MergedCleanupSnapshot {
+  function baseSnapshot(patch: Partial<MergedCleanupSnapshot> = {}) {
     return {
       branch: SESSION,
       defaultBranch: DEFAULT_BRANCH,
@@ -122,7 +122,7 @@ describe("merged worktree cleanup", () => {
     };
   }
 
-  function mergedPr(number: number): MergedPrMatch {
+  function mergedPr(number: number) {
     return {
       baseRefName: DEFAULT_BRANCH,
       headRefName: SESSION,

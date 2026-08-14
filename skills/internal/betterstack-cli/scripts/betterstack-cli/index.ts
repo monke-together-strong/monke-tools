@@ -3,7 +3,7 @@
 import { Command, InvalidArgumentError } from '@commander-js/extra-typings';
 import type { OptionValues } from '@commander-js/extra-typings';
 import { existsSync, readFileSync } from "node:fs";
-import type { output, ZodType } from "zod";
+import type { ZodType } from "zod";
 import {
   BetterStackApiError,
   BetterStackClient,
@@ -13,7 +13,7 @@ import {
 } from './client';
 import { getFirstEnvValue, loadEnvFileIfPresent } from "./env";
 
-async function main(): Promise<void> {
+async function main() {
   const program = createProgram();
   if (process.argv.slice(2).length === 0) {
     program.outputHelp();
@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   await program.parseAsync(process.argv);
 }
 
-function createProgram(): Command {
+function createProgram() {
   const program = new Command()
     .name("betterstack")
     .description("Run Better Stack source and query commands through the shared HTTP CLI.")
@@ -122,7 +122,7 @@ type SourceGetOptions = ReturnType<SourceGetCommand["opts"]>;
 type QueryRunCommand = ReturnType<typeof createQueryRunCommand>;
 type QueryRunOptions = ReturnType<QueryRunCommand["opts"]>;
 
-function parseIntegerOption(value: string): number {
+function parseIntegerOption(value: string) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed)) {
     throw new InvalidArgumentError("must be an integer.");
@@ -131,7 +131,7 @@ function parseIntegerOption(value: string): number {
   return parsed;
 }
 
-function initializeEnvironment(envFilePath?: string): void {
+function initializeEnvironment(envFilePath?: string) {
   if (envFilePath !== undefined && envFilePath !== "") {
     loadEnvFileIfPresent(envFilePath);
     return;
@@ -148,7 +148,7 @@ function initializeEnvironment(envFilePath?: string): void {
   }
 }
 
-async function handleSourceList(options: PaginationOptions): Promise<void> {
+async function handleSourceList(options: PaginationOptions) {
   initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
@@ -158,7 +158,7 @@ async function handleSourceList(options: PaginationOptions): Promise<void> {
   writeStdout(await client.listSources(page, perPage));
 }
 
-async function handleSourceGet(options: SourceGetOptions): Promise<void> {
+async function handleSourceGet(options: SourceGetOptions) {
   initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
@@ -167,7 +167,7 @@ async function handleSourceGet(options: SourceGetOptions): Promise<void> {
   writeStdout(await client.getSource(id));
 }
 
-async function handleConnectionList(options: PaginationOptions): Promise<void> {
+async function handleConnectionList(options: PaginationOptions) {
   initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
@@ -177,7 +177,7 @@ async function handleConnectionList(options: PaginationOptions): Promise<void> {
   writeStdout(await client.listConnections(page, perPage));
 }
 
-async function handleQueryRun(options: QueryRunOptions): Promise<void> {
+async function handleQueryRun(options: QueryRunOptions) {
   initializeEnvironment(options.envFile);
 
   const { sourceId, table } = options;
@@ -229,7 +229,7 @@ class BetterStackInvalidResponseError extends Error {
 async function resolveQueryCredentials(
   options: QueryRunOptions,
   context: ResolvedQueryContext
-): Promise<{ password: string; url: string; username: string }> {
+) {
   const { matchingConnection, sourceMetadata } = await loadQueryMetadata(context);
   validateQueryTable(context, sourceMetadata);
 
@@ -275,10 +275,7 @@ async function resolveQueryCredentials(
   };
 }
 
-async function loadQueryMetadata(context: ResolvedQueryContext): Promise<{
-  matchingConnection: BetterStackConnectionMetadata | null;
-  sourceMetadata: BetterStackSourceMetadata | null;
-}> {
+async function loadQueryMetadata(context: ResolvedQueryContext) {
   if (context.metadataToken === undefined || context.metadataToken === "") {
     return { matchingConnection: null, sourceMetadata: null };
   }
@@ -300,7 +297,7 @@ async function loadQueryMetadata(context: ResolvedQueryContext): Promise<{
 function validateQueryTable(
   context: ResolvedQueryContext,
   sourceMetadata: BetterStackSourceMetadata | null
-): void {
+) {
   if (sourceMetadata !== null && context.table !== sourceMetadata.expectedTable) {
     fail(
       `Table mismatch for source ${sourceMetadata.sourceId}. Expected ${sourceMetadata.expectedTable}, received ${context.table}.`
@@ -308,7 +305,7 @@ function validateQueryTable(
   }
 }
 
-function requireQueryCredential(value: string | undefined, message: string): string {
+function requireQueryCredential(value: string | undefined, message: string) {
   if (value === undefined || value === "") {
     fail(message);
   }
@@ -318,7 +315,7 @@ function requireQueryCredential(value: string | undefined, message: string): str
 async function loadSourceMetadata(
   token: string,
   sourceId: number
-): Promise<BetterStackSourceMetadata> {
+) {
   const client = createMetadataClient(token);
   const raw = await client.getSource(sourceId);
   const parsed = parseMetadataResponse(
@@ -337,7 +334,7 @@ async function loadSourceMetadata(
   };
 }
 
-async function loadConnections(token: string): Promise<BetterStackConnectionMetadata[]> {
+async function loadConnections(token: string) {
   const client = createMetadataClient(token);
   const raw = await client.listConnections(1, 100);
   const parsed = parseMetadataResponse(
@@ -359,7 +356,7 @@ async function loadConnections(token: string): Promise<BetterStackConnectionMeta
 async function tryLoadSourceMetadata(
   token: string,
   sourceId: number
-): Promise<BetterStackSourceMetadata | null> {
+) {
   try {
     return await loadSourceMetadata(token, sourceId);
   } catch (error) {
@@ -371,7 +368,7 @@ async function tryLoadSourceMetadata(
   }
 }
 
-async function tryLoadConnections(token: string): Promise<BetterStackConnectionMetadata[]> {
+async function tryLoadConnections(token: string) {
   try {
     return await loadConnections(token);
   } catch (error) {
@@ -387,7 +384,7 @@ function validateQueryEndpointMatchesSource(
   normalizedUrl: string,
   sourceMetadata: BetterStackSourceMetadata,
   matchingConnection: BetterStackConnectionMetadata | null
-): void {
+) {
   const endpoint = new URL(normalizedUrl);
   const endpointHost = endpoint.hostname;
   const endpointPort = getEffectiveUrlPort(endpoint);
@@ -412,7 +409,7 @@ function validateQueryEndpointMatchesSource(
   );
 }
 
-function validateQueryEndpointIsAllowed(normalizedUrl: string): void {
+function validateQueryEndpointIsAllowed(normalizedUrl: string) {
   const endpoint = new URL(normalizedUrl);
 
   if (isAllowedBetterStackQueryHost(endpoint.hostname)) {
@@ -424,11 +421,11 @@ function validateQueryEndpointIsAllowed(normalizedUrl: string): void {
   );
 }
 
-function isAllowedBetterStackQueryHost(hostname: string): boolean {
+function isAllowedBetterStackQueryHost(hostname: string) {
   return hostname.endsWith("-connect.betterstackdata.com");
 }
 
-function formatConnectionEndpoint(connection: BetterStackConnectionMetadata): string {
+function formatConnectionEndpoint(connection: BetterStackConnectionMetadata) {
   if (/:\d+$/u.test(connection.host)) {
     return connection.host;
   }
@@ -436,7 +433,7 @@ function formatConnectionEndpoint(connection: BetterStackConnectionMetadata): st
   return `${connection.host}:${connection.port}`;
 }
 
-function getEffectiveUrlPort(url: URL): number {
+function getEffectiveUrlPort(url: URL) {
   if (url.port) {
     return Number(url.port);
   }
@@ -444,7 +441,7 @@ function getEffectiveUrlPort(url: URL): number {
   return 443;
 }
 
-function formatHostAndPort(host: string, port: number): string {
+function formatHostAndPort(host: string, port: number) {
   return port === 443 ? host : `${host}:${port}`;
 }
 
@@ -452,7 +449,7 @@ function parseMetadataResponse<T extends ZodType>(
   raw: string,
   schema: T,
   errorMessage: string
-): output<T> {
+) {
   try {
     const parsed = schema.safeParse(JSON.parse(raw));
     if (parsed.success) {
@@ -464,7 +461,7 @@ function parseMetadataResponse<T extends ZodType>(
   return invalidResponse(errorMessage);
 }
 
-function createMetadataClient(tokenOverride?: string): BetterStackClient {
+function createMetadataClient(tokenOverride?: string) {
   const token = tokenOverride ?? getFirstEnvValue(["BETTER_STACK_TOKEN", "BETTERSTACK_API_TOKEN"]);
 
   if (token === undefined || token === "") {
@@ -476,7 +473,7 @@ function createMetadataClient(tokenOverride?: string): BetterStackClient {
   return new BetterStackClient(token);
 }
 
-async function resolveSql(options: QueryRunOptions): Promise<string> {
+async function resolveSql(options: QueryRunOptions) {
   const inlineSql = options.sql;
   const {sqlFile} = options;
   const useStdin = options.stdin === true;
@@ -517,11 +514,11 @@ function invalidResponse(message: string): never {
   throw new BetterStackInvalidResponseError(message);
 }
 
-function writeStdout(text: string): void {
+function writeStdout(text: string) {
   process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
 }
 
-function reportFailure(cause: unknown): void {
+function reportFailure(cause: unknown) {
   if (cause instanceof BetterStackApiError) {
     process.stderr.write(`${cause.status} ${cause.statusText}\n`);
 

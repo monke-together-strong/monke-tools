@@ -31,13 +31,13 @@ afterEach(() => {
   }
 });
 
-export function makeTempDir(prefix: string): string {
+export function makeTempDir(prefix: string) {
   const directory = realpathSync.native(mkdtempSync(path.join(tmpdir(), `${prefix}-`)));
   tempDirectories.push(directory);
   return directory;
 }
 
-export function createRepo(root: string, files: Record<string, string>): string {
+export function createRepo(root: string, files: Record<string, string>) {
   mkdirSync(root, { recursive: true });
   git(root, ["init", "-b", "main"]);
   git(root, ["config", "user.email", "test@example.com"]);
@@ -52,7 +52,7 @@ export function createRepo(root: string, files: Record<string, string>): string 
   return realpathSync.native(root);
 }
 
-export function git(cwd: string, args: string[], env?: Record<string, string>): string {
+export function git(cwd: string, args: string[], env?: Record<string, string>) {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf-8",
@@ -64,13 +64,13 @@ export function git(cwd: string, args: string[], env?: Record<string, string>): 
   return result.stdout.trim();
 }
 
-export function write(root: string, relativePath: string, contents: string): void {
+export function write(root: string, relativePath: string, contents: string) {
   const targetPath = path.join(root, relativePath);
   mkdirSync(path.dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, contents, "utf-8");
 }
 
-export function read(root: string, relativePath: string): string {
+export function read(root: string, relativePath: string) {
   return readFileSync(path.join(root, relativePath), "utf-8");
 }
 
@@ -88,7 +88,7 @@ export function installGitShim(
       message?: string;
     };
   }
-): string {
+) {
   const logPath = path.join(binDirectory, "git.log");
   const failCommand =
     options?.failCommand === undefined
@@ -141,7 +141,7 @@ exec "${findExecutableOnPath("git")}" "$@"
   return logPath;
 }
 
-export function installShShim(binDirectory: string): string {
+export function installShShim(binDirectory: string) {
   const logPath = path.join(binDirectory, "sh.log");
   writeExecutable(
     path.join(binDirectory, "sh"),
@@ -157,7 +157,7 @@ exec /bin/sh "$@"
   return logPath;
 }
 
-export function installCodexUrlOpenShim(binDirectory: string): string {
+export function installCodexUrlOpenShim(binDirectory: string) {
   const logPath = path.join(binDirectory, "open-url.log");
   const command = process.platform === "darwin" ? "open" : "xdg-open";
   writeExecutable(
@@ -179,7 +179,7 @@ export function installFakeCodiff(
     versionCoordination?: { discovery: string; started: string };
     waitForBases?: string[];
   } = {}
-): string {
+) {
   const logPath = path.join(binDirectory, "codiff.log");
   const coordinationDirectory = path.join(binDirectory, "codiff-coordination");
   const coordinatedBases = options.waitForBases ?? [];
@@ -231,7 +231,7 @@ exit ${String(options.exitCode ?? 0)}
   return logPath;
 }
 
-export function installBrewShim(binDirectory: string): string {
+export function installBrewShim(binDirectory: string) {
   const logPath = path.join(binDirectory, "brew.log");
   writeExecutable(
     path.join(binDirectory, "brew"),
@@ -243,7 +243,7 @@ exit 99
   return logPath;
 }
 
-export function installWindowsCmdShim(binDirectory: string): string {
+export function installWindowsCmdShim(binDirectory: string) {
   const logPath = path.join(binDirectory, "cmd.log");
   writeExecutable(
     path.join(binDirectory, "cmd"),
@@ -258,7 +258,7 @@ printf '%s\\n' "$@" >> ${shellQuote(logPath)}
 export function installFakeGh(
   binDirectory: string,
   issues: Record<number, { body: string; comments?: readonly string[]; title: string }>
-): string {
+) {
   const logPath = path.join(binDirectory, "gh.log");
   const issueCases = Object.entries(issues)
     .map(([issueNumber, issue]) => {
@@ -308,7 +308,7 @@ export function installFakeGhForMergedPrs(
     prsByHead: Record<string, unknown[]>;
     repo: string;
   }
-): string {
+) {
   const logPath = path.join(binDirectory, "gh.log");
   const cases = Object.entries(options.prsByHead)
     .map(
@@ -361,10 +361,7 @@ interface RunMonkeOptions {
   monkeHome: string;
 }
 
-function captureMonkeRun(options: RunMonkeOptions): {
-  output: () => { stderr: string; stdout: string };
-  runtime: ReturnType<typeof createRuntime>;
-} {
+function captureMonkeRun(options: RunMonkeOptions) {
   let stdout = "";
   let stderr = "";
   const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
@@ -389,18 +386,14 @@ function captureMonkeRun(options: RunMonkeOptions): {
   };
 }
 
-export function runMonke(options: RunMonkeOptions): { stderr: string; stdout: string } {
+export function runMonke(options: RunMonkeOptions) {
   const captured = captureMonkeRun(options);
 
   runCli(options.args, captured.runtime);
   return captured.output();
 }
 
-export function runMonkeCapturingFailure(options: RunMonkeOptions): {
-  error: unknown;
-  stderr: string;
-  stdout: string;
-} {
+export function runMonkeCapturingFailure(options: RunMonkeOptions) {
   const captured = captureMonkeRun(options);
 
   try {
@@ -420,7 +413,7 @@ export async function runMonkeAsync(options: {
   monkeHome: string;
   onSelect?: (prompt: SelectPrompt) => void;
   selectValues?: string[];
-}): Promise<{ stderr: string; stdout: string }> {
+}) {
   let stdout = "";
   let stderr = "";
   const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
@@ -447,7 +440,7 @@ export async function runMonkeAsync(options: {
   return { stderr, stdout };
 }
 
-export function withPlatform<T>(platform: NodeJS.Platform, callback: () => T): T {
+export function withPlatform<T>(platform: NodeJS.Platform, callback: () => T) {
   const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
   Object.defineProperty(process, "platform", { value: platform });
   try {
@@ -464,7 +457,7 @@ export function readSingleYamlFile<T extends z.ZodType>(
   schema: T
 ): z.output<T>;
 export function readSingleYamlFile(directoryPath: string): unknown;
-export function readSingleYamlFile(directoryPath: string, schema?: z.ZodType): unknown {
+export function readSingleYamlFile(directoryPath: string, schema?: z.ZodType) {
   const entries = readdirSync(directoryPath).filter((entry) => entry.endsWith(".yml"));
   if (entries.length !== 1) {
     throw new Error(`Expected exactly one yaml file in ${directoryPath}, found ${entries.length}`);
@@ -477,17 +470,17 @@ export function readSingleYamlFile(directoryPath: string, schema?: z.ZodType): u
   return schema ? schema.parse(value) : value;
 }
 
-function writeExecutable(targetPath: string, contents: string): void {
+function writeExecutable(targetPath: string, contents: string) {
   mkdirSync(path.dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, contents, "utf-8");
   chmodSync(targetPath, 0o755);
 }
 
-function shellQuote(value: string): string {
+function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-function findExecutableOnPath(command: string): string {
+function findExecutableOnPath(command: string) {
   const pathValue = process.env.PATH ?? "";
   for (const segment of pathValue.split(path.delimiter)) {
     if (!segment) {

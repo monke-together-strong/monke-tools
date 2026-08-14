@@ -26,7 +26,6 @@ import type {
   AgentKind,
   FrozenSessionRecord,
   RepoBundle,
-  RepoFindings,
   RepoMeta,
   RetrospectiveWindow,
 } from "./types.ts";
@@ -34,18 +33,18 @@ import type {
 const LOCK_TIMEOUT_MS = 5000;
 
 /** Root of all retrospective state, matching monke house style under MONKE_HOME. */
-export function retroHome(monkeHome?: string): string {
+export function retroHome(monkeHome?: string) {
   const home = monkeHome ?? process.env.MONKE_HOME ?? path.join(homedir(), ".monke");
   return path.join(home, "agent-retrospectives");
 }
 
-function ensureDir(dir: string): void {
+function ensureDir(dir: string) {
   mkdirSync(dir, { recursive: true });
 }
 
 // --- frozen per-session records (the durable, never-recomputed corpus) -------
 
-function sessionPath(root: string, agent: AgentKind, sessionId: string): string {
+function sessionPath(root: string, agent: AgentKind, sessionId: string) {
   return path.join(root, "sessions", `${sessionHashKey(agent, sessionId)}.yml`);
 }
 
@@ -53,7 +52,7 @@ export function loadFrozenSession(
   root: string,
   agent: AgentKind,
   sessionId: string,
-): FrozenSessionRecord | null {
+) {
   const filePath = sessionPath(root, agent, sessionId);
   if (!existsSync(filePath)) {
     return null;
@@ -61,13 +60,13 @@ export function loadFrozenSession(
   return parseYamlFile(filePath, FrozenSessionRecordSchema);
 }
 
-export function saveFrozenSession(root: string, record: FrozenSessionRecord): void {
+export function saveFrozenSession(root: string, record: FrozenSessionRecord) {
   const filePath = sessionPath(root, record.agent, record.sessionId);
   ensureDir(path.dirname(filePath));
   writeFileSync(filePath, stringify(record), "utf-8");
 }
 
-export function listFrozenSessions(root: string): FrozenSessionRecord[] {
+export function listFrozenSessions(root: string) {
   const dir = path.join(root, "sessions");
   if (!existsSync(dir)) {
     return [];
@@ -85,13 +84,13 @@ export function listFrozenSessions(root: string): FrozenSessionRecord[] {
 
 // --- repo meta ---------------------------------------------------------------
 
-export function saveRepoMeta(root: string, meta: RepoMeta): void {
+export function saveRepoMeta(root: string, meta: RepoMeta) {
   const filePath = path.join(root, "repos", `${hashKey(meta.repoKey)}.yml`);
   ensureDir(path.dirname(filePath));
   writeFileSync(filePath, stringify(meta), "utf-8");
 }
 
-export function loadRepoMeta(root: string, repoKey: string): RepoMeta | null {
+export function loadRepoMeta(root: string, repoKey: string) {
   const filePath = path.join(root, "repos", `${hashKey(repoKey)}.yml`);
   if (!existsSync(filePath)) {
     return null;
@@ -101,11 +100,11 @@ export function loadRepoMeta(root: string, repoKey: string): RepoMeta | null {
 
 // --- run dir (bundles + findings, transient) --------------------------------
 
-export function runDir(root: string, runTs: string): string {
+export function runDir(root: string, runTs: string) {
   return path.join(root, "runs", runTs);
 }
 
-export function writeBundle(root: string, bundle: RepoBundle): string {
+export function writeBundle(root: string, bundle: RepoBundle) {
   const dir = runDir(root, bundle.runTs);
   ensureDir(dir);
   const filePath = path.join(dir, `${bundle.repoHash}.json`);
@@ -113,14 +112,14 @@ export function writeBundle(root: string, bundle: RepoBundle): string {
   return filePath;
 }
 
-export function readBundle(root: string, runTs: string, repoHash: string): RepoBundle {
+export function readBundle(root: string, runTs: string, repoHash: string) {
   return parseJsonFile(
     path.join(runDir(root, runTs), `${repoHash}.json`),
     RepoBundleSchema,
   );
 }
 
-export function listBundleHashes(root: string, runTs: string): string[] {
+export function listBundleHashes(root: string, runTs: string) {
   const dir = runDir(root, runTs);
   if (!existsSync(dir)) {
     return [];
@@ -132,14 +131,14 @@ export function listBundleHashes(root: string, runTs: string): string[] {
     .map((entry) => entry.slice(0, -".json".length));
 }
 
-export function writeRunWindow(root: string, runTs: string, window: RetrospectiveWindow): string {
+export function writeRunWindow(root: string, runTs: string, window: RetrospectiveWindow) {
   const filePath = path.join(runDir(root, runTs), "window.json");
   ensureDir(path.dirname(filePath));
   writeFileSync(filePath, JSON.stringify(window, null, 2), "utf-8");
   return filePath;
 }
 
-export function readRunWindow(root: string, runTs: string): RetrospectiveWindow | null {
+export function readRunWindow(root: string, runTs: string) {
   const filePath = path.join(runDir(root, runTs), "window.json");
   if (!existsSync(filePath)) {
     return null;
@@ -147,11 +146,11 @@ export function readRunWindow(root: string, runTs: string): RetrospectiveWindow 
   return parseJsonFile(filePath, RetrospectiveWindowSchema);
 }
 
-export function findingsPath(root: string, runTs: string, repoHash: string): string {
+export function findingsPath(root: string, runTs: string, repoHash: string) {
   return path.join(runDir(root, runTs), `${repoHash}.findings.json`);
 }
 
-export function readFindings(root: string, runTs: string, repoHash: string): RepoFindings | null {
+export function readFindings(root: string, runTs: string, repoHash: string) {
   const filePath = findingsPath(root, runTs, repoHash);
   if (!existsSync(filePath)) {
     return null;
@@ -159,11 +158,11 @@ export function readFindings(root: string, runTs: string, repoHash: string): Rep
   return parseJsonFile(filePath, RepoFindingsSchema);
 }
 
-export function prAnalysisPath(root: string, runTs: string): string {
+export function prAnalysisPath(root: string, runTs: string) {
   return path.join(runDir(root, runTs), "pr-analysis.md");
 }
 
-export function readPrAnalysis(root: string, runTs: string): string | null {
+export function readPrAnalysis(root: string, runTs: string) {
   const filePath = prAnalysisPath(root, runTs);
   if (!existsSync(filePath)) {
     return null;
@@ -171,13 +170,13 @@ export function readPrAnalysis(root: string, runTs: string): string | null {
   return readFileSync(filePath, "utf-8");
 }
 
-export function cleanRunDir(root: string, runTs: string): void {
+export function cleanRunDir(root: string, runTs: string) {
   rmSync(runDir(root, runTs), { force: true, recursive: true });
 }
 
 // --- reports -----------------------------------------------------------------
 
-export function writeReport(root: string, runTs: string, content: string): string {
+export function writeReport(root: string, runTs: string, content: string) {
   const dir = path.join(root, "reports");
   ensureDir(dir);
   const filePath = path.join(dir, `${runTs}-retrospective.md`);
@@ -185,7 +184,7 @@ export function writeReport(root: string, runTs: string, content: string): strin
   return filePath;
 }
 
-export function writeReportArtifact(root: string, runTs: string, suffix: string, content: string): string {
+export function writeReportArtifact(root: string, runTs: string, suffix: string, content: string) {
   const dir = path.join(root, "reports");
   ensureDir(dir);
   const filePath = path.join(dir, `${runTs}-${suffix}.md`);
@@ -193,7 +192,7 @@ export function writeReportArtifact(root: string, runTs: string, suffix: string,
   return filePath;
 }
 
-export function listReportPaths(root: string): string[] {
+export function listReportPaths(root: string) {
   const dir = path.join(root, "reports");
   if (!existsSync(dir)) {
     return [];
@@ -208,7 +207,7 @@ export function listReportPaths(root: string): string[] {
 
 const STALE_LOCK_AGE_MS = 60_000;
 
-export function withRetroLock<T>(root: string, callback: () => T): T {
+export function withRetroLock<T>(root: string, callback: () => T) {
   const lockPath = path.join(root, "run.lock");
   ensureDir(path.dirname(lockPath));
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
@@ -240,7 +239,7 @@ export function withRetroLock<T>(root: string, callback: () => T): T {
 }
 
 /** Evict a lock whose owning process is gone or whose age exceeds the cutoff. */
-function evictIfStale(lockPath: string): boolean {
+function evictIfStale(lockPath: string) {
   let stale = false;
   try {
     const meta = parseJsonFile(lockPath, RetroLockMetadataSchema);
@@ -269,12 +268,12 @@ function evictIfStale(lockPath: string): boolean {
   }
 }
 
-function parseYamlFile<T extends z.ZodType>(filePath: string, schema: T): z.output<T> {
+function parseYamlFile<T extends z.ZodType>(filePath: string, schema: T) {
   const value: unknown = parse(readFileSync(filePath, "utf-8"));
   return schema.parse(value);
 }
 
-function parseJsonFile<T extends z.ZodType>(filePath: string, schema: T): z.output<T> {
+function parseJsonFile<T extends z.ZodType>(filePath: string, schema: T) {
   const value: unknown = JSON.parse(readFileSync(filePath, "utf-8"));
   return schema.parse(value);
 }

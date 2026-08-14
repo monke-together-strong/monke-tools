@@ -19,12 +19,7 @@ import {
   write
 } from "./helpers.ts";
 
-function mergedPr(options: {
-  base: string;
-  head: string;
-  headRefOid: string;
-  number: number;
-}): Record<string, unknown> {
+function mergedPr(options: { base: string; head: string; headRefOid: string; number: number }) {
   return {
     baseRefName: options.base,
     headRefName: options.head,

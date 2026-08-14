@@ -42,7 +42,7 @@ interface PreparedDiff {
 }
 
 /** Open Codiff when no interactive Diff picker is needed. */
-export function runDiff(runtime: Runtime, options: DiffOptions = {}): void {
+export function runDiff(runtime: Runtime, options: DiffOptions = {}) {
   const executable = verifyCodiff(runtime);
   const prepared = prepareDiff(runtime);
   if (launchRememberedDiff(runtime, executable, prepared.remembered, options)) {
@@ -52,10 +52,7 @@ export function runDiff(runtime: Runtime, options: DiffOptions = {}): void {
 }
 
 /** Open Codiff with independent startup work and the interactive picker available. */
-export async function runDiffInteractive(
-  runtime: Runtime,
-  options: DiffOptions = {}
-): Promise<void> {
+export async function runDiffInteractive(runtime: Runtime, options: DiffOptions = {}) {
   const [executable, prepared] = await Promise.all([
     verifyCodiffAsync(runtime),
     prepareDiffAsync(runtime)
@@ -66,12 +63,12 @@ export async function runDiffInteractive(
   await selectAndLaunchDiff(runtime, executable, prepared);
 }
 
-async function prepareDiffAsync(runtime: Runtime): Promise<PreparedDiff> {
+async function prepareDiffAsync(runtime: Runtime) {
   await Promise.resolve();
   return prepareDiff(runtime);
 }
 
-function prepareDiff(runtime: Runtime): PreparedDiff {
+function prepareDiff(runtime: Runtime) {
   const remembered = resolveRememberedDiff(runtime);
   return { choices: buildDiffChoices(runtime, remembered), remembered };
 }
@@ -81,7 +78,7 @@ function launchRememberedDiff(
   executable: string,
   remembered: RememberedDiff,
   options: DiffOptions
-): boolean {
+) {
   if (options.pick === true || remembered.baseRef === undefined) {
     return false;
   }
@@ -100,11 +97,7 @@ function launchRememberedDiff(
   return true;
 }
 
-async function selectAndLaunchDiff(
-  runtime: Runtime,
-  executable: string,
-  prepared: PreparedDiff
-): Promise<void> {
+async function selectAndLaunchDiff(runtime: Runtime, executable: string, prepared: PreparedDiff) {
   const { remembered } = prepared;
   let { choices } = prepared;
   while (true) {
@@ -164,7 +157,7 @@ async function selectAndLaunchDiff(
   }
 }
 
-function buildDiffChoices(runtime: Runtime, remembered: RememberedDiff): DiffChoice[] {
+function buildDiffChoices(runtime: Runtime, remembered: RememberedDiff) {
   const targets = listLocalWorktreeTargets(
     runtime,
     getMonkeHome(runtime),
@@ -188,12 +181,12 @@ function buildDiffChoices(runtime: Runtime, remembered: RememberedDiff): DiffCho
   return choices;
 }
 
-function formatDiffTargetLabel(target: LocalWorktreeTarget): string {
+function formatDiffTargetLabel(target: LocalWorktreeTarget) {
   const label = target.kind === "source" ? `Source checkout: ${target.label}` : target.label;
   return `${label} (committed branch base)`;
 }
 
-function persistDiffBase(runtime: Runtime, remembered: RememberedDiff, baseRef: string): void {
+function persistDiffBase(runtime: Runtime, remembered: RememberedDiff, baseRef: string) {
   const { owner } = remembered;
   if (owner === undefined) {
     return;
@@ -213,7 +206,7 @@ function persistDiffBase(runtime: Runtime, remembered: RememberedDiff, baseRef: 
   });
 }
 
-function warnDirtyBase(runtime: Runtime, target: LocalWorktreeTarget): void {
+function warnDirtyBase(runtime: Runtime, target: LocalWorktreeTarget) {
   if (hasWorkingTreeChanges(runtime, target.path)) {
     runtime.writeStderr(
       `Warning: ${target.label} has local changes; Diff uses its committed branch state only.\n`
@@ -221,7 +214,7 @@ function warnDirtyBase(runtime: Runtime, target: LocalWorktreeTarget): void {
   }
 }
 
-function warnDirtyRememberedBase(runtime: Runtime, context: RepoContext, baseRef: string): void {
+function warnDirtyRememberedBase(runtime: Runtime, context: RepoContext, baseRef: string) {
   const branchPrefix = "refs/heads/";
   if (!baseRef.startsWith(branchPrefix)) {
     return;
@@ -235,7 +228,7 @@ function warnDirtyRememberedBase(runtime: Runtime, context: RepoContext, baseRef
   }
 }
 
-function launchLocalChanges(runtime: Runtime, executable: string, context: RepoContext): void {
+function launchLocalChanges(runtime: Runtime, executable: string, context: RepoContext) {
   if (!hasWorkingTreeChanges(runtime, context.worktreeRoot)) {
     runtime.writeStdout(
       `No Diff base or local changes found for ${path.basename(context.sourceRoot)}.\n`
@@ -245,7 +238,7 @@ function launchLocalChanges(runtime: Runtime, executable: string, context: RepoC
   launchCodiff(runtime, executable, planWorkingTreeComparison(context));
 }
 
-function resolveRememberedDiff(runtime: Runtime): RememberedDiff {
+function resolveRememberedDiff(runtime: Runtime) {
   const home = getMonkeHome(runtime);
   const context = resolveRepoContext(runtime, runtime.cwd, null, { inferSessionName: false });
   const normalizedWorktree = path.normalize(context.worktreeRoot);

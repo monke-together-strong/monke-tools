@@ -23,30 +23,9 @@ interface OrdinaryFixture {
   worktreePath: string;
 }
 
-interface MultiRepoSessionFixture {
-  binDirectory: string;
-  cleanupLog: string;
-  depRoot: string;
-  depWorktree: string;
-  home: string;
-  root: string;
-  rootWorktree: string;
-  sandbox: string;
-  session: string;
-  statePath: string;
-}
-
-interface FailingCleanupSessionFixture {
-  home: string;
-  root: string;
-  sandbox: string;
-  statePath: string;
-  worktree: string;
-}
-
 type DirtyKind = "modified" | "staged" | "untracked";
 
-function dirtyWorktree(worktreePath: string, dirtyKind: DirtyKind): void {
+function dirtyWorktree(worktreePath: string, dirtyKind: DirtyKind) {
   if (dirtyKind === "untracked") {
     write(worktreePath, "scratch.txt", "untracked\n");
     return;
@@ -57,7 +36,7 @@ function dirtyWorktree(worktreePath: string, dirtyKind: DirtyKind): void {
   }
 }
 
-function addSubmodule(repoRoot: string, submoduleRoot: string): void {
+function addSubmodule(repoRoot: string, submoduleRoot: string) {
   git(repoRoot, [
     "-c",
     "protocol.file.allow=always",
@@ -69,7 +48,7 @@ function addSubmodule(repoRoot: string, submoduleRoot: string): void {
   git(repoRoot, ["commit", "-am", "add submodule"]);
 }
 
-function initializeSubmodules(worktreePath: string): void {
+function initializeSubmodules(worktreePath: string) {
   git(worktreePath, ["-c", "protocol.file.allow=always", "submodule", "update", "--init"]);
 }
 
@@ -79,7 +58,7 @@ function createOrdinaryFixture(
     files?: Record<string, string>;
     worktreePath?: (fixture: Omit<OrdinaryFixture, "worktreePath">) => string;
   } = {}
-): OrdinaryFixture {
+) {
   const sandbox = makeTempDir(prefix);
   const home = path.join(sandbox, "home");
   const sourceRoot = createRepo(
@@ -93,10 +72,7 @@ function createOrdinaryFixture(
   return { ...base, worktreePath };
 }
 
-function createMultiRepoSessionFixture(
-  prefix: string,
-  session = "banana"
-): MultiRepoSessionFixture {
+function createMultiRepoSessionFixture(prefix: string, session = "banana") {
   const sandbox = makeTempDir(prefix);
   const binDirectory = path.join(sandbox, "bin");
   mkdirSync(binDirectory);
@@ -156,7 +132,7 @@ function createMultiRepoSessionFixture(
   };
 }
 
-function createFailingCleanupSessionFixture(prefix: string): FailingCleanupSessionFixture {
+function createFailingCleanupSessionFixture(prefix: string) {
   const sandbox = makeTempDir(prefix);
   const home = path.join(sandbox, "home");
   const root = createRepo(path.join(sandbox, "root"), {
@@ -181,7 +157,7 @@ function createFailingCleanupSessionFixture(prefix: string): FailingCleanupSessi
   };
 }
 
-function readWorktreeRemovals(gitLog: string): string[] {
+function readWorktreeRemovals(gitLog: string) {
   return readFileSync(gitLog, "utf-8")
     .split("\n")
     .filter((line) => line.startsWith("worktree remove"));

@@ -106,16 +106,6 @@ export interface RunPrAggregateOptions {
   runTs: string;
 }
 
-export interface RepoPrCollection {
-  gaps: PrAnalysisGap[];
-  prs: GhPr[];
-}
-
-export interface PrAggregateResult {
-  gaps: PrAnalysisGap[];
-  path: string;
-}
-
 const GhRepoSchema = object({
   isArchived: boolean().optional(),
   nameWithOwner: string(),
@@ -218,7 +208,7 @@ const PR_DETAIL_FIELDS = [
   "commits",
 ].join(",");
 
-export function runPrCollect(options: RunPrCollectOptions): PrAnalysisManifest {
+export function runPrCollect(options: RunPrCollectOptions) {
   const root = options.retroRoot ?? retroHome(options.home);
   const window = readRunWindow(root, options.runTs);
   if (!window) {
@@ -299,7 +289,7 @@ function collectRepoPrs(
   author: string,
   window: RetrospectiveWindow,
   exec: CommandRunner,
-): RepoPrCollection {
+) {
   const gaps: PrAnalysisGap[] = [];
   const summariesByNumber = new Map<number, GhPr>();
 
@@ -364,7 +354,7 @@ function collectRepoPrs(
   return { gaps, prs };
 }
 
-function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAnalysisGap[]): GhPr {
+function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAnalysisGap[]) {
   const detail = parseJson(
     runText(exec, "gh", [
       "pr",
@@ -399,7 +389,7 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
   };
 }
 
-export function runPrAggregate(options: RunPrAggregateOptions): PrAggregateResult {
+export function runPrAggregate(options: RunPrAggregateOptions) {
   const root = options.retroRoot ?? retroHome(options.home);
   const manifest = readPrManifest(root, options.runTs);
   if (!manifest) {
@@ -488,11 +478,11 @@ export function runPrAggregate(options: RunPrAggregateOptions): PrAggregateResul
   return { gaps: uniqueGaps, path: filePath };
 }
 
-export function prManifestPath(root: string, runTs: string): string {
+export function prManifestPath(root: string, runTs: string) {
   return path.join(runDir(root, runTs), "pr-analysis", "manifest.json");
 }
 
-export function readPrManifest(root: string, runTs: string): PrAnalysisManifest | null {
+export function readPrManifest(root: string, runTs: string) {
   const filePath = prManifestPath(root, runTs);
   if (!existsSync(filePath)) {
     return null;
@@ -504,7 +494,7 @@ export function readPrManifest(root: string, runTs: string): PrAnalysisManifest 
   }
 }
 
-function writePrManifest(root: string, runTs: string, manifest: PrAnalysisManifest): void {
+function writePrManifest(root: string, runTs: string, manifest: PrAnalysisManifest) {
   const filePath = prManifestPath(root, runTs);
   mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, JSON.stringify(manifest, null, 2), "utf-8");
@@ -551,12 +541,12 @@ function buildWorkItem(
   };
 }
 
-function writeWorkItem(item: PrWorkItem): void {
+function writeWorkItem(item: PrWorkItem) {
   mkdirSync(path.dirname(item.workItemPath), { recursive: true });
   writeFileSync(item.workItemPath, JSON.stringify(item, null, 2), "utf-8");
 }
 
-function summaryOf(item: PrWorkItem): PrWorkItemSummary {
+function summaryOf(item: PrWorkItem) {
   return {
     analysisPath: item.analysisPath,
     commitShas: item.commitShas,
@@ -666,7 +656,7 @@ function materializeDelta(
   }
 }
 
-function ensureRepoCache(repo: string, repoDir: string, exec: CommandRunner): void {
+function ensureRepoCache(repo: string, repoDir: string, exec: CommandRunner) {
   if (existsSync(path.join(repoDir, ".git"))) {
     return;
   }
@@ -674,7 +664,7 @@ function ensureRepoCache(repo: string, repoDir: string, exec: CommandRunner): vo
   runText(exec, "gh", ["repo", "clone", repo, repoDir, "--", "--filter=blob:none", "--no-checkout"]);
 }
 
-function normalizeCommits(commits: GhCommit[] | undefined): PrCommitReference[] {
+function normalizeCommits(commits: GhCommit[] | undefined) {
   return (commits ?? [])
     .map((commit) => {
       const sha = commit.oid ?? commit.sha;
@@ -694,28 +684,28 @@ function normalizeCommits(commits: GhCommit[] | undefined): PrCommitReference[] 
     .filter((entry): entry is PrCommitReference => entry !== null);
 }
 
-function normalizeFiles(files: GhFile[] | undefined): string[] {
+function normalizeFiles(files: GhFile[] | undefined) {
   return (files ?? [])
     .map((file) => file.path ?? file.filename)
     .filter((entry): entry is string => Boolean(entry))
     .toSorted();
 }
 
-function normalizeMergeCommit(commit: GhMergeCommit | null | undefined): string | undefined {
+function normalizeMergeCommit(commit: GhMergeCommit | null | undefined) {
   return commit?.oid ?? commit?.sha;
 }
 
-function parseJson<T extends ZodType>(text: string, schema: T): output<T> {
+function parseJson<T extends ZodType>(text: string, schema: T) {
   const value: unknown = JSON.parse(text);
   return schema.parse(value);
 }
 
-function prInWindow(pr: GhPr, window: RetrospectiveWindow): boolean {
+function prInWindow(pr: GhPr, window: RetrospectiveWindow) {
   const mergedAt = Date.parse(pr.mergedAt);
   return !Number.isNaN(mergedAt) && mergedAt >= Date.parse(window.since) && mergedAt <= Date.parse(window.until);
 }
 
-function extractCorrectivePatternLines(body: string): string[] {
+function extractCorrectivePatternLines(body: string) {
   const section = extractSection(body, "Corrective Patterns");
   if (!isNonEmptyString(section)) {
     return [];
@@ -730,7 +720,7 @@ function extractCorrectivePatternLines(body: string): string[] {
 
 function groupCorrectivePatterns(
   analyses: { body: string; item: PrWorkItemSummary; }[],
-): { items: string[]; label: string; }[] {
+) {
   const byPattern = new Map<string, { items: string[]; label: string; }>();
   for (const { body, item } of analyses) {
     if (!body) {
@@ -749,7 +739,7 @@ function groupCorrectivePatterns(
   return [...byPattern.values()].toSorted((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label));
 }
 
-function normalizePattern(value: string): string {
+function normalizePattern(value: string) {
   return value
     .toLowerCase()
     .replaceAll(/`[^`]+`/gu, "")
@@ -759,7 +749,7 @@ function normalizePattern(value: string): string {
     .trim();
 }
 
-function dedupeGaps(gaps: PrAnalysisGap[]): PrAnalysisGap[] {
+function dedupeGaps(gaps: PrAnalysisGap[]) {
   const byKey = new Map<string, PrAnalysisGap>();
   for (const gap of gaps) {
     byKey.set(`${gap.repo}#${gap.number ?? ""}#${gap.reason}`, gap);
@@ -767,11 +757,11 @@ function dedupeGaps(gaps: PrAnalysisGap[]): PrAnalysisGap[] {
   return [...byKey.values()].toSorted((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number));
 }
 
-function comparePrLabels(repoA: string, numberA: number | undefined, repoB: string, numberB: number | undefined): number {
+function comparePrLabels(repoA: string, numberA: number | undefined, repoB: string, numberB: number | undefined) {
   return repoA.localeCompare(repoB) || (numberA ?? 0) - (numberB ?? 0);
 }
 
-export function extractSection(body: string, heading: string): string | null {
+export function extractSection(body: string, heading: string) {
   const pattern = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "mu");
   const match = body.match(pattern);
   if (!match || match.index === undefined) {
@@ -783,24 +773,24 @@ export function extractSection(body: string, heading: string): string | null {
   return (next === -1 ? rest : rest.slice(0, next)).trim();
 }
 
-function formatPrLabel(gap: PrAnalysisGap): string {
+function formatPrLabel(gap: PrAnalysisGap) {
   return gap.number === undefined ? gap.repo : `${gap.repo}#${gap.number}`;
 }
 
-function sentence(value: string): string {
+function sentence(value: string) {
   return /[.!?]\s*$/u.test(value) ? `${value} ` : `${value}. `;
 }
 
-function workItemId(repo: string, number: number): string {
+function workItemId(repo: string, number: number) {
   const readable = repo.replaceAll("/", "__").replaceAll(/[^a-zA-Z0-9_.-]/gu, "-");
   return `${readable}__${number}__${hashKey(`${repo}#${number}`).slice(0, 12)}`;
 }
 
-function dateOnly(value: string): string {
+function dateOnly(value: string) {
   return value.slice(0, 10);
 }
 
-function eachDateOnly(since: string, until: string): string[] {
+function eachDateOnly(since: string, until: string) {
   const days: string[] = [];
   const cursor = new Date(`${dateOnly(since)}T00:00:00.000Z`);
   const end = new Date(`${dateOnly(until)}T00:00:00.000Z`);
@@ -811,7 +801,7 @@ function eachDateOnly(since: string, until: string): string[] {
   return days;
 }
 
-function clipDelta(value: string): string {
+function clipDelta(value: string) {
   const limit = 100_000;
   if (value.length <= limit) {
     return value;
@@ -820,7 +810,7 @@ function clipDelta(value: string): string {
   return `${value.slice(0, keep)}\n\n[${value.length - keep * 2} chars elided]\n\n${value.slice(-keep)}`;
 }
 
-function defaultRunner(command: string, args: string[], options: { cwd?: string } = {}): CommandResult {
+function defaultRunner(command: string, args: string[], options: { cwd?: string } = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
     encoding: "utf-8",
@@ -839,7 +829,7 @@ function runText(
   command: string,
   args: string[],
   options?: { cwd?: string },
-): string {
+) {
   const result = exec(command, args, options);
   if (result.status !== 0) {
     const detail =
@@ -849,10 +839,10 @@ function runText(
   return result.stdout;
 }
 
-function errorMessage(cause: unknown): string {
+function errorMessage(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-function escapeRegExp(value: string): string {
+function escapeRegExp(value: string) {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

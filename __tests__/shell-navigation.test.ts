@@ -10,21 +10,11 @@ import { createRepo, makeTempDir, read, runMonke } from "./helpers.ts";
 
 type SupportedShell = "bash" | "zsh";
 
-function isShellAvailable(shell: SupportedShell): boolean {
+function isShellAvailable(shell: SupportedShell) {
   return spawnSync(shell, ["-c", "exit 0"], { stdio: "ignore" }).error === undefined;
 }
 
-function runGeneratedAdapter(
-  shell: SupportedShell,
-  mtStatus: number,
-  targetExists: boolean
-): {
-  processStatus: number | null;
-  reportedPath: string;
-  reportedStatus: string;
-  sandbox: string;
-  targetPath: string;
-} {
+function runGeneratedAdapter(shell: SupportedShell, mtStatus: number, targetExists: boolean) {
   const sandbox = makeTempDir(`shell-adapter-${shell}-${mtStatus}-${targetExists}`);
   const targetPath = path.join(sandbox, targetExists ? "target" : "missing");
   const binaryPath = path.join(sandbox, "fake-mt");
@@ -234,6 +224,7 @@ apps:
   describe.each(["bash", "zsh"] as const)("%s adapter", (shell) => {
     const available = isShellAvailable(shell);
     const availability = available ? "" : " (shell unavailable)";
+
     test.skipIf(!available)(
       `honors a directory request and preserves a nonzero mt status${availability}`,
       () => {

@@ -44,7 +44,7 @@ export interface ValidatedFindings {
  * surviving episode. Offending items are dropped and counted (commit stays the
  * deterministic gate; a hallucinated ref never reaches the frozen record).
  */
-export function validateFindings(findings: RepoFindings, bundle: RepoBundle): ValidatedFindings {
+export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
   // A session's friction is authored once, by its PRIMARY repo's subagent. Refs
   // are validated against that same session's turns, so a surviving episode can
   // never render as a missing citation.
@@ -109,19 +109,7 @@ export interface RunCommitOptions {
   synthesisPath?: string;
 }
 
-export interface CommitResult {
-  appendedSessions: number;
-  dropped: { episodes: number; fixes: number };
-  frozenSessions: number;
-  prAnalysis: { present: boolean; warnings: string[] };
-  reportPath: string;
-  sourcePaths: {
-    pr: string;
-    session: string;
-  };
-}
-
-export function runCommit(options: RunCommitOptions): CommitResult {
+export function runCommit(options: RunCommitOptions) {
   const root = options.retroRoot ?? retroHome(options.home);
   const slices: RepoSlice[] = [];
   for (const repoHash of listBundleHashes(root, options.runTs)) {
@@ -224,7 +212,7 @@ export function runCommit(options: RunCommitOptions): CommitResult {
   };
 }
 
-function secondaryRootsOf(session: BundleSession, slices: RepoSlice[]): string[] {
+function secondaryRootsOf(session: BundleSession, slices: RepoSlice[]) {
   const roots = new Set<string>();
   for (const slice of slices) {
     if (
@@ -246,28 +234,12 @@ interface ReportContext {
   window?: RetrospectiveWindow | null;
 }
 
-export interface ReportArtifacts {
-  prSources: string;
-  report: string;
-  sessionSources: string;
-}
-
-export interface PrAnalysisValidation {
-  warnings: string[];
-}
-
-export interface FixHeader {
-  confidence: string;
-  rest: string;
-  target: string;
-}
-
 export function buildReport(
   runTs: string,
   synthesis: string,
   slices: RepoSlice[],
   context: ReportContext = {},
-): string {
+) {
   return buildReportArtifacts(runTs, synthesis, slices, context).report;
 }
 
@@ -276,7 +248,7 @@ export function buildReportArtifacts(
   synthesis: string,
   slices: RepoSlice[],
   context: ReportContext = {},
-): ReportArtifacts {
+) {
   const out: string[] = [
     `# Agent session retrospective — ${runTs}`,
     "",
@@ -311,7 +283,7 @@ function buildSessionSources(
   runTs: string,
   slices: RepoSlice[],
   window: RetrospectiveWindow | null | undefined,
-): string {
+) {
   const out: string[] = [
     `# Session sources — ${runTs}`,
     "",
@@ -374,7 +346,7 @@ function buildSessionSources(
   return out.join("\n");
 }
 
-function buildPrSources(runTs: string, prAnalysis: string | null | undefined, context: ReportContext): string {
+function buildPrSources(runTs: string, prAnalysis: string | null | undefined, context: ReportContext) {
   const out: string[] = [
     `# PR sources — ${runTs}`,
     "",
@@ -430,7 +402,7 @@ const REQUIRED_ACTIVE_ACTION_FIELDS = [
   "Session evidence",
 ];
 
-export function validateSynthesis(content: string | null | undefined): string[] {
+export function validateSynthesis(content: string | null | undefined) {
   const text = content?.trim();
   if (!isNonEmptyString(text)) {
     return ["Synthesis is empty."];
@@ -453,7 +425,7 @@ export function validateSynthesis(content: string | null | undefined): string[] 
   return warnings;
 }
 
-function validateActiveActions(section: string): string[] {
+function validateActiveActions(section: string) {
   const headings = [...section.matchAll(/^####\s+(?<title>.+)$/gmu)];
   const warnings: string[] = [];
   for (const [index, heading] of headings.entries()) {
@@ -491,7 +463,7 @@ function validateActiveActions(section: string): string[] {
 export function validatePrAnalysis(
   content: string | null | undefined,
   manifest?: PrAnalysisManifest | null,
-): PrAnalysisValidation {
+) {
   const text = content?.trim();
   if (!isNonEmptyString(text)) {
     return { warnings: [] };
@@ -523,7 +495,7 @@ export function validatePrAnalysis(
 function validateManifestBackedPrAnalysis(
   text: string,
   manifest: PrAnalysisManifest,
-): PrAnalysisValidation {
+) {
   const warnings: string[] = [];
   for (const item of manifest.workItems) {
     const section = findPrAnalysisSection(text, item);
@@ -565,7 +537,7 @@ function validateManifestBackedPrAnalysis(
   return { warnings };
 }
 
-function findPrAnalysisSection(text: string, item: PrWorkItemSummary): string | null {
+function findPrAnalysisSection(text: string, item: PrWorkItemSummary) {
   const heading = `${item.repo}#${item.number}`;
   const match = new RegExp(`^###\\s+${escapeRegExp(heading)}\\s*$`, "mu").exec(text);
   if (!match || match.index === undefined) {
@@ -577,7 +549,7 @@ function findPrAnalysisSection(text: string, item: PrWorkItemSummary): string | 
   return next === -1 ? rest : rest.slice(0, match[0].length + next);
 }
 
-function countHeading(text: string, heading: string, level = 2): number {
+function countHeading(text: string, heading: string, level = 2) {
   return [
     ...text.matchAll(
       new RegExp(`^${"#".repeat(level)}\\s+${escapeRegExp(heading)}\\s*$`, "gmu"),
@@ -585,7 +557,7 @@ function countHeading(text: string, heading: string, level = 2): number {
   ].length;
 }
 
-function containsRef(text: string, ref: string): boolean {
+function containsRef(text: string, ref: string) {
   if (text.includes(ref)) {
     return true;
   }
@@ -597,7 +569,7 @@ function containsRef(text: string, ref: string): boolean {
   return false;
 }
 
-function citedShas(text: string): string[] {
+function citedShas(text: string) {
   const out = new Set<string>();
   for (const match of text.matchAll(/\b(?<sha>[0-9a-f]{7,40})\b/giu)) {
     if (isNonEmptyString(match.groups?.sha)) {
@@ -607,23 +579,23 @@ function citedShas(text: string): string[] {
   return [...out];
 }
 
-function formatWindowLine(window: RetrospectiveWindow | null | undefined, runTs: string): string {
+function formatWindowLine(window: RetrospectiveWindow | null | undefined, runTs: string) {
   if (!window) {
     return `Window: _missing \`runs/${runTs}/window.json\`_`;
   }
   return `Window: ${window.since} to ${window.until} (${window.sinceSource} to ${window.untilSource})`;
 }
 
-function sourceFileName(runTs: string, kind: "session" | "pr"): string {
+function sourceFileName(runTs: string, kind: "session" | "pr") {
   return `${runTs}-${kind}-sources.md`;
 }
 
-function extractPrRepeatedPatterns(prAnalysis: string): string {
+function extractPrRepeatedPatterns(prAnalysis: string) {
   const section = extractMarkdownSection(prAnalysis, "Recurring Corrective Patterns");
   return section ?? "_No recurring corrective-change patterns were extracted from per-PR analyses._";
 }
 
-function extractMarkdownSection(markdown: string, heading: string, level = 2): string | null {
+function extractMarkdownSection(markdown: string, heading: string, level = 2) {
   const prefix = "#".repeat(level);
   const pattern = new RegExp(`^${prefix}\\s+${escapeRegExp(heading)}\\s*$`, "mu");
   const match = markdown.match(pattern);
@@ -637,7 +609,7 @@ function extractMarkdownSection(markdown: string, heading: string, level = 2): s
 }
 
 /** Pull the leading `Target:` / `Confidence:` lines out of a free-form fix body. */
-export function parseFixHeader(body: string): FixHeader {
+export function parseFixHeader(body: string) {
   let target = "unspecified";
   let confidence = "unspecified";
   const kept: string[] = [];
@@ -655,11 +627,11 @@ export function parseFixHeader(body: string): FixHeader {
   return { confidence, rest: kept.join(" "), target };
 }
 
-function episodesFor(fix: DurableFixProposal, episodes: FrictionEpisode[]): FrictionEpisode[] {
+function episodesFor(fix: DurableFixProposal, episodes: FrictionEpisode[]) {
   return episodes.filter((episode) => fix.citedEpisodeRefs.includes(episode.id));
 }
 
-function renderEvidence(episode: FrictionEpisode, bundle: RepoBundle): string[] {
+function renderEvidence(episode: FrictionEpisode, bundle: RepoBundle) {
   const session = bundle.sessions.find((candidate) => candidate.sessionId === episode.sessionId);
   if (!session) {
     return ["(session not in bundle)"];
@@ -671,7 +643,7 @@ function renderEvidence(episode: FrictionEpisode, bundle: RepoBundle): string[] 
   });
 }
 
-function renderTurn(turn: CanonicalTurn): string {
+function renderTurn(turn: CanonicalTurn) {
   if (turn.kind === "tool_call") {
     const status = isNonEmptyString(turn.error) ? ` [${turn.error}]` : "";
     return `\`${turn.name}\` ${turn.inputSummary}${status}`;
@@ -679,15 +651,15 @@ function renderTurn(turn: CanonicalTurn): string {
   return `**${turn.kind}:** ${firstLine(turn.text)}`;
 }
 
-function indentBody(body: string): string {
+function indentBody(body: string) {
   return body.trim().split("\n").join("\n  ");
 }
 
-function firstLine(text: string): string {
+function firstLine(text: string) {
   const line = text.split("\n").find((entry) => entry.trim()) ?? "";
   return line.length > 200 ? `${line.slice(0, 200)}…` : line;
 }
 
-function escapeRegExp(value: string): string {
+function escapeRegExp(value: string) {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

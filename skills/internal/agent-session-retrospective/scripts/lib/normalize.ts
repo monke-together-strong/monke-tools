@@ -11,7 +11,7 @@ const OUTPUT_HEAD_TAIL_MAX = 600;
 const PROSE_MAX = 4000;
 
 /** One-line summary of a tool's input object or string. */
-export function summarizeInput(input: JsonValue | undefined): string {
+export function summarizeInput(input: JsonValue | undefined) {
   if (input == null) {
     return "";
   }
@@ -21,13 +21,13 @@ export function summarizeInput(input: JsonValue | undefined): string {
 }
 
 /** Head + tail of tool output; the middle of long output is elided. */
-export function summarizeOutput(output: string | undefined): string | undefined {
+export function summarizeOutput(output: string | undefined) {
   if (output == null) {
-    return undefined;
+    return;
   }
   const trimmed = output.trim();
   if (!trimmed) {
-    return undefined;
+    return;
   }
   if (trimmed.length <= OUTPUT_HEAD_TAIL_MAX) {
     return trimmed;
@@ -40,26 +40,26 @@ export function summarizeOutput(output: string | undefined): string | undefined 
 }
 
 /** Keep assistant/human prose, but cap pathological lengths. */
-export function clipProse(text: string): string {
+export function clipProse(text: string) {
   return clip(text.trim(), PROSE_MAX);
 }
 
 /** Collapse a file-read tool result to {path, size} when the body is large. */
-export function elideFilePayload(filePath: string, body: string): string {
+export function elideFilePayload(filePath: string, body: string) {
   if (body.length <= OUTPUT_HEAD_TAIL_MAX) {
     return body.trim();
   }
   return `{path: ${filePath}, size: ${body.length} chars}`;
 }
 
-function clip(text: string, max: number): string {
+function clip(text: string, max: number) {
   if (text.length <= max) {
     return text;
   }
   return `${text.slice(0, max)}…`;
 }
 
-function collapseWhitespace(text: string): string {
+function collapseWhitespace(text: string) {
   return text.replaceAll(/\s+/gu, " ").trim();
 }
 

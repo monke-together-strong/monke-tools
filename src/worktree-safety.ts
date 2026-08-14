@@ -6,14 +6,8 @@ import { listWorktrees, resolveRepoContext } from "./git.ts";
 import type { WorktreeEntry } from "./git.ts";
 import type { Runtime } from "./types.ts";
 
-/** Shared result of a worktree removal preflight. */
-export interface WorktreeRemovalPreflight {
-  forceGitRemoval: boolean;
-  worktree: WorktreeEntry;
-}
-
 /** Reject a locked Git worktree registration. */
-export function assertWorktreeUnlocked(entry: WorktreeEntry): void {
+export function assertWorktreeUnlocked(entry: WorktreeEntry) {
   if (entry.locked === null) {
     return;
   }
@@ -22,7 +16,7 @@ export function assertWorktreeUnlocked(entry: WorktreeEntry): void {
 }
 
 /** Validate that a recorded absolute path is the canonical Source checkout for its repository. */
-export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: string): void {
+export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: string) {
   if (!path.isAbsolute(sourceRoot) || !existsSync(sourceRoot)) {
     throw new MonkeError(`Recorded Source checkout does not exist at canonical path ${sourceRoot}`);
   }
@@ -53,7 +47,7 @@ export function preflightWorktreeRemoval(
   sourceRoot: string,
   targetPath: string,
   options: { force: boolean }
-): WorktreeRemovalPreflight {
+) {
   const worktree = validateRegisteredWorktreeForRemoval(runtime, sourceRoot, targetPath);
   if (options.force) {
     return { forceGitRemoval: true, worktree };
@@ -73,7 +67,7 @@ export function validateRegisteredWorktreeForRemoval(
   runtime: Runtime,
   sourceRoot: string,
   targetPath: string
-): WorktreeEntry {
+) {
   const target = path.normalize(targetPath);
   const entry = listWorktrees(runtime, sourceRoot).find(
     (worktree) => path.normalize(worktree.path) === target
@@ -90,7 +84,7 @@ export function validateRegisteredWorktreeForRemoval(
 }
 
 /** Reject staged, modified, or untracked files in a worktree. */
-export function assertCleanWorktree(runtime: Runtime, worktreePath: string): void {
+export function assertCleanWorktree(runtime: Runtime, worktreePath: string) {
   const status = runtime.exec(
     "git",
     ["status", "--porcelain", "--untracked-files=normal", "--ignore-submodules=none"],
@@ -105,14 +99,14 @@ export function assertCleanWorktree(runtime: Runtime, worktreePath: string): voi
   }
 }
 
-function hasInitializedSubmodules(runtime: Runtime, worktreePath: string): boolean {
+function hasInitializedSubmodules(runtime: Runtime, worktreePath: string) {
   const status = runtime.exec("git", ["submodule", "status", "--recursive"], {
     cwd: worktreePath
   }).stdout;
   return status.split("\n").some((line) => line !== "" && !line.startsWith("-"));
 }
 
-function assertWorktreeIdentity(runtime: Runtime, sourceRoot: string, worktreePath: string): void {
+function assertWorktreeIdentity(runtime: Runtime, sourceRoot: string, worktreePath: string) {
   let context: ReturnType<typeof resolveRepoContext>;
   try {
     context = resolveRepoContext(runtime, worktreePath, null, {

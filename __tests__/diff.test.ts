@@ -968,7 +968,7 @@ async function runDiffChild(options: {
   binDirectory: string;
   currentWorktree: string;
   home: string;
-}): Promise<void> {
+}) {
   const indexUrl = new URL("../src/index.ts", import.meta.url).href;
   const runtimeUrl = new URL("../src/runtime.ts", import.meta.url).href;
   const selected = `worktree:${options.baseWorktree}`;

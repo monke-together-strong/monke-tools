@@ -150,7 +150,7 @@ export const ClaudeContentBlockSchema = discriminatedUnion("type", [
   }),
 ]);
 
-export function extractClaudeTextBlocks(content: JsonValue[]): string {
+export function extractClaudeTextBlocks(content: JsonValue[]) {
   return content
     .map((block) => {
       const parsed = ClaudeToolResultTextBlockSchema.safeParse(block);

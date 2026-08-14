@@ -16,22 +16,6 @@ import type {
   SessionRepoState
 } from "./types.ts";
 
-/** Result of resolving deterministic Resource values for one repo/session pair. */
-export interface ResolvedResourceValues {
-  /** Previously remembered Resource env names no longer declared by the repo. */
-  removedEnvNames: string[];
-  /** Declared Resource values to persist and write to the session root .env. */
-  values: ResourceValueState[];
-}
-
-/** Result of resolving Resource command outputs for one repo/session pair. */
-export interface ResolvedResourceCommands {
-  /** Declared Resource command outputs to persist and write to the session root .env. */
-  commands: ResourceCommandState[];
-  /** Previously remembered Resource command env names no longer declared by the repo. */
-  removedEnvNames: string[];
-}
-
 type ResourceCommandInput = Record<string, string[]>;
 
 const RESOURCE_COMMAND_RUNNER_ARGV = "monke-resource-command-runner";
@@ -86,7 +70,7 @@ export function resolveResourceValues(options: {
   repoConfig: RepoConfig;
   rootSourceRoot: string;
   session: string;
-}): ResolvedResourceValues {
+}) {
   const declaredEnvNames = new Set(
     options.repoConfig.resourceValuesInOrder.map((resource) => resource.env)
   );
@@ -146,7 +130,7 @@ export function resolveResourceCommands(options: {
   runtime: Runtime;
   session: string;
   worktreePath: string;
-}): ResolvedResourceCommands {
+}) {
   const existingCommands = options.existingRepoState?.resourceCommandOutputs ?? [];
   const existingByName = new Map(existingCommands.map((command) => [command.name, command]));
   const currentByName = new Map<string, ResourceCommandState>();
@@ -210,7 +194,7 @@ export function resolveResourceCommands(options: {
 function getReusableResourceCommand(
   command: ResourceCommandConfig,
   existing: ResourceCommandState | undefined
-): ResourceCommandState | null {
+) {
   if (!existing) {
     return null;
   }
@@ -237,7 +221,7 @@ function runResourceCommand(options: {
   runtime: Runtime;
   stdin: ResourceCommandInput;
   worktreePath: string;
-}): ResourceCommandState {
+}) {
   const stdin = JSON.stringify(options.stdin);
   const outputDirectory = mkdtempSync(path.join(tmpdir(), "monke-resource-command-"));
   const outputPath = path.join(outputDirectory, "output.json");
@@ -293,13 +277,10 @@ function runResourceCommand(options: {
   }
 }
 
-function resolveResourceCommandRunner(worktreePath: string): {
-  args: (modulePath: string, outputPath: string) => string[];
-  command: string;
-} {
+function resolveResourceCommandRunner(worktreePath: string) {
   if (existsSync(path.join(worktreePath, "pnpm-lock.yaml"))) {
     return {
-      args: (modulePath, outputPath) => [
+      args: (modulePath: string, outputPath: string) => [
         "exec",
         "bun",
         "--eval",
@@ -314,7 +295,7 @@ function resolveResourceCommandRunner(worktreePath: string): {
   }
 
   return {
-    args: (modulePath, outputPath) => [
+    args: (modulePath: string, outputPath: string) => [
       "--eval",
       RESOURCE_COMMAND_MODULE_RUNNER,
       "--",
@@ -331,7 +312,7 @@ function withResourceCommandLock<T>(
   sourceRoot: string,
   commandName: string,
   callback: () => T
-): T {
+) {
   return withScopedLock(home, `resource-command\u0000${sourceRoot}\u0000${commandName}`, callback);
 }
 
@@ -340,7 +321,7 @@ function buildResourceCommandInput(options: {
   home: string;
   session: string;
   sourceRoot: string;
-}): ResourceCommandInput {
+}) {
   const valuesByEnv = new Map(options.command.outputs.map((env) => [env, new Set<string>()]));
 
   for (const state of listSessionStates(options.home)) {
@@ -382,7 +363,7 @@ function readResourceCommandRunnerOutput(options: {
   outputPath: string;
   stderr: string;
   stdout: string;
-}): unknown {
+}) {
   let outputText: string;
   try {
     outputText = readFileSync(options.outputPath, "utf-8");
@@ -426,7 +407,7 @@ function validateResourceCommandReturn(
   stdout: string,
   stderr: string,
   stdin: ResourceCommandInput
-): { env: string; value: string }[] {
+) {
   const parsed = ResourceCommandReturnSchema.safeParse(returned);
   if (!parsed.success) {
     throw resourceCommandFailure({
@@ -473,10 +454,7 @@ function validateResourceCommandReturn(
   });
 }
 
-function resolveResourceCommandRunPath(
-  worktreePath: string,
-  command: ResourceCommandConfig
-): string {
+function resolveResourceCommandRunPath(worktreePath: string, command: ResourceCommandConfig) {
   const resolved = path.resolve(worktreePath, command.run);
   const relative = path.relative(worktreePath, resolved);
   if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
@@ -492,7 +470,7 @@ function resourceCommandFailure(options: {
   kind: string;
   stderr: string;
   stdout?: string;
-}): MonkeError {
+}) {
   const stderr = options.stderr.trim() || "<empty>";
   const stdout =
     options.stdout === undefined ? "" : `\nstdout:\n${options.stdout.trim() || "<empty>"}`;
@@ -504,7 +482,7 @@ function resourceCommandFailure(options: {
 function toResourceCommandStates(
   declaredCommands: ResourceCommandConfig[],
   currentByName: Map<string, ResourceCommandState>
-): ResourceCommandState[] {
+) {
   return declaredCommands.flatMap((command) => {
     const state = currentByName.get(command.name);
     return state ? [state] : [];
@@ -515,7 +493,7 @@ function toImmediateResourceCommandStates(
   declaredCommands: ResourceCommandConfig[],
   currentByName: Map<string, ResourceCommandState>,
   existingCommands: ResourceCommandState[]
-): ResourceCommandState[] {
+) {
   const existingByName = new Map(existingCommands.map((command) => [command.name, command]));
   const declaredNames = new Set(declaredCommands.map((command) => command.name));
   const declaredStates = declaredCommands.flatMap((command) => {
@@ -546,7 +524,7 @@ function interpolateResourceLiteral(options: {
   location: string;
   session: string;
   user: string;
-}): string {
+}) {
   const value = options.literal.replaceAll(
     /\$\{(?<name>[^}]*)\}/gu,
     (placeholder, name: string) => {
@@ -571,7 +549,7 @@ function interpolateResourceLiteral(options: {
   return value;
 }
 
-function resolveResourceUser(env: Record<string, string | undefined>): string {
+function resolveResourceUser(env: Record<string, string | undefined>) {
   for (const key of ["USER", "LOGNAME", "USERNAME"]) {
     const value = env[key]?.trim();
     if (value) {
@@ -581,7 +559,7 @@ function resolveResourceUser(env: Record<string, string | undefined>): string {
   return "unknown";
 }
 
-function describeRedactedValue(value: string): string {
+function describeRedactedValue(value: string) {
   return `<redacted length=${value.length}>`;
 }
 
@@ -591,7 +569,7 @@ function rejectResourceValueCollisions(options: {
   session: string;
   sourceRoot: string;
   values: ResourceValueState[];
-}): void {
+}) {
   for (const state of listSessionStates(options.home)) {
     if (state.rootSourceRoot === options.rootSourceRoot && state.session === options.session) {
       continue;
@@ -618,6 +596,6 @@ function rejectResourceValueCollisions(options: {
   }
 }
 
-function dedupe(values: string[]): string[] {
+function dedupe(values: string[]) {
   return [...new Set(values)];
 }

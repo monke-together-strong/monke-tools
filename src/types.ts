@@ -140,12 +140,6 @@ export interface RepoConfig {
   sourceRoot: string;
 }
 
-export interface ResolvedGraph {
-  reposByRoot: Map<string, RepoConfig>;
-  reposInMaterializationOrder: RepoConfig[];
-  rootSourceRoot: string;
-}
-
 export interface RepoMaterializationResult {
   localAssignments: Map<string, number>;
   state: SessionRepoState;

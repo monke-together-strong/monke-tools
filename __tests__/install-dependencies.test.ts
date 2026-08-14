@@ -265,13 +265,13 @@ describe("dependency installation", () => {
   });
 });
 
-function listBuildArtifacts(buildDirectory: string): string[] {
+function listBuildArtifacts(buildDirectory: string) {
   return readdirSync(buildDirectory)
     .filter((entry) => entry.startsWith(".") && entry.endsWith(".bun-build"))
     .toSorted();
 }
 
-function prepareInstallFixture(checkout: string, binDirectory: string): void {
+function prepareInstallFixture(checkout: string, binDirectory: string) {
   mkdirSync(path.join(checkout, "scripts"), { recursive: true });
   mkdirSync(path.join(checkout, "src"), { recursive: true });
   writeFileSync(
@@ -289,7 +289,7 @@ function prepareInstallFixture(checkout: string, binDirectory: string): void {
   installFakeBun(binDirectory);
 }
 
-function installFakePlatform(binDirectory: string, system: string, architecture: string): void {
+function installFakePlatform(binDirectory: string, system: string, architecture: string) {
   const unamePath = path.join(binDirectory, "uname");
   writeFileSync(
     unamePath,
@@ -299,7 +299,7 @@ function installFakePlatform(binDirectory: string, system: string, architecture:
   chmodSync(unamePath, 0o755);
 }
 
-function installFakeBrew(binDirectory: string): void {
+function installFakeBrew(binDirectory: string) {
   const brewPath = path.join(binDirectory, "brew");
   writeFileSync(
     brewPath,
@@ -319,7 +319,7 @@ exit 2
   chmodSync(brewPath, 0o755);
 }
 
-function installFakeBun(binDirectory: string): void {
+function installFakeBun(binDirectory: string) {
   mkdirSync(binDirectory, { recursive: true });
   const bunPath = path.join(binDirectory, "bun");
   writeFileSync(

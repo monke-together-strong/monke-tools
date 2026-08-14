@@ -94,7 +94,7 @@ function bundleWith(refs: string[]): RepoBundle {
   };
 }
 
-function writeWindow(root: string, runTs = "ts"): void {
+function writeWindow(root: string, runTs = "ts") {
   const runDir = path.join(root, "runs", runTs);
   mkdirSync(runDir, { recursive: true });
   writeFileSync(
@@ -122,7 +122,7 @@ describe("agent session retrospective", () => {
     rmSync(dir, { force: true, recursive: true });
   });
 
-  function jsonl(lines: unknown[]): string {
+  function jsonl(lines: unknown[]) {
     const filePath = path.join(dir, "transcript.jsonl");
     writeFileSync(filePath, lines.map((line) => JSON.stringify(line)).join("\n"), "utf-8");
     return filePath;
@@ -1476,7 +1476,7 @@ describe("agent session retrospective", () => {
       const codexRoot = path.join(dir, "codex");
       const dayDir = path.join(codexRoot, "sessions", "2026", "05", "26");
       mkdirSync(dayDir, { recursive: true });
-      const writeCodex = (name: string, turns: number): void => {
+      const writeCodex = (name: string, turns: number) => {
         const lines: unknown[] = [
           {
             payload: { cwd: dir, id: "dup-1" },

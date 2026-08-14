@@ -6,16 +6,12 @@ import type * as z from "zod";
 import { MonkeError } from "./errors.ts";
 
 /** Parse an application-owned YAML file and validate its runtime shape. */
-export function parseOwnedYamlFile<T extends z.ZodType>(filePath: string, schema: T): z.output<T> {
+export function parseOwnedYamlFile<T extends z.ZodType>(filePath: string, schema: T) {
   return parseOwnedYamlText(readFileSync(filePath, "utf-8"), filePath, schema);
 }
 
 /** Parse application-owned YAML text and validate its runtime shape. */
-export function parseOwnedYamlText<T extends z.ZodType>(
-  text: string,
-  label: string,
-  schema: T
-): z.output<T> {
+export function parseOwnedYamlText<T extends z.ZodType>(text: string, label: string, schema: T) {
   const document = parseDocument(text, {
     merge: false,
     strict: true,
@@ -31,11 +27,7 @@ export function parseOwnedYamlText<T extends z.ZodType>(
 }
 
 /** Validate one runtime boundary and translate schema issues into application errors. */
-export function parseBoundaryValue<T extends z.ZodType>(
-  schema: T,
-  value: unknown,
-  label: string
-): z.output<T> {
+export function parseBoundaryValue<T extends z.ZodType>(schema: T, value: unknown, label: string) {
   const result = schema.safeParse(value);
   if (result.success) {
     return result.data;
@@ -50,7 +42,7 @@ export function parseBoundaryValue<T extends z.ZodType>(
   throw new MonkeError(`Invalid ${label}:\n${message}`);
 }
 
-function formatIssuePath(issuePath: PropertyKey[]): string {
+function formatIssuePath(issuePath: PropertyKey[]) {
   let result = "";
   for (const segment of issuePath) {
     if (typeof segment === "number") {

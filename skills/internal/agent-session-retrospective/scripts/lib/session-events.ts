@@ -8,7 +8,7 @@ import {
   summarizeOutput,
 } from "./normalize.ts";
 import type { JsonValue } from "./transcript-schemas.ts";
-import type { AgentKind, CanonicalSession, CanonicalTurn } from "./types.ts";
+import type { AgentKind, CanonicalTurn } from "./types.ts";
 
 // Cap distinct directory resolutions per session: a session that reads thousands
 // of paths must not trigger thousands of `git` calls. Secondary membership is
@@ -64,7 +64,7 @@ interface BuildCanonicalSessionOptions extends DecodedSession {
 class TurnBuilder {
   readonly turns: CanonicalTurn[] = [];
 
-  prose(kind: "user" | "assistant", text: string): void {
+  prose(kind: "user" | "assistant", text: string) {
     const trimmed = clipProse(text);
     if (!trimmed) {
       return;
@@ -72,7 +72,7 @@ class TurnBuilder {
     this.turns.push({ kind, ref: `t${this.turns.length}`, text: trimmed });
   }
 
-  toolCall(name: string, inputSummary: string): CanonicalTurn & { kind: "tool_call" } {
+  toolCall(name: string, inputSummary: string) {
     const turn = {
       inputSummary,
       kind: "tool_call" as const,
@@ -87,7 +87,7 @@ class TurnBuilder {
 /** Build one canonical session from agent-independent transcript events. */
 export function buildCanonicalSession(
   options: BuildCanonicalSessionOptions,
-): CanonicalSession | null {
+) {
   if (!isNonEmptyString(options.sessionId)) {
     return null;
   }
@@ -143,14 +143,14 @@ export function buildCanonicalSession(
   };
 }
 
-function isHumanPromptSource(threadSource: string | null): boolean {
+function isHumanPromptSource(threadSource: string | null) {
   return threadSource !== "subagent" && threadSource !== "automation";
 }
 
 function applyToolResult(
   turn: CanonicalTurn & { kind: "tool_call" },
   result: SessionEvent & { kind: "tool-result" },
-): void {
+) {
   turn.outputHeadTail = summarizeOutput(result.output);
   if (result.error !== undefined) {
     turn.error = result.error;
@@ -168,7 +168,7 @@ function collectTouchedRoot(
   primary: string,
   into: Set<string>,
   visitedDirs: Set<string>,
-): void {
+) {
   if (
     !value.startsWith("/") ||
     value.length <= 1 ||
@@ -189,7 +189,7 @@ function collectTouchedRoot(
   }
 }
 
-function isDirectory(value: string): boolean {
+function isDirectory(value: string) {
   try {
     return statSync(value, { throwIfNoEntry: false })?.isDirectory() ?? false;
   } catch {

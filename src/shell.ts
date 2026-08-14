@@ -24,12 +24,12 @@ export interface ShellInstallOptions {
 }
 
 /** Request that an active Shell adapter changes directory after mt exits. */
-export function requestShellDirectory(runtime: Runtime, targetPath: string): boolean {
+export function requestShellDirectory(runtime: Runtime, targetPath: string) {
   return requestShellDirectoryWithFallback(runtime, targetPath, false);
 }
 
 /** Relocate a shell after its current worktree has already been removed. */
-export function requestShellDirectoryAfterRemoval(runtime: Runtime, targetPath: string): boolean {
+export function requestShellDirectoryAfterRemoval(runtime: Runtime, targetPath: string) {
   return requestShellDirectoryWithFallback(runtime, targetPath, true);
 }
 
@@ -37,7 +37,7 @@ function requestShellDirectoryWithFallback(
   runtime: Runtime,
   targetPath: string,
   removedCurrentWorktree: boolean
-): boolean {
+) {
   const logger = createLogger(runtime);
 
   if (writeDirectoryDirective(runtime, targetPath)) {
@@ -61,16 +61,12 @@ function requestShellDirectoryWithFallback(
   return false;
 }
 
-export function runShellInit(
-  runtime: Runtime,
-  shellName: string,
-  options: ShellInitOptions = {}
-): void {
+export function runShellInit(runtime: Runtime, shellName: string, options: ShellInitOptions = {}) {
   const shell = requireSupportedShell(shellName);
   runtime.writeStdout(renderShellAdapter(shell, resolveAdapterBinary(runtime, options.binary)));
 }
 
-export function runShellInstall(runtime: Runtime, options: ShellInstallOptions = {}): void {
+export function runShellInstall(runtime: Runtime, options: ShellInstallOptions = {}) {
   const home = getHomeDirectory(runtime);
   const binary = resolveAdapterBinary(runtime, options.binary);
   const installedFiles: string[] = [];
@@ -86,7 +82,7 @@ export function runShellInstall(runtime: Runtime, options: ShellInstallOptions =
   );
 }
 
-function renderShellAdapter(shell: SupportedShell, binaryPath: string): string {
+function renderShellAdapter(shell: SupportedShell, binaryPath: string) {
   return `# monke-tools shell integration for ${shell}
 mt() {
   local __monke_mt_cd_status
@@ -124,7 +120,7 @@ monke() {
 `;
 }
 
-function writeDirectoryDirective(runtime: Runtime, targetPath: string): boolean {
+function writeDirectoryDirective(runtime: Runtime, targetPath: string) {
   const directivePath = runtime.env[SHELL_DIRECTORY_DIRECTIVE_ENV];
   if (!directivePath) {
     return false;
@@ -138,7 +134,7 @@ function writeDirectoryDirective(runtime: Runtime, targetPath: string): boolean 
   }
 }
 
-function isShellIntegrationConfigured(runtime: Runtime): boolean {
+function isShellIntegrationConfigured(runtime: Runtime) {
   const home = getHomeDirectory(runtime);
   const currentShell = resolveCurrentShell(runtime);
   const startupFiles =
@@ -158,7 +154,7 @@ function isShellIntegrationConfigured(runtime: Runtime): boolean {
   });
 }
 
-function installStartupBlock(startupFile: string, block: string): void {
+function installStartupBlock(startupFile: string, block: string) {
   ensureDirectory(path.dirname(startupFile));
   const existing = existsSync(startupFile) ? readFileSync(startupFile, "utf-8") : "";
   const startIndex = existing.indexOf(INTEGRATION_START);
@@ -176,14 +172,14 @@ function installStartupBlock(startupFile: string, block: string): void {
   writeFileSync(startupFile, nextContents, "utf-8");
 }
 
-function renderStartupBlock(shell: SupportedShell, binaryPath: string): string {
+function renderStartupBlock(shell: SupportedShell, binaryPath: string) {
   return `${INTEGRATION_START}
 eval "$(${shellQuote(binaryPath)} shell init ${shell} --binary ${shellQuote(binaryPath)})"
 ${INTEGRATION_END}
 `;
 }
 
-function resolveAdapterBinary(runtime: Runtime, binary: string | undefined): string {
+function resolveAdapterBinary(runtime: Runtime, binary: string | undefined) {
   const candidate = binary ?? runtime.env.MONKE_TOOLS_BINARY ?? findExecutable("mt", runtime.env);
   if (!candidate) {
     return "mt";
@@ -192,12 +188,12 @@ function resolveAdapterBinary(runtime: Runtime, binary: string | undefined): str
   return path.isAbsolute(candidate) ? candidate : path.resolve(runtime.cwd, candidate);
 }
 
-function resolveCurrentShell(runtime: Runtime): SupportedShell | null {
+function resolveCurrentShell(runtime: Runtime) {
   const shell = path.basename(runtime.env.SHELL ?? "");
   return isSupportedShell(shell) ? shell : null;
 }
 
-function requireSupportedShell(shellName: string): SupportedShell {
+function requireSupportedShell(shellName: string) {
   if (isSupportedShell(shellName)) {
     return shellName;
   }
@@ -208,10 +204,10 @@ function isSupportedShell(shellName: string): shellName is SupportedShell {
   return (SUPPORTED_SHELLS as readonly string[]).includes(shellName);
 }
 
-function getStartupFilePath(home: string, shell: SupportedShell): string {
+function getStartupFilePath(home: string, shell: SupportedShell) {
   return path.join(home, shell === "zsh" ? ".zshrc" : ".bashrc");
 }
 
-function shellQuote(value: string): string {
+function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }

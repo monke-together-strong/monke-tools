@@ -21,17 +21,11 @@ import type {
   CodexTranscriptRecord,
   JsonValue,
 } from "./transcript-schemas.ts";
-import type { AgentKind, CanonicalSession } from "./types.ts";
+import type { AgentKind } from "./types.ts";
 
 interface DiscoveredFile {
   agent: AgentKind;
   filePath: string;
-}
-
-interface JsonlReadResult {
-  hash: string;
-  lineCount: number;
-  records: JsonValue[];
 }
 
 type CodexEventPayload = Extract<CodexTranscriptRecord, { type: "event_msg" }>["payload"];
@@ -40,7 +34,7 @@ type CodexResponsePayload = Extract<CodexTranscriptRecord, { type: "response_ite
 type CodexSessionMetaPayload = Extract<CodexTranscriptRecord, { type: "session_meta" }>["payload"];
 type CodexTurnContextPayload = Extract<CodexTranscriptRecord, { type: "turn_context" }>["payload"];
 
-function readJsonlLines(filePath: string): JsonlReadResult {
+function readJsonlLines(filePath: string) {
   const raw = readFileSync(filePath, "utf-8");
   const hash = createHash("sha256").update(raw).digest("hex");
   const lines = raw.split("\n");
@@ -71,14 +65,11 @@ const EXIT_CODE_PATTERNS = [
   /process exited with status (?<exitCode>\d+)/iu,
 ];
 
-function parseExitCode(output: string): number | undefined {
-  for (const pattern of EXIT_CODE_PATTERNS) {
-    const match = output.match(pattern);
-    if (match?.groups?.exitCode !== undefined && match.groups.exitCode !== "") {
-      return Number(match.groups.exitCode);
-    }
-  }
-  return undefined;
+function parseExitCode(output: string) {
+  const exitCode = EXIT_CODE_PATTERNS.map(
+    (pattern) => output.match(pattern)?.groups?.exitCode
+  ).find((value) => value !== undefined && value !== "");
+  return exitCode === undefined ? undefined : Number(exitCode);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,11 +81,11 @@ const codexSessionAdapter: SessionAdapter = {
   decode: decodeCodexSession,
 };
 
-export function parseCodexSession(filePath: string): CanonicalSession | null {
+export function parseCodexSession(filePath: string) {
   return parseSessionWithAdapter(filePath, codexSessionAdapter);
 }
 
-function decodeCodexSession(rawRecords: JsonValue[]): DecodedSession {
+function decodeCodexSession(rawRecords: JsonValue[]) {
   const session = createDecodedSession();
   const records = parseCodexTranscript(rawRecords);
   const hasEventProse = records.some((record) => record.type === "event_msg");
@@ -141,7 +132,7 @@ function decodeCodexSession(rawRecords: JsonValue[]): DecodedSession {
 function readCodexSessionMetadata(
   session: DecodedSession,
   payload: CodexSessionMetaPayload,
-): void {
+) {
   if (payload.id !== undefined) {
     session.sessionId = payload.id;
   }
@@ -158,7 +149,7 @@ function readCodexSessionMetadata(
 function readCodexTurnContext(
   session: DecodedSession,
   payload: CodexTurnContextPayload,
-): void {
+) {
   if ((session.cwd === null || session.cwd === "") && payload.cwd !== undefined) {
     session.cwd = payload.cwd;
   }
@@ -231,7 +222,7 @@ function decodeCodexResponseItem(
   return event;
 }
 
-function parseCodexTranscript(records: JsonValue[]): CodexTranscriptRecord[] {
+function parseCodexTranscript(records: JsonValue[]) {
   const parsedRecords: CodexTranscriptRecord[] = [];
   for (const record of records) {
     const parsed = CodexTranscriptRecordSchema.safeParse(record);
@@ -242,7 +233,7 @@ function parseCodexTranscript(records: JsonValue[]): CodexTranscriptRecord[] {
   return parsedRecords;
 }
 
-function parseCodexArguments(value: JsonValue | undefined): JsonValue {
+function parseCodexArguments(value: JsonValue | undefined) {
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The response schema already validated this recursive JSON value; Codex alone may encode its tool arguments as a JSON string.
   if (value === undefined || typeof value !== "string") {
     return value ?? null;
@@ -256,7 +247,7 @@ function parseCodexArguments(value: JsonValue | undefined): JsonValue {
   }
 }
 
-function extractCodexMessageText(content: CodexMessagePayload["content"]): string {
+function extractCodexMessageText(content: CodexMessagePayload["content"]) {
   return Array.isArray(content)
     ? content
         .map((block) => block?.text ?? "")
@@ -265,9 +256,9 @@ function extractCodexMessageText(content: CodexMessagePayload["content"]): strin
     : content;
 }
 
-function collectToolPathCandidates(input: JsonValue): string[] {
+function collectToolPathCandidates(input: JsonValue) {
   const candidates: string[] = [];
-  const visit = (value: JsonValue): void => {
+  const visit = (value: JsonValue) => {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The transcript schema already validated this recursive JSON value; string members are candidate filesystem paths.
     if (typeof value === "string") {
       candidates.push(value);
@@ -294,7 +285,7 @@ function collectToolPathCandidates(input: JsonValue): string[] {
   return candidates;
 }
 
-function isInjectedUserText(text: string): boolean {
+function isInjectedUserText(text: string) {
   const head = text.trimStart().slice(0, 40);
   return (
     head.startsWith("# AGENTS.md") ||
@@ -314,11 +305,11 @@ const claudeSessionAdapter: SessionAdapter = {
   decode: decodeClaudeSession,
 };
 
-export function parseClaudeSession(filePath: string): CanonicalSession | null {
+export function parseClaudeSession(filePath: string) {
   return parseSessionWithAdapter(filePath, claudeSessionAdapter);
 }
 
-function decodeClaudeSession(rawRecords: JsonValue[]): DecodedSession {
+function decodeClaudeSession(rawRecords: JsonValue[]) {
   const session = createDecodedSession();
   const records = parseClaudeTranscript(rawRecords);
   const toolResults = collectClaudeToolResults(records);
@@ -339,7 +330,7 @@ function decodeClaudeSession(rawRecords: JsonValue[]): DecodedSession {
 
 function collectClaudeToolResults(
   records: ClaudeTranscriptRecord[],
-): Map<string, SessionEvent & { kind: "tool-result" }> {
+) {
   const results = new Map<string, SessionEvent & { kind: "tool-result" }>();
   for (const record of records) {
     if (!Array.isArray(record.message.content)) {
@@ -355,7 +346,7 @@ function collectClaudeToolResults(
   return results;
 }
 
-function parseClaudeTranscript(records: JsonValue[]): ClaudeTranscriptRecord[] {
+function parseClaudeTranscript(records: JsonValue[]) {
   const parsedRecords: ClaudeTranscriptRecord[] = [];
   for (const record of records) {
     const parsed = ClaudeTranscriptRecordSchema.safeParse(record);
@@ -369,7 +360,7 @@ function parseClaudeTranscript(records: JsonValue[]): ClaudeTranscriptRecord[] {
 function readClaudeSessionMetadata(
   session: DecodedSession,
   record: ClaudeTranscriptEnvelope,
-): void {
+) {
   if (session.sessionId === "" && record.sessionId !== undefined) {
     session.sessionId = record.sessionId;
   }
@@ -463,7 +454,7 @@ function decodeClaudeBlock(
 
 function decodeClaudeToolResult(
   block: JsonValue,
-): (SessionEvent & { kind: "tool-result" }) | null {
+) {
   const parsed = ClaudeContentBlockSchema.safeParse(block);
   if (!parsed.success || parsed.data.type !== "tool_result") {
     return null;
@@ -480,7 +471,7 @@ function decodeClaudeToolResult(
   return event;
 }
 
-function extractClaudeText(content: JsonValue | undefined): string {
+function extractClaudeText(content: JsonValue | undefined) {
   if (content === undefined) {
     return "";
   }
@@ -494,7 +485,7 @@ function extractClaudeText(content: JsonValue | undefined): string {
 function parseSessionWithAdapter(
   filePath: string,
   adapter: SessionAdapter,
-): CanonicalSession | null {
+) {
   const { hash, lineCount, records } = readJsonlLines(filePath);
   if (records.length === 0) {
     return null;
@@ -520,7 +511,7 @@ function createDecodedSession(): DecodedSession {
   };
 }
 
-function noteActivity(session: DecodedSession, timestamp: string | undefined): void {
+function noteActivity(session: DecodedSession, timestamp: string | undefined) {
   if (timestamp === undefined) {
     return;
   }
@@ -539,7 +530,7 @@ export interface DiscoverOptions {
 }
 
 /** Enumerate Codex + Claude transcript files on disk. */
-export function discoverSessionFiles(options: DiscoverOptions = {}): DiscoveredFile[] {
+export function discoverSessionFiles(options: DiscoverOptions = {}) {
   const home = options.home ?? homedir();
   const codexRoot = options.codexRoot ?? path.join(home, ".codex");
   const claudeRoot = options.claudeRoot ?? path.join(home, ".claude", "projects");
@@ -556,7 +547,7 @@ export function discoverSessionFiles(options: DiscoverOptions = {}): DiscoveredF
   return files;
 }
 
-function walkJsonl(dir: string): string[] {
+function walkJsonl(dir: string) {
   if (!existsSync(dir)) {
     return [];
   }
@@ -572,6 +563,6 @@ function walkJsonl(dir: string): string[] {
   return out;
 }
 
-export function parseSessionFile(file: DiscoveredFile): CanonicalSession | null {
+export function parseSessionFile(file: DiscoveredFile) {
   return file.agent === "codex" ? parseCodexSession(file.filePath) : parseClaudeSession(file.filePath);
 }

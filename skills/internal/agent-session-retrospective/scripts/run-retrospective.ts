@@ -19,7 +19,7 @@ import { runCommit } from "./lib/commit.ts";
 import { runPrAggregate, runPrCollect } from "./lib/pr-analysis.ts";
 import { retroHome, withRetroLock } from "./lib/store.ts";
 
-function parseFlags(argv: string[]): Map<string, string> {
+function parseFlags(argv: string[]) {
   const flags = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
@@ -37,13 +37,13 @@ function parseFlags(argv: string[]): Map<string, string> {
   return flags;
 }
 
-function defaultRunTs(): string {
+function defaultRunTs() {
   return new Date().toISOString().replaceAll(/[:.]/gu, "-");
 }
 
-function parseDateMs(value: string | undefined): number | undefined {
+function parseDateMs(value: string | undefined) {
   if (value === undefined || value === "") {
-    return undefined;
+    return;
   }
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) {
@@ -52,9 +52,9 @@ function parseDateMs(value: string | undefined): number | undefined {
   return parsed;
 }
 
-function parseIdleMinutes(value: string | undefined): number | undefined {
+function parseIdleMinutes(value: string | undefined) {
   if (value === undefined) {
-    return undefined;
+    return;
   }
   const minutes = Number(value);
   if (!Number.isFinite(minutes) || minutes < 0) {
@@ -63,7 +63,7 @@ function parseIdleMinutes(value: string | undefined): number | undefined {
   return minutes;
 }
 
-function main(): void {
+function main() {
   const [command, ...rest] = process.argv.slice(2);
   const flags = parseFlags(rest);
   const root = retroHome(flags.get("home"));

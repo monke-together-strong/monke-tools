@@ -89,7 +89,7 @@ export function loadGlobalMonkeConfig(home: string): GlobalMonkeConfig {
 }
 
 /** Save versioned Global monke config to `config.yml` under the monke home directory. */
-export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig): void {
+export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig) {
   const configPath = getGlobalConfigPath(home);
   const parsed = normalizeGlobalMonkeConfig(
     parseBoundaryValue(GlobalMonkeConfigSchema, config, configPath),
@@ -100,7 +100,7 @@ export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig): 
 }
 
 /** Return the path of the Global monke config file for a monke home directory. */
-function getGlobalConfigPath(home: string): string {
+function getGlobalConfigPath(home: string) {
   return path.join(home, "config.yml");
 }
 
@@ -122,10 +122,7 @@ function normalizeGlobalMonkeConfig(
   };
 }
 
-function parseSkillInstallPreference(
-  preference: ParsedSkillInstallPreference,
-  configPath: string
-): SkillInstallPreference {
+function parseSkillInstallPreference(preference: ParsedSkillInstallPreference, configPath: string) {
   const location = `${configPath}#skillInstallPreference`;
 
   const targets: SkillInstallTargetPreference[] = [];

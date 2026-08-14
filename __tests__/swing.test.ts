@@ -798,7 +798,7 @@ apps:
   });
 });
 
-function installBareOrigin(sandbox: string, repoRoot: string): void {
+function installBareOrigin(sandbox: string, repoRoot: string) {
   const originRoot = path.join(sandbox, "origin.git");
   mkdirSync(originRoot, { recursive: true });
   git(originRoot, ["init", "--bare"]);
@@ -813,7 +813,7 @@ function pushReadmePullRequestHead(
     message: string;
     number: number;
   }
-): void {
+) {
   git(repoRoot, ["switch", "-c", options.branch]);
   writeFileSync(path.join(repoRoot, "README.md"), options.contents, "utf-8");
   git(repoRoot, ["add", "README.md"]);
@@ -823,7 +823,7 @@ function pushReadmePullRequestHead(
   git(repoRoot, ["branch", "-D", options.branch]);
 }
 
-function localBranchExists(repoRoot: string, branch: string): boolean {
+function localBranchExists(repoRoot: string, branch: string) {
   try {
     git(repoRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]);
     return true;
@@ -832,7 +832,7 @@ function localBranchExists(repoRoot: string, branch: string): boolean {
   }
 }
 
-function installSwingGhShim(binDirectory: string, prs: Record<string, unknown>): void {
+function installSwingGhShim(binDirectory: string, prs: Record<string, unknown>) {
   mkdirSync(binDirectory, { recursive: true });
   const cases = Object.entries(prs)
     .map(([number, pr]) => `    ${number}) printf '%s\\n' '${JSON.stringify(pr)}'; exit 0 ;;`)
