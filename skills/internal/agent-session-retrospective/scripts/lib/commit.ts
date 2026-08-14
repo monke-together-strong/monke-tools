@@ -246,6 +246,22 @@ interface ReportContext {
   window?: RetrospectiveWindow | null;
 }
 
+export interface ReportArtifacts {
+  prSources: string;
+  report: string;
+  sessionSources: string;
+}
+
+export interface PrAnalysisValidation {
+  warnings: string[];
+}
+
+export interface FixHeader {
+  confidence: string;
+  rest: string;
+  target: string;
+}
+
 export function buildReport(
   runTs: string,
   synthesis: string,
@@ -260,7 +276,7 @@ export function buildReportArtifacts(
   synthesis: string,
   slices: RepoSlice[],
   context: ReportContext = {},
-): { prSources: string; report: string; sessionSources: string; } {
+): ReportArtifacts {
   const out: string[] = [
     `# Agent session retrospective — ${runTs}`,
     "",
@@ -475,7 +491,7 @@ function validateActiveActions(section: string): string[] {
 export function validatePrAnalysis(
   content: string | null | undefined,
   manifest?: PrAnalysisManifest | null,
-): { warnings: string[] } {
+): PrAnalysisValidation {
   const text = content?.trim();
   if (!isNonEmptyString(text)) {
     return { warnings: [] };
@@ -507,7 +523,7 @@ export function validatePrAnalysis(
 function validateManifestBackedPrAnalysis(
   text: string,
   manifest: PrAnalysisManifest,
-): { warnings: string[] } {
+): PrAnalysisValidation {
   const warnings: string[] = [];
   for (const item of manifest.workItems) {
     const section = findPrAnalysisSection(text, item);
@@ -621,7 +637,7 @@ function extractMarkdownSection(markdown: string, heading: string, level = 2): s
 }
 
 /** Pull the leading `Target:` / `Confidence:` lines out of a free-form fix body. */
-export function parseFixHeader(body: string): { confidence: string; rest: string; target: string; } {
+export function parseFixHeader(body: string): FixHeader {
   let target = "unspecified";
   let confidence = "unspecified";
   const kept: string[] = [];

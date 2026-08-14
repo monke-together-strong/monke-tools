@@ -23,7 +23,7 @@ export function loadEnvFileIfPresent(filePath: string): void {
   try {
     content = readFileSync(filePath, "utf-8");
   } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return;
     }
 

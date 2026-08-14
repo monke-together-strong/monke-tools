@@ -244,7 +244,7 @@ function evictIfStale(lockPath: string): boolean {
   let stale = false;
   try {
     const meta = parseJsonFile(lockPath, RetroLockMetadataSchema);
-    if (typeof meta.pid === "number" && meta.pid > 0) {
+    if (meta.pid !== undefined && meta.pid > 0) {
       // Liveness wins over age: a long run (>60s) past the cutoff must keep its lock.
       try {
         process.kill(meta.pid, 0);
@@ -252,7 +252,7 @@ function evictIfStale(lockPath: string): boolean {
       } catch (error) {
         stale = error instanceof Error && "code" in error && error.code === "ESRCH";
       }
-    } else if (typeof meta.acquiredAt === "number") {
+    } else if (meta.acquiredAt !== undefined) {
       stale = Date.now() - meta.acquiredAt > STALE_LOCK_AGE_MS;
     }
   } catch {

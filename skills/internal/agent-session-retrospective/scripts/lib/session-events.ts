@@ -2,7 +2,12 @@ import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { resolveGitRoot, resolveRepoKey } from "./identity.ts";
-import { clipProse, summarizeInput, summarizeOutput } from "./normalize.ts";
+import {
+  clipProse,
+  isNonEmptyString,
+  summarizeOutput,
+} from "./normalize.ts";
+import type { JsonValue } from "./transcript-schemas.ts";
 import type { AgentKind, CanonicalSession, CanonicalTurn } from "./types.ts";
 
 // Cap distinct directory resolutions per session: a session that reads thousands
@@ -20,9 +25,10 @@ export type SessionEvent =
   | {
       callId: string | null;
       cwd: string | null;
-      input: unknown;
+      inputSummary: string;
       kind: "tool-call";
       name: string;
+      pathCandidates: string[];
     }
   | {
       callId: string;
@@ -44,7 +50,7 @@ export interface DecodedSession {
 
 export interface SessionAdapter {
   readonly agent: AgentKind;
-  decode: (records: unknown[]) => DecodedSession;
+  decode: (records: JsonValue[]) => DecodedSession;
 }
 
 interface BuildCanonicalSessionOptions extends DecodedSession {
@@ -104,8 +110,10 @@ export function buildCanonicalSession(
 
     if (event.kind === "tool-call") {
       const callPrimary = isNonEmptyString(event.cwd) ? resolveRepoKey(event.cwd) : "";
-      collectTouchedRoots(event.input, callPrimary, touched, visitedDirs);
-      const turn = builder.toolCall(event.name, summarizeInput(event.input));
+      for (const candidate of event.pathCandidates) {
+        collectTouchedRoot(candidate, callPrimary, touched, visitedDirs);
+      }
+      const turn = builder.toolCall(event.name, event.inputSummary);
       if (event.callId !== null) {
         pendingCalls.set(event.callId, turn);
       }
@@ -155,35 +163,6 @@ function applyToolResult(
   }
 }
 
-function collectTouchedRoots(
-  rawArgs: unknown,
-  primary: string,
-  into: Set<string>,
-  visitedDirs: Set<string>,
-): void {
-  const visit = (value: unknown): void => {
-    if (typeof value === "string") {
-      collectTouchedRoot(value, primary, into, visitedDirs);
-      return;
-    }
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        visit(item);
-      }
-      return;
-    }
-    if (!isRecord(value)) {
-      return;
-    }
-    for (const key of ["workdir", "cwd", "path", "file_path", "absolute_path"]) {
-      if (key in value) {
-        visit(value[key]);
-      }
-    }
-  };
-  visit(rawArgs);
-}
-
 function collectTouchedRoot(
   value: string,
   primary: string,
@@ -216,12 +195,4 @@ function isDirectory(value: string): boolean {
   } catch {
     return false;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value !== "";
 }

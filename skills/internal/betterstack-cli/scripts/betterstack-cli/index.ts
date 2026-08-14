@@ -3,8 +3,14 @@
 import { Command, InvalidArgumentError } from '@commander-js/extra-typings';
 import type { OptionValues } from '@commander-js/extra-typings';
 import { existsSync, readFileSync } from "node:fs";
-import { BetterStackApiError, BetterStackClient, normalizeQueryUrl } from './client';
-import type { BetterStackConnectionsResponse, BetterStackSourceResponse } from './client';
+import type * as z from "zod";
+import {
+  BetterStackApiError,
+  BetterStackClient,
+  BetterStackConnectionsResponseSchema,
+  BetterStackSourceResponseSchema,
+  normalizeQueryUrl
+} from './client';
 import { getFirstEnvValue, loadEnvFileIfPresent } from "./env";
 
 async function main(): Promise<void> {
@@ -213,10 +219,10 @@ interface BetterStackConnectionMetadata {
   username: string;
 }
 
-class BetterStackResponseShapeError extends Error {
+class BetterStackInvalidResponseError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "BetterStackResponseShapeError";
+    this.name = "BetterStackInvalidResponseError";
   }
 }
 
@@ -315,11 +321,11 @@ async function loadSourceMetadata(
 ): Promise<BetterStackSourceMetadata> {
   const client = createMetadataClient(token);
   const raw = await client.getSource(sourceId);
-  const parsed: unknown = JSON.parse(raw);
-
-  if (!isBetterStackSourceResponse(parsed)) {
-    invalidResponse("Invalid Better Stack source response shape: expected data.attributes.");
-  }
+  const parsed = parseMetadataResponse(
+    raw,
+    BetterStackSourceResponseSchema,
+    "Invalid Better Stack source response: expected data.attributes."
+  );
 
   return {
     dataRegion: parsed.data.attributes.data_region,
@@ -334,11 +340,11 @@ async function loadSourceMetadata(
 async function loadConnections(token: string): Promise<BetterStackConnectionMetadata[]> {
   const client = createMetadataClient(token);
   const raw = await client.listConnections(1, 100);
-  const parsed: unknown = JSON.parse(raw);
-
-  if (!isBetterStackConnectionsResponse(parsed)) {
-    invalidResponse("Invalid Better Stack connections response shape: expected data[].attributes.");
-  }
+  const parsed = parseMetadataResponse(
+    raw,
+    BetterStackConnectionsResponseSchema,
+    "Invalid Better Stack connections response: expected data[].attributes."
+  );
 
   return parsed.data.map((connection) => ({
     dataRegion: connection.attributes.data_region,
@@ -357,7 +363,7 @@ async function tryLoadSourceMetadata(
   try {
     return await loadSourceMetadata(token, sourceId);
   } catch (error) {
-    if (error instanceof BetterStackResponseShapeError) {
+    if (error instanceof BetterStackInvalidResponseError) {
       throw error;
     }
 
@@ -369,7 +375,7 @@ async function tryLoadConnections(token: string): Promise<BetterStackConnectionM
   try {
     return await loadConnections(token);
   } catch (error) {
-    if (error instanceof BetterStackResponseShapeError) {
+    if (error instanceof BetterStackInvalidResponseError) {
       throw error;
     }
 
@@ -442,52 +448,20 @@ function formatHostAndPort(host: string, port: number): string {
   return port === 443 ? host : `${host}:${port}`;
 }
 
-function isBetterStackSourceResponse(value: unknown): value is BetterStackSourceResponse {
-  if (!isRecord(value) || !isRecord(value.data)) {
-    return false;
-  }
-
-  const {data} = value;
-  const {attributes} = data;
-
-  return (
-    isRecord(attributes) &&
-    typeof data.id === "string" &&
-    typeof attributes.team_id === "number" &&
-    typeof attributes.team_name === "string" &&
-    typeof attributes.table_name === "string" &&
-    typeof attributes.data_region === "string" &&
-    typeof attributes.name === "string"
-  );
-}
-
-function isBetterStackConnectionsResponse(value: unknown): value is BetterStackConnectionsResponse {
-  if (!isRecord(value) || !Array.isArray(value.data)) {
-    return false;
-  }
-
-  return value.data.every((connection) => {
-    if (!isRecord(connection) || !isRecord(connection.attributes)) {
-      return false;
+function parseMetadataResponse<T extends z.ZodType>(
+  raw: string,
+  schema: T,
+  errorMessage: string
+): z.output<T> {
+  try {
+    const parsed = schema.safeParse(JSON.parse(raw));
+    if (parsed.success) {
+      return parsed.data;
     }
-
-    const {attributes} = connection;
-
-    return (
-      typeof attributes.data_region === "string" &&
-      typeof attributes.host === "string" &&
-      typeof attributes.port === "number" &&
-      Array.isArray(attributes.team_ids) &&
-      attributes.team_ids.every((teamId) => typeof teamId === "number") &&
-      Array.isArray(attributes.team_names) &&
-      attributes.team_names.every((teamName) => typeof teamName === "string") &&
-      typeof attributes.username === "string"
-    );
-  });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  } catch {
+    // The shared contract error below covers malformed JSON and invalid payloads.
+  }
+  return invalidResponse(errorMessage);
 }
 
 function createMetadataClient(tokenOverride?: string): BetterStackClient {
@@ -540,25 +514,27 @@ function fail(message: string): never {
 }
 
 function invalidResponse(message: string): never {
-  throw new BetterStackResponseShapeError(message);
+  throw new BetterStackInvalidResponseError(message);
 }
 
 function writeStdout(text: string): void {
   process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
 }
 
-main().catch((error: unknown) => {
-  if (error instanceof BetterStackApiError) {
-    process.stderr.write(`${error.status} ${error.statusText}\n`);
+function reportFailure(cause: unknown): void {
+  if (cause instanceof BetterStackApiError) {
+    process.stderr.write(`${cause.status} ${cause.statusText}\n`);
 
-    if (error.body) {
-      process.stderr.write(error.body.endsWith("\n") ? error.body : `${error.body}\n`);
+    if (cause.body) {
+      process.stderr.write(cause.body.endsWith("\n") ? cause.body : `${cause.body}\n`);
     }
 
     process.exit(1);
   }
 
-  const message = error instanceof Error ? error.message : String(error);
+  const message = cause instanceof Error ? cause.message : String(cause);
   process.stderr.write(`${message}\n`);
   process.exit(1);
-});
+}
+
+main().catch(reportFailure);

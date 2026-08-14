@@ -4,30 +4,28 @@
  * error?, output_head_tail}; elide big payloads. No triviality gate.
  */
 
+import type { JsonValue } from "./transcript-schemas.ts";
+
 const INPUT_SUMMARY_MAX = 200;
 const OUTPUT_HEAD_TAIL_MAX = 600;
 const PROSE_MAX = 4000;
 
-export function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value !== "";
-}
-
 /** One-line summary of a tool's input object or string. */
-export function summarizeInput(input: unknown): string {
+export function summarizeInput(input: JsonValue | undefined): string {
   if (input == null) {
     return "";
   }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The transcript adapter already validated this recursive JSON value; this selects its string member for readable summaries.
   const text = typeof input === "string" ? input : safeStringify(input);
   return clip(collapseWhitespace(text), INPUT_SUMMARY_MAX);
 }
 
 /** Head + tail of tool output; the middle of long output is elided. */
-export function summarizeOutput(output: unknown): string | undefined {
+export function summarizeOutput(output: string | undefined): string | undefined {
   if (output == null) {
     return undefined;
   }
-  const text = typeof output === "string" ? output : safeStringify(output);
-  const trimmed = text.trim();
+  const trimmed = output.trim();
   if (!trimmed) {
     return undefined;
   }
@@ -65,10 +63,10 @@ function collapseWhitespace(text: string): string {
   return text.replaceAll(/\s+/gu, " ").trim();
 }
 
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
+function safeStringify(value: JsonValue): string {
+  return JSON.stringify(value) ?? "";
+}
+
+export function isNonEmptyString(value: string | null | undefined): value is string {
+  return value !== undefined && value !== null && value !== "";
 }

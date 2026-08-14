@@ -19,7 +19,9 @@ import { runCommit } from "./lib/commit.ts";
 import { runPrAggregate, runPrCollect } from "./lib/pr-analysis.ts";
 import { retroHome, withRetroLock } from "./lib/store.ts";
 
-type Flags = Record<string, string | undefined>;
+interface Flags {
+  [key: string]: string | undefined;
+}
 
 function parseFlags(argv: string[]): Flags {
   const flags: Flags = {};

@@ -1,4 +1,5 @@
 import { BetterStackApiError } from "./api-error";
+import * as z from "zod";
 
 interface QueryCredentials {
   password: string;
@@ -10,37 +11,39 @@ const REQUEST_TIMEOUT_MS = 30_000;
 
 export { BetterStackApiError } from "./api-error";
 
-export interface BetterStackSourceResponse {
-  data: {
-    attributes: {
-      data_region: string;
-      name: string;
-      table_name: string;
-      team_id: number;
-      team_name: string;
-    };
-    id: string;
-    type: string;
-  };
-}
+export const BetterStackSourceResponseSchema = z.object({
+  data: z.object({
+    attributes: z.object({
+      data_region: z.string(),
+      name: z.string(),
+      table_name: z.string(),
+      team_id: z.number(),
+      team_name: z.string()
+    }),
+    id: z.string()
+  })
+});
 
-export interface BetterStackConnectionsResponse {
-  data: {
-    attributes: {
-      client_type: string;
-      data_region: string;
-      host: string;
-      id: number;
-      note: string;
-      port: number;
-      team_ids: number[];
-      team_names: string[];
-      username: string;
-    };
-    id: string;
-    type: string;
-  }[];
-}
+export type BetterStackSourceResponse = z.output<typeof BetterStackSourceResponseSchema>;
+
+export const BetterStackConnectionsResponseSchema = z.object({
+  data: z.array(
+    z.object({
+      attributes: z.object({
+        data_region: z.string(),
+        host: z.string(),
+        port: z.number(),
+        team_ids: z.array(z.number()),
+        team_names: z.array(z.string()),
+        username: z.string()
+      })
+    })
+  )
+});
+
+export type BetterStackConnectionsResponse = z.output<
+  typeof BetterStackConnectionsResponseSchema
+>;
 
 export class BetterStackClient {
   constructor(private readonly token: string) {}

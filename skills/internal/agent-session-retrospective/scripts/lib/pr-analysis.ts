@@ -96,21 +96,50 @@ export interface RunPrAggregateOptions {
   runTs: string;
 }
 
+export interface RepoPrCollection {
+  gaps: PrAnalysisGap[];
+  prs: GhPr[];
+}
+
+export interface PrAggregateResult {
+  gaps: PrAnalysisGap[];
+  path: string;
+}
+
 interface GhRepo {
   isArchived?: boolean;
   nameWithOwner: string;
 }
 
+interface GhCommit {
+  committedDate?: string;
+  message?: string;
+  messageBody?: string;
+  messageHeadline?: string;
+  oid?: string;
+  sha?: string;
+}
+
+interface GhFile {
+  filename?: string;
+  path?: string;
+}
+
+interface GhMergeCommit {
+  oid?: string;
+  sha?: string;
+}
+
 interface GhPr {
   baseRefName?: string;
-  commits?: unknown[];
+  commits?: GhCommit[];
   createdAt: string;
   createdHeadRefOid?: string;
   creationHeadRefOid?: string;
-  files?: unknown[];
+  files?: GhFile[];
   headRefName?: string;
   headRefOid?: string;
-  mergeCommit?: unknown;
+  mergeCommit?: GhMergeCommit | null;
   mergedAt: string;
   number: number;
   openingSnapshotOid?: string;
@@ -123,16 +152,32 @@ const GhRepoSchema: z.ZodType<GhRepo> = z.object({
   isArchived: z.boolean().optional(),
   nameWithOwner: z.string(),
 });
+const GhCommitSchema: z.ZodType<GhCommit> = z.object({
+  committedDate: z.string().optional(),
+  message: z.string().optional(),
+  messageBody: z.string().optional(),
+  messageHeadline: z.string().optional(),
+  oid: z.string().optional(),
+  sha: z.string().optional(),
+});
+const GhFileSchema: z.ZodType<GhFile> = z.object({
+  filename: z.string().optional(),
+  path: z.string().optional(),
+});
+const GhMergeCommitSchema: z.ZodType<GhMergeCommit> = z.object({
+  oid: z.string().optional(),
+  sha: z.string().optional(),
+});
 const GhPrSchema: z.ZodType<GhPr> = z.object({
   baseRefName: z.string().optional(),
-  commits: z.array(z.unknown()).optional(),
+  commits: z.array(GhCommitSchema).optional(),
   createdAt: z.string(),
   createdHeadRefOid: z.string().optional(),
   creationHeadRefOid: z.string().optional(),
-  files: z.array(z.unknown()).optional(),
+  files: z.array(GhFileSchema).optional(),
   headRefName: z.string().optional(),
   headRefOid: z.string().optional(),
-  mergeCommit: z.unknown().optional(),
+  mergeCommit: GhMergeCommitSchema.nullish(),
   mergedAt: z.string(),
   number: z.number(),
   openingSnapshotOid: z.string().optional(),
@@ -143,7 +188,7 @@ const GhPrSchema: z.ZodType<GhPr> = z.object({
 const GhRepoListSchema = z.array(GhRepoSchema);
 const GhPrListSchema = z.array(GhPrSchema);
 const GhPrFilesResponseSchema = z.object({
-  files: z.array(z.unknown()),
+  files: z.array(GhFileSchema),
 });
 const PrAnalysisManifestSchema: z.ZodType<PrAnalysisManifest> = z.strictObject({
   author: z.string(),
@@ -280,7 +325,7 @@ function collectRepoPrs(
   author: string,
   window: RetrospectiveWindow,
   exec: CommandRunner,
-): { gaps: PrAnalysisGap[]; prs: GhPr[]; } {
+): RepoPrCollection {
   const gaps: PrAnalysisGap[] = [];
   const summariesByNumber = new Map<number, GhPr>();
 
@@ -358,14 +403,13 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
     ]),
     GhPrSchema,
   );
-  let files: unknown[] = [];
+  let files: GhFile[] = [];
   try {
-    files = normalizePrFilesResponse(
-      parseJson(
-        runText(exec, "gh", ["pr", "view", String(summary.number), "--repo", repo, "--json", "files"]),
-        GhPrFilesResponseSchema,
-      ),
+    const response = parseJson(
+      runText(exec, "gh", ["pr", "view", String(summary.number), "--repo", repo, "--json", "files"]),
+      GhPrFilesResponseSchema,
     );
+    ({ files } = response);
   } catch (error) {
     gaps.push({
       impact: "Changed-file context is missing, but post-opening delta analysis can still proceed.",
@@ -381,7 +425,7 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
   };
 }
 
-export function runPrAggregate(options: RunPrAggregateOptions): { gaps: PrAnalysisGap[]; path: string; } {
+export function runPrAggregate(options: RunPrAggregateOptions): PrAggregateResult {
   const root = options.retroRoot ?? retroHome(options.home);
   const manifest = readPrManifest(root, options.runTs);
   if (!manifest) {
@@ -656,57 +700,35 @@ function ensureRepoCache(repo: string, repoDir: string, exec: CommandRunner): vo
   runText(exec, "gh", ["repo", "clone", repo, repoDir, "--", "--filter=blob:none", "--no-checkout"]);
 }
 
-function normalizeCommits(value: unknown): PrCommitReference[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((entry) => {
-      const record = asRecord(entry);
-      const sha = asString(record?.oid) ?? asString(record?.sha);
+function normalizeCommits(commits: GhCommit[] | undefined): PrCommitReference[] {
+  return (commits ?? [])
+    .map((commit) => {
+      const sha = commit.oid ?? commit.sha;
       if (!isNonEmptyString(sha)) {
         return null;
       }
-      const headline = asString(record?.messageHeadline) ?? asString(record?.message) ?? "";
-      const body = asString(record?.messageBody);
-      const committedDate = asString(record?.committedDate);
-      const commit: PrCommitReference = {
-        message: isNonEmptyString(body) ? `${headline}\n\n${body}` : headline,
+      const headline = commit.messageHeadline ?? commit.message ?? "";
+      const normalized: PrCommitReference = {
+        committedDate: commit.committedDate,
+        message: isNonEmptyString(commit.messageBody)
+          ? `${headline}\n\n${commit.messageBody}`
+          : headline,
         sha,
       };
-      if (isNonEmptyString(committedDate)) {
-        commit.committedDate = committedDate;
-      }
-      return commit;
+      return normalized;
     })
     .filter((entry): entry is PrCommitReference => entry !== null);
 }
 
-function normalizeFiles(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((entry) => {
-      const record = asRecord(entry);
-      return asString(record?.path) ?? asString(record?.filename);
-    })
+function normalizeFiles(files: GhFile[] | undefined): string[] {
+  return (files ?? [])
+    .map((file) => file.path ?? file.filename)
     .filter((entry): entry is string => Boolean(entry))
     .toSorted();
 }
 
-function normalizePrFilesResponse(value: unknown): unknown[] {
-  if (Array.isArray(value)) {
-    return value;
-  }
-  const record = asRecord(value);
-  const files = record?.files;
-  return Array.isArray(files) ? files : [];
-}
-
-function normalizeMergeCommit(value: unknown): string | undefined {
-  const record = asRecord(value);
-  return asString(record?.oid) ?? asString(record?.sha);
+function normalizeMergeCommit(commit: GhMergeCommit | null | undefined): string | undefined {
+  return commit?.oid ?? commit?.sha;
 }
 
 function parseJson<T extends z.ZodType>(text: string, schema: T): z.output<T> {
@@ -853,20 +875,8 @@ function runText(
   return result.stdout;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return isRecord(value) ? value : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function asString(value: unknown): string | undefined {
-  return isNonEmptyString(value) ? value : undefined;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
 function escapeRegExp(value: string): string {

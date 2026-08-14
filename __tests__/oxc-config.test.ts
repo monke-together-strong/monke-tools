@@ -3,6 +3,18 @@ import { describe, expect, test } from "vite-plus/test";
 import { createOxlintConfig } from "../packages/oxc-config/src/oxlint.ts";
 
 describe("shared Oxlint config", () => {
+  test("enables Ultracite's anti-slop preset", () => {
+    const config = createOxlintConfig();
+    const configuredAntiSlop = config.extends?.find(
+      (extension) =>
+        extension.rules?.["anti-slop/require-safety-comment-for-type-assertion"] === "error"
+    );
+
+    expect(configuredAntiSlop?.rules).toMatchObject({
+      "anti-slop/require-safety-comment-for-type-assertion": "error"
+    });
+  });
+
   test("owns JSDoc type validation while preserving consumer plugins", () => {
     const consumerPlugin = {
       name: "consumer",
@@ -12,9 +24,7 @@ describe("shared Oxlint config", () => {
     const [jsdocPlugin, perfectionistPlugin, configuredConsumerPlugin] = config.jsPlugins ?? [];
 
     expect(jsdocPlugin).toMatchObject({ name: "jsdoc-js" });
-    expect(
-      typeof jsdocPlugin === "object" && jsdocPlugin.specifier.includes("eslint-plugin-jsdoc")
-    ).toBeTruthy();
+    expect(JSON.stringify(jsdocPlugin)).toContain("eslint-plugin-jsdoc");
     expect(perfectionistPlugin).toMatchObject({ name: "perfectionist" });
     expect(configuredConsumerPlugin).toStrictEqual(consumerPlugin);
     expect(config.rules).toMatchObject({

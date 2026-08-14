@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 
 import type { OxlintConfig, OxlintOverride } from "oxlint";
+import antiSlop from "ultracite/oxlint/anti-slop";
 import core from "ultracite/oxlint/core";
 import vitest from "ultracite/oxlint/vitest";
 
@@ -51,15 +52,19 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
   } = options;
   const vitestOverrides = (vitest.overrides ?? []).map<OxlintOverride>((override) => {
     const excludeFiles = [...(override.excludeFiles ?? []), ...vitestExcludeFiles];
-
-    return {
+    const resolvedOverride: OxlintOverride = {
       ...override,
-      ...(excludeFiles.length > 0 ? { excludeFiles } : {}),
       rules: {
         ...override.rules,
         "vitest/max-expects": "off"
       }
     };
+
+    if (excludeFiles.length > 0) {
+      resolvedOverride.excludeFiles = excludeFiles;
+    }
+
+    return resolvedOverride;
   });
   const vitestConfig: OxlintConfig = {
     ...vitest,
@@ -68,7 +73,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
 
   return {
     ...config,
-    extends: [core, vitestConfig, ...extensions],
+    extends: [core, antiSlop, vitestConfig, ...extensions],
     ignorePatterns: [
       ...(core.ignorePatterns ?? []),
       ...generatedFileIgnorePatterns,

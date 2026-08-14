@@ -59,6 +59,16 @@ describe("distributed skill metadata", () => {
     ).toBeFalsy();
   });
 
+  test("enforce-standards is user-invoked only", () => {
+    const skillRoot = path.join(projectRoot, "skills", "internal", "enforce-standards");
+    const skill = readFileSync(path.join(skillRoot, "SKILL.md"), "utf-8");
+
+    expect(skill).toContain("disable-model-invocation: true");
+    expect(
+      parse(readFileSync(path.join(skillRoot, "agents", "openai.yaml"), "utf-8"))
+    ).toMatchObject({ policy: { allow_implicit_invocation: false } });
+  });
+
   test("tracked import recipes record one Import kind for every selector", () => {
     const store = normalizeImportRecipeStore(
       JSON.parse(

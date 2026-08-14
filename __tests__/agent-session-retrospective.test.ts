@@ -1060,7 +1060,7 @@ describe("agent session retrospective", () => {
             throw new Error(`unexpected pr list fields: ${args.at(-1)}`);
           }
           const search = args[args.indexOf("--search") + 1] ?? "";
-          const byDay: Record<string, unknown[]> = {
+          const byDay = {
             "merged:2026-05-21..2026-05-21": [
               {
                 createdAt: "2026-05-20T10:00:00Z",
@@ -1098,18 +1098,20 @@ describe("agent session retrospective", () => {
               }
             ]
           };
-          return { status: 0, stderr: "", stdout: JSON.stringify(byDay[search] ?? []) };
+          const response = Object.entries(byDay).find(([key]) => key === search)?.[1] ?? [];
+          return { status: 0, stderr: "", stdout: JSON.stringify(response) };
         }
         if (command === "gh" && args[0] === "pr" && args[1] === "view") {
           const number = args[2] ?? "";
           const fields = args.at(-1);
           if (fields === "files") {
-            const filesByNumber: Record<string, unknown> = {
+            const filesByNumber = {
               "10": { files: [{ path: "docs.md" }] },
               "7": { files: [{ path: "setup.ts" }] },
               "9": { files: [] }
             };
-            return { status: 0, stderr: "", stdout: JSON.stringify(filesByNumber[number]) };
+            const response = Object.entries(filesByNumber).find(([key]) => key === number)?.[1];
+            return { status: 0, stderr: "", stdout: JSON.stringify(response) };
           }
           if (
             fields !==
@@ -1117,7 +1119,7 @@ describe("agent session retrospective", () => {
           ) {
             throw new Error(`unexpected pr view fields: ${fields}`);
           }
-          const detailsByNumber: Record<string, unknown> = {
+          const detailsByNumber = {
             "10": {
               baseRefName: "main",
               commits: [
@@ -1173,7 +1175,8 @@ describe("agent session retrospective", () => {
               url: "https://github.com/monke-together-strong/alpha/pull/9"
             }
           };
-          return { status: 0, stderr: "", stdout: JSON.stringify(detailsByNumber[number]) };
+          const response = Object.entries(detailsByNumber).find(([key]) => key === number)?.[1];
+          return { status: 0, stderr: "", stdout: JSON.stringify(response) };
         }
         if (command === "gh" && args[0] === "pr" && args[1] === "diff") {
           return {

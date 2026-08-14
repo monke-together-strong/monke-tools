@@ -1,0 +1,5 @@
+interface:
+  display_name: "Enforce Standards"
+  short_description: "Audit and fix standards in bounded pull requests"
+policy:
+  allow_implicit_invocation: false
