@@ -6,9 +6,11 @@ disable-model-invocation: true
 
 # Enforce Standards
 
-Pin the latest default-branch tip as `BASE_SHA`. Run `$code-review` unchanged except:
+Pin the latest default-branch tip as `BASE_SHA`. Treat the tree at `BASE_SHA` as
+`$code-review`'s candidate snapshot, overriding its normal fixed-point/diff workflow:
 
-- review the entire `BASE_SHA` snapshot, not a diff;
+- inspect every tracked file exactly as it exists in the `BASE_SHA` tree;
+- do not compare `HEAD` against `BASE_SHA` or rely on checkout state to define the candidate;
 - run the Standards axis only.
 
 Group findings by standard/rule and common remediation. Give each group confidence, severity,
@@ -23,7 +25,9 @@ apply independently to `BASE_SHA`. Keep only the highest-ranked conflicting grou
 
 For each selected group:
 
-1. Work only in the automation's isolated worktree.
+1. Start a fresh branch and isolated worktree at `BASE_SHA`. If reusing the automation's worktree,
+   reset it to `BASE_SHA` and switch to a fresh branch before processing the group. Verify that no
+   changes from earlier groups remain.
 2. Run focused and repository-required checks.
 3. Create PR
 
