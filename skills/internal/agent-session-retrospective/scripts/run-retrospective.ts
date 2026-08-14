@@ -19,22 +19,18 @@ import { runCommit } from "./lib/commit.ts";
 import { runPrAggregate, runPrCollect } from "./lib/pr-analysis.ts";
 import { retroHome, withRetroLock } from "./lib/store.ts";
 
-interface Flags {
-  [key: string]: string | undefined;
-}
-
-function parseFlags(argv: string[]): Flags {
-  const flags: Flags = {};
+function parseFlags(argv: string[]): Map<string, string> {
+  const flags = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token?.startsWith("--") === true) {
       const key = token.slice(2);
       const next = argv[i + 1];
       if (next !== undefined && next !== "" && !next.startsWith("--")) {
-        flags[key] = next;
+        flags.set(key, next);
         i += 1;
       } else {
-        flags[key] = "true";
+        flags.set(key, "true");
       }
     }
   }
@@ -70,17 +66,17 @@ function parseIdleMinutes(value: string | undefined): number | undefined {
 function main(): void {
   const [command, ...rest] = process.argv.slice(2);
   const flags = parseFlags(rest);
-  const root = retroHome(flags.home);
+  const root = retroHome(flags.get("home"));
 
   if (command === "collect") {
-    const runTs = flags["run-ts"] ?? defaultRunTs();
+    const runTs = flags.get("run-ts") ?? defaultRunTs();
     const result = withRetroLock(root, () =>
       runCollect({
-        idleMinutes: parseIdleMinutes(flags["idle-minutes"]),
+        idleMinutes: parseIdleMinutes(flags.get("idle-minutes")),
         retroRoot: root,
         runTs,
-        sinceMs: parseDateMs(flags.since),
-        untilMs: parseDateMs(flags.until),
+        sinceMs: parseDateMs(flags.get("since")),
+        untilMs: parseDateMs(flags.get("until")),
       }),
     );
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -88,7 +84,7 @@ function main(): void {
   }
 
   if (command === "commit") {
-    const runTs = flags["run-ts"];
+    const runTs = flags.get("run-ts");
     if (runTs === undefined || runTs === "") {
       throw new Error("commit requires --run-ts");
     }
@@ -97,7 +93,7 @@ function main(): void {
         nowIso: new Date().toISOString(),
         retroRoot: root,
         runTs,
-        synthesisPath: flags.synthesis,
+        synthesisPath: flags.get("synthesis"),
       }),
     );
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -105,13 +101,14 @@ function main(): void {
   }
 
   if (command === "pr-collect") {
-    const runTs = flags["run-ts"];
+    const runTs = flags.get("run-ts");
     if (runTs === undefined || runTs === "") {
       throw new Error("pr-collect requires --run-ts");
     }
     const result = withRetroLock(root, () =>
       runPrCollect({
-        repoCacheRoot: flags["repo-cache"] ?? path.join(root, "tmp", "agent-retrospective-pr-analysis"),
+        repoCacheRoot:
+          flags.get("repo-cache") ?? path.join(root, "tmp", "agent-retrospective-pr-analysis"),
         retroRoot: root,
         runTs,
       }),
@@ -121,7 +118,7 @@ function main(): void {
   }
 
   if (command === "pr-aggregate") {
-    const runTs = flags["run-ts"];
+    const runTs = flags.get("run-ts");
     if (runTs === undefined || runTs === "") {
       throw new Error("pr-aggregate requires --run-ts");
     }

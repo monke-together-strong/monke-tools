@@ -3,7 +3,7 @@
 import { Command, InvalidArgumentError } from '@commander-js/extra-typings';
 import type { OptionValues } from '@commander-js/extra-typings';
 import { existsSync, readFileSync } from "node:fs";
-import type * as z from "zod";
+import type { output, ZodType } from "zod";
 import {
   BetterStackApiError,
   BetterStackClient,
@@ -448,11 +448,11 @@ function formatHostAndPort(host: string, port: number): string {
   return port === 443 ? host : `${host}:${port}`;
 }
 
-function parseMetadataResponse<T extends z.ZodType>(
+function parseMetadataResponse<T extends ZodType>(
   raw: string,
   schema: T,
   errorMessage: string
-): z.output<T> {
+): output<T> {
   try {
     const parsed = schema.safeParse(JSON.parse(raw));
     if (parsed.success) {

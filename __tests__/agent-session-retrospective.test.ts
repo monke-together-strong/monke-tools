@@ -290,6 +290,24 @@ describe("agent session retrospective", () => {
       expect(session?.threadSource).toBe("subagent");
       expect(session?.parentSessionId).toBeNull();
     });
+
+    test("keeps activity from unknown record kinds", () => {
+      const filePath = jsonl([
+        {
+          payload: { cwd: dir, id: "session-with-unknown-activity" },
+          timestamp: "2026-05-26T10:00:00Z",
+          type: "session_meta"
+        },
+        {
+          payload: { type: "context_compacted" },
+          timestamp: "2026-05-26T10:05:00Z",
+          type: "event_msg"
+        }
+      ]);
+
+      const session = parseCodexSession(filePath);
+      expect(session?.lastActivityAt).toBe("2026-05-26T10:05:00Z");
+    });
   });
 
   describe("Claude collector", () => {
@@ -372,6 +390,27 @@ describe("agent session retrospective", () => {
       const tool = parseClaudeSession(filePath)?.turns[0];
       expect(tool?.kind).toBe("tool_call");
       expect(tool?.kind === "tool_call" && tool.outputHeadTail).toBe("already finished");
+    });
+
+    test("keeps metadata and activity from unknown record kinds", () => {
+      const filePath = jsonl([
+        {
+          cwd: dir,
+          sessionId: "claude-metadata-envelope",
+          timestamp: "2026-05-26T10:00:00Z",
+          type: "progress"
+        },
+        {
+          message: { content: [{ text: "continuing", type: "text" }] },
+          timestamp: "2026-05-26T10:05:00Z",
+          type: "assistant"
+        }
+      ]);
+
+      const session = parseClaudeSession(filePath);
+      expect(session?.sessionId).toBe("claude-metadata-envelope");
+      expect(session?.cwd).toBe(dir);
+      expect(session?.lastActivityAt).toBe("2026-05-26T10:05:00Z");
     });
   });
 

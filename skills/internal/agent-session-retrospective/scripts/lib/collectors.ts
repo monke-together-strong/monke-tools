@@ -8,12 +8,15 @@ import { buildCanonicalSession } from "./session-events.ts";
 import type { DecodedSession, SessionAdapter, SessionEvent } from "./session-events.ts";
 import {
   ClaudeContentBlockSchema,
+  ClaudeTranscriptEnvelopeSchema,
   ClaudeTranscriptRecordSchema,
   CodexTranscriptRecordSchema,
-  extractTextBlocks,
+  extractClaudeTextBlocks,
   JsonValueSchema,
+  TranscriptEnvelopeSchema,
 } from "./transcript-schemas.ts";
 import type {
+  ClaudeTranscriptEnvelope,
   ClaudeTranscriptRecord,
   CodexTranscriptRecord,
   JsonValue,
@@ -32,6 +35,7 @@ interface JsonlReadResult {
 }
 
 type CodexEventPayload = Extract<CodexTranscriptRecord, { type: "event_msg" }>["payload"];
+type CodexMessagePayload = Extract<CodexResponsePayload, { type: "message" }>;
 type CodexResponsePayload = Extract<CodexTranscriptRecord, { type: "response_item" }>["payload"];
 type CodexSessionMetaPayload = Extract<CodexTranscriptRecord, { type: "session_meta" }>["payload"];
 type CodexTurnContextPayload = Extract<CodexTranscriptRecord, { type: "turn_context" }>["payload"];
@@ -95,8 +99,13 @@ function decodeCodexSession(rawRecords: JsonValue[]): DecodedSession {
   const records = parseCodexTranscript(rawRecords);
   const hasEventProse = records.some((record) => record.type === "event_msg");
 
+  for (const rawRecord of rawRecords) {
+    const envelope = TranscriptEnvelopeSchema.safeParse(rawRecord);
+    if (envelope.success) {
+      noteActivity(session, envelope.data.timestamp);
+    }
+  }
   for (const record of records) {
-    noteActivity(session, record.timestamp);
     switch (record.type) {
       case "event_msg": {
         const event = decodeCodexEventMessage(record.payload, hasEventProse);
@@ -247,8 +256,13 @@ function parseCodexArguments(value: JsonValue | undefined): JsonValue {
   }
 }
 
-function extractCodexMessageText(content: string | JsonValue[]): string {
-  return Array.isArray(content) ? extractTextBlocks(content) : content;
+function extractCodexMessageText(content: CodexMessagePayload["content"]): string {
+  return Array.isArray(content)
+    ? content
+        .map((block) => block?.text ?? "")
+        .filter(Boolean)
+        .join("\n")
+    : content;
 }
 
 function collectToolPathCandidates(input: JsonValue): string[] {
@@ -309,9 +323,14 @@ function decodeClaudeSession(rawRecords: JsonValue[]): DecodedSession {
   const records = parseClaudeTranscript(rawRecords);
   const toolResults = collectClaudeToolResults(records);
 
+  for (const rawRecord of rawRecords) {
+    const envelope = ClaudeTranscriptEnvelopeSchema.safeParse(rawRecord);
+    if (envelope.success) {
+      noteActivity(session, envelope.data.timestamp);
+      readClaudeSessionMetadata(session, envelope.data);
+    }
+  }
   for (const record of records) {
-    noteActivity(session, record.timestamp);
-    readClaudeSessionMetadata(session, record);
     session.events.push(...decodeClaudeMessage(record, session.cwd, toolResults));
   }
 
@@ -347,7 +366,10 @@ function parseClaudeTranscript(records: JsonValue[]): ClaudeTranscriptRecord[] {
   return parsedRecords;
 }
 
-function readClaudeSessionMetadata(session: DecodedSession, record: ClaudeTranscriptRecord): void {
+function readClaudeSessionMetadata(
+  session: DecodedSession,
+  record: ClaudeTranscriptEnvelope,
+): void {
   if (session.sessionId === "" && record.sessionId !== undefined) {
     session.sessionId = record.sessionId;
   }
@@ -463,7 +485,7 @@ function extractClaudeText(content: JsonValue | undefined): string {
     return "";
   }
   if (Array.isArray(content)) {
-    return extractTextBlocks(content);
+    return extractClaudeTextBlocks(content);
   }
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The block schema already validated this recursive JSON value; only its string member is textual tool output.
   return typeof content === "string" ? content : "";

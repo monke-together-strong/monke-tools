@@ -16,7 +16,7 @@ export function summarizeInput(input: JsonValue | undefined): string {
     return "";
   }
   // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The transcript adapter already validated this recursive JSON value; this selects its string member for readable summaries.
-  const text = typeof input === "string" ? input : safeStringify(input);
+  const text = typeof input === "string" ? input : (JSON.stringify(input) ?? "");
   return clip(collapseWhitespace(text), INPUT_SUMMARY_MAX);
 }
 
@@ -61,10 +61,6 @@ function clip(text: string, max: number): string {
 
 function collapseWhitespace(text: string): string {
   return text.replaceAll(/\s+/gu, " ").trim();
-}
-
-function safeStringify(value: JsonValue): string {
-  return JSON.stringify(value) ?? "";
 }
 
 export function isNonEmptyString(value: string | null | undefined): value is string {

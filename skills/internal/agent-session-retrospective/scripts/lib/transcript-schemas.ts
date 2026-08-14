@@ -1,127 +1,160 @@
-import * as z from "zod";
+import {
+  array,
+  boolean,
+  discriminatedUnion,
+  enum as enumSchema,
+  json,
+  literal,
+  object,
+  string,
+  union,
+} from "zod";
+import type { output } from "zod";
 
-export const JsonValueSchema = z.json();
-export type JsonValue = z.output<typeof JsonValueSchema>;
+export const JsonValueSchema = json();
+export type JsonValue = output<typeof JsonValueSchema>;
 
-const TranscriptTextBlockSchema = z.object({
-  text: z.string(),
+const CodexMessageContentBlockSchema = union([
+  discriminatedUnion("type", [
+    object({
+      text: string(),
+      type: literal("input_text"),
+    }),
+    object({
+      text: string(),
+      type: literal("output_text"),
+    }),
+  ]),
+  JsonValueSchema.transform(() => null),
+]);
+
+const ClaudeToolResultTextBlockSchema = object({
+  text: string(),
+  type: literal("text").optional(),
 });
 
-const CodexSourceSchema = z.object({
-  subagent: z
-    .object({
-      thread_spawn: z
-        .object({
-          parent_thread_id: z.string().optional(),
-        })
-        .optional(),
-    })
-    .optional(),
+export const TranscriptEnvelopeSchema = object({
+  timestamp: string().optional(),
+});
+export type TranscriptEnvelope = output<typeof TranscriptEnvelopeSchema>;
+
+const CodexSourceSchema = object({
+  subagent: object({
+    thread_spawn: object({
+      parent_thread_id: string().optional(),
+    }).optional(),
+  }).optional(),
 });
 
-const CodexSessionMetaRecordSchema = z.object({
-  payload: z.object({
-    cwd: z.string().optional(),
-    id: z.string().optional(),
-    parent_thread_id: z.string().optional(),
+const CodexSessionMetaRecordSchema = object({
+  payload: object({
+    cwd: string().optional(),
+    id: string().optional(),
+    parent_thread_id: string().optional(),
     source: CodexSourceSchema.optional().catch(undefined),
-    thread_source: z.string().optional(),
+    thread_source: string().optional(),
   }),
-  timestamp: z.string().optional(),
-  type: z.literal("session_meta"),
+  timestamp: string().optional(),
+  type: literal("session_meta"),
 });
 
-const CodexTurnContextRecordSchema = z.object({
-  payload: z.object({
-    cwd: z.string().optional(),
+const CodexTurnContextRecordSchema = object({
+  payload: object({
+    cwd: string().optional(),
   }),
-  timestamp: z.string().optional(),
-  type: z.literal("turn_context"),
+  timestamp: string().optional(),
+  type: literal("turn_context"),
 });
 
-const CodexEventMessageRecordSchema = z.object({
-  payload: z.discriminatedUnion("type", [
-    z.object({
-      message: z.string(),
-      type: z.literal("user_message"),
+const CodexEventMessageRecordSchema = object({
+  payload: discriminatedUnion("type", [
+    object({
+      message: string(),
+      type: literal("user_message"),
     }),
-    z.object({
-      message: z.string(),
-      type: z.literal("agent_message"),
+    object({
+      message: string(),
+      type: literal("agent_message"),
     }),
   ]),
-  timestamp: z.string().optional(),
-  type: z.literal("event_msg"),
+  timestamp: string().optional(),
+  type: literal("event_msg"),
 });
 
-const CodexResponseItemRecordSchema = z.object({
-  payload: z.discriminatedUnion("type", [
-    z.object({
-      content: z.union([z.string(), z.array(JsonValueSchema)]),
-      role: z.enum(["user", "assistant"]),
-      type: z.literal("message"),
+const CodexResponseItemRecordSchema = object({
+  payload: discriminatedUnion("type", [
+    object({
+      content: union([string(), array(CodexMessageContentBlockSchema)]),
+      role: enumSchema(["user", "assistant"]),
+      type: literal("message"),
     }),
-    z.object({
+    object({
       arguments: JsonValueSchema.optional(),
-      call_id: z.string().optional(),
-      name: z.string().optional(),
-      type: z.literal("function_call"),
+      call_id: string().optional(),
+      name: string().optional(),
+      type: literal("function_call"),
     }),
-    z.object({
-      call_id: z.string().optional(),
+    object({
+      call_id: string().optional(),
       output: JsonValueSchema.optional(),
-      type: z.literal("function_call_output"),
+      type: literal("function_call_output"),
     }),
   ]),
-  timestamp: z.string().optional(),
-  type: z.literal("response_item"),
+  timestamp: string().optional(),
+  type: literal("response_item"),
 });
 
-export const CodexTranscriptRecordSchema = z.discriminatedUnion("type", [
+export const CodexTranscriptRecordSchema = discriminatedUnion("type", [
   CodexSessionMetaRecordSchema,
   CodexTurnContextRecordSchema,
   CodexEventMessageRecordSchema,
   CodexResponseItemRecordSchema,
 ]);
-export type CodexTranscriptRecord = z.output<typeof CodexTranscriptRecordSchema>;
+export type CodexTranscriptRecord = output<typeof CodexTranscriptRecordSchema>;
 
-const ClaudeMessageSchema = z.object({
-  content: z.union([z.string(), z.array(JsonValueSchema)]),
+const ClaudeMessageSchema = object({
+  content: union([string(), array(JsonValueSchema)]),
 });
 
-export const ClaudeTranscriptRecordSchema = z.object({
-  cwd: z.string().optional(),
-  isMeta: z.boolean().optional(),
+export const ClaudeTranscriptRecordSchema = object({
+  cwd: string().optional(),
+  isMeta: boolean().optional(),
   message: ClaudeMessageSchema,
-  sessionId: z.string().optional(),
-  timestamp: z.string().optional(),
-  type: z.enum(["user", "assistant"]),
+  sessionId: string().optional(),
+  timestamp: string().optional(),
+  type: enumSchema(["user", "assistant"]),
 });
-export type ClaudeTranscriptRecord = z.output<typeof ClaudeTranscriptRecordSchema>;
+export type ClaudeTranscriptRecord = output<typeof ClaudeTranscriptRecordSchema>;
 
-export const ClaudeContentBlockSchema = z.discriminatedUnion("type", [
-  z.object({
-    text: z.string(),
-    type: z.literal("text"),
+export const ClaudeTranscriptEnvelopeSchema = TranscriptEnvelopeSchema.extend({
+  cwd: string().optional(),
+  sessionId: string().optional(),
+});
+export type ClaudeTranscriptEnvelope = output<typeof ClaudeTranscriptEnvelopeSchema>;
+
+export const ClaudeContentBlockSchema = discriminatedUnion("type", [
+  object({
+    text: string(),
+    type: literal("text"),
   }),
-  z.object({
-    id: z.string().optional(),
+  object({
+    id: string().optional(),
     input: JsonValueSchema.optional(),
-    name: z.string().optional(),
-    type: z.literal("tool_use"),
+    name: string().optional(),
+    type: literal("tool_use"),
   }),
-  z.object({
+  object({
     content: JsonValueSchema.optional(),
-    is_error: z.boolean().optional(),
-    tool_use_id: z.string(),
-    type: z.literal("tool_result"),
+    is_error: boolean().optional(),
+    tool_use_id: string(),
+    type: literal("tool_result"),
   }),
 ]);
 
-export function extractTextBlocks(content: JsonValue[]): string {
+export function extractClaudeTextBlocks(content: JsonValue[]): string {
   return content
     .map((block) => {
-      const parsed = TranscriptTextBlockSchema.safeParse(block);
+      const parsed = ClaudeToolResultTextBlockSchema.safeParse(block);
       return parsed.success ? parsed.data.text : "";
     })
     .filter(Boolean)

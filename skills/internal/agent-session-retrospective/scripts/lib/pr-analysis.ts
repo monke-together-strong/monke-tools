@@ -1,7 +1,17 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import * as z from "zod";
+import {
+  array,
+  boolean,
+  enum as enumSchema,
+  literal,
+  number as numberSchema,
+  object,
+  strictObject,
+  string,
+} from "zod";
+import type { output, ZodType } from "zod";
 
 import { hashKey } from "./identity.ts";
 import { isNonEmptyString } from "./normalize.ts";
@@ -106,123 +116,87 @@ export interface PrAggregateResult {
   path: string;
 }
 
-interface GhRepo {
-  isArchived?: boolean;
-  nameWithOwner: string;
-}
-
-interface GhCommit {
-  committedDate?: string;
-  message?: string;
-  messageBody?: string;
-  messageHeadline?: string;
-  oid?: string;
-  sha?: string;
-}
-
-interface GhFile {
-  filename?: string;
-  path?: string;
-}
-
-interface GhMergeCommit {
-  oid?: string;
-  sha?: string;
-}
-
-interface GhPr {
-  baseRefName?: string;
-  commits?: GhCommit[];
-  createdAt: string;
-  createdHeadRefOid?: string;
-  creationHeadRefOid?: string;
-  files?: GhFile[];
-  headRefName?: string;
-  headRefOid?: string;
-  mergeCommit?: GhMergeCommit | null;
-  mergedAt: string;
-  number: number;
-  openingSnapshotOid?: string;
-  openingSnapshotRef?: string;
-  title: string;
-  url: string;
-}
-
-const GhRepoSchema: z.ZodType<GhRepo> = z.object({
-  isArchived: z.boolean().optional(),
-  nameWithOwner: z.string(),
+const GhRepoSchema = object({
+  isArchived: boolean().optional(),
+  nameWithOwner: string(),
 });
-const GhCommitSchema: z.ZodType<GhCommit> = z.object({
-  committedDate: z.string().optional(),
-  message: z.string().optional(),
-  messageBody: z.string().optional(),
-  messageHeadline: z.string().optional(),
-  oid: z.string().optional(),
-  sha: z.string().optional(),
+const GhCommitSchema = object({
+  committedDate: string().optional(),
+  message: string().optional(),
+  messageBody: string().optional(),
+  messageHeadline: string().optional(),
+  oid: string().optional(),
+  sha: string().optional(),
 });
-const GhFileSchema: z.ZodType<GhFile> = z.object({
-  filename: z.string().optional(),
-  path: z.string().optional(),
+const GhFileSchema = object({
+  filename: string().optional(),
+  path: string().optional(),
 });
-const GhMergeCommitSchema: z.ZodType<GhMergeCommit> = z.object({
-  oid: z.string().optional(),
-  sha: z.string().optional(),
+const GhMergeCommitSchema = object({
+  oid: string().optional(),
+  sha: string().optional(),
 });
-const GhPrSchema: z.ZodType<GhPr> = z.object({
-  baseRefName: z.string().optional(),
-  commits: z.array(GhCommitSchema).optional(),
-  createdAt: z.string(),
-  createdHeadRefOid: z.string().optional(),
-  creationHeadRefOid: z.string().optional(),
-  files: z.array(GhFileSchema).optional(),
-  headRefName: z.string().optional(),
-  headRefOid: z.string().optional(),
+const GhPrSchema = object({
+  baseRefName: string().optional(),
+  commits: array(GhCommitSchema).optional(),
+  createdAt: string(),
+  createdHeadRefOid: string().optional(),
+  creationHeadRefOid: string().optional(),
+  files: array(GhFileSchema).optional(),
+  headRefName: string().optional(),
+  headRefOid: string().optional(),
   mergeCommit: GhMergeCommitSchema.nullish(),
-  mergedAt: z.string(),
-  number: z.number(),
-  openingSnapshotOid: z.string().optional(),
-  openingSnapshotRef: z.string().optional(),
-  title: z.string(),
-  url: z.string(),
+  mergedAt: string(),
+  number: numberSchema(),
+  openingSnapshotOid: string().optional(),
+  openingSnapshotRef: string().optional(),
+  title: string(),
+  url: string(),
 });
-const GhRepoListSchema = z.array(GhRepoSchema);
-const GhPrListSchema = z.array(GhPrSchema);
-const GhPrFilesResponseSchema = z.object({
-  files: z.array(GhFileSchema),
+const GhRepoListSchema = array(GhRepoSchema);
+const GhPrListSchema = array(GhPrSchema);
+const GhPrFilesResponseSchema = object({
+  files: array(GhFileSchema),
 });
-const PrAnalysisManifestSchema: z.ZodType<PrAnalysisManifest> = z.strictObject({
-  author: z.string(),
-  gaps: z.array(
-    z.strictObject({
-      impact: z.string(),
-      number: z.number().optional(),
-      reason: z.string(),
-      repo: z.string(),
+type GhCommit = output<typeof GhCommitSchema>;
+type GhFile = output<typeof GhFileSchema>;
+type GhMergeCommit = output<typeof GhMergeCommitSchema>;
+type GhPr = output<typeof GhPrSchema>;
+type GhRepo = output<typeof GhRepoSchema>;
+
+const PrAnalysisManifestSchema: ZodType<PrAnalysisManifest> = strictObject({
+  author: string(),
+  gaps: array(
+    strictObject({
+      impact: string(),
+      number: numberSchema().optional(),
+      reason: string(),
+      repo: string(),
     }),
   ),
-  generatedAt: z.string(),
-  org: z.string(),
-  runTs: z.string(),
-  version: z.literal(1),
+  generatedAt: string(),
+  org: string(),
+  runTs: string(),
+  version: literal(1),
   window: RetrospectiveWindowSchema,
-  workItems: z.array(
-    z.strictObject({
-      analysisPath: z.string(),
-      commitShas: z.array(z.string()),
-      createdAt: z.string(),
-      finalHeadSha: z.string().optional(),
-      mergeCommitSha: z.string().optional(),
-      mergedAt: z.string(),
-      number: z.number(),
-      openingSnapshot: z.strictObject({
-        confidence: z.enum(["exact", "inferred", "unknown"]),
-        reason: z.string(),
-        ref: z.string().optional(),
+  workItems: array(
+    strictObject({
+      analysisPath: string(),
+      commitShas: array(string()),
+      createdAt: string(),
+      finalHeadSha: string().optional(),
+      mergeCommitSha: string().optional(),
+      mergedAt: string(),
+      number: numberSchema(),
+      openingSnapshot: strictObject({
+        confidence: enumSchema(["exact", "inferred", "unknown"]),
+        reason: string(),
+        ref: string().optional(),
       }),
-      repo: z.string(),
-      title: z.string(),
-      url: z.string(),
-      workItemPath: z.string(),
+      repo: string(),
+      title: string(),
+      url: string(),
+      workItemPath: string(),
     }),
   ),
 });
@@ -731,7 +705,7 @@ function normalizeMergeCommit(commit: GhMergeCommit | null | undefined): string 
   return commit?.oid ?? commit?.sha;
 }
 
-function parseJson<T extends z.ZodType>(text: string, schema: T): z.output<T> {
+function parseJson<T extends ZodType>(text: string, schema: T): output<T> {
   const value: unknown = JSON.parse(text);
   return schema.parse(value);
 }

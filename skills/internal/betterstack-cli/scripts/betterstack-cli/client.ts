@@ -1,5 +1,7 @@
+import { array, number, object, string } from "zod";
+import type { output } from "zod";
+
 import { BetterStackApiError } from "./api-error";
-import * as z from "zod";
 
 interface QueryCredentials {
   password: string;
@@ -11,37 +13,37 @@ const REQUEST_TIMEOUT_MS = 30_000;
 
 export { BetterStackApiError } from "./api-error";
 
-export const BetterStackSourceResponseSchema = z.object({
-  data: z.object({
-    attributes: z.object({
-      data_region: z.string(),
-      name: z.string(),
-      table_name: z.string(),
-      team_id: z.number(),
-      team_name: z.string()
+export const BetterStackSourceResponseSchema = object({
+  data: object({
+    attributes: object({
+      data_region: string(),
+      name: string(),
+      table_name: string(),
+      team_id: number(),
+      team_name: string()
     }),
-    id: z.string()
+    id: string()
   })
 });
 
-export type BetterStackSourceResponse = z.output<typeof BetterStackSourceResponseSchema>;
+export type BetterStackSourceResponse = output<typeof BetterStackSourceResponseSchema>;
 
-export const BetterStackConnectionsResponseSchema = z.object({
-  data: z.array(
-    z.object({
-      attributes: z.object({
-        data_region: z.string(),
-        host: z.string(),
-        port: z.number(),
-        team_ids: z.array(z.number()),
-        team_names: z.array(z.string()),
-        username: z.string()
+export const BetterStackConnectionsResponseSchema = object({
+  data: array(
+    object({
+      attributes: object({
+        data_region: string(),
+        host: string(),
+        port: number(),
+        team_ids: array(number()),
+        team_names: array(string()),
+        username: string()
       })
     })
   )
 });
 
-export type BetterStackConnectionsResponse = z.output<
+export type BetterStackConnectionsResponse = output<
   typeof BetterStackConnectionsResponseSchema
 >;
 
