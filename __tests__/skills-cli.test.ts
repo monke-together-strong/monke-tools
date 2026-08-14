@@ -64,11 +64,9 @@ describe("skills CLI", () => {
       targets: [{ kind: "codex" }, { kind: "custom", path: path.join(osHome, "team-skills") }]
     });
     expect(
-      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink()
+      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isDirectory()
     ).toBeTruthy();
-    expect(
-      lstatSync(path.join(osHome, "team-skills", "monke-tools")).isSymbolicLink()
-    ).toBeTruthy();
+    expect(lstatSync(path.join(osHome, "team-skills", "monke-tools")).isDirectory()).toBeTruthy();
     expect(stdout).not.toContain("comma-separated");
     expect(stderr).toContain("Configured monke-tools skills");
   });
@@ -133,7 +131,7 @@ describe("skills CLI", () => {
     );
     expect(existsSync(path.join(osHome, ".claude", "skills", "monke-tools"))).toBeFalsy();
     expect(
-      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink()
+      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isDirectory()
     ).toBeTruthy();
     expect(existsSync(path.join(osHome, ".cursor", "skills", "monke-tools"))).toBeFalsy();
     expect(existsSync(path.join(customRoot, "monke-tools"))).toBeFalsy();
@@ -172,7 +170,7 @@ describe("skills CLI", () => {
       version: 1
     });
     expect(
-      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isSymbolicLink()
+      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isDirectory()
     ).toBeTruthy();
   });
 
@@ -217,7 +215,10 @@ describe("skills CLI", () => {
     );
 
     expect(loadGlobalMonkeConfig(monkeHome).installedSourceCheckout).toBe(newCheckout);
-    expect(readlinkSync(namespacePath)).toBe(path.join(newCheckout, "skills"));
+    expect(lstatSync(namespacePath).isDirectory()).toBeTruthy();
+    expect(readlinkSync(path.join(namespacePath, "internal"))).toBe(
+      path.join(newCheckout, "skills", "internal")
+    );
   });
 
   test("mt skills configure fails clearly when the installed source checkout is missing", async () => {

@@ -7,6 +7,7 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
+  rmdirSync,
   symlinkSync,
   writeFileSync
 } from "node:fs";
@@ -30,6 +31,9 @@ import { parseBoundaryValue } from "./validation.ts";
 /** Directory name monke-tools owns inside each selected Agent skill root. */
 const SKILL_NAMESPACE = "monke-tools";
 const FLAT_SKILL_MANIFEST = ".monke-tools-flat-skills.json";
+const SHARED_SKILL_SOURCE_FOLDERS = ["internal", "imported"] as const;
+const SHARED_NAMESPACE_SOURCE_FOLDERS = ["imported", "internal", "references"] as const;
+const CODEX_NAMESPACE_SOURCE_FOLDERS = ["codex", ...SHARED_NAMESPACE_SOURCE_FOLDERS] as const;
 
 const BUILT_IN_TARGET_ROOTS: Record<BuiltInSkillInstallTargetKind, string> = {
   claude: path.join(".claude", "skills"),
@@ -317,22 +321,40 @@ function reconcileNamespaceTarget(
   }
 
   const namespaceStat = lstatIfExists(target.namespacePath);
-  if (namespaceStat && !namespaceStat.isSymbolicLink()) {
-    throw new MonkeError(
-      `Refusing to overwrite non-managed Skill namespace at ${target.namespacePath}`
-    );
-  }
-
-  if (namespaceStat) {
+  if (namespaceStat?.isSymbolicLink()) {
     rmSync(target.namespacePath);
+    mkdirSync(target.namespacePath);
+  } else if (namespaceStat && !namespaceStat.isDirectory()) {
+    throw new MonkeError(`Refusing to overwrite Skill namespace at ${target.namespacePath}`);
+  } else if (!namespaceStat) {
+    mkdirSync(target.namespacePath);
   }
 
-  symlinkSync(skillSourceTree, target.namespacePath, "dir");
+  const sourceFolders =
+    target.kind === "codex" ? CODEX_NAMESPACE_SOURCE_FOLDERS : SHARED_NAMESPACE_SOURCE_FOLDERS;
+  for (const name of sourceFolders) {
+    const linkPath = path.join(target.namespacePath, name);
+    const linkStat = lstatIfExists(linkPath);
+    if (linkStat && !linkStat.isSymbolicLink()) {
+      throw new MonkeError(`Refusing to overwrite non-managed Skill folder at ${linkPath}`);
+    }
+  }
+
+  for (const name of sourceFolders) {
+    const sourcePath = path.join(skillSourceTree, name);
+    const linkPath = path.join(target.namespacePath, name);
+    if (lstatIfExists(linkPath)) {
+      rmSync(linkPath);
+    }
+    if (existsSync(sourcePath)) {
+      symlinkSync(sourcePath, linkPath, "dir");
+    }
+  }
 }
 
 function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string): void {
   mkdirSync(target.agentSkillRoot, { recursive: true });
-  removeManagedNamespace(target.namespacePath);
+  removeManagedNamespace(target);
 
   const links = discoverFlatSkillLinks(skillSourceTree);
   const supportingLinks = discoverFlatSupportingLinks(target, skillSourceTree);
@@ -373,16 +395,31 @@ function removeManagedTarget(target: ResolvedSkillInstallTarget): void {
   if (target.kind === "claude") {
     removeFlatManagedLinks(target);
   }
-  removeManagedNamespace(target.namespacePath);
+  removeManagedNamespace(target);
 }
 
-function removeManagedNamespace(namespacePath: string): void {
-  const namespaceStat = lstatIfExists(namespacePath);
-  if (namespaceStat?.isSymbolicLink() !== true) {
+function removeManagedNamespace(target: ResolvedSkillInstallTarget): void {
+  const namespaceStat = lstatIfExists(target.namespacePath);
+  if (!namespaceStat) {
+    return;
+  }
+  if (namespaceStat.isSymbolicLink()) {
+    rmSync(target.namespacePath);
+    return;
+  }
+  if (!namespaceStat.isDirectory()) {
     return;
   }
 
-  rmSync(namespacePath);
+  for (const name of CODEX_NAMESPACE_SOURCE_FOLDERS) {
+    const linkPath = path.join(target.namespacePath, name);
+    if (lstatIfExists(linkPath)?.isSymbolicLink()) {
+      rmSync(linkPath);
+    }
+  }
+  if (readdirSync(target.namespacePath).length === 0) {
+    rmdirSync(target.namespacePath);
+  }
 }
 
 const FlatSkillLinkSchema = z.strictObject({
@@ -412,7 +449,7 @@ type FlatSkillManifest = z.output<typeof FlatSkillManifestSchema>;
 function discoverFlatSkillLinks(skillSourceTree: string): FlatSkillLink[] {
   const links = new Map<string, FlatSkillLink>();
 
-  for (const categoryName of ["internal", "imported"]) {
+  for (const categoryName of SHARED_SKILL_SOURCE_FOLDERS) {
     const categoryPath = path.join(skillSourceTree, categoryName);
     if (!existsSync(categoryPath)) {
       continue;

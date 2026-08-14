@@ -10,11 +10,17 @@ import { normalizeImportRecipeStore } from "../scripts/import-skills.ts";
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("distributed skill metadata", () => {
-  test("distributed skill source layout uses internal and imported categories", () => {
+  test("distributed skill source layout separates shared and Codex-only skills", () => {
     expect(
       existsSync(path.join(projectRoot, "skills", "internal", "monke-tools-core", "SKILL.md"))
     ).toBeTruthy();
     expect(existsSync(path.join(projectRoot, "skills", "imported"))).toBeTruthy();
+    expect(
+      existsSync(path.join(projectRoot, "skills", "codex", "codex-chrome-use", "SKILL.md"))
+    ).toBeTruthy();
+    expect(
+      existsSync(path.join(projectRoot, "skills", "internal", "codex-chrome-use", "SKILL.md"))
+    ).toBeFalsy();
     expect(existsSync(path.join(projectRoot, "skills", "core"))).toBeFalsy();
 
     const coreSkill = readFileSync(

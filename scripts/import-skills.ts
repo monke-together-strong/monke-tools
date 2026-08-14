@@ -73,6 +73,7 @@ const SKILLS_CLI_ARGS = ["--yes", "skills", "add"];
 const SKILL_IMPORT_RECIPE_STORE_VERSION = 3;
 export const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
 export const IMPORTED_REFERENCES_ROOT = path.join("skills", "references", "imported");
+const CODEX_SKILLS_ROOT = path.join("skills", "codex");
 const INTERNAL_SKILLS_ROOT = path.join("skills", "internal");
 const INTERNAL_REFERENCES_ROOT = path.join("skills", "references", "internal");
 const IMPORT_RECIPE_STORE_PATH = path.join(IMPORTED_SKILLS_ROOT, ".monke-imports.json");
@@ -517,6 +518,7 @@ function assertObsoleteReferencesAreUnconsumed(
     const obsoleteReferenceRoot = importedGuidancePath(repoRoot, guidance);
     const referencePathPrefix = `${path.posix.join("references", "imported", guidance.slug)}/`;
     const consumers = [
+      CODEX_SKILLS_ROOT,
       INTERNAL_SKILLS_ROOT,
       IMPORTED_SKILLS_ROOT,
       INTERNAL_REFERENCES_ROOT,
