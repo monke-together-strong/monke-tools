@@ -36,7 +36,6 @@ const ClaudeToolResultTextBlockSchema = object({
 export const TranscriptEnvelopeSchema = object({
   timestamp: string().optional(),
 });
-export type TranscriptEnvelope = output<typeof TranscriptEnvelopeSchema>;
 
 const CodexSourceSchema = object({
   subagent: object({

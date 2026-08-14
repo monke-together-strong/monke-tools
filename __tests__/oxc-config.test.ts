@@ -1,6 +1,12 @@
+import { createRequire } from "node:module";
+
 import { describe, expect, test } from "vite-plus/test";
 
 import { createOxlintConfig } from "../packages/oxc-config/src/oxlint.ts";
+
+const oxcConfigRequire = createRequire(
+  new URL("../packages/oxc-config/package.json", import.meta.url)
+);
 
 describe("shared Oxlint config", () => {
   test("enables Ultracite's anti-slop preset", () => {
@@ -23,8 +29,10 @@ describe("shared Oxlint config", () => {
     const config = createOxlintConfig({ jsPlugins: [consumerPlugin] });
     const [jsdocPlugin, perfectionistPlugin, configuredConsumerPlugin] = config.jsPlugins ?? [];
 
-    expect(jsdocPlugin).toMatchObject({ name: "jsdoc-js" });
-    expect(JSON.stringify(jsdocPlugin)).toContain("eslint-plugin-jsdoc");
+    expect(jsdocPlugin).toMatchObject({
+      name: "jsdoc-js",
+      specifier: oxcConfigRequire.resolve("eslint-plugin-jsdoc")
+    });
     expect(perfectionistPlugin).toMatchObject({ name: "perfectionist" });
     expect(configuredConsumerPlugin).toStrictEqual(consumerPlugin);
     expect(config.rules).toMatchObject({
