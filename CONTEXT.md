@@ -291,6 +291,8 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - **Default branch spawn mode** prefers fetched remote `main` or `master` and may fall back to local `main` or `master`.
 - **Default branch spawn mode** requires fresh session branches.
 - **Default branch spawn mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
+- A **Diff** for a Session repo without a remembered **Diff base** may infer an unambiguous, distinct local or remote-tracking `main` or `master` ref with one merge-base only when the current branch is not itself `main` or `master` and no non-default branch has nearer or incomparable shared history, and remember it only after Codiff launches successfully.
+- A **Diff** warns when its **Session worktree** does not carry the Session branch and that branch is attached to another checkout; the current checkout remains the reviewed side.
 - **Spawn** always emits a **Shell directory request** for the root repo's **Session worktree** after the operation succeeds.
 - **Chop** without a target selects the current **Session** when run inside one of its managed worktrees.
 - An explicit **Chop** target selects that named **Session** within the current **Root repo** scope, even when invoked from a different Session.

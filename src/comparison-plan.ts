@@ -50,6 +50,44 @@ export function planBranchComparison(
   return { baseRef, kind: "branch-working-tree", worktreePath: context.worktreeRoot };
 }
 
+/** Find an unambiguous main/master ref for a checkout that has no remembered Diff base. */
+export function findInitialDefaultBranchBase(runtime: Runtime, context: RepoContext) {
+  if (isDefaultBranchRef(`refs/heads/${context.currentBranch}`)) {
+    return;
+  }
+  const head = resolveCommit(runtime, context, "HEAD");
+  if (head === undefined) {
+    return;
+  }
+
+  const candidates: DefaultBranchCandidate[] = [];
+  for (const ref of listDefaultBranchRefs(runtime, context)) {
+    const commit = resolveCommit(runtime, context, ref);
+    if (commit === undefined || commit === head) {
+      continue;
+    }
+    const mergeBases = resolveMergeBases(runtime, context, ref);
+    if (mergeBases === undefined || mergeBases.length === 0) {
+      continue;
+    }
+    if (mergeBases.length !== 1) {
+      return;
+    }
+    const [mergeBase] = mergeBases;
+    if (mergeBase !== undefined) {
+      candidates.push({ mergeBase, ref });
+    }
+  }
+  const selected = selectDefaultBranchCandidate(runtime, context, candidates);
+  if (
+    selected === undefined ||
+    hasCompetingBranchBase(runtime, context, head, selected.mergeBase)
+  ) {
+    return;
+  }
+  return selected.ref;
+}
+
 /** Find an unambiguous main/master ref with newer shared history than a remembered base. */
 export function findNewerDefaultBranchBase(
   runtime: Runtime,
@@ -65,16 +103,11 @@ export function findNewerDefaultBranchBase(
     return;
   }
 
-  const refs = runtime
-    .exec("git", ["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"], {
-      allowFailure: true,
-      cwd: context.worktreeRoot
-    })
-    .stdout.trim()
-    .split("\n")
-    .filter((ref) => isDefaultBranchRef(ref) && ref !== rememberedBaseRef);
   const candidates: DefaultBranchCandidate[] = [];
-  for (const ref of refs) {
+  for (const ref of listDefaultBranchRefs(runtime, context)) {
+    if (ref === rememberedBaseRef) {
+      continue;
+    }
     const mergeBases = resolveMergeBases(runtime, context, ref);
     if (
       mergeBases === undefined ||
@@ -92,6 +125,14 @@ export function findNewerDefaultBranchBase(
       candidates.push({ mergeBase, ref });
     }
   }
+  return selectDefaultBranchCandidate(runtime, context, candidates)?.ref;
+}
+
+function selectDefaultBranchCandidate(
+  runtime: Runtime,
+  context: RepoContext,
+  candidates: DefaultBranchCandidate[]
+) {
   const maximalCandidates = candidates.filter((candidate) =>
     candidates.every(
       (other) =>
@@ -111,7 +152,7 @@ export function findNewerDefaultBranchBase(
       return 1;
     }
     return left.ref.localeCompare(right.ref);
-  })[0]?.ref;
+  })[0];
 }
 
 /** Report whether one checkout contains staged, unstaged, or untracked changes. */
@@ -131,6 +172,62 @@ function resolveMergeBases(runtime: Runtime, context: RepoContext, baseRef: stri
     cwd: context.worktreeRoot
   });
   return result.exitCode === 0 ? result.stdout.trim().split("\n").filter(Boolean) : undefined;
+}
+
+function resolveCommit(runtime: Runtime, context: RepoContext, ref: string) {
+  const result = runtime.exec("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
+    allowFailure: true,
+    cwd: context.worktreeRoot
+  });
+  return result.exitCode === 0 ? result.stdout.trim() : undefined;
+}
+
+function listBranchRefs(runtime: Runtime, context: RepoContext) {
+  return runtime
+    .exec("git", ["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"], {
+      allowFailure: true,
+      cwd: context.worktreeRoot
+    })
+    .stdout.trim()
+    .split("\n")
+    .filter(Boolean);
+}
+
+function listDefaultBranchRefs(runtime: Runtime, context: RepoContext) {
+  return listBranchRefs(runtime, context).filter(isDefaultBranchRef);
+}
+
+function hasCompetingBranchBase(
+  runtime: Runtime,
+  context: RepoContext,
+  head: string,
+  defaultMergeBase: string
+) {
+  for (const ref of listBranchRefs(runtime, context)) {
+    if (isDefaultBranchRef(ref) || isCurrentBranchRef(ref, context.currentBranch)) {
+      continue;
+    }
+    const commit = resolveCommit(runtime, context, ref);
+    if (commit === undefined || commit === head) {
+      continue;
+    }
+    const mergeBases = resolveMergeBases(runtime, context, ref);
+    if (mergeBases === undefined || mergeBases.length === 0) {
+      continue;
+    }
+    if (mergeBases.length !== 1) {
+      return true;
+    }
+    const [mergeBase] = mergeBases;
+    if (
+      mergeBase !== undefined &&
+      mergeBase !== defaultMergeBase &&
+      !isAncestor(runtime, context, mergeBase, defaultMergeBase)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function hasNewerSharedHistory(
@@ -156,6 +253,14 @@ function isAncestor(runtime: Runtime, context: RepoContext, ancestor: string, de
 
 function isDefaultBranchRef(ref: string) {
   return LOCAL_DEFAULT_BRANCH_REF_PATTERN.test(ref) || REMOTE_DEFAULT_BRANCH_REF_PATTERN.test(ref);
+}
+
+function isCurrentBranchRef(ref: string, currentBranch: string) {
+  if (ref === `refs/heads/${currentBranch}`) {
+    return true;
+  }
+  const remoteBranch = /^refs\/remotes\/[^/]+\/(?<branch>.+)$/u.exec(ref)?.groups?.branch;
+  return remoteBranch === currentBranch;
 }
 
 function resolvePreferredDefaultBranchRef(runtime: Runtime, context: RepoContext) {

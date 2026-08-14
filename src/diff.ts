@@ -2,13 +2,14 @@ import path from "node:path";
 
 import { launchCodiff, verifyCodiff, verifyCodiffAsync } from "./codiff.ts";
 import {
+  findInitialDefaultBranchBase,
   findNewerDefaultBranchBase,
   hasWorkingTreeChanges,
   planBranchComparison,
   planWorkingTreeComparison
 } from "./comparison-plan.ts";
 import { MonkeError } from "./errors.ts";
-import { resolveRepoContext } from "./git.ts";
+import { describeSessionBranchMismatch, resolveRepoContext } from "./git.ts";
 import { listSessionStates, loadSessionState, saveSessionState } from "./registry.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import type { RepoContext, Runtime } from "./types.ts";
@@ -45,7 +46,8 @@ interface PreparedDiff {
 export function runDiff(runtime: Runtime, options: DiffOptions = {}) {
   const executable = verifyCodiff(runtime);
   const prepared = prepareDiff(runtime);
-  if (launchRememberedDiff(runtime, executable, prepared.remembered, options)) {
+  warnSessionBranchElsewhere(runtime, prepared.remembered);
+  if (launchAutomaticDiff(runtime, executable, prepared.remembered, options)) {
     return;
   }
   throw new MonkeError("Interactive Diff picker requires the async CLI runner");
@@ -57,7 +59,8 @@ export async function runDiffInteractive(runtime: Runtime, options: DiffOptions 
     verifyCodiffAsync(runtime),
     prepareDiffAsync(runtime)
   ]);
-  if (launchRememberedDiff(runtime, executable, prepared.remembered, options)) {
+  warnSessionBranchElsewhere(runtime, prepared.remembered);
+  if (launchAutomaticDiff(runtime, executable, prepared.remembered, options)) {
     return;
   }
   await selectAndLaunchDiff(runtime, executable, prepared);
@@ -73,18 +76,19 @@ function prepareDiff(runtime: Runtime) {
   return { choices: buildDiffChoices(runtime, remembered), remembered };
 }
 
-function launchRememberedDiff(
+function launchAutomaticDiff(
   runtime: Runtime,
   executable: string,
   remembered: RememberedDiff,
   options: DiffOptions
 ) {
-  if (options.pick === true || remembered.baseRef === undefined) {
+  if (options.pick === true) {
     return false;
   }
-  const baseRef =
-    findNewerDefaultBranchBase(runtime, remembered.context, remembered.baseRef) ??
-    remembered.baseRef;
+  const baseRef = resolveAutomaticBase(runtime, remembered);
+  if (baseRef === undefined) {
+    return false;
+  }
   const plan = planBranchComparison(runtime, remembered.context, baseRef);
   if (plan === undefined) {
     return false;
@@ -95,6 +99,18 @@ function launchRememberedDiff(
     persistDiffBase(runtime, remembered, baseRef);
   }
   return true;
+}
+
+function resolveAutomaticBase(runtime: Runtime, remembered: RememberedDiff) {
+  if (remembered.baseRef === undefined) {
+    return remembered.owner === undefined
+      ? undefined
+      : findInitialDefaultBranchBase(runtime, remembered.context);
+  }
+  return (
+    findNewerDefaultBranchBase(runtime, remembered.context, remembered.baseRef) ??
+    remembered.baseRef
+  );
 }
 
 async function selectAndLaunchDiff(runtime: Runtime, executable: string, prepared: PreparedDiff) {
@@ -212,6 +228,33 @@ function warnDirtyBase(runtime: Runtime, target: LocalWorktreeTarget) {
       `Warning: ${target.label} has local changes; Diff uses its committed branch state only.\n`
     );
   }
+}
+
+function warnSessionBranchElsewhere(runtime: Runtime, remembered: RememberedDiff) {
+  const { owner } = remembered;
+  if (owner === undefined) {
+    return;
+  }
+  const branch = remembered.context.currentBranch;
+  const mismatch = describeSessionBranchMismatch(owner.session, branch === "HEAD" ? null : branch);
+  if (mismatch === null) {
+    return;
+  }
+  const attached = listLocalWorktreeTargets(
+    runtime,
+    getMonkeHome(runtime),
+    remembered.context.sourceRoot
+  ).find(
+    (target) =>
+      target.branch === owner.session &&
+      path.normalize(target.path) !== path.normalize(remembered.context.worktreeRoot)
+  );
+  if (attached === undefined) {
+    return;
+  }
+  runtime.writeStderr(
+    `Warning: Session ${owner.session} worktree ${remembered.context.worktreeRoot} ${mismatch}; branch ${owner.session} is checked out at ${attached.path}. Diff reviews the current checkout only.\n`
+  );
 }
 
 function warnDirtyRememberedBase(runtime: Runtime, context: RepoContext, baseRef: string) {
