@@ -86,6 +86,14 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Distributed skill**: Agent guidance distributed through the **Local tool install** so agents in a **Consumer repo** can use shared team workflows. _Avoid_: Package skill, copied prompt, generated instruction file
 
+**Shared distributed skill**: A **Distributed skill** available to every selected compatible **Agent harness**. _Avoid_: Default skill, universal folder, unscoped skill
+
+**Harness-specific skill**: A **Distributed skill** available only to one **Agent harness**. _Avoid_: Target-specific skill, private skill, platform skill
+
+**Codex-only skill**: A **Harness-specific skill** available only through the built-in Codex **Skill install target**. _Avoid_: Codex skill, Codex reference, custom-target skill
+
+**Agent harness**: A supported agent runtime family whose capabilities determine whether a **Harness-specific skill** applies, such as Codex. _Avoid_: Skill install target, Agent skill root, test harness
+
 **Skill source tree**: The `skills/` directory in the monke-tools source checkout that packages **Distributed skills** and **Distributed references** for installation into **Agent skill roots**. _Avoid_: Skill registry, source root, package metadata
 
 **Reference source tree**: The `references/` area inside the **Skill source tree** that stores **Distributed references**, separated into internal and imported ownership groups. _Avoid_: Skill source tree, global reference directory, reference cache
@@ -144,7 +152,9 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Skill namespace**: The monke-tools-owned directory inside an **Agent skill root** where monke-tools installs its **Distributed skills**. _Avoid_: Root skill folder, agent skill root, flat install
 
-**Managed skill namespace**: A **Skill namespace** that the local install can reconcile as a whole because monke-tools created it and owns its contents. _Avoid_: Skill cache, generated skills, copied namespace
+**Managed skill namespace**: A **Skill namespace** whose standard source-folder entries are reconciled by monke-tools while unrelated entries are preserved. _Avoid_: Skill cache, generated skills, copied namespace
+
+**Skill projection**: The target-specific view of compatible **Distributed skills** and shared **Distributed references** exposed through a **Managed skill namespace**. _Avoid_: Skill copy, generated skill tree, Skill namespace
 
 **Skill install target**: An agent-specific or custom destination selected for installing monke-tools **Distributed skills**. _Avoid_: Default agent, package manager, install mode
 
@@ -431,8 +441,14 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - A failed **Skill install target** does not prevent other selected **Skill install targets** from being reconciled.
 - A **Local install refresh** fails overall after reconciliation if any selected **Skill install target** failed.
 - A **Distributed skill** belongs to the monke-tools source version that ships it.
+- A **Distributed skill** is either a **Shared distributed skill** or a **Harness-specific skill**.
+- A **Harness-specific skill** belongs to exactly one **Agent harness**.
+- The initial supported **Agent harness** scope for **Harness-specific skills** is Codex.
+- A **Codex-only skill** is installed only into the built-in Codex **Skill install target**.
+- Claude, Cursor, and **Custom skill install targets** receive only **Shared distributed skills**.
 - A **Distributed reference** belongs to the monke-tools source version that ships it.
-- A **Skill source tree** packages **Distributed skills** and **Distributed references** under ownership-specific category paths.
+- Every **Distributed reference** is shared across **Skill install targets**.
+- A **Skill source tree** separates **Shared distributed skills** by ownership and **Harness-specific skills** by **Agent harness**.
 - A **Distributed skill** has a **Skill slug** and may have a different **Agent skill name**.
 - The **Core distributed skill** uses `core` as its **Skill slug** and `monke-tools-core` as its **Agent skill name**.
 - A **Distributed skill** is either an **Internal skill** or an **Imported skill**.
@@ -443,14 +459,16 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - A **Skill import recipe** belongs to the **Skill import recipe store**.
 - A **Skill import recipe** records the **Skill import selector**, **Import kind**, and import metadata needed to reproduce a **Skill import**.
 - A **Skill import recipe** can be rerun to refresh all **Imported guidance** it owns.
-- A **Skill namespace** packages monke-tools **Distributed skills** and **Distributed references**, but only **Distributed skills** are discoverable.
+- A **Skill namespace** packages compatible monke-tools **Distributed skills** and shared **Distributed references**, but only **Distributed skills** are discoverable.
 - A **Skill namespace** is always named `monke-tools`.
-- A **Managed skill namespace** is a symlink to the **Skill source tree**.
-- Any symlink at the explicit monke-tools **Skill namespace** path is treated as a **Managed skill namespace**.
+- A **Managed skill namespace** contains one **Skill projection**.
+- A **Skill projection** keeps source changes live without copying **Distributed skills**.
+- A legacy symlink at the explicit monke-tools **Skill namespace** path is treated as managed and migrated to a **Skill projection**.
 - Each **Agent skill root** may contain one monke-tools **Skill namespace**.
 - A **Managed skill namespace** may be reconciled by a **Local install refresh**.
-- A **Local install refresh** must not modify an existing **Skill namespace** unless it is a **Managed skill namespace**.
-- A **Local install refresh** may relink a **Managed skill namespace** from an old **Skill source tree** to the current **Skill source tree**.
+- A **Local install refresh** must not overwrite a non-symlink at a managed source-folder name inside a **Skill namespace**.
+- A **Local install refresh** may relink a **Skill projection** from an old **Skill source tree** to the current **Skill source tree**.
+- A **Local install refresh** must not remove non-managed entries from a **Managed skill namespace**.
 - **Skills Configure** may remove **Managed skill namespaces** from previously selected **Skill install targets** that are no longer selected.
 - A **Distributed skill** is available to **Consumer repos** through installed global agent skills.
 - The initial monke-tools skill set contains one **Core distributed skill**.

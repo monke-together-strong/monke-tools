@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -45,30 +45,47 @@ describe("skills", () => {
     ).toThrow(/Agent skill root/u);
   });
 
-  test("skill namespace reconciliation creates missing roots and links the namespace to the source tree", () => {
-    const sandbox = makeTempDir("skill-reconcile-create");
+  test("skill namespace reconciliation projects Codex-only skills only into Codex", () => {
+    const sandbox = makeTempDir("skill-reconcile-project");
     const sourceCheckout = path.join(sandbox, "source");
-    const agentSkillRoot = path.join(sandbox, "agent", "skills");
+    const customSkillRoot = path.join(sandbox, "custom", "skills");
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
       "---\nname: monke-tools-core\n---\n"
     );
+    write(sourceCheckout, "skills/imported/tdd/SKILL.md", "---\nname: tdd\n---\n");
+    write(
+      sourceCheckout,
+      "skills/codex/codex-chrome-use/SKILL.md",
+      "---\nname: codex-chrome-use\n---\n"
+    );
+    write(sourceCheckout, "skills/references/internal/README.md", "shared reference\n");
 
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
       nextPreference: {
-        targets: [{ kind: "custom", path: agentSkillRoot }]
+        targets: [{ kind: "codex" }, { kind: "cursor" }, { kind: "custom", path: customSkillRoot }]
       },
       previousPreference: null,
       sourceCheckout,
       writeMessage() {}
     });
 
-    const namespacePath = path.join(agentSkillRoot, "monke-tools");
-    expect(existsSync(agentSkillRoot)).toBeTruthy();
-    expect(lstatSync(namespacePath).isSymbolicLink()).toBeTruthy();
-    expect(readlinkSync(namespacePath)).toBe(path.join(sourceCheckout, "skills"));
+    const projections = [
+      { path: path.join(sandbox, ".codex", "skills", "monke-tools"), seesCodex: true },
+      { path: path.join(sandbox, ".cursor", "skills", "monke-tools"), seesCodex: false },
+      { path: path.join(customSkillRoot, "monke-tools"), seesCodex: false }
+    ];
+    for (const projection of projections) {
+      expect(lstatSync(projection.path).isDirectory()).toBeTruthy();
+      for (const sourceFolder of ["imported", "internal", "references"]) {
+        const installedPath = path.join(projection.path, sourceFolder);
+        expect(lstatSync(installedPath).isSymbolicLink()).toBeTruthy();
+        expect(readlinkSync(installedPath)).toBe(path.join(sourceCheckout, "skills", sourceFolder));
+      }
+      expect(existsSync(path.join(projection.path, "codex"))).toBe(projection.seesCodex);
+    }
   });
 
   test("Claude skill reconciliation flattens source categories into the Agent skill root", () => {
@@ -80,6 +97,11 @@ describe("skills", () => {
       "---\nname: monke-tools-core\n---\n"
     );
     write(sourceCheckout, "skills/imported/tdd/SKILL.md", "---\nname: tdd\n---\n");
+    write(
+      sourceCheckout,
+      "skills/codex/codex-chrome-use/SKILL.md",
+      "---\nname: codex-chrome-use\n---\n"
+    );
 
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
@@ -115,6 +137,7 @@ describe("skills", () => {
     );
     expect(lstatSync(tddLink).isSymbolicLink()).toBeTruthy();
     expect(readlinkSync(tddLink)).toBe(path.join(sourceCheckout, "skills", "imported", "tdd"));
+    expect(existsSync(path.join(claudeSkillRoot, "codex-chrome-use"))).toBeFalsy();
     expect(existsSync(path.join(claudeSkillRoot, "monke-tools"))).toBeFalsy();
 
     reconcileSkillNamespaces({
@@ -132,9 +155,9 @@ describe("skills", () => {
     expect(existsSync(coreLink)).toBeFalsy();
     expect(existsSync(tddLink)).toBeFalsy();
     expect(existsSync(manifestPath)).toBeFalsy();
-    expect(
-      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink()
-    ).toBeTruthy();
+    const codexNamespace = path.join(sandbox, ".codex", "skills", "monke-tools");
+    expect(lstatSync(codexNamespace).isDirectory()).toBeTruthy();
+    expect(lstatSync(path.join(codexNamespace, "codex")).isSymbolicLink()).toBeTruthy();
   });
 
   test("Reference-backed skills resolve packaged references from namespaced and Claude flat targets", () => {
@@ -248,7 +271,7 @@ describe("skills", () => {
       "skills/internal/monke-tools-core/SKILL.md",
       "---\nname: monke-tools-core\n---\n"
     );
-    mkdirSync(path.join(blockedSkillRoot, "monke-tools"), { recursive: true });
+    mkdirSync(path.join(blockedSkillRoot, "monke-tools", "internal"), { recursive: true });
 
     expect(() => {
       reconcileSkillNamespaces({
@@ -263,7 +286,7 @@ describe("skills", () => {
     }).toThrow(/Failed to reconcile 1 Skill install target/u);
 
     const codexNamespace = path.join(sandbox, ".codex", "skills", "monke-tools");
-    expect(lstatSync(codexNamespace).isSymbolicLink()).toBeTruthy();
+    expect(lstatSync(codexNamespace).isDirectory()).toBeTruthy();
     expect(lstatSync(path.join(blockedSkillRoot, "monke-tools")).isDirectory()).toBeTruthy();
   });
 
@@ -292,7 +315,7 @@ describe("skills", () => {
     }).toThrow(/Failed to reconcile 1 Skill install target/u);
 
     expect(
-      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink()
+      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isDirectory()
     ).toBeTruthy();
   });
 
@@ -305,8 +328,15 @@ describe("skills", () => {
       "skills/internal/monke-tools-core/SKILL.md",
       "---\nname: monke-tools-core\n---\n"
     );
-    mkdirSync(oldSkillRoot, { recursive: true });
-    symlinkSync(path.join(sourceCheckout, "skills"), path.join(oldSkillRoot, "monke-tools"), "dir");
+    reconcileSkillNamespaces({
+      homeDirectory: sandbox,
+      nextPreference: {
+        targets: [{ kind: "custom", path: oldSkillRoot }]
+      },
+      previousPreference: null,
+      sourceCheckout,
+      writeMessage() {}
+    });
 
     reconcileSkillNamespaces({
       homeDirectory: sandbox,
@@ -322,7 +352,7 @@ describe("skills", () => {
 
     expect(existsSync(path.join(oldSkillRoot, "monke-tools"))).toBeFalsy();
     expect(
-      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isSymbolicLink()
+      lstatSync(path.join(sandbox, ".codex", "skills", "monke-tools")).isDirectory()
     ).toBeTruthy();
   });
 });
