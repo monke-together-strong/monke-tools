@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Argument, Command } from "@commander-js/extra-typings";
+import { Argument, Command, Option } from "@commander-js/extra-typings";
 
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
@@ -143,7 +143,15 @@ function createProgram(
   skills
     .command("local-install")
     .argument("<source-checkout>")
-    .action((sourceCheckout) => runLocalInstallSkills(runtime, sourceCheckout));
+    .addOption(
+      new Option(
+        "--targets <targets...>",
+        "Replace the saved Skill install preference with built-in targets"
+      ).choices(["codex", "claude", "cursor"])
+    )
+    .action((sourceCheckout, options) =>
+      runLocalInstallSkills(runtime, sourceCheckout, options.targets)
+    );
 
   return program;
 }

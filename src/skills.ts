@@ -19,6 +19,7 @@ import { errorMessage, MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
 import type {
   BuiltInSkillInstallTargetKind,
+  GlobalMonkeConfig,
   SkillInstallPreference,
   SkillInstallTargetKind,
   SkillInstallTargetPreference
@@ -120,33 +121,46 @@ export async function runSkillsConfigure(runtime: Runtime) {
 }
 
 /** Record the Installed source checkout and refresh or configure Distributed skill targets. */
-export async function runLocalInstallSkills(runtime: Runtime, sourceCheckout: string) {
+export async function runLocalInstallSkills(
+  runtime: Runtime,
+  sourceCheckout: string,
+  targetKinds?: BuiltInSkillInstallTargetKind[]
+) {
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
   const installedSourceCheckout = path.resolve(sourceCheckout);
-  const nextConfig = {
+  const explicitPreference: SkillInstallPreference | undefined = targetKinds
+    ? { targets: targetKinds.map((kind) => ({ kind })) }
+    : undefined;
+  const nextPreference = explicitPreference ?? config.skillInstallPreference;
+  const nextConfig: GlobalMonkeConfig = {
     ...config,
     installedSourceCheckout
   };
+  if (nextPreference) {
+    nextConfig.skillInstallPreference = nextPreference;
+  }
 
   saveGlobalMonkeConfig(monkeHome, nextConfig);
 
-  if (!config.skillInstallPreference) {
+  if (!nextPreference) {
     await runSkillsConfigure(runtime);
     return;
   }
 
   reconcileSkillNamespaces({
     homeDirectory,
-    nextPreference: config.skillInstallPreference,
-    previousPreference: config.skillInstallPreference,
+    nextPreference,
+    previousPreference: config.skillInstallPreference ?? null,
     sourceCheckout: installedSourceCheckout,
     writeMessage(message) {
       runtime.writeStderr(message);
     }
   });
-  createLogger(runtime).success("Refreshed monke-tools skills");
+  createLogger(runtime).success(
+    explicitPreference ? "Configured monke-tools skills" : "Refreshed monke-tools skills"
+  );
 }
 
 /** Reconcile selected Agent skill roots with the monke-tools Skill source tree. */

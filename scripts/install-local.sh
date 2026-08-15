@@ -58,4 +58,4 @@ cleanup_old_bun_builds
 "$TARGET_MT" install-dependencies
 printf 'Installed mt and monke to %s and %s\n' "$TARGET_MT" "$TARGET_MONKE"
 MONKE_TOOLS_BINARY="$TARGET_MT" "$TARGET_MT" shell install
-"$TARGET_MT" skills local-install "$ROOT_DIR"
+"$TARGET_MT" skills local-install "$ROOT_DIR" "$@"

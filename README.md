@@ -29,7 +29,7 @@ mt spawn banana -m
 
 `vp run install:local` installs or upgrades the dependencies declared in `Brewfile` on Apple Silicon Macs, rebuilds the local executable from the current checkout, installs it as `~/.local/bin/mt`, and installs `~/.local/bin/monke` as a wrapper that invokes it. It removes the obsolete `~/.local/bin/monke-tools` command, installs shell integration for bash and zsh, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots. The current Homebrew dependency is the Codiff developer tool; other platforms skip Homebrew dependency installation.
 
-On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and refresh the managed skills from the current checkout.
+On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and refresh the managed skills from the current checkout. Automation can replace the preference without prompting by passing built-in targets explicitly, for example `vp run install:local --targets codex claude cursor` or `mt skills local-install <source-checkout> --targets codex claude cursor`.
 
 After changing CLI source code, run `vp run install:local` again before testing from another repo. For linked skills, file edits are visible immediately through symlinks. If you add or remove skill directories, rerun reconciliation (`vp run install:local` or `mt skills configure`) so flat Claude links are refreshed.
 
@@ -68,6 +68,7 @@ The Skill source tree is organized as:
 - `mt setup` syncs external repo path env vars into the source checkout root `.env`.
 - `mt shell install` refreshes the bash/zsh Shell adapter; `mt shell init bash` and `mt shell init zsh` print the adapter for inspection.
 - `mt skills configure` updates the saved Skill install preference and reconciles selected Agent skill roots.
+- `mt skills local-install <source-checkout> [--targets <targets...>]` records the Installed source checkout, then either replaces the preference with explicit Codex, Claude, or Cursor targets, reuses the saved preference, or prompts through Skills Configure when no preference exists.
 
 ## `monke.yml`
 
