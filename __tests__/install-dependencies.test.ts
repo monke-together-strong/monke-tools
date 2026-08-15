@@ -179,24 +179,33 @@ describe("dependency installation", () => {
       mkdirSync(path.dirname(obsoleteBuild), { recursive: true });
       writeFileSync(obsoleteBuild, "obsolete", "utf-8");
     }
-
-    const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
-      cwd: checkout,
-      encoding: "utf-8",
-      env: {
-        ...process.env,
-        BUN_LOG: bunLog,
-        HOME: home,
-        INSTALL_DEPENDENCIES_EXIT: "0",
-        MONKE_TOOLS_LOG: monkeToolsLog,
-        PATH: `${binDirectory}:/usr/bin:/bin`
+    const result = spawnSync(
+      "sh",
+      [
+        path.join(checkout, "scripts", "install-local.sh"),
+        "--targets",
+        "claude",
+        "cursor",
+        "codex"
+      ],
+      {
+        cwd: checkout,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          BUN_LOG: bunLog,
+          HOME: home,
+          INSTALL_DEPENDENCIES_EXIT: "0",
+          MONKE_TOOLS_LOG: monkeToolsLog,
+          PATH: `${binDirectory}:/usr/bin:/bin`
+        }
       }
-    });
+    );
 
     expect(result.status).toBe(0);
     expect(readFileSync(bunLog, "utf-8")).toContain(`pwd:${path.join(checkout, "builds")}\n`);
     expect(readFileSync(monkeToolsLog, "utf-8")).toBe(
-      `install-dependencies\nshell install\nskills local-install ${checkout}\n`
+      `install-dependencies\nshell install\nskills local-install ${checkout} --targets claude cursor codex\n`
     );
     const installedMt = readFileSync(path.join(home, ".local", "bin", "mt"), "utf-8");
     expect(installedMt).toContain("MONKE_TOOLS_LOG");

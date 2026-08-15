@@ -64,6 +64,6 @@ Internal skills are owned by monke-tools. Imported skills come from other projec
 
 ## Consequences
 
-Local install always includes skill installation. It installs the `mt` binary first, records the Installed source checkout, then either prompts with `mt skills configure` when no preference exists or reconciles the existing preference.
+Local install always includes skill installation. It installs the `mt` binary first, records the Installed source checkout, then replaces the preference and reconciles when built-in targets are supplied explicitly, prompts with `mt skills configure` when no preference exists, or reconciles the existing preference.
 
 Deselecting a namespace target removes only a managed `monke-tools` symlink namespace. Deselecting Claude removes only flat links recorded in the managed manifest. A failure in one selected target does not prevent other selected targets from being reconciled, but the operation fails overall so partial installation is visible.

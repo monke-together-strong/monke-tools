@@ -174,6 +174,88 @@ describe("skills CLI", () => {
     ).toBeTruthy();
   });
 
+  test("mt skills local-install accepts built-in targets without prompting", async () => {
+    const sandbox = makeTempDir("skills-local-install-targets");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+
+    await runCliAsync(
+      ["skills", "local-install", sourceCheckout, "--targets", "claude", "cursor", "codex"],
+      createRuntime({
+        cwd: sandbox,
+        env: {
+          HOME: osHome,
+          MONKE_HOME: monkeHome
+        },
+        onMultiSelect() {
+          throw new Error("Target arguments must bypass the interactive prompt");
+        },
+        onStderr() {},
+        onStdout() {}
+      })
+    );
+
+    expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
+      installedSourceCheckout: sourceCheckout,
+      skillInstallPreference: {
+        targets: [{ kind: "claude" }, { kind: "cursor" }, { kind: "codex" }]
+      },
+      version: 1
+    });
+    expect(
+      lstatSync(path.join(osHome, ".claude", "skills", "monke-tools-core")).isSymbolicLink()
+    ).toBeTruthy();
+    expect(
+      lstatSync(path.join(osHome, ".cursor", "skills", "monke-tools")).isDirectory()
+    ).toBeTruthy();
+    expect(
+      lstatSync(path.join(osHome, ".codex", "skills", "monke-tools")).isDirectory()
+    ).toBeTruthy();
+  });
+
+  test("mt skills local-install replaces the saved preference when targets are explicit", async () => {
+    const sandbox = makeTempDir("skills-local-install-reconfigure");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    saveGlobalMonkeConfig(monkeHome, {
+      installedSourceCheckout: sourceCheckout,
+      skillInstallPreference: {
+        targets: [{ kind: "cursor" }]
+      },
+      version: 1
+    });
+
+    await runCliAsync(
+      ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
+      createRuntime({
+        cwd: sandbox,
+        env: {
+          HOME: osHome,
+          MONKE_HOME: monkeHome
+        },
+        onStderr() {},
+        onStdout() {}
+      })
+    );
+
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toStrictEqual({
+      targets: [{ kind: "codex" }, { kind: "claude" }]
+    });
+    expect(existsSync(path.join(osHome, ".cursor", "skills", "monke-tools"))).toBeFalsy();
+  });
+
   test("mt skills local-install reuses an existing preference and relinks after a checkout move", async () => {
     const sandbox = makeTempDir("skills-local-install-refresh");
     const monkeHome = path.join(sandbox, "monke-home");

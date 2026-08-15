@@ -28,6 +28,7 @@ If it is missing or stale, ask the user to refresh the local install from the mo
 - `mt setup`: run from a source checkout to write dependency path env vars into the source checkout root `.env`.
 - `mt cleanup`: remove Session state records whose Dead worktrees no longer exist and run configured Cleanup commands; `mt cleanup --merged` additionally removes Session worktrees for Merge-cleanable Sessions whose branch is proven by a Merged PR (`--dry-run` to preview without removing).
 - `mt skills configure`: update which Agent skill roots receive monke-tools Distributed skills.
+- `mt skills local-install <source-checkout> [--targets <targets...>]`: record the Installed source checkout and install skills using explicit Codex, Claude, or Cursor targets, the saved preference, or interactive configuration when neither exists.
 
 ## Core Flows
 
