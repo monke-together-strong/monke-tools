@@ -35,7 +35,7 @@ After every `OPEN` check, fetch the live base and PR head. If the base is not an
 
 2. **Wait for reviewers:** Once the latest commit has no unresolved CI failure, inspect each reviewer's latest-head state before triggering a missing automatic review. Read mutable bot comments directly, including their full body and update time, together with command replies and commit coverage; a check context alone does not establish reviewer state. Explicit processing or in-progress text, or an accepted trigger for the latest head, means the review has started. Run `/polling` with an eight-minute heartbeat until every required reviewer and every automatic reviewer that started on the latest commit has finished. Do not act on partial feedback.
 
-   Make at most one manual trigger attempt per reviewer per head. A rejected, deferred, or rate-limited command consumes that attempt: keep observing, and only a new head resets the boundary. Treat non-required reviewer integrations as best-effort. Inspect and triage any comments they already produced, but when a latest-commit suite never starts after two heartbeat intervals, record the integration as unavailable and continue. Do not create empty commits, toggle PR state, or post another trigger solely to wake an optional reviewer. For a required reviewer that cannot start, report the blocker instead of retriggering it.
+  Treat non-required reviewer integrations as best-effort. Inspect and triage any comments they already produced, but when a latest-commit suite never starts after two heartbeat intervals, record the integration as unavailable and continue. Do not create empty commits, toggle PR state, or post another trigger solely to wake an optional reviewer. For a required reviewer that cannot start, report the blocker instead of retriggering it. If rate limit is hit, do no manually try to trigger another review, just continue polling and working through other reviews/issues.
 
    This step is complete when every required review and every latest-head review that started has finished, while each optional non-starter has been recorded as unavailable.
 
@@ -43,7 +43,7 @@ After every `OPEN` check, fetch the live base and PR head. If the base is not an
 
 Nitpick is a severity label, not a dismissal. Prefer fixing consistency polish; prefer rejecting imaginary-scenario complexity.
 
-4. **Commit and push:** After implementing changes, commit and push. Then go back to the terminal-state and rebase gates - the reviewers will automatically re-review your new push.
+4. **Commit and push:** After implementing changes, commit and push. Treat that push as the review trigger: the reviewers will automatically queue a re-review. 
 
 5. **Loop:** Repeat until a full cycle passes with nothing meaningful left to address from either reviewer.
 
