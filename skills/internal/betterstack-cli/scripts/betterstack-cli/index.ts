@@ -219,7 +219,14 @@ interface BetterStackConnectionMetadata {
   username: string;
 }
 
-class BetterStackInvalidResponseError extends Error {
+class BetterStackCliError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BetterStackCliError";
+  }
+}
+
+class BetterStackInvalidResponseError extends BetterStackCliError {
   constructor(message: string) {
     super(message);
     this.name = "BetterStackInvalidResponseError";
@@ -507,7 +514,7 @@ async function resolveSql(options: QueryRunOptions) {
 }
 
 function fail(message: string): never {
-  throw new Error(message);
+  throw new BetterStackCliError(message);
 }
 
 function invalidResponse(message: string): never {
@@ -526,12 +533,22 @@ function reportFailure(cause: unknown) {
       process.stderr.write(cause.body.endsWith("\n") ? cause.body : `${cause.body}\n`);
     }
 
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
-  const message = cause instanceof Error ? cause.message : String(cause);
+  const message =
+    cause instanceof BetterStackCliError
+      ? cause.message
+      : cause instanceof Error
+        ? (cause.stack ?? `${cause.name}: ${cause.message}`)
+        : String(cause);
   process.stderr.write(`${message}\n`);
-  process.exit(1);
+  process.exitCode = 1;
 }
 
-main().catch(reportFailure);
+try {
+  await main();
+} catch (error) {
+  reportFailure(error);
+}
