@@ -1020,7 +1020,7 @@ external:
     expect(read(rootWorktree, ".bootstrap-path")).toBe(path.relative(rootWorktree, depWorktree));
   });
 
-  test("dependency bootstrap runs before root bootstrap and root can rely on synced dependency paths", () => {
+  test("Dependency repo bootstrap runs before Root repo bootstrap and the Root repo can rely on synced Path env values", () => {
     const sandbox = makeTempDir("multi-repo-bootstrap");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
