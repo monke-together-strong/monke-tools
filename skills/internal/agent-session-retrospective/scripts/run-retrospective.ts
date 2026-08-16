@@ -19,6 +19,13 @@ import { runCommit } from "./lib/commit.ts";
 import { runPrAggregate, runPrCollect } from "./lib/pr-analysis.ts";
 import { retroHome, withRetroLock } from "./lib/store.ts";
 
+class RetrospectiveCliError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RetrospectiveCliError";
+  }
+}
+
 function parseFlags(argv: string[]) {
   const flags = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 1) {
@@ -47,7 +54,7 @@ function parseDateMs(value: string | undefined) {
   }
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) {
-    throw new TypeError(`Invalid date: ${value}`);
+    throw new RetrospectiveCliError(`Invalid date: ${value}`);
   }
   return parsed;
 }
@@ -58,7 +65,7 @@ function parseIdleMinutes(value: string | undefined) {
   }
   const minutes = Number(value);
   if (!Number.isFinite(minutes) || minutes < 0) {
-    throw new Error(`Invalid --idle-minutes: ${value}`);
+    throw new RetrospectiveCliError(`Invalid --idle-minutes: ${value}`);
   }
   return minutes;
 }
@@ -86,7 +93,7 @@ function main() {
   if (command === "commit") {
     const runTs = flags.get("run-ts");
     if (runTs === undefined || runTs === "") {
-      throw new Error("commit requires --run-ts");
+      throw new RetrospectiveCliError("commit requires --run-ts");
     }
     const result = withRetroLock(root, () =>
       runCommit({
@@ -103,7 +110,7 @@ function main() {
   if (command === "pr-collect") {
     const runTs = flags.get("run-ts");
     if (runTs === undefined || runTs === "") {
-      throw new Error("pr-collect requires --run-ts");
+      throw new RetrospectiveCliError("pr-collect requires --run-ts");
     }
     const result = withRetroLock(root, () =>
       runPrCollect({
@@ -120,7 +127,7 @@ function main() {
   if (command === "pr-aggregate") {
     const runTs = flags.get("run-ts");
     if (runTs === undefined || runTs === "") {
-      throw new Error("pr-aggregate requires --run-ts");
+      throw new RetrospectiveCliError("pr-aggregate requires --run-ts");
     }
     const result = withRetroLock(root, () =>
       runPrAggregate({
@@ -139,6 +146,12 @@ function main() {
 try {
   main();
 } catch (error) {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-  process.exit(1);
+  const message =
+    error instanceof RetrospectiveCliError
+      ? error.message
+      : error instanceof Error
+        ? (error.stack ?? `${error.name}: ${error.message}`)
+        : String(error);
+  process.stderr.write(`${message}\n`);
+  process.exitCode = 1;
 }
