@@ -334,7 +334,7 @@ describe("chop", () => {
     ]);
   });
 
-  test("a recorded dependency path promotes to its whole owning Session", () => {
+  test("a recorded Session worktree path for a Dependency repo promotes to its owning Session", () => {
     const fixture = createMultiRepoSessionFixture("chop-session-member-path");
 
     runMonke({

@@ -1133,7 +1133,7 @@ apps:
     expect(message).not.toContain("shared");
   });
 
-  test("materialize rejects source checkout context and reuses sticky ports inside a valid session worktree", () => {
+  test("Materialize rejects Source checkout context and reuses Assigned ports inside a valid Session worktree", () => {
     const sandbox = makeTempDir("single-materialize");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");

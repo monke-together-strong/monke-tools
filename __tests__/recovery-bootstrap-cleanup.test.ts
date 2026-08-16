@@ -167,7 +167,7 @@ external:
     expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
   });
 
-  test("materialize from the root worktree re-applies dependency repos", () => {
+  test("Materialize from the Session worktree for the Root repo re-applies Dependency repos", () => {
     const sandbox = makeTempDir("rematerialize-dependency");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");

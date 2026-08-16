@@ -24,8 +24,8 @@ If it is missing or stale, ask the user to refresh the local install from the mo
 - `mt spawn <session> [--codex]`: create or update a Session worktree and its dependency worktrees. Use `--codex` when follow-up threads will use it; the flag opens it as a Codex workspace.
 - `mt swing [target] [--codex]`: navigate to an existing Session worktree, Ordinary worktree, Source checkout, Previous Swing target, or same-repo pull request. Use `--codex` when follow-up threads will use that checkout; the flag opens it as a Codex workspace.
 - `mt home`: print the resolved absolute Monke home path without creating it.
-- `mt materialize`: run inside a session worktree to refresh env rewrites, dependency paths, resources, and bootstrap behavior.
-- `mt setup`: run from a source checkout to write dependency path env vars into the source checkout root `.env`.
+- `mt materialize`: run inside a Session worktree to refresh Managed env file rewrites, Path env values, resources, and bootstrap behavior.
+- `mt setup`: run from a Source checkout to write Path env values into the Source checkout root `.env`.
 - `mt cleanup`: remove Session state records whose Dead worktrees no longer exist and run configured Cleanup commands; `mt cleanup --merged` additionally removes Session worktrees for Merge-cleanable Sessions whose branch is proven by a Merged PR (`--dry-run` to preview without removing).
 - `mt skills configure`: update which Agent skill roots receive monke-tools Distributed skills.
 - `mt skills local-install <source-checkout> [--targets <targets...>]`: record the Installed source checkout and install skills using explicit Codex, Claude, or Cursor targets, the saved preference, or interactive configuration when neither exists.
@@ -33,8 +33,8 @@ If it is missing or stale, ask the user to refresh the local install from the mo
 ## Core Flows
 
 - Spawn a session worktree from the source checkout with `mt spawn <session>`; use the spawned session worktree for task work.
-- Refresh an existing session from inside the session worktree with `mt materialize`; completion requires env rewrites, dependency paths, resources, and bootstrap behavior to finish or report a clear failure.
-- Update source checkout dependency path env vars with `mt setup`; do not use it as a replacement for session materialization.
+- Refresh an existing Session from inside the Session worktree with `mt materialize`; completion requires Managed env file rewrites, Path env values, resources, and bootstrap behavior to finish or report a clear failure.
+- Update Source checkout Path env values with `mt setup`; do not use it as a replacement for Session materialization.
 - Clean stale monke-tools state with `mt cleanup`; report cleanup failures instead of deleting state by hand.
 - When editing or diagnosing `monke.yml`, read [MONKE-YML-REFERENCE.md](MONKE-YML-REFERENCE.md).
 
