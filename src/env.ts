@@ -11,6 +11,7 @@ import {
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
+import { samePath } from "./path-identity.ts";
 import type { AssignedPort, RepoConfig } from "./types.ts";
 
 /** Options for collecting baseline ports from a concrete repo-content root. */
@@ -253,7 +254,7 @@ function seedRelativePath(
 
   const targetPath = path.join(worktreeRoot, normalizedRelativePath);
   const sourceIsDirectory = statSync(sourcePath).isDirectory();
-  if (path.normalize(sourcePath) === path.normalize(targetPath)) {
+  if (samePath(sourcePath, targetPath)) {
     return;
   }
 

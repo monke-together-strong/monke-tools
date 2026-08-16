@@ -5,6 +5,7 @@ import { parseDocument, stringify, visit } from "yaml";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
+import { samePath } from "./path-identity.ts";
 import { ensureDirectory, hashKey, isPortAvailable } from "./runtime.ts";
 import { RepoReservationSchema, SessionStateSchema } from "./state-schema.ts";
 import type { RepoConfig, RepoReservation, SessionRepoState, SessionState } from "./types.ts";
@@ -247,7 +248,7 @@ function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: 
   try {
     const partial = parseOwnedYamlFile(filePath, SessionStateWorktreePathsSchema);
     return partial.repos.some((repo) =>
-      worktreePaths.some((worktreePath) => sameWorktreePath(repo.worktreePath, worktreePath))
+      worktreePaths.some((worktreePath) => samePath(repo.worktreePath, worktreePath))
     );
   } catch {
     const text = readFileSync(filePath, "utf-8");
@@ -263,7 +264,7 @@ function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: 
         if (
           key !== "key" &&
           typeof scalarValue === "string" &&
-          worktreePaths.some((candidate) => sameWorktreePath(scalarValue, candidate))
+          worktreePaths.some((candidate) => samePath(scalarValue, candidate))
         ) {
           referencesWorktree = true;
         }
@@ -272,10 +273,6 @@ function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: 
     });
     return referencesWorktree;
   }
-}
-
-function sameWorktreePath(left: string, right: string) {
-  return path.normalize(left) === path.normalize(right);
 }
 
 function getReservationFilePath(home: string, sourceRoot: string) {

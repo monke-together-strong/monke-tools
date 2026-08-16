@@ -41,6 +41,7 @@ import {
 } from "./git.ts";
 import type { DefaultBranchRef } from "./git.ts";
 import { createLogger } from "./logger.ts";
+import { samePath } from "./path-identity.ts";
 import {
   allocateLocalPorts,
   ensureSessionPrefix,
@@ -687,8 +688,8 @@ function assertNoGlobalWorktreePathStateCollisions(
       .flatMap((state) => state.repos)
       .find(
         (repoState) =>
-          path.normalize(repoState.worktreePath) === path.normalize(expectedPath) &&
-          path.normalize(repoState.sourceRoot) !== path.normalize(repoConfig.sourceRoot)
+          samePath(repoState.worktreePath, expectedPath) &&
+          !samePath(repoState.sourceRoot, repoConfig.sourceRoot)
       );
 
     if (collision) {
@@ -1433,7 +1434,7 @@ function findFirstIndexNeedingWork(
     }
 
     const expectedPath = getExpectedWorktreePath(home, repoConfig.sourceRoot, session);
-    if (path.normalize(existing.worktreePath) !== path.normalize(expectedPath)) {
+    if (!samePath(existing.worktreePath, expectedPath)) {
       throw new MonkeError(
         `Session ${session} recorded ${existing.worktreePath} for ${repoConfig.sourceRoot}, expected ${expectedPath}`
       );
