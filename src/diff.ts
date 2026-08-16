@@ -10,6 +10,7 @@ import {
 } from "./comparison-plan.ts";
 import { MonkeError } from "./errors.ts";
 import { describeSessionBranchMismatch, resolveRepoContext } from "./git.ts";
+import { samePath } from "./path-identity.ts";
 import { listSessionStates, loadSessionState, saveSessionState } from "./registry.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import type { RepoContext, Runtime } from "./types.ts";
@@ -178,9 +179,7 @@ function buildDiffChoices(runtime: Runtime, remembered: RememberedDiff) {
     runtime,
     getMonkeHome(runtime),
     remembered.context.sourceRoot
-  ).filter(
-    (target) => path.normalize(target.path) !== path.normalize(remembered.context.worktreeRoot)
-  );
+  ).filter((target) => !samePath(target.path, remembered.context.worktreeRoot));
   const choices: DiffChoice[] = targets.map((target) => ({
     label: formatDiffTargetLabel(target),
     target,
@@ -213,8 +212,8 @@ function persistDiffBase(runtime: Runtime, remembered: RememberedDiff, baseRef: 
     saveSessionState(home, {
       ...state,
       repos: state.repos.map((repo) =>
-        path.normalize(repo.sourceRoot) === path.normalize(remembered.context.sourceRoot) &&
-        path.normalize(repo.worktreePath) === path.normalize(remembered.context.worktreeRoot)
+        samePath(repo.sourceRoot, remembered.context.sourceRoot) &&
+        samePath(repo.worktreePath, remembered.context.worktreeRoot)
           ? { ...repo, diffBaseRef: baseRef }
           : repo
       )
@@ -246,8 +245,7 @@ function warnSessionBranchElsewhere(runtime: Runtime, remembered: RememberedDiff
     remembered.context.sourceRoot
   ).find(
     (target) =>
-      target.branch === owner.session &&
-      path.normalize(target.path) !== path.normalize(remembered.context.worktreeRoot)
+      target.branch === owner.session && !samePath(target.path, remembered.context.worktreeRoot)
   );
   if (attached === undefined) {
     return;
@@ -288,13 +286,13 @@ function resolveRememberedDiff(runtime: Runtime) {
   const sessionState = listSessionStates(home).find((state) =>
     state.repos.some(
       (repo) =>
-        path.normalize(repo.sourceRoot) === path.normalize(context.sourceRoot) &&
+        samePath(repo.sourceRoot, context.sourceRoot) &&
         path.normalize(repo.worktreePath) === normalizedWorktree
     )
   );
   const repoState = sessionState?.repos.find(
     (repo) =>
-      path.normalize(repo.sourceRoot) === path.normalize(context.sourceRoot) &&
+      samePath(repo.sourceRoot, context.sourceRoot) &&
       path.normalize(repo.worktreePath) === normalizedWorktree
   );
   return {

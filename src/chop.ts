@@ -10,6 +10,7 @@ import {
   resolveRepoContext
 } from "./git.ts";
 import { createLogger } from "./logger.ts";
+import { samePath } from "./path-identity.ts";
 import {
   getSessionStateFilePath,
   listSessionStates,
@@ -99,8 +100,7 @@ export function runChop(runtime: Runtime, target: string | undefined, options: C
     });
     return {
       kind: "ordinary" as const,
-      removedInvocation:
-        path.normalize(invocation.worktreeRoot) === path.normalize(current.worktree.path),
+      removedInvocation: samePath(invocation.worktreeRoot, current.worktree.path),
       sourceRoot: invocation.sourceRoot,
       worktreePath: current.worktree.path
     };
@@ -206,7 +206,7 @@ function resolveChopTarget(
   const selectedOwner = findSessionOwner(allStates, ordinaryCandidate.path);
   if (selectedOwner !== null) {
     assertSessionIdentity(home, selectedOwner);
-    if (path.normalize(selectedOwner.rootSourceRoot) !== path.normalize(rootScope)) {
+    if (!samePath(selectedOwner.rootSourceRoot, rootScope)) {
       throw new MonkeError(
         `Session ${selectedOwner.session} is outside the current Root repo scope ${rootScope}`
       );
@@ -568,9 +568,7 @@ function resolveOrdinaryTarget(
   const targetPath = existsSync(unresolvedTargetPath)
     ? realpathSync.native(unresolvedTargetPath)
     : unresolvedTargetPath;
-  const pathMatches = worktrees.filter(
-    (worktree) => path.normalize(worktree.path) === path.normalize(targetPath)
-  );
+  const pathMatches = worktrees.filter((worktree) => samePath(worktree.path, targetPath));
   const matches = [...new Set([...branchMatches, ...pathMatches])];
   if (matches.length > 1) {
     throw new MonkeError(
@@ -614,8 +612,4 @@ function removeWorktree(
   runtime.exec("git", ["worktree", "remove", ...(options.force ? ["--force"] : []), worktreePath], {
     cwd: sourceRoot
   });
-}
-
-function samePath(left: string, right: string) {
-  return path.normalize(left) === path.normalize(right);
 }

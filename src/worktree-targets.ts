@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { listWorktrees, resolveRepoContext } from "./git.ts";
+import { samePath } from "./path-identity.ts";
 import { getSessionStateFilePath, listSessionStates } from "./registry.ts";
 import type { Runtime } from "./types.ts";
 
@@ -27,9 +28,7 @@ export function listLocalWorktreeTargets(runtime: Runtime, home: string, sourceR
   const claimedPaths = new Set<string>();
 
   for (const state of listSessionStates(home)) {
-    const repo = state.repos.find(
-      (candidate) => path.normalize(candidate.sourceRoot) === path.normalize(sourceRoot)
-    );
+    const repo = state.repos.find((candidate) => samePath(candidate.sourceRoot, sourceRoot));
     if (repo === undefined) {
       continue;
     }
@@ -98,15 +97,13 @@ export function resolveLocalWorktreeTarget(
   try {
     const context = resolveRepoContext(runtime, selected.path, null, { inferSessionName: false });
     if (
-      path.normalize(context.gitCommonDir) !== path.normalize(gitCommonDir) ||
+      !samePath(context.gitCommonDir, gitCommonDir) ||
       context.currentBranch !== (selected.branch ?? "HEAD")
     ) {
       return;
     }
     resolvedTarget = listLocalWorktreeTargets(runtime, home, sourceRoot).find(
-      (target) =>
-        path.normalize(target.path) === path.normalize(selected.path) &&
-        target.branch === selected.branch
+      (target) => samePath(target.path, selected.path) && target.branch === selected.branch
     );
   } catch {
     // A stale or missing worktree has no resolvable target.

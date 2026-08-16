@@ -16,6 +16,7 @@ import {
 } from "./git.ts";
 import { createLogger } from "./logger.ts";
 import { spawnSessionFromSourceRootLocked } from "./monke.ts";
+import { samePath } from "./path-identity.ts";
 import { ensureDirectory, getMonkeHome, hashKey, withGlobalLock } from "./runtime.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
@@ -490,7 +491,7 @@ function getCurrentSwingTarget(home: string, context: RepoContext): SwingHistory
   }
 
   const expectedPath = getExpectedWorktreePath(home, context.sourceRoot, context.sessionName);
-  return path.normalize(context.worktreeRoot) === path.normalize(expectedPath)
+  return samePath(context.worktreeRoot, expectedPath)
     ? {
         kind: "session",
         session: context.sessionName
@@ -515,7 +516,7 @@ function isSameSwingTarget(left: SwingHistoryTarget, right: SwingHistoryTarget) 
   return (
     right.kind === "ordinary-worktree" &&
     left.branch === right.branch &&
-    path.normalize(left.path) === path.normalize(right.path)
+    samePath(left.path, right.path)
   );
 }
 
@@ -573,7 +574,7 @@ function listLinkedWorktrees(runtime: Runtime, rootSourceRoot: string) {
     entry.branch !== null &&
     !entry.prunable &&
     existsSync(entry.path) &&
-    path.normalize(entry.path) !== path.normalize(rootSourceRoot)
+    !samePath(entry.path, rootSourceRoot)
       ? [{ branch: entry.branch, path: entry.path }]
       : []
   );

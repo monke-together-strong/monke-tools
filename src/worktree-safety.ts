@@ -4,6 +4,7 @@ import path from "node:path";
 import { errorMessage, MonkeError } from "./errors.ts";
 import { listWorktrees, resolveRepoContext } from "./git.ts";
 import type { WorktreeEntry } from "./git.ts";
+import { samePath } from "./path-identity.ts";
 import type { Runtime } from "./types.ts";
 
 /** Reject a locked Git worktree registration. */
@@ -20,7 +21,7 @@ export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: stri
   if (!path.isAbsolute(sourceRoot) || !existsSync(sourceRoot)) {
     throw new MonkeError(`Recorded Source checkout does not exist at canonical path ${sourceRoot}`);
   }
-  if (path.normalize(realpathSync.native(sourceRoot)) !== path.normalize(sourceRoot)) {
+  if (!samePath(realpathSync.native(sourceRoot), sourceRoot)) {
     throw new MonkeError(`Recorded Source checkout path is not canonical: ${sourceRoot}`);
   }
 
@@ -34,8 +35,8 @@ export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: stri
   }
   if (
     !context.isSourceCheckout ||
-    path.normalize(context.sourceRoot) !== path.normalize(sourceRoot) ||
-    path.normalize(context.worktreeRoot) !== path.normalize(sourceRoot)
+    !samePath(context.sourceRoot, sourceRoot) ||
+    !samePath(context.worktreeRoot, sourceRoot)
   ) {
     throw new MonkeError(`Recorded Source checkout is not that repository's Source checkout`);
   }
@@ -76,7 +77,7 @@ export function validateRegisteredWorktreeForRemoval(
     throw new MonkeError(`No removable registered worktree exists at ${targetPath}`);
   }
   assertWorktreeUnlocked(entry);
-  if (path.normalize(entry.path) === path.normalize(sourceRoot)) {
+  if (samePath(entry.path, sourceRoot)) {
     throw new MonkeError(`Cannot Chop the Source checkout at ${sourceRoot}`);
   }
   assertWorktreeIdentity(runtime, sourceRoot, entry.path);
@@ -118,15 +119,12 @@ function assertWorktreeIdentity(runtime: Runtime, sourceRoot: string, worktreePa
     );
   }
 
-  if (path.normalize(context.sourceRoot) !== path.normalize(sourceRoot)) {
+  if (!samePath(context.sourceRoot, sourceRoot)) {
     throw new MonkeError(
       `Worktree ${worktreePath} belongs to ${context.sourceRoot}; expected ${sourceRoot}`
     );
   }
-  if (
-    context.isSourceCheckout ||
-    path.normalize(context.worktreeRoot) !== path.normalize(worktreePath)
-  ) {
+  if (context.isSourceCheckout || !samePath(context.worktreeRoot, worktreePath)) {
     throw new MonkeError(`Registered path ${worktreePath} is not that linked worktree's root`);
   }
 }
