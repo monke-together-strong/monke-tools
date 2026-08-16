@@ -48,7 +48,7 @@ closeout rerun.
 
 Use /tdd where possible, at pre-agreed seams.
 
-Run typechecking regularly, single test files regularly, and the full test suite once at the end.
+Run targeted typechecking, linting, and single test files regularly.
 
 ## Closeout
 
@@ -72,8 +72,7 @@ findings, and the final gate result back to the implementation thread.
 ```
 
 If closeout blocks, supply missing evidence, obtain explicit acceptance, or fix
-the code. If the checkout changes, rerun verification—including the full test
-suite for code changes—commit every checkout change, update the review candidate,
-then rerun the Review gate and affected evidence gates against the same fixed
-point. Otherwise rerun only the affected gates. Finish only after closeout passes
-with a clean checkout.
+the code. If the checkout changes, rerun targeted verification, commit every
+checkout change, update the review candidate, then rerun the Review gate and
+affected evidence gates against the same fixed point. Finish only after closeout passes with
+a clean checkout.
