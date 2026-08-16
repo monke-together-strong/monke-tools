@@ -126,6 +126,10 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Reference-backed skill**: An invocable **Distributed skill** that loads an unchanged **Distributed reference** as its base behavior and applies additional guidance with explicit precedence. _Avoid_: Forked skill, patched imported skill, copied skill
 
+**Global agent instructions**: Team-owned agent guidance installed into selected **Agent harnesses** at user scope and loaded across **Consumer repos**. Repo guidance may specialize or override it. _Avoid_: Global team instructions, User agent instructions, Global monke config, Repo coding standards
+
+**Managed instruction section**: The marker-delimited portion of an **Agent harness** user-level instruction file owned and reconciled by monke-tools. _Avoid_: Global instruction file, generated instruction file, user instructions
+
 **Team coding baseline**: Minimum Team-owned coding guidance required across all **Consumer repos**; repo rules may add stricter or more specific guidance. _Avoid_: Repo coding standards, personal preferences, lint rules
 
 **Repo coding standards**: Repository-owned coding guidance documented by a **Consumer repo**; it supplements the **Team coding baseline** and may override conflicting imported review guidance. _Avoid_: Team coding baseline, formatter config, inferred conventions
@@ -443,6 +447,13 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - A **Local install refresh** may succeed for one **Skill install target** and fail for another.
 - A failed **Skill install target** does not prevent other selected **Skill install targets** from being reconciled.
 - A **Local install refresh** fails overall after reconciliation if any selected **Skill install target** failed.
+- **Global agent instructions** belong to the monke-tools source version that ships them.
+- A **Local install refresh** writes one shared **Global agent instructions** body into managed sections of the selected Codex and Claude user-level instruction files.
+- The Codex and Claude **Skill install targets** include **Global agent instructions** installation.
+- The Cursor and **Custom skill install targets** do not include **Global agent instructions** installation.
+- **Global agent instructions** installation honors `CODEX_HOME` and `CLAUDE_CONFIG_DIR` when they are set.
+- **Global agent instructions** installation preserves user-owned content outside its managed sections.
+- Repo guidance may specialize or override **Global agent instructions**.
 - A **Distributed skill** belongs to the monke-tools source version that ships it.
 - A **Distributed skill** is either a **Shared distributed skill** or a **Harness-specific skill**.
 - A **Harness-specific skill** belongs to exactly one **Agent harness**.

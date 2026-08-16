@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readlinkSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -10,6 +10,359 @@ import type { MultiSelectPrompt } from "../src/types.ts";
 import { makeTempDir, write } from "./helpers.ts";
 
 describe("skills CLI", () => {
+  test("mt skills local-install installs shared Global agent instructions for Codex and Claude", async () => {
+    const sandbox = makeTempDir("skills-local-install-instructions");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+
+    await runCliAsync(
+      ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude", "cursor"],
+      createRuntime({
+        cwd: sandbox,
+        env: {
+          HOME: osHome,
+          MONKE_HOME: monkeHome
+        },
+        onStderr() {},
+        onStdout() {}
+      })
+    );
+
+    const expected =
+      "<!-- monke-tools:global-agent-instructions:start -->\n" +
+      "Team baseline.\n" +
+      "<!-- monke-tools:global-agent-instructions:end -->\n";
+    expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(expected);
+    expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toBe(expected);
+    expect(existsSync(path.join(osHome, ".cursor", "AGENTS.md"))).toBeFalsy();
+  });
+
+  test("mt skills configure leaves instructions untouched for Cursor and Custom targets", async () => {
+    const sandbox = makeTempDir("skills-configure-instructions-skills-only");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    write(osHome, ".codex/AGENTS.md", "Personal Codex guidance.\n");
+    write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
+    saveGlobalMonkeConfig(monkeHome, {
+      installedSourceCheckout: sourceCheckout,
+      version: 1
+    });
+
+    await runCliAsync(
+      ["skills", "configure"],
+      createRuntime({
+        cwd: sandbox,
+        env: { HOME: osHome, MONKE_HOME: monkeHome },
+        multiSelectValues: [["cursor", "custom"]],
+        onStderr() {},
+        onStdout() {},
+        stdinText: "~/custom-skills\n"
+      })
+    );
+
+    expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(
+      "Personal Codex guidance.\n"
+    );
+    expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toBe(
+      "Personal Claude guidance.\n"
+    );
+  });
+
+  test("mt skills local-install preserves user guidance while refreshing its Managed instruction section", async () => {
+    const sandbox = makeTempDir("skills-local-install-instructions-refresh");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    write(sourceCheckout, "instructions/GLOBAL.md", "First team baseline.\n");
+    write(osHome, ".codex/AGENTS.md", "Personal Codex guidance.\n");
+    write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
+
+    const runtime = createRuntime({
+      cwd: sandbox,
+      env: {
+        HOME: osHome,
+        MONKE_HOME: monkeHome
+      },
+      onStderr() {},
+      onStdout() {}
+    });
+    await runCliAsync(
+      ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
+      runtime
+    );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Updated team baseline.\n");
+
+    await runCliAsync(["skills", "local-install", sourceCheckout], runtime);
+
+    const managed =
+      "<!-- monke-tools:global-agent-instructions:start -->\n" +
+      "Updated team baseline.\n" +
+      "<!-- monke-tools:global-agent-instructions:end -->\n";
+    expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(
+      `Personal Codex guidance.\n\n${managed}`
+    );
+    expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toBe(
+      `Personal Claude guidance.\n\n${managed}`
+    );
+  });
+
+  test("mt skills local-install adopts only a whole-file Codex instructions match", async () => {
+    const sandbox = makeTempDir("skills-local-install-instructions-adopt");
+    const sourceCheckout = path.join(sandbox, "source");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+
+    const exactHome = path.join(sandbox, "exact-home");
+    write(exactHome, ".codex/AGENTS.md", "Team baseline.\n");
+    await runCliAsync(
+      ["skills", "local-install", sourceCheckout, "--targets", "codex"],
+      createRuntime({
+        cwd: sandbox,
+        env: { HOME: exactHome, MONKE_HOME: path.join(sandbox, "exact-monke-home") },
+        onStderr() {},
+        onStdout() {}
+      })
+    );
+
+    const managed =
+      "<!-- monke-tools:global-agent-instructions:start -->\n" +
+      "Team baseline.\n" +
+      "<!-- monke-tools:global-agent-instructions:end -->\n";
+    expect(readFileSync(path.join(exactHome, ".codex", "AGENTS.md"), "utf-8")).toBe(managed);
+
+    const partialHome = path.join(sandbox, "partial-home");
+    write(partialHome, ".codex/AGENTS.md", "Team baseline.\nPersonal addition.\n");
+    await runCliAsync(
+      ["skills", "local-install", sourceCheckout, "--targets", "codex"],
+      createRuntime({
+        cwd: sandbox,
+        env: { HOME: partialHome, MONKE_HOME: path.join(sandbox, "partial-monke-home") },
+        onStderr() {},
+        onStdout() {}
+      })
+    );
+    expect(readFileSync(path.join(partialHome, ".codex", "AGENTS.md"), "utf-8")).toBe(
+      `Team baseline.\nPersonal addition.\n\n${managed}`
+    );
+  });
+
+  test("mt skills local-install removes only Managed instruction sections when targets are deselected", async () => {
+    const sandbox = makeTempDir("skills-local-install-instructions-deselect");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
+    const runtime = createRuntime({
+      cwd: sandbox,
+      env: { HOME: osHome, MONKE_HOME: monkeHome },
+      onStderr() {},
+      onStdout() {}
+    });
+
+    await runCliAsync(
+      ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
+      runtime
+    );
+    await runCliAsync(["skills", "local-install", sourceCheckout, "--targets", "cursor"], runtime);
+
+    expect(existsSync(path.join(osHome, ".codex", "AGENTS.md"))).toBeFalsy();
+    expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toBe(
+      "Personal Claude guidance.\n"
+    );
+  });
+
+  test("mt skills local-install honors harness config directories and preserves instruction symlinks", async () => {
+    const sandbox = makeTempDir("skills-local-install-instructions-config");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    const codexHome = path.join(sandbox, "codex-config");
+    const claudeConfig = path.join(sandbox, "claude-config");
+    const dotfileTarget = path.join(sandbox, "dotfiles", "AGENTS.md");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    write(sandbox, "dotfiles/AGENTS.md", "Personal Codex guidance.\n");
+    write(codexHome, ".keep", "\n");
+    symlinkSync(dotfileTarget, path.join(codexHome, "AGENTS.md"));
+
+    await runCliAsync(
+      ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
+      createRuntime({
+        cwd: sandbox,
+        env: {
+          CLAUDE_CONFIG_DIR: claudeConfig,
+          CODEX_HOME: codexHome,
+          HOME: osHome,
+          MONKE_HOME: monkeHome
+        },
+        onStderr() {},
+        onStdout() {}
+      })
+    );
+
+    expect(lstatSync(path.join(codexHome, "AGENTS.md")).isSymbolicLink()).toBeTruthy();
+    expect(readFileSync(dotfileTarget, "utf-8")).toContain("Personal Codex guidance.\n\n");
+    expect(readFileSync(path.join(claudeConfig, "CLAUDE.md"), "utf-8")).toContain("Team baseline.");
+    expect(existsSync(path.join(osHome, ".codex", "AGENTS.md"))).toBeFalsy();
+    expect(existsSync(path.join(osHome, ".claude", "CLAUDE.md"))).toBeFalsy();
+  });
+
+  test("mt skills local-install keeps an instruction symlink valid when deselection empties its target", async () => {
+    const sandbox = makeTempDir("skills-local-install-instructions-symlink-deselect");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    const destinationPath = path.join(osHome, ".codex", "AGENTS.md");
+    const dotfileTarget = path.join(sandbox, "dotfiles", "AGENTS.md");
+    write(
+      sourceCheckout,
+      "skills/internal/monke-tools-core/SKILL.md",
+      "---\nname: monke-tools-core\n---\n"
+    );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    write(sandbox, "dotfiles/AGENTS.md", "");
+    write(osHome, ".codex/.keep", "\n");
+    symlinkSync(dotfileTarget, destinationPath);
+    const runtime = createRuntime({
+      cwd: sandbox,
+      env: { HOME: osHome, MONKE_HOME: monkeHome },
+      onStderr() {},
+      onStdout() {}
+    });
+
+    await runCliAsync(["skills", "local-install", sourceCheckout, "--targets", "codex"], runtime);
+    await runCliAsync(["skills", "local-install", sourceCheckout, "--targets", "cursor"], runtime);
+
+    expect(lstatSync(destinationPath).isSymbolicLink()).toBeTruthy();
+    expect(readFileSync(dotfileTarget, "utf-8")).toBe("");
+  });
+
+  test.each(["broken", "cyclic", "non-file"] as const)(
+    "mt skills local-install refuses a %s instruction symlink and continues other targets",
+    async (symlinkState) => {
+      const sandbox = makeTempDir(`skills-local-install-instructions-${symlinkState}`);
+      const monkeHome = path.join(sandbox, "monke-home");
+      const osHome = path.join(sandbox, "home");
+      const sourceCheckout = path.join(sandbox, "source");
+      const codexHome = path.join(osHome, ".codex");
+      const destinationPath = path.join(codexHome, "AGENTS.md");
+      write(
+        sourceCheckout,
+        "skills/internal/monke-tools-core/SKILL.md",
+        "---\nname: monke-tools-core\n---\n"
+      );
+      write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+      write(codexHome, ".keep", "\n");
+      if (symlinkState === "broken") {
+        symlinkSync("missing.md", destinationPath);
+      } else if (symlinkState === "cyclic") {
+        symlinkSync("cycle.md", destinationPath);
+        symlinkSync("AGENTS.md", path.join(codexHome, "cycle.md"));
+      } else {
+        write(codexHome, "directory-target/.keep", "\n");
+        symlinkSync(path.join(codexHome, "directory-target"), destinationPath, "dir");
+      }
+
+      await expect(
+        runCliAsync(
+          ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
+          createRuntime({
+            cwd: sandbox,
+            env: { HOME: osHome, MONKE_HOME: monkeHome },
+            onStderr() {},
+            onStdout() {}
+          })
+        )
+      ).rejects.toThrow(
+        `Refusing to modify Global agent instructions at ${destinationPath}: destination symlink must resolve to a regular file`
+      );
+      expect(lstatSync(destinationPath).isSymbolicLink()).toBeTruthy();
+      expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toContain(
+        "Team baseline."
+      );
+    }
+  );
+
+  test.each([
+    ["unmatched", "<!-- monke-tools:global-agent-instructions:start -->\nOld body.\n"],
+    [
+      "reversed",
+      "<!-- monke-tools:global-agent-instructions:end -->\nOld body.\n<!-- monke-tools:global-agent-instructions:start -->\n"
+    ],
+    [
+      "nested",
+      "<!-- monke-tools:global-agent-instructions:start -->\n<!-- monke-tools:global-agent-instructions:start -->\nOld body.\n<!-- monke-tools:global-agent-instructions:end -->\n<!-- monke-tools:global-agent-instructions:end -->\n"
+    ],
+    [
+      "duplicate",
+      "<!-- monke-tools:global-agent-instructions:start -->\nOne.\n<!-- monke-tools:global-agent-instructions:end -->\n<!-- monke-tools:global-agent-instructions:start -->\nTwo.\n<!-- monke-tools:global-agent-instructions:end -->\n"
+    ]
+  ] as const)(
+    "mt skills local-install refuses %s Managed instruction markers without stopping other targets",
+    async (_markerState, malformedContent) => {
+      const sandbox = makeTempDir("skills-local-install-instructions-markers");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const osHome = path.join(sandbox, "home");
+      const sourceCheckout = path.join(sandbox, "source");
+      const codexInstructions = path.join(osHome, ".codex", "AGENTS.md");
+      write(
+        sourceCheckout,
+        "skills/internal/monke-tools-core/SKILL.md",
+        "---\nname: monke-tools-core\n---\n"
+      );
+      write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+      write(osHome, ".codex/AGENTS.md", malformedContent);
+
+      await expect(
+        runCliAsync(
+          ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
+          createRuntime({
+            cwd: sandbox,
+            env: { HOME: osHome, MONKE_HOME: monkeHome },
+            onStderr() {},
+            onStdout() {}
+          })
+        )
+      ).rejects.toThrow("Refusing to modify malformed Global agent instructions markers");
+      expect(readFileSync(codexInstructions, "utf-8")).toBe(malformedContent);
+      expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toContain(
+        "Team baseline."
+      );
+    }
+  );
+
   test("mt skills configure uses a multi-select and reconciles selected targets", async () => {
     const sandbox = makeTempDir("skills-configure");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -20,6 +373,7 @@ describe("skills CLI", () => {
       "skills/internal/monke-tools-core/SKILL.md",
       "---\nname: monke-tools-core\n---\n"
     );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: sourceCheckout,
       version: 1
@@ -82,6 +436,7 @@ describe("skills CLI", () => {
       "skills/internal/monke-tools-core/SKILL.md",
       "---\nname: monke-tools-core\n---\n"
     );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: sourceCheckout,
       version: 1
@@ -147,6 +502,7 @@ describe("skills CLI", () => {
       "skills/internal/monke-tools-core/SKILL.md",
       "---\nname: monke-tools-core\n---\n"
     );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout],
@@ -184,6 +540,7 @@ describe("skills CLI", () => {
       "skills/internal/monke-tools-core/SKILL.md",
       "---\nname: monke-tools-core\n---\n"
     );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "claude", "cursor", "codex"],
@@ -229,6 +586,7 @@ describe("skills CLI", () => {
       "skills/internal/monke-tools-core/SKILL.md",
       "---\nname: monke-tools-core\n---\n"
     );
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
@@ -273,6 +631,7 @@ describe("skills CLI", () => {
       "skills/internal/monke-tools-core/SKILL.md",
       "---\nname: monke-tools-core\n---\n"
     );
+    write(newCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: oldCheckout,
       skillInstallPreference: {
