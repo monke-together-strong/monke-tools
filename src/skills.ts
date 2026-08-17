@@ -336,7 +336,7 @@ function reconcileNamespaceTarget(target: ResolvedSkillInstallTarget, skillSourc
     removeFlatManagedLinks(target);
   }
 
-  const namespaceStat = lstatIfExists(target.namespacePath);
+  const namespaceStat = lstatSync(target.namespacePath, { throwIfNoEntry: false });
   if (namespaceStat?.isSymbolicLink()) {
     rmSync(target.namespacePath);
     mkdirSync(target.namespacePath);
@@ -350,7 +350,7 @@ function reconcileNamespaceTarget(target: ResolvedSkillInstallTarget, skillSourc
     target.kind === "codex" ? CODEX_NAMESPACE_SOURCE_FOLDERS : SHARED_NAMESPACE_SOURCE_FOLDERS;
   for (const name of sourceFolders) {
     const linkPath = path.join(target.namespacePath, name);
-    const linkStat = lstatIfExists(linkPath);
+    const linkStat = lstatSync(linkPath, { throwIfNoEntry: false });
     if (linkStat && !linkStat.isSymbolicLink()) {
       throw new MonkeError(`Refusing to overwrite non-managed Skill folder at ${linkPath}`);
     }
@@ -359,7 +359,7 @@ function reconcileNamespaceTarget(target: ResolvedSkillInstallTarget, skillSourc
   for (const name of sourceFolders) {
     const sourcePath = path.join(skillSourceTree, name);
     const linkPath = path.join(target.namespacePath, name);
-    if (lstatIfExists(linkPath)) {
+    if (lstatSync(linkPath, { throwIfNoEntry: false })) {
       rmSync(linkPath);
     }
     if (existsSync(sourcePath)) {
@@ -385,7 +385,7 @@ function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree
   try {
     for (const link of supportingLinks) {
       mkdirSync(path.dirname(link.targetPath), { recursive: true });
-      if (lstatIfExists(link.targetPath)) {
+      if (lstatSync(link.targetPath, { throwIfNoEntry: false })) {
         rmSync(link.targetPath);
       }
       symlinkSync(link.sourcePath, link.targetPath, "dir");
@@ -393,7 +393,7 @@ function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree
     }
     for (const link of links) {
       const linkPath = path.join(target.agentSkillRoot, link.name);
-      if (lstatIfExists(linkPath)) {
+      if (lstatSync(linkPath, { throwIfNoEntry: false })) {
         rmSync(linkPath);
       }
       symlinkSync(link.sourcePath, linkPath, "dir");
@@ -423,7 +423,7 @@ function removeManagedTarget(
 }
 
 function removeManagedNamespace(target: ResolvedSkillInstallTarget) {
-  const namespaceStat = lstatIfExists(target.namespacePath);
+  const namespaceStat = lstatSync(target.namespacePath, { throwIfNoEntry: false });
   if (!namespaceStat) {
     return;
   }
@@ -437,7 +437,7 @@ function removeManagedNamespace(target: ResolvedSkillInstallTarget) {
 
   for (const name of CODEX_NAMESPACE_SOURCE_FOLDERS) {
     const linkPath = path.join(target.namespacePath, name);
-    if (lstatIfExists(linkPath)?.isSymbolicLink()) {
+    if (lstatSync(linkPath, { throwIfNoEntry: false })?.isSymbolicLink()) {
       rmSync(linkPath);
     }
   }
@@ -526,7 +526,7 @@ function assertFlatLinksCanBeManaged(
 
   for (const link of links) {
     const linkPath = path.join(target.agentSkillRoot, link.name);
-    const linkStat = lstatIfExists(linkPath);
+    const linkStat = lstatSync(linkPath, { throwIfNoEntry: false });
     if (!linkStat) {
       continue;
     }
@@ -550,7 +550,7 @@ function assertFlatSupportingLinksCanBeManaged(
   );
 
   for (const link of links) {
-    const linkStat = lstatIfExists(link.targetPath);
+    const linkStat = lstatSync(link.targetPath, { throwIfNoEntry: false });
     if (!linkStat) {
       continue;
     }
@@ -577,7 +577,7 @@ function removeFlatManagedLinks(target: ResolvedSkillInstallTarget) {
 
   for (const link of manifest.links) {
     const linkPath = path.join(target.agentSkillRoot, link.name);
-    const linkStat = lstatIfExists(linkPath);
+    const linkStat = lstatSync(linkPath, { throwIfNoEntry: false });
     if (linkStat?.isSymbolicLink() !== true) {
       continue;
     }
@@ -586,7 +586,7 @@ function removeFlatManagedLinks(target: ResolvedSkillInstallTarget) {
     }
   }
   for (const link of manifest.supportingLinks ?? []) {
-    const linkStat = lstatIfExists(link.targetPath);
+    const linkStat = lstatSync(link.targetPath, { throwIfNoEntry: false });
     if (linkStat?.isSymbolicLink() === true && readlinkSync(link.targetPath) === link.sourcePath) {
       rmSync(link.targetPath);
     }
@@ -653,18 +653,6 @@ function managedLocation(target: ResolvedSkillInstallTarget) {
   }
 
   return target.namespacePath;
-}
-
-function lstatIfExists(targetPath: string) {
-  try {
-    return lstatSync(targetPath);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return null;
-    }
-
-    throw error;
-  }
 }
 
 function targetKey(target: ResolvedSkillInstallTarget) {
