@@ -10,7 +10,8 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import * as z from "zod";
+import { boolean, enum as enumSchema, strictObject } from "zod";
+import type { output } from "zod";
 
 import { MonkeError } from "./errors.ts";
 import type { SkillInstallTargetKind } from "./global-config.ts";
@@ -19,12 +20,13 @@ const GLOBAL_INSTRUCTIONS_RELATIVE_PATH = path.join("instructions", "GLOBAL.md")
 const MANAGED_INSTRUCTIONS_START = "<!-- monke-tools:global-agent-instructions:start -->";
 const MANAGED_INSTRUCTIONS_END = "<!-- monke-tools:global-agent-instructions:end -->";
 const MANAGED_INSTRUCTIONS_METADATA_PREFIX = "<!-- monke-tools:global-agent-instructions:metadata ";
+const MANAGED_INSTRUCTIONS_METADATA_SUFFIX = " -->";
 
-const ManagedInstructionsMetadataSchema = z.strictObject({
-  createdFile: z.boolean(),
-  separatorLength: z.number().int().min(0).max(2)
+const ManagedInstructionsMetadataSchema = strictObject({
+  createdFile: boolean(),
+  separator: enumSchema(["", "\n", "\n\n", "\r\n", "\r\n\r\n"])
 });
-type ManagedInstructionsMetadata = z.output<typeof ManagedInstructionsMetadataSchema>;
+type ManagedInstructionsMetadata = output<typeof ManagedInstructionsMetadataSchema>;
 
 interface GlobalInstructionsOptions {
   cwd?: string;
@@ -76,11 +78,10 @@ export function removeGlobalInstructions(
     return;
   }
 
-  const managedStart = markers.start - markers.metadata.separatorLength;
+  const managedStart = markers.start - markers.metadata.separator.length;
   if (
     managedStart < 0 ||
-    existingContent.slice(managedStart, markers.start) !==
-      "\n".repeat(markers.metadata.separatorLength)
+    existingContent.slice(managedStart, markers.start) !== markers.metadata.separator
   ) {
     throw new MonkeError("Refusing to modify malformed Global agent instructions metadata");
   }
@@ -104,26 +105,21 @@ function reconcileManagedInstructions(
   adoptWholeFileMatch: boolean
 ) {
   if (existingContent === null) {
-    return renderManagedInstructions(body, { createdFile: true, separatorLength: 0 });
+    return renderManagedInstructions(body, { createdFile: true, separator: "" });
   }
   if (existingContent.length === 0) {
-    return renderManagedInstructions(body, { createdFile: false, separatorLength: 0 });
+    return renderManagedInstructions(body, { createdFile: false, separator: "" });
   }
   if (adoptWholeFileMatch && existingContent === body) {
-    return renderManagedInstructions(body, { createdFile: false, separatorLength: 0 });
+    return renderManagedInstructions(body, { createdFile: false, separator: "" });
   }
 
   const markers = findManagedInstructionMarkers(existingContent);
   if (markers === null) {
-    let separator = "\n\n";
-    if (existingContent.endsWith("\n\n")) {
-      separator = "";
-    } else if (existingContent.endsWith("\n")) {
-      separator = "\n";
-    }
+    const separator = instructionSeparator(existingContent);
     const managedSection = renderManagedInstructions(body, {
       createdFile: false,
-      separatorLength: separator.length
+      separator
     });
     return `${existingContent}${separator}${managedSection}`;
   }
@@ -132,12 +128,25 @@ function reconcileManagedInstructions(
   return `${existingContent.slice(0, markers.start)}${managedSection}${existingContent.slice(markers.end)}`;
 }
 
+function instructionSeparator(existingContent: string) {
+  if (existingContent.endsWith("\r\n\r\n") || existingContent.endsWith("\n\n")) {
+    return "";
+  }
+  if (existingContent.endsWith("\r\n")) {
+    return "\r\n";
+  }
+  if (existingContent.endsWith("\n")) {
+    return "\n";
+  }
+  return existingContent.includes("\r\n") ? "\r\n\r\n" : "\n\n";
+}
+
 function renderManagedInstructions(body: string, metadata: ManagedInstructionsMetadata) {
   if (body.includes(MANAGED_INSTRUCTIONS_START) || body.includes(MANAGED_INSTRUCTIONS_END)) {
     throw new MonkeError("Global agent instructions body contains reserved management markers");
   }
 
-  const metadataComment = `${MANAGED_INSTRUCTIONS_METADATA_PREFIX}${JSON.stringify(metadata)} -->`;
+  const metadataComment = `${MANAGED_INSTRUCTIONS_METADATA_PREFIX}${JSON.stringify(metadata)}${MANAGED_INSTRUCTIONS_METADATA_SUFFIX}`;
   return `${MANAGED_INSTRUCTIONS_START}\n${metadataComment}\n${body}${body.endsWith("\n") ? "" : "\n"}${MANAGED_INSTRUCTIONS_END}\n`;
 }
 
@@ -178,13 +187,21 @@ function findManagedInstructionMarkers(content: string) {
 }
 
 function parseManagedInstructionsMetadata(comment: string) {
-  if (!comment.startsWith(MANAGED_INSTRUCTIONS_METADATA_PREFIX) || !comment.endsWith(" -->")) {
+  if (
+    !comment.startsWith(MANAGED_INSTRUCTIONS_METADATA_PREFIX) ||
+    !comment.endsWith(MANAGED_INSTRUCTIONS_METADATA_SUFFIX)
+  ) {
     throw new MonkeError("Refusing to modify malformed Global agent instructions metadata");
   }
 
   let value: unknown;
   try {
-    value = JSON.parse(comment.slice(MANAGED_INSTRUCTIONS_METADATA_PREFIX.length, -4));
+    value = JSON.parse(
+      comment.slice(
+        MANAGED_INSTRUCTIONS_METADATA_PREFIX.length,
+        -MANAGED_INSTRUCTIONS_METADATA_SUFFIX.length
+      )
+    );
   } catch {
     throw new MonkeError("Refusing to modify malformed Global agent instructions metadata");
   }

@@ -9,14 +9,20 @@ import { createRuntime } from "../src/runtime.ts";
 import type { MultiSelectPrompt } from "../src/types.ts";
 import { makeTempDir, write } from "./helpers.ts";
 
-function managedInstructions(
-  body: string,
-  metadata: { createdFile: boolean; separatorLength: number }
-) {
+function managedInstructions(body: string, metadata: { createdFile: boolean; separator: string }) {
   return `<!-- monke-tools:global-agent-instructions:start -->
 <!-- monke-tools:global-agent-instructions:metadata ${JSON.stringify(metadata)} -->
 ${body}<!-- monke-tools:global-agent-instructions:end -->
 `;
+}
+
+function writeSkillSource(sourceCheckout: string, body = "Team baseline.\n") {
+  write(
+    sourceCheckout,
+    "skills/internal/monke-tools-core/SKILL.md",
+    "---\nname: monke-tools-core\n---\n"
+  );
+  write(sourceCheckout, "instructions/GLOBAL.md", body);
 }
 
 describe("skills CLI", () => {
@@ -25,12 +31,7 @@ describe("skills CLI", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude", "cursor"],
@@ -47,7 +48,7 @@ describe("skills CLI", () => {
 
     const expected = managedInstructions("Team baseline.\n", {
       createdFile: true,
-      separatorLength: 0
+      separator: ""
     });
     expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(expected);
     expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toBe(expected);
@@ -59,12 +60,7 @@ describe("skills CLI", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "claude"],
@@ -155,12 +151,7 @@ describe("skills CLI", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "First team baseline.\n");
+    writeSkillSource(sourceCheckout, "First team baseline.\n");
     write(osHome, ".codex/AGENTS.md", "Personal Codex guidance.\n");
     write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
 
@@ -183,7 +174,7 @@ describe("skills CLI", () => {
 
     const managed = managedInstructions("Updated team baseline.\n", {
       createdFile: false,
-      separatorLength: 1
+      separator: "\n"
     });
     expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(
       `Personal Codex guidance.\n\n${managed}`
@@ -196,12 +187,7 @@ describe("skills CLI", () => {
   test("mt skills local-install adopts only a whole-file Codex instructions match", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-adopt");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
 
     const exactHome = path.join(sandbox, "exact-home");
     write(exactHome, ".codex/AGENTS.md", "Team baseline.\n");
@@ -217,7 +203,7 @@ describe("skills CLI", () => {
 
     const managed = managedInstructions("Team baseline.\n", {
       createdFile: false,
-      separatorLength: 0
+      separator: ""
     });
     expect(readFileSync(path.join(exactHome, ".codex", "AGENTS.md"), "utf-8")).toBe(managed);
 
@@ -234,7 +220,7 @@ describe("skills CLI", () => {
     );
     const partialManaged = managedInstructions("Team baseline.\n", {
       createdFile: false,
-      separatorLength: 1
+      separator: "\n"
     });
     expect(readFileSync(path.join(partialHome, ".codex", "AGENTS.md"), "utf-8")).toBe(
       `Team baseline.\nPersonal addition.\n\n${partialManaged}`
@@ -246,12 +232,7 @@ describe("skills CLI", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
     write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
     const runtime = createRuntime({
       cwd: sandbox,
@@ -272,19 +253,20 @@ describe("skills CLI", () => {
     );
   });
 
-  test.each(["No trailing newline", "One trailing newline\n", "Two trailing newlines\n\n"])(
+  test.each([
+    ["No trailing newline", "\n\n"],
+    ["One trailing newline\n", "\n"],
+    ["Two trailing newlines\n\n", ""],
+    ["One CRLF trailing newline\r\n", "\r\n"],
+    ["Two CRLF trailing newlines\r\n\r\n", ""]
+  ])(
     "mt skills local-install preserves user whitespace exactly when instructions are deselected",
-    async (userGuidance) => {
+    async (userGuidance, expectedSeparator) => {
       const sandbox = makeTempDir("skills-local-install-instructions-whitespace");
       const monkeHome = path.join(sandbox, "monke-home");
       const osHome = path.join(sandbox, "home");
       const sourceCheckout = path.join(sandbox, "source");
-      write(
-        sourceCheckout,
-        "skills/internal/monke-tools-core/SKILL.md",
-        "---\nname: monke-tools-core\n---\n"
-      );
-      write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+      writeSkillSource(sourceCheckout);
       write(osHome, ".codex/AGENTS.md", userGuidance);
       const runtime = createRuntime({
         cwd: sandbox,
@@ -294,6 +276,12 @@ describe("skills CLI", () => {
       });
 
       await runCliAsync(["skills", "local-install", sourceCheckout, "--targets", "codex"], runtime);
+      const installed = readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8");
+      expect(
+        installed.startsWith(
+          `${userGuidance}${expectedSeparator}<!-- monke-tools:global-agent-instructions:start -->`
+        )
+      ).toBeTruthy();
       await runCliAsync(
         ["skills", "local-install", sourceCheckout, "--targets", "cursor"],
         runtime
@@ -309,12 +297,7 @@ describe("skills CLI", () => {
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     const destinationPath = path.join(osHome, ".codex", "AGENTS.md");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
     write(osHome, ".codex/AGENTS.md", "");
     const runtime = createRuntime({
       cwd: sandbox,
@@ -338,12 +321,7 @@ describe("skills CLI", () => {
     const codexHome = path.join(sandbox, "codex-config");
     const claudeConfig = path.join(sandbox, "claude-config");
     const dotfileTarget = path.join(sandbox, "dotfiles", "AGENTS.md");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
     write(sandbox, "dotfiles/AGENTS.md", "Personal Codex guidance.\n");
     write(codexHome, ".keep", "\n");
     symlinkSync(dotfileTarget, path.join(codexHome, "AGENTS.md"));
@@ -377,12 +355,7 @@ describe("skills CLI", () => {
     const sourceCheckout = path.join(sandbox, "source");
     const destinationPath = path.join(osHome, ".codex", "AGENTS.md");
     const dotfileTarget = path.join(sandbox, "dotfiles", "AGENTS.md");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
     write(sandbox, "dotfiles/AGENTS.md", "");
     write(osHome, ".codex/.keep", "\n");
     symlinkSync(dotfileTarget, destinationPath);
@@ -409,12 +382,7 @@ describe("skills CLI", () => {
       const sourceCheckout = path.join(sandbox, "source");
       const codexHome = path.join(osHome, ".codex");
       const destinationPath = path.join(codexHome, "AGENTS.md");
-      write(
-        sourceCheckout,
-        "skills/internal/monke-tools-core/SKILL.md",
-        "---\nname: monke-tools-core\n---\n"
-      );
-      write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+      writeSkillSource(sourceCheckout);
       write(codexHome, ".keep", "\n");
       if (symlinkState === "broken") {
         symlinkSync("missing.md", destinationPath);
@@ -472,12 +440,7 @@ describe("skills CLI", () => {
       const osHome = path.join(sandbox, "home");
       const sourceCheckout = path.join(sandbox, "source");
       const codexInstructions = path.join(osHome, ".codex", "AGENTS.md");
-      write(
-        sourceCheckout,
-        "skills/internal/monke-tools-core/SKILL.md",
-        "---\nname: monke-tools-core\n---\n"
-      );
-      write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+      writeSkillSource(sourceCheckout);
       write(osHome, ".codex/AGENTS.md", malformedContent);
 
       await expect(
@@ -505,12 +468,7 @@ describe("skills CLI", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: sourceCheckout,
       version: 1
@@ -568,12 +526,7 @@ describe("skills CLI", () => {
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     const customRoot = path.join(osHome, "custom-skills");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: sourceCheckout,
       version: 1
@@ -634,12 +587,7 @@ describe("skills CLI", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout],
@@ -672,12 +620,7 @@ describe("skills CLI", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "claude", "cursor", "codex"],
@@ -718,12 +661,7 @@ describe("skills CLI", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
-    write(
-      sourceCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(sourceCheckout);
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
@@ -763,12 +701,7 @@ describe("skills CLI", () => {
       "skills/internal/monke-tools-core/SKILL.md",
       "---\nname: monke-tools-core\n---\n"
     );
-    write(
-      newCheckout,
-      "skills/internal/monke-tools-core/SKILL.md",
-      "---\nname: monke-tools-core\n---\n"
-    );
-    write(newCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeSkillSource(newCheckout);
     saveGlobalMonkeConfig(monkeHome, {
       installedSourceCheckout: oldCheckout,
       skillInstallPreference: {
