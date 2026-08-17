@@ -61,8 +61,8 @@ export function removeGlobalInstructions(
   if (destinationPath === null) {
     return;
   }
-  const destinationStat = lstatIfExists(destinationPath);
-  if (destinationStat === null) {
+  const destinationStat = lstatSync(destinationPath, { throwIfNoEntry: false });
+  if (destinationStat === undefined) {
     return;
   }
 
@@ -201,8 +201,8 @@ function resolveAgentConfigDirectory(
 }
 
 function resolveInstructionFile(destinationPath: string) {
-  const destinationStat = lstatIfExists(destinationPath);
-  if (destinationStat === null) {
+  const destinationStat = lstatSync(destinationPath, { throwIfNoEntry: false });
+  if (destinationStat === undefined) {
     return destinationPath;
   }
   if (!destinationStat.isSymbolicLink()) {
@@ -228,16 +228,4 @@ function resolveInstructionFile(destinationPath: string) {
     );
   }
   return resolvedPath;
-}
-
-function lstatIfExists(targetPath: string) {
-  try {
-    return lstatSync(targetPath);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return null;
-    }
-
-    throw error;
-  }
 }
