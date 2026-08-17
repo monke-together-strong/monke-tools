@@ -48,6 +48,7 @@ describe("skills", () => {
   test("skill namespace reconciliation projects Codex-only skills only into Codex", () => {
     const sandbox = makeTempDir("skill-reconcile-project");
     const sourceCheckout = path.join(sandbox, "source");
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     const customSkillRoot = path.join(sandbox, "custom", "skills");
     write(
       sourceCheckout,
@@ -91,6 +92,7 @@ describe("skills", () => {
   test("Claude skill reconciliation flattens source categories into the Agent skill root", () => {
     const sandbox = makeTempDir("skill-reconcile-claude-flat");
     const sourceCheckout = path.join(sandbox, "source");
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
@@ -163,6 +165,7 @@ describe("skills", () => {
   test("Reference-backed skills resolve packaged references from namespaced and Claude flat targets", () => {
     const sandbox = makeTempDir("skill-reconcile-reference-backed");
     const sourceCheckout = path.join(sandbox, "source");
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     const customSkillRoot = path.join(sandbox, "custom", "skills");
     const wrapperRelativePath = "skills/internal/code-review/SKILL.md";
     const upstreamRelativePath = "../../references/imported/code-review/MAIN.md";
@@ -239,6 +242,7 @@ describe("skills", () => {
   test("Claude skill reconciliation rejects unknown future flat manifest versions", () => {
     const sandbox = makeTempDir("skill-reconcile-future-manifest");
     const sourceCheckout = path.join(sandbox, "source");
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     const claudeSkillRoot = path.join(sandbox, ".claude", "skills");
     write(
       sourceCheckout,
@@ -265,6 +269,7 @@ describe("skills", () => {
   test("skill namespace reconciliation attempts every selected target before failing on unmanaged namespaces", () => {
     const sandbox = makeTempDir("skill-reconcile-partial");
     const sourceCheckout = path.join(sandbox, "source");
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     const blockedSkillRoot = path.join(sandbox, "blocked", "skills");
     write(
       sourceCheckout,
@@ -293,6 +298,7 @@ describe("skills", () => {
   test("skill namespace reconciliation continues after deselected target cleanup failures", () => {
     const sandbox = makeTempDir("skill-reconcile-cleanup-partial");
     const sourceCheckout = path.join(sandbox, "source");
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
@@ -322,6 +328,7 @@ describe("skills", () => {
   test("skill namespace reconciliation removes deselected managed namespaces", () => {
     const sandbox = makeTempDir("skill-reconcile-deselect");
     const sourceCheckout = path.join(sandbox, "source");
+    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
     const oldSkillRoot = path.join(sandbox, "old", "skills");
     write(
       sourceCheckout,

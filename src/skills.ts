@@ -24,6 +24,7 @@ import type {
   SkillInstallTargetKind,
   SkillInstallTargetPreference
 } from "./global-config.ts";
+import { reconcileGlobalInstructions, removeGlobalInstructions } from "./global-instructions.ts";
 import { createLogger } from "./logger.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
@@ -109,6 +110,8 @@ export async function runSkillsConfigure(runtime: Runtime) {
   });
 
   reconcileSkillNamespaces({
+    cwd: runtime.cwd,
+    environment: runtime.env,
     homeDirectory,
     nextPreference,
     previousPreference,
@@ -150,6 +153,8 @@ export async function runLocalInstallSkills(
   }
 
   reconcileSkillNamespaces({
+    cwd: runtime.cwd,
+    environment: runtime.env,
     homeDirectory,
     nextPreference,
     previousPreference: config.skillInstallPreference ?? null,
@@ -165,6 +170,8 @@ export async function runLocalInstallSkills(
 
 /** Reconcile selected Agent skill roots with the monke-tools Skill source tree. */
 export function reconcileSkillNamespaces(options: {
+  cwd?: string;
+  environment?: Record<string, string | undefined>;
   homeDirectory: string;
   nextPreference: SkillInstallPreference;
   previousPreference: SkillInstallPreference | null;
@@ -192,7 +199,7 @@ export function reconcileSkillNamespaces(options: {
     }
 
     try {
-      removeManagedTarget(previousTarget);
+      removeManagedTarget(previousTarget, options);
     } catch (error) {
       const message = errorMessage(error);
       failures.push(`${previousTarget.agentSkillRoot}: ${message}`);
@@ -202,6 +209,7 @@ export function reconcileSkillNamespaces(options: {
   for (const target of nextTargets) {
     try {
       reconcileOneTarget(target, skillSourceTree);
+      reconcileGlobalInstructions(target, options);
       options.writeMessage(`Linked ${SKILL_NAMESPACE} skills at ${managedLocation(target)}\n`);
     } catch (error) {
       const message = errorMessage(error);
@@ -399,11 +407,19 @@ function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree
   writeFlatManifest(target, links, supportingLinks);
 }
 
-function removeManagedTarget(target: ResolvedSkillInstallTarget) {
+function removeManagedTarget(
+  target: ResolvedSkillInstallTarget,
+  options: {
+    cwd?: string;
+    environment?: Record<string, string | undefined>;
+    homeDirectory: string;
+  }
+) {
   if (target.kind === "claude") {
     removeFlatManagedLinks(target);
   }
   removeManagedNamespace(target);
+  removeGlobalInstructions(target, options);
 }
 
 function removeManagedNamespace(target: ResolvedSkillInstallTarget) {
@@ -607,9 +623,11 @@ function writeFlatManifest(
   const manifest: FlatSkillManifest = {
     links,
     managedBy: "monke-tools",
-    version: 1,
-    ...(supportingLinks.length > 0 ? { supportingLinks } : {})
+    version: 1
   };
+  if (supportingLinks.length > 0) {
+    manifest.supportingLinks = supportingLinks;
+  }
   const manifestPath = flatManifestPath(target);
   const parsed = FlatSkillManifestSchema.parse(manifest);
 

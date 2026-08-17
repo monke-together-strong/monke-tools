@@ -27,9 +27,9 @@ mt spawn banana --no-dirty
 mt spawn banana -m
 ```
 
-`vp run install:local` installs or upgrades the dependencies declared in `Brewfile` on Apple Silicon Macs, rebuilds the local executable from the current checkout, installs it as `~/.local/bin/mt`, and installs `~/.local/bin/monke` as a wrapper that invokes it. It removes the obsolete `~/.local/bin/monke-tools` command, installs shell integration for bash and zsh, records the Installed source checkout in `~/.monke/config.yml`, and installs Distributed skills into the selected Agent skill roots. The current Homebrew dependency is the Codiff developer tool; other platforms skip Homebrew dependency installation.
+`vp run install:local` installs or upgrades the dependencies declared in `Brewfile` on Apple Silicon Macs, rebuilds the local executable from the current checkout, installs it as `~/.local/bin/mt`, and installs `~/.local/bin/monke` as a wrapper that invokes it. It removes the obsolete `~/.local/bin/monke-tools` command, installs shell integration for bash and zsh, records the Installed source checkout in `~/.monke/config.yml`, installs Distributed skills into the selected Agent skill roots, and refreshes Global agent instructions for selected Codex and Claude targets. The current Homebrew dependency is the Codiff developer tool; other platforms skip Homebrew dependency installation.
 
-On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and refresh the managed skills from the current checkout. Automation can replace the preference without prompting by passing built-in targets explicitly, for example `vp run install:local --targets codex claude cursor` or `mt skills local-install <source-checkout> --targets codex claude cursor`.
+On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and refresh the managed skills and instructions snapshot from the current checkout. Automation can replace the preference without prompting by passing built-in targets explicitly, for example `vp run install:local --targets codex claude cursor` or `mt skills local-install <source-checkout> --targets codex claude cursor`.
 
 After changing CLI source code, run `vp run install:local` again before testing from another repo. For linked skills, file edits are visible immediately through symlinks. If you add or remove skill directories, rerun reconciliation (`vp run install:local` or `mt skills configure`) so flat Claude links are refreshed.
 
@@ -46,6 +46,8 @@ Built-in targets resolve against the OS home directory:
 - Cursor: `~/.cursor/skills`
 
 Codex, Cursor, and custom targets receive a managed `monke-tools` namespace containing symlinks to compatible source folders. Codex receives shared skills plus Codex-only skills; Cursor and custom targets receive shared skills only. Claude receives flat root-level symlinks for each shared source skill because Claude does not discover nested skill directories. monke-tools refuses to overwrite non-symlinks at managed folder names or root-level skills.
+
+Codex and Claude targets also receive the shared `instructions/GLOBAL.md` snapshot in a marker-delimited Managed instruction section. Codex writes `AGENTS.md` under `CODEX_HOME` or `~/.codex`; Claude writes `CLAUDE.md` under `CLAUDE_CONFIG_DIR` or `~/.claude`. Refreshes preserve guidance outside the managed section, and deselecting a target removes only managed content. Cursor and Custom targets remain skills-only. Repo guidance may specialize or override these Global agent instructions.
 
 The Skill source tree is organized as:
 
