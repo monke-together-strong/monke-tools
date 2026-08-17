@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs"
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import * as p from "@clack/prompts";
+import { confirm, isCancel } from "@clack/prompts";
 import { Command } from "@commander-js/extra-typings";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
@@ -275,12 +275,12 @@ function renderSlugMismatchMessage(
 }
 
 async function promptForSlugReplacement(request: SlugReplacementRequest) {
-  const accepted = await p.confirm({
+  const accepted = await confirm({
     initialValue: false,
     message: `Staged Skill slug changed for ${request.source}: ${request.recordedSlug} -> ${request.stagedSlug}. Replace the recorded slug and imported directory?`
   });
 
-  if (p.isCancel(accepted)) {
+  if (isCancel(accepted)) {
     throw new MonkeError("Skill update cancelled");
   }
 
