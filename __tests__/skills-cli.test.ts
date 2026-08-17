@@ -7,7 +7,7 @@ import { saveGlobalMonkeConfig, loadGlobalMonkeConfig } from "../src/global-conf
 import { runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
 import type { MultiSelectPrompt } from "../src/types.ts";
-import { makeTempDir, write } from "./helpers.ts";
+import { makeTempDir, write, writeGlobalInstructionsSource } from "./helpers.ts";
 
 function managedInstructions(body: string) {
   return `<!-- monke-rules:start -->
@@ -22,7 +22,16 @@ function writeSkillSource(sourceCheckout: string, body = "Team baseline.\n") {
     "skills/internal/monke-tools-core/SKILL.md",
     "---\nname: monke-tools-core\n---\n"
   );
-  write(sourceCheckout, "instructions/GLOBAL.md", body);
+  writeGlobalInstructionsSource(sourceCheckout, body);
+}
+
+function skillsEnvironment(osHome: string, monkeHome: string) {
+  return {
+    CLAUDE_CONFIG_DIR: path.join(osHome, ".claude"),
+    CODEX_HOME: path.join(osHome, ".codex"),
+    HOME: osHome,
+    MONKE_HOME: monkeHome
+  };
 }
 
 describe("skills CLI", () => {
@@ -37,10 +46,7 @@ describe("skills CLI", () => {
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude", "cursor"],
       createRuntime({
         cwd: sandbox,
-        env: {
-          HOME: osHome,
-          MONKE_HOME: monkeHome
-        },
+        env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
         onStdout() {}
       })
@@ -63,7 +69,7 @@ describe("skills CLI", () => {
       ["skills", "local-install", sourceCheckout, "--targets", "claude"],
       createRuntime({
         cwd: sandbox,
-        env: { HOME: osHome, MONKE_HOME: monkeHome },
+        env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
         onStdout() {}
       })
@@ -96,7 +102,7 @@ describe("skills CLI", () => {
       ["skills", "configure"],
       createRuntime({
         cwd: sandbox,
-        env: { HOME: osHome, MONKE_HOME: monkeHome },
+        env: skillsEnvironment(osHome, monkeHome),
         multiSelectValues: [["custom"]],
         onStderr() {},
         onStdout() {},
@@ -129,7 +135,7 @@ describe("skills CLI", () => {
       ["skills", "local-install", sourceCheckout, "--targets", "cursor"],
       createRuntime({
         cwd: sandbox,
-        env: { HOME: osHome, MONKE_HOME: monkeHome },
+        env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
         onStdout() {}
       })
@@ -154,10 +160,7 @@ describe("skills CLI", () => {
 
     const runtime = createRuntime({
       cwd: sandbox,
-      env: {
-        HOME: osHome,
-        MONKE_HOME: monkeHome
-      },
+      env: skillsEnvironment(osHome, monkeHome),
       onStderr() {},
       onStdout() {}
     });
@@ -165,7 +168,7 @@ describe("skills CLI", () => {
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
       runtime
     );
-    write(sourceCheckout, "instructions/GLOBAL.md", "Updated team baseline.\n");
+    writeGlobalInstructionsSource(sourceCheckout, "Updated team baseline.\n");
 
     await runCliAsync(["skills", "local-install", sourceCheckout], runtime);
 
@@ -178,6 +181,49 @@ describe("skills CLI", () => {
     );
   });
 
+  test.each(["refresh", "remove"] as const)(
+    "mt skills local-install consumes a CRLF boundary after Managed instructions during %s",
+    async (operation) => {
+      const sandbox = makeTempDir(`skills-local-install-instructions-crlf-${operation}`);
+      const monkeHome = path.join(sandbox, "monke-home");
+      const osHome = path.join(sandbox, "home");
+      const sourceCheckout = path.join(sandbox, "source");
+      writeSkillSource(sourceCheckout, "Updated team baseline.\n");
+      write(
+        osHome,
+        ".codex/AGENTS.md",
+        "Personal guidance.\n<!-- monke-rules:start -->\r\n\r\nOld team baseline.\r\n<!-- monke-rules:end -->\r\nFollowing guidance.\n"
+      );
+      saveGlobalMonkeConfig(monkeHome, {
+        installedSourceCheckout: sourceCheckout,
+        skillInstallPreference: { targets: [{ kind: "codex" }] },
+        version: 1
+      });
+
+      await runCliAsync(
+        [
+          "skills",
+          "local-install",
+          sourceCheckout,
+          "--targets",
+          operation === "refresh" ? "codex" : "cursor"
+        ],
+        createRuntime({
+          cwd: sandbox,
+          env: skillsEnvironment(osHome, monkeHome),
+          onStderr() {},
+          onStdout() {}
+        })
+      );
+
+      const expected =
+        operation === "refresh"
+          ? `Personal guidance.\n${managedInstructions("Updated team baseline.\n")}Following guidance.\n`
+          : "Personal guidance.\nFollowing guidance.\n";
+      expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(expected);
+    }
+  );
+
   test("mt skills local-install adopts only a whole-file Codex instructions match", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-adopt");
     const sourceCheckout = path.join(sandbox, "source");
@@ -189,7 +235,7 @@ describe("skills CLI", () => {
       ["skills", "local-install", sourceCheckout, "--targets", "codex"],
       createRuntime({
         cwd: sandbox,
-        env: { HOME: exactHome, MONKE_HOME: path.join(sandbox, "exact-monke-home") },
+        env: skillsEnvironment(exactHome, path.join(sandbox, "exact-monke-home")),
         onStderr() {},
         onStdout() {}
       })
@@ -204,7 +250,7 @@ describe("skills CLI", () => {
       ["skills", "local-install", sourceCheckout, "--targets", "codex"],
       createRuntime({
         cwd: sandbox,
-        env: { HOME: partialHome, MONKE_HOME: path.join(sandbox, "partial-monke-home") },
+        env: skillsEnvironment(partialHome, path.join(sandbox, "partial-monke-home")),
         onStderr() {},
         onStdout() {}
       })
@@ -224,7 +270,7 @@ describe("skills CLI", () => {
     write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
     const runtime = createRuntime({
       cwd: sandbox,
-      env: { HOME: osHome, MONKE_HOME: monkeHome },
+      env: skillsEnvironment(osHome, monkeHome),
       onStderr() {},
       onStdout() {}
     });
@@ -248,7 +294,7 @@ describe("skills CLI", () => {
     "One CRLF trailing newline\r\n",
     "Two CRLF trailing newlines\r\n\r\n"
   ])(
-    "mt skills local-install preserves user whitespace exactly when instructions are deselected",
+    "mt skills local-install preserves user whitespace exactly when instructions are deselected: %j",
     async (userGuidance) => {
       const sandbox = makeTempDir("skills-local-install-instructions-whitespace");
       const monkeHome = path.join(sandbox, "monke-home");
@@ -258,7 +304,7 @@ describe("skills CLI", () => {
       write(osHome, ".codex/AGENTS.md", userGuidance);
       const runtime = createRuntime({
         cwd: sandbox,
-        env: { HOME: osHome, MONKE_HOME: monkeHome },
+        env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
         onStdout() {}
       });
@@ -285,7 +331,7 @@ describe("skills CLI", () => {
     write(osHome, ".codex/AGENTS.md", "");
     const runtime = createRuntime({
       cwd: sandbox,
-      env: { HOME: osHome, MONKE_HOME: monkeHome },
+      env: skillsEnvironment(osHome, monkeHome),
       onStderr() {},
       onStdout() {}
     });
@@ -302,8 +348,8 @@ describe("skills CLI", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
-    const codexHome = path.join(sandbox, "codex-config");
-    const claudeConfig = path.join(sandbox, "claude-config");
+    const codexHome = path.join(osHome, "codex-config");
+    const claudeConfig = path.join(osHome, "claude-config");
     const dotfileTarget = path.join(sandbox, "dotfiles", "AGENTS.md");
     writeSkillSource(sourceCheckout);
     write(sandbox, "dotfiles/AGENTS.md", "Personal Codex guidance.\n");
@@ -315,10 +361,9 @@ describe("skills CLI", () => {
       createRuntime({
         cwd: sandbox,
         env: {
-          CLAUDE_CONFIG_DIR: claudeConfig,
-          CODEX_HOME: codexHome,
-          HOME: osHome,
-          MONKE_HOME: monkeHome
+          ...skillsEnvironment(osHome, monkeHome),
+          CLAUDE_CONFIG_DIR: path.relative(sandbox, claudeConfig),
+          CODEX_HOME: path.relative(sandbox, codexHome)
         },
         onStderr() {},
         onStdout() {}
@@ -334,6 +379,32 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(osHome, ".claude", "CLAUDE.md"))).toBeFalsy();
   });
 
+  test.each([
+    ["CODEX_HOME", "codex"],
+    ["CLAUDE_CONFIG_DIR", "claude"]
+  ] as const)("mt skills local-install rejects whitespace-only %s", async (variable, target) => {
+    const sandbox = makeTempDir("skills-local-install-instructions-empty-config");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    writeSkillSource(sourceCheckout);
+
+    await expect(
+      runCliAsync(
+        ["skills", "local-install", sourceCheckout, "--targets", target],
+        createRuntime({
+          cwd: sandbox,
+          env: {
+            ...skillsEnvironment(osHome, monkeHome),
+            [variable]: " \t "
+          },
+          onStderr() {},
+          onStdout() {}
+        })
+      )
+    ).rejects.toThrow(`Invalid ${variable} environment variable`);
+  });
+
   test("mt skills local-install keeps an instruction symlink valid when deselection empties its target", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-symlink-deselect");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -347,7 +418,7 @@ describe("skills CLI", () => {
     symlinkSync(dotfileTarget, destinationPath);
     const runtime = createRuntime({
       cwd: sandbox,
-      env: { HOME: osHome, MONKE_HOME: monkeHome },
+      env: skillsEnvironment(osHome, monkeHome),
       onStderr() {},
       onStdout() {}
     });
@@ -385,7 +456,7 @@ describe("skills CLI", () => {
           ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
           createRuntime({
             cwd: sandbox,
-            env: { HOME: osHome, MONKE_HOME: monkeHome },
+            env: skillsEnvironment(osHome, monkeHome),
             onStderr() {},
             onStdout() {}
           })
@@ -427,7 +498,7 @@ describe("skills CLI", () => {
           ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
           createRuntime({
             cwd: sandbox,
-            env: { HOME: osHome, MONKE_HOME: monkeHome },
+            env: skillsEnvironment(osHome, monkeHome),
             onStderr() {},
             onStdout() {}
           })
@@ -456,10 +527,7 @@ describe("skills CLI", () => {
     let prompt: MultiSelectPrompt | undefined;
     const runtime = createRuntime({
       cwd: sandbox,
-      env: {
-        HOME: osHome,
-        MONKE_HOME: monkeHome
-      },
+      env: skillsEnvironment(osHome, monkeHome),
       multiSelectValues: [["codex", "custom"]],
       onMultiSelect(value) {
         prompt = value;
@@ -513,10 +581,7 @@ describe("skills CLI", () => {
       ["skills", "configure"],
       createRuntime({
         cwd: sandbox,
-        env: {
-          HOME: osHome,
-          MONKE_HOME: monkeHome
-        },
+        env: skillsEnvironment(osHome, monkeHome),
         multiSelectValues: [["codex", "claude", "cursor", "custom"]],
         onStderr() {},
         onStdout() {},
@@ -528,10 +593,7 @@ describe("skills CLI", () => {
       ["skills", "configure"],
       createRuntime({
         cwd: sandbox,
-        env: {
-          HOME: osHome,
-          MONKE_HOME: monkeHome
-        },
+        env: skillsEnvironment(osHome, monkeHome),
         multiSelectValues: [["claude", "codex"]],
         onMultiSelect(value) {
           prompt = value;
@@ -570,10 +632,7 @@ describe("skills CLI", () => {
       ["skills", "local-install", sourceCheckout],
       createRuntime({
         cwd: sandbox,
-        env: {
-          HOME: osHome,
-          MONKE_HOME: monkeHome
-        },
+        env: skillsEnvironment(osHome, monkeHome),
         multiSelectValues: [["codex"]],
         onStderr() {},
         onStdout() {}
@@ -603,10 +662,7 @@ describe("skills CLI", () => {
       ["skills", "local-install", sourceCheckout, "--targets", "claude", "cursor", "codex"],
       createRuntime({
         cwd: sandbox,
-        env: {
-          HOME: osHome,
-          MONKE_HOME: monkeHome
-        },
+        env: skillsEnvironment(osHome, monkeHome),
         onMultiSelect() {
           throw new Error("Target arguments must bypass the interactive prompt");
         },
@@ -651,10 +707,7 @@ describe("skills CLI", () => {
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
       createRuntime({
         cwd: sandbox,
-        env: {
-          HOME: osHome,
-          MONKE_HOME: monkeHome
-        },
+        env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
         onStdout() {}
       })
@@ -693,10 +746,7 @@ describe("skills CLI", () => {
       ["skills", "local-install", newCheckout],
       createRuntime({
         cwd: sandbox,
-        env: {
-          HOME: osHome,
-          MONKE_HOME: monkeHome
-        },
+        env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
         onStdout() {}
       })
@@ -724,10 +774,7 @@ describe("skills CLI", () => {
         ["skills", "configure"],
         createRuntime({
           cwd: sandbox,
-          env: {
-            HOME: osHome,
-            MONKE_HOME: monkeHome
-          },
+          env: skillsEnvironment(osHome, monkeHome),
           onStderr() {},
           onStdout() {}
         })

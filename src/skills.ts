@@ -170,7 +170,7 @@ export async function runLocalInstallSkills(
 
 /** Reconcile selected Agent skill roots with the monke-tools Skill source tree. */
 export function reconcileSkillNamespaces(options: {
-  cwd?: string;
+  cwd: string;
   environment?: Record<string, string | undefined>;
   homeDirectory: string;
   nextPreference: SkillInstallPreference;
@@ -410,7 +410,7 @@ function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree
 function removeManagedTarget(
   target: ResolvedSkillInstallTarget,
   options: {
-    cwd?: string;
+    cwd: string;
     environment?: Record<string, string | undefined>;
     homeDirectory: string;
   }
