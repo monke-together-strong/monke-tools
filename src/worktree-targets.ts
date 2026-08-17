@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { listWorktrees, resolveRepoContext } from "./git.ts";
 import { samePath } from "./path-identity.ts";
-import { getSessionStateFilePath, listSessionStates } from "./registry.ts";
+import { getSessionStateFilePath, listSessionStates } from "./session-state-store.ts";
 import type { Runtime } from "./types.ts";
 
 export interface LocalWorktreeTarget {

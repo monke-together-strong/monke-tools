@@ -10,13 +10,13 @@ import {
   listSessionStatesRelevantToWorktrees,
   loadSessionState,
   saveSessionState
-} from "../src/registry.ts";
+} from "../src/session-state-store.ts";
 import type { RepoConfig, RepoReservation } from "../src/types.ts";
 import { makeTempDir, write } from "./helpers.ts";
 
-describe("session registry", () => {
+describe("Session state store", () => {
   test("loadSessionState keeps legacy repo entries without an optional Diff base compatible", () => {
-    const sandbox = makeTempDir("registry-legacy-diff-base");
+    const sandbox = makeTempDir("session-state-store-legacy-diff-base");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
@@ -37,7 +37,7 @@ repos:
   });
 
   test("loadSessionState rejects an externally persisted empty Diff base", () => {
-    const sandbox = makeTempDir("registry-invalid-diff-base");
+    const sandbox = makeTempDir("session-state-store-invalid-diff-base");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
@@ -59,7 +59,7 @@ repos:
   });
 
   test("loadSessionState rejects corrupt persisted state with the file and field path", () => {
-    const sandbox = makeTempDir("registry-corrupt-session");
+    const sandbox = makeTempDir("session-state-store-corrupt-session");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
@@ -79,7 +79,7 @@ repos: wrong
   });
 
   test("loadSessionState rejects persisted assigned ports with invalid port keys", () => {
-    const sandbox = makeTempDir("registry-invalid-port-key");
+    const sandbox = makeTempDir("session-state-store-invalid-port-key");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     const statePath = getSessionStateFilePath(home, sourceRoot, "invalid-port-key");
@@ -102,7 +102,7 @@ repos:
   });
 
   test("loadSessionState rejects unknown keys in application-owned state", () => {
-    const sandbox = makeTempDir("registry-unknown-session-key");
+    const sandbox = makeTempDir("session-state-store-unknown-session-key");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
@@ -123,7 +123,7 @@ typo: true
   });
 
   test("loadSessionState rejects unknown future versions", () => {
-    const sandbox = makeTempDir("registry-future-session-version");
+    const sandbox = makeTempDir("session-state-store-future-session-version");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
@@ -143,7 +143,7 @@ repos: []
   });
 
   test("targeted state checks recognize escaped worktree paths in corrupt YAML", () => {
-    const sandbox = makeTempDir("registry-escaped-corrupt-session");
+    const sandbox = makeTempDir("session-state-store-escaped-corrupt-session");
     const home = path.join(sandbox, "home");
     const worktreePath = String.raw`C:\worktrees\banana`;
     write(
@@ -165,7 +165,7 @@ repos:
   });
 
   test("saveSessionState rejects invalid values before writing them", () => {
-    const sandbox = makeTempDir("registry-invalid-write");
+    const sandbox = makeTempDir("session-state-store-invalid-write");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
 
@@ -180,7 +180,7 @@ repos:
   });
 
   test("getOrCreateReservation rejects corrupt persisted reservations", () => {
-    const sandbox = makeTempDir("registry-corrupt-reservation");
+    const sandbox = makeTempDir("session-state-store-corrupt-reservation");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     getOrCreateReservation(home, sourceRoot, 1);
@@ -227,7 +227,7 @@ size: 1000
       name: "unknown future versions"
     }
   ])("getOrCreateReservation rejects $name", ({ contents, expected }) => {
-    const sandbox = makeTempDir("registry-reservation-versioning");
+    const sandbox = makeTempDir("session-state-store-reservation-versioning");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     getOrCreateReservation(home, sourceRoot, 1);
@@ -242,7 +242,7 @@ size: 1000
   });
 
   test("allocateLocalPorts skips ports that are already taken inside the reserved block", async () => {
-    const sandbox = makeTempDir("registry-taken");
+    const sandbox = makeTempDir("session-state-store-taken");
     const repoConfig = makeRepoConfig(path.join(sandbox, "root"), ["API_PORT"]);
 
     const listener = Bun.serve({
@@ -276,7 +276,7 @@ size: 1000
   });
 
   test("allocateLocalPorts skips baseline local-dev ports before choosing session ports", () => {
-    const sandbox = makeTempDir("registry-baseline");
+    const sandbox = makeTempDir("session-state-store-baseline");
     const repoConfig = makeRepoConfig(path.join(sandbox, "root"), ["API_PORT"]);
     const reservation = makeReservation(repoConfig.sourceRoot, 10_000, 2);
 
@@ -294,7 +294,7 @@ size: 1000
   });
 
   test("getOrCreateReservation fails instead of resizing an existing repo block", () => {
-    const sandbox = makeTempDir("registry-overflow");
+    const sandbox = makeTempDir("session-state-store-overflow");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
 
@@ -308,7 +308,7 @@ size: 1000
   });
 
   test("getOrCreateReservation leaves spare ports for multiple retained sessions", () => {
-    const sandbox = makeTempDir("registry-capacity");
+    const sandbox = makeTempDir("session-state-store-capacity");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     const repoConfig = makeRepoConfig(sourceRoot, ["API_PORT"]);

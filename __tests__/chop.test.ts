@@ -4,7 +4,11 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
-import { getSessionStateFilePath, loadSessionState, saveSessionState } from "../src/registry.ts";
+import {
+  getSessionStateFilePath,
+  loadSessionState,
+  saveSessionState
+} from "../src/session-state-store.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "../src/shell.ts";
 import {
   createRepo,
