@@ -4,29 +4,17 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
-  rmSync,
   statSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
 
-import { boolean, enum as enumSchema, strictObject } from "zod";
-import type { output } from "zod";
-
 import { MonkeError } from "./errors.ts";
 import type { SkillInstallTargetKind } from "./global-config.ts";
 
 const GLOBAL_INSTRUCTIONS_RELATIVE_PATH = path.join("instructions", "GLOBAL.md");
-const MANAGED_INSTRUCTIONS_START = "<!-- monke-tools:global-agent-instructions:start -->";
-const MANAGED_INSTRUCTIONS_END = "<!-- monke-tools:global-agent-instructions:end -->";
-const MANAGED_INSTRUCTIONS_METADATA_PREFIX = "<!-- monke-tools:global-agent-instructions:metadata ";
-const MANAGED_INSTRUCTIONS_METADATA_SUFFIX = " -->";
-
-const ManagedInstructionsMetadataSchema = strictObject({
-  createdFile: boolean(),
-  separator: enumSchema(["", "\n", "\n\n", "\r\n", "\r\n\r\n"])
-});
-type ManagedInstructionsMetadata = output<typeof ManagedInstructionsMetadataSchema>;
+const MANAGED_INSTRUCTIONS_START = "<!-- monke-rules:start -->";
+const MANAGED_INSTRUCTIONS_END = "<!-- monke-rules:end -->";
 
 interface GlobalInstructionsOptions {
   cwd?: string;
@@ -78,22 +66,11 @@ export function removeGlobalInstructions(
     return;
   }
 
-  const managedStart = markers.start - markers.metadata.separator.length;
-  if (
-    managedStart < 0 ||
-    existingContent.slice(managedStart, markers.start) !== markers.metadata.separator
-  ) {
-    throw new MonkeError("Refusing to modify malformed Global agent instructions metadata");
-  }
-  const before = existingContent.slice(0, managedStart);
+  const before = existingContent.slice(0, markers.start);
   const after = existingContent.slice(markers.end);
   const nextContent = `${before}${after}`;
   if (nextContent.length === 0) {
-    if (destinationStat.isSymbolicLink() || !markers.metadata.createdFile) {
-      writeFileSync(filePath, "");
-    } else {
-      rmSync(filePath);
-    }
+    writeFileSync(filePath, "");
     return;
   }
   writeFileSync(filePath, nextContent);
@@ -105,49 +82,30 @@ function reconcileManagedInstructions(
   adoptWholeFileMatch: boolean
 ) {
   if (existingContent === null) {
-    return renderManagedInstructions(body, { createdFile: true, separator: "" });
+    return renderManagedInstructions(body);
   }
   if (existingContent.length === 0) {
-    return renderManagedInstructions(body, { createdFile: false, separator: "" });
+    return renderManagedInstructions(body);
   }
   if (adoptWholeFileMatch && existingContent === body) {
-    return renderManagedInstructions(body, { createdFile: false, separator: "" });
+    return renderManagedInstructions(body);
   }
 
   const markers = findManagedInstructionMarkers(existingContent);
   if (markers === null) {
-    const separator = instructionSeparator(existingContent);
-    const managedSection = renderManagedInstructions(body, {
-      createdFile: false,
-      separator
-    });
-    return `${existingContent}${separator}${managedSection}`;
+    return `${existingContent}${renderManagedInstructions(body)}`;
   }
 
-  const managedSection = renderManagedInstructions(body, markers.metadata);
+  const managedSection = renderManagedInstructions(body);
   return `${existingContent.slice(0, markers.start)}${managedSection}${existingContent.slice(markers.end)}`;
 }
 
-function instructionSeparator(existingContent: string) {
-  if (existingContent.endsWith("\r\n\r\n") || existingContent.endsWith("\n\n")) {
-    return "";
-  }
-  if (existingContent.endsWith("\r\n")) {
-    return "\r\n";
-  }
-  if (existingContent.endsWith("\n")) {
-    return "\n";
-  }
-  return existingContent.includes("\r\n") ? "\r\n\r\n" : "\n\n";
-}
-
-function renderManagedInstructions(body: string, metadata: ManagedInstructionsMetadata) {
+function renderManagedInstructions(body: string) {
   if (body.includes(MANAGED_INSTRUCTIONS_START) || body.includes(MANAGED_INSTRUCTIONS_END)) {
     throw new MonkeError("Global agent instructions body contains reserved management markers");
   }
 
-  const metadataComment = `${MANAGED_INSTRUCTIONS_METADATA_PREFIX}${JSON.stringify(metadata)}${MANAGED_INSTRUCTIONS_METADATA_SUFFIX}`;
-  return `${MANAGED_INSTRUCTIONS_START}\n${metadataComment}\n${body}${body.endsWith("\n") ? "" : "\n"}${MANAGED_INSTRUCTIONS_END}\n`;
+  return `${MANAGED_INSTRUCTIONS_START}\n\n${body}${body.endsWith("\n") ? "" : "\n"}${MANAGED_INSTRUCTIONS_END}\n`;
 }
 
 function findManagedInstructionMarkers(content: string) {
@@ -168,49 +126,11 @@ function findManagedInstructionMarkers(content: string) {
     throw new MonkeError("Refusing to modify malformed Global agent instructions markers");
   }
 
-  const metadataStart = start + MANAGED_INSTRUCTIONS_START.length + 1;
-  const metadataEnd = content.indexOf("\n", metadataStart);
-  if (
-    content[start + MANAGED_INSTRUCTIONS_START.length] !== "\n" ||
-    metadataEnd === -1 ||
-    metadataEnd > endMarker
-  ) {
-    throw new MonkeError("Refusing to modify malformed Global agent instructions metadata");
-  }
-  const metadata = parseManagedInstructionsMetadata(content.slice(metadataStart, metadataEnd));
-
   let end = endMarker + MANAGED_INSTRUCTIONS_END.length;
   if (content[end] === "\n") {
     end += 1;
   }
-  return { end, metadata, start };
-}
-
-function parseManagedInstructionsMetadata(comment: string) {
-  if (
-    !comment.startsWith(MANAGED_INSTRUCTIONS_METADATA_PREFIX) ||
-    !comment.endsWith(MANAGED_INSTRUCTIONS_METADATA_SUFFIX)
-  ) {
-    throw new MonkeError("Refusing to modify malformed Global agent instructions metadata");
-  }
-
-  let value: unknown;
-  try {
-    value = JSON.parse(
-      comment.slice(
-        MANAGED_INSTRUCTIONS_METADATA_PREFIX.length,
-        -MANAGED_INSTRUCTIONS_METADATA_SUFFIX.length
-      )
-    );
-  } catch {
-    throw new MonkeError("Refusing to modify malformed Global agent instructions metadata");
-  }
-  const parsed = ManagedInstructionsMetadataSchema.safeParse(value);
-  if (!parsed.success) {
-    throw new MonkeError("Refusing to modify malformed Global agent instructions metadata");
-  }
-
-  return parsed.data;
+  return { end, start };
 }
 
 function indexesOf(content: string, token: string) {

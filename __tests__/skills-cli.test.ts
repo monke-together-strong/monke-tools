@@ -9,10 +9,10 @@ import { createRuntime } from "../src/runtime.ts";
 import type { MultiSelectPrompt } from "../src/types.ts";
 import { makeTempDir, write } from "./helpers.ts";
 
-function managedInstructions(body: string, metadata: { createdFile: boolean; separator: string }) {
-  return `<!-- monke-tools:global-agent-instructions:start -->
-<!-- monke-tools:global-agent-instructions:metadata ${JSON.stringify(metadata)} -->
-${body}<!-- monke-tools:global-agent-instructions:end -->
+function managedInstructions(body: string) {
+  return `<!-- monke-rules:start -->
+
+${body}<!-- monke-rules:end -->
 `;
 }
 
@@ -46,10 +46,7 @@ describe("skills CLI", () => {
       })
     );
 
-    const expected = managedInstructions("Team baseline.\n", {
-      createdFile: true,
-      separator: ""
-    });
+    const expected = managedInstructions("Team baseline.\n");
     expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(expected);
     expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toBe(expected);
     expect(existsSync(path.join(osHome, ".cursor", "AGENTS.md"))).toBeFalsy();
@@ -172,15 +169,12 @@ describe("skills CLI", () => {
 
     await runCliAsync(["skills", "local-install", sourceCheckout], runtime);
 
-    const managed = managedInstructions("Updated team baseline.\n", {
-      createdFile: false,
-      separator: "\n"
-    });
+    const managed = managedInstructions("Updated team baseline.\n");
     expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(
-      `Personal Codex guidance.\n\n${managed}`
+      `Personal Codex guidance.\n${managed}`
     );
     expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toBe(
-      `Personal Claude guidance.\n\n${managed}`
+      `Personal Claude guidance.\n${managed}`
     );
   });
 
@@ -201,10 +195,7 @@ describe("skills CLI", () => {
       })
     );
 
-    const managed = managedInstructions("Team baseline.\n", {
-      createdFile: false,
-      separator: ""
-    });
+    const managed = managedInstructions("Team baseline.\n");
     expect(readFileSync(path.join(exactHome, ".codex", "AGENTS.md"), "utf-8")).toBe(managed);
 
     const partialHome = path.join(sandbox, "partial-home");
@@ -218,12 +209,9 @@ describe("skills CLI", () => {
         onStdout() {}
       })
     );
-    const partialManaged = managedInstructions("Team baseline.\n", {
-      createdFile: false,
-      separator: "\n"
-    });
+    const partialManaged = managedInstructions("Team baseline.\n");
     expect(readFileSync(path.join(partialHome, ".codex", "AGENTS.md"), "utf-8")).toBe(
-      `Team baseline.\nPersonal addition.\n\n${partialManaged}`
+      `Team baseline.\nPersonal addition.\n${partialManaged}`
     );
   });
 
@@ -247,21 +235,21 @@ describe("skills CLI", () => {
     );
     await runCliAsync(["skills", "local-install", sourceCheckout, "--targets", "cursor"], runtime);
 
-    expect(existsSync(path.join(osHome, ".codex", "AGENTS.md"))).toBeFalsy();
+    expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe("");
     expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toBe(
       "Personal Claude guidance.\n"
     );
   });
 
   test.each([
-    ["No trailing newline", "\n\n"],
-    ["One trailing newline\n", "\n"],
-    ["Two trailing newlines\n\n", ""],
-    ["One CRLF trailing newline\r\n", "\r\n"],
-    ["Two CRLF trailing newlines\r\n\r\n", ""]
+    "No trailing newline",
+    "One trailing newline\n",
+    "Two trailing newlines\n\n",
+    "One CRLF trailing newline\r\n",
+    "Two CRLF trailing newlines\r\n\r\n"
   ])(
     "mt skills local-install preserves user whitespace exactly when instructions are deselected",
-    async (userGuidance, expectedSeparator) => {
+    async (userGuidance) => {
       const sandbox = makeTempDir("skills-local-install-instructions-whitespace");
       const monkeHome = path.join(sandbox, "monke-home");
       const osHome = path.join(sandbox, "home");
@@ -277,11 +265,7 @@ describe("skills CLI", () => {
 
       await runCliAsync(["skills", "local-install", sourceCheckout, "--targets", "codex"], runtime);
       const installed = readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8");
-      expect(
-        installed.startsWith(
-          `${userGuidance}${expectedSeparator}<!-- monke-tools:global-agent-instructions:start -->`
-        )
-      ).toBeTruthy();
+      expect(installed.startsWith(`${userGuidance}<!-- monke-rules:start -->`)).toBeTruthy();
       await runCliAsync(
         ["skills", "local-install", sourceCheckout, "--targets", "cursor"],
         runtime
@@ -342,7 +326,9 @@ describe("skills CLI", () => {
     );
 
     expect(lstatSync(path.join(codexHome, "AGENTS.md")).isSymbolicLink()).toBeTruthy();
-    expect(readFileSync(dotfileTarget, "utf-8")).toContain("Personal Codex guidance.\n\n");
+    expect(readFileSync(dotfileTarget, "utf-8")).toContain(
+      "Personal Codex guidance.\n<!-- monke-rules:start -->"
+    );
     expect(readFileSync(path.join(claudeConfig, "CLAUDE.md"), "utf-8")).toContain("Team baseline.");
     expect(existsSync(path.join(osHome, ".codex", "AGENTS.md"))).toBeFalsy();
     expect(existsSync(path.join(osHome, ".claude", "CLAUDE.md"))).toBeFalsy();
@@ -415,22 +401,15 @@ describe("skills CLI", () => {
   );
 
   test.each([
-    ["unmatched", "<!-- monke-tools:global-agent-instructions:start -->\nOld body.\n"],
-    [
-      "missing metadata",
-      "<!-- monke-tools:global-agent-instructions:start -->\nOld body.\n<!-- monke-tools:global-agent-instructions:end -->\n"
-    ],
-    [
-      "reversed",
-      "<!-- monke-tools:global-agent-instructions:end -->\nOld body.\n<!-- monke-tools:global-agent-instructions:start -->\n"
-    ],
+    ["unmatched", "<!-- monke-rules:start -->\nOld body.\n"],
+    ["reversed", "<!-- monke-rules:end -->\nOld body.\n<!-- monke-rules:start -->\n"],
     [
       "nested",
-      "<!-- monke-tools:global-agent-instructions:start -->\n<!-- monke-tools:global-agent-instructions:start -->\nOld body.\n<!-- monke-tools:global-agent-instructions:end -->\n<!-- monke-tools:global-agent-instructions:end -->\n"
+      "<!-- monke-rules:start -->\n<!-- monke-rules:start -->\nOld body.\n<!-- monke-rules:end -->\n<!-- monke-rules:end -->\n"
     ],
     [
       "duplicate",
-      "<!-- monke-tools:global-agent-instructions:start -->\nOne.\n<!-- monke-tools:global-agent-instructions:end -->\n<!-- monke-tools:global-agent-instructions:start -->\nTwo.\n<!-- monke-tools:global-agent-instructions:end -->\n"
+      "<!-- monke-rules:start -->\nOne.\n<!-- monke-rules:end -->\n<!-- monke-rules:start -->\nTwo.\n<!-- monke-rules:end -->\n"
     ]
   ] as const)(
     "mt skills local-install refuses %s Managed instruction markers without stopping other targets",
@@ -453,9 +432,7 @@ describe("skills CLI", () => {
             onStdout() {}
           })
         )
-      ).rejects.toThrow(
-        /Refusing to modify malformed Global agent instructions (?:markers|metadata)/u
-      );
+      ).rejects.toThrow("Refusing to modify malformed Global agent instructions markers");
       expect(readFileSync(codexInstructions, "utf-8")).toBe(malformedContent);
       expect(readFileSync(path.join(osHome, ".claude", "CLAUDE.md"), "utf-8")).toContain(
         "Team baseline."
