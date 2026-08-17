@@ -14,7 +14,7 @@
 
 - Use the smallest proof that the change works: tests for the files or behavior
   changed, plus targeted lint and typecheck for the changed scope.
-- **Do not run repo-wide checks** unless explicitely asked. CI owns full suite.
+- **Do not run repo-wide checks** unless explicitly asked. CI owns full suite.
 
 ## Branching
 

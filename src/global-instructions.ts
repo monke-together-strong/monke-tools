@@ -9,18 +9,25 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import * as z from "zod";
+
 import { MonkeError } from "./errors.ts";
 import type { SkillInstallTargetKind } from "./global-config.ts";
+import { parseBoundaryValue } from "./validation.ts";
 
 const GLOBAL_INSTRUCTIONS_RELATIVE_PATH = path.join("instructions", "GLOBAL.md");
 const MANAGED_INSTRUCTIONS_START = "<!-- monke-rules:start -->";
 const MANAGED_INSTRUCTIONS_END = "<!-- monke-rules:end -->";
 
 interface GlobalInstructionsOptions {
-  cwd?: string;
+  cwd: string;
   environment?: Record<string, string | undefined>;
   homeDirectory: string;
 }
+
+const ConfiguredDirectorySchema = z.string().refine((value) => value.trim().length > 0, {
+  message: "Must not be empty"
+});
 
 /** Reconcile the selected harness's Managed instruction section from the source snapshot. */
 export function reconcileGlobalInstructions(
@@ -93,7 +100,8 @@ function reconcileManagedInstructions(
 
   const markers = findManagedInstructionMarkers(existingContent);
   if (markers === null) {
-    return `${existingContent}${renderManagedInstructions(body)}`;
+    const separator = existingContent.endsWith("\n") ? "" : "\n";
+    return `${existingContent}${separator}${renderManagedInstructions(body)}`;
   }
 
   const managedSection = renderManagedInstructions(body);
@@ -127,7 +135,9 @@ function findManagedInstructionMarkers(content: string) {
   }
 
   let end = endMarker + MANAGED_INSTRUCTIONS_END.length;
-  if (content[end] === "\n") {
+  if (content.startsWith("\r\n", end)) {
+    end += 2;
+  } else if (content[end] === "\n") {
     end += 1;
   }
   return { end, start };
@@ -155,7 +165,8 @@ function globalInstructionsPath(
     const configDirectory = resolveAgentConfigDirectory(
       options.environment?.CODEX_HOME,
       options.cwd,
-      path.join(options.homeDirectory, ".codex")
+      path.join(options.homeDirectory, ".codex"),
+      "CODEX_HOME"
     );
     return path.join(configDirectory, "AGENTS.md");
   }
@@ -163,7 +174,8 @@ function globalInstructionsPath(
     const configDirectory = resolveAgentConfigDirectory(
       options.environment?.CLAUDE_CONFIG_DIR,
       options.cwd,
-      path.join(options.homeDirectory, ".claude")
+      path.join(options.homeDirectory, ".claude"),
+      "CLAUDE_CONFIG_DIR"
     );
     return path.join(configDirectory, "CLAUDE.md");
   }
@@ -173,14 +185,20 @@ function globalInstructionsPath(
 
 function resolveAgentConfigDirectory(
   configuredDirectory: string | undefined,
-  cwd: string | undefined,
-  defaultDirectory: string
+  cwd: string,
+  defaultDirectory: string,
+  environmentVariable: "CLAUDE_CONFIG_DIR" | "CODEX_HOME"
 ) {
   if (configuredDirectory === undefined) {
     return defaultDirectory;
   }
 
-  return path.resolve(cwd ?? process.cwd(), configuredDirectory);
+  const validDirectory = parseBoundaryValue(
+    ConfiguredDirectorySchema,
+    configuredDirectory,
+    `${environmentVariable} environment variable`
+  );
+  return path.resolve(cwd, validDirectory);
 }
 
 function resolveInstructionFile(destinationPath: string) {

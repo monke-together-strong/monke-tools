@@ -70,6 +70,10 @@ export function write(root: string, relativePath: string, contents: string) {
   writeFileSync(targetPath, contents, "utf-8");
 }
 
+export function writeGlobalInstructionsSource(sourceCheckout: string, body = "Team baseline.\n") {
+  write(sourceCheckout, "instructions/GLOBAL.md", body);
+}
+
 export function read(root: string, relativePath: string) {
   return readFileSync(path.join(root, relativePath), "utf-8");
 }

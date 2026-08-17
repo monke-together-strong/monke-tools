@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { reconcileSkillNamespaces, resolveSkillInstallTargets } from "../src/skills.ts";
-import { makeTempDir, write } from "./helpers.ts";
+import { makeTempDir, write, writeGlobalInstructionsSource } from "./helpers.ts";
 
 describe("skills", () => {
   test("skill install targets resolve built-ins against OS home and normalize custom skill roots", () => {
@@ -48,7 +48,7 @@ describe("skills", () => {
   test("skill namespace reconciliation projects Codex-only skills only into Codex", () => {
     const sandbox = makeTempDir("skill-reconcile-project");
     const sourceCheckout = path.join(sandbox, "source");
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeGlobalInstructionsSource(sourceCheckout);
     const customSkillRoot = path.join(sandbox, "custom", "skills");
     write(
       sourceCheckout,
@@ -64,6 +64,7 @@ describe("skills", () => {
     write(sourceCheckout, "skills/references/internal/README.md", "shared reference\n");
 
     reconcileSkillNamespaces({
+      cwd: sandbox,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "codex" }, { kind: "cursor" }, { kind: "custom", path: customSkillRoot }]
@@ -92,7 +93,7 @@ describe("skills", () => {
   test("Claude skill reconciliation flattens source categories into the Agent skill root", () => {
     const sandbox = makeTempDir("skill-reconcile-claude-flat");
     const sourceCheckout = path.join(sandbox, "source");
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeGlobalInstructionsSource(sourceCheckout);
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
@@ -106,6 +107,7 @@ describe("skills", () => {
     );
 
     reconcileSkillNamespaces({
+      cwd: sandbox,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "claude" }]
@@ -143,6 +145,7 @@ describe("skills", () => {
     expect(existsSync(path.join(claudeSkillRoot, "monke-tools"))).toBeFalsy();
 
     reconcileSkillNamespaces({
+      cwd: sandbox,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "codex" }]
@@ -165,7 +168,7 @@ describe("skills", () => {
   test("Reference-backed skills resolve packaged references from namespaced and Claude flat targets", () => {
     const sandbox = makeTempDir("skill-reconcile-reference-backed");
     const sourceCheckout = path.join(sandbox, "source");
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeGlobalInstructionsSource(sourceCheckout);
     const customSkillRoot = path.join(sandbox, "custom", "skills");
     const wrapperRelativePath = "skills/internal/code-review/SKILL.md";
     const upstreamRelativePath = "../../references/imported/code-review/MAIN.md";
@@ -187,6 +190,7 @@ describe("skills", () => {
     );
 
     reconcileSkillNamespaces({
+      cwd: sandbox,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "custom", path: customSkillRoot }, { kind: "claude" }]
@@ -226,6 +230,7 @@ describe("skills", () => {
     expect(existsSync(path.join(sandbox, ".claude", "skills", "references"))).toBeFalsy();
 
     reconcileSkillNamespaces({
+      cwd: sandbox,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "custom", path: customSkillRoot }]
@@ -242,7 +247,7 @@ describe("skills", () => {
   test("Claude skill reconciliation rejects unknown future flat manifest versions", () => {
     const sandbox = makeTempDir("skill-reconcile-future-manifest");
     const sourceCheckout = path.join(sandbox, "source");
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeGlobalInstructionsSource(sourceCheckout);
     const claudeSkillRoot = path.join(sandbox, ".claude", "skills");
     write(
       sourceCheckout,
@@ -257,6 +262,7 @@ describe("skills", () => {
 
     expect(() => {
       reconcileSkillNamespaces({
+        cwd: sandbox,
         homeDirectory: sandbox,
         nextPreference: { targets: [{ kind: "claude" }] },
         previousPreference: { targets: [{ kind: "claude" }] },
@@ -269,7 +275,7 @@ describe("skills", () => {
   test("skill namespace reconciliation attempts every selected target before failing on unmanaged namespaces", () => {
     const sandbox = makeTempDir("skill-reconcile-partial");
     const sourceCheckout = path.join(sandbox, "source");
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeGlobalInstructionsSource(sourceCheckout);
     const blockedSkillRoot = path.join(sandbox, "blocked", "skills");
     write(
       sourceCheckout,
@@ -280,6 +286,7 @@ describe("skills", () => {
 
     expect(() => {
       reconcileSkillNamespaces({
+        cwd: sandbox,
         homeDirectory: sandbox,
         nextPreference: {
           targets: [{ kind: "codex" }, { kind: "custom", path: blockedSkillRoot }]
@@ -298,7 +305,7 @@ describe("skills", () => {
   test("skill namespace reconciliation continues after deselected target cleanup failures", () => {
     const sandbox = makeTempDir("skill-reconcile-cleanup-partial");
     const sourceCheckout = path.join(sandbox, "source");
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeGlobalInstructionsSource(sourceCheckout);
     write(
       sourceCheckout,
       "skills/internal/monke-tools-core/SKILL.md",
@@ -308,6 +315,7 @@ describe("skills", () => {
 
     expect(() => {
       reconcileSkillNamespaces({
+        cwd: sandbox,
         homeDirectory: sandbox,
         nextPreference: {
           targets: [{ kind: "codex" }]
@@ -328,7 +336,7 @@ describe("skills", () => {
   test("skill namespace reconciliation removes deselected managed namespaces", () => {
     const sandbox = makeTempDir("skill-reconcile-deselect");
     const sourceCheckout = path.join(sandbox, "source");
-    write(sourceCheckout, "instructions/GLOBAL.md", "Team baseline.\n");
+    writeGlobalInstructionsSource(sourceCheckout);
     const oldSkillRoot = path.join(sandbox, "old", "skills");
     write(
       sourceCheckout,
@@ -336,6 +344,7 @@ describe("skills", () => {
       "---\nname: monke-tools-core\n---\n"
     );
     reconcileSkillNamespaces({
+      cwd: sandbox,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "custom", path: oldSkillRoot }]
@@ -346,6 +355,7 @@ describe("skills", () => {
     });
 
     reconcileSkillNamespaces({
+      cwd: sandbox,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "codex" }]
