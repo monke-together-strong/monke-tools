@@ -115,7 +115,6 @@ export async function runSkillsConfigure(runtime: Runtime) {
     homeDirectory,
     nextPreference,
     previousPreference,
-    reconcileGlobalInstructions: true,
     sourceCheckout,
     writeMessage(message) {
       runtime.writeStderr(message);
@@ -159,7 +158,6 @@ export async function runLocalInstallSkills(
     homeDirectory,
     nextPreference,
     previousPreference: config.skillInstallPreference ?? null,
-    reconcileGlobalInstructions: true,
     sourceCheckout: installedSourceCheckout,
     writeMessage(message) {
       runtime.writeStderr(message);
@@ -177,7 +175,6 @@ export function reconcileSkillNamespaces(options: {
   homeDirectory: string;
   nextPreference: SkillInstallPreference;
   previousPreference: SkillInstallPreference | null;
-  reconcileGlobalInstructions?: boolean;
   sourceCheckout: string;
   writeMessage: (message: string) => void;
 }) {
@@ -212,9 +209,7 @@ export function reconcileSkillNamespaces(options: {
   for (const target of nextTargets) {
     try {
       reconcileOneTarget(target, skillSourceTree);
-      if (options.reconcileGlobalInstructions === true) {
-        reconcileGlobalInstructions(target, options);
-      }
+      reconcileGlobalInstructions(target, options);
       options.writeMessage(`Linked ${SKILL_NAMESPACE} skills at ${managedLocation(target)}\n`);
     } catch (error) {
       const message = errorMessage(error);
@@ -418,16 +413,13 @@ function removeManagedTarget(
     cwd?: string;
     environment?: Record<string, string | undefined>;
     homeDirectory: string;
-    reconcileGlobalInstructions?: boolean;
   }
 ) {
   if (target.kind === "claude") {
     removeFlatManagedLinks(target);
   }
   removeManagedNamespace(target);
-  if (options.reconcileGlobalInstructions === true) {
-    removeGlobalInstructions(target, options);
-  }
+  removeGlobalInstructions(target, options);
 }
 
 function removeManagedNamespace(target: ResolvedSkillInstallTarget) {
