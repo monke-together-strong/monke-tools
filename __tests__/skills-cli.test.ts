@@ -311,16 +311,13 @@ describe("skills CLI", () => {
 
       await runCliAsync(["skills", "local-install", sourceCheckout, "--targets", "codex"], runtime);
       const installed = readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8");
-      const normalizedGuidance = userGuidance.endsWith("\n") ? userGuidance : `${userGuidance}\n`;
-      expect(installed.startsWith(`${normalizedGuidance}<!-- monke-rules:start -->`)).toBeTruthy();
+      expect(installed.startsWith(`${userGuidance}<!-- monke-rules:start -->`)).toBeTruthy();
       await runCliAsync(
         ["skills", "local-install", sourceCheckout, "--targets", "cursor"],
         runtime
       );
 
-      expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(
-        normalizedGuidance
-      );
+      expect(readFileSync(path.join(osHome, ".codex", "AGENTS.md"), "utf-8")).toBe(userGuidance);
     }
   );
 

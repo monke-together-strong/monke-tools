@@ -100,8 +100,7 @@ function reconcileManagedInstructions(
 
   const markers = findManagedInstructionMarkers(existingContent);
   if (markers === null) {
-    const separator = existingContent.endsWith("\n") ? "" : "\n";
-    return `${existingContent}${separator}${renderManagedInstructions(body)}`;
+    return `${existingContent}${renderManagedInstructions(body)}`;
   }
 
   const managedSection = renderManagedInstructions(body);
