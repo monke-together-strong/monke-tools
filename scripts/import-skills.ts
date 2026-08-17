@@ -20,7 +20,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { GroupMultiSelectPrompt } from "@clack/core";
-import * as p from "@clack/prompts";
+import { isCancel } from "@clack/prompts";
+import type { Option } from "@clack/prompts";
 import { Command } from "@commander-js/extra-typings";
 import pc from "picocolors";
 import { parseDocument } from "yaml";
@@ -46,7 +47,7 @@ export interface AvailableSkillGroup {
 }
 
 /** Clack-compatible grouped prompt options keyed by upstream group heading. */
-export type GroupedSkillOptions = Record<string, p.Option<string>[]>;
+export type GroupedSkillOptions = Record<string, Option<string>[]>;
 
 interface ImportSkillsDependencies {
   runInstallCommand?: (repoRoot: string) => void;
@@ -1092,7 +1093,7 @@ async function promptForSkillSelection(availableSkillGroups: readonly AvailableS
     required: true
   });
 
-  if (p.isCancel(selectedSkills)) {
+  if (isCancel(selectedSkills)) {
     throw new MonkeError("Skill import cancelled");
   }
 
@@ -1121,7 +1122,7 @@ async function groupedSkillMultiselect(options: {
   options: GroupedSkillOptions;
   required: boolean;
 }) {
-  const result: unknown = await new GroupMultiSelectPrompt<p.Option<string>>({
+  const result: unknown = await new GroupMultiSelectPrompt<Option<string>>({
     cursorAt: options.cursorAt,
     options: options.options,
     render() {
@@ -1207,7 +1208,7 @@ ${pc.reset(pc.dim(`Press ${pc.gray(pc.bgWhite(pc.inverse(" space ")))} to select
   throw new MonkeError("Grouped Skill selection returned an invalid value");
 }
 
-type GroupedPromptOption = p.Option<string> & { group: string | boolean };
+type GroupedPromptOption = Option<string> & { group: string | boolean };
 type GroupedPromptOptionState =
   | "active"
   | "inactive"
