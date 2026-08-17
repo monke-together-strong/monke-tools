@@ -12,8 +12,8 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
-import { getSessionStateFilePath, loadSessionState } from "../src/registry.ts";
 import { hashKey } from "../src/runtime.ts";
+import { getSessionStateFilePath, loadSessionState } from "../src/session-state-store.ts";
 import type { SelectPrompt } from "../src/types.ts";
 import {
   createRepo,

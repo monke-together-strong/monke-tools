@@ -42,6 +42,9 @@ import {
 import type { DefaultBranchRef } from "./git.ts";
 import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
+import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
+import { getMonkeHome, withGlobalLock } from "./runtime.ts";
+import { finalizeSession } from "./session-finalization.ts";
 import {
   allocateLocalPorts,
   ensureSessionPrefix,
@@ -53,10 +56,7 @@ import {
   removeSessionState,
   saveSessionState,
   toAssignedPorts
-} from "./registry.ts";
-import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
-import { getMonkeHome, withGlobalLock } from "./runtime.ts";
-import { finalizeSession } from "./session-finalization.ts";
+} from "./session-state-store.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type {
   AssignedPort,

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 
 import { errorMessage, MonkeError } from "./errors.ts";
-import { removeSessionState } from "./registry.ts";
+import { removeSessionState } from "./session-state-store.ts";
 import type { Runtime, SessionState } from "./types.ts";
 import { assertCanonicalSourceCheckout } from "./worktree-safety.ts";
 

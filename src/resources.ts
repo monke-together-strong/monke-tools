@@ -5,8 +5,8 @@ import path from "node:path";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
-import { listSessionStates } from "./registry.ts";
 import { withScopedLock } from "./runtime.ts";
+import { listSessionStates } from "./session-state-store.ts";
 import type {
   RepoConfig,
   ResourceCommandConfig,

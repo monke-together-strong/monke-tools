@@ -5,8 +5,8 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
 import { spawnSessionFromSourceRootLocked } from "../src/monke.ts";
-import { getSessionStateFilePath, saveSessionState } from "../src/registry.ts";
 import { createRuntime } from "../src/runtime.ts";
+import { getSessionStateFilePath, saveSessionState } from "../src/session-state-store.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
 import {
   createRepo,

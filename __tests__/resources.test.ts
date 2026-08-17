@@ -3,9 +3,9 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { saveSessionState } from "../src/registry.ts";
 import { resolveResourceCommands } from "../src/resources.ts";
 import { hashKey } from "../src/runtime.ts";
+import { saveSessionState } from "../src/session-state-store.ts";
 import type { RepoConfig, Runtime } from "../src/types.ts";
 import { makeTempDir } from "./helpers.ts";
 

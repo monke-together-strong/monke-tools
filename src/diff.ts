@@ -11,8 +11,8 @@ import {
 import { MonkeError } from "./errors.ts";
 import { describeSessionBranchMismatch, resolveRepoContext } from "./git.ts";
 import { samePath } from "./path-identity.ts";
-import { listSessionStates, loadSessionState, saveSessionState } from "./registry.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
+import { listSessionStates, loadSessionState, saveSessionState } from "./session-state-store.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 import {
   listLocalWorktreeTargets,

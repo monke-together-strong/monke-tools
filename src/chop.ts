@@ -11,14 +11,14 @@ import {
 } from "./git.ts";
 import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
+import { getMonkeHome, withGlobalLock } from "./runtime.ts";
+import { finalizeSession } from "./session-finalization.ts";
 import {
   getSessionStateFilePath,
   listSessionStates,
   listSessionStatesRelevantToWorktrees,
   loadSessionState
-} from "./registry.ts";
-import { getMonkeHome, withGlobalLock } from "./runtime.ts";
-import { finalizeSession } from "./session-finalization.ts";
+} from "./session-state-store.ts";
 import { requestShellDirectoryAfterRemoval } from "./shell.ts";
 import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
 import {
