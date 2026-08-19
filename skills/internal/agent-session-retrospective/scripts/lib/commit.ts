@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 
-import { isNonEmptyString } from "./normalize.ts";
+import { isNonEmptyString } from "@sindresorhus/is";
+
 import {
   cleanRunDir,
   listBundleHashes,

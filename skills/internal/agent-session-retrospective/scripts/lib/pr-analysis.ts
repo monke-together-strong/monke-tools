@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+
+import { isNonEmptyString } from "@sindresorhus/is";
 import {
   array,
   boolean,
@@ -14,7 +16,6 @@ import {
 import type { output, ZodType } from "zod";
 
 import { hashKey } from "./identity.ts";
-import { isNonEmptyString } from "./normalize.ts";
 import { RetrospectiveWindowSchema } from "./schemas.ts";
 import {
   prAnalysisPath,

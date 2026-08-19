@@ -62,7 +62,3 @@ function clip(text: string, max: number) {
 function collapseWhitespace(text: string) {
   return text.replaceAll(/\s+/gu, " ").trim();
 }
-
-export function isNonEmptyString(value: string | null | undefined): value is string {
-  return value !== undefined && value !== null && value !== "";
-}
