@@ -1,10 +1,11 @@
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { isNonEmptyString } from "@sindresorhus/is";
+
 import { discoverSessionFiles, parseSessionFile } from './collectors.ts';
 import type { DiscoverOptions } from './collectors.ts';
 import { hashKey, resolveRepoKey, sessionHashKey } from "./identity.ts";
-import { isNonEmptyString } from "./normalize.ts";
 import {
   listReportPaths,
   listFrozenSessions,

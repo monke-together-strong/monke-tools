@@ -1,12 +1,10 @@
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { isNonEmptyString } from "@sindresorhus/is";
+
 import { resolveGitRoot, resolveRepoKey } from "./identity.ts";
-import {
-  clipProse,
-  isNonEmptyString,
-  summarizeOutput,
-} from "./normalize.ts";
+import { clipProse, summarizeOutput } from "./normalize.ts";
 import type { JsonValue } from "./transcript-schemas.ts";
 import type { AgentKind, CanonicalTurn } from "./types.ts";
 
