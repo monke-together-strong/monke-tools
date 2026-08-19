@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { parseDocument, stringify, visit } from "yaml";
@@ -6,7 +6,7 @@ import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { samePath } from "./path-identity.ts";
-import { ensureDirectory, hashKey, isPortAvailable } from "./runtime.ts";
+import { hashKey, isPortAvailable } from "./runtime.ts";
 import { RepoReservationSchema, SessionStateSchema } from "./state-schema.ts";
 import type { RepoConfig, RepoReservation, SessionRepoState, SessionState } from "./types.ts";
 import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
@@ -50,7 +50,7 @@ export function saveSessionState(home: string, state: unknown) {
     : "session state";
   const parsed = parseBoundaryValue(SessionStateSchema, state, label);
   const filePath = getSessionStateFilePath(home, parsed.rootSourceRoot, parsed.session);
-  ensureDirectory(path.dirname(filePath));
+  mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, stringify(parsed), "utf-8");
 }
 
@@ -123,7 +123,7 @@ export function getOrCreateReservation(home: string, sourceRoot: string, size: n
     version: 1
   };
 
-  ensureDirectory(path.dirname(filePath));
+  mkdirSync(path.dirname(filePath), { recursive: true });
   const parsed = parseBoundaryValue(RepoReservationSchema, nextReservation, filePath);
   writeFileSync(filePath, stringify(parsed), "utf-8");
   return parsed;

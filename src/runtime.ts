@@ -305,10 +305,6 @@ export function getHomeDirectory(runtime: Runtime) {
   return runtime.env.HOME ?? homedir();
 }
 
-export function ensureDirectory(directoryPath: string) {
-  mkdirSync(directoryPath, { recursive: true });
-}
-
 export function hashKey(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -350,7 +346,7 @@ export function withScopedLock<T>(home: string, namespace: string, callback: () 
 }
 
 function withLockPath<T>(lockPath: string, callback: () => T) {
-  ensureDirectory(path.dirname(lockPath));
+  mkdirSync(path.dirname(lockPath), { recursive: true });
   const deadline = Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
   let fileDescriptor: number | null = null;
 

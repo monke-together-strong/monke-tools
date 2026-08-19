@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { stringify } from "yaml";
@@ -17,7 +17,7 @@ import {
 import { createLogger } from "./logger.ts";
 import { spawnSessionFromSourceRootLocked } from "./monke.ts";
 import { samePath } from "./path-identity.ts";
-import { ensureDirectory, getMonkeHome, hashKey, withGlobalLock } from "./runtime.ts";
+import { getMonkeHome, hashKey, withGlobalLock } from "./runtime.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
@@ -592,7 +592,7 @@ function loadSwingHistory(home: string, rootSourceRoot: string): SwingHistory {
 function saveSwingHistory(home: string, rootSourceRoot: string, history: SwingHistory) {
   const filePath = getSwingHistoryFilePath(home, rootSourceRoot);
   const parsed = parseBoundaryValue(SwingHistorySchema, history, filePath);
-  ensureDirectory(path.dirname(filePath));
+  mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, stringify(parsed), "utf-8");
 }
 

@@ -1,9 +1,9 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
-import { ensureDirectory, findExecutable, getHomeDirectory } from "./runtime.ts";
+import { findExecutable, getHomeDirectory } from "./runtime.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
 import type { Runtime } from "./types.ts";
 
@@ -155,7 +155,7 @@ function isShellIntegrationConfigured(runtime: Runtime) {
 }
 
 function installStartupBlock(startupFile: string, block: string) {
-  ensureDirectory(path.dirname(startupFile));
+  mkdirSync(path.dirname(startupFile), { recursive: true });
   const existing = existsSync(startupFile) ? readFileSync(startupFile, "utf-8") : "";
   const startIndex = existing.indexOf(INTEGRATION_START);
   const endIndex = existing.indexOf(INTEGRATION_END);
