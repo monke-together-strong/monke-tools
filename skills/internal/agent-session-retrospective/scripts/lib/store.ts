@@ -38,10 +38,6 @@ export function retroHome(monkeHome?: string) {
   return path.join(home, "agent-retrospectives");
 }
 
-function ensureDir(dir: string) {
-  mkdirSync(dir, { recursive: true });
-}
-
 // --- frozen per-session records (the durable, never-recomputed corpus) -------
 
 function sessionPath(root: string, agent: AgentKind, sessionId: string) {
@@ -62,7 +58,7 @@ export function loadFrozenSession(
 
 export function saveFrozenSession(root: string, record: FrozenSessionRecord) {
   const filePath = sessionPath(root, record.agent, record.sessionId);
-  ensureDir(path.dirname(filePath));
+  mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, stringify(record), "utf-8");
 }
 
@@ -86,7 +82,7 @@ export function listFrozenSessions(root: string) {
 
 export function saveRepoMeta(root: string, meta: RepoMeta) {
   const filePath = path.join(root, "repos", `${hashKey(meta.repoKey)}.yml`);
-  ensureDir(path.dirname(filePath));
+  mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, stringify(meta), "utf-8");
 }
 
@@ -106,7 +102,7 @@ export function runDir(root: string, runTs: string) {
 
 export function writeBundle(root: string, bundle: RepoBundle) {
   const dir = runDir(root, bundle.runTs);
-  ensureDir(dir);
+  mkdirSync(dir, { recursive: true });
   const filePath = path.join(dir, `${bundle.repoHash}.json`);
   writeFileSync(filePath, JSON.stringify(bundle, null, 2), "utf-8");
   return filePath;
@@ -133,7 +129,7 @@ export function listBundleHashes(root: string, runTs: string) {
 
 export function writeRunWindow(root: string, runTs: string, window: RetrospectiveWindow) {
   const filePath = path.join(runDir(root, runTs), "window.json");
-  ensureDir(path.dirname(filePath));
+  mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, JSON.stringify(window, null, 2), "utf-8");
   return filePath;
 }
@@ -178,7 +174,7 @@ export function cleanRunDir(root: string, runTs: string) {
 
 export function writeReport(root: string, runTs: string, content: string) {
   const dir = path.join(root, "reports");
-  ensureDir(dir);
+  mkdirSync(dir, { recursive: true });
   const filePath = path.join(dir, `${runTs}-retrospective.md`);
   writeFileSync(filePath, content, "utf-8");
   return filePath;
@@ -186,7 +182,7 @@ export function writeReport(root: string, runTs: string, content: string) {
 
 export function writeReportArtifact(root: string, runTs: string, suffix: string, content: string) {
   const dir = path.join(root, "reports");
-  ensureDir(dir);
+  mkdirSync(dir, { recursive: true });
   const filePath = path.join(dir, `${runTs}-${suffix}.md`);
   writeFileSync(filePath, content, "utf-8");
   return filePath;
@@ -209,7 +205,7 @@ const STALE_LOCK_AGE_MS = 60_000;
 
 export function withRetroLock<T>(root: string, callback: () => T) {
   const lockPath = path.join(root, "run.lock");
-  ensureDir(path.dirname(lockPath));
+  mkdirSync(path.dirname(lockPath), { recursive: true });
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
   let fd: number | null = null;
   while (fd === null) {

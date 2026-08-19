@@ -1,11 +1,10 @@
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { stringify } from "yaml";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
-import { ensureDirectory } from "./runtime.ts";
 import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
 
 const BuiltInSkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor"]);
@@ -95,7 +94,7 @@ export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig) {
     parseBoundaryValue(GlobalMonkeConfigSchema, config, configPath),
     configPath
   );
-  ensureDirectory(home);
+  mkdirSync(home, { recursive: true });
   writeFileSync(configPath, stringify(parsed), "utf-8");
 }
 
