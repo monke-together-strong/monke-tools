@@ -5,6 +5,7 @@ import { Argument, Command, Option } from "@commander-js/extra-typings";
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runDiff, runDiffInteractive } from "./diff.ts";
+import { runActivateLocalInstall } from "./installation.ts";
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
@@ -34,7 +35,10 @@ function createProgram(
   diffAction: (runtime: Runtime, options: { pick?: boolean }) => void | Promise<void>
 ) {
   // Subcommands copy these at .command() time, so every subcommand below must be declared after.
-  const program = new Command().name("mt").allowExcessArguments(false);
+  const program = new Command()
+    .name("mt")
+    .version(runtime.toolBuildIdentity)
+    .allowExcessArguments(false);
 
   configureCliParser(program);
 
@@ -118,6 +122,34 @@ function createProgram(
     .action(() => {
       runInstallDependencies(runtime);
     });
+
+  program
+    .command("activate-local-install", { hidden: true })
+    .argument("<staged-install>")
+    .argument("<source-checkout>")
+    .requiredOption("--install-id <identity>")
+    .requiredOption("--source-commit <sha>")
+    .requiredOption("--created-at <timestamp>")
+    .requiredOption("--platform <platform>")
+    .option("--dirty")
+    .addOption(
+      new Option(
+        "--targets <targets...>",
+        "Replace the saved Skill install preference with built-in targets"
+      ).choices(["codex", "claude", "cursor"])
+    )
+    .action((stagedInstall, sourceCheckout, options) =>
+      runActivateLocalInstall(runtime, {
+        createdAt: options.createdAt,
+        dirty: options.dirty === true,
+        installId: options.installId,
+        platform: options.platform,
+        sourceCheckout,
+        sourceCommit: options.sourceCommit,
+        stagedInstall,
+        targetKinds: options.targets
+      })
+    );
 
   const shell = program.command("shell");
 

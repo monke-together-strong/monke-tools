@@ -1,6 +1,8 @@
 import type { SessionRepoState } from "./state-schema.ts";
 
 export interface Runtime {
+  /** Architecture of the machine running this command. */
+  readonly architecture: string;
   /** Current working directory used by monke-tools operations. */
   readonly cwd: string;
   /** Process environment used by monke-tools operations. */
@@ -11,10 +13,16 @@ export interface Runtime {
   execAsync: (command: string, args?: string[], options?: ExecOptions) => Promise<ExecResult>;
   /** Select multiple values from an interactive terminal picker. */
   multiSelect: (prompt: MultiSelectPrompt) => Promise<string[]>;
+  /** Operating system of the machine running this command. */
+  readonly platform: NodeJS.Platform;
   /** Read one interactive input line after writing a prompt. */
   readLine: (prompt: string) => string;
   /** Select one value from an interactive terminal picker. */
   select: (prompt: SelectPrompt) => Promise<string>;
+  /** Identity compiled into this mt executable. */
+  readonly toolBuildIdentity: string;
+  /** Root of the versioned tool install resolved once when the command starts. */
+  readonly toolInstallRoot: string;
   /** Write CLI output to stderr. */
   writeStderr: (text: string) => void;
   /** Write CLI output to stdout. */

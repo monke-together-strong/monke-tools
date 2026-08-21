@@ -8,7 +8,7 @@ monke-tools uses a shell adapter to make successful **Spawn** and **Swing** oper
 
 `Swing` follows Worktrunk's navigation model rather than Git's branch-switching model. It navigates to existing Session worktrees and ordinary linked Git worktrees for branch-name targets, and never changes which branch an existing worktree has checked out. Pull request targets are the one exception: explicit pull request targets (`mt swing pr:<n>` or a pull request URL) fetch the PR head, create the Session branch and Session worktree through session-branch spawn when missing, and refuse to navigate on every explicit pull request swing when the local Session branch diverged from the PR head. Plain branch-name targets, Swing picker selections, and `-` Previous Swing targets do not re-fetch PR heads. Users continue to spawn ordinary sessions with `mt spawn`.
 
-The first Shell integration supports bash and zsh only. `bun run install:local` installs it idempotently as part of the **Local install refresh**, and explicit commands are available to repair or inspect it without reinstalling skills or rebuilding the binary:
+The first Shell integration supports bash and zsh only. `bun run install:local` installs it idempotently for the user's current supported shell as part of the **Local install refresh**, reports the startup file changed, and asks the user to restart that shell. Unsupported current shells receive manual guidance and no startup-file changes. Explicit commands remain available to repair or inspect the integration without reinstalling skills or rebuilding the binary:
 
 ```sh
 mt shell install

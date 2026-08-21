@@ -3,37 +3,9 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-INSTALL_DIR="$HOME/.local/bin"
 BUILD_DIR="$ROOT_DIR/builds"
-DIST_DIR="$ROOT_DIR/dist"
 LOCAL_BUILD_ARTIFACT_RETENTION=2
-TARGET_MT="$INSTALL_DIR/mt"
-TARGET_MONKE="$INSTALL_DIR/monke"
-REMOVED_TARGET="$INSTALL_DIR/monke-tools"
-
-install_homebrew_dependencies() {
-  if [ ! -f "$ROOT_DIR/Brewfile" ] || [ "$(uname -s)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
-    return
-  fi
-
-  if ! command -v brew >/dev/null 2>&1; then
-    printf '%s\n' 'Homebrew is required to install monke-tools developer dependencies' >&2
-    exit 1
-  fi
-
-  if brew bundle check --file="$ROOT_DIR/Brewfile" >/dev/null 2>&1; then
-    return
-  fi
-
-  printf '%s\n' 'Installing Homebrew dependencies...'
-  brew bundle install --file="$ROOT_DIR/Brewfile"
-}
-
-install_wrapper() {
-  target="$1"
-  printf '%s\n' '#!/bin/sh' 'exec "$(dirname "$0")/mt" "$@"' > "$target"
-  chmod +x "$target"
-}
+MONKE_HOME=${MONKE_HOME:-"$HOME/.monke"}
 
 cleanup_old_bun_builds() {
   ls -t "$BUILD_DIR"/.*.bun-build 2>/dev/null |
@@ -43,19 +15,47 @@ cleanup_old_bun_builds() {
     done
 }
 
-install_homebrew_dependencies
-mkdir -p "$INSTALL_DIR" "$DIST_DIR" "$BUILD_DIR"
+SOURCE_COMMIT=$(git -C "$ROOT_DIR" rev-parse HEAD)
+SHORT_COMMIT=$(git -C "$ROOT_DIR" rev-parse --short=7 HEAD)
+SOURCE_DIRTY=false
+if [ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)" ]; then
+  SOURCE_DIRTY=true
+fi
+TOOL_BUILD_IDENTITY="local+$SHORT_COMMIT"
+DIRTY_ARGUMENT=
+if [ "$SOURCE_DIRTY" = true ]; then
+  TOOL_BUILD_IDENTITY="$TOOL_BUILD_IDENTITY-dirty"
+  DIRTY_ARGUMENT=--dirty
+fi
+
+SYSTEM=$(uname -s | tr '[:upper:]' '[:lower:]')
+MACHINE=$(uname -m)
+case "$MACHINE" in
+  x86_64) MACHINE=x64 ;;
+  aarch64) MACHINE=arm64 ;;
+esac
+PLATFORM="$SYSTEM-$MACHINE"
+CREATED_AT=$(date -u '+%Y-%m-%dT%H:%M:%S.000Z')
+
+mkdir -p "$MONKE_HOME/install-staging" "$BUILD_DIR"
+STAGED_INSTALL=$(mktemp -d "$MONKE_HOME/install-staging/local-$SHORT_COMMIT-XXXXXX")
+INSTALL_ID=$(basename "$STAGED_INSTALL")
+STAGED_MT="$STAGED_INSTALL/mt"
 
 cd "$BUILD_DIR"
-bun build --compile --outfile "$DIST_DIR/mt" "$ROOT_DIR/src/index.ts"
-rm -f -- "$DIST_DIR/monke-tools" "$DIST_DIR/monke"
-cp "$DIST_DIR/mt" "$TARGET_MT"
-install_wrapper "$TARGET_MONKE"
-chmod +x "$TARGET_MT"
-rm -f -- "$REMOVED_TARGET"
+bun build --compile \
+  --define "process.env.MONKE_TOOLS_BUILD_IDENTITY=\"$TOOL_BUILD_IDENTITY\"" \
+  --outfile "$STAGED_MT" \
+  "$ROOT_DIR/src/index.ts"
+chmod +x "$STAGED_MT"
 cleanup_old_bun_builds
 
-"$TARGET_MT" install-dependencies
-printf 'Installed mt and monke to %s and %s\n' "$TARGET_MT" "$TARGET_MONKE"
-MONKE_TOOLS_BINARY="$TARGET_MT" "$TARGET_MT" shell install
-"$TARGET_MT" skills local-install "$ROOT_DIR" "$@"
+"$STAGED_MT" activate-local-install \
+  "$STAGED_INSTALL" \
+  "$ROOT_DIR" \
+  --install-id "$INSTALL_ID" \
+  --source-commit "$SOURCE_COMMIT" \
+  --created-at "$CREATED_AT" \
+  --platform "$PLATFORM" \
+  ${DIRTY_ARGUMENT:+"$DIRTY_ARGUMENT"} \
+  "$@"

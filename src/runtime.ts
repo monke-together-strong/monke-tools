@@ -8,6 +8,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   readSync,
   rmSync,
   statSync,
@@ -19,6 +20,7 @@ import path from "node:path";
 import { isCancel, multiselect as clackMultiSelect, select as clackSelect } from "@clack/prompts";
 import * as z from "zod";
 
+import { DEFAULT_TOOL_BUILD_IDENTITY } from "./build-identity.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import type { ExecOptions, ExecResult, MultiSelectPrompt, Runtime, SelectPrompt } from "./types.ts";
 
@@ -33,6 +35,8 @@ const LockTimestampSchema = z.number();
 
 /** Runtime construction options for CLI commands and integration-style tests. */
 export interface RuntimeOptions {
+  /** Machine architecture override used by platform behavior tests. */
+  architecture?: string;
   /** Make the next select prompt follow the normal cancellation path in tests. */
   cancelSelect?: boolean;
   /** Current working directory used by command execution. */
@@ -49,10 +53,16 @@ export interface RuntimeOptions {
   onStderr?: (text: string) => void;
   /** Optional stdout sink used by tests and embedding callers. */
   onStdout?: (text: string) => void;
+  /** Operating system override used by platform behavior tests. */
+  platform?: NodeJS.Platform;
   /** Scripted selected values used by tests for Clack-style select prompts. */
   selectValues?: string[];
   /** Scripted stdin lines used by tests for interactive prompts. */
   stdinText?: string;
+  /** Compiled Tool build identity override used by installation behavior tests. */
+  toolBuildIdentity?: string;
+  /** Versioned install root override used by installation behavior tests. */
+  toolInstallRoot?: string;
 }
 
 /** Create the default runtime adapter around the current process. */
@@ -76,6 +86,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
   };
 
   return {
+    architecture: options?.architecture ?? process.arch,
     cwd: runtimeCwd,
     env: runtimeEnv,
     exec(command: string, args: string[] = [], execOptions?: ExecOptions) {
@@ -108,6 +119,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
+    platform: options?.platform ?? process.platform,
     readLine(prompt: string) {
       writeStdout(prompt);
       if (scriptedInput !== null) {
@@ -138,6 +150,8 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
+    toolBuildIdentity: options?.toolBuildIdentity ?? DEFAULT_TOOL_BUILD_IDENTITY,
+    toolInstallRoot: options?.toolInstallRoot ?? resolveRunningToolInstallRoot(),
     writeStderr(text: string) {
       if (options?.onStderr) {
         options.onStderr(text);
@@ -340,12 +354,36 @@ export function withGlobalLock<T>(home: string, callback: () => T) {
   return withLockPath(path.join(home, "lock"), callback);
 }
 
+/** Run a synchronous installation mutation under the machine-wide installation lock. */
+export function withInstallationLock<T>(home: string, callback: () => T) {
+  return withLockPath(path.join(home, "locks", "installation.lock"), callback);
+}
+
+/** Run an asynchronous installation mutation under the machine-wide installation lock. */
+export async function withInstallationLockAsync<T>(home: string, callback: () => Promise<T>) {
+  const release = acquireLockPath(path.join(home, "locks", "installation.lock"));
+  try {
+    return await callback();
+  } finally {
+    release();
+  }
+}
+
 /** Run a synchronous callback while holding a lock scoped inside the monke home directory. */
 export function withScopedLock<T>(home: string, namespace: string, callback: () => T) {
   return withLockPath(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
 }
 
 function withLockPath<T>(lockPath: string, callback: () => T) {
+  const release = acquireLockPath(lockPath);
+  try {
+    return callback();
+  } finally {
+    release();
+  }
+}
+
+function acquireLockPath(lockPath: string) {
   mkdirSync(path.dirname(lockPath), { recursive: true });
   const deadline = Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
   let fileDescriptor: number | null = null;
@@ -376,14 +414,13 @@ function withLockPath<T>(lockPath: string, callback: () => T) {
     }
   }
 
-  try {
-    return callback();
-  } finally {
+  return () => {
     if (fileDescriptor !== null) {
       closeSync(fileDescriptor);
+      fileDescriptor = null;
     }
     rmSync(lockPath, { force: true });
-  }
+  };
 }
 
 export function isPortAvailable(port: number) {
@@ -502,5 +539,13 @@ function isProcessRunning(pid: number) {
       }
     }
     return false;
+  }
+}
+
+function resolveRunningToolInstallRoot() {
+  try {
+    return path.dirname(realpathSync.native(process.execPath));
+  } catch {
+    return path.dirname(process.execPath);
   }
 }

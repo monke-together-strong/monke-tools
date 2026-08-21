@@ -8,13 +8,11 @@ import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-conf
 import { makeTempDir, read, write } from "./helpers.ts";
 
 describe("global configuration", () => {
-  test("global monke config stores installed source checkout and current skill install preference", () => {
+  test("global monke config stores preferences without Active install identity", () => {
     const home = makeTempDir("global-config");
-    const sourceCheckout = path.join(home, "monke-tools");
     const customSkillRoot = path.join(home, "custom-skills");
 
     saveGlobalMonkeConfig(home, {
-      installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
         targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
       },
@@ -24,19 +22,29 @@ describe("global configuration", () => {
     const configPath = path.join(home, "config.yml");
     expect(existsSync(configPath)).toBeTruthy();
     expect(parse(read(home, "config.yml"))).toStrictEqual({
-      installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
         targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
       },
       version: 1
     });
     expect(loadGlobalMonkeConfig(home)).toStrictEqual({
-      installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
         targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
       },
       version: 1
     });
+  });
+
+  test("global monke config rejects duplicated Active install identity", () => {
+    const home = makeTempDir("global-config-active-identity");
+    writeInvalidConfig(
+      home,
+      `version: 1
+installedSourceCheckout: /tmp/monke-tools
+`
+    );
+
+    expect(() => loadGlobalMonkeConfig(home)).toThrow(/installedSourceCheckout/u);
   });
 
   test("global monke config rejects empty preferences and relative custom paths", () => {

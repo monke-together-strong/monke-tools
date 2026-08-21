@@ -2,9 +2,9 @@
 
 Research date: 2026-08-07
 
-## Recommendation
+## Implemented decision
 
-Treat Codiff as an **optional, macOS/Apple-Silicon developer dependency**, not as an unconditional runtime dependency of `mt`.
+Treat Codiff as an external minimum-compatible runtime dependency reconciled through `mt install-dependencies` on macOS arm64, not as an unconditional bundled dependency of `mt`. Local install refresh runs reconciliation after core Install activation, so failure leaves the valid new Local tool install active and reports a separately retryable command.
 
 The usual Homebrew pattern for a repository-level developer dependency is a checked-in `Brewfile`. Homebrew explicitly recommends this for project dependencies, supports casks, and provides `brew bundle check` for scripting. For this repository, the smallest declaration would be:
 
@@ -61,7 +61,7 @@ Whether implemented with `Brewfile` or the existing installer seam, use this con
 3. If missing, resolve `brew` from PATH and fail with a clear installation command when Homebrew is unavailable. Do not install Homebrew itself.
 4. Install only the fully qualified cask, with separate argument-array execution: `brew install --cask --require-sha nkzw-tech/tap/codiff`. Do not use `--force`, `--adopt`, `sudo`, or whole-tap trust.
 5. Re-resolve `codiff` after Homebrew exits, then run `codiff --version`. The current official CLI prints `codiff v<semver>` and exits without launching the GUI. ([Codiff CLI](https://github.com/nkzw-tech/codiff/blob/3ee0d09405a01f5c57f7d8e4835e071f4a0ee3d2/bin/codiff-app))
-6. Surface Homebrew and verification failures without continuing installation.
+6. Surface Homebrew and verification failures without rolling back an already activated core tool install.
 7. Test: already valid; missing plus successful brew install; no brew; brew failure; successful brew exit but missing command; wrong `codiff` identity; and unsupported platform.
 
 Checking the exact cask's installed state with `brew list --cask` is useful if monke-tools intends to require Homebrew ownership. Checking the executable and version is friendlier if a manually installed official Codiff should also satisfy the dependency. Homebrew documents that `brew list --cask` treats its argument as a cask and lists installed cask artifacts. ([brew manpage](https://github.com/Homebrew/brew/blob/d0319d20564497783dfa526f0ff86c6859a97eb4/docs/Manpage.md))
@@ -74,10 +74,9 @@ Homebrew is rolling-release software and `Brewfile` has no lock-file mechanism. 
 
 The former Worktrunk implementation introduced an explicit `mt install-dependencies` command, called it from `scripts/install-local.sh`, resolved `wt` before installation, resolved `brew` only when needed, ran `brew install worktrunk`, re-resolved `wt`, and failed when the expected executable still did not exist. It also tested missing Homebrew, brew failure, and a successful brew command that failed to produce `wt`. ([monke-tools commit `30e9753`](https://github.com/monke-together-strong/monke-tools/commit/30e97538b9ae51900317a0be448a432e3a551d8a))
 
-That control flow is a good baseline for direct bootstrap. Codiff needs four additions that Worktrunk did not: cask installation, a fully qualified third-party item with narrow trust, macOS/arm64 gating, and identity/version verification because `codiff` is not a unique executable name. The current repository preserves `mt install-dependencies` as a compatibility no-op and still invokes it from local installation, so this seam can be revived without installing Codiff from every ordinary `mt` operation. ([Worktrunk removal commit](https://github.com/monke-together-strong/monke-tools/commit/8b4d720212acd0385d47f311f9308603b8124873))
+That control flow is the baseline for direct bootstrap. Codiff adds cask installation, a fully qualified third-party item with narrow trust, macOS/arm64 gating, minimum-version and ownership checks, and identity verification because `codiff` is not a unique executable name. `mt install-dependencies` now owns this reconciliation without installing Codiff from ordinary workspace commands. ([Worktrunk removal commit](https://github.com/monke-together-strong/monke-tools/commit/8b4d720212acd0385d47f311f9308603b8124873))
 
 ## Decision summary
 
-- **Default recommendation:** optional Darwin/arm64 developer dependency in a checked-in `Brewfile`, installed during explicit bootstrap.
-- **Simplest one-tool alternative:** revive `mt install-dependencies` and use the safe bootstrap contract above.
+- **Implemented path:** reconcile minimum-compatible Codiff through `mt install-dependencies` on Darwin/arm64 after core activation.
 - **Do not:** add it as a JavaScript dependency, declare it as a formula dependency, trust the entire vendor tap, install it from routine `mt` commands, or promise exact version pinning through Homebrew.

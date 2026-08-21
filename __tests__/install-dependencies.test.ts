@@ -1,21 +1,78 @@
-import { spawnSync } from "node:child_process";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  utimesSync,
-  writeFileSync
-} from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { makeTempDir, runMonke } from "./helpers.ts";
+import { runCli } from "../src/index.ts";
+import { createRuntime } from "../src/runtime.ts";
+import { makeTempDir } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
+
+function executable(filePath: string, contents: string) {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, contents, "utf-8");
+  chmodSync(filePath, 0o755);
+}
+
+function installCodiff(binDirectory: string, versionFile: string) {
+  executable(
+    path.join(binDirectory, "codiff"),
+    `#!/bin/sh
+set -eu
+/bin/cat '${versionFile}'
+`
+  );
+}
+
+function installBrew(options: {
+  afterVersion?: string;
+  binDirectory: string;
+  commandExit?: number;
+  logPath: string;
+  owned?: boolean;
+  versionFile: string;
+}) {
+  const codiffPath = path.join(options.binDirectory, "codiff");
+  executable(
+    path.join(options.binDirectory, "brew"),
+    `#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> '${options.logPath}'
+if [ "\${1:-}" = "list" ]; then
+  exit ${options.owned === false ? "1" : "0"}
+fi
+if [ "\${1:-}" = "install" ] || [ "\${1:-}" = "upgrade" ]; then
+  [ ${String(options.commandExit ?? 0)} -eq 0 ] || exit ${String(options.commandExit ?? 0)}
+  printf '%s\n' 'codiff v${options.afterVersion ?? "1.10.1"}' > '${options.versionFile}'
+  /bin/cat > '${codiffPath}' <<'EOF'
+#!/bin/sh
+set -eu
+/bin/cat '${options.versionFile}'
+EOF
+  /bin/chmod +x '${codiffPath}'
+  exit 0
+fi
+exit 2
+`
+  );
+}
+
+function dependencyRuntime(options: {
+  architecture?: string;
+  binDirectory: string;
+  platform?: NodeJS.Platform;
+}) {
+  return createRuntime({
+    architecture: options.architecture ?? "arm64",
+    cwd: options.binDirectory,
+    env: { PATH: options.binDirectory },
+    onStderr() {},
+    onStdout() {},
+    platform: options.platform ?? "darwin"
+  });
+}
 
 describe("dependency installation", () => {
   test("Brewfile declares the narrowly trusted Codiff cask", () => {
@@ -24,345 +81,108 @@ describe("dependency installation", () => {
     );
   });
 
-  test("install-dependencies remains a compatibility no-op", () => {
-    const sandbox = makeTempDir("install-dependencies-noop");
+  test("compatible Codiff is a no-op", () => {
+    const sandbox = makeTempDir("install-dependencies-compatible");
+    const binDirectory = path.join(sandbox, "bin");
+    const versionFile = path.join(sandbox, "codiff-version");
+    const brewLog = path.join(sandbox, "brew.log");
+    writeFileSync(versionFile, "codiff v1.10.1\n", "utf-8");
+    installCodiff(binDirectory, versionFile);
+    installBrew({ binDirectory, logPath: brewLog, versionFile });
+
+    runCli(["install-dependencies"], dependencyRuntime({ binDirectory }));
+
+    expect(existsSync(brewLog)).toBeFalsy();
+  });
+
+  test("missing Codiff is installed through the checksummed narrowly trusted cask", () => {
+    const sandbox = makeTempDir("install-dependencies-missing");
+    const binDirectory = path.join(sandbox, "bin");
+    const versionFile = path.join(sandbox, "codiff-version");
+    const brewLog = path.join(sandbox, "brew.log");
+    installBrew({ binDirectory, logPath: brewLog, versionFile });
+
+    runCli(["install-dependencies"], dependencyRuntime({ binDirectory }));
+
+    expect(readFileSync(brewLog, "utf-8")).toBe(
+      "install --cask --require-sha nkzw-tech/tap/codiff\n"
+    );
+    expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.10.1\n");
+  });
+
+  test("below-minimum Homebrew-owned Codiff is upgraded", () => {
+    const sandbox = makeTempDir("install-dependencies-upgrade");
+    const binDirectory = path.join(sandbox, "bin");
+    const versionFile = path.join(sandbox, "codiff-version");
+    const brewLog = path.join(sandbox, "brew.log");
+    writeFileSync(versionFile, "codiff v1.8.9\n", "utf-8");
+    installCodiff(binDirectory, versionFile);
+    installBrew({ binDirectory, logPath: brewLog, versionFile });
+
+    runCli(["install-dependencies"], dependencyRuntime({ binDirectory }));
+
+    expect(readFileSync(brewLog, "utf-8")).toBe(
+      "list --cask nkzw-tech/tap/codiff\nupgrade --cask nkzw-tech/tap/codiff\n"
+    );
+    expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.10.1\n");
+  });
+
+  test.each(["codiff v1.8.9\n", "not the official Codiff CLI\n"])(
+    "Codiff with unknown ownership is not overwritten automatically: %j",
+    (versionOutput) => {
+      const sandbox = makeTempDir("install-dependencies-unknown-owner");
+      const binDirectory = path.join(sandbox, "bin");
+      const versionFile = path.join(sandbox, "codiff-version");
+      const brewLog = path.join(sandbox, "brew.log");
+      writeFileSync(versionFile, versionOutput, "utf-8");
+      installCodiff(binDirectory, versionFile);
+      installBrew({ binDirectory, logPath: brewLog, owned: false, versionFile });
+
+      expect(() => {
+        runCli(["install-dependencies"], dependencyRuntime({ binDirectory }));
+      }).toThrow(/not owned by Homebrew/u);
+
+      expect(readFileSync(brewLog, "utf-8")).toBe("list --cask nkzw-tech/tap/codiff\n");
+      expect(readFileSync(versionFile, "utf-8")).toBe(versionOutput);
+    }
+  );
+
+  test("missing Homebrew produces retryable guidance", () => {
+    const sandbox = makeTempDir("install-dependencies-no-brew");
     const binDirectory = path.join(sandbox, "bin");
     mkdirSync(binDirectory, { recursive: true });
-    const home = path.join(sandbox, "home");
 
-    const result = runMonke({
-      args: ["install-dependencies"],
-      binDirectory,
-      cwd: sandbox,
-      extraEnv: { PATH: binDirectory },
-      monkeHome: home
-    });
-
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toBe("Verified monke-tools runtime dependencies\n");
+    expect(() => {
+      runCli(["install-dependencies"], dependencyRuntime({ binDirectory }));
+    }).toThrow(/Homebrew is unavailable.*mt install-dependencies/u);
   });
 
-  test("install-local installs or upgrades Brewfile dependencies", () => {
-    const sandbox = makeTempDir("install-local-homebrew-dependencies");
-    const checkout = path.join(sandbox, "checkout");
+  test("Homebrew failure is reported without accepting the dependency", () => {
+    const sandbox = makeTempDir("install-dependencies-brew-failure");
     const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
+    const versionFile = path.join(sandbox, "codiff-version");
     const brewLog = path.join(sandbox, "brew.log");
-    const bunLog = path.join(sandbox, "bun.log");
-    const monkeToolsLog = path.join(sandbox, "monke-tools.log");
+    installBrew({ binDirectory, commandExit: 23, logPath: brewLog, versionFile });
 
-    prepareInstallFixture(checkout, binDirectory);
-    installFakePlatform(binDirectory, "Darwin", "arm64");
-    installFakeBrew(binDirectory);
-
-    const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
-      cwd: checkout,
-      encoding: "utf-8",
-      env: {
-        ...process.env,
-        BREW_CHECK_EXIT: "1",
-        BREW_INSTALL_EXIT: "0",
-        BREW_LOG: brewLog,
-        BUN_LOG: bunLog,
-        HOME: home,
-        INSTALL_DEPENDENCIES_EXIT: "0",
-        MONKE_TOOLS_LOG: monkeToolsLog,
-        PATH: `${binDirectory}:/usr/bin:/bin`
-      }
-    });
-
-    expect(result.status).toBe(0);
-    expect(readFileSync(brewLog, "utf-8")).toBe(
-      `bundle check --file=${path.join(checkout, "Brewfile")}\n` +
-        `bundle install --file=${path.join(checkout, "Brewfile")}\n`
-    );
-    expect(result.stdout).toContain("Installing Homebrew dependencies...");
+    expect(() => {
+      runCli(["install-dependencies"], dependencyRuntime({ binDirectory }));
+    }).toThrow(/Homebrew Codiff reconciliation failed/u);
+    expect(existsSync(path.join(binDirectory, "codiff"))).toBeFalsy();
   });
 
-  test("install-local stops before building when Homebrew dependency installation fails", () => {
-    const sandbox = makeTempDir("install-local-homebrew-failure");
-    const checkout = path.join(sandbox, "checkout");
+  test("non-macOS platforms never invoke Homebrew", () => {
+    const sandbox = makeTempDir("install-dependencies-linux");
     const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
+    const versionFile = path.join(sandbox, "codiff-version");
     const brewLog = path.join(sandbox, "brew.log");
-    const bunLog = path.join(sandbox, "bun.log");
-    const monkeToolsLog = path.join(sandbox, "monke-tools.log");
+    installBrew({ binDirectory, logPath: brewLog, versionFile });
 
-    prepareInstallFixture(checkout, binDirectory);
-    installFakePlatform(binDirectory, "Darwin", "arm64");
-    installFakeBrew(binDirectory);
-
-    const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
-      cwd: checkout,
-      encoding: "utf-8",
-      env: {
-        ...process.env,
-        BREW_CHECK_EXIT: "1",
-        BREW_INSTALL_EXIT: "23",
-        BREW_LOG: brewLog,
-        BUN_LOG: bunLog,
-        HOME: home,
-        INSTALL_DEPENDENCIES_EXIT: "0",
-        MONKE_TOOLS_LOG: monkeToolsLog,
-        PATH: `${binDirectory}:/usr/bin:/bin`
-      }
-    });
-
-    expect(result.status).toBe(23);
-    expect(existsSync(bunLog)).toBeFalsy();
-    expect(existsSync(monkeToolsLog)).toBeFalsy();
-  });
-
-  test("install-local runs dependency installation before skill installation and stops on dependency failure", () => {
-    const sandbox = makeTempDir("install-local-dependencies");
-    const checkout = path.join(sandbox, "checkout");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-    const bunLog = path.join(sandbox, "bun.log");
-    const monkeToolsLog = path.join(sandbox, "monke-tools.log");
-
-    mkdirSync(path.join(checkout, "scripts"), { recursive: true });
-    mkdirSync(path.join(checkout, "src"), { recursive: true });
-    writeFileSync(
-      path.join(checkout, "scripts", "install-local.sh"),
-      readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf-8"),
-      "utf-8"
-    );
-    chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
-    writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
-    installFakeBun(binDirectory);
-
-    const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
-      cwd: checkout,
-      encoding: "utf-8",
-      env: {
-        ...process.env,
-        BUN_LOG: bunLog,
-        HOME: home,
-        INSTALL_DEPENDENCIES_EXIT: "17",
-        MONKE_TOOLS_LOG: monkeToolsLog,
-        PATH: `${binDirectory}:/usr/bin:/bin`
-      }
-    });
-
-    expect(result.status).toBe(17);
-    expect(readFileSync(bunLog, "utf-8")).toContain(`pwd:${path.join(checkout, "builds")}\n`);
-    expect(readFileSync(monkeToolsLog, "utf-8")).toBe("install-dependencies\n");
-  });
-
-  test("install-local continues to skill installation after dependency installation succeeds", () => {
-    const sandbox = makeTempDir("install-local-dependencies-success");
-    const checkout = path.join(sandbox, "checkout");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-    const bunLog = path.join(sandbox, "bun.log");
-    const monkeToolsLog = path.join(sandbox, "monke-tools.log");
-
-    mkdirSync(path.join(checkout, "scripts"), { recursive: true });
-    mkdirSync(path.join(checkout, "src"), { recursive: true });
-    writeFileSync(
-      path.join(checkout, "scripts", "install-local.sh"),
-      readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf-8"),
-      "utf-8"
-    );
-    chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
-    writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
-    installFakeBun(binDirectory);
-    const obsoleteCommand = path.join(home, ".local", "bin", "monke-tools");
-    mkdirSync(path.dirname(obsoleteCommand), { recursive: true });
-    writeFileSync(obsoleteCommand, "obsolete", "utf-8");
-    const obsoleteBuilds = [
-      path.join(checkout, "dist", "monke-tools"),
-      path.join(checkout, "dist", "monke")
-    ];
-    for (const obsoleteBuild of obsoleteBuilds) {
-      mkdirSync(path.dirname(obsoleteBuild), { recursive: true });
-      writeFileSync(obsoleteBuild, "obsolete", "utf-8");
-    }
-    const result = spawnSync(
-      "sh",
-      [
-        path.join(checkout, "scripts", "install-local.sh"),
-        "--targets",
-        "claude",
-        "cursor",
-        "codex"
-      ],
-      {
-        cwd: checkout,
-        encoding: "utf-8",
-        env: {
-          ...process.env,
-          BUN_LOG: bunLog,
-          HOME: home,
-          INSTALL_DEPENDENCIES_EXIT: "0",
-          MONKE_TOOLS_LOG: monkeToolsLog,
-          PATH: `${binDirectory}:/usr/bin:/bin`
-        }
-      }
+    runCli(
+      ["install-dependencies"],
+      dependencyRuntime({ architecture: "x64", binDirectory, platform: "linux" })
     );
 
-    expect(result.status).toBe(0);
-    expect(readFileSync(bunLog, "utf-8")).toContain(`pwd:${path.join(checkout, "builds")}\n`);
-    expect(readFileSync(monkeToolsLog, "utf-8")).toBe(
-      `install-dependencies\nshell install\nskills local-install ${checkout} --targets claude cursor codex\n`
-    );
-    const installedMt = readFileSync(path.join(home, ".local", "bin", "mt"), "utf-8");
-    expect(installedMt).toContain("MONKE_TOOLS_LOG");
-    expect(installedMt).not.toContain('exec "$(dirname "$0")/');
-    expect(readFileSync(path.join(home, ".local", "bin", "monke"), "utf-8")).toBe(
-      '#!/bin/sh\nexec "$(dirname "$0")/mt" "$@"\n'
-    );
-    expect(existsSync(obsoleteCommand)).toBeFalsy();
-    for (const obsoleteBuild of obsoleteBuilds) {
-      expect(existsSync(obsoleteBuild)).toBeFalsy();
-    }
-    expect(result.stdout).toContain("Installed mt and monke");
-    expect(result.stdout).toContain(path.join(home, ".local", "bin", "mt"));
-    expect(result.stdout).toContain(path.join(home, ".local", "bin", "monke"));
-  });
-
-  test("install-local prunes old bun build artifacts after a successful build", () => {
-    const sandbox = makeTempDir("install-local-build-retention");
-    const checkout = path.join(sandbox, "checkout");
-    const buildDirectory = path.join(checkout, "builds");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-    const bunLog = path.join(sandbox, "bun.log");
-    const monkeToolsLog = path.join(sandbox, "monke-tools.log");
-
-    mkdirSync(path.join(checkout, "scripts"), { recursive: true });
-    mkdirSync(path.join(checkout, "src"), { recursive: true });
-    mkdirSync(buildDirectory, { recursive: true });
-    writeFileSync(
-      path.join(checkout, "scripts", "install-local.sh"),
-      readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf-8"),
-      "utf-8"
-    );
-    chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
-    writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
-    writeFileSync(path.join(buildDirectory, ".oldest.bun-build"), "oldest", "utf-8");
-    writeFileSync(path.join(buildDirectory, ".older.bun-build"), "older", "utf-8");
-    writeFileSync(path.join(buildDirectory, ".newer.bun-build"), "newer", "utf-8");
-    writeFileSync(path.join(buildDirectory, ".newest.bun-build"), "newest", "utf-8");
-    writeFileSync(path.join(buildDirectory, "manual.txt"), "keep me", "utf-8");
-    utimesSync(path.join(buildDirectory, ".oldest.bun-build"), new Date(0), new Date(0));
-    utimesSync(path.join(buildDirectory, ".older.bun-build"), new Date(1000), new Date(1000));
-    utimesSync(path.join(buildDirectory, ".newer.bun-build"), new Date(2000), new Date(2000));
-    utimesSync(path.join(buildDirectory, ".newest.bun-build"), new Date(3000), new Date(3000));
-    installFakeBun(binDirectory);
-
-    const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
-      cwd: checkout,
-      encoding: "utf-8",
-      env: {
-        ...process.env,
-        BUN_LOG: bunLog,
-        HOME: home,
-        INSTALL_DEPENDENCIES_EXIT: "0",
-        MONKE_TOOLS_LOG: monkeToolsLog,
-        PATH: `${binDirectory}:/usr/bin:/bin`
-      }
-    });
-
-    expect(result.status).toBe(0);
-    expect(listBuildArtifacts(buildDirectory)).toStrictEqual([
-      ".newer.bun-build",
-      ".newest.bun-build"
-    ]);
-    expect(readFileSync(path.join(buildDirectory, "manual.txt"), "utf-8")).toBe("keep me");
+    expect(existsSync(brewLog)).toBeFalsy();
+    expect(existsSync(path.join(binDirectory, "codiff"))).toBeFalsy();
   });
 });
-
-function listBuildArtifacts(buildDirectory: string) {
-  return readdirSync(buildDirectory)
-    .filter((entry) => entry.startsWith(".") && entry.endsWith(".bun-build"))
-    .toSorted();
-}
-
-function prepareInstallFixture(checkout: string, binDirectory: string) {
-  mkdirSync(path.join(checkout, "scripts"), { recursive: true });
-  mkdirSync(path.join(checkout, "src"), { recursive: true });
-  writeFileSync(
-    path.join(checkout, "scripts", "install-local.sh"),
-    readFileSync(path.join(projectRoot, "scripts", "install-local.sh"), "utf-8"),
-    "utf-8"
-  );
-  chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
-  writeFileSync(
-    path.join(checkout, "Brewfile"),
-    readFileSync(path.join(projectRoot, "Brewfile"), "utf-8"),
-    "utf-8"
-  );
-  writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
-  installFakeBun(binDirectory);
-}
-
-function installFakePlatform(binDirectory: string, system: string, architecture: string) {
-  const unamePath = path.join(binDirectory, "uname");
-  writeFileSync(
-    unamePath,
-    `#!/bin/sh\nif [ "\${1:-}" = "-s" ]; then printf '%s\\n' '${system}'; else printf '%s\\n' '${architecture}'; fi\n`,
-    "utf-8"
-  );
-  chmodSync(unamePath, 0o755);
-}
-
-function installFakeBrew(binDirectory: string) {
-  const brewPath = path.join(binDirectory, "brew");
-  writeFileSync(
-    brewPath,
-    `#!/bin/sh
-set -eu
-printf '%s\\n' "$*" >> "$BREW_LOG"
-if [ "\${1:-}" = "bundle" ] && [ "\${2:-}" = "check" ]; then
-  exit "$BREW_CHECK_EXIT"
-fi
-if [ "\${1:-}" = "bundle" ] && [ "\${2:-}" = "install" ]; then
-  exit "$BREW_INSTALL_EXIT"
-fi
-exit 2
-`,
-    "utf-8"
-  );
-  chmodSync(brewPath, 0o755);
-}
-
-function installFakeBun(binDirectory: string) {
-  mkdirSync(binDirectory, { recursive: true });
-  const bunPath = path.join(binDirectory, "bun");
-  writeFileSync(
-    bunPath,
-    `#!/bin/sh
-set -eu
-printf 'pwd:%s\\n' "$PWD" >> "$BUN_LOG"
-printf '%s\\n' "$*" >> "$BUN_LOG"
-outfile=""
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = "--outfile" ]; then
-    shift
-    outfile="$1"
-    break
-  fi
-  shift
-done
-if [ -z "$outfile" ]; then
-  echo "missing --outfile" >&2
-  exit 1
-fi
-mkdir -p "$(dirname "$outfile")"
-cat > "$outfile" <<'EOF'
-#!/bin/sh
-set -e
-printf '%s\n' "$*" >> "$MONKE_TOOLS_LOG"
-if [ "$#" -gt 0 ] && [ "$1" = "install-dependencies" ]; then
-  exit "$INSTALL_DEPENDENCIES_EXIT"
-fi
-exit 0
-EOF
-chmod +x "$outfile"
-`,
-    "utf-8"
-  );
-  chmodSync(bunPath, 0o755);
-}

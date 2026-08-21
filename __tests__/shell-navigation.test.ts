@@ -259,7 +259,7 @@ apps:
     );
   });
 
-  test("shell install refreshes bash and zsh startup files idempotently", () => {
+  test("shell install refreshes only the current supported shell startup file idempotently", () => {
     const sandbox = makeTempDir("shell-install");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
@@ -269,17 +269,36 @@ apps:
         args: ["shell", "install", "--binary", "/opt/mt"],
         cwd: sandbox,
         extraEnv: {
-          HOME: shellHome
+          HOME: shellHome,
+          SHELL: "/bin/zsh"
         },
         monkeHome
       });
     }
 
-    for (const startupFile of [".bashrc", ".zshrc"]) {
-      const contents = read(shellHome, startupFile);
-      expect(contents.match(/monke-tools shell integration/gu)).toHaveLength(2);
-      expect(contents).toContain("'/opt/mt' shell init");
-      expect(existsSync(path.join(shellHome, startupFile))).toBeTruthy();
-    }
+    const contents = read(shellHome, ".zshrc");
+    expect(contents.match(/monke-tools shell integration/gu)).toHaveLength(2);
+    expect(contents).toContain("'/opt/mt' shell init");
+    expect(existsSync(path.join(shellHome, ".bashrc"))).toBeFalsy();
+  });
+
+  test("shell install leaves startup files untouched for an unsupported current shell", () => {
+    const sandbox = makeTempDir("shell-install-unsupported");
+    const shellHome = path.join(sandbox, "shell-home");
+
+    const result = runMonke({
+      args: ["shell", "install", "--binary", "/opt/mt"],
+      cwd: sandbox,
+      extraEnv: {
+        HOME: shellHome,
+        SHELL: "/usr/local/bin/fish"
+      },
+      monkeHome: path.join(sandbox, "monke-home")
+    });
+
+    expect(existsSync(path.join(shellHome, ".bashrc"))).toBeFalsy();
+    expect(existsSync(path.join(shellHome, ".zshrc"))).toBeFalsy();
+    expect(result.stderr).toContain("Shell integration is not available for /usr/local/bin/fish");
+    expect(result.stderr).toContain("No startup file was changed");
   });
 });

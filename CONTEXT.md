@@ -78,6 +78,34 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Local tool install**: A developer-machine install of monke-tools built from a source checkout and shared by all **Consumer repos** through the `mt` command. _Avoid_: Published package, consumer dependency, package-manager link
 
+**Release install**: A developer-machine install of monke-tools activated from an official tagged release rather than a source checkout. _Avoid_: Managed install, public install, package-manager install
+
+**Customized release install**: A **Release install** whose projected **Distributed skills** or **Distributed references** differ from their recorded release hashes. A **Release update** reports the changed paths and refuses to replace it. _Avoid_: Dirty source checkout, Local tool install, Skill authoring mode
+
+**Release bundle**: A platform-specific published artifact for one monke-tools release containing the `mt` executable and its matching **Distributed skills**, **Distributed references**, and **Global agent instructions**. _Avoid_: Binary package, source archive, update payload
+
+**Release update**: An explicit `mt update` operation that selects the newest stable official **Release bundle** and activates it as a **Release install**, including when replacing a **Local tool install**; it refuses to replace a **Customized release install**. _Avoid_: Source update, package upgrade, automatic update
+
+**Active tool install**: The one **Local tool install** or **Release install** currently selected by the stable `mt` command. _Avoid_: Current version, current bundle, Installed source checkout
+
+**Tool build identity**: The human-readable identity reported by `mt --version`: an official semantic version for a **Release install**, or `local+<short-commit>` with a `-dirty` suffix when applicable for a **Local tool install**. Update decisions use the **Install manifest**, not this display string. _Avoid_: Install manifest, release tag, config version
+
+**Install activation**: The act of selecting one **Local tool install** or **Release install** as the **Active tool install**. _Avoid_: Install, update, refresh
+
+**Install manifest**: Machine-owned provenance stored inside one versioned **Local tool install** or **Release install** and selected with it during **Install activation**. A release manifest records its version, commit, tag, artifact digest, minimum Codiff version, and original guidance hashes; a local manifest records its source checkout and commit. _Avoid_: Global monke config, release notes, lock file
+
+**Update staging directory**: A unique temporary directory under the **Monke home** where a candidate **Release bundle** is downloaded, unpacked, and fully verified before it can participate in **Install activation**. _Avoid_: Release install, download cache, previous release
+
+**Installation mutation lock**: The machine-wide lock that serializes tool-managed changes to installed monke-tools versions, the active-install pointer, and agent guidance projections without blocking ordinary `mt` commands or direct edits to projected guidance. _Avoid_: Command lock, Session state lock, update lock
+
+**Release installer**: The official first-install workflow that creates a **Release install** from a verified **Release bundle**. _Avoid_: Local installer, package manager, source installer
+
+**Release bootstrap**: The small public shell entrypoint that detects the platform, discovers and verifies the newest stable **Release bundle**, and delegates installation to bundle-owned code. _Avoid_: Release installer, package manager, update command
+
+**Mainline release**: A stable monke-tools release automatically published after a qualifying push to `main` passes static and artifact validation. It increments the latest `monke-tools-v*` patch version without a **Release PR** or repo version-bump commit. _Avoid_: Release PR, prerelease, main branch install
+
+**Codiff runtime dependency**: The externally released Codiff executable used by `mt diff`, managed through Homebrew on macOS arm64 and accepted when it meets the minimum version required by the **Active tool install**; it is not version-aligned with a **Release bundle**. _Avoid_: Bundled Codiff, pinned Codiff, Release bundle component
+
 **Local install refresh**: The act of rebuilding the **Local tool install** from the current monke-tools source checkout before validating behavior in a **Consumer repo**. _Avoid_: Publish, dependency update, session refresh
 
 **Monke home**: The machine-local directory where monke-tools keeps state, preferences, and owned **Session worktrees** shared across **Consumer repos**. Defaults to `~/.monke`; Session worktrees live under `worktrees/<repo-name>/<session>` within this directory. _Avoid_: OS home, repo root, source checkout
@@ -99,6 +127,8 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 **Reference source tree**: The `references/` area inside the **Skill source tree** that stores **Distributed references**, separated into internal and imported ownership groups. _Avoid_: Skill source tree, global reference directory, reference cache
 
 **Installed source checkout**: The monke-tools source checkout used by the current **Local tool install**. _Avoid_: Package root, global package link, install directory
+
+**Skill authoring mode**: The **Local tool install** state in which installed **Distributed skills** and **Distributed references** remain live-editable in the **Installed source checkout** as tracked source changes. _Avoid_: Developer overlay, mutable release, editable install
 
 **Skill slug**: The filesystem name of one **Distributed skill** inside the **Skill source tree**. _Avoid_: Skill name, package name, agent label
 
@@ -350,8 +380,8 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - When no active **Shell adapter** can accept the **Shell directory request**, monke-tools reports the target path the user should switch to manually.
 - When **Shell integration install** has configured the user's shell but no **Active shell adapter** can accept the current **Shell directory request**, monke-tools reports the target path and explains that the shell integration is configured but inactive.
 - When **Shell integration install** has not configured the user's shell, monke-tools reports the target path and explains how to configure automatic switching.
-- **Shell integration install** supports bash and zsh.
-- **Shell integration install** is idempotent and runs during **Local install refresh**.
+- **Shell integration install** supports bash and zsh, targets only the user's current supported `$SHELL`, and reports the startup file it changed.
+- **Shell integration install** is idempotent and runs during **Local install refresh** and the interactive **Release installer**; unsupported shells receive manual instructions instead of startup-file changes.
 - **Shell integration install** can be rerun explicitly without refreshing skills or reinstalling the binary.
 - **Shell integration init** supports bash and zsh.
 - A **Cleanup command** runs from the repo's **Source checkout** when cleanup finds a **Dead worktree**.
@@ -409,11 +439,11 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - **Global monke config** belongs to the machine, not to a **Consumer repo** or **Session**.
 - **Global monke config** lives at `$MONKE_HOME/config.yml`, defaulting to `~/.monke/config.yml`.
 - The initial **Global monke config** format version is `1`.
-- The **Installed source checkout** belongs to **Global monke config**.
+- The **Installed source checkout** belongs to the active Local **Install manifest**, not **Global monke config**.
 - A **Local tool install** has at most one active **Report target**.
 - A **Report target** is shared by an organization, not owned by one user.
 - A **Skill source tree** belongs to the **Installed source checkout**.
-- monke-tools does not infer a replacement **Installed source checkout** when the configured checkout is missing.
+- monke-tools does not infer a replacement **Installed source checkout** when the checkout recorded by the active Local **Install manifest** is missing.
 - A **Skill install preference** belongs to **Global monke config**.
 - A **Skill install preference** contains one or more **Skill install targets** selected by the user.
 - A **Skill install preference** must contain at least one **Skill install target**.
@@ -436,8 +466,13 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - **Skills Configure** reuses the existing **Custom skill install target** path when custom remains selected and removes it when custom is deselected.
 - **Skills Configure** reconciles selected **Skill install targets** after saving the **Skill install preference**.
 - A **Local install refresh** happens before testing monke-tools changes from any **Consumer repo**.
-- A **Local install refresh** installs the `mt` command before writing the **Installed source checkout**.
-- A **Local install refresh** writes the **Installed source checkout** before running **Skills Configure** or reconciling **Skill install targets**.
+- A **Local install refresh** builds a unique versioned install, writes its self-describing Local **Install manifest**, and selects it with one atomic **Install activation**.
+- A **Local install refresh** keeps `~/.local/bin/mt` as a stable symlink through the active-install pointer.
+- A **Local install refresh** records the **Installed source checkout** in the Local **Install manifest** before running **Skills Configure** or reconciling **Skill install targets**.
+- A **Local install refresh**, **Skills Configure**, **Install activation**, and managed-install cleanup serialize through the **Installation mutation lock**.
+- A successful **Install activation** retains the **Active tool install** and its immediate predecessor and cleans only validated older managed installs.
+- A failed **Install activation** keeps the prior **Active tool install** selected and performs no predecessor cleanup.
+- A Codiff reconciliation failure after **Install activation** leaves the new Local **Active tool install** selected and is separately retryable with `mt install-dependencies`.
 - A **Local install refresh** delegates skill configuration and target reconciliation to monke-tools rather than reimplementing those rules in shell.
 - A **Local install refresh** uses the stored **Skill install preference** instead of assuming a default **Skill install target**.
 - A **Local install refresh** may replace the stored **Skill install preference** with one or more explicitly supplied built-in **Skill install targets** without running **Skills Configure**.

@@ -34,6 +34,32 @@ function skillsEnvironment(osHome: string, monkeHome: string) {
   };
 }
 
+function selectActiveLocalInstall(monkeHome: string, sourceCheckout: string) {
+  const installId = "local-fixture";
+  write(
+    monkeHome,
+    `installs/${installId}/install-manifest.json`,
+    `${JSON.stringify(
+      {
+        createdAt: "2026-08-20T12:34:56.000Z",
+        createdBy: "bun run install:local",
+        installId,
+        installKind: "local",
+        minimumCodiffVersion: "1.9.0",
+        platform: "darwin-arm64",
+        schemaVersion: 1,
+        sourceCheckout,
+        sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+        sourceDirty: false,
+        toolBuildIdentity: "local+0123456"
+      },
+      null,
+      2
+    )}\n`
+  );
+  symlinkSync(path.join("installs", installId), path.join(monkeHome, "current"), "dir");
+}
+
 describe("skills CLI", () => {
   test("mt skills local-install installs shared Global agent instructions for Codex and Claude", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions");
@@ -93,10 +119,7 @@ describe("skills CLI", () => {
     );
     write(osHome, ".codex/AGENTS.md", "Personal Codex guidance.\n");
     write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
-    saveGlobalMonkeConfig(monkeHome, {
-      installedSourceCheckout: sourceCheckout,
-      version: 1
-    });
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await runCliAsync(
       ["skills", "configure"],
@@ -195,7 +218,6 @@ describe("skills CLI", () => {
         "Personal guidance.\n<!-- monke-rules:start -->\r\n\r\nOld team baseline.\r\n<!-- monke-rules:end -->\r\nFollowing guidance.\n"
       );
       saveGlobalMonkeConfig(monkeHome, {
-        installedSourceCheckout: sourceCheckout,
         skillInstallPreference: { targets: [{ kind: "codex" }] },
         version: 1
       });
@@ -517,13 +539,11 @@ describe("skills CLI", () => {
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     writeSkillSource(sourceCheckout);
-    saveGlobalMonkeConfig(monkeHome, {
-      installedSourceCheckout: sourceCheckout,
-      version: 1
-    });
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     let stdout = "";
     let stderr = "";
+    let installationLockObserved = false;
     let prompt: MultiSelectPrompt | undefined;
     const runtime = createRuntime({
       cwd: sandbox,
@@ -531,6 +551,7 @@ describe("skills CLI", () => {
       multiSelectValues: [["codex", "custom"]],
       onMultiSelect(value) {
         prompt = value;
+        installationLockObserved = existsSync(path.join(monkeHome, "locks", "installation.lock"));
       },
       onStderr(text) {
         stderr += text;
@@ -563,6 +584,8 @@ describe("skills CLI", () => {
     expect(lstatSync(path.join(osHome, "team-skills", "monke-tools")).isDirectory()).toBeTruthy();
     expect(stdout).not.toContain("comma-separated");
     expect(stderr).toContain("Configured monke-tools skills");
+    expect(installationLockObserved).toBeTruthy();
+    expect(existsSync(path.join(monkeHome, "locks", "installation.lock"))).toBeFalsy();
   });
 
   test("mt skills configure preselects existing targets when reconfiguring", async () => {
@@ -572,10 +595,7 @@ describe("skills CLI", () => {
     const sourceCheckout = path.join(sandbox, "source");
     const customRoot = path.join(osHome, "custom-skills");
     writeSkillSource(sourceCheckout);
-    saveGlobalMonkeConfig(monkeHome, {
-      installedSourceCheckout: sourceCheckout,
-      version: 1
-    });
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await runCliAsync(
       ["skills", "configure"],
@@ -621,7 +641,7 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(customRoot, "monke-tools"))).toBeFalsy();
   });
 
-  test("mt skills local-install records the source checkout and configures skills when no preference exists", async () => {
+  test("mt skills local-install configures skills without duplicating Active install identity", async () => {
     const sandbox = makeTempDir("skills-local-install-first");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -640,7 +660,6 @@ describe("skills CLI", () => {
     );
 
     expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
-      installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
         targets: [{ kind: "codex" }]
       },
@@ -672,7 +691,6 @@ describe("skills CLI", () => {
     );
 
     expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
-      installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
         targets: [{ kind: "claude" }, { kind: "cursor" }, { kind: "codex" }]
       },
@@ -696,7 +714,6 @@ describe("skills CLI", () => {
     const sourceCheckout = path.join(sandbox, "source");
     writeSkillSource(sourceCheckout);
     saveGlobalMonkeConfig(monkeHome, {
-      installedSourceCheckout: sourceCheckout,
       skillInstallPreference: {
         targets: [{ kind: "cursor" }]
       },
@@ -733,7 +750,6 @@ describe("skills CLI", () => {
     );
     writeSkillSource(newCheckout);
     saveGlobalMonkeConfig(monkeHome, {
-      installedSourceCheckout: oldCheckout,
       skillInstallPreference: {
         targets: [{ kind: "codex" }]
       },
@@ -752,7 +768,10 @@ describe("skills CLI", () => {
       })
     );
 
-    expect(loadGlobalMonkeConfig(monkeHome).installedSourceCheckout).toBe(newCheckout);
+    expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
+      skillInstallPreference: { targets: [{ kind: "codex" }] },
+      version: 1
+    });
     expect(lstatSync(namespacePath).isDirectory()).toBeTruthy();
     expect(readlinkSync(path.join(namespacePath, "internal"))).toBe(
       path.join(newCheckout, "skills", "internal")
@@ -764,10 +783,7 @@ describe("skills CLI", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const missingCheckout = path.join(sandbox, "missing-source");
-    saveGlobalMonkeConfig(monkeHome, {
-      installedSourceCheckout: missingCheckout,
-      version: 1
-    });
+    selectActiveLocalInstall(monkeHome, missingCheckout);
 
     await expect(
       runCliAsync(

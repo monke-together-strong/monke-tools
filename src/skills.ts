@@ -25,8 +25,9 @@ import type {
   SkillInstallTargetPreference
 } from "./global-config.ts";
 import { reconcileGlobalInstructions, removeGlobalInstructions } from "./global-instructions.ts";
+import { loadActiveLocalInstall } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
-import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
+import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
@@ -86,11 +87,17 @@ export function resolveSkillInstallTargets(options: {
 }
 
 /** Prompt for a Skill install preference, save it, and reconcile selected Agent skill roots. */
-export async function runSkillsConfigure(runtime: Runtime) {
+export function runSkillsConfigure(runtime: Runtime) {
+  const monkeHome = getMonkeHome(runtime);
+  return withInstallationLockAsync(monkeHome, () => runSkillsConfigureLocked(runtime));
+}
+
+async function runSkillsConfigureLocked(runtime: Runtime, sourceCheckoutOverride?: string) {
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
-  const sourceCheckout = config.installedSourceCheckout;
+  const activeInstall = loadActiveLocalInstall(monkeHome);
+  const sourceCheckout = sourceCheckoutOverride ?? activeInstall?.manifest.sourceCheckout;
   if (!sourceCheckout) {
     throw new MonkeError(
       "Installed source checkout is not configured; run bun run install:local from the monke-tools checkout first"
@@ -105,8 +112,8 @@ export async function runSkillsConfigure(runtime: Runtime) {
     homeDirectory
   );
   saveGlobalMonkeConfig(monkeHome, {
-    ...config,
-    skillInstallPreference: nextPreference
+    skillInstallPreference: nextPreference,
+    version: 1
   });
 
   reconcileSkillNamespaces({
@@ -124,7 +131,19 @@ export async function runSkillsConfigure(runtime: Runtime) {
 }
 
 /** Record the Installed source checkout and refresh or configure Distributed skill targets. */
-export async function runLocalInstallSkills(
+export function runLocalInstallSkills(
+  runtime: Runtime,
+  sourceCheckout: string,
+  targetKinds?: BuiltInSkillInstallTargetKind[]
+) {
+  const monkeHome = getMonkeHome(runtime);
+  return withInstallationLockAsync(monkeHome, () =>
+    runLocalInstallSkillsLocked(runtime, sourceCheckout, targetKinds)
+  );
+}
+
+/** Reconcile source-backed Local-mode guidance while the installation lock is already held. */
+export async function runLocalInstallSkillsLocked(
   runtime: Runtime,
   sourceCheckout: string,
   targetKinds?: BuiltInSkillInstallTargetKind[]
@@ -137,10 +156,7 @@ export async function runLocalInstallSkills(
     ? { targets: targetKinds.map((kind) => ({ kind })) }
     : undefined;
   const nextPreference = explicitPreference ?? config.skillInstallPreference;
-  const nextConfig: GlobalMonkeConfig = {
-    ...config,
-    installedSourceCheckout
-  };
+  const nextConfig: GlobalMonkeConfig = { version: 1 };
   if (nextPreference) {
     nextConfig.skillInstallPreference = nextPreference;
   }
@@ -148,7 +164,7 @@ export async function runLocalInstallSkills(
   saveGlobalMonkeConfig(monkeHome, nextConfig);
 
   if (!nextPreference) {
-    await runSkillsConfigure(runtime);
+    await runSkillsConfigureLocked(runtime, installedSourceCheckout);
     return;
   }
 

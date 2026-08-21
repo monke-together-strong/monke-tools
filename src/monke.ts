@@ -17,6 +17,7 @@ import {
 } from "./cleanup-merged.ts";
 import type { MergedCleanupDecision } from "./cleanup-merged.ts";
 import { openCodexWorkspace } from "./codex.ts";
+import { reconcileCodiff } from "./codiff.ts";
 import { loadResolvedGraph } from "./config.ts";
 import {
   syncRootEnvFile,
@@ -728,6 +729,7 @@ function loadResolvedGraphForSession(
 
 /** Load the session graph for cleanup, tolerating missing repo config. */
 export function runInstallDependencies(runtime: Runtime) {
+  reconcileCodiff(runtime);
   createLogger(runtime).success("Verified monke-tools runtime dependencies");
 }
 
