@@ -658,10 +658,12 @@ function mergeImportedGuidanceIntoRecipeStore(
     }
   } else {
     const newRecipe: SkillImportRecipe = {
-      source: input.source,
-      ...(input.acceptOpenClawRisks ? { acceptOpenClawRisks: true as const } : {}),
-      skills: importedGuidance
+      skills: importedGuidance,
+      source: input.source
     };
+    if (input.acceptOpenClawRisks) {
+      newRecipe.acceptOpenClawRisks = true;
+    }
 
     for (const skill of importedGuidance) {
       assertSkillCanBeOwnedByRecipe(nextStore, newRecipe, skill);
@@ -686,7 +688,7 @@ export function extractSecurityRiskAssessment(output: string) {
 /** Writes a non-empty upstream security assessment when one is present. */
 export function reportSecurityRiskAssessment(
   output: string,
-  writeMessage: (message: string) => unknown
+  writeMessage: (message: string) => void
 ) {
   const assessment = extractSecurityRiskAssessment(output);
   if (assessment) {
@@ -754,7 +756,11 @@ export async function runImportSkills(
   const repoRoot = process.cwd();
   const normalizedSource = normalizeSourceForStaging(source, repoRoot);
   const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-import-"));
-  const writeMessage = dependencies.writeMessage ?? process.stdout.write.bind(process.stdout);
+  const writeMessage =
+    dependencies.writeMessage ??
+    ((message: string) => {
+      process.stdout.write(message);
+    });
 
   try {
     const listOutput = runSkillsCaptured(
@@ -1126,10 +1132,8 @@ async function groupedSkillMultiselect(options: {
     cursorAt: options.cursorAt,
     options: options.options,
     render() {
-      const rawValue: unknown = this.value;
-      const selectedValues = Array.isArray(rawValue)
-        ? rawValue.filter((value): value is string => typeof value === "string")
-        : [];
+      const parsedValues = z.array(z.string()).safeParse(this.value);
+      const selectedValues = parsedValues.success ? parsedValues.data : [];
       const title = `${pc.gray("\u2502")}
 ${stepSymbol(this.state)}  ${options.message}
 `;
@@ -1151,8 +1155,8 @@ ${stepSymbol(this.state)}  ${options.message}
           }`;
         }
         case "error": {
-          const rawError: unknown = this.error;
-          const error = (typeof rawError === "string" ? rawError : "")
+          const parsedError = z.string().safeParse(this.error);
+          const error = (parsedError.success ? parsedError.data : "")
             .split("\n")
             .map((line, index) =>
               index === 0 ? `${pc.yellow("\u2514")}  ${pc.yellow(line)}` : `   ${line}`
@@ -1199,11 +1203,9 @@ ${pc.reset(pc.dim(`Press ${pc.gray(pc.bgWhite(pc.inverse(" space ")))} to select
     }
   }).prompt();
 
-  if (typeof result === "symbol") {
-    return result;
-  }
-  if (Array.isArray(result) && result.every((value) => typeof value === "string")) {
-    return result;
+  const parsedResult = z.union([z.symbol(), z.array(z.string())]).safeParse(result);
+  if (parsedResult.success) {
+    return parsedResult.data;
   }
   throw new MonkeError("Grouped Skill selection returned an invalid value");
 }
@@ -1262,7 +1264,8 @@ function getVisibleGroupedPromptOptions(options: {
   );
   let end = Math.min(options.options.length, start + maxItems);
   const cursorOption = options.options[options.cursor];
-  const cursorGroupName = typeof cursorOption?.group === "string" ? cursorOption.group : null;
+  const parsedCursorGroupName = z.string().safeParse(cursorOption?.group);
+  const cursorGroupName = parsedCursorGroupName.success ? parsedCursorGroupName.data : null;
 
   if (cursorGroupName) {
     const groupHeaderIndex = options.options.findIndex(
@@ -1368,6 +1371,7 @@ function stepSymbol(state: string) {
   }
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Persisted JSON is parsed into the recipe-store contract immediately below.
 export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeStore {
   const store = parseBoundaryValue(
     SkillImportRecipeStoreSchema,

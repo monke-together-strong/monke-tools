@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { resolveResourceCommands } from "../src/resources.ts";
-import { hashKey } from "../src/runtime.ts";
+import { createRuntime, hashKey } from "../src/runtime.ts";
 import { saveSessionState } from "../src/session-state-store.ts";
 import type { RepoConfig, Runtime } from "../src/types.ts";
 import { makeTempDir } from "./helpers.ts";
@@ -44,6 +44,7 @@ describe("resources", () => {
       sourceRoot
     };
     const runtime: Runtime = {
+      ...createRuntime({ cwd: sourceRoot }),
       cwd: sourceRoot,
       env: {},
       exec(command, args, options) {
@@ -179,6 +180,7 @@ describe("resources", () => {
     });
 
     const runtime: Runtime = {
+      ...createRuntime({ cwd: sourceRoot }),
       cwd: sourceRoot,
       env: {},
       exec(command, args, options) {
@@ -259,6 +261,7 @@ describe("resources", () => {
     const invocations: { args: string[] | undefined; command: string }[] = [];
 
     const runtime: Runtime = {
+      ...createRuntime({ cwd: sourceRoot }),
       cwd: sourceRoot,
       env: {},
       exec(command, args, _options) {

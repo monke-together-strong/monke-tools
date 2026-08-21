@@ -832,7 +832,13 @@ function localBranchExists(repoRoot: string, branch: string) {
   }
 }
 
-function installSwingGhShim(binDirectory: string, prs: Record<string, unknown>) {
+interface SwingGhResponse {
+  headRefName: number | string;
+  headRepository: { name: string } | null;
+  headRepositoryOwner: { login: string } | null;
+}
+
+function installSwingGhShim(binDirectory: string, prs: Record<string, SwingGhResponse>) {
   mkdirSync(binDirectory, { recursive: true });
   const cases = Object.entries(prs)
     .map(([number, pr]) => `    ${number}) printf '%s\\n' '${JSON.stringify(pr)}'; exit 0 ;;`)

@@ -66,6 +66,7 @@ describe("Git operations", () => {
 
   test("listWorktrees parses prunable entries from porcelain output", () => {
     const runtime: Runtime = {
+      ...createRuntime({ cwd: "/tmp" }),
       cwd: "/tmp",
       env: {},
       exec(command, args) {

@@ -57,7 +57,11 @@ export async function runUpdateSkills(
   const { install, interactive } = parseCommand(argv);
   const repoRoot = process.cwd();
   let store = readImportRecipeStore(repoRoot);
-  const writeMessage = dependencies.writeMessage ?? process.stdout.write.bind(process.stdout);
+  const writeMessage =
+    dependencies.writeMessage ??
+    ((message: string) => {
+      process.stdout.write(message);
+    });
   const failures: string[] = [];
 
   validateImportedGuidanceDirectoriesAreTracked(repoRoot, store);

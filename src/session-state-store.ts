@@ -43,6 +43,7 @@ export function loadSessionState(
   return parseOwnedYamlFile(filePath, SessionStateSchema);
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Persisted state is validated before its identity or contents are used.
 export function saveSessionState(home: string, state: unknown) {
   const identity = SessionStateIdentitySchema.safeParse(state);
   const label = identity.success
@@ -260,11 +261,11 @@ function invalidSessionStateReferencesWorktree(filePath: string, worktreePaths: 
     let referencesWorktree = false;
     visit(document, {
       Scalar(key, scalar) {
-        const scalarValue = scalar.value;
+        const scalarValue = z.string().safeParse(scalar.value);
         if (
           key !== "key" &&
-          typeof scalarValue === "string" &&
-          worktreePaths.some((candidate) => samePath(scalarValue, candidate))
+          scalarValue.success &&
+          worktreePaths.some((candidate) => samePath(scalarValue.data, candidate))
         ) {
           referencesWorktree = true;
         }
