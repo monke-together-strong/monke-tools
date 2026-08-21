@@ -480,10 +480,9 @@ function run(command: string, arguments_: string[], cwd = repositoryRoot) {
   return result.stdout;
 }
 
-function option(arguments_: string[], name: string) {
-  const index = arguments_.indexOf(name);
-  const value = index === -1 ? undefined : arguments_[index + 1];
-  if (value === undefined || value.startsWith("--")) {
+function requiredOption(arguments_: string[], name: string) {
+  const value = optionalOption(arguments_, name);
+  if (value === undefined) {
     throw new Error(`Missing required option ${name}`);
   }
   return value;
@@ -517,20 +516,20 @@ export function runReleaseBundleCli(arguments_: string[]) {
       throw new Error("Missing Release bundle command");
     }
     case "build": {
-      const platform = ReleasePlatformSchema.parse(option(arguments_, "--platform"));
+      const platform = ReleasePlatformSchema.parse(requiredOption(arguments_, "--platform"));
       const archivePath = buildReleaseBundle({
-        outputDirectory: option(arguments_, "--output"),
+        outputDirectory: requiredOption(arguments_, "--output"),
         platform,
-        sourceCommit: option(arguments_, "--source-commit"),
-        version: option(arguments_, "--version")
+        sourceCommit: requiredOption(arguments_, "--source-commit"),
+        version: requiredOption(arguments_, "--version")
       });
       process.stdout.write(`${archivePath}\n`);
       return;
     }
     case "checksums": {
       const checksumPath = writeReleaseChecksums(
-        option(arguments_, "--directory"),
-        option(arguments_, "--version")
+        requiredOption(arguments_, "--directory"),
+        requiredOption(arguments_, "--version")
       );
       process.stdout.write(`${checksumPath}\n`);
       return;
@@ -545,28 +544,28 @@ export function runReleaseBundleCli(arguments_: string[]) {
     }
     case "relevant": {
       const relevant = hasReleaseOwnedChanges(
-        changedPaths(option(arguments_, "--before"), option(arguments_, "--after"))
+        changedPaths(requiredOption(arguments_, "--before"), requiredOption(arguments_, "--after"))
       );
       process.stdout.write(`${String(relevant)}\n`);
       return;
     }
     case "verify": {
       verifyReleaseArchive({
-        archivePath: option(arguments_, "--archive"),
+        archivePath: requiredOption(arguments_, "--archive"),
         checksumPath: optionalOption(arguments_, "--checksums"),
         expectedGuidanceRoot: repositoryRoot,
-        expectedPlatform: ReleasePlatformSchema.parse(option(arguments_, "--platform")),
-        expectedSourceCommit: option(arguments_, "--source-commit"),
-        expectedVersion: option(arguments_, "--version")
+        expectedPlatform: ReleasePlatformSchema.parse(requiredOption(arguments_, "--platform")),
+        expectedSourceCommit: requiredOption(arguments_, "--source-commit"),
+        expectedVersion: requiredOption(arguments_, "--version")
       });
       return;
     }
     case "verify-assets": {
       verifyReleaseAssets({
-        directory: option(arguments_, "--directory"),
+        directory: requiredOption(arguments_, "--directory"),
         expectedGuidanceRoot: repositoryRoot,
-        sourceCommit: option(arguments_, "--source-commit"),
-        version: option(arguments_, "--version")
+        sourceCommit: requiredOption(arguments_, "--source-commit"),
+        version: requiredOption(arguments_, "--version")
       });
       return;
     }

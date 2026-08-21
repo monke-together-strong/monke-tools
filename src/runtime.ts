@@ -101,20 +101,14 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
   // oxlint-disable-next-line node/no-process-env -- This adapter centralizes access to the process environment.
   const runtimeEnv = { ...process.env, ...options?.env };
   const runtimeCwd = options?.cwd ?? process.cwd();
-  const scriptedInput = options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/u);
+  const scriptedInput = createScriptedInput(options);
   const scriptedSelectValues = options?.selectValues ? [...options.selectValues] : null;
   const scriptedMultiSelectValues = options?.multiSelectValues
     ? [...options.multiSelectValues]
     : null;
 
-  const writeStdout = (text: string) => {
-    if (options?.onStdout) {
-      options.onStdout(text);
-      return;
-    }
-
-    process.stdout.write(text);
-  };
+  const writeStdout = createStdoutWriter(options);
+  const writeStderr = createStderrWriter(options);
 
   return {
     architecture: options?.architecture ?? process.arch,
@@ -126,7 +120,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     execAsync(command: string, args: string[] = [], execOptions?: ExecOptions) {
       return executeCommandAsync(runtimeEnv, runtimeCwd, command, args, execOptions);
     },
-    installationActivationBoundary: resolveInstallationActivationBoundary(options),
+    installationActivationBoundary: options?.installationActivationBoundary,
     async multiSelect(prompt) {
       options?.onMultiSelect?.(prompt);
       if (scriptedMultiSelectValues !== null) {
@@ -187,22 +181,35 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     stderrIsTTY: resolveStderrIsTTY(options),
     toolBuildIdentity: options?.toolBuildIdentity ?? DEFAULT_TOOL_BUILD_IDENTITY,
     toolInstallRoot: options?.toolInstallRoot ?? resolveRunningToolInstallRoot(),
-    writeStderr(text: string) {
-      if (options?.onStderr) {
-        options.onStderr(text);
-        return;
-      }
-
-      process.stderr.write(text);
-    },
+    writeStderr,
     writeStdout(text: string) {
       writeStdout(text);
     }
   };
 }
 
-function resolveInstallationActivationBoundary(options: RuntimeOptions | undefined) {
-  return options?.installationActivationBoundary;
+function createStdoutWriter(options: RuntimeOptions | undefined) {
+  return (text: string) => {
+    if (options?.onStdout) {
+      options.onStdout(text);
+      return;
+    }
+    process.stdout.write(text);
+  };
+}
+
+function createScriptedInput(options: RuntimeOptions | undefined) {
+  return options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/u);
+}
+
+function createStderrWriter(options: RuntimeOptions | undefined) {
+  return (text: string) => {
+    if (options?.onStderr) {
+      options.onStderr(text);
+      return;
+    }
+    process.stderr.write(text);
+  };
 }
 
 function resolveStderrIsTTY(options: RuntimeOptions | undefined) {

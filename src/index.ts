@@ -132,6 +132,7 @@ function createProgram(
   program
     .command("activate-release-install", { hidden: true })
     .argument("<bundle-root>")
+    .option("--custom-target <path>", "Add a custom Agent Skill root")
     .option("--installation-lock-held")
     .option("--interactive")
     .addOption(
@@ -143,6 +144,7 @@ function createProgram(
     .action((bundleRoot, options) =>
       runActivateReleaseInstall(runtime, {
         bundleRoot,
+        customTarget: options.customTarget,
         installationLockHeld: options.installationLockHeld === true,
         interactive: options.interactive === true,
         targetKinds: options.targets
@@ -157,6 +159,7 @@ function createProgram(
     .requiredOption("--source-commit <sha>")
     .requiredOption("--created-at <timestamp>")
     .requiredOption("--platform <platform>")
+    .option("--custom-target <path>", "Add a custom Agent Skill root")
     .option("--dirty")
     .option("--installation-lock-held")
     .addOption(
@@ -168,6 +171,7 @@ function createProgram(
     .action((stagedInstall, sourceCheckout, options) =>
       runActivateLocalInstall(runtime, {
         createdAt: options.createdAt,
+        customTarget: options.customTarget,
         dirty: options.dirty === true,
         installationLockHeld: options.installationLockHeld === true,
         installId: options.installId,
@@ -203,6 +207,7 @@ function createProgram(
   skills
     .command("local-install")
     .argument("<source-checkout>")
+    .option("--custom-target <path>", "Add a custom Agent Skill root")
     .addOption(
       new Option(
         "--targets <targets...>",
@@ -210,7 +215,7 @@ function createProgram(
       ).choices(["codex", "claude", "cursor"])
     )
     .action((sourceCheckout, options) =>
-      runLocalInstallSkills(runtime, sourceCheckout, options.targets)
+      runLocalInstallSkills(runtime, sourceCheckout, options.targets, options.customTarget)
     );
 
   return program;

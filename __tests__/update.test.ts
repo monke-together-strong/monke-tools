@@ -775,6 +775,7 @@ describe("Release update", () => {
       const monkeHome = path.join(sandbox, "monke-home");
       const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
       const olderInstall = prepareActiveRelease(monkeHome, "1.2.2", false);
+      const sameReleasePredecessor = prepareActiveRelease(monkeHome, "1.2.4", false);
       const candidate = prepareReleaseAsset(sandbox, "1.2.4");
 
       const update = runCliAsync(
@@ -810,7 +811,7 @@ describe("Release update", () => {
       );
       expect(existsSync(predecessor)).toBeTruthy();
       expect(existsSync(olderInstall)).toBeTruthy();
-      expect(existsSync(path.join(monkeHome, "installs", "release-1.2.4-linux-x64"))).toBeFalsy();
+      expect(existsSync(sameReleasePredecessor)).toBeTruthy();
       const stagingRoot = path.join(monkeHome, "install-staging");
       expect(existsSync(stagingRoot) ? readdirSync(stagingRoot) : []).toStrictEqual([]);
     }

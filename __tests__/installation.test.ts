@@ -261,6 +261,30 @@ describe("versioned installation lifecycle", () => {
     );
   });
 
+  test("automation can install Release guidance into an explicit Custom Skill target", async () => {
+    const sandbox = makeTempDir("release-install-custom-target");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const customTarget = path.join(sandbox, "agent", "skills");
+    const release = prepareReleaseBundle(sandbox);
+
+    await activateRelease({
+      args: ["--custom-target", customTarget],
+      bundleRoot: release.bundleRoot,
+      home,
+      monkeHome,
+      sandbox
+    });
+
+    expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
+      skillInstallPreference: { targets: [{ kind: "custom", path: customTarget }] },
+      version: 1
+    });
+    expect(readlinkSync(path.join(customTarget, "monke-tools", "internal"))).toBe(
+      path.join(monkeHome, "installs", "release-1.2.3-linux-x64", "skills", "internal")
+    );
+  });
+
   test("an interactive Release install asks for targets only after core activation", async () => {
     const sandbox = makeTempDir("release-install-interactive");
     const home = path.join(sandbox, "home");
@@ -843,6 +867,42 @@ skillInstallPreference:
     expect(realpathSync(path.join(home, ".local", "bin", "mt"))).toBe(
       path.join(monkeHome, "installs", installId, "mt")
     );
+  });
+
+  test("unexpected Local projection failure reports the Active core and repair command", async () => {
+    const sandbox = makeTempDir("local-install-projection-failure");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const sourceCheckout = path.join(sandbox, "source");
+    const installId = "local-projection-failure";
+    prepareSource(sourceCheckout);
+    let collisionInjected = false;
+
+    const activation = activateLocal({
+      home,
+      installId,
+      monkeHome,
+      onMutationOutput() {
+        if (collisionInjected || !existsSync(path.join(monkeHome, "current"))) {
+          return;
+        }
+        if (readlinkSync(path.join(monkeHome, "current")) !== path.join("installs", installId)) {
+          return;
+        }
+        mkdirSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"), {
+          recursive: true
+        });
+        collisionInjected = true;
+      },
+      sourceCheckout,
+      targetKinds: ["cursor"]
+    });
+
+    await expect(activation).rejects.toThrow(
+      /Local tool install is active[\s\S]*Retry with: mt skills configure/u
+    );
+    expect(collisionInjected).toBeTruthy();
+    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(path.join("installs", installId));
   });
 
   test("Skills Configure rejects a fixed install root that stopped being Active", async () => {

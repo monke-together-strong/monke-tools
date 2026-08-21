@@ -53,6 +53,7 @@ const MANAGED_STAGING_DIRECTORY_PATTERN = /^(?:local|release|update)-[A-Za-z0-9.
 
 export interface ActivateLocalInstallOptions {
   createdAt: string;
+  customTarget?: string;
   dirty: boolean;
   installationLockHeld?: boolean;
   installId: string;
@@ -65,6 +66,7 @@ export interface ActivateLocalInstallOptions {
 
 export interface ActivateReleaseInstallOptions {
   bundleRoot: string;
+  customTarget?: string;
   installationLockHeld?: boolean;
   interactive?: boolean;
   targetKinds?: BuiltInSkillInstallTargetKind[];
@@ -79,9 +81,9 @@ export async function runActivateReleaseInstall(
   const homeDirectory = getHomeDirectory(runtime);
   const sourceBundle = path.resolve(options.bundleRoot);
   const sourceManifest = validateReleaseBundle(runtime, sourceBundle);
-  preflightInstallGuidance(runtime, sourceBundle, options.targetKinds);
+  preflightInstallGuidance(runtime, sourceBundle, options.targetKinds, options.customTarget);
   const activate = async () => {
-    preflightInstallGuidance(runtime, sourceBundle, options.targetKinds);
+    preflightInstallGuidance(runtime, sourceBundle, options.targetKinds, options.customTarget);
     const stagingRoot = path.join(monkeHome, "install-staging");
     const stagedInstall = path.join(stagingRoot, `release-${randomUUID()}`);
     const stagingRootExisted = existsSync(stagingRoot);
@@ -94,7 +96,7 @@ export async function runActivateReleaseInstall(
       if (JSON.stringify(manifest) !== JSON.stringify(sourceManifest)) {
         throw new MonkeError("Release bundle changed while it was being staged");
       }
-      preflightInstallGuidance(runtime, stagedInstall, options.targetKinds);
+      preflightInstallGuidance(runtime, stagedInstall, options.targetKinds, options.customTarget);
     } catch (error) {
       rmSync(stagedInstall, { force: true, recursive: true });
       if (!stagingRootExisted && readdirSync(stagingRoot).length === 0) {
@@ -105,15 +107,27 @@ export async function runActivateReleaseInstall(
     const installId = releaseInstallId(manifest);
 
     const predecessor = resolveActiveInstallRoot(monkeHome);
-    removeValidatedInactiveInstallCollision(monkeHome, installId, predecessor);
-    const installRoot = activateStagedInstall({
-      homeDirectory,
-      installId,
-      manifest,
-      monkeHome,
-      runtime,
-      stagedInstall
-    });
+    const collision = prepareValidatedInactiveInstallCollision(monkeHome, installId, predecessor);
+    const candidateRoot = path.join(monkeHome, "installs", installId);
+    let installRoot: string;
+    try {
+      installRoot = activateStagedInstall({
+        homeDirectory,
+        installId,
+        manifest,
+        monkeHome,
+        runtime,
+        stagedInstall
+      });
+    } catch (error) {
+      if (resolveActiveInstallRoot(monkeHome) === candidateRoot) {
+        collision?.discard();
+      } else {
+        collision?.restore();
+      }
+      throw error;
+    }
+    collision?.discard();
     cleanupInactiveToolInstalls(
       monkeHome,
       new Set([installRoot, ...(predecessor ? [predecessor] : [])])
@@ -130,6 +144,7 @@ export async function runActivateReleaseInstall(
     }
     try {
       await runReleaseInstallSkillsLocked(runtime, installRoot, {
+        customTarget: options.customTarget,
         interactive: options.interactive === true,
         targetKinds: options.targetKinds
       });
@@ -163,7 +178,7 @@ export async function runActivateReleaseInstall(
   );
 }
 
-function removeValidatedInactiveInstallCollision(
+function prepareValidatedInactiveInstallCollision(
   monkeHome: string,
   installId: string,
   activeInstallRoot: string | null
@@ -171,7 +186,7 @@ function removeValidatedInactiveInstallCollision(
   const installRoot = path.join(monkeHome, "installs", installId);
   const stat = lstatSync(installRoot, { throwIfNoEntry: false });
   if (!stat) {
-    return;
+    return null;
   }
   if (installRoot === activeInstallRoot || !stat.isDirectory() || stat.isSymbolicLink()) {
     throw new MonkeError(`Tool install identity already exists: ${installId}`);
@@ -186,7 +201,19 @@ function removeValidatedInactiveInstallCollision(
   } catch {
     throw new MonkeError(`Tool install identity already exists: ${installId}`);
   }
-  rmSync(installRoot, { recursive: true });
+  const backupRoot = path.join(monkeHome, "install-staging", `release-collision-${randomUUID()}`);
+  assertDirectChildPath(backupRoot, path.join(monkeHome, "install-staging"), "collision backup");
+  renameSync(installRoot, backupRoot);
+  return {
+    discard() {
+      rmSync(backupRoot, { force: true, recursive: true });
+    },
+    restore() {
+      if (lstatSync(backupRoot, { throwIfNoEntry: false })) {
+        renameSync(backupRoot, installRoot);
+      }
+    }
+  };
 }
 
 /** Activate a fully built Local tool install and finish its installation-adjacent work. */
@@ -197,7 +224,7 @@ export async function runActivateLocalInstall(
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const sourceCheckout = path.resolve(options.sourceCheckout);
-  preflightInstallGuidance(runtime, sourceCheckout, options.targetKinds);
+  preflightInstallGuidance(runtime, sourceCheckout, options.targetKinds, options.customTarget);
   const activate = async () => {
     const stagedInstall = path.resolve(options.stagedInstall);
     assertDirectChildPath(
@@ -231,7 +258,7 @@ export async function runActivateLocalInstall(
     if (!existsSync(path.join(sourceCheckout, "skills"))) {
       throw new MonkeError(`Skill source tree is missing: ${path.join(sourceCheckout, "skills")}`);
     }
-    preflightInstallGuidance(runtime, sourceCheckout, options.targetKinds);
+    preflightInstallGuidance(runtime, sourceCheckout, options.targetKinds, options.customTarget);
 
     const predecessor = resolveActiveInstallRoot(monkeHome);
     const installRoot = activateStagedInstall({
@@ -251,7 +278,18 @@ export async function runActivateLocalInstall(
 
     const stableCommand = path.join(homeDirectory, ".local", "bin", "mt");
     runShellInstall(runtime, { binary: stableCommand });
-    await runInstallSkillsLocked(runtime, sourceCheckout, options.targetKinds);
+    try {
+      await runInstallSkillsLocked(
+        runtime,
+        sourceCheckout,
+        options.targetKinds,
+        options.customTarget
+      );
+    } catch (error) {
+      throw new MonkeError(
+        `The Local tool install is active, but Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(error)}`
+      );
+    }
 
     try {
       reconcileCodiff(runtime, manifest.minimumCodiffVersion);

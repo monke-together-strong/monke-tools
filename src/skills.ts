@@ -160,11 +160,12 @@ function loadFixedToolInstall(runtime: Runtime, monkeHome: string) {
 export function runLocalInstallSkills(
   runtime: Runtime,
   sourceCheckout: string,
-  targetKinds?: BuiltInSkillInstallTargetKind[]
+  targetKinds?: BuiltInSkillInstallTargetKind[],
+  customTarget?: string
 ) {
   const monkeHome = getMonkeHome(runtime);
   return withInstallationLockAsync(monkeHome, () =>
-    runInstallSkillsLocked(runtime, sourceCheckout, targetKinds)
+    runInstallSkillsLocked(runtime, sourceCheckout, targetKinds, customTarget)
   );
 }
 
@@ -172,15 +173,18 @@ export function runLocalInstallSkills(
 export async function runInstallSkillsLocked(
   runtime: Runtime,
   guidanceSourceRoot: string,
-  targetKinds?: BuiltInSkillInstallTargetKind[]
+  targetKinds?: BuiltInSkillInstallTargetKind[],
+  customTarget?: string
 ) {
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
   const resolvedGuidanceSourceRoot = path.resolve(guidanceSourceRoot);
-  const explicitPreference: SkillInstallPreference | undefined = targetKinds
-    ? { targets: targetKinds.map((kind) => ({ kind })) }
-    : undefined;
+  const explicitPreference = explicitSkillInstallPreference(
+    homeDirectory,
+    targetKinds,
+    customTarget
+  );
   const nextPreference = explicitPreference ?? config.skillInstallPreference;
   const nextConfig: GlobalMonkeConfig = { version: 1 };
   if (nextPreference) {
@@ -210,21 +214,39 @@ export async function runInstallSkillsLocked(
   );
 }
 
+function explicitSkillInstallPreference(
+  homeDirectory: string,
+  targetKinds: BuiltInSkillInstallTargetKind[] | undefined,
+  customTarget: string | undefined
+) {
+  if (targetKinds === undefined && customTarget === undefined) {
+    return;
+  }
+  const targets: SkillInstallTargetPreference[] = targetKinds?.map((kind) => ({ kind })) ?? [];
+  if (customTarget !== undefined) {
+    targets.push({
+      kind: "custom",
+      path: normalizeCustomSkillRoot({ homeDirectory, input: customTarget })
+    });
+  }
+  return { targets } satisfies SkillInstallPreference;
+}
+
 /** Preflight destinations known before Release core activation. */
 export function preflightInstallGuidance(
   runtime: Runtime,
-  bundleRoot: string,
-  targetKinds?: BuiltInSkillInstallTargetKind[]
+  guidanceSourceRoot: string,
+  targetKinds?: BuiltInSkillInstallTargetKind[],
+  customTarget?: string
 ) {
   const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
   const previousPreference = config.skillInstallPreference;
-  const nextPreference: SkillInstallPreference | undefined = targetKinds
-    ? { targets: targetKinds.map((kind) => ({ kind })) }
-    : previousPreference;
+  const homeDirectory = getHomeDirectory(runtime);
+  const nextPreference =
+    explicitSkillInstallPreference(homeDirectory, targetKinds, customTarget) ?? previousPreference;
   if (!nextPreference && !previousPreference) {
     return;
   }
-  const homeDirectory = getHomeDirectory(runtime);
   const previousTargets = resolveTargetsByKey(homeDirectory, previousPreference);
   const nextTargets = resolveTargetsByKey(homeDirectory, nextPreference);
   const failures: string[] = [];
@@ -245,11 +267,11 @@ export function preflightInstallGuidance(
   }
   for (const target of nextTargets.values()) {
     try {
-      preflightOneSkillTarget(target, bundleRoot);
+      preflightOneSkillTarget(target, guidanceSourceRoot);
       preflightGlobalInstructions(target, {
         cwd: runtime.cwd,
         environment: runtime.env,
-        guidanceSourceRoot: bundleRoot,
+        guidanceSourceRoot,
         homeDirectory
       });
     } catch (error) {
@@ -257,7 +279,7 @@ export function preflightInstallGuidance(
     }
   }
   if (failures.length > 0) {
-    throw new MonkeError(`Release guidance destination preflight failed:\n${failures.join("\n")}`);
+    throw new MonkeError(`Install guidance destination preflight failed:\n${failures.join("\n")}`);
   }
 }
 
@@ -330,11 +352,24 @@ function preflightSkillTargetRemoval(target: ResolvedSkillInstallTarget) {
 export async function runReleaseInstallSkillsLocked(
   runtime: Runtime,
   releaseInstallRoot: string,
-  options: { interactive: boolean; targetKinds?: BuiltInSkillInstallTargetKind[] }
+  options: {
+    customTarget?: string;
+    interactive: boolean;
+    targetKinds?: BuiltInSkillInstallTargetKind[];
+  }
 ) {
   const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
-  if (options.targetKinds || config.skillInstallPreference) {
-    await runInstallSkillsLocked(runtime, releaseInstallRoot, options.targetKinds);
+  if (
+    options.targetKinds !== undefined ||
+    options.customTarget !== undefined ||
+    config.skillInstallPreference
+  ) {
+    await runInstallSkillsLocked(
+      runtime,
+      releaseInstallRoot,
+      options.targetKinds,
+      options.customTarget
+    );
     return;
   }
   if (options.interactive) {
@@ -401,7 +436,7 @@ export function reconcileSkillNamespaces(options: {
 
   for (const target of nextTargets) {
     try {
-      reconcileOneTarget(target, skillSourceTree);
+      prepareSkillTargetPlan(target, skillSourceTree).reconcile();
       reconcileGlobalInstructions(target, options);
       options.writeMessage(`Linked ${SKILL_NAMESPACE} skills at ${managedLocation(target)}\n`);
     } catch (error) {
@@ -512,10 +547,6 @@ function resolveSkillSourceTree(guidanceSourceRoot: string) {
   }
 
   return skillSourceTree;
-}
-
-function reconcileOneTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
-  prepareSkillTargetPlan(target, skillSourceTree).reconcile();
 }
 
 function reconcileNamespaceTarget(
