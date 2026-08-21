@@ -28,7 +28,8 @@ const JobSchema = looseObject({
 const WorkflowSchema = looseObject({
   concurrency: looseObject({
     "cancel-in-progress": literal(false),
-    group: stringSchema()
+    group: stringSchema(),
+    queue: literal("max")
   }),
   jobs: record(stringSchema(), JobSchema),
   on: looseObject({ push: looseObject({ branches: arraySchema(stringSchema()) }) })
@@ -50,6 +51,7 @@ describe("Mainline publication workflow", () => {
     const { parsed } = readWorkflow();
     expect(parsed.on.push.branches).toStrictEqual(["main"]);
     expect(parsed.concurrency["cancel-in-progress"]).toBeFalsy();
+    expect(parsed.concurrency.queue).toBe("max");
 
     const prepare = JobSchema.parse(parsed.jobs["prepare-release"]);
     const selection = StepSchema.parse(
