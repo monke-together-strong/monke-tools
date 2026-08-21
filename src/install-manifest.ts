@@ -1,7 +1,16 @@
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
-import * as z from "zod";
+import {
+  boolean as booleanSchema,
+  enum as enumSchema,
+  iso,
+  literal,
+  record,
+  strictObject,
+  string as stringSchema
+} from "zod";
+import type { output } from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { assertDirectChildPath } from "./path-boundary.ts";
@@ -9,59 +18,59 @@ import { parseBoundaryValue } from "./validation.ts";
 
 export const INSTALL_MANIFEST_FILENAME = "install-manifest.json";
 
-const InstallIdSchema = z
-  .string()
+export const StableSemanticVersionSchema = stringSchema().regex(
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u,
+  "must use stable major.minor.patch semantic version syntax"
+);
+const InstallIdSchema = stringSchema()
   .min(1)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u, "must contain only install identity characters");
-const CommitSchema = z.string().regex(/^[0-9a-f]{40}$/u, "must be a full Git commit SHA");
-export const ReleasePlatformSchema = z.enum(["linux-x64", "macos-arm64"]);
-export const ReleaseInstallManifestSchema = z.strictObject({
-  artifactName: z
-    .string()
-    .regex(/^monke-tools-v\d+\.\d+\.\d+-(?:linux-x64|macos-arm64)\.tar\.gz$/u),
-  guidanceHashes: z.record(
-    z
-      .string()
-      .regex(
-        /^skills\/(?:codex|imported|internal|references)\/.+/u,
-        "must be a projected guidance path"
-      ),
-    z.string().regex(/^[0-9a-f]{64}$/u, "must be a SHA-256 hash")
+export const FullCommitSchema = stringSchema().regex(
+  /^[0-9a-f]{40}$/u,
+  "must be a full Git commit SHA"
+);
+export const ReleasePlatformSchema = enumSchema(["linux-x64", "macos-arm64"]);
+export const ReleaseTagSchema = stringSchema().regex(
+  /^monke-tools-v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u
+);
+export const ReleaseInstallManifestSchema = strictObject({
+  artifactName: stringSchema().regex(
+    /^monke-tools-v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)-(?:linux-x64|macos-arm64)\.tar\.gz$/u
   ),
-  installKind: z.literal("release"),
-  minimumCodiffVersion: z
-    .string()
-    .regex(/^\d+\.\d+\.\d+$/u, "must use major.minor.patch numeric version syntax"),
+  guidanceHashes: record(
+    stringSchema().regex(
+      /^skills\/(?:codex|imported|internal|references)\/.+/u,
+      "must be a projected guidance path"
+    ),
+    stringSchema().regex(/^[0-9a-f]{64}$/u, "must be a SHA-256 hash")
+  ),
+  installKind: literal("release"),
+  minimumCodiffVersion: StableSemanticVersionSchema,
   platform: ReleasePlatformSchema,
-  releaseTag: z.string().regex(/^monke-tools-v\d+\.\d+\.\d+$/u),
-  releaseVersion: z
-    .string()
-    .regex(/^\d+\.\d+\.\d+$/u, "must use major.minor.patch numeric version syntax"),
-  schemaVersion: z.literal(1),
-  sourceCommit: CommitSchema,
-  toolBuildIdentity: z.string().min(1)
+  releaseTag: ReleaseTagSchema,
+  releaseVersion: StableSemanticVersionSchema,
+  schemaVersion: literal(1),
+  sourceCommit: FullCommitSchema,
+  toolBuildIdentity: stringSchema().min(1)
 });
-export const LocalInstallManifestSchema = z.strictObject({
-  createdAt: z.iso.datetime(),
-  createdBy: z.literal("bun run install:local"),
+export const LocalInstallManifestSchema = strictObject({
+  createdAt: iso.datetime(),
+  createdBy: literal("bun run install:local"),
   installId: InstallIdSchema,
-  installKind: z.literal("local"),
-  minimumCodiffVersion: z
-    .string()
-    .regex(/^\d+\.\d+\.\d+$/u, "must use major.minor.patch numeric version syntax"),
-  platform: z.string().min(1),
-  schemaVersion: z.literal(1),
-  sourceCheckout: z
-    .string()
+  installKind: literal("local"),
+  minimumCodiffVersion: StableSemanticVersionSchema,
+  platform: stringSchema().min(1),
+  schemaVersion: literal(1),
+  sourceCheckout: stringSchema()
     .min(1)
     .refine((value) => path.isAbsolute(value)),
-  sourceCommit: CommitSchema,
-  sourceDirty: z.boolean(),
-  toolBuildIdentity: z.string().min(1)
+  sourceCommit: FullCommitSchema,
+  sourceDirty: booleanSchema(),
+  toolBuildIdentity: stringSchema().min(1)
 });
 
-export type LocalInstallManifest = z.output<typeof LocalInstallManifestSchema>;
-export type ReleaseInstallManifest = z.output<typeof ReleaseInstallManifestSchema>;
+export type LocalInstallManifest = output<typeof LocalInstallManifestSchema>;
+export type ReleaseInstallManifest = output<typeof ReleaseInstallManifestSchema>;
 
 /** Load the self-describing Active tool install when one is selected. */
 export function loadActiveLocalInstall(monkeHome: string) {

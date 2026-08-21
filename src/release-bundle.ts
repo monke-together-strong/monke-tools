@@ -21,21 +21,24 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type * as z from "zod";
+import type { output } from "zod";
 
 import { MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
-import { ReleaseInstallManifestSchema, ReleasePlatformSchema } from "./install-manifest.ts";
+import {
+  FullCommitSchema,
+  ReleaseInstallManifestSchema,
+  ReleasePlatformSchema,
+  ReleaseTagSchema,
+  StableSemanticVersionSchema
+} from "./install-manifest.ts";
 import type { ReleaseInstallManifest } from "./install-manifest.ts";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const RELEASE_TAG_PREFIX = "monke-tools-v";
 const CHECKSUM_PATTERN = /^(?<hash>[0-9a-f]{64}) {2}(?<name>[^/\s]+)$/u;
-const RELEASE_TAG_PATTERN = /^monke-tools-v\d+\.\d+\.\d+$/u;
-const SEMANTIC_VERSION_PATTERN = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$/u;
 const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
 const RELEASE_INPUTS = [
   ".github/workflows/publish.yml",
-  "bun.lock",
   "instructions/GLOBAL.md",
   "package.json",
   "scripts/install-local.sh",
@@ -54,7 +57,7 @@ export const SUPPORTED_RELEASE_PLATFORMS = ["macos-arm64", "linux-x64"] as const
 
 interface BuildReleaseBundleOptions {
   outputDirectory: string;
-  platform: z.output<typeof ReleasePlatformSchema>;
+  platform: output<typeof ReleasePlatformSchema>;
   sourceCommit: string;
   version: string;
 }
@@ -62,7 +65,8 @@ interface BuildReleaseBundleOptions {
 interface VerifyReleaseArchiveOptions {
   archivePath: string;
   checksumPath?: string;
-  expectedPlatform: z.output<typeof ReleasePlatformSchema>;
+  expectedGuidanceRoot: string;
+  expectedPlatform: output<typeof ReleasePlatformSchema>;
   expectedSourceCommit: string;
   expectedVersion: string;
   verifyExecutable?: boolean;
@@ -86,13 +90,23 @@ export function isReleaseOwnedPath(filePath: string) {
   );
 }
 
+export function hasReleaseOwnedChanges(filePaths: string[]) {
+  if (filePaths.some(isReleaseOwnedPath)) {
+    return true;
+  }
+  return (
+    filePaths.includes("bun.lock") &&
+    !filePaths.some((filePath) => filePath.startsWith("packages/"))
+  );
+}
+
 export function deriveNextReleaseVersion(tags: string[]) {
   const versions = tags
-    .filter((tag) => RELEASE_TAG_PATTERN.test(tag))
+    .filter((tag) => ReleaseTagSchema.safeParse(tag).success)
     .map((tag) => parseSemanticVersion(tag.slice(RELEASE_TAG_PREFIX.length)))
     .toSorted(compareSemanticVersions);
-  const current = versions.at(-1) ?? [0, 0, 0];
-  return `${String(current[0])}.${String(current[1])}.${String(current[2] + 1)}`;
+  const current = versions.at(-1) ?? [0n, 0n, 0n];
+  return `${String(current[0])}.${String(current[1])}.${String(current[2] + 1n)}`;
 }
 
 export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
@@ -201,6 +215,10 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
       throw new Error(`Release manifest artifact identity does not match ${expectedArchiveName}`);
     }
     assertGuidanceHashes(manifest.guidanceHashes, hashGuidance(extractedRoot));
+    assertGuidanceHashes(
+      manifest.guidanceHashes,
+      hashGuidance(path.resolve(options.expectedGuidanceRoot))
+    );
 
     if (options.verifyExecutable !== false) {
       const version = spawnSync(path.join(extractedRoot, "mt"), ["--version"], {
@@ -208,6 +226,12 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
       });
       if (version.status !== 0 || version.stdout.trim() !== expectedVersion) {
         throw new Error(`Release executable Tool build identity does not match ${expectedVersion}`);
+      }
+      const installer = spawnSync(path.join(extractedRoot, "install.sh"), ["--verify"], {
+        encoding: "utf-8"
+      });
+      if (installer.status !== 0) {
+        throw new Error(`Release installer verification failed: ${installer.stderr.trim()}`);
       }
     }
     return manifest;
@@ -218,6 +242,7 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
 
 export function verifyReleaseAssets(options: {
   directory: string;
+  expectedGuidanceRoot: string;
   sourceCommit: string;
   version: string;
 }) {
@@ -243,6 +268,7 @@ export function verifyReleaseAssets(options: {
     verifyReleaseArchive({
       archivePath: path.join(directory, releaseArchiveName(options.version, platform)),
       checksumPath,
+      expectedGuidanceRoot: options.expectedGuidanceRoot,
       expectedPlatform: platform,
       expectedSourceCommit: options.sourceCommit,
       expectedVersion: options.version,
@@ -253,7 +279,7 @@ export function verifyReleaseAssets(options: {
 
 function compileExecutable(
   outputPath: string,
-  platform: z.output<typeof ReleasePlatformSchema>,
+  platform: output<typeof ReleasePlatformSchema>,
   version: string
 ) {
   const target = platform === "macos-arm64" ? "bun-darwin-arm64" : "bun-linux-x64";
@@ -433,12 +459,9 @@ function assertGuidanceHashes(expected: Record<string, string>, actual: Record<s
   }
 }
 
-function parseSemanticVersion(value: string): [number, number, number] {
-  const match = SEMANTIC_VERSION_PATTERN.exec(value);
-  if (!match?.groups) {
-    throw new Error(`Invalid stable semantic version: ${value}`);
-  }
-  return [Number(match.groups.major), Number(match.groups.minor), Number(match.groups.patch)];
+function parseSemanticVersion(value: string): [bigint, bigint, bigint] {
+  const parts = StableSemanticVersionSchema.parse(value).split(".");
+  return [BigInt(parts[0] ?? ""), BigInt(parts[1] ?? ""), BigInt(parts[2] ?? "")];
 }
 
 function semanticVersionText(value: string) {
@@ -447,17 +470,15 @@ function semanticVersionText(value: string) {
 }
 
 function fullCommit(value: string) {
-  if (!/^[0-9a-f]{40}$/u.test(value)) {
-    throw new Error(`Invalid full source commit: ${value}`);
-  }
-  return value;
+  return FullCommitSchema.parse(value);
 }
 
-function compareSemanticVersions(left: number[], right: number[]) {
-  for (let index = 0; index < 3; index += 1) {
-    const difference = (left[index] ?? 0) - (right[index] ?? 0);
-    if (difference !== 0) {
-      return difference;
+function compareSemanticVersions(left: bigint[], right: bigint[]) {
+  for (const index of [0, 1, 2]) {
+    const leftPart = left[index] ?? 0n;
+    const rightPart = right[index] ?? 0n;
+    if (leftPart !== rightPart) {
+      return leftPart < rightPart ? -1 : 1;
     }
   }
   return 0;
@@ -537,10 +558,9 @@ export function runReleaseBundleCli(arguments_: string[]) {
       return;
     }
     case "relevant": {
-      const relevant = changedPaths(
-        option(arguments_, "--before"),
-        option(arguments_, "--after")
-      ).some(isReleaseOwnedPath);
+      const relevant = hasReleaseOwnedChanges(
+        changedPaths(option(arguments_, "--before"), option(arguments_, "--after"))
+      );
       process.stdout.write(`${String(relevant)}\n`);
       return;
     }
@@ -548,6 +568,7 @@ export function runReleaseBundleCli(arguments_: string[]) {
       verifyReleaseArchive({
         archivePath: option(arguments_, "--archive"),
         checksumPath: optionalOption(arguments_, "--checksums"),
+        expectedGuidanceRoot: repositoryRoot,
         expectedPlatform: ReleasePlatformSchema.parse(option(arguments_, "--platform")),
         expectedSourceCommit: option(arguments_, "--source-commit"),
         expectedVersion: option(arguments_, "--version")
@@ -557,6 +578,7 @@ export function runReleaseBundleCli(arguments_: string[]) {
     case "verify-assets": {
       verifyReleaseAssets({
         directory: option(arguments_, "--directory"),
+        expectedGuidanceRoot: repositoryRoot,
         sourceCommit: option(arguments_, "--source-commit"),
         version: option(arguments_, "--version")
       });
@@ -565,14 +587,5 @@ export function runReleaseBundleCli(arguments_: string[]) {
     default: {
       throw new Error(`Unknown Release bundle command: ${command ?? ""}`);
     }
-  }
-}
-
-if (import.meta.main) {
-  try {
-    runReleaseBundleCli(Bun.argv.slice(2));
-  } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
   }
 }

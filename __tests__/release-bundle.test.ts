@@ -8,7 +8,9 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   buildReleaseBundle,
   deriveNextReleaseVersion,
+  hasReleaseOwnedChanges,
   isReleaseOwnedPath,
+  releaseArchiveName,
   verifyReleaseArchive,
   verifyReleaseAssets,
   writeReleaseChecksums
@@ -104,10 +106,12 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   const tar = spawnSync("tar", ["-czf", archivePath, "-C", bundleRoot, "."], {
     encoding: "utf-8"
   });
-  expect(tar.status).toBe(0);
+  if (tar.status !== 0) {
+    throw new Error(`Could not create Release fixture: ${tar.stderr}`);
+  }
   const checksumPath = path.join(sandbox, `monke-tools-v${RELEASE_VERSION}-checksums.txt`);
   writeFileSync(checksumPath, `${sha256(readFileSync(archivePath))}  ${archiveName}\n`, "utf-8");
-  return { archivePath, checksumPath };
+  return { archivePath, bundleRoot, checksumPath };
 }
 
 describe("Release bundle verifier", () => {
@@ -117,6 +121,7 @@ describe("Release bundle verifier", () => {
     const manifest = verifyReleaseArchive({
       archivePath: fixture.archivePath,
       checksumPath: fixture.checksumPath,
+      expectedGuidanceRoot: fixture.bundleRoot,
       expectedPlatform: "macos-arm64",
       expectedSourceCommit: SOURCE_COMMIT,
       expectedVersion: RELEASE_VERSION
@@ -171,6 +176,7 @@ describe("Release bundle verifier", () => {
       verifyReleaseArchive({
         archivePath: release.archivePath,
         checksumPath: release.checksumPath,
+        expectedGuidanceRoot: release.bundleRoot,
         expectedPlatform: "macos-arm64",
         expectedSourceCommit: SOURCE_COMMIT,
         expectedVersion: RELEASE_VERSION
@@ -186,6 +192,7 @@ describe("Release bundle verifier", () => {
       verifyReleaseArchive({
         archivePath: fixture.archivePath,
         checksumPath: fixture.checksumPath,
+        expectedGuidanceRoot: fixture.bundleRoot,
         expectedPlatform: "macos-arm64",
         expectedSourceCommit: SOURCE_COMMIT,
         expectedVersion: RELEASE_VERSION
@@ -193,14 +200,35 @@ describe("Release bundle verifier", () => {
     ).toThrow(/checksum mismatch/u);
   });
 
+  test("rejects an internally consistent archive that omits source guidance", () => {
+    const fixture = makeReleaseArchive();
+    writeFileSync(
+      path.join(fixture.bundleRoot, "skills", "internal", "omitted.md"),
+      "omitted from archive\n",
+      "utf-8"
+    );
+
+    expect(() =>
+      verifyReleaseArchive({
+        archivePath: fixture.archivePath,
+        checksumPath: fixture.checksumPath,
+        expectedGuidanceRoot: fixture.bundleRoot,
+        expectedPlatform: "macos-arm64",
+        expectedSourceCommit: SOURCE_COMMIT,
+        expectedVersion: RELEASE_VERSION
+      })
+    ).toThrow(/guidance hashes do not match/u);
+  });
+
   test("requires checksums for both supported platform archives", () => {
     const directory = makeTempDir("release-assets");
-    makeReleaseArchive({ platform: "macos-arm64", sandbox: directory });
+    const source = makeReleaseArchive({ platform: "macos-arm64", sandbox: directory });
     makeReleaseArchive({ platform: "linux-x64", sandbox: directory });
     const checksumPath = writeReleaseChecksums(directory, RELEASE_VERSION);
 
     const manifests = verifyReleaseAssets({
       directory,
+      expectedGuidanceRoot: source.bundleRoot,
       sourceCommit: SOURCE_COMMIT,
       version: RELEASE_VERSION
     });
@@ -224,6 +252,7 @@ describe("Release bundle verifier", () => {
 
     const manifest = verifyReleaseArchive({
       archivePath,
+      expectedGuidanceRoot: path.join(import.meta.dirname, ".."),
       expectedPlatform: platform,
       expectedSourceCommit: SOURCE_COMMIT,
       expectedVersion: RELEASE_VERSION
@@ -240,6 +269,7 @@ describe("Mainline Release selection", () => {
         "monke-tools-v1.9.9",
         "monke-tools-v1.10.2",
         "monke-tools-v2.0.0",
+        "monke-tools-v09.0.0",
         "monke-tools-v99.0.0-rc.1",
         "monke-tools-vbanana",
         "other-package-v99.0.0"
@@ -247,15 +277,28 @@ describe("Mainline Release selection", () => {
     ).toBe("2.0.1");
   });
 
+  test("rejects leading-zero versions", () => {
+    expect(() => releaseArchiveName("01.2.3", "macos-arm64")).toThrow(
+      /stable major\.minor\.patch semantic version/u
+    );
+  });
+
   test.each([
     ["src/index.ts", true],
     ["skills/codex/codex-chrome-use/SKILL.md", true],
     ["skills/internal/implement/SKILL.md", true],
     ["scripts/install-release.sh", true],
+    ["bun.lock", false],
     ["README.md", false],
     ["docs/adr/0009-distribute-monke-tools-as-atomic-release-bundles.md", false],
     ["packages/oxc-config/src/oxlint.ts", false]
   ])("classifies %s as release-owned: %s", (filePath, expected) => {
     expect(isReleaseOwnedPath(filePath)).toBe(expected);
+  });
+
+  test("skips an unrelated workspace dependency and lockfile change", () => {
+    expect(hasReleaseOwnedChanges(["bun.lock", "packages/oxc-config/package.json"])).toBeFalsy();
+    expect(hasReleaseOwnedChanges(["bun.lock", "package.json"])).toBeTruthy();
+    expect(hasReleaseOwnedChanges(["bun.lock"])).toBeTruthy();
   });
 });

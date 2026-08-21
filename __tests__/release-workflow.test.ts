@@ -3,29 +3,35 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 import { parse } from "yaml";
-import * as z from "zod";
+import {
+  array as arraySchema,
+  literal,
+  looseObject,
+  record,
+  string as stringSchema,
+  union
+} from "zod";
+import type { output } from "zod";
 
-const StepSchema = z.looseObject({
-  name: z.string(),
-  run: z.string().optional(),
-  uses: z.string().optional()
+const StepSchema = looseObject({
+  name: stringSchema(),
+  run: stringSchema().optional(),
+  uses: stringSchema().optional()
 });
-const JobSchema = z.looseObject({
-  needs: z.union([z.string(), z.array(z.string())]).optional(),
-  steps: z.array(StepSchema),
-  strategy: z
-    .looseObject({
-      matrix: z.looseObject({ include: z.array(z.record(z.string(), z.string())) })
-    })
-    .optional()
+const JobSchema = looseObject({
+  needs: union([stringSchema(), arraySchema(stringSchema())]).optional(),
+  steps: arraySchema(StepSchema),
+  strategy: looseObject({
+    matrix: looseObject({ include: arraySchema(record(stringSchema(), stringSchema())) })
+  }).optional()
 });
-const WorkflowSchema = z.looseObject({
-  concurrency: z.looseObject({
-    "cancel-in-progress": z.literal(false),
-    group: z.string()
+const WorkflowSchema = looseObject({
+  concurrency: looseObject({
+    "cancel-in-progress": literal(false),
+    group: stringSchema()
   }),
-  jobs: z.record(z.string(), JobSchema),
-  on: z.looseObject({ push: z.looseObject({ branches: z.array(z.string()) }) })
+  jobs: record(stringSchema(), JobSchema),
+  on: looseObject({ push: looseObject({ branches: arraySchema(stringSchema()) }) })
 });
 
 const workflowPath = path.join(import.meta.dirname, "..", ".github", "workflows", "publish.yml");
@@ -35,7 +41,7 @@ function readWorkflow() {
   return { parsed: WorkflowSchema.parse(parse(source)), source };
 }
 
-function stepIndex(job: z.output<typeof JobSchema>, name: string) {
+function stepIndex(job: output<typeof JobSchema>, name: string) {
   return job.steps.findIndex((step) => step.name === name);
 }
 
