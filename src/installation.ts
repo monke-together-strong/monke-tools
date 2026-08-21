@@ -396,7 +396,7 @@ function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
   return manifest;
 }
 
-function releasePlatform(runtime: Runtime) {
+export function releasePlatform(runtime: Runtime) {
   if (runtime.platform === "darwin" && runtime.architecture === "arm64") {
     return "macos-arm64";
   }

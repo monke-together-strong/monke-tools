@@ -27,6 +27,7 @@ import type { output } from "zod";
 import { MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
 import {
   FullCommitSchema,
+  RELEASE_TAG_PREFIX,
   ReleaseInstallManifestSchema,
   ReleasePlatformSchema,
   ReleaseTagSchema,
@@ -40,7 +41,6 @@ import {
 } from "./release-guidance.ts";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
-const RELEASE_TAG_PREFIX = "monke-tools-v";
 const CHECKSUM_PATTERN = /^(?<hash>[0-9a-f]{64}) {2}(?<name>[^/\s]+)$/u;
 const ChecksumEntrySchema = stringSchema()
   .regex(CHECKSUM_PATTERN, "must be a SHA-256 hash followed by two spaces and an asset name")
@@ -127,9 +127,9 @@ export function hasReleaseOwnedChanges(filePaths: string[]) {
 export function deriveNextReleaseVersion(tags: string[]) {
   const versions = tags
     .filter((tag) => ReleaseTagSchema.safeParse(tag).success)
-    .map((tag) => parseSemanticVersion(tag.slice(RELEASE_TAG_PREFIX.length)))
-    .toSorted(compareSemanticVersions);
-  const current = versions.at(-1) ?? [0n, 0n, 0n];
+    .map((tag) => tag.slice(RELEASE_TAG_PREFIX.length))
+    .toSorted(compareStableSemanticVersions);
+  const current = parseSemanticVersion(versions.at(-1) ?? "0.0.0");
   return `${String(current[0])}.${String(current[1])}.${String(current[2] + 1n)}`;
 }
 
@@ -443,10 +443,12 @@ function parseSemanticVersion(value: string): [bigint, bigint, bigint] {
   return [BigInt(parts[0] ?? ""), BigInt(parts[1] ?? ""), BigInt(parts[2] ?? "")];
 }
 
-function compareSemanticVersions(left: bigint[], right: bigint[]) {
+export function compareStableSemanticVersions(left: string, right: string) {
+  const leftParts = parseSemanticVersion(left);
+  const rightParts = parseSemanticVersion(right);
   for (const index of [0, 1, 2]) {
-    const leftPart = left[index] ?? 0n;
-    const rightPart = right[index] ?? 0n;
+    const leftPart = leftParts[index] ?? 0n;
+    const rightPart = rightParts[index] ?? 0n;
     if (leftPart !== rightPart) {
       return leftPart < rightPart ? -1 : 1;
     }

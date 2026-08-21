@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 
 import { createRuntime, withGlobalLock } from "../src/runtime.ts";
 import { makeTempDir } from "./helpers.ts";
@@ -24,6 +24,23 @@ describe("runtime", () => {
         options: [{ label: "One", value: "one" }]
       })
     ).rejects.toThrow(/No scripted select values remain/u);
+  });
+
+  test("Release requests fall through an empty GH_TOKEN to GITHUB_TOKEN", async () => {
+    let authorization = "";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      authorization = new Headers(init?.headers).get("Authorization") ?? "";
+      return new Response("[]", { status: 200 });
+    });
+
+    try {
+      const runtime = createRuntime({ env: { GH_TOKEN: "", GITHUB_TOKEN: "fallback-token" } });
+      await runtime.releaseDistribution.listReleases(1);
+    } finally {
+      fetchMock.mockRestore();
+    }
+
+    expect(authorization).toBe("Bearer fallback-token");
   });
 
   test("withGlobalLock evicts stale locks left by dead processes", () => {

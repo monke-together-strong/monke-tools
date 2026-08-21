@@ -40,6 +40,10 @@ const LockMetadataSchema = z.object({
 });
 const LockPidSchema = z.number().int().positive();
 const LockTimestampSchema = z.number();
+interface LockAttempt {
+  release?: () => void;
+  wait: boolean;
+}
 const ReleaseCatalogAssetSchema = z.looseObject({
   browser_download_url: z.url(),
   digest: z.string().nullable().optional(),
@@ -81,6 +85,8 @@ export interface RuntimeOptions {
   releaseDistribution?: ReleaseDistribution;
   /** Scripted selected values used by tests for Clack-style select prompts. */
   selectValues?: string[];
+  /** Status-output TTY override used by presentation behavior tests. */
+  stderrIsTTY?: boolean;
   /** Scripted stdin lines used by tests for interactive prompts. */
   stdinText?: string;
   /** Compiled Tool build identity override used by installation behavior tests. */
@@ -176,6 +182,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
+    stderrIsTTY: resolveStderrIsTTY(options),
     toolBuildIdentity: options?.toolBuildIdentity ?? DEFAULT_TOOL_BUILD_IDENTITY,
     toolInstallRoot: options?.toolInstallRoot ?? resolveRunningToolInstallRoot(),
     writeStderr(text: string) {
@@ -192,6 +199,10 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
   };
 }
 
+function resolveStderrIsTTY(options: RuntimeOptions | undefined) {
+  return options?.stderrIsTTY ?? process.stderr.isTTY;
+}
+
 function createGitHubReleaseDistribution(
   env: Record<string, string | undefined>
 ): ReleaseDistribution {
@@ -201,7 +212,7 @@ function createGitHubReleaseDistribution(
     "User-Agent": "monke-tools",
     "X-GitHub-Api-Version": "2022-11-28"
   };
-  const token = env.GH_TOKEN ?? env.GITHUB_TOKEN;
+  const token = env.GH_TOKEN || env.GITHUB_TOKEN;
   const headers = token ? { ...commonHeaders, Authorization: `Bearer ${token}` } : commonHeaders;
 
   const request = async (url: string) => {
@@ -439,28 +450,14 @@ export async function withInstallationLockAsync<T>(home: string, callback: () =>
 }
 
 async function acquireLockPathAsync(lockPath: string) {
-  mkdirSync(path.dirname(lockPath), { recursive: true });
-  const deadline = Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
-  let fileDescriptor: number | null = null;
-
-  while (fileDescriptor === null) {
-    try {
-      fileDescriptor = openSync(lockPath, "wx");
-      writeFileSync(
-        lockPath,
-        JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
-        "utf-8"
-      );
-    } catch (error) {
-      if (!errorMessage(error).includes("EEXIST")) {
-        throw error;
-      }
-      if (tryEvictStaleLock(lockPath)) {
-        continue;
-      }
-      if (Date.now() >= deadline) {
-        throw new MonkeError(`Timed out waiting for lock at ${lockPath}`);
-      }
+  const deadline = prepareLockAcquisition(lockPath);
+  while (true) {
+    const attempt = tryAcquireLockPath(lockPath);
+    if (attempt.release) {
+      return attempt.release;
+    }
+    assertLockDeadline(lockPath, deadline);
+    if (attempt.wait) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Lock retries must remain sequential.
       await new Promise<void>((resolve) => {
         setTimeout(() => {
@@ -469,14 +466,6 @@ async function acquireLockPathAsync(lockPath: string) {
       });
     }
   }
-
-  return () => {
-    if (fileDescriptor !== null) {
-      closeSync(fileDescriptor);
-      fileDescriptor = null;
-    }
-    rmSync(lockPath, { force: true });
-  };
 }
 
 /** Run a synchronous callback while holding a lock scoped inside the monke home directory. */
@@ -494,43 +483,56 @@ function withLockPath<T>(lockPath: string, callback: () => T) {
 }
 
 function acquireLockPath(lockPath: string) {
-  mkdirSync(path.dirname(lockPath), { recursive: true });
-  const deadline = Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
-  let fileDescriptor: number | null = null;
-
-  while (fileDescriptor === null) {
-    try {
-      fileDescriptor = openSync(lockPath, "wx");
-      writeFileSync(
-        lockPath,
-        JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
-        "utf-8"
-      );
-    } catch (error) {
-      const message = errorMessage(error);
-      if (!message.includes("EEXIST")) {
-        throw error;
-      }
-
-      if (tryEvictStaleLock(lockPath)) {
-        continue;
-      }
-
-      if (Date.now() >= deadline) {
-        throw new MonkeError(`Timed out waiting for lock at ${lockPath}`);
-      }
-
+  const deadline = prepareLockAcquisition(lockPath);
+  while (true) {
+    const attempt = tryAcquireLockPath(lockPath);
+    if (attempt.release) {
+      return attempt.release;
+    }
+    assertLockDeadline(lockPath, deadline);
+    if (attempt.wait) {
       sleep(50);
     }
   }
+}
 
-  return () => {
+function prepareLockAcquisition(lockPath: string) {
+  mkdirSync(path.dirname(lockPath), { recursive: true });
+  return Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
+}
+
+function tryAcquireLockPath(lockPath: string): LockAttempt {
+  let fileDescriptor: number | null = null;
+  try {
+    fileDescriptor = openSync(lockPath, "wx");
+    writeFileSync(lockPath, JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }), "utf-8");
+  } catch (error) {
     if (fileDescriptor !== null) {
       closeSync(fileDescriptor);
-      fileDescriptor = null;
+      rmSync(lockPath, { force: true });
     }
-    rmSync(lockPath, { force: true });
+    if (!errorMessage(error).includes("EEXIST")) {
+      throw error;
+    }
+    return { wait: !tryEvictStaleLock(lockPath) };
+  }
+
+  return {
+    release: () => {
+      if (fileDescriptor !== null) {
+        closeSync(fileDescriptor);
+        fileDescriptor = null;
+      }
+      rmSync(lockPath, { force: true });
+    },
+    wait: false
   };
+}
+
+function assertLockDeadline(lockPath: string, deadline: number) {
+  if (Date.now() >= deadline) {
+    throw new MonkeError(`Timed out waiting for lock at ${lockPath}`);
+  }
 }
 
 export function isPortAvailable(port: number) {

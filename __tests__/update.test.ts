@@ -173,7 +173,7 @@ describe("Release update", () => {
       createRuntime({
         architecture: "x64",
         cwd: sandbox,
-        env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+        env: { FORCE_COLOR: "1", HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
         onStderr(text) {
           stderr += text;
         },
@@ -201,10 +201,52 @@ describe("Release update", () => {
     );
 
     expect(stderr).toContain("Update available: 1.2.3 -> 1.2.4");
+    expect(stderr).not.toContain("Checking the stable");
+    expect(stderr).not.toContain("\u001B[");
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
       path.join("installs", "release-1.2.3-linux-x64")
     );
     expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
+  });
+
+  test("interactive checks show colored progress while redirected output stays stable", async () => {
+    const sandbox = makeTempDir("release-update-tty");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
+    let stderr = "";
+
+    await runCliAsync(
+      ["update", "--check"],
+      createRuntime({
+        architecture: "x64",
+        cwd: sandbox,
+        env: {
+          FORCE_COLOR: "1",
+          HOME: path.join(sandbox, "home"),
+          MONKE_HOME: monkeHome,
+          NO_COLOR: undefined
+        },
+        onStderr(text) {
+          stderr += text;
+        },
+        onStdout() {},
+        platform: "linux",
+        releaseDistribution: {
+          async downloadReleaseAsset() {
+            throw new Error("check must not download Release assets");
+          },
+          async listReleases(page) {
+            return page === 1 ? [release("1.2.4")] : [];
+          }
+        },
+        stderrIsTTY: true,
+        toolBuildIdentity: "1.2.3",
+        toolInstallRoot: installRoot
+      })
+    );
+
+    expect(stderr).toContain("Checking the stable monke-tools Release catalog");
+    expect(stderr).toContain("\u001B[");
   });
 
   test("update verifies and atomically activates a complete Release while retaining its predecessor", async () => {
@@ -352,7 +394,7 @@ describe("Release update", () => {
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
       path.join("installs", "release-1.2.4-linux-x64")
     );
-    expect(stderr).toContain("Local to Release mode");
+    expect(stderr).toContain("Release install in place of the Local tool install");
     expect(stderr).toContain(sourceCheckout);
     expect(stderr).toContain("vp run install:local");
   });
@@ -402,7 +444,7 @@ describe("Release update", () => {
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
       path.join("installs", "release-1.2.4-linux-x64")
     );
-    expect(stderr).toContain("Local to Release mode");
+    expect(stderr).toContain("Release install in place of the Local tool install");
     expect(stderr).toContain(sourceCheckout);
     expect(stderr).toContain("vp run install:local");
   });

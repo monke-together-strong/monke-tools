@@ -6,22 +6,26 @@ import { errorMessage, MonkeError } from "./errors.ts";
 import {
   FullCommitSchema,
   loadActiveToolInstall,
-  ReleaseTagSchema,
-  StableSemanticVersionSchema
+  RELEASE_TAG_PREFIX,
+  ReleaseTagSchema
 } from "./install-manifest.ts";
 import type { ReleaseInstallManifest, ToolInstallManifest } from "./install-manifest.ts";
-import { cleanupStaleStagingDirectories, runActivateReleaseInstall } from "./installation.ts";
+import {
+  cleanupStaleStagingDirectories,
+  releasePlatform,
+  runActivateReleaseInstall
+} from "./installation.ts";
 import { createLogger } from "./logger.ts";
 import {
   releaseArchiveName,
   releaseChecksumsName,
+  compareStableSemanticVersions,
   verifyReleaseArchive
 } from "./release-bundle.ts";
 import { findChangedReleaseGuidancePaths } from "./release-guidance.ts";
 import { getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import type { ReleaseCatalogAsset, ReleaseCatalogEntry, Runtime } from "./types.ts";
 
-const RELEASE_TAG_PREFIX = "monke-tools-v";
 const MAX_RELEASE_PAGES = 10_000;
 
 export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
@@ -34,6 +38,7 @@ export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
   const platform = releasePlatform(runtime);
 
   if (options.check) {
+    createLogger(runtime).progress("Checking the stable monke-tools Release catalog...");
     const selected = await selectLatestStableRelease(runtime);
     assertSelectedReleaseContract(selected, platform);
     reportAvailability(runtime, active.manifest, selected.version);
@@ -47,6 +52,7 @@ export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
     }
     assertReleaseInstallNotCustomized(lockedActive);
     cleanupStaleStagingDirectories(monkeHome);
+    createLogger(runtime).progress("Checking the stable monke-tools Release catalog...");
     const selected = await selectLatestStableRelease(runtime);
     const contract = assertSelectedReleaseContract(selected, platform);
     if (!isUpdateAvailable(lockedActive.manifest, selected.version)) {
@@ -110,7 +116,7 @@ async function selectLatestStableRelease(runtime: Runtime) {
         continue;
       }
       const version = release.tag_name.slice(RELEASE_TAG_PREFIX.length);
-      if (selected === null || compareSemanticVersions(version, selectedVersion) > 0) {
+      if (selected === null || compareStableSemanticVersions(version, selectedVersion) > 0) {
         selected = release;
         selectedVersion = version;
       }
@@ -159,6 +165,8 @@ async function downloadAndActivate(
   try {
     const archivePath = path.join(updateRoot, contract.archiveName);
     const checksumsPath = path.join(updateRoot, contract.checksumsName);
+    const logger = createLogger(runtime);
+    logger.progress(`Downloading monke-tools ${version} for ${contract.platform}...`);
     const [archive, checksums] = await Promise.all([
       runtime.releaseDistribution.downloadReleaseAsset(contract.archive.browser_download_url),
       runtime.releaseDistribution.downloadReleaseAsset(contract.checksums.browser_download_url)
@@ -167,6 +175,7 @@ async function downloadAndActivate(
     assertAssetDigest(checksums, contract.checksums);
     writeFileSync(archivePath, archive);
     writeFileSync(checksumsPath, checksums);
+    logger.progress(`Verifying monke-tools ${version}...`);
     try {
       verifyReleaseArchive({
         archivePath,
@@ -202,7 +211,9 @@ function isSelectedReleaseActive(monkeHome: string, selectedVersion: string) {
 
 function reportLocalTransition(runtime: Runtime, sourceCheckout: string) {
   const logger = createLogger(runtime);
-  logger.info(`Switched from Local to Release mode. Preserved source checkout: ${sourceCheckout}`);
+  logger.info(
+    `Activated a Release install in place of the Local tool install. Preserved Installed source checkout: ${sourceCheckout}`
+  );
   logger.hint("To return to Skill authoring mode, run `vp run install:local` from that checkout.");
 }
 
@@ -234,11 +245,11 @@ function reportAvailability(
 function isUpdateAvailable(manifest: ToolInstallManifest, selectedVersion: string) {
   return (
     manifest.installKind === "local" ||
-    compareSemanticVersions(selectedVersion, manifest.releaseVersion) > 0
+    compareStableSemanticVersions(selectedVersion, manifest.releaseVersion) > 0
   );
 }
 
-function selectAsset(assets: ReleaseCatalogAsset[], name: string): ReleaseCatalogAsset {
+function selectAsset(assets: ReleaseCatalogAsset[], name: string) {
   const matches = assets.filter((asset) => asset.name === name);
   if (matches.length !== 1) {
     throw new MonkeError(
@@ -252,27 +263,4 @@ function selectAsset(assets: ReleaseCatalogAsset[], name: string): ReleaseCatalo
     throw new MonkeError(`Selected Release is missing required asset ${name}`);
   }
   return asset;
-}
-
-function releasePlatform(runtime: Runtime): ReleaseInstallManifest["platform"] {
-  if (runtime.platform === "darwin" && runtime.architecture === "arm64") {
-    return "macos-arm64";
-  }
-  if (runtime.platform === "linux" && runtime.architecture === "x64") {
-    return "linux-x64";
-  }
-  throw new MonkeError("Unsupported Release platform; supported platforms: macOS arm64, Linux x64");
-}
-
-function compareSemanticVersions(left: string, right: string) {
-  const leftParts = StableSemanticVersionSchema.parse(left).split(".").map(BigInt);
-  const rightParts = StableSemanticVersionSchema.parse(right).split(".").map(BigInt);
-  for (let index = 0; index < leftParts.length; index += 1) {
-    const leftPart = leftParts[index] ?? 0n;
-    const rightPart = rightParts[index] ?? 0n;
-    if (leftPart !== rightPart) {
-      return leftPart > rightPart ? 1 : -1;
-    }
-  }
-  return 0;
 }

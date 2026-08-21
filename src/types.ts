@@ -21,6 +21,8 @@ export interface Runtime {
   readonly releaseDistribution: ReleaseDistribution;
   /** Select one value from an interactive terminal picker. */
   select: (prompt: SelectPrompt) => Promise<string>;
+  /** Whether status output is connected to an interactive terminal. */
+  readonly stderrIsTTY: boolean;
   /** Identity compiled into this mt executable. */
   readonly toolBuildIdentity: string;
   /** Root of the versioned tool install resolved once when the command starts. */
