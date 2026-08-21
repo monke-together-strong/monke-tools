@@ -456,20 +456,7 @@ export function withPlatform<T>(platform: NodeJS.Platform, callback: () => T) {
   }
 }
 
-type ParsedYamlValue =
-  | ParsedYamlValue[]
-  | { [key: string]: ParsedYamlValue }
-  | boolean
-  | null
-  | number
-  | string;
-
-export function readSingleYamlFile<T extends z.ZodType>(
-  directoryPath: string,
-  schema: T
-): z.output<T>;
-export function readSingleYamlFile(directoryPath: string): ParsedYamlValue;
-export function readSingleYamlFile(directoryPath: string, schema?: z.ZodType) {
+export function readSingleYamlFile<T extends z.ZodType>(directoryPath: string, schema: T) {
   const entries = readdirSync(directoryPath).filter((entry) => entry.endsWith(".yml"));
   if (entries.length !== 1) {
     throw new Error(`Expected exactly one yaml file in ${directoryPath}, found ${entries.length}`);
@@ -479,7 +466,7 @@ export function readSingleYamlFile(directoryPath: string, schema?: z.ZodType) {
     throw new Error(`Expected one yaml file in ${directoryPath}`);
   }
   const value: unknown = parse(readFileSync(path.join(directoryPath, entry), "utf-8"));
-  return schema ? schema.parse(value) : value;
+  return schema.parse(value);
 }
 
 export function writeExecutable(targetPath: string, contents: string) {

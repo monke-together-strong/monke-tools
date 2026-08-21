@@ -290,7 +290,7 @@ apps:
       monkeHome: home
     });
 
-    expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
+    expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
       /Expected exactly one yaml file.*found 0/u
     );
     const reservationState = readSingleYamlFile(
@@ -326,7 +326,7 @@ apps:
       monkeHome: home
     });
 
-    expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
+    expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
       /Expected exactly one yaml file.*found 0/u
     );
   });
@@ -472,7 +472,7 @@ apps:
     expect(() =>
       git(root, ["show-ref", "--verify", "--quiet", "refs/heads/clean-merged"])
     ).not.toThrow();
-    expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
+    expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
       /Expected exactly one yaml file.*found 0/u
     );
   });
@@ -597,7 +597,7 @@ apps:
     expect(result.stderr).toContain("Merged cleanup: removed 0 worktrees, skipped 1 worktree");
     expect(result.stderr).toContain("Removed 0 dead sessions");
     expect(existsSync(worktree)).toBeTruthy();
-    expect(readSingleYamlFile(path.join(home, "sessions"))).toBeDefined();
+    expect(readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toBeDefined();
   });
 
   test("cleanup --merged fails closed for malformed GitHub PR metadata", () => {
@@ -651,7 +651,7 @@ apps:
     expect(result.stderr).toContain("no exact merged PR match");
     expect(result.stderr).toContain("Merged cleanup: removed 0 worktrees, skipped 1 worktree");
     expect(existsSync(worktree)).toBeTruthy();
-    expect(readSingleYamlFile(path.join(home, "sessions"))).toBeDefined();
+    expect(readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toBeDefined();
   });
 
   test("cleanup --merged keeps session state when cleanupCommand fails after worktree removal", () => {
@@ -703,7 +703,7 @@ apps:
 
     expect(existsSync(worktree)).toBeFalsy();
     expect(read(root, "cleanup-merged-failure.log")).toBe("clean-merged\n");
-    expect(readSingleYamlFile(path.join(home, "sessions"))).toBeDefined();
+    expect(readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toBeDefined();
   });
 
   test("cleanupCommand runs only for dead worktrees and removes state after success", () => {
@@ -761,7 +761,7 @@ apps:
     const shellArgs = readFileSync(shLogPath, "utf-8").trim().split("\n");
     expect(shellArgs.filter((arg) => arg === "-c")).toHaveLength(1);
     expect(shellArgs).not.toContain("-lc");
-    expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
+    expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
       /Expected exactly one yaml file.*found 0/u
     );
   });
@@ -812,7 +812,7 @@ apps:
     });
 
     expect(read(root, "cleanup-resource-command.log")).toBe("SOL/USDT:USDT\nclean-command\n");
-    expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
+    expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
       /Expected exactly one yaml file.*found 0/u
     );
   });
@@ -869,7 +869,7 @@ apps:
     });
 
     expect(read(root, "cleanup-drift.log")).toBe(`drift-clean\n${root}\n`);
-    expect(() => readSingleYamlFile(path.join(home, "sessions"))).toThrow(
+    expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
       /Expected exactly one yaml file.*found 0/u
     );
   });
