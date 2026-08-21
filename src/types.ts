@@ -1,8 +1,6 @@
 import type { ReleaseCatalogEntry } from "./release-catalog-schema.ts";
 import type { SessionRepoState } from "./state-schema.ts";
 
-export type { ReleaseCatalogAsset, ReleaseCatalogEntry } from "./release-catalog-schema.ts";
-
 export interface Runtime {
   /** Architecture of the machine running this command. */
   readonly architecture: string;

@@ -23,9 +23,10 @@ import {
   compareStableSemanticVersions,
   verifyReleaseArchive
 } from "./release-bundle.ts";
+import type { ReleaseCatalogAsset, ReleaseCatalogEntry } from "./release-catalog-schema.ts";
 import { findChangedReleaseGuidancePaths } from "./release-guidance.ts";
 import { getMonkeHome } from "./runtime.ts";
-import type { ReleaseCatalogAsset, ReleaseCatalogEntry, Runtime } from "./types.ts";
+import type { Runtime } from "./types.ts";
 
 const MAX_RELEASE_PAGES = 10_000;
 const RELEASE_ASSET_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
