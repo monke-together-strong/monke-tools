@@ -4,6 +4,8 @@ set -eu
 REPOSITORY=monke-together-strong/monke-tools
 RELEASES_API="https://api.github.com/repos/$REPOSITORY/releases"
 SUPPORTED_PLATFORMS='macOS arm64, Linux x64'
+RELEASES_PER_PAGE=100
+MAX_RELEASE_PAGES=10000
 
 SYSTEM=$(uname -s)
 MACHINE=$(uname -m)
@@ -61,8 +63,10 @@ version_is_greater() {
     split(candidate, left, ".")
     split(current, right, ".")
     for (i = 1; i <= 3; i += 1) {
-      if ((left[i] + 0) > (right[i] + 0)) exit 0
-      if ((left[i] + 0) < (right[i] + 0)) exit 1
+      if (length(left[i]) > length(right[i])) exit 0
+      if (length(left[i]) < length(right[i])) exit 1
+      if (("v" left[i]) > ("v" right[i])) exit 0
+      if (("v" left[i]) < ("v" right[i])) exit 1
     }
     exit 1
   }'
@@ -174,9 +178,9 @@ page=1
 selected_version=
 selected_tag=
 selected_metadata="$WORK_DIRECTORY/selected-release.json"
-while [ "$page" -le 10000 ]; do
+while [ "$page" -le "$MAX_RELEASE_PAGES" ]; do
   page_file="$WORK_DIRECTORY/releases-$page.json"
-  if ! github_curl -o "$page_file" "$RELEASES_API?per_page=100&page=$page"; then
+  if ! github_curl -o "$page_file" "$RELEASES_API?per_page=$RELEASES_PER_PAGE&page=$page"; then
     printf 'GitHub Release lookup failed on page %s\n' "$page" >&2
     exit 1
   fi
@@ -211,7 +215,7 @@ if [ -z "$selected_version" ]; then
   printf 'No stable monke-tools Release was found\n' >&2
   exit 1
 fi
-if [ "$page" -gt 10000 ]; then
+if [ "$page" -gt "$MAX_RELEASE_PAGES" ]; then
   printf 'GitHub Release lookup exceeded the pagination safety limit\n' >&2
   exit 1
 fi

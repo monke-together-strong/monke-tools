@@ -33,6 +33,7 @@ import {
   StableSemanticVersionSchema
 } from "./install-manifest.ts";
 import type { ReleaseInstallManifest } from "./install-manifest.ts";
+import { BUNDLED_GUIDANCE_FOLDERS, hashReleaseGuidance } from "./release-guidance.ts";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const RELEASE_TAG_PREFIX = "monke-tools-v";
@@ -55,7 +56,6 @@ const ChecksumEntriesSchema = arraySchema(ChecksumEntrySchema).superRefine((entr
     names.add(entry.name);
   }
 });
-const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
 const RELEASE_INPUTS = [
   ".github/workflows/publish.yml",
   "install.sh",
@@ -147,7 +147,7 @@ export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
 
     const manifest: ReleaseInstallManifest = ReleaseInstallManifestSchema.parse({
       artifactName: archiveName,
-      guidanceHashes: hashGuidance(bundleRoot),
+      guidanceHashes: hashReleaseGuidance(bundleRoot),
       installKind: "release",
       minimumCodiffVersion: MINIMUM_CODIFF_VERSION_TEXT,
       platform,
@@ -234,10 +234,10 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
     if (manifest.artifactName !== expectedArchiveName) {
       throw new Error(`Release manifest artifact identity does not match ${expectedArchiveName}`);
     }
-    assertGuidanceHashes(manifest.guidanceHashes, hashGuidance(extractedRoot));
+    assertGuidanceHashes(manifest.guidanceHashes, hashReleaseGuidance(extractedRoot));
     assertGuidanceHashes(
       manifest.guidanceHashes,
-      hashGuidance(path.resolve(options.expectedGuidanceRoot))
+      hashReleaseGuidance(path.resolve(options.expectedGuidanceRoot))
     );
 
     if (options.verifyExecutable !== false) {
@@ -333,35 +333,6 @@ function copyBundleInputs(bundleRoot: string) {
     path.join(bundleRoot, "install.sh")
   );
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
-}
-
-function hashGuidance(bundleRoot: string) {
-  const hashes: Record<string, string> = {};
-  for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
-    const root = path.join(bundleRoot, "skills", folder);
-    for (const filePath of listFiles(root)) {
-      const relativePath = path.relative(bundleRoot, filePath).replaceAll(path.sep, "/");
-      hashes[relativePath] = hashFile(filePath);
-    }
-  }
-  return Object.fromEntries(
-    Object.entries(hashes).toSorted(([left], [right]) => left.localeCompare(right))
-  );
-}
-
-function listFiles(root: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const entryPath = path.join(root, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...listFiles(entryPath));
-    } else if (entry.isFile()) {
-      files.push(entryPath);
-    } else {
-      throw new Error(`Release guidance contains an unsupported filesystem entry: ${entryPath}`);
-    }
-  }
-  return files;
 }
 
 function hashFile(filePath: string) {

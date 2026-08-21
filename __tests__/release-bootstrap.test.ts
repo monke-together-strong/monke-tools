@@ -28,6 +28,8 @@ function prepareBootstrapFixture(
     invalidArchive?: boolean;
     machine?: string;
     missingAsset?: boolean;
+    olderVersion?: string;
+    selectedVersion?: string;
     system?: string;
   } = {}
 ) {
@@ -36,8 +38,11 @@ function prepareBootstrapFixture(
   const responses = path.join(sandbox, "responses");
   const bundleRoot = path.join(sandbox, "bundle");
   const platform = options.system === "Darwin" ? "macos-arm64" : "linux-x64";
-  const archiveName = `monke-tools-v1.2.3-${platform}.tar.gz`;
-  const checksumName = "monke-tools-v1.2.3-checksums.txt";
+  const selectedVersion = options.selectedVersion ?? "1.2.3";
+  const olderVersion = options.olderVersion ?? "1.2.2";
+  const selectedTag = `monke-tools-v${selectedVersion}`;
+  const archiveName = `${selectedTag}-${platform}.tar.gz`;
+  const checksumName = `${selectedTag}-checksums.txt`;
   const archivePath = path.join(responses, archiveName);
   const checksumPath = path.join(responses, checksumName);
   const installLog = path.join(sandbox, "install.log");
@@ -70,7 +75,7 @@ printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
         ],
     draft: false,
     prerelease: false,
-    tag_name: "monke-tools-v1.2.3"
+    tag_name: selectedTag
   };
   write(
     responses,
@@ -82,7 +87,7 @@ printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
         prerelease: false,
         tag_name: "@monke/other@9.0.0"
       },
-      { draft: false, prerelease: false, tag_name: "monke-tools-v1.2.2" }
+      { draft: false, prerelease: false, tag_name: `monke-tools-v${olderVersion}` }
     )
   );
   write(
@@ -125,7 +130,7 @@ printf '%s\n' "$url" >> ${JSON.stringify(curlLog)}
 ${options.failLookup ? "case \"$url\" in *'page=1') exit 88 ;; esac" : ""}
 ${options.failDownload ? `case "$url" in *${archiveName}) exit 89 ;; esac` : ""}
 case "$url" in
-  */releases/tags/monke-tools-v1.2.3) source=${JSON.stringify(path.join(responses, "selected-release.json"))} ;;
+  */releases/tags/${selectedTag}) source=${JSON.stringify(path.join(responses, "selected-release.json"))} ;;
   *'page=1') source=${JSON.stringify(path.join(responses, "page-1.json"))} ;;
   *'page=2') source=${JSON.stringify(path.join(responses, "page-2.json"))} ;;
   *'page=3') source=${JSON.stringify(path.join(responses, "page-3.json"))} ;;
@@ -185,6 +190,31 @@ describe("public Release bootstrap", () => {
 
     expect(result.exitCode).toBe(0);
     expect(readFileSync(fixture.curlLog, "utf-8")).toContain(fixture.archiveName);
+  });
+
+  test("compares arbitrarily large stable SemVer components without numeric precision loss", () => {
+    const selectedVersion = "9007199254740993.0.0";
+    const fixture = prepareBootstrapFixture({
+      olderVersion: "9007199254740992.0.0",
+      selectedVersion
+    });
+    const result = Bun.spawnSync({
+      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
+      env: {
+        HOME: path.join(fixture.sandbox, "home"),
+        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
+        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
+        PATH: `${fixture.bin}:/usr/bin:/bin`,
+        SHELL: "/bin/sh"
+      },
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(fixture.curlLog, "utf-8")).toContain(
+      `monke-tools-v${selectedVersion}-linux-x64.tar.gz`
+    );
   });
 
   test("uses GITHUB_TOKEN without exposing it in command logs", () => {

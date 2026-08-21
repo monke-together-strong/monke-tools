@@ -1,4 +1,6 @@
 import {
+  accessSync,
+  constants as fsConstants,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -34,19 +36,11 @@ export function preflightGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
   options: GlobalInstructionsOptions & { sourceCheckout: string }
 ) {
-  const destinationPath = globalInstructionsPath(target, options);
-  if (destinationPath === null) {
+  const prepared = prepareGlobalInstructions(target, options);
+  if (prepared === null) {
     return;
   }
-  const body = readFileSync(
-    path.join(options.sourceCheckout, GLOBAL_INSTRUCTIONS_RELATIVE_PATH),
-    "utf-8"
-  );
-  const destinationStat = lstatSync(destinationPath, { throwIfNoEntry: false });
-  const existingContent = destinationStat
-    ? readFileSync(resolveInstructionFile(destinationPath), "utf-8")
-    : null;
-  reconcileManagedInstructions(existingContent, body, target.kind === "codex");
+  assertGlobalInstructionsWritable(prepared.filePath);
 }
 
 /** Reconcile the selected harness's Managed instruction section from the source snapshot. */
@@ -54,22 +48,62 @@ export function reconcileGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
   options: GlobalInstructionsOptions & { sourceCheckout: string }
 ) {
-  const destinationPath = globalInstructionsPath(target, options);
-  if (destinationPath === null) {
+  const prepared = prepareGlobalInstructions(target, options);
+  if (prepared === null) {
     return;
   }
+  mkdirSync(path.dirname(prepared.filePath), { recursive: true });
+  writeFileSync(prepared.filePath, prepared.nextContent);
+}
 
+function prepareGlobalInstructions(
+  target: { kind: SkillInstallTargetKind },
+  options: GlobalInstructionsOptions & { sourceCheckout: string }
+) {
+  const destinationPath = globalInstructionsPath(target, options);
+  if (destinationPath === null) {
+    return null;
+  }
   const filePath = resolveInstructionFile(destinationPath);
   const body = readFileSync(
     path.join(options.sourceCheckout, GLOBAL_INSTRUCTIONS_RELATIVE_PATH),
     "utf-8"
   );
   const existingContent = existsSync(filePath) ? readFileSync(filePath, "utf-8") : null;
-  mkdirSync(path.dirname(destinationPath), { recursive: true });
-  writeFileSync(
+  return {
     filePath,
-    reconcileManagedInstructions(existingContent, body, target.kind === "codex")
-  );
+    nextContent: reconcileManagedInstructions(existingContent, body, target.kind === "codex")
+  };
+}
+
+function assertGlobalInstructionsWritable(filePath: string) {
+  if (existsSync(filePath)) {
+    try {
+      accessSync(filePath, fsConstants.W_OK);
+      return;
+    } catch {
+      throw new MonkeError(`Global agent instructions are not writable: ${filePath}`);
+    }
+  }
+
+  let ancestor = path.dirname(filePath);
+  while (!existsSync(ancestor)) {
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor) {
+      throw new MonkeError(`Global agent instructions parent is not writable: ${filePath}`);
+    }
+    ancestor = parent;
+  }
+  const ancestorStat = statSync(ancestor);
+  if (!ancestorStat.isDirectory()) {
+    throw new MonkeError(`Global agent instructions parent is not a directory: ${ancestor}`);
+  }
+  try {
+    accessSync(ancestor, fsConstants.W_OK);
+    accessSync(ancestor, fsConstants.X_OK);
+  } catch {
+    throw new MonkeError(`Global agent instructions parent is not writable: ${ancestor}`);
+  }
 }
 
 /** Remove the selected harness's Managed instruction section without touching user guidance. */

@@ -297,6 +297,75 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
   });
 
+  test("invalid Release guidance leaves installation state unchanged", async () => {
+    const sandbox = makeTempDir("release-install-invalid-guidance");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox);
+    writeFileSync(path.join(release.bundleRoot, "skills/internal/example/SKILL.md"), "changed\n");
+
+    await expect(
+      runCliAsync(
+        ["activate-release-install", release.bundleRoot, "--targets", "codex"],
+        createRuntime({
+          architecture: "x64",
+          cwd: sandbox,
+          env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
+          onStderr() {},
+          onStdout() {},
+          platform: "linux",
+          toolBuildIdentity: "1.2.3"
+        })
+      )
+    ).rejects.toThrow(/original hashes/u);
+
+    expect(existsSync(monkeHome)).toBeFalsy();
+  });
+
+  test.each(["destination", "parent"])(
+    "unwritable Global instruction %s is rejected before Release activation",
+    async (unwritablePathKind) => {
+      const sandbox = makeTempDir("release-install-unwritable-instructions");
+      const home = path.join(sandbox, "home");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const release = prepareReleaseBundle(sandbox);
+      const configDirectory = path.join(home, ".codex");
+      const instructionsPath = path.join(home, ".codex", "AGENTS.md");
+      if (unwritablePathKind === "destination") {
+        write(home, ".codex/AGENTS.md", "User instructions.\n");
+        chmodSync(instructionsPath, 0o444);
+      } else {
+        mkdirSync(configDirectory, { recursive: true });
+        chmodSync(configDirectory, 0o555);
+      }
+
+      try {
+        await expect(
+          runCliAsync(
+            ["activate-release-install", release.bundleRoot, "--targets", "codex"],
+            createRuntime({
+              architecture: "x64",
+              cwd: sandbox,
+              env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
+              onStderr() {},
+              onStdout() {},
+              platform: "linux",
+              toolBuildIdentity: "1.2.3"
+            })
+          )
+        ).rejects.toThrow(/not writable/u);
+      } finally {
+        chmodSync(
+          unwritablePathKind === "destination" ? instructionsPath : configDirectory,
+          unwritablePathKind === "destination" ? 0o644 : 0o755
+        );
+      }
+
+      expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
+      expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
+    }
+  );
+
   test("post-activation projection failure leaves Release core active with repair guidance", async () => {
     const sandbox = makeTempDir("release-install-projection-failure");
     const home = path.join(sandbox, "home");

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   cpSync,
   existsSync,
@@ -8,6 +8,7 @@ import {
   readlinkSync,
   readdirSync,
   renameSync,
+  rmdirSync,
   rmSync,
   symlinkSync,
   writeFileSync
@@ -33,6 +34,7 @@ import type {
 } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
 import { assertDirectChildPath } from "./path-boundary.ts";
+import { hashReleaseGuidance } from "./release-guidance.ts";
 import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
 import {
@@ -74,16 +76,29 @@ export async function runActivateReleaseInstall(
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const sourceBundle = path.resolve(options.bundleRoot);
+  const sourceManifest = validateReleaseBundle(runtime, sourceBundle);
+  preflightReleaseInstallSkills(runtime, sourceBundle, options.targetKinds);
   const activated = await withInstallationLockAsync(monkeHome, async () => {
     const stagingRoot = path.join(monkeHome, "install-staging");
     const stagedInstall = path.join(stagingRoot, `release-${randomUUID()}`);
+    const stagingRootExisted = existsSync(stagingRoot);
     mkdirSync(stagingRoot, { recursive: true });
     assertDirectChildPath(stagedInstall, stagingRoot, "staged Release tool install");
-    cpSync(sourceBundle, stagedInstall, { recursive: true });
-
-    const manifest = validateReleaseBundle(runtime, stagedInstall);
+    let manifest: ReleaseInstallManifest;
+    try {
+      cpSync(sourceBundle, stagedInstall, { recursive: true });
+      manifest = validateReleaseBundle(runtime, stagedInstall);
+      if (JSON.stringify(manifest) !== JSON.stringify(sourceManifest)) {
+        throw new MonkeError("Release bundle changed while it was being staged");
+      }
+    } catch (error) {
+      rmSync(stagedInstall, { force: true, recursive: true });
+      if (!stagingRootExisted && readdirSync(stagingRoot).length === 0) {
+        rmdirSync(stagingRoot);
+      }
+      throw error;
+    }
     const installId = releaseInstallId(manifest);
-    preflightReleaseInstallSkills(runtime, stagedInstall, options.targetKinds);
 
     const predecessor = resolveActiveInstallRoot(monkeHome);
     const installRoot = activateStagedInstall({
@@ -348,36 +363,6 @@ function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
     throw new MonkeError("Release guidance does not match its original hashes");
   }
   return manifest;
-}
-
-function hashReleaseGuidance(bundleRoot: string) {
-  const hashes: Record<string, string> = {};
-  for (const folder of ["codex", "imported", "internal", "references"]) {
-    const root = path.join(bundleRoot, "skills", folder);
-    assertDirectory(root, "Release guidance folder is missing");
-    for (const filePath of listRegularFiles(root)) {
-      const relativePath = path.relative(bundleRoot, filePath).replaceAll(path.sep, "/");
-      hashes[relativePath] = createHash("sha256").update(readFileSync(filePath)).digest("hex");
-    }
-  }
-  return Object.fromEntries(
-    Object.entries(hashes).toSorted(([left], [right]) => left.localeCompare(right))
-  );
-}
-
-function listRegularFiles(root: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const entryPath = path.join(root, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...listRegularFiles(entryPath));
-    } else if (entry.isFile()) {
-      files.push(entryPath);
-    } else {
-      throw new MonkeError(`Release guidance contains an unsupported entry: ${entryPath}`);
-    }
-  }
-  return files;
 }
 
 function releasePlatform(runtime: Runtime) {
