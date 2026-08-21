@@ -272,7 +272,7 @@ function prepareValidatedInactiveInstallCollision(
     },
     restore() {
       if (lstatSync(backupRoot, { throwIfNoEntry: false })) {
-        rmSync(path.join(backupRoot, COLLISION_RECOVERY_FILENAME));
+        rmSync(path.join(backupRoot, COLLISION_RECOVERY_FILENAME), { force: true });
         renameSync(backupRoot, installRoot);
         removeEmptyDirectory(backupsRoot);
       }
@@ -428,7 +428,7 @@ function activateStagedInstall(options: {
     renameSync(temporaryPointer, currentPointer);
   } catch (error) {
     rmSync(temporaryPointer, { force: true });
-    rmSync(installRoot, { recursive: true });
+    rmSync(installRoot, { force: true, recursive: true });
     throw error;
   }
   return installRoot;
@@ -544,7 +544,7 @@ export function cleanupStaleStagingDirectories(monkeHome: string, activeStage?: 
       (PUBLIC_BOOTSTRAP_STAGING_DIRECTORY_PATTERN.test(entry.name) &&
         isAbandonedPublicBootstrap(candidate, finalStat.mtimeMs))
     ) {
-      rmSync(candidate, { recursive: true });
+      rmSync(candidate, { force: true, recursive: true });
     }
   }
 }

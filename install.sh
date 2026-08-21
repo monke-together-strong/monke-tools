@@ -170,6 +170,28 @@ parse_selected_release() {
           keys[depth] = pending
           pending = ""
           expecting[depth] = 1
+        } else if (expecting[depth] && substr($0, position, 4) == "true") {
+          if (depth == 1 && keys[depth] == "draft") {
+            draft_matches += 1
+            draft = "true"
+          }
+          if (depth == 1 && keys[depth] == "prerelease") {
+            prerelease_matches += 1
+            prerelease = "true"
+          }
+          expecting[depth] = 0
+          position += 3
+        } else if (expecting[depth] && substr($0, position, 5) == "false") {
+          if (depth == 1 && keys[depth] == "draft") {
+            draft_matches += 1
+            draft = "false"
+          }
+          if (depth == 1 && keys[depth] == "prerelease") {
+            prerelease_matches += 1
+            prerelease = "false"
+          }
+          expecting[depth] = 0
+          position += 4
         } else if (character == ",") {
           keys[depth] = ""
           expecting[depth] = 0
@@ -180,7 +202,8 @@ parse_selected_release() {
     END {
       if (matches == 0) exit 3
       if (matches != 1 || invalid) exit 4
-      if (tag_matches != 1 || commit_matches != 1) exit 5
+      if (tag_matches != 1 || commit_matches != 1 || draft_matches != 1 || prerelease_matches != 1) exit 5
+      if (draft != "false" || prerelease != "false") exit 6
       print tag "\t" commit "\t" result
     }
   ' "$1"
@@ -247,6 +270,8 @@ else
     printf 'Selected Release is missing platform asset %s\n' "$archive_name" >&2
   elif [ "$contract_status" -eq 5 ]; then
     printf 'Selected Release identity metadata is missing or ambiguous\n' >&2
+  elif [ "$contract_status" -eq 6 ]; then
+    printf 'Selected Release is a draft or prerelease\n' >&2
   else
     printf 'Selected Release platform asset metadata is ambiguous or incomplete\n' >&2
   fi

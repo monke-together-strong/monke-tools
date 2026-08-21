@@ -88,6 +88,8 @@ describe("Mainline publication workflow", () => {
     );
     expect(selection.run).toContain("release-bundle.ts relevant");
     expect(selection.run).toContain("release-bundle.ts next-version");
+    expect(selection.run).toContain("git cat-file -e");
+    expect(selection.run).toContain("BEFORE_SHA=0000000000000000000000000000000000000000");
   });
 
   test("checks main without repeating the pull-request unit test command", () => {

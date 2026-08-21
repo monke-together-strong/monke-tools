@@ -24,11 +24,14 @@ function installBrew(options: {
   afterVersion?: string;
   binDirectory: string;
   commandExit?: number;
+  homebrewBinDirectory?: string;
   logPath: string;
   owned?: boolean;
   versionFile: string;
 }) {
-  const codiffPath = path.join(options.binDirectory, "codiff");
+  const homebrewBinDirectory = options.homebrewBinDirectory ?? options.binDirectory;
+  const codiffPath = path.join(homebrewBinDirectory, "codiff");
+  mkdirSync(homebrewBinDirectory, { recursive: true });
   writeExecutable(
     path.join(options.binDirectory, "brew"),
     `#!/bin/sh
@@ -38,7 +41,7 @@ if [ "\${1:-}" = "list" ]; then
   exit ${options.owned === false ? "1" : "0"}
 fi
 if [ "\${1:-}" = "--prefix" ]; then
-  printf '%s\n' '${path.dirname(options.binDirectory)}'
+  printf '%s\n' '${path.dirname(homebrewBinDirectory)}'
   exit 0
 fi
 if [ "\${1:-}" = "install" ] || [ "\${1:-}" = "upgrade" ]; then
@@ -112,6 +115,25 @@ describe("dependency installation", () => {
       "install --cask --require-sha nkzw-tech/tap/codiff\n"
     );
     expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.10.1\n");
+  });
+
+  test("a successful Homebrew install resolves Codiff outside PATH from the prefix", () => {
+    const sandbox = makeTempDir("install-dependencies-prefix-fallback");
+    const binDirectory = path.join(sandbox, "shim-bin");
+    const homebrewBinDirectory = path.join(sandbox, "homebrew", "bin");
+    const versionFile = path.join(sandbox, "codiff-version");
+    const brewLog = path.join(sandbox, "brew.log");
+    installBrew({
+      binDirectory,
+      homebrewBinDirectory,
+      logPath: brewLog,
+      versionFile
+    });
+
+    runCli(["install-dependencies"], dependencyRuntime({ binDirectory }));
+
+    expect(existsSync(path.join(binDirectory, "codiff"))).toBeFalsy();
+    expect(readFileSync(path.join(homebrewBinDirectory, "codiff"), "utf-8")).toContain(versionFile);
   });
 
   test("below-minimum Homebrew-owned Codiff is upgraded", () => {

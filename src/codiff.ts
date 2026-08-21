@@ -1,4 +1,4 @@
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import type { ComparisonPlan } from "./comparison-plan.ts";
@@ -74,7 +74,8 @@ export function reconcileCodiff(
     runBrew(runtime, brew, ["upgrade", "--cask", CODIFF_CASK]);
   }
 
-  const installed = findExecutable("codiff", runtime.env);
+  const installed =
+    findExecutable("codiff", runtime.env) ?? resolveInstalledHomebrewCodiff(runtime, brew);
   if (installed === null) {
     throwCodiffInstallError();
   }
@@ -84,6 +85,19 @@ export function reconcileCodiff(
       `Codiff ${minimumVersionText} or newer is required after Homebrew reconciliation`
     );
   }
+}
+
+function resolveInstalledHomebrewCodiff(runtime: Runtime, brew: string) {
+  const prefix = runtime.exec(brew, ["--prefix"], { allowFailure: true });
+  if (prefix.exitCode !== 0) {
+    return null;
+  }
+  const prefixPath = prefix.stdout.trim();
+  if (!prefixPath) {
+    return null;
+  }
+  const executable = path.join(prefixPath, "bin", "codiff");
+  return existsSync(executable) ? executable : null;
 }
 
 function sameExecutable(left: string, right: string) {

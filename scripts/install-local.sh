@@ -30,19 +30,12 @@ acquire_installation_lock() {
       return
     fi
 
-    lock_pid=$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$INSTALLATION_LOCK" 2>/dev/null || true)
-    if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
-      rm -f -- "$INSTALLATION_LOCK"
-      attempts=$((attempts + 1))
-      sleep 0.05
-      continue
-    fi
-
     attempts=$((attempts + 1))
     sleep 0.05
   done
 
   printf 'Timed out waiting for lock at %s\n' "$INSTALLATION_LOCK" >&2
+  printf 'If no installation is running, remove that stale lock and retry\n' >&2
   exit 1
 }
 

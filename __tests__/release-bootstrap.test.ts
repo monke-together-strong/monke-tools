@@ -23,6 +23,7 @@ function prepareBootstrapFixture(
     machine?: string;
     missingAsset?: boolean;
     olderVersion?: string;
+    selectedMetadataStability?: "draft" | "prerelease";
     selectedVersion?: string;
     sourceCommit?: string;
     system?: string;
@@ -143,7 +144,14 @@ printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
     )
   );
   write(responses, "page-3.json", "[]\n");
-  write(responses, "selected-release.json", `${JSON.stringify(selectedRelease)}\n`);
+  const selectedMetadata: ReleaseResponse = {
+    assets: selectedRelease.assets,
+    draft: options.selectedMetadataStability === "draft",
+    prerelease: options.selectedMetadataStability === "prerelease",
+    tag_name: selectedRelease.tag_name,
+    target_commitish: selectedRelease.target_commitish
+  };
+  write(responses, "selected-release.json", `${JSON.stringify(selectedMetadata)}\n`);
   writeExecutable(
     path.join(bin, "uname"),
     `#!/bin/sh
@@ -310,6 +318,18 @@ describe("public Release bootstrap", () => {
     expect(result.stderr.toString()).toContain("commit metadata is invalid");
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
+
+  test.each(["draft", "prerelease"] as const)(
+    "per-tag %s metadata prevents bundle-owned installer delegation",
+    (selectedMetadataStability) => {
+      const fixture = prepareBootstrapFixture({ selectedMetadataStability });
+      const result = runBootstrap(fixture);
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr.toString()).toContain("draft or prerelease");
+      expect(existsSync(fixture.installLog)).toBeFalsy();
+    }
+  );
 
   test.each([
     { expected: "GitHub Release lookup failed", options: { failLookup: true } },

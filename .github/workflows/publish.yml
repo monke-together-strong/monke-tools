@@ -39,6 +39,9 @@ jobs:
           AFTER_SHA: ${{ github.sha }}
           BEFORE_SHA: ${{ github.event.before }}
         run: |
+          if [ -z "$BEFORE_SHA" ] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            BEFORE_SHA=0000000000000000000000000000000000000000
+          fi
           relevant="$(bun run scripts/release-bundle.ts relevant \
             --before "$BEFORE_SHA" \
             --after "$AFTER_SHA")"

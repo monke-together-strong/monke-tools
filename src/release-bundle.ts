@@ -490,12 +490,17 @@ function run(
   environment?: NodeJS.ProcessEnv
 ) {
   const result = spawnSync(command, arguments_, { cwd, encoding: "utf-8", env: environment });
-  if (result.status !== 0) {
-    throw new Error(
-      `${command} ${arguments_.join(" ")} failed: ${(result.stderr || result.stdout).trim()}`
-    );
+  const commandText = `${command} ${arguments_.join(" ")}`;
+  if (result.error) {
+    throw new Error(`${commandText} could not be started`, { cause: result.error });
   }
-  return result.stdout;
+  if (result.status === null) {
+    throw new Error(`${commandText} was terminated by signal ${result.signal ?? "unknown"}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(`${commandText} failed: ${commandFailureDetail(result)}`);
+  }
+  return result.stdout ?? "";
 }
 
 function requiredOption(arguments_: string[], name: string) {
