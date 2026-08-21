@@ -33,6 +33,7 @@ import type {
 } from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
+const LOCK_RETRY_INTERVAL_MS = 50;
 const STALE_LOCK_AGE_MS = 60_000;
 const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
@@ -458,7 +459,7 @@ async function acquireLockPathAsync(lockPath: string) {
       await new Promise<void>((resolve) => {
         setTimeout(() => {
           resolve();
-        }, 50);
+        }, LOCK_RETRY_INTERVAL_MS);
       });
     }
   }
@@ -487,7 +488,7 @@ function acquireLockPath(lockPath: string) {
     }
     assertLockDeadline(lockPath, deadline);
     if (attempt.wait) {
-      sleep(50);
+      sleep(LOCK_RETRY_INTERVAL_MS);
     }
   }
 }
