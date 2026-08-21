@@ -1,0 +1,578 @@
+#!/usr/bin/env bun
+
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  accessSync,
+  chmodSync,
+  constants as fsConstants,
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import type * as z from "zod";
+
+import { MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
+import { ReleaseInstallManifestSchema, ReleasePlatformSchema } from "./install-manifest.ts";
+import type { ReleaseInstallManifest } from "./install-manifest.ts";
+
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
+const RELEASE_TAG_PREFIX = "monke-tools-v";
+const CHECKSUM_PATTERN = /^(?<hash>[0-9a-f]{64}) {2}(?<name>[^/\s]+)$/u;
+const RELEASE_TAG_PATTERN = /^monke-tools-v\d+\.\d+\.\d+$/u;
+const SEMANTIC_VERSION_PATTERN = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$/u;
+const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
+const RELEASE_INPUTS = [
+  ".github/workflows/publish.yml",
+  "bun.lock",
+  "instructions/GLOBAL.md",
+  "package.json",
+  "scripts/install-local.sh",
+  "scripts/install-release.sh",
+  "scripts/release-bundle.ts",
+  "src/",
+  "skills/codex/",
+  "skills/imported/",
+  "skills/internal/",
+  "skills/references/",
+  "tsconfig.json",
+  "vite.config.ts"
+] as const;
+
+export const SUPPORTED_RELEASE_PLATFORMS = ["macos-arm64", "linux-x64"] as const;
+
+interface BuildReleaseBundleOptions {
+  outputDirectory: string;
+  platform: z.output<typeof ReleasePlatformSchema>;
+  sourceCommit: string;
+  version: string;
+}
+
+interface VerifyReleaseArchiveOptions {
+  archivePath: string;
+  checksumPath?: string;
+  expectedPlatform: z.output<typeof ReleasePlatformSchema>;
+  expectedSourceCommit: string;
+  expectedVersion: string;
+  verifyExecutable?: boolean;
+}
+
+export function releaseArchiveName(version: string, platform: string) {
+  parseSemanticVersion(version);
+  ReleasePlatformSchema.parse(platform);
+  return `${RELEASE_TAG_PREFIX}${version}-${platform}.tar.gz`;
+}
+
+export function releaseChecksumsName(version: string) {
+  parseSemanticVersion(version);
+  return `${RELEASE_TAG_PREFIX}${version}-checksums.txt`;
+}
+
+export function isReleaseOwnedPath(filePath: string) {
+  const normalized = filePath.replaceAll("\\", "/");
+  return RELEASE_INPUTS.some((input) =>
+    input.endsWith("/") ? normalized.startsWith(input) : normalized === input
+  );
+}
+
+export function deriveNextReleaseVersion(tags: string[]) {
+  const versions = tags
+    .filter((tag) => RELEASE_TAG_PATTERN.test(tag))
+    .map((tag) => parseSemanticVersion(tag.slice(RELEASE_TAG_PREFIX.length)))
+    .toSorted(compareSemanticVersions);
+  const current = versions.at(-1) ?? [0, 0, 0];
+  return `${String(current[0])}.${String(current[1])}.${String(current[2] + 1)}`;
+}
+
+export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
+  const version = semanticVersionText(options.version);
+  const platform = ReleasePlatformSchema.parse(options.platform);
+  const sourceCommit = fullCommit(options.sourceCommit);
+  const outputDirectory = path.resolve(options.outputDirectory);
+  const archiveName = releaseArchiveName(version, platform);
+  const archivePath = path.join(outputDirectory, archiveName);
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), "monke-tools-release-build-"));
+  const bundleRoot = path.join(temporaryRoot, "bundle");
+
+  try {
+    mkdirSync(bundleRoot, { recursive: true });
+    mkdirSync(outputDirectory, { recursive: true });
+    compileExecutable(path.join(bundleRoot, "mt"), platform, version);
+    copyBundleInputs(bundleRoot);
+
+    const manifest: ReleaseInstallManifest = ReleaseInstallManifestSchema.parse({
+      artifactName: archiveName,
+      guidanceHashes: hashGuidance(bundleRoot),
+      installKind: "release",
+      minimumCodiffVersion: MINIMUM_CODIFF_VERSION_TEXT,
+      platform,
+      releaseTag: `${RELEASE_TAG_PREFIX}${version}`,
+      releaseVersion: version,
+      schemaVersion: 1,
+      sourceCommit,
+      toolBuildIdentity: version
+    });
+    writeFileSync(
+      path.join(bundleRoot, "install-manifest.json"),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf-8"
+    );
+    run("tar", ["-czf", archivePath, "-C", bundleRoot, "."]);
+    return archivePath;
+  } finally {
+    rmSync(temporaryRoot, { force: true, recursive: true });
+  }
+}
+
+export function writeReleaseChecksums(directory: string, version: string) {
+  const outputDirectory = path.resolve(directory);
+  const archiveNames = SUPPORTED_RELEASE_PLATFORMS.map((platform) =>
+    releaseArchiveName(version, platform)
+  );
+  for (const archiveName of archiveNames) {
+    if (!existsSync(path.join(outputDirectory, archiveName))) {
+      throw new Error(`Release archive is missing: ${archiveName}`);
+    }
+  }
+  const checksumPath = path.join(outputDirectory, releaseChecksumsName(version));
+  const contents = archiveNames
+    .map((archiveName) => `${hashFile(path.join(outputDirectory, archiveName))}  ${archiveName}`)
+    .join("\n");
+  writeFileSync(checksumPath, `${contents}\n`, "utf-8");
+  return checksumPath;
+}
+
+export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): ReleaseInstallManifest {
+  const archivePath = path.resolve(options.archivePath);
+  const expectedVersion = semanticVersionText(options.expectedVersion);
+  const expectedPlatform = ReleasePlatformSchema.parse(options.expectedPlatform);
+  const expectedSourceCommit = fullCommit(options.expectedSourceCommit);
+  const expectedArchiveName = releaseArchiveName(expectedVersion, expectedPlatform);
+  if (path.basename(archivePath) !== expectedArchiveName) {
+    throw new Error(
+      `Release archive name mismatch: expected ${expectedArchiveName}, found ${path.basename(archivePath)}`
+    );
+  }
+  if (options.checksumPath) {
+    verifyArchiveChecksum(archivePath, options.checksumPath);
+  }
+
+  const entries = listArchiveEntries(archivePath);
+  assertArchiveContract(entries);
+  const extractedRoot = mkdtempSync(path.join(tmpdir(), "monke-tools-release-verify-"));
+  try {
+    run("tar", ["-xzf", archivePath, "-C", extractedRoot]);
+    assertNoLinks(extractedRoot);
+    assertExecutable(path.join(extractedRoot, "mt"), "Release executable");
+    assertExecutable(path.join(extractedRoot, "install.sh"), "Release installer");
+
+    const manifestPath = path.join(extractedRoot, "install-manifest.json");
+    const manifest = ReleaseInstallManifestSchema.parse(
+      JSON.parse(readFileSync(manifestPath, "utf-8"))
+    );
+    const expectedTag = `${RELEASE_TAG_PREFIX}${expectedVersion}`;
+    if (
+      manifest.releaseVersion !== expectedVersion ||
+      manifest.toolBuildIdentity !== expectedVersion
+    ) {
+      throw new Error(`Release manifest Tool build identity does not match ${expectedVersion}`);
+    }
+    if (manifest.releaseTag !== expectedTag) {
+      throw new Error(`Release manifest tag does not match ${expectedTag}`);
+    }
+    if (manifest.sourceCommit !== expectedSourceCommit) {
+      throw new Error("Release manifest source commit does not match the selected commit");
+    }
+    if (manifest.platform !== expectedPlatform) {
+      throw new Error(`Release manifest platform does not match ${expectedPlatform}`);
+    }
+    if (manifest.artifactName !== expectedArchiveName) {
+      throw new Error(`Release manifest artifact identity does not match ${expectedArchiveName}`);
+    }
+    assertGuidanceHashes(manifest.guidanceHashes, hashGuidance(extractedRoot));
+
+    if (options.verifyExecutable !== false) {
+      const version = spawnSync(path.join(extractedRoot, "mt"), ["--version"], {
+        encoding: "utf-8"
+      });
+      if (version.status !== 0 || version.stdout.trim() !== expectedVersion) {
+        throw new Error(`Release executable Tool build identity does not match ${expectedVersion}`);
+      }
+    }
+    return manifest;
+  } finally {
+    rmSync(extractedRoot, { force: true, recursive: true });
+  }
+}
+
+export function verifyReleaseAssets(options: {
+  directory: string;
+  sourceCommit: string;
+  version: string;
+}) {
+  const directory = path.resolve(options.directory);
+  const checksumPath = path.join(directory, releaseChecksumsName(options.version));
+  const checksums = readChecksums(checksumPath);
+  const expectedNames = SUPPORTED_RELEASE_PLATFORMS.map((platform) =>
+    releaseArchiveName(options.version, platform)
+  );
+  const actualArchiveNames = readdirSync(directory)
+    .filter((name) => name.endsWith(".tar.gz"))
+    .toSorted();
+  if (JSON.stringify(actualArchiveNames) !== JSON.stringify(expectedNames.toSorted())) {
+    throw new Error("Release assets must contain exactly the supported platform archives");
+  }
+  if (
+    checksums.size !== expectedNames.length ||
+    expectedNames.some((archiveName) => !checksums.has(archiveName))
+  ) {
+    throw new Error("Release checksums must cover every supported platform archive exactly once");
+  }
+  return SUPPORTED_RELEASE_PLATFORMS.map((platform) =>
+    verifyReleaseArchive({
+      archivePath: path.join(directory, releaseArchiveName(options.version, platform)),
+      checksumPath,
+      expectedPlatform: platform,
+      expectedSourceCommit: options.sourceCommit,
+      expectedVersion: options.version,
+      verifyExecutable: false
+    })
+  );
+}
+
+function compileExecutable(
+  outputPath: string,
+  platform: z.output<typeof ReleasePlatformSchema>,
+  version: string
+) {
+  const target = platform === "macos-arm64" ? "bun-darwin-arm64" : "bun-linux-x64";
+  run("bun", [
+    "build",
+    "--compile",
+    "--target",
+    target,
+    "--define",
+    `process.env.MONKE_TOOLS_BUILD_IDENTITY=${JSON.stringify(version)}`,
+    "--outfile",
+    outputPath,
+    path.join(repositoryRoot, "src", "index.ts")
+  ]);
+  chmodSync(outputPath, 0o755);
+}
+
+function copyBundleInputs(bundleRoot: string) {
+  for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
+    cpSync(path.join(repositoryRoot, "skills", folder), path.join(bundleRoot, "skills", folder), {
+      recursive: true
+    });
+  }
+  mkdirSync(path.join(bundleRoot, "instructions"), { recursive: true });
+  cpSync(
+    path.join(repositoryRoot, "instructions", "GLOBAL.md"),
+    path.join(bundleRoot, "instructions", "GLOBAL.md")
+  );
+  cpSync(
+    path.join(repositoryRoot, "scripts", "install-release.sh"),
+    path.join(bundleRoot, "install.sh")
+  );
+  chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
+}
+
+function hashGuidance(bundleRoot: string) {
+  const hashes: Record<string, string> = {};
+  for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
+    const root = path.join(bundleRoot, "skills", folder);
+    for (const filePath of listFiles(root)) {
+      const relativePath = path.relative(bundleRoot, filePath).replaceAll(path.sep, "/");
+      hashes[relativePath] = hashFile(filePath);
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(hashes).toSorted(([left], [right]) => left.localeCompare(right))
+  );
+}
+
+function listFiles(root: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listFiles(entryPath));
+    } else if (entry.isFile()) {
+      files.push(entryPath);
+    } else {
+      throw new Error(`Release guidance contains an unsupported filesystem entry: ${entryPath}`);
+    }
+  }
+  return files;
+}
+
+function hashFile(filePath: string) {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
+function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
+  const checksums = readChecksums(checksumPath);
+  const archiveName = path.basename(archivePath);
+  const expected = checksums.get(archiveName);
+  if (expected === undefined) {
+    throw new Error(`Release checksum is missing for ${archiveName}`);
+  }
+  if (expected !== hashFile(archivePath)) {
+    throw new Error(`Release checksum mismatch for ${archiveName}`);
+  }
+}
+
+function readChecksums(checksumPath: string) {
+  const checksums = new Map<string, string>();
+  for (const line of readFileSync(checksumPath, "utf-8").trim().split("\n")) {
+    const match = CHECKSUM_PATTERN.exec(line);
+    if (!match?.groups) {
+      throw new Error(`Malformed Release checksum line: ${line}`);
+    }
+    const { hash, name } = match.groups;
+    if (hash === undefined || name === undefined || checksums.has(name)) {
+      throw new Error(`Malformed or duplicate Release checksum entry: ${line}`);
+    }
+    checksums.set(name, hash);
+  }
+  return checksums;
+}
+
+function listArchiveEntries(archivePath: string) {
+  return run("tar", ["-tzf", archivePath])
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((entry) => entry.replace(/^\.\/?/u, "").replace(/\/$/u, ""))
+    .filter(Boolean);
+}
+
+function assertArchiveContract(entries: string[]) {
+  const requiredEntries = [
+    "install-manifest.json",
+    "install.sh",
+    "instructions/GLOBAL.md",
+    "mt",
+    "skills/codex",
+    "skills/imported",
+    "skills/internal",
+    "skills/references"
+  ];
+  if (new Set(entries).size !== entries.length) {
+    throw new Error("Release archive contains duplicate entries");
+  }
+  for (const entry of entries) {
+    const [topLevel, skillFolder] = entry.split("/");
+    const allowedEntry =
+      ["install-manifest.json", "install.sh", "mt"].includes(entry) ||
+      entry === "instructions" ||
+      entry === "instructions/GLOBAL.md" ||
+      entry === "skills" ||
+      (topLevel === "skills" && BUNDLED_GUIDANCE_FOLDERS.some((folder) => folder === skillFolder));
+    if (
+      entry === "" ||
+      path.posix.isAbsolute(entry) ||
+      entry.split("/").includes("..") ||
+      !allowedEntry
+    ) {
+      throw new Error(`Unsafe or unexpected Release archive entry: ${entry}`);
+    }
+  }
+  for (const required of requiredEntries) {
+    if (!entries.includes(required)) {
+      throw new Error(`Release archive entry is missing: ${required}`);
+    }
+  }
+}
+
+function assertNoLinks(root: string) {
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const entryPath = path.join(root, entry.name);
+    const stat = lstatSync(entryPath);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Release archive contains a symbolic link: ${entry.name}`);
+    }
+    if (stat.isDirectory()) {
+      assertNoLinks(entryPath);
+    }
+  }
+}
+
+function assertExecutable(filePath: string, label: string) {
+  const stat = statSync(filePath, { throwIfNoEntry: false });
+  if (!stat?.isFile()) {
+    throw new Error(`${label} is missing or not executable: ${filePath}`);
+  }
+  try {
+    accessSync(filePath, fsConstants.X_OK);
+  } catch {
+    throw new Error(`${label} is missing or not executable: ${filePath}`);
+  }
+}
+
+function assertGuidanceHashes(expected: Record<string, string>, actual: Record<string, string>) {
+  const expectedPaths = Object.keys(expected).toSorted();
+  const actualPaths = Object.keys(actual).toSorted();
+  if (
+    JSON.stringify(expectedPaths) !== JSON.stringify(actualPaths) ||
+    expectedPaths.some((filePath) => expected[filePath] !== actual[filePath])
+  ) {
+    throw new Error("Release guidance hashes do not match the archived Distributed guidance");
+  }
+}
+
+function parseSemanticVersion(value: string): [number, number, number] {
+  const match = SEMANTIC_VERSION_PATTERN.exec(value);
+  if (!match?.groups) {
+    throw new Error(`Invalid stable semantic version: ${value}`);
+  }
+  return [Number(match.groups.major), Number(match.groups.minor), Number(match.groups.patch)];
+}
+
+function semanticVersionText(value: string) {
+  parseSemanticVersion(value);
+  return value;
+}
+
+function fullCommit(value: string) {
+  if (!/^[0-9a-f]{40}$/u.test(value)) {
+    throw new Error(`Invalid full source commit: ${value}`);
+  }
+  return value;
+}
+
+function compareSemanticVersions(left: number[], right: number[]) {
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (left[index] ?? 0) - (right[index] ?? 0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  return 0;
+}
+
+function run(command: string, arguments_: string[], cwd = repositoryRoot) {
+  const result = spawnSync(command, arguments_, { cwd, encoding: "utf-8" });
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} ${arguments_.join(" ")} failed: ${(result.stderr || result.stdout).trim()}`
+    );
+  }
+  return result.stdout;
+}
+
+function option(arguments_: string[], name: string) {
+  const index = arguments_.indexOf(name);
+  const value = index === -1 ? undefined : arguments_[index + 1];
+  if (value === undefined || value.startsWith("--")) {
+    throw new Error(`Missing required option ${name}`);
+  }
+  return value;
+}
+
+function optionalOption(arguments_: string[], name: string) {
+  const index = arguments_.indexOf(name);
+  const value = index === -1 ? undefined : arguments_[index + 1];
+  return value === undefined || value.startsWith("--") ? undefined : value;
+}
+
+function changedPaths(before: string, after: string) {
+  fullCommit(after);
+  if (/^0{40}$/u.test(before)) {
+    return run("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", after])
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+  }
+  fullCommit(before);
+  return run("git", ["diff", "--name-only", "--no-renames", before, after])
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+}
+
+export function runReleaseBundleCli(arguments_: string[]) {
+  const [command] = arguments_;
+  switch (command) {
+    case undefined: {
+      throw new Error("Missing Release bundle command");
+    }
+    case "build": {
+      const platform = ReleasePlatformSchema.parse(option(arguments_, "--platform"));
+      const archivePath = buildReleaseBundle({
+        outputDirectory: option(arguments_, "--output"),
+        platform,
+        sourceCommit: option(arguments_, "--source-commit"),
+        version: option(arguments_, "--version")
+      });
+      process.stdout.write(`${archivePath}\n`);
+      return;
+    }
+    case "checksums": {
+      const checksumPath = writeReleaseChecksums(
+        option(arguments_, "--directory"),
+        option(arguments_, "--version")
+      );
+      process.stdout.write(`${checksumPath}\n`);
+      return;
+    }
+    case "next-version": {
+      const tags = run("git", ["tag", "--list", `${RELEASE_TAG_PREFIX}*`])
+        .trim()
+        .split("\n")
+        .filter(Boolean);
+      process.stdout.write(`${deriveNextReleaseVersion(tags)}\n`);
+      return;
+    }
+    case "relevant": {
+      const relevant = changedPaths(
+        option(arguments_, "--before"),
+        option(arguments_, "--after")
+      ).some(isReleaseOwnedPath);
+      process.stdout.write(`${String(relevant)}\n`);
+      return;
+    }
+    case "verify": {
+      verifyReleaseArchive({
+        archivePath: option(arguments_, "--archive"),
+        checksumPath: optionalOption(arguments_, "--checksums"),
+        expectedPlatform: ReleasePlatformSchema.parse(option(arguments_, "--platform")),
+        expectedSourceCommit: option(arguments_, "--source-commit"),
+        expectedVersion: option(arguments_, "--version")
+      });
+      return;
+    }
+    case "verify-assets": {
+      verifyReleaseAssets({
+        directory: option(arguments_, "--directory"),
+        sourceCommit: option(arguments_, "--source-commit"),
+        version: option(arguments_, "--version")
+      });
+      return;
+    }
+    default: {
+      throw new Error(`Unknown Release bundle command: ${command ?? ""}`);
+    }
+  }
+}
+
+if (import.meta.main) {
+  try {
+    runReleaseBundleCli(Bun.argv.slice(2));
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  }
+}

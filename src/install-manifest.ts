@@ -14,6 +14,33 @@ const InstallIdSchema = z
   .min(1)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u, "must contain only install identity characters");
 const CommitSchema = z.string().regex(/^[0-9a-f]{40}$/u, "must be a full Git commit SHA");
+export const ReleasePlatformSchema = z.enum(["linux-x64", "macos-arm64"]);
+export const ReleaseInstallManifestSchema = z.strictObject({
+  artifactName: z
+    .string()
+    .regex(/^monke-tools-v\d+\.\d+\.\d+-(?:linux-x64|macos-arm64)\.tar\.gz$/u),
+  guidanceHashes: z.record(
+    z
+      .string()
+      .regex(
+        /^skills\/(?:codex|imported|internal|references)\/.+/u,
+        "must be a projected guidance path"
+      ),
+    z.string().regex(/^[0-9a-f]{64}$/u, "must be a SHA-256 hash")
+  ),
+  installKind: z.literal("release"),
+  minimumCodiffVersion: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/u, "must use major.minor.patch numeric version syntax"),
+  platform: ReleasePlatformSchema,
+  releaseTag: z.string().regex(/^monke-tools-v\d+\.\d+\.\d+$/u),
+  releaseVersion: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/u, "must use major.minor.patch numeric version syntax"),
+  schemaVersion: z.literal(1),
+  sourceCommit: CommitSchema,
+  toolBuildIdentity: z.string().min(1)
+});
 export const LocalInstallManifestSchema = z.strictObject({
   createdAt: z.iso.datetime(),
   createdBy: z.literal("bun run install:local"),
@@ -34,6 +61,7 @@ export const LocalInstallManifestSchema = z.strictObject({
 });
 
 export type LocalInstallManifest = z.output<typeof LocalInstallManifestSchema>;
+export type ReleaseInstallManifest = z.output<typeof ReleaseInstallManifestSchema>;
 
 /** Load the self-describing Active tool install when one is selected. */
 export function loadActiveLocalInstall(monkeHome: string) {
