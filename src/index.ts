@@ -204,7 +204,7 @@ function createProgram(
   skills.command("configure").action(() => runSkillsConfigure(runtime));
 
   skills
-    .command("local-install")
+    .command("local-install", { hidden: true })
     .argument("<source-checkout>")
     .option("--custom-target <path>", "Add a custom Agent Skill root")
     .addOption(

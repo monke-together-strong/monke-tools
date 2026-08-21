@@ -60,13 +60,81 @@ function selectActiveLocalInstall(monkeHome: string, sourceCheckout: string) {
   symlinkSync(path.join("installs", installId), path.join(monkeHome, "current"), "dir");
 }
 
+function selectActiveReleaseInstall(monkeHome: string) {
+  const installId = "release-1.2.3-linux-x64";
+  write(
+    monkeHome,
+    `installs/${installId}/install-manifest.json`,
+    `${JSON.stringify({
+      artifactDigest: "0".repeat(64),
+      artifactName: "monke-tools-v1.2.3-linux-x64.tar.gz",
+      createdAt: "2026-08-20T12:34:56.000Z",
+      guidanceHashes: {},
+      installKind: "release",
+      minimumCodiffVersion: "1.9.0",
+      platform: "linux-x64",
+      releaseTag: "monke-tools-v1.2.3",
+      releaseVersion: "1.2.3",
+      schemaVersion: 1,
+      sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+      toolBuildIdentity: "1.2.3"
+    })}\n`
+  );
+  symlinkSync(path.join("installs", installId), path.join(monkeHome, "current"), "dir");
+}
+
 describe("skills CLI", () => {
+  test("mt skills local-install rejects an Active Release install", async () => {
+    const sandbox = makeTempDir("skills-local-install-release");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    writeSkillSource(sourceCheckout);
+    selectActiveReleaseInstall(monkeHome);
+
+    await expect(
+      runCliAsync(
+        ["skills", "local-install", sourceCheckout, "--targets", "codex"],
+        createRuntime({
+          cwd: sandbox,
+          env: skillsEnvironment(osHome, monkeHome),
+          onStderr() {},
+          onStdout() {}
+        })
+      )
+    ).rejects.toThrow("requires an Active Local tool install");
+    expect(existsSync(path.join(osHome, ".codex", "skills", "monke-tools"))).toBeFalsy();
+  });
+
+  test("mt skills local-install rejects a checkout other than the Active Local checkout", async () => {
+    const sandbox = makeTempDir("skills-local-install-checkout-mismatch");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const activeCheckout = path.join(sandbox, "active-source");
+    const requestedCheckout = path.join(sandbox, "requested-source");
+    writeSkillSource(requestedCheckout);
+    selectActiveLocalInstall(monkeHome, activeCheckout);
+
+    await expect(
+      runCliAsync(
+        ["skills", "local-install", requestedCheckout, "--targets", "codex"],
+        createRuntime({
+          cwd: sandbox,
+          env: skillsEnvironment(osHome, monkeHome),
+          onStderr() {},
+          onStdout() {}
+        })
+      )
+    ).rejects.toThrow("does not match the Active Local install");
+  });
+
   test("mt skills local-install installs shared Global agent instructions for Codex and Claude", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     writeSkillSource(sourceCheckout);
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude", "cursor"],
@@ -90,6 +158,7 @@ describe("skills CLI", () => {
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     writeSkillSource(sourceCheckout);
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "claude"],
@@ -153,6 +222,7 @@ describe("skills CLI", () => {
     );
     write(osHome, ".codex/AGENTS.md", "Personal Codex guidance.\n");
     write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "cursor"],
@@ -180,6 +250,7 @@ describe("skills CLI", () => {
     writeSkillSource(sourceCheckout, "First team baseline.\n");
     write(osHome, ".codex/AGENTS.md", "Personal Codex guidance.\n");
     write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     const runtime = createRuntime({
       cwd: sandbox,
@@ -221,6 +292,7 @@ describe("skills CLI", () => {
         skillInstallPreference: { targets: [{ kind: "codex" }] },
         version: 1
       });
+      selectActiveLocalInstall(monkeHome, sourceCheckout);
 
       await runCliAsync(
         [
@@ -252,12 +324,14 @@ describe("skills CLI", () => {
     writeSkillSource(sourceCheckout);
 
     const exactHome = path.join(sandbox, "exact-home");
+    const exactMonkeHome = path.join(sandbox, "exact-monke-home");
     write(exactHome, ".codex/AGENTS.md", "Team baseline.\n");
+    selectActiveLocalInstall(exactMonkeHome, sourceCheckout);
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex"],
       createRuntime({
         cwd: sandbox,
-        env: skillsEnvironment(exactHome, path.join(sandbox, "exact-monke-home")),
+        env: skillsEnvironment(exactHome, exactMonkeHome),
         onStderr() {},
         onStdout() {}
       })
@@ -267,12 +341,14 @@ describe("skills CLI", () => {
     expect(readFileSync(path.join(exactHome, ".codex", "AGENTS.md"), "utf-8")).toBe(managed);
 
     const partialHome = path.join(sandbox, "partial-home");
+    const partialMonkeHome = path.join(sandbox, "partial-monke-home");
     write(partialHome, ".codex/AGENTS.md", "Team baseline.\nPersonal addition.\n");
+    selectActiveLocalInstall(partialMonkeHome, sourceCheckout);
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex"],
       createRuntime({
         cwd: sandbox,
-        env: skillsEnvironment(partialHome, path.join(sandbox, "partial-monke-home")),
+        env: skillsEnvironment(partialHome, partialMonkeHome),
         onStderr() {},
         onStdout() {}
       })
@@ -290,6 +366,7 @@ describe("skills CLI", () => {
     const sourceCheckout = path.join(sandbox, "source");
     writeSkillSource(sourceCheckout);
     write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
     const runtime = createRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
@@ -324,6 +401,7 @@ describe("skills CLI", () => {
       const sourceCheckout = path.join(sandbox, "source");
       writeSkillSource(sourceCheckout);
       write(osHome, ".codex/AGENTS.md", userGuidance);
+      selectActiveLocalInstall(monkeHome, sourceCheckout);
       const runtime = createRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
@@ -351,6 +429,7 @@ describe("skills CLI", () => {
     const destinationPath = path.join(osHome, ".codex", "AGENTS.md");
     writeSkillSource(sourceCheckout);
     write(osHome, ".codex/AGENTS.md", "");
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
     const runtime = createRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
@@ -377,6 +456,7 @@ describe("skills CLI", () => {
     write(sandbox, "dotfiles/AGENTS.md", "Personal Codex guidance.\n");
     write(codexHome, ".keep", "\n");
     symlinkSync(dotfileTarget, path.join(codexHome, "AGENTS.md"));
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
@@ -410,6 +490,7 @@ describe("skills CLI", () => {
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     writeSkillSource(sourceCheckout);
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await expect(
       runCliAsync(
@@ -438,6 +519,7 @@ describe("skills CLI", () => {
     write(sandbox, "dotfiles/AGENTS.md", "");
     write(osHome, ".codex/.keep", "\n");
     symlinkSync(dotfileTarget, destinationPath);
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
     const runtime = createRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
@@ -472,6 +554,7 @@ describe("skills CLI", () => {
         write(codexHome, "directory-target/.keep", "\n");
         symlinkSync(path.join(codexHome, "directory-target"), destinationPath, "dir");
       }
+      selectActiveLocalInstall(monkeHome, sourceCheckout);
 
       await expect(
         runCliAsync(
@@ -514,6 +597,7 @@ describe("skills CLI", () => {
       const codexInstructions = path.join(osHome, ".codex", "AGENTS.md");
       writeSkillSource(sourceCheckout);
       write(osHome, ".codex/AGENTS.md", malformedContent);
+      selectActiveLocalInstall(monkeHome, sourceCheckout);
 
       await expect(
         runCliAsync(
@@ -647,6 +731,7 @@ describe("skills CLI", () => {
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     writeSkillSource(sourceCheckout);
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout],
@@ -676,6 +761,7 @@ describe("skills CLI", () => {
     const osHome = path.join(sandbox, "home");
     const sourceCheckout = path.join(sandbox, "source");
     writeSkillSource(sourceCheckout);
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "claude", "cursor", "codex"],
@@ -719,6 +805,7 @@ describe("skills CLI", () => {
       },
       version: 1
     });
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
@@ -757,6 +844,7 @@ describe("skills CLI", () => {
     });
     write(path.dirname(namespacePath), ".keep", "\n");
     symlinkSync(path.join(oldCheckout, "skills"), namespacePath, "dir");
+    selectActiveLocalInstall(monkeHome, newCheckout);
 
     await runCliAsync(
       ["skills", "local-install", newCheckout],

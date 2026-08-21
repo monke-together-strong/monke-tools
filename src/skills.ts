@@ -170,9 +170,21 @@ export function runLocalInstallSkills(
   explicitTargets?: ExplicitSkillTargetSelection
 ) {
   const monkeHome = getMonkeHome(runtime);
-  return withInstallMutationLockAsync(monkeHome, () =>
-    runInstallSkillsLocked(runtime, sourceCheckout, explicitTargets)
-  );
+  return withInstallMutationLockAsync(monkeHome, async () => {
+    const activeInstall = loadFixedToolInstall(runtime, monkeHome);
+    if (activeInstall?.manifest.installKind !== "local") {
+      throw new MonkeError(
+        "Skills Local Install requires an Active Local tool install; run vp run install:local from the source checkout"
+      );
+    }
+    const requestedCheckout = path.resolve(sourceCheckout);
+    if (activeInstall.manifest.sourceCheckout !== requestedCheckout) {
+      throw new MonkeError(
+        `Skills Local Install checkout does not match the Active Local install: ${activeInstall.manifest.sourceCheckout}`
+      );
+    }
+    await runInstallSkillsLocked(runtime, requestedCheckout, explicitTargets);
+  });
 }
 
 /** Reconcile guidance from a Local source checkout or Release install while the lock is held. */

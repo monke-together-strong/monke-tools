@@ -52,16 +52,32 @@ cleanup_old_bun_builds() {
     done
 }
 
-source_snapshot() {
-  {
-    git -C "$ROOT_DIR" rev-parse HEAD
-    git -C "$ROOT_DIR" diff --binary HEAD --
-    git -C "$ROOT_DIR" ls-files --others --exclude-standard |
-      while IFS= read -r untracked_file; do
-        printf '%s\n' "$untracked_file"
-        cksum "$ROOT_DIR/$untracked_file"
-      done
-  } | cksum
+capture_source_state() {
+  CAPTURED_SOURCE_COMMIT=$(git -C "$ROOT_DIR" rev-parse HEAD)
+  CAPTURED_SOURCE_STATUS=$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)
+  captured_tracked_diff=$(git -C "$ROOT_DIR" diff --binary HEAD --)
+  captured_untracked_files=$(git -C "$ROOT_DIR" ls-files --others --exclude-standard)
+  captured_untracked_state=
+  while IFS= read -r untracked_file; do
+    if [ -n "$untracked_file" ]; then
+      captured_untracked_state="$captured_untracked_state
+$untracked_file
+$(cksum "$ROOT_DIR/$untracked_file")"
+    fi
+  done <<EOF
+$captured_untracked_files
+EOF
+  if [ "$(git -C "$ROOT_DIR" rev-parse HEAD)" != "$CAPTURED_SOURCE_COMMIT" ]; then
+    return 1
+  fi
+  CAPTURED_SOURCE_SNAPSHOT=$(
+    printf '%s\n%s\n%s\n%s\n' \
+      "$CAPTURED_SOURCE_COMMIT" \
+      "$CAPTURED_SOURCE_STATUS" \
+      "$captured_tracked_diff" \
+      "$captured_untracked_state" |
+      cksum
+  )
 }
 
 SYSTEM=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -78,13 +94,17 @@ trap release_installation_lock 0
 trap 'exit 1' 1 2 15
 acquire_installation_lock
 
-SOURCE_COMMIT=$(git -C "$ROOT_DIR" rev-parse HEAD)
-SHORT_COMMIT=$(git -C "$ROOT_DIR" rev-parse --short=7 HEAD)
+if ! capture_source_state; then
+  printf 'Source checkout changed while Local provenance was being captured; rerun vp run install:local\n' >&2
+  exit 1
+fi
+SOURCE_COMMIT=$CAPTURED_SOURCE_COMMIT
+SOURCE_SNAPSHOT=$CAPTURED_SOURCE_SNAPSHOT
+SHORT_COMMIT=$(printf '%.7s' "$SOURCE_COMMIT")
 SOURCE_DIRTY=false
-if [ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)" ]; then
+if [ -n "$CAPTURED_SOURCE_STATUS" ]; then
   SOURCE_DIRTY=true
 fi
-SOURCE_SNAPSHOT=$(source_snapshot)
 TOOL_BUILD_IDENTITY="local+$SHORT_COMMIT"
 DIRTY_ARGUMENT=
 if [ "$SOURCE_DIRTY" = true ]; then
@@ -105,7 +125,9 @@ bun build --compile \
 chmod +x "$STAGED_MT"
 cleanup_old_bun_builds
 
-if [ "$(source_snapshot)" != "$SOURCE_SNAPSHOT" ]; then
+if ! capture_source_state ||
+  [ "$CAPTURED_SOURCE_COMMIT" != "$SOURCE_COMMIT" ] ||
+  [ "$CAPTURED_SOURCE_SNAPSHOT" != "$SOURCE_SNAPSHOT" ]; then
   printf 'Source checkout changed while the Local tool install was compiling; rerun vp run install:local\n' >&2
   exit 1
 fi

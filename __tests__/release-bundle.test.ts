@@ -305,6 +305,7 @@ describe("Mainline Release selection", () => {
     ["skills/internal/implement/SKILL.md", true],
     ["install.sh", true],
     ["scripts/install-release.sh", true],
+    [".github/actions/check-mainline/action.yml", true],
     [".github/workflows/publish.yml", true],
     [".github/workflows/publish-packages.yml", false],
     ["bun.lock", false],

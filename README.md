@@ -78,7 +78,7 @@ mt spawn banana -m
 
 The refresh then installs shell integration only for the current Bash or Zsh startup file, installs source-backed Distributed skill and reference links into the selected Agent skill roots, refreshes Global agent instructions for selected Codex and Claude targets, and reconciles Codiff 1.9.0 or newer on Apple Silicon Macs. Missing Codiff is installed through the narrowly trusted checksummed Homebrew cask; an older Homebrew-owned Codiff is upgraded, while an older executable with unknown ownership is left untouched. Other platforms never invoke Homebrew. A Codiff failure is reported separately after activation, so the new core Local tool install remains active and reconciliation can be retried with `mt install-dependencies`.
 
-On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and refresh the managed skills and instructions snapshot from the current checkout. Automation can replace the preference without prompting by passing explicit targets, for example `vp run install:local --targets codex --custom-target /absolute/path/to/agent/skills` or `mt skills local-install <source-checkout> --custom-target /absolute/path/to/agent/skills`.
+On the first local install, monke-tools prompts for one or more skill targets: Codex, Claude, Cursor, or one Custom Agent skill root. Later local installs reuse the saved Skill install preference and refresh the managed skills and instructions snapshot from the current checkout. Automation can replace the preference without prompting by passing explicit targets, for example `vp run install:local --targets codex --custom-target /absolute/path/to/agent/skills`.
 
 After changing CLI source code, run `vp run install:local` again before testing from another repo. For linked skills, file edits are visible immediately through symlinks. If you add or remove skill directories, rerun reconciliation (`vp run install:local` or `mt skills configure`) so flat Claude links are refreshed.
 
@@ -128,7 +128,6 @@ The Skill source tree is organized as:
 - `mt update [--check]` checks for or atomically activates the highest compatible stable monke-tools Release. Check-only mode is non-mutating; a Customized release install blocks both forms before network access.
 - `mt shell install` refreshes the Shell adapter for the current Bash or Zsh startup file and reports that file; unsupported shells receive manual guidance without startup-file changes. `mt shell init bash` and `mt shell init zsh` print adapters for inspection.
 - `mt skills configure` updates the saved Skill install preference and reconciles selected Agent skill roots.
-- `mt skills local-install <source-checkout> [--targets <targets...>] [--custom-target <absolute-agent-skill-root>]` reconciles source-backed guidance using the explicit checkout, then either replaces the preference with explicit built-in and Custom targets, reuses the saved preference, or prompts through Skills Configure when no preference exists. Local install refresh records the checkout in the Active Install manifest.
 
 ## `monke.yml`
 

@@ -65,6 +65,7 @@ const ChecksumEntriesSchema = arraySchema(ChecksumEntrySchema).superRefine((entr
   }
 });
 const RELEASE_INPUTS = [
+  ".github/actions/check-mainline/",
   ".github/workflows/publish.yml",
   "install.sh",
   "instructions/GLOBAL.md",

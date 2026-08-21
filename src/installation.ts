@@ -110,7 +110,7 @@ export async function runActivateReleaseInstall(
       }
       throw error;
     }
-    const installId = releaseInstallId(manifest);
+    const installId = installIdForManifest(manifest);
 
     const predecessor = resolveActiveInstallRoot(monkeHome);
     const collision = prepareValidatedInactiveInstallCollision(monkeHome, installId, predecessor);
@@ -448,10 +448,6 @@ export function releasePlatform(runtime: Runtime) {
     return "linux-x64";
   }
   throw new MonkeError("Unsupported Release platform; supported platforms: macOS arm64, Linux x64");
-}
-
-function releaseInstallId(manifest: ReleaseInstallManifest) {
-  return installIdForManifest(manifest);
 }
 
 export function cleanupStaleStagingDirectories(monkeHome: string, activeStage?: string) {
