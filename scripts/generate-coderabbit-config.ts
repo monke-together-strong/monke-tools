@@ -67,6 +67,7 @@ const SourceManifestSchema = strictObject({
   )
 });
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Workflow input is parsed into the relevance contract immediately below.
 export function isCodeRabbitSyncRelevant(rawOptions: unknown) {
   const options = RelevanceOptionsSchema.parse(rawOptions);
   const sources = new Set(options.sources);
@@ -99,6 +100,7 @@ export function listChangedPaths(repoRoot: string, before: string, after: string
   return result.stdout.split("\0").filter(Boolean);
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- CLI and test inputs are parsed into the render contract immediately below.
 export function renderCodeRabbitConfig(rawOptions: unknown) {
   const options = RenderOptionsSchema.parse(rawOptions);
   const documents = [

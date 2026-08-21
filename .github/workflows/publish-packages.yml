@@ -1,0 +1,49 @@
+name: Publish Packages
+
+on:
+  push:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify-mainline.yml
+
+  publish:
+    name: Version Or Publish
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+
+      - name: Setup npm
+        # Tegami packs with Bun but publishes through npm; trusted publishing requires npm 11.5.1+.
+        run: npm install --global npm@11.5.1
+
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
+
+      - name: Version or publish packages
+        run: vp run tegami ci
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

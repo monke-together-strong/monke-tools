@@ -1,0 +1,14 @@
+name: Setup Mainline
+description: Set up Vite+ and install frozen workspace dependencies
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Vite+
+      uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+      with:
+        cache: true
+
+    - name: Install deps
+      shell: bash
+      run: vp install --frozen-lockfile

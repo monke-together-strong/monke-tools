@@ -24,11 +24,10 @@ Claude receives flat root-level symlinks instead because Claude does not discove
 
 The Claude layout is tracked with a managed manifest in the Claude skill root so later installs can validate, refresh, or remove only links that monke-tools created, including the supporting reference link when Claude is deselected. The manifest records that supporting link even though it remains outside the Agent skill root, so references resolve from flat linked skills without becoming independently discoverable.
 
-Global monke config is versioned YAML at `config.yml` under monke home. It stores the Installed source checkout and one current Skill install preference:
+Global monke config is versioned YAML at `config.yml` under monke home. It stores the current Skill install preference, while the active Local Install manifest stores the Installed source checkout:
 
 ```yaml
 version: 1
-installedSourceCheckout: /path/to/monke-tools
 skillInstallPreference:
   targets:
     - kind: codex
@@ -64,6 +63,6 @@ Internal skills are owned by monke-tools. Imported skills come from other projec
 
 ## Consequences
 
-Local install always includes skill installation. It installs the `mt` binary first, records the Installed source checkout, then replaces the preference and reconciles when built-in targets are supplied explicitly, prompts with `mt skills configure` when no preference exists, or reconciles the existing preference.
+Local install always includes skill installation. It atomically activates a versioned Local tool install whose manifest records the Installed source checkout, then replaces the preference and reconciles when built-in targets are supplied explicitly, prompts through Skills Configure when no preference exists, or reconciles the existing preference. Source-backed links preserve Skill authoring mode.
 
 Deselecting a namespace target removes only a managed `monke-tools` symlink namespace. Deselecting Claude removes only flat links recorded in the managed manifest. A failure in one selected target does not prevent other selected targets from being reconciled, but the operation fails overall so partial installation is visible.

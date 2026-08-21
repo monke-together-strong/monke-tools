@@ -40,7 +40,7 @@ describe("Diff", () => {
         }
       })
     ).rejects.toThrow(
-      "Codiff 1.9.0 or newer is required. Install it with: brew install --cask nkzw-tech/tap/codiff"
+      "Codiff 1.9.0 or newer is required. Install it with: brew install --cask --require-sha nkzw-tech/tap/codiff"
     );
     expect(prompt).toBeUndefined();
   });
@@ -54,13 +54,13 @@ describe("Diff", () => {
     },
     {
       expected:
-        "Codiff 1.9.0 or newer is required. Install it with: brew install --cask nkzw-tech/tap/codiff",
+        "Codiff 1.9.0 or newer is required. Install it with: brew install --cask --require-sha nkzw-tech/tap/codiff",
       name: "an unrelated executable",
       version: "different v9.0.0"
     },
     {
       expected:
-        "Codiff 1.9.0 or newer is required. Install it with: brew install --cask nkzw-tech/tap/codiff",
+        "Codiff 1.9.0 or newer is required. Install it with: brew install --cask --require-sha nkzw-tech/tap/codiff",
       name: "malformed version output",
       version: "codiff banana"
     }

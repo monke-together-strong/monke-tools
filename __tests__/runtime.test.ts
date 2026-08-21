@@ -1,12 +1,27 @@
 import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 
-import { createRuntime, withGlobalLock } from "../src/runtime.ts";
+import { createRuntime, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
 import { makeTempDir } from "./helpers.ts";
 
 describe("runtime", () => {
+  test.each([
+    ["EPERM", true],
+    ["ESRCH", false],
+    ["EIO", true]
+  ])("process liveness treats %s conservatively", (code, expected) => {
+    const killMock = vi.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error(code), { code });
+    });
+    try {
+      expect(isProcessRunning(1234)).toBe(expected);
+    } finally {
+      killMock.mockRestore();
+    }
+  });
+
   test("createRuntime surfaces signal-terminated commands as failures", () => {
     const runtime = createRuntime();
 
@@ -24,6 +39,39 @@ describe("runtime", () => {
         options: [{ label: "One", value: "one" }]
       })
     ).rejects.toThrow(/No scripted select values remain/u);
+  });
+
+  test("Release requests fall through an empty GH_TOKEN to GITHUB_TOKEN", async () => {
+    let authorization = "";
+    let signal: AbortSignal | null | undefined;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      authorization = new Headers(init?.headers).get("Authorization") ?? "";
+      signal = init?.signal;
+      return new Response("[]", { status: 200 });
+    });
+
+    try {
+      const runtime = createRuntime({ env: { GH_TOKEN: "", GITHUB_TOKEN: "fallback-token" } });
+      await runtime.releaseDistribution.listReleases(1);
+    } finally {
+      fetchMock.mockRestore();
+    }
+
+    expect(authorization).toBe("Bearer fallback-token");
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test("Release asset downloads reject unapproved URLs before sending credentials", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    try {
+      const runtime = createRuntime({ env: { GITHUB_TOKEN: "secret-token" } });
+      await expect(
+        runtime.releaseDistribution.downloadReleaseAsset("https://example.com/release.tar.gz")
+      ).rejects.toThrow(/not an approved repository download/u);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   test("withGlobalLock evicts stale locks left by dead processes", () => {

@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
-import { createHash } from "node:crypto";
+import { hash } from "node:crypto";
 import {
   accessSync,
   closeSync,
@@ -8,6 +8,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   readSync,
   rmSync,
   statSync,
@@ -19,10 +20,23 @@ import path from "node:path";
 import { isCancel, multiselect as clackMultiSelect, select as clackSelect } from "@clack/prompts";
 import * as z from "zod";
 
+import { DEFAULT_TOOL_BUILD_IDENTITY } from "./build-identity.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
-import type { ExecOptions, ExecResult, MultiSelectPrompt, Runtime, SelectPrompt } from "./types.ts";
+import { ReleaseCatalogPageSchema } from "./release-catalog-schema.ts";
+import type {
+  ExecOptions,
+  ExecResult,
+  InstallationActivationPhase,
+  MultiSelectPrompt,
+  ReleaseDistribution,
+  Runtime,
+  SelectPrompt
+} from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
+const LOCK_RETRY_INTERVAL_MS = 50;
+const RELEASE_CATALOG_PAGE_SIZE = 100;
+const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
 const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
@@ -33,12 +47,16 @@ const LockTimestampSchema = z.number();
 
 /** Runtime construction options for CLI commands and integration-style tests. */
 export interface RuntimeOptions {
+  /** Machine architecture override used by platform behavior tests. */
+  architecture?: string;
   /** Make the next select prompt follow the normal cancellation path in tests. */
   cancelSelect?: boolean;
   /** Current working directory used by command execution. */
   cwd?: string;
   /** Environment overrides merged over the process environment. */
   env?: Record<string, string | undefined>;
+  /** Optional injected activation boundary used by failure-behavior tests. */
+  installationActivationBoundary?: (phase: InstallationActivationPhase) => void;
   /** Scripted selected value sets used by tests for Clack-style multi-select prompts. */
   multiSelectValues?: string[][];
   /** Optional observer used by tests and embedding callers to inspect multi-select prompts. */
@@ -49,10 +67,20 @@ export interface RuntimeOptions {
   onStderr?: (text: string) => void;
   /** Optional stdout sink used by tests and embedding callers. */
   onStdout?: (text: string) => void;
+  /** Operating system override used by platform behavior tests. */
+  platform?: NodeJS.Platform;
+  /** Official Release boundary override used by update behavior tests. */
+  releaseDistribution?: ReleaseDistribution;
   /** Scripted selected values used by tests for Clack-style select prompts. */
   selectValues?: string[];
+  /** Status-output TTY override used by presentation behavior tests. */
+  stderrIsTTY?: boolean;
   /** Scripted stdin lines used by tests for interactive prompts. */
   stdinText?: string;
+  /** Compiled Tool build identity override used by installation behavior tests. */
+  toolBuildIdentity?: string;
+  /** Versioned install root override used by installation behavior tests. */
+  toolInstallRoot?: string;
 }
 
 /** Create the default runtime adapter around the current process. */
@@ -60,22 +88,17 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
   // oxlint-disable-next-line node/no-process-env -- This adapter centralizes access to the process environment.
   const runtimeEnv = { ...process.env, ...options?.env };
   const runtimeCwd = options?.cwd ?? process.cwd();
-  const scriptedInput = options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/u);
+  const scriptedInput = createScriptedInput(options);
   const scriptedSelectValues = options?.selectValues ? [...options.selectValues] : null;
   const scriptedMultiSelectValues = options?.multiSelectValues
     ? [...options.multiSelectValues]
     : null;
 
-  const writeStdout = (text: string) => {
-    if (options?.onStdout) {
-      options.onStdout(text);
-      return;
-    }
-
-    process.stdout.write(text);
-  };
+  const writeStdout = createStdoutWriter(options);
+  const writeStderr = createStderrWriter(options);
 
   return {
+    architecture: options?.architecture ?? process.arch,
     cwd: runtimeCwd,
     env: runtimeEnv,
     exec(command: string, args: string[] = [], execOptions?: ExecOptions) {
@@ -84,6 +107,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     execAsync(command: string, args: string[] = [], execOptions?: ExecOptions) {
       return executeCommandAsync(runtimeEnv, runtimeCwd, command, args, execOptions);
     },
+    installationActivationBoundary: options?.installationActivationBoundary,
     async multiSelect(prompt) {
       options?.onMultiSelect?.(prompt);
       if (scriptedMultiSelectValues !== null) {
@@ -108,6 +132,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
+    platform: options?.platform ?? process.platform,
     readLine(prompt: string) {
       writeStdout(prompt);
       if (scriptedInput !== null) {
@@ -116,6 +141,8 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
 
       return readLineFromStdin();
     },
+    releaseDistribution:
+      options?.releaseDistribution ?? createGitHubReleaseDistribution(runtimeEnv),
     async select(prompt) {
       options?.onSelect?.(prompt);
       if (options?.cancelSelect === true) {
@@ -138,16 +165,102 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
-    writeStderr(text: string) {
-      if (options?.onStderr) {
-        options.onStderr(text);
-        return;
-      }
+    stderrIsTTY: resolveStderrIsTTY(options),
+    toolBuildIdentity: options?.toolBuildIdentity ?? DEFAULT_TOOL_BUILD_IDENTITY,
+    toolInstallRoot: options?.toolInstallRoot ?? resolveRunningToolInstallRoot(),
+    writeStderr,
+    writeStdout
+  };
+}
 
-      process.stderr.write(text);
+function createStdoutWriter(options: RuntimeOptions | undefined) {
+  return (text: string) => {
+    if (options?.onStdout) {
+      options.onStdout(text);
+      return;
+    }
+    process.stdout.write(text);
+  };
+}
+
+function createScriptedInput(options: RuntimeOptions | undefined) {
+  return options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/u);
+}
+
+function createStderrWriter(options: RuntimeOptions | undefined) {
+  return (text: string) => {
+    if (options?.onStderr) {
+      options.onStderr(text);
+      return;
+    }
+    process.stderr.write(text);
+  };
+}
+
+function resolveStderrIsTTY(options: RuntimeOptions | undefined) {
+  return options?.stderrIsTTY ?? process.stderr.isTTY;
+}
+
+function createGitHubReleaseDistribution(
+  env: Record<string, string | undefined>
+): ReleaseDistribution {
+  const repository = "monke-together-strong/monke-tools";
+  const commonHeaders = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "monke-tools",
+    "X-GitHub-Api-Version": "2022-11-28"
+  };
+  const token = env.GH_TOKEN || env.GITHUB_TOKEN;
+  const headers = token ? { ...commonHeaders, Authorization: `Bearer ${token}` } : commonHeaders;
+
+  const request = async (url: string) => {
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(RELEASE_REQUEST_TIMEOUT_MS)
+      });
+    } catch (error) {
+      throw new MonkeError(`GitHub Release request failed: ${errorMessage(error)}`);
+    }
+    if (!response.ok) {
+      throw new MonkeError(`GitHub Release request failed with HTTP ${response.status}`);
+    }
+    return response;
+  };
+
+  return {
+    async downloadReleaseAsset(url) {
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        throw new MonkeError("GitHub Release asset URL is invalid");
+      }
+      if (
+        parsedUrl.protocol !== "https:" ||
+        parsedUrl.hostname !== "github.com" ||
+        !parsedUrl.pathname.startsWith(`/${repository}/releases/download/`)
+      ) {
+        throw new MonkeError("GitHub Release asset URL is not an approved repository download");
+      }
+      const response = await request(url);
+      const body = await response.arrayBuffer();
+      return new Uint8Array(body);
     },
-    writeStdout(text: string) {
-      writeStdout(text);
+    async listReleases(page) {
+      try {
+        const response = await request(
+          `https://api.github.com/repos/${repository}/releases?per_page=${RELEASE_CATALOG_PAGE_SIZE}&page=${page}`
+        );
+        const body: unknown = await response.json();
+        return ReleaseCatalogPageSchema.parse(body);
+      } catch (error) {
+        if (error instanceof MonkeError) {
+          throw error;
+        }
+        throw new MonkeError(`GitHub Release metadata is invalid: ${errorMessage(error)}`);
+      }
     }
   };
 }
@@ -306,7 +419,7 @@ export function getHomeDirectory(runtime: Runtime) {
 }
 
 export function hashKey(value: string) {
-  return createHash("sha256").update(value).digest("hex");
+  return hash("sha256", value, "hex");
 }
 
 export function findExecutable(command: string, env: Record<string, string | undefined>) {
@@ -340,49 +453,106 @@ export function withGlobalLock<T>(home: string, callback: () => T) {
   return withLockPath(path.join(home, "lock"), callback);
 }
 
+/** Run an asynchronous installation mutation under the machine-wide installation lock. */
+export async function withInstallationLockAsync<T>(home: string, callback: () => Promise<T>) {
+  const release = await acquireLockPathAsync(path.join(home, "locks", "installation.lock"));
+  try {
+    return await callback();
+  } finally {
+    release();
+  }
+}
+
+function acquireLockPathAsync(lockPath: string) {
+  const deadline = prepareLockAcquisition(lockPath);
+  return new Promise<() => void>((resolve, reject) => {
+    const poll = () => {
+      try {
+        const attempt = tryAcquireLockBeforeDeadline(lockPath, deadline);
+        if (attempt.release) {
+          resolve(attempt.release);
+          return;
+        }
+        setTimeout(poll, attempt.wait ? LOCK_RETRY_INTERVAL_MS : 0);
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+    poll();
+  });
+}
+
 /** Run a synchronous callback while holding a lock scoped inside the monke home directory. */
 export function withScopedLock<T>(home: string, namespace: string, callback: () => T) {
   return withLockPath(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
 }
 
 function withLockPath<T>(lockPath: string, callback: () => T) {
-  mkdirSync(path.dirname(lockPath), { recursive: true });
-  const deadline = Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
-  let fileDescriptor: number | null = null;
-
-  while (fileDescriptor === null) {
-    try {
-      fileDescriptor = openSync(lockPath, "wx");
-      writeFileSync(
-        lockPath,
-        JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
-        "utf-8"
-      );
-    } catch (error) {
-      const message = errorMessage(error);
-      if (!message.includes("EEXIST")) {
-        throw error;
-      }
-
-      if (tryEvictStaleLock(lockPath)) {
-        continue;
-      }
-
-      if (Date.now() >= deadline) {
-        throw new MonkeError(`Timed out waiting for lock at ${lockPath}`);
-      }
-
-      sleep(50);
-    }
-  }
-
+  const release = acquireLockPath(lockPath);
   try {
     return callback();
   } finally {
+    release();
+  }
+}
+
+function acquireLockPath(lockPath: string) {
+  const deadline = prepareLockAcquisition(lockPath);
+  while (true) {
+    const attempt = tryAcquireLockBeforeDeadline(lockPath, deadline);
+    if (attempt.release) {
+      return attempt.release;
+    }
+    if (attempt.wait) {
+      sleep(LOCK_RETRY_INTERVAL_MS);
+    }
+  }
+}
+
+function tryAcquireLockBeforeDeadline(lockPath: string, deadline: number) {
+  const attempt = tryAcquireLockPath(lockPath);
+  if (!attempt.release) {
+    assertLockDeadline(lockPath, deadline);
+  }
+  return attempt;
+}
+
+function prepareLockAcquisition(lockPath: string) {
+  mkdirSync(path.dirname(lockPath), { recursive: true });
+  return Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
+}
+
+function tryAcquireLockPath(lockPath: string) {
+  let fileDescriptor: number | null = null;
+  try {
+    fileDescriptor = openSync(lockPath, "wx");
+    writeFileSync(lockPath, JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }), "utf-8");
+  } catch (error) {
     if (fileDescriptor !== null) {
       closeSync(fileDescriptor);
+      rmSync(lockPath, { force: true });
     }
-    rmSync(lockPath, { force: true });
+    if (!errorMessage(error).includes("EEXIST")) {
+      throw error;
+    }
+    return { wait: !tryEvictStaleLock(lockPath) };
+  }
+
+  return {
+    release: () => {
+      if (fileDescriptor !== null) {
+        closeSync(fileDescriptor);
+        fileDescriptor = null;
+      }
+      rmSync(lockPath, { force: true });
+    },
+    wait: false
+  };
+}
+
+function assertLockDeadline(lockPath: string, deadline: number) {
+  if (Date.now() >= deadline) {
+    throw new MonkeError(`Timed out waiting for lock at ${lockPath}`);
   }
 }
 
@@ -488,7 +658,7 @@ function tryEvictStaleLock(lockPath: string) {
   return true;
 }
 
-function isProcessRunning(pid: number) {
+export function isProcessRunning(pid: number) {
   try {
     process.kill(pid, 0);
     return true;
@@ -501,6 +671,14 @@ function isProcessRunning(pid: number) {
         return false;
       }
     }
-    return false;
+    return true;
+  }
+}
+
+function resolveRunningToolInstallRoot() {
+  try {
+    return path.dirname(realpathSync.native(process.execPath));
+  } catch {
+    return path.dirname(process.execPath);
   }
 }

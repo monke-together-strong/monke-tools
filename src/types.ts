@@ -1,6 +1,9 @@
+import type { ReleaseCatalogEntry } from "./release-catalog-schema.ts";
 import type { SessionRepoState } from "./state-schema.ts";
 
 export interface Runtime {
+  /** Architecture of the machine running this command. */
+  readonly architecture: string;
   /** Current working directory used by monke-tools operations. */
   readonly cwd: string;
   /** Process environment used by monke-tools operations. */
@@ -9,16 +12,37 @@ export interface Runtime {
   exec: (command: string, args?: string[], options?: ExecOptions) => ExecResult;
   /** Run a command without blocking independent startup work. */
   execAsync: (command: string, args?: string[], options?: ExecOptions) => Promise<ExecResult>;
+  /** Optional injected activation boundary used to prove atomic failure behavior. */
+  readonly installationActivationBoundary?: (phase: InstallationActivationPhase) => void;
   /** Select multiple values from an interactive terminal picker. */
   multiSelect: (prompt: MultiSelectPrompt) => Promise<string[]>;
+  /** Operating system of the machine running this command. */
+  readonly platform: NodeJS.Platform;
   /** Read one interactive input line after writing a prompt. */
   readLine: (prompt: string) => string;
+  /** Official Release catalog and asset download boundary. */
+  readonly releaseDistribution: ReleaseDistribution;
   /** Select one value from an interactive terminal picker. */
   select: (prompt: SelectPrompt) => Promise<string>;
+  /** Whether status output is connected to an interactive terminal. */
+  readonly stderrIsTTY: boolean;
+  /** Identity compiled into this mt executable. */
+  readonly toolBuildIdentity: string;
+  /** Root of the versioned tool install resolved once when the command starts. */
+  readonly toolInstallRoot: string;
   /** Write CLI output to stderr. */
   writeStderr: (text: string) => void;
   /** Write CLI output to stdout. */
   writeStdout: (text: string) => void;
+}
+
+export type InstallationActivationPhase = "final-rename" | "pointer-replacement";
+
+export interface ReleaseDistribution {
+  /** Download one asset selected from an official GitHub Release. */
+  downloadReleaseAsset: (url: string) => Promise<Uint8Array>;
+  /** List one 100-item page from the official GitHub Releases catalog. */
+  listReleases: (page: number) => Promise<ReleaseCatalogEntry[]>;
 }
 
 export interface ExecOptions {

@@ -7,6 +7,7 @@ export interface Logger {
   error: (message: string) => void;
   hint: (message: string) => void;
   info: (message: string) => void;
+  progress: (message: string) => void;
   success: (message: string) => void;
   warning: (message: string) => void;
 }
@@ -24,6 +25,11 @@ export function createLogger(runtime: Runtime): Logger {
     info(message) {
       runtime.writeStderr(`${message}\n`);
     },
+    progress(message) {
+      if (runtime.stderrIsTTY) {
+        runtime.writeStderr(`${colors.dim(message)}\n`);
+      }
+    },
     success(message) {
       runtime.writeStderr(`${colors.green(message)}\n`);
     },
@@ -34,10 +40,9 @@ export function createLogger(runtime: Runtime): Logger {
 }
 
 function shouldUseColor(runtime: Runtime) {
-  if (runtime.env.NO_COLOR !== undefined) {
+  if (!runtime.stderrIsTTY || runtime.env.NO_COLOR !== undefined) {
     return false;
   }
 
-  const forceColor = runtime.env.FORCE_COLOR;
-  return Boolean(forceColor && forceColor !== "0");
+  return runtime.env.FORCE_COLOR !== "0";
 }

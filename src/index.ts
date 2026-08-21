@@ -5,12 +5,19 @@ import { Argument, Command, Option } from "@commander-js/extra-typings";
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runDiff, runDiffInteractive } from "./diff.ts";
+import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
+import {
+  expectedReleaseIdentityFromEnvironment,
+  runActivateLocalInstall,
+  runActivateReleaseInstall
+} from "./installation.ts";
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
-import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
+import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import { runSwing, runSwingInteractive } from "./swing.ts";
 import type { Runtime } from "./types.ts";
+import { runUpdate } from "./update.ts";
 
 /** Run the Monke Tools CLI. */
 export function runCli(argv: string[], runtime = createRuntime()) {
@@ -34,7 +41,10 @@ function createProgram(
   diffAction: (runtime: Runtime, options: { pick?: boolean }) => void | Promise<void>
 ) {
   // Subcommands copy these at .command() time, so every subcommand below must be declared after.
-  const program = new Command().name("mt").allowExcessArguments(false);
+  const program = new Command()
+    .name("mt")
+    .version(runtime.toolBuildIdentity)
+    .allowExcessArguments(false);
 
   configureCliParser(program);
 
@@ -119,6 +129,64 @@ function createProgram(
       runInstallDependencies(runtime);
     });
 
+  program
+    .command("update")
+    .option("--check", "Check for a compatible stable Release without installing it")
+    .action((options) => runUpdate(runtime, { check: options.check === true }));
+
+  program
+    .command("activate-release-install", { hidden: true })
+    .argument("<bundle-root>")
+    .option("--custom-target <path>", "Add a custom Agent Skill root")
+    .option("--installation-lock-held")
+    .option("--interactive")
+    .addOption(
+      new Option(
+        "--targets <targets...>",
+        "Replace the saved Skill install preference with built-in targets"
+      ).choices(["codex", "claude", "cursor"])
+    )
+    .action((bundleRoot, options) =>
+      runActivateReleaseInstall(runtime, {
+        bundleRoot,
+        expectedReleaseIdentity: expectedReleaseIdentityFromEnvironment(runtime.env),
+        explicitTargets: explicitSkillTargets(options.targets, options.customTarget),
+        installationLockHeld: options.installationLockHeld === true,
+        interactive: options.interactive === true
+      })
+    );
+
+  program
+    .command("activate-local-install", { hidden: true })
+    .argument("<staged-install>")
+    .argument("<source-checkout>")
+    .requiredOption("--install-id <identity>")
+    .requiredOption("--source-commit <sha>")
+    .requiredOption("--created-at <timestamp>")
+    .requiredOption("--platform <platform>")
+    .option("--custom-target <path>", "Add a custom Agent Skill root")
+    .option("--dirty")
+    .option("--installation-lock-held")
+    .addOption(
+      new Option(
+        "--targets <targets...>",
+        "Replace the saved Skill install preference with built-in targets"
+      ).choices(["codex", "claude", "cursor"])
+    )
+    .action((stagedInstall, sourceCheckout, options) =>
+      runActivateLocalInstall(runtime, {
+        createdAt: options.createdAt,
+        dirty: options.dirty === true,
+        explicitTargets: explicitSkillTargets(options.targets, options.customTarget),
+        installationLockHeld: options.installationLockHeld === true,
+        installId: options.installId,
+        platform: options.platform,
+        sourceCheckout,
+        sourceCommit: options.sourceCommit,
+        stagedInstall
+      })
+    );
+
   const shell = program.command("shell");
 
   shell
@@ -141,8 +209,9 @@ function createProgram(
   skills.command("configure").action(() => runSkillsConfigure(runtime));
 
   skills
-    .command("local-install")
+    .command("local-install", { hidden: true })
     .argument("<source-checkout>")
+    .option("--custom-target <path>", "Add a custom Agent Skill root")
     .addOption(
       new Option(
         "--targets <targets...>",
@@ -150,10 +219,24 @@ function createProgram(
       ).choices(["codex", "claude", "cursor"])
     )
     .action((sourceCheckout, options) =>
-      runLocalInstallSkills(runtime, sourceCheckout, options.targets)
+      runLocalInstallSkills(
+        runtime,
+        sourceCheckout,
+        explicitSkillTargets(options.targets, options.customTarget)
+      )
     );
 
   return program;
+}
+
+function explicitSkillTargets(
+  builtInTargetKinds: ExplicitSkillTargetSelection["builtInTargetKinds"],
+  customTargetPath: string | undefined
+): ExplicitSkillTargetSelection | undefined {
+  if (builtInTargetKinds === undefined && customTargetPath === undefined) {
+    return undefined;
+  }
+  return { builtInTargetKinds, customTargetPath };
 }
 
 if (import.meta.main) {

@@ -19,19 +19,22 @@ const SkillInstallTargetPreferenceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: BuiltInSkillInstallTargetKindSchema }),
   z.strictObject({ kind: z.literal("custom"), path: AbsolutePathSchema })
 ]);
-const SkillInstallPreferenceSchema = z.strictObject({
+export const SkillInstallPreferenceSchema = z.strictObject({
   targets: z.array(SkillInstallTargetPreferenceSchema).min(1, {
     error: "must be a non-empty array"
   })
 });
 const GlobalMonkeConfigSchema = z.strictObject({
-  installedSourceCheckout: AbsolutePathSchema.optional(),
   skillInstallPreference: SkillInstallPreferenceSchema.optional(),
   version: z.literal(1, { error: "must be 1" })
+});
+const PersistedGlobalMonkeConfigSchema = GlobalMonkeConfigSchema.extend({
+  installedSourceCheckout: AbsolutePathSchema.optional()
 });
 
 type ParsedSkillInstallPreference = z.output<typeof SkillInstallPreferenceSchema>;
 type ParsedGlobalMonkeConfig = z.output<typeof GlobalMonkeConfigSchema>;
+type ParsedPersistedGlobalMonkeConfig = z.output<typeof PersistedGlobalMonkeConfigSchema>;
 
 /** Built-in Agent skill roots supported by monke-tools. */
 export type BuiltInSkillInstallTargetKind = "codex" | "claude" | "cursor";
@@ -66,8 +69,6 @@ export interface SkillInstallPreference {
 
 /** Versioned machine-local monke-tools configuration stored under the monke home directory. */
 export interface GlobalMonkeConfig {
-  /** Source checkout used by the current local monke-tools install. */
-  installedSourceCheckout?: string;
   /** Current Skill install target selection. */
   skillInstallPreference?: SkillInstallPreference;
   /** Global config schema version. */
@@ -82,7 +83,7 @@ export function loadGlobalMonkeConfig(home: string): GlobalMonkeConfig {
   }
 
   return normalizeGlobalMonkeConfig(
-    parseOwnedYamlFile(configPath, GlobalMonkeConfigSchema),
+    parseOwnedYamlFile(configPath, PersistedGlobalMonkeConfigSchema),
     configPath
   );
 }
@@ -104,21 +105,19 @@ function getGlobalConfigPath(home: string) {
 }
 
 function normalizeGlobalMonkeConfig(
-  config: ParsedGlobalMonkeConfig,
+  config: ParsedGlobalMonkeConfig | ParsedPersistedGlobalMonkeConfig,
   configPath: string
 ): GlobalMonkeConfig {
-  const { installedSourceCheckout } = config;
-
   const skillInstallPreference =
     config.skillInstallPreference === undefined
       ? undefined
       : parseSkillInstallPreference(config.skillInstallPreference, configPath);
 
-  return {
-    version: 1,
-    ...(installedSourceCheckout === undefined ? {} : { installedSourceCheckout }),
-    ...(skillInstallPreference === undefined ? {} : { skillInstallPreference })
-  };
+  const normalized: GlobalMonkeConfig = { version: 1 };
+  if (skillInstallPreference !== undefined) {
+    normalized.skillInstallPreference = skillInstallPreference;
+  }
+  return normalized;
 }
 
 function parseSkillInstallPreference(preference: ParsedSkillInstallPreference, configPath: string) {

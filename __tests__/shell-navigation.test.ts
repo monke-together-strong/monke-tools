@@ -106,7 +106,8 @@ describe("shell navigation", () => {
       args: ["shell", "install", "--binary", "/opt/mt"],
       cwd: repoRoot,
       extraEnv: {
-        HOME: shellHome
+        HOME: shellHome,
+        SHELL: "/bin/zsh"
       },
       monkeHome
     });
@@ -259,27 +260,92 @@ apps:
     );
   });
 
-  test("shell install refreshes bash and zsh startup files idempotently", () => {
-    const sandbox = makeTempDir("shell-install");
-    const monkeHome = path.join(sandbox, "monke-home");
-    const shellHome = path.join(sandbox, "shell-home");
+  test.each([
+    ["bash", ".bashrc", ".zshrc"],
+    ["zsh", ".zshrc", ".bashrc"]
+  ] as const)(
+    "%s shell install reports and idempotently refreshes only its startup file",
+    (shell, startupFile, otherStartupFile) => {
+      const sandbox = makeTempDir(`shell-install-${shell}`);
+      const monkeHome = path.join(sandbox, "monke-home");
+      const shellHome = path.join(sandbox, "shell-home");
+      const stableBinary = path.join(shellHome, ".local", "bin", "mt");
+      const results = [];
 
-    for (let index = 0; index < 2; index += 1) {
-      runMonke({
-        args: ["shell", "install", "--binary", "/opt/mt"],
-        cwd: sandbox,
-        extraEnv: {
-          HOME: shellHome
-        },
-        monkeHome
-      });
-    }
+      for (const _attempt of [1, 2]) {
+        results.push(
+          runMonke({
+            args: ["shell", "install", "--binary", stableBinary],
+            cwd: sandbox,
+            extraEnv: {
+              HOME: shellHome,
+              SHELL: `/bin/${shell}`
+            },
+            monkeHome
+          })
+        );
+      }
 
-    for (const startupFile of [".bashrc", ".zshrc"]) {
       const contents = read(shellHome, startupFile);
       expect(contents.match(/monke-tools shell integration/gu)).toHaveLength(2);
-      expect(contents).toContain("'/opt/mt' shell init");
-      expect(existsSync(path.join(shellHome, startupFile))).toBeTruthy();
+      expect(contents).toContain(`'${stableBinary}' shell init`);
+      expect(existsSync(path.join(shellHome, otherStartupFile))).toBeFalsy();
+      for (const result of results) {
+        expect(result.stderr).toContain(
+          `Installed shell integration in ${path.join(shellHome, startupFile)}`
+        );
+        expect(result.stderr).toContain("Restart your shell");
+      }
     }
+  );
+
+  test("zsh install and configured-state detection honor relative ZDOTDIR", () => {
+    const sandbox = makeTempDir("shell-install-zdotdir");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const shellHome = path.join(sandbox, "shell-home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    const startupFile = path.join(repoRoot, "config", "zsh", ".zshrc");
+    const shellEnvironment = {
+      HOME: shellHome,
+      SHELL: "/bin/zsh",
+      ZDOTDIR: "config/zsh"
+    };
+
+    runMonke({
+      args: ["shell", "install", "--binary", "/opt/mt"],
+      cwd: repoRoot,
+      extraEnv: shellEnvironment,
+      monkeHome
+    });
+    const result = runMonke({
+      args: ["spawn", "banana"],
+      cwd: repoRoot,
+      extraEnv: shellEnvironment,
+      monkeHome
+    });
+
+    expect(readFileSync(startupFile, "utf-8")).toContain("monke-tools shell integration");
+    expect(existsSync(path.join(shellHome, ".zshrc"))).toBeFalsy();
+    expect(result.stderr).toContain("Shell integration is configured but not active");
+  });
+
+  test("shell install leaves startup files untouched for an unsupported current shell", () => {
+    const sandbox = makeTempDir("shell-install-unsupported");
+    const shellHome = path.join(sandbox, "shell-home");
+
+    const result = runMonke({
+      args: ["shell", "install", "--binary", "/opt/mt"],
+      cwd: sandbox,
+      extraEnv: {
+        HOME: shellHome,
+        SHELL: "/usr/local/bin/fish"
+      },
+      monkeHome: path.join(sandbox, "monke-home")
+    });
+
+    expect(existsSync(path.join(shellHome, ".bashrc"))).toBeFalsy();
+    expect(existsSync(path.join(shellHome, ".zshrc"))).toBeFalsy();
+    expect(result.stderr).toContain("Shell integration is not available for /usr/local/bin/fish");
+    expect(result.stderr).toContain("No startup file was changed");
   });
 });

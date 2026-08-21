@@ -432,7 +432,8 @@ function getGithubRepositoryFullName(
       return { error: `GitHub repository lookup failed: ${commandDetail(result)}`, ok: false };
     }
 
-    const parsed = GithubRepositoryLookupSchema.safeParse(JSON.parse(result.stdout) as unknown);
+    const rawRepository: unknown = JSON.parse(result.stdout);
+    const parsed = GithubRepositoryLookupSchema.safeParse(rawRepository);
     if (!parsed.success) {
       return { error: "GitHub repository lookup did not return nameWithOwner", ok: false };
     }
@@ -477,7 +478,7 @@ function queryMergedPrs(
       return { error: `GitHub merged PR lookup failed: ${commandDetail(result)}`, ok: false };
     }
 
-    const parsed = JSON.parse(result.stdout) as unknown;
+    const parsed: unknown = JSON.parse(result.stdout);
     if (!Array.isArray(parsed)) {
       return { error: "GitHub merged PR lookup did not return a list", ok: false };
     }
@@ -488,6 +489,7 @@ function queryMergedPrs(
   }
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Each item comes from an external GitHub response and is parsed immediately below.
 function normalizeMergedPrMatch(value: unknown) {
   const parsed = MergedPrInputSchema.safeParse(value);
   const record = parsed.success ? parsed.data : {};

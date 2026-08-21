@@ -5,9 +5,9 @@ import * as z from "zod";
 import { MonkeError } from "./errors.ts";
 
 interface ConfigurableCliParser {
-  configureOutput: (configuration: OutputConfiguration) => unknown;
-  exitOverride: (callback?: (error: CommanderError) => never) => unknown;
-  showSuggestionAfterError: (displaySuggestion?: boolean) => unknown;
+  configureOutput: (configuration: OutputConfiguration) => void;
+  exitOverride: (callback?: (error: CommanderError) => never) => void;
+  showSuggestionAfterError: (displaySuggestion?: boolean) => void;
 }
 
 /** Configure a testable CLI parser whose executable boundary owns error output. */
@@ -27,6 +27,7 @@ export function configureCliParser<T extends ConfigurableCliParser>(program: T) 
 }
 
 /** Render one failure at an executable boundary. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Executable catch values are untyped at this final reporting boundary.
 export function reportCliFailure(error: unknown) {
   if (error instanceof CommanderError && error.exitCode === 0) {
     return;
@@ -36,6 +37,7 @@ export function reportCliFailure(error: unknown) {
   process.exitCode = 1;
 }
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Executable catch values are classified into supported failure shapes here.
 function formatCliFailure(error: unknown) {
   if (error instanceof z.ZodError) {
     return `error: invalid input\n${z.prettifyError(error)}`;

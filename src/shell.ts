@@ -69,17 +69,21 @@ export function runShellInit(runtime: Runtime, shellName: string, options: Shell
 export function runShellInstall(runtime: Runtime, options: ShellInstallOptions = {}) {
   const home = getHomeDirectory(runtime);
   const binary = resolveAdapterBinary(runtime, options.binary);
-  const installedFiles: string[] = [];
-
-  for (const shell of SUPPORTED_SHELLS) {
-    const startupFile = getStartupFilePath(home, shell);
-    installStartupBlock(startupFile, renderStartupBlock(shell, binary));
-    installedFiles.push(startupFile);
+  const shell = resolveCurrentShell(runtime);
+  const logger = createLogger(runtime);
+  if (shell === null) {
+    const currentShell = runtime.env.SHELL || "the current shell";
+    logger.warning(`Shell integration is not available for ${currentShell}`);
+    logger.hint(
+      `No startup file was changed. Add ${path.dirname(binary)} to PATH and switch to paths printed by mt manually.`
+    );
+    return;
   }
 
-  createLogger(runtime).success(
-    `Installed shell integration in ${installedFiles.map((file) => path.basename(file)).join(", ")}`
-  );
+  const startupFile = getStartupFilePath(runtime, home, shell);
+  installStartupBlock(startupFile, renderStartupBlock(shell, binary));
+  logger.success(`Installed shell integration in ${startupFile}`);
+  logger.hint("Restart your shell to activate the updated integration.");
 }
 
 function renderShellAdapter(shell: SupportedShell, binaryPath: string) {
@@ -139,8 +143,8 @@ function isShellIntegrationConfigured(runtime: Runtime) {
   const currentShell = resolveCurrentShell(runtime);
   const startupFiles =
     currentShell === null
-      ? SUPPORTED_SHELLS.map((shell) => getStartupFilePath(home, shell))
-      : [getStartupFilePath(home, currentShell)];
+      ? SUPPORTED_SHELLS.map((shell) => getStartupFilePath(runtime, home, shell))
+      : [getStartupFilePath(runtime, home, currentShell)];
 
   return startupFiles.some((startupFile) => {
     if (!existsSync(startupFile)) {
@@ -201,11 +205,14 @@ function requireSupportedShell(shellName: string) {
 }
 
 function isSupportedShell(shellName: string): shellName is SupportedShell {
+  // SAFETY: membership in the immutable literal tuple establishes the SupportedShell union.
   return (SUPPORTED_SHELLS as readonly string[]).includes(shellName);
 }
 
-function getStartupFilePath(home: string, shell: SupportedShell) {
-  return path.join(home, shell === "zsh" ? ".zshrc" : ".bashrc");
+function getStartupFilePath(runtime: Runtime, home: string, shell: SupportedShell) {
+  const startupRoot =
+    shell === "zsh" && runtime.env.ZDOTDIR ? path.resolve(runtime.cwd, runtime.env.ZDOTDIR) : home;
+  return path.join(startupRoot, shell === "zsh" ? ".zshrc" : ".bashrc");
 }
 
 function shellQuote(value: string) {

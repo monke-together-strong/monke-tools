@@ -1,4 +1,6 @@
 import {
+  accessSync,
+  constants as fsConstants,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -13,6 +15,7 @@ import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import type { SkillInstallTargetKind } from "./global-config.ts";
+import { assertDirectoryMutationAccess } from "./path-boundary.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
 const GLOBAL_INSTRUCTIONS_RELATIVE_PATH = path.join("instructions", "GLOBAL.md");
@@ -29,27 +32,74 @@ const ConfiguredDirectorySchema = z.string().refine((value) => value.trim().leng
   message: "Must not be empty"
 });
 
+/** Validate a known Global instruction destination without changing it. */
+export function preflightGlobalInstructions(
+  target: { kind: SkillInstallTargetKind },
+  options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
+) {
+  const prepared = prepareGlobalInstructions(target, options);
+  if (prepared === null) {
+    return;
+  }
+  assertGlobalInstructionsWritable(prepared.filePath);
+}
+
+/** Validate removal from a known Global instruction destination without changing it. */
+export function preflightRemoveGlobalInstructions(
+  target: { kind: SkillInstallTargetKind },
+  options: GlobalInstructionsOptions
+) {
+  const prepared = prepareGlobalInstructionsRemoval(target, options);
+  if (prepared === null) {
+    return;
+  }
+  assertGlobalInstructionsWritable(prepared.filePath);
+}
+
 /** Reconcile the selected harness's Managed instruction section from the source snapshot. */
 export function reconcileGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
-  options: GlobalInstructionsOptions & { sourceCheckout: string }
+  options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
+) {
+  const prepared = prepareGlobalInstructions(target, options);
+  if (prepared === null) {
+    return;
+  }
+  mkdirSync(path.dirname(prepared.filePath), { recursive: true });
+  writeFileSync(prepared.filePath, prepared.nextContent);
+}
+
+function prepareGlobalInstructions(
+  target: { kind: SkillInstallTargetKind },
+  options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
 ) {
   const destinationPath = globalInstructionsPath(target, options);
   if (destinationPath === null) {
-    return;
+    return null;
   }
-
   const filePath = resolveInstructionFile(destinationPath);
   const body = readFileSync(
-    path.join(options.sourceCheckout, GLOBAL_INSTRUCTIONS_RELATIVE_PATH),
+    path.join(options.guidanceSourceRoot, GLOBAL_INSTRUCTIONS_RELATIVE_PATH),
     "utf-8"
   );
   const existingContent = existsSync(filePath) ? readFileSync(filePath, "utf-8") : null;
-  mkdirSync(path.dirname(destinationPath), { recursive: true });
-  writeFileSync(
+  return {
     filePath,
-    reconcileManagedInstructions(existingContent, body, target.kind === "codex")
-  );
+    nextContent: reconcileManagedInstructions(existingContent, body, target.kind === "codex")
+  };
+}
+
+function assertGlobalInstructionsWritable(filePath: string) {
+  if (existsSync(filePath)) {
+    try {
+      accessSync(filePath, fsConstants.W_OK);
+      return;
+    } catch {
+      throw new MonkeError(`Global agent instructions are not writable: ${filePath}`);
+    }
+  }
+
+  assertDirectoryMutationAccess(path.dirname(filePath), "Global agent instructions parent");
 }
 
 /** Remove the selected harness's Managed instruction section without touching user guidance. */
@@ -57,30 +107,34 @@ export function removeGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
   options: GlobalInstructionsOptions
 ) {
-  const destinationPath = globalInstructionsPath(target, options);
-  if (destinationPath === null) {
+  const prepared = prepareGlobalInstructionsRemoval(target, options);
+  if (prepared === null) {
     return;
   }
-  const destinationStat = lstatSync(destinationPath, { throwIfNoEntry: false });
-  if (destinationStat === undefined) {
-    return;
-  }
+  writeFileSync(prepared.filePath, prepared.nextContent);
+}
 
+function prepareGlobalInstructionsRemoval(
+  target: { kind: SkillInstallTargetKind },
+  options: GlobalInstructionsOptions
+) {
+  const destinationPath = globalInstructionsPath(target, options);
+  if (
+    destinationPath === null ||
+    lstatSync(destinationPath, { throwIfNoEntry: false }) === undefined
+  ) {
+    return null;
+  }
   const filePath = resolveInstructionFile(destinationPath);
   const existingContent = readFileSync(filePath, "utf-8");
   const markers = findManagedInstructionMarkers(existingContent);
   if (markers === null) {
-    return;
+    return null;
   }
-
-  const before = existingContent.slice(0, markers.start);
-  const after = existingContent.slice(markers.end);
-  const nextContent = `${before}${after}`;
-  if (nextContent.length === 0) {
-    writeFileSync(filePath, "");
-    return;
-  }
-  writeFileSync(filePath, nextContent);
+  return {
+    filePath,
+    nextContent: `${existingContent.slice(0, markers.start)}${existingContent.slice(markers.end)}`
+  };
 }
 
 function reconcileManagedInstructions(

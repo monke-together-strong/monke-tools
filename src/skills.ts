@@ -16,16 +16,20 @@ import path from "node:path";
 import * as z from "zod";
 
 import { errorMessage, MonkeError } from "./errors.ts";
-import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
+import { loadGlobalMonkeConfig, SkillInstallPreferenceSchema } from "./global-config.ts";
 import type {
   BuiltInSkillInstallTargetKind,
-  GlobalMonkeConfig,
   SkillInstallPreference,
   SkillInstallTargetKind,
   SkillInstallTargetPreference
 } from "./global-config.ts";
-import { reconcileGlobalInstructions, removeGlobalInstructions } from "./global-instructions.ts";
-import { createLogger } from "./logger.ts";
+import {
+  preflightGlobalInstructions,
+  preflightRemoveGlobalInstructions,
+  reconcileGlobalInstructions,
+  removeGlobalInstructions
+} from "./global-instructions.ts";
+import { assertDirectoryMutationAccess } from "./path-boundary.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
@@ -63,6 +67,12 @@ export interface ResolvedSkillInstallTarget {
   namespacePath: string;
 }
 
+/** Noninteractive Skill targets supplied by install automation. */
+export interface ExplicitSkillTargetSelection {
+  builtInTargetKinds?: BuiltInSkillInstallTargetKind[];
+  customTargetPath?: string;
+}
+
 /** Resolve stored Skill install target preferences into concrete Agent skill root paths. */
 export function resolveSkillInstallTargets(options: {
   homeDirectory: string;
@@ -85,86 +95,158 @@ export function resolveSkillInstallTargets(options: {
   });
 }
 
-/** Prompt for a Skill install preference, save it, and reconcile selected Agent skill roots. */
-export async function runSkillsConfigure(runtime: Runtime) {
-  const monkeHome = getMonkeHome(runtime);
-  const homeDirectory = getHomeDirectory(runtime);
-  const config = loadGlobalMonkeConfig(monkeHome);
-  const sourceCheckout = config.installedSourceCheckout;
-  if (!sourceCheckout) {
-    throw new MonkeError(
-      "Installed source checkout is not configured; run bun run install:local from the monke-tools checkout first"
-    );
-  }
-  resolveSkillSourceTree(sourceCheckout);
-
-  const previousPreference = config.skillInstallPreference ?? null;
-  const nextPreference = await promptForSkillInstallPreference(
-    runtime,
-    previousPreference,
-    homeDirectory
-  );
-  saveGlobalMonkeConfig(monkeHome, {
-    ...config,
-    skillInstallPreference: nextPreference
-  });
-
-  reconcileSkillNamespaces({
-    cwd: runtime.cwd,
-    environment: runtime.env,
-    homeDirectory,
-    nextPreference,
-    previousPreference,
-    sourceCheckout,
-    writeMessage(message) {
-      runtime.writeStderr(message);
-    }
-  });
-  createLogger(runtime).success("Configured monke-tools skills");
-}
-
-/** Record the Installed source checkout and refresh or configure Distributed skill targets. */
-export async function runLocalInstallSkills(
-  runtime: Runtime,
-  sourceCheckout: string,
-  targetKinds?: BuiltInSkillInstallTargetKind[]
+export function explicitSkillInstallPreference(
+  homeDirectory: string,
+  explicitTargets: ExplicitSkillTargetSelection | undefined
 ) {
-  const monkeHome = getMonkeHome(runtime);
-  const homeDirectory = getHomeDirectory(runtime);
-  const config = loadGlobalMonkeConfig(monkeHome);
-  const installedSourceCheckout = path.resolve(sourceCheckout);
-  const explicitPreference: SkillInstallPreference | undefined = targetKinds
-    ? { targets: targetKinds.map((kind) => ({ kind })) }
-    : undefined;
-  const nextPreference = explicitPreference ?? config.skillInstallPreference;
-  const nextConfig: GlobalMonkeConfig = {
-    ...config,
-    installedSourceCheckout
-  };
-  if (nextPreference) {
-    nextConfig.skillInstallPreference = nextPreference;
-  }
-
-  saveGlobalMonkeConfig(monkeHome, nextConfig);
-
-  if (!nextPreference) {
-    await runSkillsConfigure(runtime);
+  if (explicitTargets === undefined) {
     return;
   }
+  const targets: SkillInstallTargetPreference[] =
+    explicitTargets.builtInTargetKinds?.map((kind) => ({ kind })) ?? [];
+  if (explicitTargets.customTargetPath !== undefined) {
+    targets.push({
+      kind: "custom",
+      path: normalizeCustomSkillRoot({
+        homeDirectory,
+        input: explicitTargets.customTargetPath
+      })
+    });
+  }
+  return parseBoundaryValue(
+    SkillInstallPreferenceSchema,
+    { targets },
+    "explicit Skill install target selection"
+  );
+}
 
-  reconcileSkillNamespaces({
-    cwd: runtime.cwd,
-    environment: runtime.env,
-    homeDirectory,
-    nextPreference,
-    previousPreference: config.skillInstallPreference ?? null,
-    sourceCheckout: installedSourceCheckout,
-    writeMessage(message) {
-      runtime.writeStderr(message);
+/** Preflight known guidance destinations before Local or Release core activation. */
+export function preflightInstallGuidance(
+  runtime: Runtime,
+  guidanceSourceRoot: string,
+  explicitTargets?: ExplicitSkillTargetSelection
+) {
+  const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
+  const previousPreference = config.skillInstallPreference;
+  const homeDirectory = getHomeDirectory(runtime);
+  const nextPreference =
+    explicitSkillInstallPreference(homeDirectory, explicitTargets) ?? previousPreference;
+  if (!nextPreference && !previousPreference) {
+    return;
+  }
+  const previousTargets = resolveTargetsByKey(homeDirectory, previousPreference);
+  const nextTargets = resolveTargetsByKey(homeDirectory, nextPreference);
+  const failures: string[] = [];
+  for (const [key, target] of previousTargets) {
+    if (nextTargets.has(key)) {
+      continue;
     }
-  });
-  createLogger(runtime).success(
-    explicitPreference ? "Configured monke-tools skills" : "Refreshed monke-tools skills"
+    try {
+      preflightSkillTargetRemoval(target);
+      preflightRemoveGlobalInstructions(target, {
+        cwd: runtime.cwd,
+        environment: runtime.env,
+        homeDirectory
+      });
+    } catch (error) {
+      failures.push(`${target.agentSkillRoot}: ${errorMessage(error)}`);
+    }
+  }
+  for (const target of nextTargets.values()) {
+    try {
+      preflightOneSkillTarget(target, guidanceSourceRoot);
+      preflightGlobalInstructions(target, {
+        cwd: runtime.cwd,
+        environment: runtime.env,
+        guidanceSourceRoot,
+        homeDirectory
+      });
+    } catch (error) {
+      failures.push(`${target.agentSkillRoot}: ${errorMessage(error)}`);
+    }
+  }
+  if (failures.length > 0) {
+    throw new MonkeError(`Install guidance destination preflight failed:\n${failures.join("\n")}`);
+  }
+}
+
+function preflightOneSkillTarget(target: ResolvedSkillInstallTarget, guidanceSourceRoot: string) {
+  const skillSourceTree = resolveSkillSourceTree(guidanceSourceRoot);
+  prepareSkillTargetPlan(target, skillSourceTree).preflight();
+}
+
+function preflightNamespaceTarget(
+  target: ResolvedSkillInstallTarget,
+  sourceFolders: readonly string[]
+) {
+  assertDirectoryMutationAccess(target.agentSkillRoot, "Skill namespace destination");
+  const namespaceStat = lstatSync(target.namespacePath, { throwIfNoEntry: false });
+  if (namespaceStat && !namespaceStat.isDirectory() && !namespaceStat.isSymbolicLink()) {
+    throw new MonkeError(`Refusing to overwrite Skill namespace at ${target.namespacePath}`);
+  }
+  if (namespaceStat?.isDirectory() === true) {
+    assertDirectoryMutationAccess(target.namespacePath, "Skill namespace destination");
+  }
+  if (!namespaceStat?.isDirectory()) {
+    return;
+  }
+  assertNamespaceLinksCanBeManaged(target, sourceFolders);
+}
+
+function assertNamespaceLinksCanBeManaged(
+  target: ResolvedSkillInstallTarget,
+  sourceFolders: readonly string[]
+) {
+  for (const name of sourceFolders) {
+    const linkPath = path.join(target.namespacePath, name);
+    const linkStat = lstatSync(linkPath, { throwIfNoEntry: false });
+    if (linkStat && !linkStat.isSymbolicLink()) {
+      throw new MonkeError(`Refusing to overwrite non-managed Skill folder at ${linkPath}`);
+    }
+  }
+}
+
+function preflightFlatTarget(
+  target: ResolvedSkillInstallTarget,
+  links: FlatSkillLink[],
+  supportingLinks: FlatSupportingLink[]
+) {
+  const previousManifest = readFlatManifest(target);
+  assertDirectoryMutationAccess(target.agentSkillRoot, "Agent Skill root");
+  for (const link of supportingLinks) {
+    assertDirectoryMutationAccess(path.dirname(link.targetPath), "Reference link parent");
+  }
+  assertFlatLinksCanBeManaged(target, links, previousManifest);
+  assertFlatSupportingLinksCanBeManaged(supportingLinks, previousManifest);
+}
+
+function preflightSkillTargetRemoval(target: ResolvedSkillInstallTarget) {
+  const namespaceStat = lstatSync(target.namespacePath, { throwIfNoEntry: false });
+  const manifest = target.kind === "claude" ? readFlatManifest(target) : null;
+  if (!namespaceStat && !manifest) {
+    return;
+  }
+  assertDirectoryMutationAccess(target.agentSkillRoot, "Agent Skill root");
+  if (namespaceStat?.isDirectory() === true) {
+    assertDirectoryMutationAccess(target.namespacePath, "Skill namespace");
+  }
+  for (const link of manifest?.supportingLinks ?? []) {
+    assertDirectoryMutationAccess(path.dirname(link.targetPath), "Reference link parent");
+  }
+}
+
+function resolveTargetsByKey(
+  homeDirectory: string,
+  preference: SkillInstallPreference | undefined
+) {
+  if (!preference) {
+    return new Map<string, ResolvedSkillInstallTarget>();
+  }
+  return new Map(
+    resolveSkillInstallTargets({ homeDirectory, preference }).map((target) => [
+      targetKey(target),
+      target
+    ])
   );
 }
 
@@ -172,13 +254,13 @@ export async function runLocalInstallSkills(
 export function reconcileSkillNamespaces(options: {
   cwd: string;
   environment?: Record<string, string | undefined>;
+  guidanceSourceRoot: string;
   homeDirectory: string;
   nextPreference: SkillInstallPreference;
   previousPreference: SkillInstallPreference | null;
-  sourceCheckout: string;
   writeMessage: (message: string) => void;
 }) {
-  const skillSourceTree = resolveSkillSourceTree(options.sourceCheckout);
+  const skillSourceTree = resolveSkillSourceTree(options.guidanceSourceRoot);
   const previousTargets =
     options.previousPreference === null
       ? []
@@ -208,9 +290,11 @@ export function reconcileSkillNamespaces(options: {
 
   for (const target of nextTargets) {
     try {
-      reconcileOneTarget(target, skillSourceTree);
+      prepareSkillTargetPlan(target, skillSourceTree).reconcile();
       reconcileGlobalInstructions(target, options);
-      options.writeMessage(`Linked ${SKILL_NAMESPACE} skills at ${managedLocation(target)}\n`);
+      options.writeMessage(
+        `Linked ${SKILL_NAMESPACE} skills at ${skillTargetPolicy(target).managedLocation}\n`
+      );
     } catch (error) {
       const message = errorMessage(error);
       failures.push(`${target.agentSkillRoot}: ${message}`);
@@ -246,7 +330,7 @@ function normalizeCustomSkillRoot(options: { homeDirectory: string; input: strin
   return normalized;
 }
 
-async function promptForSkillInstallPreference(
+export async function promptForSkillInstallPreference(
   runtime: Runtime,
   previousPreference: SkillInstallPreference | null,
   homeDirectory: string
@@ -307,13 +391,13 @@ function resolveCustomSkillRootAnswer(options: {
   });
 }
 
-function resolveSkillSourceTree(sourceCheckout: string) {
-  const resolvedCheckout = path.resolve(sourceCheckout);
-  if (!existsSync(resolvedCheckout)) {
-    throw new MonkeError(`Installed source checkout is missing: ${resolvedCheckout}`);
+export function resolveSkillSourceTree(guidanceSourceRoot: string) {
+  const resolvedGuidanceSourceRoot = path.resolve(guidanceSourceRoot);
+  if (!existsSync(resolvedGuidanceSourceRoot)) {
+    throw new MonkeError(`Guidance source root is missing: ${resolvedGuidanceSourceRoot}`);
   }
 
-  const skillSourceTree = path.join(resolvedCheckout, "skills");
+  const skillSourceTree = path.join(resolvedGuidanceSourceRoot, "skills");
   if (!existsSync(skillSourceTree)) {
     throw new MonkeError(`Skill source tree is missing: ${skillSourceTree}`);
   }
@@ -321,16 +405,11 @@ function resolveSkillSourceTree(sourceCheckout: string) {
   return skillSourceTree;
 }
 
-function reconcileOneTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
-  if (skillInstallLayoutForTarget(target) === "flat") {
-    reconcileFlatTarget(target, skillSourceTree);
-    return;
-  }
-
-  reconcileNamespaceTarget(target, skillSourceTree);
-}
-
-function reconcileNamespaceTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
+function reconcileNamespaceTarget(
+  target: ResolvedSkillInstallTarget,
+  skillSourceTree: string,
+  sourceFolders: readonly string[]
+) {
   mkdirSync(target.agentSkillRoot, { recursive: true });
   if (target.kind === "claude") {
     removeFlatManagedLinks(target);
@@ -346,15 +425,7 @@ function reconcileNamespaceTarget(target: ResolvedSkillInstallTarget, skillSourc
     mkdirSync(target.namespacePath);
   }
 
-  const sourceFolders =
-    target.kind === "codex" ? CODEX_NAMESPACE_SOURCE_FOLDERS : SHARED_NAMESPACE_SOURCE_FOLDERS;
-  for (const name of sourceFolders) {
-    const linkPath = path.join(target.namespacePath, name);
-    const linkStat = lstatSync(linkPath, { throwIfNoEntry: false });
-    if (linkStat && !linkStat.isSymbolicLink()) {
-      throw new MonkeError(`Refusing to overwrite non-managed Skill folder at ${linkPath}`);
-    }
-  }
+  assertNamespaceLinksCanBeManaged(target, sourceFolders);
 
   for (const name of sourceFolders) {
     const sourcePath = path.join(skillSourceTree, name);
@@ -368,12 +439,14 @@ function reconcileNamespaceTarget(target: ResolvedSkillInstallTarget, skillSourc
   }
 }
 
-function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
+function reconcileFlatTarget(
+  target: ResolvedSkillInstallTarget,
+  links: FlatSkillLink[],
+  supportingLinks: FlatSupportingLink[]
+) {
   mkdirSync(target.agentSkillRoot, { recursive: true });
   removeManagedNamespace(target);
 
-  const links = discoverFlatSkillLinks(skillSourceTree);
-  const supportingLinks = discoverFlatSupportingLinks(target, skillSourceTree);
   const previousManifest = readFlatManifest(target);
   assertFlatLinksCanBeManaged(target, links, previousManifest);
   assertFlatSupportingLinksCanBeManaged(supportingLinks, previousManifest);
@@ -639,20 +712,38 @@ function flatManifestPath(target: ResolvedSkillInstallTarget) {
   return path.join(target.agentSkillRoot, FLAT_SKILL_MANIFEST);
 }
 
-function skillInstallLayoutForTarget(target: ResolvedSkillInstallTarget) {
-  if (target.kind === "claude") {
-    return CLAUDE_SKILL_INSTALL_LAYOUT;
+function prepareSkillTargetPlan(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
+  const policy = skillTargetPolicy(target);
+  if (policy.layout === "flat") {
+    const links = discoverFlatSkillLinks(skillSourceTree);
+    const supportingLinks = discoverFlatSupportingLinks(target, skillSourceTree);
+    return {
+      preflight() {
+        preflightFlatTarget(target, links, supportingLinks);
+      },
+      reconcile() {
+        reconcileFlatTarget(target, links, supportingLinks);
+      }
+    };
   }
-
-  return "namespace";
+  const sourceFolders =
+    target.kind === "codex" ? CODEX_NAMESPACE_SOURCE_FOLDERS : SHARED_NAMESPACE_SOURCE_FOLDERS;
+  return {
+    preflight() {
+      preflightNamespaceTarget(target, sourceFolders);
+    },
+    reconcile() {
+      reconcileNamespaceTarget(target, skillSourceTree, sourceFolders);
+    }
+  };
 }
 
-function managedLocation(target: ResolvedSkillInstallTarget) {
-  if (skillInstallLayoutForTarget(target) === "flat") {
-    return target.agentSkillRoot;
-  }
-
-  return target.namespacePath;
+function skillTargetPolicy(target: ResolvedSkillInstallTarget) {
+  const layout = target.kind === "claude" ? CLAUDE_SKILL_INSTALL_LAYOUT : "namespace";
+  return {
+    layout,
+    managedLocation: layout === "flat" ? target.agentSkillRoot : target.namespacePath
+  };
 }
 
 function targetKey(target: ResolvedSkillInstallTarget) {

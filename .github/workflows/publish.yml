@@ -1,4 +1,4 @@
-name: Publish
+name: Publish monke-tools Release
 
 on:
   push:
@@ -7,43 +7,22 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
 
 jobs:
   verify:
-    name: Check And Test
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    uses: ./.github/workflows/verify-mainline.yml
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
-        with:
-          cache: true
-
-      - name: Install deps
-        run: vp install --frozen-lockfile
-
-      - name: Check
-        run: vp check
-
-      - name: Test
-        run: vp run test
-
-  publish:
-    name: Version Or Publish
+  prepare-release:
+    name: Select Mainline Release
     needs: verify
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-      pull-requests: write
+    runs-on: ubuntu-24.04
+    outputs:
+      relevant: ${{ steps.release.outputs.relevant }}
+      version: ${{ steps.release.outputs.version }}
 
     steps:
       - name: Checkout
@@ -52,24 +31,181 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
-        with:
-          cache: true
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
 
-      - name: Setup Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-
-      - name: Setup npm
-        # Tegami packs with Bun but publishes through npm; trusted publishing requires npm 11.5.1+.
-        run: npm install --global npm@11.5.1
-
-      - name: Install deps
-        run: vp install --frozen-lockfile
-
-      - name: Version or publish packages
-        run: vp run tegami ci
+      - name: Select Mainline release
+        id: release
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          AFTER_SHA: ${{ github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [ -z "$BEFORE_SHA" ] ||
+            [ "$BEFORE_SHA" = 0000000000000000000000000000000000000000 ] ||
+            ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            relevant=true
+          else
+            relevant="$(bun run scripts/release-bundle.ts relevant \
+              --before "$BEFORE_SHA" \
+              --after "$AFTER_SHA")"
+          fi
+          printf 'relevant=%s\n' "$relevant" >> "$GITHUB_OUTPUT"
+          if [ "$relevant" != true ]; then
+            exit 0
+          fi
+
+          version="$(bun run scripts/release-bundle.ts next-version)"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+  build-release:
+    name: Build Release (${{ matrix.platform }})
+    needs: prepare-release
+    if: needs.prepare-release.outputs.relevant == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-arm64
+            runner: macos-14
+          - platform: linux-x64
+            runner: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
+
+      - name: Build Release bundle
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-assets"
+          bun run scripts/release-bundle.ts build \
+            --version "$VERSION" \
+            --source-commit "$SOURCE_COMMIT" \
+            --platform "$PLATFORM" \
+            --output "$RUNNER_TEMP/release-assets"
+
+      - name: Smoke check executable and verify archive
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          archive="$RUNNER_TEMP/release-assets/monke-tools-v${VERSION}-${PLATFORM}.tar.gz"
+          bun run scripts/release-bundle.ts verify \
+            --archive "$archive" \
+            --version "$VERSION" \
+            --source-commit "$SOURCE_COMMIT" \
+            --platform "$PLATFORM"
+
+      - name: Upload verified archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          if-no-files-found: error
+          name: monke-tools-release-${{ matrix.platform }}
+          path: ${{ runner.temp }}/release-assets/*.tar.gz
+          retention-days: 1
+
+  publish-release:
+    name: Publish Mainline Release
+    needs: [prepare-release, build-release]
+    if: needs.prepare-release.outputs.relevant == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
+
+      - name: Download all verified archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          merge-multiple: true
+          path: ${{ runner.temp }}/release-assets
+          pattern: monke-tools-release-*
+
+      - name: Generate checksums
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          bun run scripts/release-bundle.ts checksums \
+            --directory "$RUNNER_TEMP/release-assets" \
+            --version "$VERSION"
+
+      - name: Verify complete Release
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          bun run scripts/release-bundle.ts verify-assets \
+            --directory "$RUNNER_TEMP/release-assets" \
+            --source-commit "$SOURCE_COMMIT" \
+            --version "$VERSION"
+
+      - name: Create draft Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          tag="monke-tools-v${VERSION}"
+          existing_draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ "$existing_draft" = true ]; then
+            gh release delete "$tag" --yes
+          elif [ -n "$existing_draft" ]; then
+            printf 'Release %s already exists and is published\n' "$tag" >&2
+            exit 1
+          fi
+          gh release create "$tag" \
+            --draft \
+            --target "$SOURCE_COMMIT" \
+            --title "monke-tools v${VERSION}" \
+            --notes "Automated monke-tools Mainline release from ${SOURCE_COMMIT}."
+
+      - name: Upload all Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: gh release upload "monke-tools-v${VERSION}" "$RUNNER_TEMP/release-assets/"*
+
+      - name: Publish immutable Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: gh release edit "monke-tools-v${VERSION}" --draft=false
+
+      - name: Publish stable Release catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          catalog_tag=monke-tools-catalog
+          catalog_path="$RUNNER_TEMP/stable.tsv"
+          bun run scripts/release-bundle.ts catalog \
+            --directory "$RUNNER_TEMP/release-assets" \
+            --output "$catalog_path" \
+            --source-commit "$SOURCE_COMMIT" \
+            --version "$VERSION"
+          if ! gh release view "$catalog_tag" >/dev/null 2>&1; then
+            gh release create "$catalog_tag" \
+              --prerelease \
+              --target "$SOURCE_COMMIT" \
+              --title "monke-tools stable Release catalog" \
+              --notes "Mutable pointer used only to discover the latest verified stable monke-tools Release."
+          fi
+          gh release upload "$catalog_tag" "$catalog_path" --clobber

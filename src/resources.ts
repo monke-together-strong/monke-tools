@@ -403,6 +403,7 @@ function readResourceCommandRunnerOutput(options: {
 
 function validateResourceCommandReturn(
   command: ResourceCommandConfig,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The command runner return crosses a process boundary and is parsed immediately below.
   returned: unknown,
   stdout: string,
   stderr: string,
