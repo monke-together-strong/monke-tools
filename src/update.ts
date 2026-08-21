@@ -10,6 +10,7 @@ import {
   ReleaseTagSchema
 } from "./install-manifest.ts";
 import type { ReleaseInstallManifest, ToolInstallManifest } from "./install-manifest.ts";
+import { withInstallMutationLockAsync } from "./install-recovery.ts";
 import {
   cleanupStaleStagingDirectories,
   releasePlatform,
@@ -23,7 +24,7 @@ import {
   verifyReleaseArchive
 } from "./release-bundle.ts";
 import { findChangedReleaseGuidancePaths } from "./release-guidance.ts";
-import { getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
+import { getMonkeHome } from "./runtime.ts";
 import type { ReleaseCatalogAsset, ReleaseCatalogEntry, Runtime } from "./types.ts";
 
 const MAX_RELEASE_PAGES = 10_000;
@@ -46,7 +47,7 @@ export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
     return;
   }
 
-  await withInstallationLockAsync(monkeHome, async () => {
+  await withInstallMutationLockAsync(monkeHome, async () => {
     const lockedActive = loadActiveToolInstall(monkeHome);
     if (lockedActive === null) {
       throw new MonkeError("The Active tool install disappeared while update was starting");

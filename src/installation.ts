@@ -23,18 +23,26 @@ import {
   INSTALL_MANIFEST_FILENAME,
   LocalInstallManifestSchema,
   ReleaseInstallManifestSchema,
-  ToolInstallManifestSchema,
-  resolveActiveInstallRoot
+  resolveActiveInstallRoot,
+  installIdForManifest
 } from "./install-manifest.ts";
 import type {
   LocalInstallManifest,
   ReleaseInstallManifest,
   ToolInstallManifest
 } from "./install-manifest.ts";
+import {
+  assertManagedInstallRoot,
+  cleanupInactiveToolInstalls,
+  COLLISION_RECOVERY_FILENAME,
+  reconcilePendingInstallBackups,
+  withInstallMutationLockAsync,
+  writeCollisionRecovery
+} from "./install-recovery.ts";
 import { createLogger } from "./logger.ts";
 import { assertDirectChildPath } from "./path-boundary.ts";
 import { assertReleaseGuidanceHashes, hashReleaseGuidance } from "./release-guidance.ts";
-import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
+import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
 import {
   preflightInstallGuidance,
@@ -165,10 +173,14 @@ export async function runActivateReleaseInstall(
     }
     return { installId, manifest };
   };
-  const activated =
-    options.installationLockHeld === true
-      ? (assertInheritedInstallationLock(monkeHome), await activate())
-      : await withInstallationLockAsync(monkeHome, activate);
+  let activated: Awaited<ReturnType<typeof activate>>;
+  if (options.installationLockHeld === true) {
+    assertInheritedInstallationLock(monkeHome);
+    reconcilePendingInstallBackups(monkeHome);
+    activated = await activate();
+  } else {
+    activated = await withInstallMutationLockAsync(monkeHome, activate);
+  }
 
   createLogger(runtime).success(
     `Activated Release install ${activated.manifest.releaseVersion} at ${path.join(monkeHome, "installs", activated.installId)}`
@@ -185,23 +197,6 @@ function prepareValidatedInactiveInstallCollision(
   const backupRoot = path.join(backupsRoot, installId);
   assertDirectChildPath(backupRoot, backupsRoot, "collision backup");
 
-  const backupStat = lstatSync(backupRoot, { throwIfNoEntry: false });
-  if (backupStat) {
-    assertValidatedInstallCollision(backupRoot, installId);
-    const installStat = lstatSync(installRoot, { throwIfNoEntry: false });
-    if (!installStat) {
-      mkdirSync(path.dirname(installRoot), { recursive: true });
-      renameSync(backupRoot, installRoot);
-    } else if (activeInstallRoot === installRoot) {
-      rmSync(backupRoot, { recursive: true });
-    } else {
-      assertValidatedInstallCollision(installRoot, installId);
-      rmSync(installRoot, { recursive: true });
-      renameSync(backupRoot, installRoot);
-    }
-    removeEmptyDirectory(backupsRoot);
-  }
-
   const stat = lstatSync(installRoot, { throwIfNoEntry: false });
   if (!stat) {
     return null;
@@ -209,10 +204,16 @@ function prepareValidatedInactiveInstallCollision(
   if (installRoot === activeInstallRoot || !stat.isDirectory() || stat.isSymbolicLink()) {
     throw new MonkeError(`Tool install identity already exists: ${installId}`);
   }
-  assertValidatedInstallCollision(installRoot, installId);
+  assertManagedInstallRoot(installRoot, installId);
   mkdirSync(backupsRoot, { recursive: true });
   assertDirectory(backupsRoot, "Install backup root is invalid");
-  renameSync(installRoot, backupRoot);
+  try {
+    writeCollisionRecovery(installRoot, activeInstallRoot);
+    renameSync(installRoot, backupRoot);
+  } catch (error) {
+    rmSync(path.join(installRoot, COLLISION_RECOVERY_FILENAME), { force: true });
+    throw error;
+  }
   return {
     discard() {
       rmSync(backupRoot, { force: true, recursive: true });
@@ -220,28 +221,12 @@ function prepareValidatedInactiveInstallCollision(
     },
     restore() {
       if (lstatSync(backupRoot, { throwIfNoEntry: false })) {
+        rmSync(path.join(backupRoot, COLLISION_RECOVERY_FILENAME));
         renameSync(backupRoot, installRoot);
         removeEmptyDirectory(backupsRoot);
       }
     }
   };
-}
-
-function assertValidatedInstallCollision(installRoot: string, installId: string) {
-  const stat = lstatSync(installRoot, { throwIfNoEntry: false });
-  if (!stat?.isDirectory() || stat.isSymbolicLink()) {
-    throw new MonkeError(`Tool install identity already exists: ${installId}`);
-  }
-  try {
-    const manifest = ToolInstallManifestSchema.parse(
-      JSON.parse(readFileSync(path.join(installRoot, INSTALL_MANIFEST_FILENAME), "utf-8"))
-    );
-    if (installIdForManifest(manifest) !== installId) {
-      throw new Error("install identity mismatch");
-    }
-  } catch {
-    throw new MonkeError(`Tool install identity already exists: ${installId}`);
-  }
 }
 
 function removeEmptyDirectory(directory: string) {
@@ -337,9 +322,10 @@ export async function runActivateLocalInstall(
   let manifest: LocalInstallManifest;
   if (options.installationLockHeld === true) {
     assertInheritedInstallationLock(monkeHome);
+    reconcilePendingInstallBackups(monkeHome);
     manifest = await activate();
   } else {
-    manifest = await withInstallationLockAsync(monkeHome, activate);
+    manifest = await withInstallMutationLockAsync(monkeHome, activate);
   }
 
   createLogger(runtime).success(
@@ -420,37 +406,6 @@ function assertCommandEntryCanBeReplaced(commandPath: string) {
   }
 }
 
-function cleanupInactiveToolInstalls(monkeHome: string, retainedRoots: Set<string>) {
-  const installsRoot = path.join(monkeHome, "installs");
-  if (!existsSync(installsRoot)) {
-    return;
-  }
-  for (const entry of readdirSync(installsRoot, { withFileTypes: true })) {
-    const installRoot = path.join(installsRoot, entry.name);
-    if (!entry.isDirectory() || entry.isSymbolicLink() || retainedRoots.has(installRoot)) {
-      continue;
-    }
-    const manifestPath = path.join(installRoot, INSTALL_MANIFEST_FILENAME);
-    if (!existsSync(manifestPath)) {
-      continue;
-    }
-    try {
-      const manifest = ToolInstallManifestSchema.parse(
-        JSON.parse(readFileSync(manifestPath, "utf-8"))
-      );
-      if (installIdForManifest(manifest) !== entry.name) {
-        continue;
-      }
-    } catch {
-      continue;
-    }
-    const finalStat = lstatSync(installRoot, { throwIfNoEntry: false });
-    if (finalStat?.isDirectory() === true && !finalStat.isSymbolicLink()) {
-      rmSync(installRoot, { recursive: true });
-    }
-  }
-}
-
 function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
   const resolvedRoot = path.resolve(bundleRoot);
   assertDirectory(resolvedRoot, "Release bundle is missing");
@@ -496,11 +451,7 @@ export function releasePlatform(runtime: Runtime) {
 }
 
 function releaseInstallId(manifest: ReleaseInstallManifest) {
-  return `release-${manifest.releaseVersion}-${manifest.platform}`;
-}
-
-function installIdForManifest(manifest: ToolInstallManifest) {
-  return manifest.installKind === "local" ? manifest.installId : releaseInstallId(manifest);
+  return installIdForManifest(manifest);
 }
 
 export function cleanupStaleStagingDirectories(monkeHome: string, activeStage?: string) {

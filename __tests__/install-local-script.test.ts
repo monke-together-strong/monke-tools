@@ -19,7 +19,13 @@ import { makeTempDir, writeExecutable } from "./helpers.ts";
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const INSTALL_ID_ARGUMENT_PATTERN = /--install-id (?<identity>\S+)/u;
 
-function prepareInstallFixture(checkout: string, binDirectory: string, dirty: boolean) {
+function prepareInstallFixture(
+  checkout: string,
+  binDirectory: string,
+  dirty: boolean,
+  changeDuringBuild = false
+) {
+  const sourceChangedMarker = path.join(checkout, ".source-changed-during-build");
   mkdirSync(path.join(checkout, "scripts"), { recursive: true });
   mkdirSync(path.join(checkout, "src"), { recursive: true });
   writeFileSync(
@@ -38,6 +44,8 @@ case "$*" in
   *"rev-parse HEAD") printf '%s\n' 0123456789abcdef0123456789abcdef01234567 ;;
   *"rev-parse --short=7 HEAD") printf '%s\n' 0123456 ;;
   *"status --porcelain --untracked-files=normal") ${dirty ? "printf '%s\\n' ' M src/index.ts'" : ":"} ;;
+  *"diff --binary HEAD --") [ ! -f ${JSON.stringify(sourceChangedMarker)} ] || printf '%s\n' changed ;;
+  *"ls-files --others --exclude-standard") : ;;
   *) exit 2 ;;
 esac
 `
@@ -66,6 +74,7 @@ set -eu
 printf '%s\n' "$*" >> "$MONKE_TOOLS_LOG"
 EOF
 /bin/chmod +x "$outfile"
+${changeDuringBuild ? `/usr/bin/touch ${JSON.stringify(sourceChangedMarker)}` : ""}
 `
   );
 }
@@ -150,6 +159,33 @@ describe("Local install refresh script", () => {
       .split("\n")
       .map((line) => INSTALL_ID_ARGUMENT_PATTERN.exec(line)?.groups?.identity);
     expect(new Set(installIdentities).size).toBe(2);
+  });
+
+  test("aborts before activation when the source changes during compilation", () => {
+    const sandbox = makeTempDir("install-local-source-change");
+    const checkout = path.join(sandbox, "checkout");
+    const binDirectory = path.join(sandbox, "bin");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const monkeToolsLog = path.join(sandbox, "monke-tools.log");
+    prepareInstallFixture(checkout, binDirectory, false, true);
+
+    const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
+      cwd: checkout,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        BUN_LOG: path.join(sandbox, "bun.log"),
+        HOME: path.join(sandbox, "home"),
+        MONKE_HOME: monkeHome,
+        MONKE_TOOLS_LOG: monkeToolsLog,
+        PATH: `${binDirectory}:/usr/bin:/bin`
+      }
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Source checkout changed while");
+    expect(existsSync(monkeToolsLog)).toBeFalsy();
+    expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
   });
 
   test("compiled Local executables report their Tool build identity", () => {

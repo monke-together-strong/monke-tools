@@ -1,6 +1,7 @@
 import { hash } from "node:crypto";
 import {
   chmodSync,
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -17,6 +18,7 @@ import { describe, expect, test } from "vite-plus/test";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { loadLocalInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
+import { writeCollisionRecovery } from "../src/install-recovery.ts";
 import { createRuntime } from "../src/runtime.ts";
 import type { RuntimeOptions } from "../src/runtime.ts";
 import { makeTempDir, write, writeGlobalInstructionsSource } from "./helpers.ts";
@@ -245,6 +247,9 @@ describe("versioned installation lifecycle", () => {
     expect(stderr).toContain("mt skills configure");
 
     const installRoot = path.join(monkeHome, "installs", "release-1.2.3-linux-x64");
+    const backupRoot = path.join(monkeHome, "install-backups", path.basename(installRoot));
+    cpSync(installRoot, backupRoot, { recursive: true });
+    writeCollisionRecovery(backupRoot, null);
     await runCliAsync(
       ["skills", "configure"],
       createRuntime({
@@ -259,6 +264,7 @@ describe("versioned installation lifecycle", () => {
     expect(readlinkSync(path.join(home, ".codex", "skills", "monke-tools", "internal"))).toBe(
       path.join(installRoot, "skills", "internal")
     );
+    expect(existsSync(path.join(monkeHome, "install-backups"))).toBeFalsy();
   });
 
   test("automation can install Release guidance into an explicit Custom Skill target", async () => {
@@ -689,6 +695,12 @@ describe("versioned installation lifecycle", () => {
     mkdirSync(unvalidatedInstall);
     mkdirSync(externalDirectory);
     symlinkSync(externalDirectory, path.join(monkeHome, "installs", "release-external"), "dir");
+    cpSync(
+      path.join(monkeHome, "installs", "local-first"),
+      path.join(monkeHome, "install-backups", "local-first"),
+      { recursive: true }
+    );
+    writeCollisionRecovery(path.join(monkeHome, "install-backups", "local-first"), null);
     await activateLocal({ home, installId: "local-second", monkeHome, sourceCheckout });
     await activateLocal({ home, installId: "local-third", monkeHome, sourceCheckout });
 
@@ -697,6 +709,7 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "installs", "local-first"))).toBeFalsy();
     expect(existsSync(path.join(monkeHome, "installs", "local-second"))).toBeTruthy();
     expect(existsSync(path.join(monkeHome, "installs", "local-third"))).toBeTruthy();
+    expect(existsSync(path.join(monkeHome, "install-backups"))).toBeFalsy();
     expect(existsSync(unvalidatedInstall)).toBeTruthy();
     expect(
       lstatSync(path.join(monkeHome, "installs", "release-external")).isSymbolicLink()

@@ -96,6 +96,13 @@ export type LocalInstallManifest = output<typeof LocalInstallManifestSchema>;
 export type ReleaseInstallManifest = output<typeof ReleaseInstallManifestSchema>;
 export type ToolInstallManifest = output<typeof ToolInstallManifestSchema>;
 
+/** Return the managed installs directory identity encoded by an Install manifest. */
+export function installIdForManifest(manifest: ToolInstallManifest) {
+  return manifest.installKind === "local"
+    ? manifest.installId
+    : `release-${manifest.releaseVersion}-${manifest.platform}`;
+}
+
 /** Load the self-describing Active tool install when one is selected. */
 export function loadActiveLocalInstall(monkeHome: string) {
   const installRoot = resolveActiveInstallRoot(monkeHome);

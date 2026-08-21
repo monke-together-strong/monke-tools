@@ -7,7 +7,7 @@ const releaseConfig = tegami({
     client: "bun",
     trustedPublish: {
       provider: "github",
-      workflow: "publish.yml"
+      workflow: "publish-packages.yml"
     },
     updateLockFile: true
   },

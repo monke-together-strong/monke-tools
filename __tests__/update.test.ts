@@ -16,6 +16,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
+import { writeCollisionRecovery } from "../src/install-recovery.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
@@ -523,6 +524,11 @@ describe("Release update", () => {
       const sandbox = makeTempDir("release-update-current");
       const monkeHome = path.join(sandbox, "monke-home");
       const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
+      const predecessor = prepareActiveRelease(monkeHome, "1.2.2", false);
+      const oldestInstall = prepareActiveRelease(monkeHome, "1.2.1", false);
+      const backupRoot = path.join(monkeHome, "install-backups", path.basename(installRoot));
+      cpSync(installRoot, backupRoot, { recursive: true });
+      writeCollisionRecovery(backupRoot, predecessor);
       let stderr = "";
 
       await runCliAsync(
@@ -555,6 +561,11 @@ describe("Release update", () => {
       expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
         path.join("installs", "release-1.2.3-linux-x64")
       );
+      expect(existsSync(path.join(monkeHome, "install-backups"))).toBe(
+        arguments_.includes("--check")
+      );
+      expect(existsSync(predecessor)).toBeTruthy();
+      expect(existsSync(oldestInstall)).toBe(arguments_.includes("--check"));
       expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
     }
   );
@@ -789,6 +800,7 @@ describe("Release update", () => {
       } else {
         cpSync(sameReleasePredecessor, strandedBackup, { recursive: true });
       }
+      writeCollisionRecovery(strandedBackup, predecessor);
       const candidate = prepareReleaseAsset(sandbox, "1.2.4");
 
       const update = runCliAsync(

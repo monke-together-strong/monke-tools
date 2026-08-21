@@ -90,7 +90,7 @@ A qualifying push to `main` continuously publishes the next stable patch Release
 
 Each Release contains complete archives for macOS arm64 and Linux x64 plus one checksums asset. Platform jobs compile the selected version into `mt`, build the archive, execute `mt --version`, and run the shared archive verifier. Publication waits for both jobs, generates checksums covering both archives, and re-verifies their manifests, source commit, platform identities, guidance hashes, and checksums before attaching every asset to a draft and making it public. Repository Release immutability then binds the tag, commit, and assets. The public `install.sh` bootstrap is also a release-owned input, so changes to discovery or verification behavior trigger a new Mainline release.
 
-Pull-request CI remains the full-test boundary. A direct `main` push runs `vp check` plus the two platform builds and Release contract validation, but it does not rerun `vp run test`. Existing Tegami package versioning and publication continues independently in the same workflow.
+Pull-request CI remains the full-test boundary. A direct `main` push runs `vp check` plus the two platform builds and Release contract validation, but it does not rerun `vp run test`. Existing Tegami package versioning and publication continues independently in its package workflow.
 
 ## Distributed Skills
 

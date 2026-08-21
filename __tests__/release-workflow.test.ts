@@ -36,6 +36,13 @@ const WorkflowSchema = looseObject({
 });
 
 const workflowPath = path.join(import.meta.dirname, "..", ".github", "workflows", "publish.yml");
+const packageWorkflowPath = path.join(
+  import.meta.dirname,
+  "..",
+  ".github",
+  "workflows",
+  "publish-packages.yml"
+);
 
 function readWorkflow() {
   const source = readFileSync(workflowPath, "utf-8");
@@ -100,6 +107,9 @@ describe("Mainline publication workflow", () => {
 
   test("keeps existing package publication independent", () => {
     const { source } = readWorkflow();
-    expect(source).toContain("vp run tegami ci");
+    const packageSource = readFileSync(packageWorkflowPath, "utf-8");
+    expect(source).not.toContain("vp run tegami ci");
+    expect(packageSource).toContain("vp run tegami ci");
+    expect(packageSource).toContain("vp check");
   });
 });

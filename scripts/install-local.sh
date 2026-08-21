@@ -52,18 +52,17 @@ cleanup_old_bun_builds() {
     done
 }
 
-SOURCE_COMMIT=$(git -C "$ROOT_DIR" rev-parse HEAD)
-SHORT_COMMIT=$(git -C "$ROOT_DIR" rev-parse --short=7 HEAD)
-SOURCE_DIRTY=false
-if [ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)" ]; then
-  SOURCE_DIRTY=true
-fi
-TOOL_BUILD_IDENTITY="local+$SHORT_COMMIT"
-DIRTY_ARGUMENT=
-if [ "$SOURCE_DIRTY" = true ]; then
-  TOOL_BUILD_IDENTITY="$TOOL_BUILD_IDENTITY-dirty"
-  DIRTY_ARGUMENT=--dirty
-fi
+source_snapshot() {
+  {
+    git -C "$ROOT_DIR" rev-parse HEAD
+    git -C "$ROOT_DIR" diff --binary HEAD --
+    git -C "$ROOT_DIR" ls-files --others --exclude-standard |
+      while IFS= read -r untracked_file; do
+        printf '%s\n' "$untracked_file"
+        cksum "$ROOT_DIR/$untracked_file"
+      done
+  } | cksum
+}
 
 SYSTEM=$(uname -s | tr '[:upper:]' '[:lower:]')
 MACHINE=$(uname -m)
@@ -78,6 +77,21 @@ mkdir -p "$BUILD_DIR"
 trap release_installation_lock 0
 trap 'exit 1' 1 2 15
 acquire_installation_lock
+
+SOURCE_COMMIT=$(git -C "$ROOT_DIR" rev-parse HEAD)
+SHORT_COMMIT=$(git -C "$ROOT_DIR" rev-parse --short=7 HEAD)
+SOURCE_DIRTY=false
+if [ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)" ]; then
+  SOURCE_DIRTY=true
+fi
+SOURCE_SNAPSHOT=$(source_snapshot)
+TOOL_BUILD_IDENTITY="local+$SHORT_COMMIT"
+DIRTY_ARGUMENT=
+if [ "$SOURCE_DIRTY" = true ]; then
+  TOOL_BUILD_IDENTITY="$TOOL_BUILD_IDENTITY-dirty"
+  DIRTY_ARGUMENT=--dirty
+fi
+
 mkdir -p "$MONKE_HOME/install-staging"
 STAGED_INSTALL=$(mktemp -d "$MONKE_HOME/install-staging/local-$SHORT_COMMIT-XXXXXX")
 INSTALL_ID=$(basename "$STAGED_INSTALL")
@@ -90,6 +104,11 @@ bun build --compile \
   "$ROOT_DIR/src/index.ts"
 chmod +x "$STAGED_MT"
 cleanup_old_bun_builds
+
+if [ "$(source_snapshot)" != "$SOURCE_SNAPSHOT" ]; then
+  printf 'Source checkout changed while the Local tool install was compiling; rerun vp run install:local\n' >&2
+  exit 1
+fi
 
 "$STAGED_MT" activate-local-install \
   "$STAGED_INSTALL" \

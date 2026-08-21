@@ -35,9 +35,10 @@ import {
   loadToolInstall,
   resolveActiveInstallRoot
 } from "./install-manifest.ts";
+import { withInstallMutationLockAsync } from "./install-recovery.ts";
 import { createLogger } from "./logger.ts";
 import { assertDirectoryMutationAccess } from "./path-boundary.ts";
-import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
+import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
@@ -105,7 +106,7 @@ export function resolveSkillInstallTargets(options: {
 /** Prompt for a Skill install preference, save it, and reconcile selected Agent skill roots. */
 export function runSkillsConfigure(runtime: Runtime) {
   const monkeHome = getMonkeHome(runtime);
-  return withInstallationLockAsync(monkeHome, () => runSkillsConfigureLocked(runtime));
+  return withInstallMutationLockAsync(monkeHome, () => runSkillsConfigureLocked(runtime));
 }
 
 async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOverride?: string) {
@@ -169,7 +170,7 @@ export function runLocalInstallSkills(
   explicitTargets?: ExplicitSkillTargetSelection
 ) {
   const monkeHome = getMonkeHome(runtime);
-  return withInstallationLockAsync(monkeHome, () =>
+  return withInstallMutationLockAsync(monkeHome, () =>
     runInstallSkillsLocked(runtime, sourceCheckout, explicitTargets)
   );
 }

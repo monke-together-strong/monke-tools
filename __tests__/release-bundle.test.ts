@@ -305,6 +305,8 @@ describe("Mainline Release selection", () => {
     ["skills/internal/implement/SKILL.md", true],
     ["install.sh", true],
     ["scripts/install-release.sh", true],
+    [".github/workflows/publish.yml", true],
+    [".github/workflows/publish-packages.yml", false],
     ["bun.lock", false],
     ["README.md", false],
     ["docs/adr/0009-distribute-monke-tools-as-atomic-release-bundles.md", false],
