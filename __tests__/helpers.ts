@@ -456,11 +456,19 @@ export function withPlatform<T>(platform: NodeJS.Platform, callback: () => T) {
   }
 }
 
+type ParsedYamlValue =
+  | ParsedYamlValue[]
+  | { [key: string]: ParsedYamlValue }
+  | boolean
+  | null
+  | number
+  | string;
+
 export function readSingleYamlFile<T extends z.ZodType>(
   directoryPath: string,
   schema: T
 ): z.output<T>;
-export function readSingleYamlFile(directoryPath: string): unknown;
+export function readSingleYamlFile(directoryPath: string): ParsedYamlValue;
 export function readSingleYamlFile(directoryPath: string, schema?: z.ZodType) {
   const entries = readdirSync(directoryPath).filter((entry) => entry.endsWith(".yml"));
   if (entries.length !== 1) {
@@ -474,7 +482,7 @@ export function readSingleYamlFile(directoryPath: string, schema?: z.ZodType) {
   return schema ? schema.parse(value) : value;
 }
 
-function writeExecutable(targetPath: string, contents: string) {
+export function writeExecutable(targetPath: string, contents: string) {
   mkdirSync(path.dirname(targetPath), { recursive: true });
   writeFileSync(targetPath, contents, "utf-8");
   chmodSync(targetPath, 0o755);

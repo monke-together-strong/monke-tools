@@ -14,15 +14,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vite-plus/test";
 import * as z from "zod";
 
-import { makeTempDir } from "./helpers.ts";
+import { makeTempDir, writeExecutable } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
-
-function executable(filePath: string, contents: string) {
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  writeFileSync(filePath, contents, "utf-8");
-  chmodSync(filePath, 0o755);
-}
 
 function prepareInstallFixture(checkout: string, binDirectory: string, dirty: boolean) {
   mkdirSync(path.join(checkout, "scripts"), { recursive: true });
@@ -35,7 +29,7 @@ function prepareInstallFixture(checkout: string, binDirectory: string, dirty: bo
   chmodSync(path.join(checkout, "scripts", "install-local.sh"), 0o755);
   writeFileSync(path.join(checkout, "src", "index.ts"), "", "utf-8");
 
-  executable(
+  writeExecutable(
     path.join(binDirectory, "git"),
     `#!/bin/sh
 set -eu
@@ -47,7 +41,7 @@ case "$*" in
 esac
 `
   );
-  executable(
+  writeExecutable(
     path.join(binDirectory, "bun"),
     `#!/bin/sh
 set -eu
@@ -185,7 +179,10 @@ describe("Local install refresh script", () => {
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
     const binDirectory = path.join(sandbox, "bin");
-    executable(path.join(binDirectory, "codiff"), "#!/bin/sh\nprintf '%s\\n' 'codiff v1.10.1'\n");
+    writeExecutable(
+      path.join(binDirectory, "codiff"),
+      "#!/bin/sh\nprintf '%s\\n' 'codiff v1.10.1'\n"
+    );
 
     const install = spawnSync(
       "sh",

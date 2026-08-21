@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,18 +6,12 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { runCli } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
-import { makeTempDir } from "./helpers.ts";
+import { makeTempDir, writeExecutable } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
-function executable(filePath: string, contents: string) {
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  writeFileSync(filePath, contents, "utf-8");
-  chmodSync(filePath, 0o755);
-}
-
 function installCodiff(binDirectory: string, versionFile: string) {
-  executable(
+  writeExecutable(
     path.join(binDirectory, "codiff"),
     `#!/bin/sh
 set -eu
@@ -35,7 +29,7 @@ function installBrew(options: {
   versionFile: string;
 }) {
   const codiffPath = path.join(options.binDirectory, "codiff");
-  executable(
+  writeExecutable(
     path.join(options.binDirectory, "brew"),
     `#!/bin/sh
 set -eu
