@@ -25,7 +25,7 @@ import type {
   SkillInstallTargetPreference
 } from "./global-config.ts";
 import { reconcileGlobalInstructions, removeGlobalInstructions } from "./global-instructions.ts";
-import { loadActiveLocalInstall } from "./install-manifest.ts";
+import { loadActiveLocalInstall, loadLocalInstall } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
 import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
@@ -96,8 +96,8 @@ async function runSkillsConfigureLocked(runtime: Runtime, sourceCheckoutOverride
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
-  const activeInstall = loadActiveLocalInstall(monkeHome);
-  const sourceCheckout = sourceCheckoutOverride ?? activeInstall?.manifest.sourceCheckout;
+  const runningInstall = loadRunningLocalInstall(runtime, monkeHome);
+  const sourceCheckout = sourceCheckoutOverride ?? runningInstall?.manifest.sourceCheckout;
   if (!sourceCheckout) {
     throw new MonkeError(
       "Installed source checkout is not configured; run bun run install:local from the monke-tools checkout first"
@@ -128,6 +128,14 @@ async function runSkillsConfigureLocked(runtime: Runtime, sourceCheckoutOverride
     }
   });
   createLogger(runtime).success("Configured monke-tools skills");
+}
+
+function loadRunningLocalInstall(runtime: Runtime, monkeHome: string) {
+  const toolInstallRoot = path.resolve(runtime.toolInstallRoot);
+  if (path.dirname(toolInstallRoot) === path.join(path.resolve(monkeHome), "installs")) {
+    return loadLocalInstall(toolInstallRoot);
+  }
+  return loadActiveLocalInstall(monkeHome);
 }
 
 /** Record the Installed source checkout and refresh or configure Distributed skill targets. */

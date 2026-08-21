@@ -38,20 +38,26 @@ export function loadActiveLocalInstall(monkeHome: string) {
   if (installRoot === null) {
     return null;
   }
+
+  return loadLocalInstall(installRoot);
+}
+
+/** Load a local install manifest from a root already resolved by the running command. */
+export function loadLocalInstall(installRoot: string) {
   const manifestPath = path.join(installRoot, INSTALL_MANIFEST_FILENAME);
   if (!existsSync(manifestPath)) {
-    throw new MonkeError(`Active Install manifest is missing: ${manifestPath}`);
+    throw new MonkeError(`Tool Install manifest is missing: ${manifestPath}`);
   }
 
   let value: unknown;
   try {
     value = JSON.parse(readFileSync(manifestPath, "utf-8"));
   } catch {
-    throw new MonkeError(`Invalid Active Install manifest: ${manifestPath}`);
+    throw new MonkeError(`Invalid Tool Install manifest: ${manifestPath}`);
   }
   return {
-    installRoot,
-    manifest: parseBoundaryValue(LocalInstallManifestSchema, value, "Active Install manifest")
+    installRoot: path.resolve(installRoot),
+    manifest: parseBoundaryValue(LocalInstallManifestSchema, value, "Tool Install manifest")
   };
 }
 

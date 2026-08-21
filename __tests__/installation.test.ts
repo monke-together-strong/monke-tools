@@ -276,34 +276,47 @@ describe("versioned installation lifecycle", () => {
     );
   });
 
-  test("Skills Configure resolves Skill authoring mode from the Active Install manifest", async () => {
+  test("a running Skills Configure command keeps its resolved install root across later activation", async () => {
     const sandbox = makeTempDir("local-install-configure");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
-    const sourceCheckout = path.join(sandbox, "source");
-    prepareSource(sourceCheckout);
-    await activateLocal({ home, installId: "local-first", monkeHome, sourceCheckout });
+    const firstSourceCheckout = path.join(sandbox, "first-source");
+    const secondSourceCheckout = path.join(sandbox, "second-source");
+    prepareSource(firstSourceCheckout);
+    prepareSource(secondSourceCheckout);
+    await activateLocal({
+      home,
+      installId: "local-first",
+      monkeHome,
+      sourceCheckout: firstSourceCheckout
+    });
 
-    await runCliAsync(
-      ["skills", "configure"],
-      createRuntime({
-        cwd: sandbox,
-        env: {
-          HOME: home,
-          MONKE_HOME: monkeHome
-        },
-        multiSelectValues: [["cursor"]],
-        onStderr() {},
-        onStdout() {}
-      })
-    );
+    const runningCommand = createRuntime({
+      cwd: sandbox,
+      env: {
+        HOME: home,
+        MONKE_HOME: monkeHome
+      },
+      multiSelectValues: [["cursor"]],
+      onStderr() {},
+      onStdout() {},
+      toolInstallRoot: path.join(monkeHome, "installs", "local-first")
+    });
+    await activateLocal({
+      home,
+      installId: "local-second",
+      monkeHome,
+      sourceCheckout: secondSourceCheckout
+    });
+
+    await runCliAsync(["skills", "configure"], runningCommand);
 
     expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
       skillInstallPreference: { targets: [{ kind: "cursor" }] },
       version: 1
     });
     expect(readlinkSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"))).toBe(
-      path.join(sourceCheckout, "skills", "internal")
+      path.join(firstSourceCheckout, "skills", "internal")
     );
   });
 });
