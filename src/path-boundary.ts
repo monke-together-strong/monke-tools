@@ -1,4 +1,11 @@
-import { accessSync, constants as fsConstants, existsSync, lstatSync, statSync } from "node:fs";
+import {
+  accessSync,
+  constants as fsConstants,
+  existsSync,
+  lstatSync,
+  realpathSync,
+  statSync
+} from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
@@ -26,6 +33,16 @@ export function assertDirectChildPath(candidate: string, parent: string, label: 
   if (path.dirname(candidate) !== resolvedParent) {
     throw new MonkeError(`${label} must be a direct child of ${resolvedParent}`);
   }
+}
+
+/** Resolve a managed directory while rejecting a symbolic link at the ownership boundary. */
+export function resolveManagedDirectory(directory: string, label: string) {
+  const resolvedDirectory = path.resolve(directory);
+  const stat = lstatSync(resolvedDirectory, { throwIfNoEntry: false });
+  if (!stat?.isDirectory() || stat.isSymbolicLink()) {
+    throw new MonkeError(`${label} is not a real directory: ${resolvedDirectory}`);
+  }
+  return realpathSync.native(resolvedDirectory);
 }
 
 /** Require the nearest existing destination directory to allow entry creation and lookup. */

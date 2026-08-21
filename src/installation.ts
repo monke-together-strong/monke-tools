@@ -7,6 +7,7 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmdirSync,
   rmSync,
@@ -39,7 +40,8 @@ import { createLogger } from "./logger.ts";
 import {
   assertDirectChildPath,
   assertDirectoryMutationAccess,
-  executableFileProblem
+  executableFileProblem,
+  resolveManagedDirectory
 } from "./path-boundary.ts";
 import { assertReleaseGuidanceHashes, hashReleaseGuidance } from "./release-guidance.ts";
 import { getHomeDirectory, getMonkeHome, isProcessRunning } from "./runtime.ts";
@@ -238,7 +240,11 @@ function prepareValidatedInactiveInstallCollision(
   if (!stat) {
     return null;
   }
-  if (installRoot === activeInstallRoot || !stat.isDirectory() || stat.isSymbolicLink()) {
+  resolveManagedDirectory(path.join(monkeHome, "installs"), "Managed installs root");
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new MonkeError(`Tool install identity already exists: ${installId}`);
+  }
+  if (realpathSync.native(installRoot) === activeInstallRoot) {
     throw new MonkeError(`Tool install identity already exists: ${installId}`);
   }
   assertManagedInstallRoot(installRoot, installId);
@@ -378,6 +384,7 @@ function activateStagedInstall(options: {
   const installsRoot = path.join(options.monkeHome, "installs");
   const installRoot = path.join(installsRoot, options.installId);
   mkdirSync(installsRoot, { recursive: true });
+  resolveManagedDirectory(installsRoot, "Managed installs root");
   if (lstatSync(installRoot, { throwIfNoEntry: false })) {
     throw new MonkeError(`Tool install identity already exists: ${options.installId}`);
   }

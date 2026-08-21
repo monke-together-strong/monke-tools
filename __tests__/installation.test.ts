@@ -1014,7 +1014,11 @@ skillInstallPreference:
   test("Skills Configure rejects a fixed install root that stopped being Active", async () => {
     const sandbox = makeTempDir("local-install-configure");
     const home = path.join(sandbox, "home");
-    const monkeHome = path.join(sandbox, "monke-home");
+    const physicalRoot = path.join(sandbox, "physical-root");
+    const aliasedRoot = path.join(sandbox, "aliased-root");
+    mkdirSync(physicalRoot);
+    symlinkSync(physicalRoot, aliasedRoot, "dir");
+    const monkeHome = path.join(aliasedRoot, "monke-home");
     const firstSourceCheckout = path.join(sandbox, "first-source");
     const secondSourceCheckout = path.join(sandbox, "second-source");
     prepareSource(firstSourceCheckout);
@@ -1035,7 +1039,7 @@ skillInstallPreference:
       multiSelectValues: [["cursor"]],
       onStderr() {},
       onStdout() {},
-      toolInstallRoot: path.join(monkeHome, "installs", "local-first")
+      toolInstallRoot: path.join(physicalRoot, "monke-home", "installs", "local-first")
     });
     await activateLocal({
       home,

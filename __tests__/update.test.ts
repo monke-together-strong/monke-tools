@@ -189,6 +189,140 @@ function prepareReleaseAsset(
 }
 
 describe("Release update", () => {
+  test("check resolves an Active tool install through a symlinked Monke home", async () => {
+    const sandbox = makeTempDir("release-update-symlinked-home");
+    const physicalRoot = path.join(sandbox, "physical-root");
+    const aliasedRoot = path.join(sandbox, "aliased-root");
+    mkdirSync(physicalRoot);
+    symlinkSync(physicalRoot, aliasedRoot, "dir");
+    const monkeHome = path.join(aliasedRoot, "monke-home");
+    prepareActiveRelease(monkeHome, "1.2.3");
+    let stderr = "";
+
+    await runCliAsync(
+      ["update", "--check"],
+      createRuntime({
+        architecture: "x64",
+        cwd: sandbox,
+        env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+        onStderr(text) {
+          stderr += text;
+        },
+        onStdout() {},
+        platform: "linux",
+        releaseDistribution: {
+          async downloadReleaseAsset() {
+            throw new Error("check must not download Release assets");
+          },
+          async listReleases(page) {
+            return page === 1 ? [release("1.2.3")] : [];
+          }
+        },
+        toolBuildIdentity: "1.2.3",
+        toolInstallRoot: path.join(
+          physicalRoot,
+          "monke-home",
+          "installs",
+          "release-1.2.3-linux-x64"
+        )
+      })
+    );
+
+    expect(stderr).toContain(
+      "Active tool install 1.2.3 already matches the selected stable Release"
+    );
+  });
+
+  test("check rejects a symbolic-link managed installs root", async () => {
+    const sandbox = makeTempDir("release-update-symlinked-installs-root");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const externalRoot = path.join(sandbox, "external-installs");
+    mkdirSync(monkeHome);
+    mkdirSync(externalRoot);
+    symlinkSync(externalRoot, path.join(monkeHome, "installs"), "dir");
+    prepareActiveRelease(monkeHome, "1.2.3");
+
+    await expect(
+      runCliAsync(
+        ["update", "--check"],
+        createRuntime({
+          architecture: "x64",
+          cwd: sandbox,
+          env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+          onStderr() {},
+          onStdout() {},
+          platform: "linux",
+          releaseDistribution: {
+            async downloadReleaseAsset() {
+              throw new Error("rejected installs root must not download Release assets");
+            },
+            async listReleases() {
+              throw new Error("rejected installs root must not query the Release catalog");
+            }
+          },
+          toolBuildIdentity: "1.2.3",
+          toolInstallRoot: path.join(externalRoot, "release-1.2.3-linux-x64")
+        })
+      )
+    ).rejects.toThrow(/Managed installs root is not a real directory/u);
+
+    expect(existsSync(path.join(externalRoot, "release-1.2.3-linux-x64"))).toBeTruthy();
+  });
+
+  test("update through a symlinked Monke home retains its predecessor", async () => {
+    const sandbox = makeTempDir("release-update-symlinked-home-retention");
+    const physicalRoot = path.join(sandbox, "physical-root");
+    const aliasedRoot = path.join(sandbox, "aliased-root");
+    mkdirSync(physicalRoot);
+    symlinkSync(physicalRoot, aliasedRoot, "dir");
+    const monkeHome = path.join(aliasedRoot, "monke-home");
+    const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
+    const candidate = prepareReleaseAsset(sandbox, "1.2.4");
+
+    await runCliAsync(
+      ["update"],
+      createRuntime({
+        architecture: "x64",
+        cwd: sandbox,
+        env: {
+          HOME: path.join(sandbox, "home"),
+          MONKE_HOME: monkeHome,
+          PATH: "/usr/bin:/bin",
+          SHELL: "/bin/zsh"
+        },
+        onStderr() {},
+        onStdout() {},
+        platform: "linux",
+        releaseDistribution: {
+          async downloadReleaseAsset(url) {
+            if (url.endsWith(candidate.archiveName)) {
+              return candidate.archive;
+            }
+            if (url.endsWith(candidate.checksumsName)) {
+              return candidate.checksums;
+            }
+            throw new Error(`Unexpected Release asset URL: ${url}`);
+          },
+          async listReleases(page) {
+            return page === 1 ? [candidate.metadata] : [];
+          }
+        },
+        toolBuildIdentity: "1.2.3",
+        toolInstallRoot: path.join(
+          physicalRoot,
+          "monke-home",
+          "installs",
+          "release-1.2.3-linux-x64"
+        )
+      })
+    );
+
+    expect(existsSync(predecessor)).toBeTruthy();
+    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+      path.join("installs", "release-1.2.4-linux-x64")
+    );
+  });
+
   test("check reports the highest compatible stable Release without changing installation", async () => {
     const sandbox = makeTempDir("release-update-check");
     const monkeHome = path.join(sandbox, "monke-home");

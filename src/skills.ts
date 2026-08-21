@@ -37,7 +37,7 @@ import {
 } from "./install-manifest.ts";
 import { withInstallMutationLockAsync } from "./install-recovery.ts";
 import { createLogger } from "./logger.ts";
-import { assertDirectoryMutationAccess } from "./path-boundary.ts";
+import { assertDirectoryMutationAccess, resolveManagedDirectory } from "./path-boundary.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
@@ -150,7 +150,10 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
 
 function loadFixedToolInstall(runtime: Runtime, monkeHome: string) {
   const fixedRoot = path.resolve(runtime.toolInstallRoot);
-  const installsRoot = path.join(path.resolve(monkeHome), "installs");
+  const configuredInstallsRoot = path.join(path.resolve(monkeHome), "installs");
+  const installsRoot = existsSync(configuredInstallsRoot)
+    ? resolveManagedDirectory(configuredInstallsRoot, "Managed installs root")
+    : configuredInstallsRoot;
   if (path.dirname(fixedRoot) !== installsRoot) {
     return loadActiveToolInstall(monkeHome);
   }

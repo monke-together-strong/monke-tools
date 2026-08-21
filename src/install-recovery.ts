@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
   rmdirSync,
@@ -20,7 +21,7 @@ import {
   installIdForManifest,
   resolveActiveInstallRoot
 } from "./install-manifest.ts";
-import { assertDirectChildPath } from "./path-boundary.ts";
+import { assertDirectChildPath, resolveManagedDirectory } from "./path-boundary.ts";
 import { withInstallationLockAsync } from "./runtime.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
@@ -48,6 +49,11 @@ export function reconcilePendingInstallBackups(monkeHome: string) {
     throw new MonkeError(`Install backup root is invalid: ${backupsRoot}`);
   }
 
+  const installsRoot = path.join(monkeHome, "installs");
+  if (existsSync(installsRoot)) {
+    resolveManagedDirectory(installsRoot, "Managed installs root");
+  }
+
   const activeInstallRoot = resolveActiveInstallRoot(monkeHome);
   for (const entry of readdirSync(backupsRoot, { withFileTypes: true })) {
     const backupRoot = path.join(backupsRoot, entry.name);
@@ -64,7 +70,7 @@ export function reconcilePendingInstallBackups(monkeHome: string) {
       continue;
     }
     assertManagedInstallRoot(installRoot, entry.name);
-    if (activeInstallRoot === installRoot) {
+    if (activeInstallRoot === realpathSync.native(installRoot)) {
       const predecessorRoot = recovery.predecessorInstallId
         ? path.join(monkeHome, "installs", recovery.predecessorInstallId)
         : null;
@@ -137,9 +143,17 @@ export function cleanupInactiveToolInstalls(monkeHome: string, retainedRoots: Se
   if (!existsSync(installsRoot)) {
     return;
   }
+  const canonicalInstallsRoot = resolveManagedDirectory(installsRoot, "Managed installs root");
+  const canonicalRetainedRoots = new Set(
+    [...retainedRoots].map((retainedRoot) => realpathSync.native(retainedRoot))
+  );
   for (const entry of readdirSync(installsRoot, { withFileTypes: true })) {
     const installRoot = path.join(installsRoot, entry.name);
-    if (!entry.isDirectory() || entry.isSymbolicLink() || retainedRoots.has(installRoot)) {
+    if (
+      !entry.isDirectory() ||
+      entry.isSymbolicLink() ||
+      canonicalRetainedRoots.has(path.join(canonicalInstallsRoot, entry.name))
+    ) {
       continue;
     }
     try {

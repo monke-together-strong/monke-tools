@@ -14,7 +14,7 @@ import {
 import type { output } from "zod";
 
 import { MonkeError } from "./errors.ts";
-import { assertDirectChildPath } from "./path-boundary.ts";
+import { assertDirectChildPath, resolveManagedDirectory } from "./path-boundary.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
 export const INSTALL_MANIFEST_FILENAME = "install-manifest.json";
@@ -162,7 +162,11 @@ export function resolveActiveInstallRoot(monkeHome: string) {
   }
   try {
     const installRoot = realpathSync.native(currentPointer);
-    assertDirectChildPath(installRoot, path.join(monkeHome, "installs"), "Active tool install");
+    const installsRoot = resolveManagedDirectory(
+      path.join(monkeHome, "installs"),
+      "Managed installs root"
+    );
+    assertDirectChildPath(installRoot, installsRoot, "Active tool install");
     return installRoot;
   } catch (error) {
     if (error instanceof MonkeError) {
