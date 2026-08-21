@@ -250,7 +250,7 @@ export async function runActivateLocalInstall(
       "staged Local tool install"
     );
     assertDirectory(stagedInstall, "Staged Local tool install is missing");
-    assertExecutableFile(path.join(stagedInstall, "mt"));
+    assertExecutableFile(path.join(stagedInstall, "mt"), "Staged mt executable");
 
     const manifest = parseBoundaryValue(
       LocalInstallManifestSchema,
@@ -414,8 +414,8 @@ function assertCommandEntryCanBeReplaced(commandPath: string) {
 function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
   const resolvedRoot = path.resolve(bundleRoot);
   assertDirectory(resolvedRoot, "Release bundle is missing");
-  assertExecutableFile(path.join(resolvedRoot, "mt"));
-  assertExecutableFile(path.join(resolvedRoot, "install.sh"));
+  assertExecutableFile(path.join(resolvedRoot, "mt"), "Release mt executable");
+  assertExecutableFile(path.join(resolvedRoot, "install.sh"), "Release installer");
   assertRegularFile(path.join(resolvedRoot, "instructions", "GLOBAL.md"));
   const manifestPath = path.join(resolvedRoot, INSTALL_MANIFEST_FILENAME);
   let manifest: ReleaseInstallManifest;
@@ -484,15 +484,15 @@ function assertDirectory(directory: string, message: string) {
   }
 }
 
-function assertExecutableFile(executable: string) {
+function assertExecutableFile(executable: string, label: string) {
   const stat = lstatSync(executable, { throwIfNoEntry: false });
   if (!stat?.isFile()) {
-    throw new MonkeError(`Staged mt executable is missing: ${executable}`);
+    throw new MonkeError(`${label} is missing: ${executable}`);
   }
   try {
     accessSync(executable, fsConstants.X_OK);
   } catch {
-    throw new MonkeError(`Staged executable is not executable: ${executable}`);
+    throw new MonkeError(`${label} is not executable: ${executable}`);
   }
 }
 

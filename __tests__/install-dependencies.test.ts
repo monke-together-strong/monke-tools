@@ -37,6 +37,10 @@ printf '%s\n' "$*" >> '${options.logPath}'
 if [ "\${1:-}" = "list" ]; then
   exit ${options.owned === false ? "1" : "0"}
 fi
+if [ "\${1:-}" = "--prefix" ]; then
+  printf '%s\n' '${path.dirname(options.binDirectory)}'
+  exit 0
+fi
 if [ "\${1:-}" = "install" ] || [ "\${1:-}" = "upgrade" ]; then
   [ ${String(options.commandExit ?? 0)} -eq 0 ] || exit ${String(options.commandExit ?? 0)}
   printf '%s\n' 'codiff v${options.afterVersion ?? "1.10.1"}' > '${options.versionFile}'
@@ -118,7 +122,7 @@ describe("dependency installation", () => {
     runCli(["install-dependencies"], dependencyRuntime({ binDirectory }));
 
     expect(readFileSync(brewLog, "utf-8")).toBe(
-      "list --cask nkzw-tech/tap/codiff\nupgrade --cask nkzw-tech/tap/codiff\n"
+      "list --cask nkzw-tech/tap/codiff\n--prefix\nupgrade --cask nkzw-tech/tap/codiff\n"
     );
     expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.10.1\n");
   });
@@ -163,7 +167,7 @@ describe("dependency installation", () => {
     );
 
     expect(readFileSync(brewLog, "utf-8")).toBe(
-      "list --cask nkzw-tech/tap/codiff\nupgrade --cask nkzw-tech/tap/codiff\n"
+      "list --cask nkzw-tech/tap/codiff\n--prefix\nupgrade --cask nkzw-tech/tap/codiff\n"
     );
     expect(readFileSync(versionFile, "utf-8")).toBe("codiff v2.0.1\n");
   });
@@ -187,6 +191,41 @@ describe("dependency installation", () => {
       expect(readFileSync(versionFile, "utf-8")).toBe(versionOutput);
     }
   );
+
+  test("an installed cask does not claim a PATH-shadowing Codiff", () => {
+    const sandbox = makeTempDir("install-dependencies-shadowed");
+    const shadowBin = path.join(sandbox, "shadow", "bin");
+    const homebrewBin = path.join(sandbox, "homebrew", "bin");
+    const shadowVersionFile = path.join(sandbox, "shadow-version");
+    const homebrewVersionFile = path.join(sandbox, "homebrew-version");
+    const brewLog = path.join(sandbox, "brew.log");
+    writeFileSync(shadowVersionFile, "codiff v1.8.9\n", "utf-8");
+    writeFileSync(homebrewVersionFile, "codiff v1.10.1\n", "utf-8");
+    installCodiff(shadowBin, shadowVersionFile);
+    installCodiff(homebrewBin, homebrewVersionFile);
+    installBrew({
+      binDirectory: homebrewBin,
+      logPath: brewLog,
+      versionFile: homebrewVersionFile
+    });
+
+    expect(() => {
+      runCli(
+        ["install-dependencies"],
+        createRuntime({
+          architecture: "arm64",
+          cwd: sandbox,
+          env: { PATH: `${shadowBin}:${homebrewBin}` },
+          onStderr() {},
+          onStdout() {},
+          platform: "darwin"
+        })
+      );
+    }).toThrow(/not owned by Homebrew/u);
+
+    expect(readFileSync(brewLog, "utf-8")).toBe("list --cask nkzw-tech/tap/codiff\n--prefix\n");
+    expect(readFileSync(shadowVersionFile, "utf-8")).toBe("codiff v1.8.9\n");
+  });
 
   test("missing Homebrew produces retryable guidance", () => {
     const sandbox = makeTempDir("install-dependencies-no-brew");

@@ -192,7 +192,7 @@ describe("public Release bootstrap", () => {
     expect(
       readFileSync(fixture.bundlePathLog, "utf-8")
         .trim()
-        .startsWith(path.join(monkeHome, "install-staging", "update-bootstrap-"))
+        .startsWith(path.join(monkeHome, "install-staging", "public-bootstrap-"))
     ).toBeTruthy();
     expect(readdirSync(path.join(monkeHome, "install-staging"))).toStrictEqual([]);
   });

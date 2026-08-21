@@ -1,3 +1,6 @@
+import { realpathSync } from "node:fs";
+import path from "node:path";
+
 import type { ComparisonPlan } from "./comparison-plan.ts";
 import { MonkeError } from "./errors.ts";
 import { findExecutable } from "./runtime.ts";
@@ -57,6 +60,17 @@ export function reconcileCodiff(
         `Codiff at ${executable} is below ${minimumVersionText} or has an invalid version, and is not owned by Homebrew. Upgrade it manually, then retry with: mt install-dependencies`
       );
     }
+    const prefix = runtime.exec(brew, ["--prefix"], { allowFailure: true });
+    const homebrewCodiff = path.join(prefix.stdout.trim(), "bin", "codiff");
+    if (
+      prefix.exitCode !== 0 ||
+      !prefix.stdout.trim() ||
+      !sameExecutable(executable, homebrewCodiff)
+    ) {
+      throw new MonkeError(
+        `Codiff at ${executable} is below ${minimumVersionText} or has an invalid version, and is not owned by Homebrew. Upgrade it manually, then retry with: mt install-dependencies`
+      );
+    }
     runBrew(runtime, brew, ["upgrade", "--cask", CODIFF_CASK]);
   }
 
@@ -69,6 +83,14 @@ export function reconcileCodiff(
     throw new MonkeError(
       `Codiff ${minimumVersionText} or newer is required after Homebrew reconciliation`
     );
+  }
+}
+
+function sameExecutable(left: string, right: string) {
+  try {
+    return realpathSync(left) === realpathSync(right);
+  } catch {
+    return false;
   }
 }
 

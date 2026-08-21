@@ -21,15 +21,15 @@ esac
 MONKE_HOME_ROOT=${MONKE_HOME:-"${HOME:?HOME is required when MONKE_HOME is unset}/.monke"}
 mkdir -p "$MONKE_HOME_ROOT/install-staging"
 STAGING_ROOT=$(CDPATH= cd -- "$MONKE_HOME_ROOT/install-staging" && pwd)
-WORK_DIRECTORY=$(mktemp -d "$STAGING_ROOT/update-bootstrap-XXXXXX")
+WORK_DIRECTORY=$(mktemp -d "$STAGING_ROOT/public-bootstrap-XXXXXX")
 case "$WORK_DIRECTORY" in
-  "$STAGING_ROOT"/update-bootstrap-*) ;;
+  "$STAGING_ROOT"/public-bootstrap-*) ;;
   *) printf 'Could not create a safe Release bootstrap directory\n' >&2; exit 1 ;;
 esac
 
 cleanup() {
   case "${WORK_DIRECTORY:-}" in
-    "$STAGING_ROOT"/update-bootstrap-*)
+    "$STAGING_ROOT"/public-bootstrap-*)
       if [ -d "$WORK_DIRECTORY" ] && [ ! -L "$WORK_DIRECTORY" ]; then
         rm -rf -- "$WORK_DIRECTORY"
       fi

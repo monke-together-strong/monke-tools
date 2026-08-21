@@ -8,6 +8,7 @@ import {
   readFileSync,
   readlinkSync,
   realpathSync,
+  rmSync,
   symlinkSync,
   writeFileSync
 } from "node:fs";
@@ -642,7 +643,25 @@ describe("versioned installation lifecycle", () => {
         monkeHome,
         sourceCheckout
       })
-    ).rejects.toThrow("Staged executable is not executable");
+    ).rejects.toThrow("Staged mt executable is not executable");
+    expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
+  });
+
+  test("Release activation identifies a missing installer", async () => {
+    const sandbox = makeTempDir("release-install-missing-installer");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox);
+    rmSync(path.join(release.bundleRoot, "install.sh"));
+
+    await expect(
+      activateRelease({
+        bundleRoot: release.bundleRoot,
+        home,
+        monkeHome,
+        sandbox
+      })
+    ).rejects.toThrow("Release installer is missing");
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
   });
 

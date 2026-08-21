@@ -284,6 +284,7 @@ describe("Release update", () => {
     mkdirSync(path.join(stagingRoot, "update-interrupted"), { recursive: true });
     mkdirSync(path.join(stagingRoot, "release-interrupted"), { recursive: true });
     mkdirSync(path.join(stagingRoot, "manual-not-managed"), { recursive: true });
+    mkdirSync(path.join(stagingRoot, "public-bootstrap-live"), { recursive: true });
     const externalDirectory = path.join(sandbox, "external");
     mkdirSync(externalDirectory);
     symlinkSync(externalDirectory, path.join(stagingRoot, "update-external"), "dir");
@@ -330,6 +331,7 @@ describe("Release update", () => {
     expect(existsSync(olderInstall)).toBeFalsy();
     expect(readdirSync(path.join(monkeHome, "install-staging")).toSorted()).toStrictEqual([
       "manual-not-managed",
+      "public-bootstrap-live",
       "update-external"
     ]);
     expect(stderr).toContain("Updated monke-tools to 1.2.4");
