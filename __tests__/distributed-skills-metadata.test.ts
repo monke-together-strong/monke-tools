@@ -69,6 +69,20 @@ describe("distributed skill metadata", () => {
     ).toMatchObject({ policy: { allow_implicit_invocation: false } });
   });
 
+  test("implement is user-invoked only", () => {
+    const skillRoot = path.join(projectRoot, "skills", "internal", "implement");
+    const skill = readFileSync(path.join(skillRoot, "SKILL.md"), "utf-8");
+
+    expect(skill).toContain(
+      "description: Heavyweight implementation workflow with mandatory closeout."
+    );
+    expect(skill).toContain("disable-model-invocation: true");
+    expect(skill).not.toContain("Use only when");
+    expect(
+      parse(readFileSync(path.join(skillRoot, "agents", "openai.yaml"), "utf-8"))
+    ).toMatchObject({ policy: { allow_implicit_invocation: false } });
+  });
+
   test("tracked import recipes record one Import kind for every selector", () => {
     const store = normalizeImportRecipeStore(
       JSON.parse(

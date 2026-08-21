@@ -20,3 +20,7 @@
 
 Follow git flow.
 Do not create `codex/` branches.
+
+## Matt Pocock skills issue tracking
+
+While projects may use their own issue tracking, skills such as `/wayfinder`, `to-spec`, `to-tickets` should use Github issues, using personal fork of the repository when it exists.

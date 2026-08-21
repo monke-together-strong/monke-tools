@@ -6,6 +6,11 @@ disable-model-invocation: true
 
 # Auto Wayfinder
 
-Run `/wayfinder <mapLink>` as usual.
+Run `/wayfinder` as usual, passing `<mapLink>` when one already exists.
 
-After each Wayfinder turn, open exactly one new thread with `/auto-wayfinder <mapLink>` if and only if wayfinder for that turn was done - the ticket is closed, no human input is pending, and the map has an unblocked, unclaimed frontier. Then finish.
+After each Wayfinder turn, open exactly one new thread with `/auto-wayfinder <mapLink>` when no human input is pending, the map has an unblocked, unclaimed frontier, and either:
+
+- the map was created this turn; or
+- an existing-map turn closed its ticket.
+
+Then finish.
