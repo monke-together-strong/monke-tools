@@ -18,7 +18,7 @@ import path from "node:path";
 import * as z from "zod";
 
 import { reconcileCodiff, MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
-import { MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError } from "./errors.ts";
 import type { BuiltInSkillInstallTargetKind } from "./global-config.ts";
 import {
   INSTALL_MANIFEST_FILENAME,
@@ -34,7 +34,7 @@ import type {
 } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
 import { assertDirectChildPath } from "./path-boundary.ts";
-import { hashReleaseGuidance } from "./release-guidance.ts";
+import { assertReleaseGuidanceHashes, hashReleaseGuidance } from "./release-guidance.ts";
 import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
 import {
@@ -79,6 +79,7 @@ export async function runActivateReleaseInstall(
   const sourceManifest = validateReleaseBundle(runtime, sourceBundle);
   preflightReleaseInstallSkills(runtime, sourceBundle, options.targetKinds);
   const activated = await withInstallationLockAsync(monkeHome, async () => {
+    preflightReleaseInstallSkills(runtime, sourceBundle, options.targetKinds);
     const stagingRoot = path.join(monkeHome, "install-staging");
     const stagedInstall = path.join(stagingRoot, `release-${randomUUID()}`);
     const stagingRootExisted = existsSync(stagingRoot);
@@ -108,7 +109,7 @@ export async function runActivateReleaseInstall(
       monkeHome,
       stagedInstall
     });
-    cleanupManagedInstalls(
+    cleanupInactiveToolInstalls(
       monkeHome,
       new Set([installRoot, ...(predecessor ? [predecessor] : [])])
     );
@@ -119,7 +120,7 @@ export async function runActivateReleaseInstall(
       runShellInstall(runtime, { binary: path.join(homeDirectory, ".local", "bin", "mt") });
     } catch (error) {
       postActivationFailures.push(
-        `Shell integration is incomplete. Retry with: mt shell install\n${error instanceof Error ? error.message : String(error)}`
+        `Shell integration is incomplete. Retry with: mt shell install\n${errorMessage(error)}`
       );
     }
     try {
@@ -129,14 +130,14 @@ export async function runActivateReleaseInstall(
       });
     } catch (error) {
       postActivationFailures.push(
-        `Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${error instanceof Error ? error.message : String(error)}`
+        `Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(error)}`
       );
     }
     try {
       reconcileCodiff(runtime, manifest.minimumCodiffVersion);
     } catch (error) {
       postActivationFailures.push(
-        `Codiff reconciliation failed. Retry with: mt install-dependencies\n${error instanceof Error ? error.message : String(error)}`
+        `Codiff reconciliation failed. Retry with: mt install-dependencies\n${errorMessage(error)}`
       );
     }
 
@@ -204,7 +205,7 @@ export async function runActivateLocalInstall(
       stagedInstall
     });
 
-    cleanupManagedInstalls(
+    cleanupInactiveToolInstalls(
       monkeHome,
       new Set([installRoot, ...(predecessor ? [predecessor] : [])])
     );
@@ -218,7 +219,7 @@ export async function runActivateLocalInstall(
       reconcileCodiff(runtime, manifest.minimumCodiffVersion);
     } catch (error) {
       throw new MonkeError(
-        `The Local tool install is active, but Codiff reconciliation failed. Retry with: mt install-dependencies\n${error instanceof Error ? error.message : String(error)}`
+        `The Local tool install is active, but Codiff reconciliation failed. Retry with: mt install-dependencies\n${errorMessage(error)}`
       );
     }
 
@@ -249,7 +250,7 @@ function activateStagedInstall(options: {
   const installRoot = path.join(installsRoot, options.installId);
   mkdirSync(installsRoot, { recursive: true });
   if (lstatSync(installRoot, { throwIfNoEntry: false })) {
-    throw new MonkeError(`Managed install identity already exists: ${options.installId}`);
+    throw new MonkeError(`Tool install identity already exists: ${options.installId}`);
   }
   const stableMt = path.join(options.homeDirectory, ".local", "bin", "mt");
   const stableMonke = path.join(options.homeDirectory, ".local", "bin", "monke");
@@ -302,7 +303,7 @@ function assertCommandEntryCanBeReplaced(commandPath: string) {
   }
 }
 
-function cleanupManagedInstalls(monkeHome: string, retainedRoots: Set<string>) {
+function cleanupInactiveToolInstalls(monkeHome: string, retainedRoots: Set<string>) {
   const installsRoot = path.join(monkeHome, "installs");
   if (!existsSync(installsRoot)) {
     return;
@@ -352,16 +353,7 @@ function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
   if (manifest.platform !== releasePlatform(runtime)) {
     throw new MonkeError(`Release bundle platform does not match ${releasePlatform(runtime)}`);
   }
-  const actualHashes = hashReleaseGuidance(resolvedRoot);
-  if (
-    JSON.stringify(Object.keys(actualHashes)) !==
-      JSON.stringify(Object.keys(manifest.guidanceHashes)) ||
-    Object.keys(actualHashes).some(
-      (filePath) => actualHashes[filePath] !== manifest.guidanceHashes[filePath]
-    )
-  ) {
-    throw new MonkeError("Release guidance does not match its original hashes");
-  }
+  assertReleaseGuidanceHashes(manifest.guidanceHashes, hashReleaseGuidance(resolvedRoot));
   return manifest;
 }
 

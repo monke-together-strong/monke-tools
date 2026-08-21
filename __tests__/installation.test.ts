@@ -391,6 +391,48 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
   });
 
+  test.each(["absent", "unmanaged"])(
+    "saved deselected %s Global instructions remain a no-op during preflight",
+    async (instructionState) => {
+      const sandbox = makeTempDir("release-install-noop-removal-preflight");
+      const home = path.join(sandbox, "home");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const release = prepareReleaseBundle(sandbox);
+      const claudeDirectory = path.join(home, ".claude");
+      const instructionsPath = path.join(claudeDirectory, "CLAUDE.md");
+      saveGlobalMonkeConfig(monkeHome, {
+        skillInstallPreference: { targets: [{ kind: "claude" }] },
+        version: 1
+      });
+      if (instructionState === "unmanaged") {
+        write(home, ".claude/CLAUDE.md", "User instructions.\n");
+        chmodSync(instructionsPath, 0o444);
+      } else {
+        mkdirSync(claudeDirectory, { recursive: true });
+        chmodSync(claudeDirectory, 0o555);
+      }
+
+      try {
+        await activateRelease({
+          args: ["--targets", "cursor"],
+          bundleRoot: release.bundleRoot,
+          home,
+          monkeHome,
+          sandbox
+        });
+      } finally {
+        chmodSync(
+          instructionState === "unmanaged" ? instructionsPath : claudeDirectory,
+          instructionState === "unmanaged" ? 0o644 : 0o755
+        );
+      }
+
+      expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+        path.join("installs", "release-1.2.3-linux-x64")
+      );
+    }
+  );
+
   test("post-activation projection failure leaves Release core active with repair guidance", async () => {
     const sandbox = makeTempDir("release-install-projection-failure");
     const home = path.join(sandbox, "home");

@@ -22,6 +22,21 @@ export function hashReleaseGuidance(bundleRoot: string) {
   );
 }
 
+/** Require the same sorted Release guidance paths and hashes on both sides. */
+export function assertReleaseGuidanceHashes(
+  expected: Record<string, string>,
+  actual: Record<string, string>
+) {
+  const expectedPaths = Object.keys(expected).toSorted();
+  const actualPaths = Object.keys(actual).toSorted();
+  if (
+    JSON.stringify(expectedPaths) !== JSON.stringify(actualPaths) ||
+    expectedPaths.some((filePath) => expected[filePath] !== actual[filePath])
+  ) {
+    throw new MonkeError("Release guidance hashes do not match the original hashes");
+  }
+}
+
 function listRegularFiles(root: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {

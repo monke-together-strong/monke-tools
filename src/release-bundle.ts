@@ -33,7 +33,11 @@ import {
   StableSemanticVersionSchema
 } from "./install-manifest.ts";
 import type { ReleaseInstallManifest } from "./install-manifest.ts";
-import { BUNDLED_GUIDANCE_FOLDERS, hashReleaseGuidance } from "./release-guidance.ts";
+import {
+  assertReleaseGuidanceHashes,
+  BUNDLED_GUIDANCE_FOLDERS,
+  hashReleaseGuidance
+} from "./release-guidance.ts";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const RELEASE_TAG_PREFIX = "monke-tools-v";
@@ -234,8 +238,8 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
     if (manifest.artifactName !== expectedArchiveName) {
       throw new Error(`Release manifest artifact identity does not match ${expectedArchiveName}`);
     }
-    assertGuidanceHashes(manifest.guidanceHashes, hashReleaseGuidance(extractedRoot));
-    assertGuidanceHashes(
+    assertReleaseGuidanceHashes(manifest.guidanceHashes, hashReleaseGuidance(extractedRoot));
+    assertReleaseGuidanceHashes(
       manifest.guidanceHashes,
       hashReleaseGuidance(path.resolve(options.expectedGuidanceRoot))
     );
@@ -429,17 +433,6 @@ function assertExecutable(filePath: string, label: string) {
     accessSync(filePath, fsConstants.X_OK);
   } catch {
     throw new Error(`${label} is missing or not executable: ${filePath}`);
-  }
-}
-
-function assertGuidanceHashes(expected: Record<string, string>, actual: Record<string, string>) {
-  const expectedPaths = Object.keys(expected).toSorted();
-  const actualPaths = Object.keys(actual).toSorted();
-  if (
-    JSON.stringify(expectedPaths) !== JSON.stringify(actualPaths) ||
-    expectedPaths.some((filePath) => expected[filePath] !== actual[filePath])
-  ) {
-    throw new Error("Release guidance hashes do not match the archived Distributed guidance");
   }
 }
 

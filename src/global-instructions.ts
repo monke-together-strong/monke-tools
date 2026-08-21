@@ -43,6 +43,18 @@ export function preflightGlobalInstructions(
   assertGlobalInstructionsWritable(prepared.filePath);
 }
 
+/** Validate removal from a known Global instruction destination without changing it. */
+export function preflightRemoveGlobalInstructions(
+  target: { kind: SkillInstallTargetKind },
+  options: GlobalInstructionsOptions
+) {
+  const prepared = prepareGlobalInstructionsRemoval(target, options);
+  if (prepared === null) {
+    return;
+  }
+  assertGlobalInstructionsWritable(prepared.filePath);
+}
+
 /** Reconcile the selected harness's Managed instruction section from the source snapshot. */
 export function reconcileGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
@@ -111,30 +123,34 @@ export function removeGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
   options: GlobalInstructionsOptions
 ) {
-  const destinationPath = globalInstructionsPath(target, options);
-  if (destinationPath === null) {
+  const prepared = prepareGlobalInstructionsRemoval(target, options);
+  if (prepared === null) {
     return;
   }
-  const destinationStat = lstatSync(destinationPath, { throwIfNoEntry: false });
-  if (destinationStat === undefined) {
-    return;
-  }
+  writeFileSync(prepared.filePath, prepared.nextContent);
+}
 
+function prepareGlobalInstructionsRemoval(
+  target: { kind: SkillInstallTargetKind },
+  options: GlobalInstructionsOptions
+) {
+  const destinationPath = globalInstructionsPath(target, options);
+  if (
+    destinationPath === null ||
+    lstatSync(destinationPath, { throwIfNoEntry: false }) === undefined
+  ) {
+    return null;
+  }
   const filePath = resolveInstructionFile(destinationPath);
   const existingContent = readFileSync(filePath, "utf-8");
   const markers = findManagedInstructionMarkers(existingContent);
   if (markers === null) {
-    return;
+    return null;
   }
-
-  const before = existingContent.slice(0, markers.start);
-  const after = existingContent.slice(markers.end);
-  const nextContent = `${before}${after}`;
-  if (nextContent.length === 0) {
-    writeFileSync(filePath, "");
-    return;
-  }
-  writeFileSync(filePath, nextContent);
+  return {
+    filePath,
+    nextContent: `${existingContent.slice(0, markers.start)}${existingContent.slice(markers.end)}`
+  };
 }
 
 function reconcileManagedInstructions(

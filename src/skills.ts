@@ -26,6 +26,7 @@ import type {
 } from "./global-config.ts";
 import {
   preflightGlobalInstructions,
+  preflightRemoveGlobalInstructions,
   reconcileGlobalInstructions,
   removeGlobalInstructions
 } from "./global-instructions.ts";
@@ -201,7 +202,7 @@ export async function runInstallSkillsLocked(
 /** Preflight destinations known before Release core activation. */
 export function preflightReleaseInstallSkills(
   runtime: Runtime,
-  releaseRoot: string,
+  bundleRoot: string,
   targetKinds?: BuiltInSkillInstallTargetKind[]
 ) {
   const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
@@ -213,22 +214,29 @@ export function preflightReleaseInstallSkills(
     return;
   }
   const homeDirectory = getHomeDirectory(runtime);
-  const targetsByKey = new Map<string, ResolvedSkillInstallTarget>();
-  for (const preference of [previousPreference, nextPreference]) {
-    if (!preference) {
+  const previousTargets = resolveTargetsByKey(homeDirectory, previousPreference);
+  const nextTargets = resolveTargetsByKey(homeDirectory, nextPreference);
+  const failures: string[] = [];
+  for (const [key, target] of previousTargets) {
+    if (nextTargets.has(key)) {
       continue;
     }
-    for (const target of resolveSkillInstallTargets({ homeDirectory, preference })) {
-      targetsByKey.set(targetKey(target), target);
+    try {
+      preflightRemoveGlobalInstructions(target, {
+        cwd: runtime.cwd,
+        environment: runtime.env,
+        homeDirectory
+      });
+    } catch (error) {
+      failures.push(`${target.agentSkillRoot}: ${errorMessage(error)}`);
     }
   }
-  const failures: string[] = [];
-  for (const target of targetsByKey.values()) {
+  for (const target of nextTargets.values()) {
     try {
       preflightGlobalInstructions(target, {
         cwd: runtime.cwd,
         environment: runtime.env,
-        guidanceSourceRoot: releaseRoot,
+        guidanceSourceRoot: bundleRoot,
         homeDirectory
       });
     } catch (error) {
@@ -243,20 +251,35 @@ export function preflightReleaseInstallSkills(
 /** Reconcile Release-mode guidance after core activation. */
 export async function runReleaseInstallSkillsLocked(
   runtime: Runtime,
-  releaseRoot: string,
+  releaseInstallRoot: string,
   options: { interactive: boolean; targetKinds?: BuiltInSkillInstallTargetKind[] }
 ) {
   const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
   if (options.targetKinds || config.skillInstallPreference) {
-    await runInstallSkillsLocked(runtime, releaseRoot, options.targetKinds);
+    await runInstallSkillsLocked(runtime, releaseInstallRoot, options.targetKinds);
     return;
   }
   if (options.interactive) {
-    await runSkillsConfigureLocked(runtime, releaseRoot);
+    await runSkillsConfigureLocked(runtime, releaseInstallRoot);
     return;
   }
   createLogger(runtime).hint(
     "No Skill install targets were selected. Configure them later with: mt skills configure"
+  );
+}
+
+function resolveTargetsByKey(
+  homeDirectory: string,
+  preference: SkillInstallPreference | undefined
+) {
+  if (!preference) {
+    return new Map<string, ResolvedSkillInstallTarget>();
+  }
+  return new Map(
+    resolveSkillInstallTargets({ homeDirectory, preference }).map((target) => [
+      targetKey(target),
+      target
+    ])
   );
 }
 
