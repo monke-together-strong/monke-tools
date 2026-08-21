@@ -7,20 +7,41 @@ BUILD_DIR="$ROOT_DIR/builds"
 LOCAL_BUILD_ARTIFACT_RETENTION=2
 MONKE_HOME=${MONKE_HOME:-"$HOME/.monke"}
 INSTALLATION_LOCK="$MONKE_HOME/locks/installation.lock"
+INSTALLATION_LOCK_RECLAIM="$INSTALLATION_LOCK.reclaim"
 INSTALLATION_LOCK_HELD=false
+INSTALLATION_LOCK_RECLAIM_HELD=false
 
 release_installation_lock() {
   if [ "$INSTALLATION_LOCK_HELD" = true ]; then
     rm -f -- "$INSTALLATION_LOCK"
     INSTALLATION_LOCK_HELD=false
   fi
+  if [ "$INSTALLATION_LOCK_RECLAIM_HELD" = true ]; then
+    rmdir -- "$INSTALLATION_LOCK_RECLAIM"
+    INSTALLATION_LOCK_RECLAIM_HELD=false
+  fi
+}
+
+reclaim_stale_installation_lock() {
+  if ! mkdir "$INSTALLATION_LOCK_RECLAIM" 2>/dev/null; then
+    return
+  fi
+  INSTALLATION_LOCK_RECLAIM_HELD=true
+
+  lock_pid=$(sed -n 's/^[[:space:]]*{"acquiredAt":[0-9][0-9]*,"pid":\([1-9][0-9]*\)}[[:space:]]*$/\1/p' "$INSTALLATION_LOCK" 2>/dev/null || true)
+  if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+    rm -f -- "$INSTALLATION_LOCK"
+  fi
+
+  rmdir -- "$INSTALLATION_LOCK_RECLAIM"
+  INSTALLATION_LOCK_RECLAIM_HELD=false
 }
 
 acquire_installation_lock() {
   mkdir -p "$(dirname -- "$INSTALLATION_LOCK")"
   attempts=0
   while [ "$attempts" -lt 100 ]; do
-    if (
+    if [ ! -e "$INSTALLATION_LOCK_RECLAIM" ] && (
       set -C
       umask 077
       acquired_at=$(($(date +%s) * 1000))
@@ -30,17 +51,14 @@ acquire_installation_lock() {
       return
     fi
 
-    lock_pid=$(sed -n 's/^[[:space:]]*{"acquiredAt":[0-9][0-9]*,"pid":\([1-9][0-9]*\)}[[:space:]]*$/\1/p' "$INSTALLATION_LOCK" 2>/dev/null || true)
-    if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
-      rm -f -- "$INSTALLATION_LOCK"
-    fi
+    reclaim_stale_installation_lock
 
     attempts=$((attempts + 1))
     sleep 0.05
   done
 
   printf 'Timed out waiting for lock at %s\n' "$INSTALLATION_LOCK" >&2
-  printf 'If no installation is running, remove that stale lock and retry\n' >&2
+  printf 'If no installation is running, remove that stale lock or its .reclaim marker and retry\n' >&2
   exit 1
 }
 

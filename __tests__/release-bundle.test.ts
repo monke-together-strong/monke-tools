@@ -33,6 +33,7 @@ interface ManifestOverrides {
   toolBuildIdentity?: string;
 }
 interface ReleaseFixtureOptions {
+  executableContents?: string;
   executableVersion?: string;
   extraPath?: string;
   manifest?: ManifestOverrides;
@@ -50,7 +51,9 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   const archivePath = path.join(sandbox, archiveName);
   const skillContents = "# Example skill\n";
   const referenceContents = "# Example reference\n";
-  const executableContents = `#!/bin/sh\nprintf '%s\\n' '${options.executableVersion ?? RELEASE_VERSION}'\n`;
+  const executableContents =
+    options.executableContents ??
+    `#!/bin/sh\nprintf '%s\\n' '${options.executableVersion ?? RELEASE_VERSION}'\n`;
 
   mkdirSync(path.join(bundleRoot, "instructions"), { recursive: true });
   mkdirSync(path.join(bundleRoot, "skills", "codex"), { recursive: true });
@@ -175,6 +178,11 @@ describe("Release bundle verifier", () => {
       expected: /executable Tool build identity does not match 1\.2\.3/u,
       fixture: { executableVersion: "9.9.9" },
       name: "mismatched executable build identity"
+    },
+    {
+      expected: /executable Tool build identity does not match 1\.2\.3.*ENOENT/u,
+      fixture: { executableContents: "#!/definitely-missing-monke-interpreter\n" },
+      name: "an executable that cannot be started"
     },
     {
       expected: /guidance hashes do not match/u,

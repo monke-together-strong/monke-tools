@@ -287,9 +287,9 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions) {
       const version = spawnSync(path.join(extractedRoot, "mt"), ["--version"], {
         encoding: "utf-8"
       });
-      if (version.status !== 0 || version.stdout.trim() !== expectedVersion) {
+      if (version.status !== 0 || version.stdout?.trim() !== expectedVersion) {
         throw new MonkeError(
-          `Release executable Tool build identity does not match ${expectedVersion}`
+          `Release executable Tool build identity does not match ${expectedVersion}: ${commandFailureDetail(version)}`
         );
       }
       const installer = spawnSync(path.join(extractedRoot, "install.sh"), ["--verify"], {
@@ -416,8 +416,14 @@ function assertExecutable(filePath: string, label: string) {
   }
 }
 
-function commandFailureDetail(result: { error?: Error; stderr: string | null }) {
-  return result.stderr?.trim() || result.error?.message || "unknown failure";
+function commandFailureDetail(result: {
+  error?: Error;
+  stderr: string | null;
+  stdout?: string | null;
+}) {
+  return (
+    result.stderr?.trim() || result.stdout?.trim() || result.error?.message || "unknown failure"
+  );
 }
 
 function parseSemanticVersion(value: string): [bigint, bigint, bigint] {
