@@ -17,13 +17,13 @@ import {
   runActivateReleaseInstall
 } from "./installation.ts";
 import { createLogger } from "./logger.ts";
+import type { ReleaseCatalogAsset, ReleaseCatalogEntry } from "./release-catalog-schema.ts";
 import {
+  compareStableSemanticVersions,
   releaseArchiveName,
   releaseChecksumsName,
-  compareStableSemanticVersions,
   verifyReleaseArchive
-} from "./release-bundle.ts";
-import type { ReleaseCatalogAsset, ReleaseCatalogEntry } from "./release-catalog-schema.ts";
+} from "./release-contract.ts";
 import { findChangedReleaseGuidancePaths } from "./release-guidance.ts";
 import { getMonkeHome } from "./runtime.ts";
 import type { Runtime } from "./types.ts";

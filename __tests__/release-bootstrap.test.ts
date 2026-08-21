@@ -3,27 +3,22 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
-import type { input } from "zod";
 
-import type { ReleaseCatalogEntrySchema } from "../src/release-catalog-schema.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
-
-type ReleaseResponse = input<typeof ReleaseCatalogEntrySchema>;
 
 const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
 function prepareBootstrapFixture(
   options: {
+    catalogTag?: string;
     corruptChecksum?: boolean;
     failDownload?: boolean;
     failLookup?: boolean;
     invalidArchive?: boolean;
     machine?: string;
     missingAsset?: boolean;
-    olderVersion?: string;
-    selectedMetadataStability?: "draft" | "prerelease";
     selectedVersion?: string;
     sourceCommit?: string;
     system?: string;
@@ -35,7 +30,6 @@ function prepareBootstrapFixture(
   const bundleRoot = path.join(sandbox, "bundle");
   const platform = options.system === "Darwin" ? "macos-arm64" : "linux-x64";
   const selectedVersion = options.selectedVersion ?? "1.2.3";
-  const olderVersion = options.olderVersion ?? "1.2.2";
   const selectedTag = `monke-tools-v${selectedVersion}`;
   const archiveName = `${selectedTag}-${platform}.tar.gz`;
   const checksumName = `${selectedTag}-checksums.txt`;
@@ -74,84 +68,13 @@ printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
     checksumName,
     `${options.corruptChecksum ? "0".repeat(64) : archiveHash}  ${archiveName}\n`
   );
-  const releasePage = (...values: ReleaseResponse[]) => `${JSON.stringify(values)}\n`;
-  const selectedRelease: ReleaseResponse = {
-    assets: options.missingAsset
-      ? [
-          {
-            browser_download_url: `https://github.com/monke-together-strong/monke-tools/releases/download/${selectedTag}/${checksumName}`,
-            digest: `sha256:${hash("sha256", readFileSync(checksumPath), "hex")}`,
-            name: checksumName
-          }
-        ]
-      : [
-          {
-            browser_download_url: `https://github.com/monke-together-strong/monke-tools/releases/download/${selectedTag}/${archiveName}`,
-            digest: `sha256:${archiveHash}`,
-            name: archiveName
-          },
-          {
-            browser_download_url: `https://github.com/monke-together-strong/monke-tools/releases/download/${selectedTag}/${checksumName}`,
-            digest: `sha256:${hash("sha256", readFileSync(checksumPath), "hex")}`,
-            name: checksumName
-          }
-        ],
-    draft: false,
-    prerelease: false,
-    tag_name: selectedTag,
-    target_commitish: options.sourceCommit ?? SOURCE_COMMIT
-  };
+  const assetDigest = options.missingAsset ? "-" : `sha256:${archiveHash}`;
+  const checksumsDigest = hash("sha256", readFileSync(checksumPath), "hex");
   write(
     responses,
-    "page-1.json",
-    releasePage(
-      {
-        assets: [],
-        body: 'Example text containing "draft": false and "tag_name": "monke-tools-v99.0.0".',
-        draft: false,
-        prerelease: false,
-        tag_name: "@monke/other@9.0.0",
-        target_commitish: SOURCE_COMMIT
-      },
-      {
-        assets: [],
-        draft: false,
-        prerelease: false,
-        tag_name: `monke-tools-v${olderVersion}`,
-        target_commitish: SOURCE_COMMIT
-      }
-    )
+    "stable.tsv",
+    `1\t${selectedVersion}\t${options.catalogTag ?? selectedTag}\t${options.sourceCommit ?? SOURCE_COMMIT}\t${assetDigest}\t${assetDigest}\tsha256:${checksumsDigest}\n`
   );
-  write(
-    responses,
-    "page-2.json",
-    releasePage(
-      {
-        assets: [],
-        draft: false,
-        prerelease: true,
-        tag_name: "monke-tools-v1.3.0",
-        target_commitish: SOURCE_COMMIT
-      },
-      selectedRelease,
-      {
-        assets: [],
-        draft: true,
-        prerelease: false,
-        tag_name: "monke-tools-v9.0.0",
-        target_commitish: SOURCE_COMMIT
-      }
-    )
-  );
-  write(responses, "page-3.json", "[]\n");
-  const selectedMetadata: ReleaseResponse = {
-    assets: selectedRelease.assets,
-    draft: options.selectedMetadataStability === "draft",
-    prerelease: options.selectedMetadataStability === "prerelease",
-    tag_name: selectedRelease.tag_name,
-    target_commitish: selectedRelease.target_commitish
-  };
-  write(responses, "selected-release.json", `${JSON.stringify(selectedMetadata)}\n`);
   writeExecutable(
     path.join(bin, "uname"),
     `#!/bin/sh
@@ -178,13 +101,10 @@ while [ "$#" -gt 0 ]; do
 done
 [ "$read_config" = false ] || cat >/dev/null
 printf '%s\n' "$url" >> ${JSON.stringify(curlLog)}
-${options.failLookup ? "case \"$url\" in *'page=1') exit 88 ;; esac" : ""}
+${options.failLookup ? 'case "$url" in *stable.tsv) exit 88 ;; esac' : ""}
 ${options.failDownload ? `case "$url" in *${archiveName}) exit 89 ;; esac` : ""}
 case "$url" in
-  */releases/tags/${selectedTag}) source=${JSON.stringify(path.join(responses, "selected-release.json"))} ;;
-  *'page=1') source=${JSON.stringify(path.join(responses, "page-1.json"))} ;;
-  *'page=2') source=${JSON.stringify(path.join(responses, "page-2.json"))} ;;
-  *'page=3') source=${JSON.stringify(path.join(responses, "page-3.json"))} ;;
+  */releases/download/monke-tools-catalog/stable.tsv) source=${JSON.stringify(path.join(responses, "stable.tsv"))} ;;
   *${archiveName}) source=${JSON.stringify(archivePath)} ;;
   *${checksumName}) source=${JSON.stringify(checksumPath)} ;;
   *) printf 'unexpected URL: %s\n' "$url" >&2; exit 91 ;;
@@ -227,7 +147,7 @@ function runBootstrap(
 }
 
 describe("public Release bootstrap", () => {
-  test("selects and verifies the highest paginated stable Release", () => {
+  test("uses the published stable catalog and verifies its Release", () => {
     const fixture = prepareBootstrapFixture();
     const secret = "github-token-must-not-be-logged";
     const result = runBootstrap(fixture, {
@@ -241,8 +161,9 @@ describe("public Release bootstrap", () => {
       "codex"
     ]);
     const curlLog = readFileSync(fixture.curlLog, "utf-8");
-    expect(curlLog).toContain("page=3");
+    expect(curlLog).toContain("/releases/download/monke-tools-catalog/stable.tsv");
     expect(curlLog).toContain("monke-tools-v1.2.3-linux-x64.tar.gz");
+    expect(curlLog).not.toContain("api.github.com");
     expect(curlLog).not.toContain(secret);
     expect(readFileSync(fixture.bootstrapOwnerLog, "utf-8")).toMatch(/^\d+\n$/u);
     expect(readFileSync(fixture.releaseIdentityLog, "utf-8").trim().split("\n")).toStrictEqual([
@@ -268,12 +189,9 @@ describe("public Release bootstrap", () => {
     expect(readFileSync(fixture.curlLog, "utf-8")).toContain(fixture.archiveName);
   });
 
-  test("compares arbitrarily large stable SemVer components without numeric precision loss", () => {
+  test("accepts arbitrarily large stable SemVer components without numeric conversion", () => {
     const selectedVersion = "9007199254740993.0.0";
-    const fixture = prepareBootstrapFixture({
-      olderVersion: "9007199254740992.0.0",
-      selectedVersion
-    });
+    const fixture = prepareBootstrapFixture({ selectedVersion });
     const result = runBootstrap(fixture);
 
     expect(result.exitCode).toBe(0);
@@ -319,22 +237,19 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  test.each(["draft", "prerelease"] as const)(
-    "per-tag %s metadata prevents bundle-owned installer delegation",
-    (selectedMetadataStability) => {
-      const fixture = prepareBootstrapFixture({ selectedMetadataStability });
-      const result = runBootstrap(fixture);
+  test("a mismatched catalog tag prevents bundle-owned installer delegation", () => {
+    const fixture = prepareBootstrapFixture({ catalogTag: "monke-tools-v9.9.9" });
+    const result = runBootstrap(fixture);
 
-      expect(result.exitCode).not.toBe(0);
-      expect(result.stderr.toString()).toContain("draft or prerelease");
-      expect(existsSync(fixture.installLog)).toBeFalsy();
-    }
-  );
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain("catalog identity is invalid");
+    expect(existsSync(fixture.installLog)).toBeFalsy();
+  });
 
   test.each([
-    { expected: "GitHub Release lookup failed", options: { failLookup: true } },
+    { expected: "Stable Release catalog lookup failed", options: { failLookup: true } },
     { expected: "archive download failed", options: { failDownload: true } },
-    { expected: "missing platform asset", options: { missingAsset: true } },
+    { expected: "missing valid platform asset digest", options: { missingAsset: true } },
     { expected: "archive extraction failed", options: { invalidArchive: true } }
   ])("$expected prevents installer delegation", ({ expected, options }) => {
     const fixture = prepareBootstrapFixture(options);

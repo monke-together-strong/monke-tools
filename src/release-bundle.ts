@@ -6,7 +6,6 @@ import {
   chmodSync,
   cpSync,
   existsSync,
-  lstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -18,7 +17,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { array as arraySchema, string as stringSchema } from "zod";
 import type { output } from "zod";
 
 import { MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
@@ -32,36 +30,17 @@ import {
   StableSemanticVersionSchema
 } from "./install-manifest.ts";
 import type { ReleaseInstallManifest } from "./install-manifest.ts";
-import { executableFileProblem } from "./path-boundary.ts";
 import {
-  assertReleaseGuidanceHashes,
-  BUNDLED_GUIDANCE_FOLDERS,
-  hashReleaseGuidance
-} from "./release-guidance.ts";
+  compareStableSemanticVersions,
+  readReleaseChecksums,
+  releaseArchiveName,
+  releaseChecksumsName,
+  verifyReleaseArchive
+} from "./release-contract.ts";
+import { BUNDLED_GUIDANCE_FOLDERS, hashReleaseGuidance } from "./release-guidance.ts";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
-const CHECKSUM_PATTERN = /^(?<hash>[0-9a-f]{64}) {2}(?<name>[^/\s]+)$/u;
-const LEADING_ARCHIVE_PATH_PATTERN = /^\.\/?/u;
-const TRAILING_SLASH_PATTERN = /\/$/u;
 const ZERO_COMMIT_PATTERN = /^0{40}$/u;
-const ChecksumEntrySchema = stringSchema()
-  .regex(CHECKSUM_PATTERN, "must be a SHA-256 hash followed by two spaces and an asset name")
-  .transform((line) => {
-    const match = CHECKSUM_PATTERN.exec(line);
-    if (!match?.groups?.hash || !match.groups.name) {
-      throw new Error("Validated Release checksum line could not be parsed");
-    }
-    return { hash: match.groups.hash, name: match.groups.name };
-  });
-const ChecksumEntriesSchema = arraySchema(ChecksumEntrySchema).superRefine((entries, context) => {
-  const names = new Set<string>();
-  for (const entry of entries) {
-    if (names.has(entry.name)) {
-      context.addIssue({ code: "custom", message: `duplicate checksum entry: ${entry.name}` });
-    }
-    names.add(entry.name);
-  }
-});
 const RELEASE_INPUTS = [
   ".github/actions/setup-mainline/",
   ".github/workflows/publish.yml",
@@ -80,36 +59,12 @@ const RELEASE_INPUTS = [
   "vite.config.ts"
 ] as const;
 
-export const SUPPORTED_RELEASE_PLATFORMS = RELEASE_PLATFORM_VALUES;
-
 interface BuildReleaseBundleOptions {
   createdAt?: string;
   outputDirectory: string;
   platform: output<typeof ReleasePlatformSchema>;
   sourceCommit: string;
   version: string;
-}
-
-interface VerifyReleaseArchiveOptions {
-  archivePath: string;
-  checksumPath?: string;
-  expectedGuidanceRoot?: string;
-  expectedMinimumCodiffVersion?: string;
-  expectedPlatform: output<typeof ReleasePlatformSchema>;
-  expectedSourceCommit: string;
-  expectedVersion: string;
-  verifyExecutable?: boolean;
-}
-
-export function releaseArchiveName(version: string, platform: string) {
-  const parsedVersion = StableSemanticVersionSchema.parse(version);
-  const parsedPlatform = ReleasePlatformSchema.parse(platform);
-  return `${RELEASE_TAG_PREFIX}${parsedVersion}-${parsedPlatform}.tar.gz`;
-}
-
-export function releaseChecksumsName(version: string) {
-  const parsedVersion = StableSemanticVersionSchema.parse(version);
-  return `${RELEASE_TAG_PREFIX}${parsedVersion}-checksums.txt`;
 }
 
 export function isReleaseOwnedPath(filePath: string) {
@@ -186,7 +141,7 @@ export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
 
 export function writeReleaseChecksums(directory: string, version: string) {
   const outputDirectory = path.resolve(directory);
-  const archiveNames = SUPPORTED_RELEASE_PLATFORMS.map((platform) =>
+  const archiveNames = RELEASE_PLATFORM_VALUES.map((platform) =>
     releaseArchiveName(version, platform)
   );
   for (const archiveName of archiveNames) {
@@ -205,95 +160,31 @@ export function writeReleaseChecksums(directory: string, version: string) {
   return checksumPath;
 }
 
-export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): ReleaseInstallManifest {
-  const archivePath = path.resolve(options.archivePath);
-  const expectedVersion = StableSemanticVersionSchema.parse(options.expectedVersion);
-  const expectedPlatform = ReleasePlatformSchema.parse(options.expectedPlatform);
-  const expectedSourceCommit = FullCommitSchema.parse(options.expectedSourceCommit);
-  const expectedArchiveName = releaseArchiveName(expectedVersion, expectedPlatform);
-  if (path.basename(archivePath) !== expectedArchiveName) {
-    throw new Error(
-      `Release archive name mismatch: expected ${expectedArchiveName}, found ${path.basename(archivePath)}`
-    );
-  }
-  if (options.checksumPath) {
-    verifyArchiveChecksum(archivePath, options.checksumPath);
-  }
-
-  const entries = listArchiveEntries(archivePath);
-  assertArchiveContract(entries);
-  const extractedRoot = mkdtempSync(path.join(tmpdir(), "monke-tools-release-verify-"));
-  try {
-    run("tar", ["-xzf", archivePath, "-C", extractedRoot]);
-    assertNoLinks(extractedRoot);
-    assertExecutable(path.join(extractedRoot, "mt"), "Release executable");
-    assertExecutable(path.join(extractedRoot, "install.sh"), "Release installer");
-
-    const manifestPath = path.join(extractedRoot, "install-manifest.json");
-    const manifest = ReleaseInstallManifestSchema.parse(
-      JSON.parse(readFileSync(manifestPath, "utf-8"))
-    );
-    const expectedTag = `${RELEASE_TAG_PREFIX}${expectedVersion}`;
-    if (
-      manifest.releaseVersion !== expectedVersion ||
-      manifest.toolBuildIdentity !== expectedVersion
-    ) {
-      throw new Error(`Release manifest Tool build identity does not match ${expectedVersion}`);
-    }
-    if (manifest.releaseTag !== expectedTag) {
-      throw new Error(`Release manifest tag does not match ${expectedTag}`);
-    }
-    if (manifest.sourceCommit !== expectedSourceCommit) {
-      throw new Error("Release manifest source commit does not match the selected commit");
-    }
-    if (manifest.platform !== expectedPlatform) {
-      throw new Error(`Release manifest platform does not match ${expectedPlatform}`);
-    }
-    if (manifest.artifactName !== expectedArchiveName) {
-      throw new Error(`Release manifest artifact identity does not match ${expectedArchiveName}`);
-    }
-    if (
-      options.expectedMinimumCodiffVersion !== undefined &&
-      manifest.minimumCodiffVersion !== options.expectedMinimumCodiffVersion
-    ) {
-      throw new Error(
-        `Release manifest Codiff minimum does not match ${options.expectedMinimumCodiffVersion}`
-      );
-    }
-    if (
-      manifest.artifactDigest !==
-      hash("sha256", readFileSync(path.join(extractedRoot, "mt")), "hex")
-    ) {
-      throw new Error("Release manifest artifact digest does not match its executable");
-    }
-    assertReleaseGuidanceHashes(manifest.guidanceHashes, hashReleaseGuidance(extractedRoot));
-    if (options.expectedGuidanceRoot) {
-      assertReleaseGuidanceHashes(
-        manifest.guidanceHashes,
-        hashReleaseGuidance(path.resolve(options.expectedGuidanceRoot))
-      );
-    }
-
-    if (options.verifyExecutable !== false) {
-      const version = spawnSync(path.join(extractedRoot, "mt"), ["--version"], {
-        encoding: "utf-8"
-      });
-      if (version.status !== 0 || version.stdout.trim() !== expectedVersion) {
-        throw new Error(`Release executable Tool build identity does not match ${expectedVersion}`);
-      }
-      const installer = spawnSync(path.join(extractedRoot, "install.sh"), ["--verify"], {
-        encoding: "utf-8"
-      });
-      if (installer.status !== 0) {
-        throw new Error(
-          `Release installer verification failed: ${commandFailureDetail(installer)}`
-        );
-      }
-    }
-    return manifest;
-  } finally {
-    rmSync(extractedRoot, { force: true, recursive: true });
-  }
+export function writeStableReleaseCatalog(options: {
+  directory: string;
+  outputPath: string;
+  sourceCommit: string;
+  version: string;
+}) {
+  const directory = path.resolve(options.directory);
+  const outputPath = path.resolve(options.outputPath);
+  const version = StableSemanticVersionSchema.parse(options.version);
+  const sourceCommit = FullCommitSchema.parse(options.sourceCommit);
+  const archiveDigests = RELEASE_PLATFORM_VALUES.map((platform) =>
+    releaseAssetDigest(directory, releaseArchiveName(version, platform))
+  );
+  const checksumsDigest = releaseAssetDigest(directory, releaseChecksumsName(version));
+  const contents = [
+    "1",
+    version,
+    `${RELEASE_TAG_PREFIX}${version}`,
+    sourceCommit,
+    ...archiveDigests,
+    checksumsDigest
+  ].join("\t");
+  mkdirSync(path.dirname(outputPath), { recursive: true });
+  writeFileSync(outputPath, `${contents}\n`, "utf-8");
+  return outputPath;
 }
 
 export function verifyReleaseAssets(options: {
@@ -304,8 +195,8 @@ export function verifyReleaseAssets(options: {
 }) {
   const directory = path.resolve(options.directory);
   const checksumPath = path.join(directory, releaseChecksumsName(options.version));
-  const checksums = readChecksums(checksumPath);
-  const expectedNames = SUPPORTED_RELEASE_PLATFORMS.map((platform) =>
+  const checksums = readReleaseChecksums(checksumPath);
+  const expectedNames = RELEASE_PLATFORM_VALUES.map((platform) =>
     releaseArchiveName(options.version, platform)
   );
   const actualArchiveNames = readdirSync(directory)
@@ -320,7 +211,7 @@ export function verifyReleaseAssets(options: {
   ) {
     throw new Error("Release checksums must cover every supported platform archive exactly once");
   }
-  return SUPPORTED_RELEASE_PLATFORMS.map((platform) =>
+  return RELEASE_PLATFORM_VALUES.map((platform) =>
     verifyReleaseArchive({
       archivePath: path.join(directory, releaseArchiveName(options.version, platform)),
       checksumPath,
@@ -372,93 +263,12 @@ function copyBundleInputs(bundleRoot: string) {
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
 }
 
-function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
-  const checksums = readChecksums(checksumPath);
-  const archiveName = path.basename(archivePath);
-  const expected = checksums.get(archiveName);
-  if (expected === undefined) {
-    throw new Error(`Release checksum is missing for ${archiveName}`);
+function releaseAssetDigest(directory: string, assetName: string) {
+  const assetPath = path.join(directory, assetName);
+  if (!existsSync(assetPath)) {
+    throw new Error(`Release asset is missing: ${assetName}`);
   }
-  if (expected !== hash("sha256", readFileSync(archivePath), "hex")) {
-    throw new Error(`Release checksum mismatch for ${archiveName}`);
-  }
-}
-
-function readChecksums(checksumPath: string) {
-  const lines = readFileSync(checksumPath, "utf-8").trim().split("\n");
-  const checksums = new Map<string, string>();
-  for (const entry of ChecksumEntriesSchema.parse(lines)) {
-    checksums.set(entry.name, entry.hash);
-  }
-  return checksums;
-}
-
-function listArchiveEntries(archivePath: string) {
-  return run("tar", ["-tzf", archivePath])
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((entry) =>
-      entry.replace(LEADING_ARCHIVE_PATH_PATTERN, "").replace(TRAILING_SLASH_PATTERN, "")
-    )
-    .filter(Boolean);
-}
-
-function assertArchiveContract(entries: string[]) {
-  const requiredEntries = [
-    "install-manifest.json",
-    "install.sh",
-    "instructions/GLOBAL.md",
-    "mt",
-    "skills/codex",
-    "skills/imported",
-    "skills/internal",
-    "skills/references"
-  ];
-  if (new Set(entries).size !== entries.length) {
-    throw new Error("Release archive contains duplicate entries");
-  }
-  for (const entry of entries) {
-    const [topLevel, skillFolder] = entry.split("/");
-    const allowedEntry =
-      ["install-manifest.json", "install.sh", "mt"].includes(entry) ||
-      entry === "instructions" ||
-      entry === "instructions/GLOBAL.md" ||
-      entry === "skills" ||
-      (topLevel === "skills" && BUNDLED_GUIDANCE_FOLDERS.some((folder) => folder === skillFolder));
-    if (
-      entry === "" ||
-      path.posix.isAbsolute(entry) ||
-      entry.split("/").includes("..") ||
-      !allowedEntry
-    ) {
-      throw new Error(`Unsafe or unexpected Release archive entry: ${entry}`);
-    }
-  }
-  for (const required of requiredEntries) {
-    if (!entries.includes(required)) {
-      throw new Error(`Release archive entry is missing: ${required}`);
-    }
-  }
-}
-
-function assertNoLinks(root: string) {
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const entryPath = path.join(root, entry.name);
-    const stat = lstatSync(entryPath);
-    if (stat.isSymbolicLink()) {
-      throw new Error(`Release archive contains a symbolic link: ${entry.name}`);
-    }
-    if (stat.isDirectory()) {
-      assertNoLinks(entryPath);
-    }
-  }
-}
-
-function assertExecutable(filePath: string, label: string) {
-  if (executableFileProblem(filePath) !== null) {
-    throw new Error(`${label} is missing or not executable: ${filePath}`);
-  }
+  return `sha256:${hash("sha256", readFileSync(assetPath), "hex")}`;
 }
 
 function commandFailureDetail(result: { error?: Error; stderr: string | null }) {
@@ -468,19 +278,6 @@ function commandFailureDetail(result: { error?: Error; stderr: string | null }) 
 function parseSemanticVersion(value: string): [bigint, bigint, bigint] {
   const parts = StableSemanticVersionSchema.parse(value).split(".");
   return [BigInt(parts[0] ?? ""), BigInt(parts[1] ?? ""), BigInt(parts[2] ?? "")];
-}
-
-export function compareStableSemanticVersions(left: string, right: string) {
-  const leftParts = parseSemanticVersion(left);
-  const rightParts = parseSemanticVersion(right);
-  for (const index of [0, 1, 2]) {
-    const leftPart = leftParts[index] ?? 0n;
-    const rightPart = rightParts[index] ?? 0n;
-    if (leftPart !== rightPart) {
-      return leftPart < rightPart ? -1 : 1;
-    }
-  }
-  return 0;
 }
 
 function run(
@@ -503,20 +300,6 @@ function run(
   return result.stdout ?? "";
 }
 
-function requiredOption(arguments_: string[], name: string) {
-  const value = optionalOption(arguments_, name);
-  if (value === undefined) {
-    throw new Error(`Missing required option ${name}`);
-  }
-  return value;
-}
-
-function optionalOption(arguments_: string[], name: string) {
-  const index = arguments_.indexOf(name);
-  const value = index === -1 ? undefined : arguments_[index + 1];
-  return value === undefined || value.startsWith("--") ? undefined : value;
-}
-
 function changedPaths(before: string, after: string) {
   FullCommitSchema.parse(after);
   if (ZERO_COMMIT_PATTERN.test(before)) {
@@ -532,69 +315,13 @@ function changedPaths(before: string, after: string) {
     .filter(Boolean);
 }
 
-export function runReleaseBundleCli(arguments_: string[]) {
-  const [command] = arguments_;
-  switch (command) {
-    case undefined: {
-      throw new Error("Missing Release bundle command");
-    }
-    case "build": {
-      const platform = ReleasePlatformSchema.parse(requiredOption(arguments_, "--platform"));
-      const archivePath = buildReleaseBundle({
-        outputDirectory: requiredOption(arguments_, "--output"),
-        platform,
-        sourceCommit: requiredOption(arguments_, "--source-commit"),
-        version: requiredOption(arguments_, "--version")
-      });
-      process.stdout.write(`${archivePath}\n`);
-      return;
-    }
-    case "checksums": {
-      const checksumPath = writeReleaseChecksums(
-        requiredOption(arguments_, "--directory"),
-        requiredOption(arguments_, "--version")
-      );
-      process.stdout.write(`${checksumPath}\n`);
-      return;
-    }
-    case "next-version": {
-      const tags = run("git", ["tag", "--list", `${RELEASE_TAG_PREFIX}*`])
-        .trim()
-        .split("\n")
-        .filter(Boolean);
-      process.stdout.write(`${deriveNextReleaseVersion(tags)}\n`);
-      return;
-    }
-    case "relevant": {
-      const relevant = hasReleaseOwnedChanges(
-        changedPaths(requiredOption(arguments_, "--before"), requiredOption(arguments_, "--after"))
-      );
-      process.stdout.write(`${String(relevant)}\n`);
-      return;
-    }
-    case "verify": {
-      verifyReleaseArchive({
-        archivePath: requiredOption(arguments_, "--archive"),
-        checksumPath: optionalOption(arguments_, "--checksums"),
-        expectedGuidanceRoot: repositoryRoot,
-        expectedMinimumCodiffVersion: MINIMUM_CODIFF_VERSION_TEXT,
-        expectedPlatform: ReleasePlatformSchema.parse(requiredOption(arguments_, "--platform")),
-        expectedSourceCommit: requiredOption(arguments_, "--source-commit"),
-        expectedVersion: requiredOption(arguments_, "--version")
-      });
-      return;
-    }
-    case "verify-assets": {
-      verifyReleaseAssets({
-        directory: requiredOption(arguments_, "--directory"),
-        expectedGuidanceRoot: repositoryRoot,
-        sourceCommit: requiredOption(arguments_, "--source-commit"),
-        version: requiredOption(arguments_, "--version")
-      });
-      return;
-    }
-    default: {
-      throw new Error(`Unknown Release bundle command: ${command ?? ""}`);
-    }
-  }
+export function hasReleaseOwnedChangesBetween(before: string, after: string) {
+  return hasReleaseOwnedChanges(changedPaths(before, after));
+}
+
+export function listReleaseTags() {
+  return run("git", ["tag", "--list", `${RELEASE_TAG_PREFIX}*`])
+    .trim()
+    .split("\n")
+    .filter(Boolean);
 }

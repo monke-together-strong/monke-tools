@@ -1,4 +1,4 @@
-import { hash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   cpSync,
   existsSync,
@@ -20,10 +20,10 @@ import { number, strictObject } from "zod";
 
 import { reconcileCodiff, MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
+import { runInstallSkillsLocked, runReleaseInstallSkillsLocked } from "./guidance-installation.ts";
 import {
   INSTALL_MANIFEST_FILENAME,
   LocalInstallManifestSchema,
-  ReleaseInstallManifestSchema,
   resolveActiveInstallRoot,
   installIdForManifest
 } from "./install-manifest.ts";
@@ -43,14 +43,11 @@ import {
   executableFileProblem,
   resolveManagedDirectory
 } from "./path-boundary.ts";
-import { assertReleaseGuidanceHashes, hashReleaseGuidance } from "./release-guidance.ts";
+import { validateReleaseBundleRoot } from "./release-contract.ts";
+import type { ExpectedReleaseIdentity } from "./release-contract.ts";
 import { getHomeDirectory, getMonkeHome, isProcessRunning } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
-import {
-  preflightInstallGuidance,
-  runInstallSkillsLocked,
-  runReleaseInstallSkillsLocked
-} from "./skills.ts";
+import { preflightInstallGuidance } from "./skills.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
@@ -82,13 +79,6 @@ export interface ActivateReleaseInstallOptions {
   explicitTargets?: ExplicitSkillTargetSelection;
   installationLockHeld?: boolean;
   interactive?: boolean;
-}
-
-interface ExpectedReleaseIdentity {
-  artifactName: string;
-  releaseTag: string;
-  releaseVersion: string;
-  sourceCommit: string;
 }
 
 /** Read the catalog identity handed from the public bootstrap to its bundled executable. */
@@ -474,26 +464,11 @@ function validateReleaseBundle(
   expectedIdentity?: ExpectedReleaseIdentity
 ) {
   const resolvedRoot = path.resolve(bundleRoot);
-  assertDirectory(resolvedRoot, "Release bundle is missing");
-  assertExecutableFile(path.join(resolvedRoot, "mt"), "Release mt executable");
-  assertExecutableFile(path.join(resolvedRoot, "install.sh"), "Release installer");
-  assertRegularFile(path.join(resolvedRoot, "instructions", "GLOBAL.md"));
-  const manifestPath = path.join(resolvedRoot, INSTALL_MANIFEST_FILENAME);
-  let manifest: ReleaseInstallManifest;
-  try {
-    manifest = ReleaseInstallManifestSchema.parse(JSON.parse(readFileSync(manifestPath, "utf-8")));
-  } catch {
-    throw new MonkeError(`Invalid Release Install manifest: ${manifestPath}`);
-  }
-  if (
-    expectedIdentity &&
-    (manifest.artifactName !== expectedIdentity.artifactName ||
-      manifest.releaseTag !== expectedIdentity.releaseTag ||
-      manifest.releaseVersion !== expectedIdentity.releaseVersion ||
-      manifest.sourceCommit !== expectedIdentity.sourceCommit)
-  ) {
-    throw new MonkeError("Release Install manifest does not match the selected GitHub Release");
-  }
+  const manifest = validateReleaseBundleRoot({
+    bundleRoot: resolvedRoot,
+    expectedIdentity,
+    expectedPlatform: releasePlatform(runtime)
+  });
   const executableIdentity = runtime.exec(path.join(resolvedRoot, "mt"), ["--version"], {
     allowFailure: true
   });
@@ -503,15 +478,6 @@ function validateReleaseBundle(
   ) {
     throw new MonkeError("Release executable identity does not match its Install manifest");
   }
-  if (
-    manifest.artifactDigest !== hash("sha256", readFileSync(path.join(resolvedRoot, "mt")), "hex")
-  ) {
-    throw new MonkeError("Release executable digest does not match its Install manifest");
-  }
-  if (manifest.platform !== releasePlatform(runtime)) {
-    throw new MonkeError(`Release bundle platform does not match ${releasePlatform(runtime)}`);
-  }
-  assertReleaseGuidanceHashes(manifest.guidanceHashes, hashReleaseGuidance(resolvedRoot));
   return manifest;
 }
 
@@ -578,13 +544,6 @@ function assertExecutableFile(executable: string, label: string) {
   }
   if (problem === "not-executable") {
     throw new MonkeError(`${label} is not executable: ${executable}`);
-  }
-}
-
-function assertRegularFile(filePath: string) {
-  const stat = lstatSync(filePath, { throwIfNoEntry: false });
-  if (!stat?.isFile()) {
-    throw new MonkeError(`Release bundle file is missing: ${filePath}`);
   }
 }
 

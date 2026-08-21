@@ -10,11 +10,15 @@ import {
   deriveNextReleaseVersion,
   hasReleaseOwnedChanges,
   isReleaseOwnedPath,
-  releaseArchiveName,
-  verifyReleaseArchive,
   verifyReleaseAssets,
-  writeReleaseChecksums
+  writeReleaseChecksums,
+  writeStableReleaseCatalog
 } from "../src/release-bundle.ts";
+import {
+  releaseArchiveName,
+  releaseChecksumsName,
+  verifyReleaseArchive
+} from "../src/release-contract.ts";
 import { makeTempDir } from "./helpers.ts";
 
 const RELEASE_VERSION = "1.2.3";
@@ -283,6 +287,39 @@ describe("Release bundle verifier", () => {
         version: RELEASE_VERSION
       })
     ).toThrow(/Codiff minimum does not match 1\.9\.0/u);
+  });
+
+  test("writes the verified stable Release catalog contract", () => {
+    const directory = makeTempDir("release-catalog");
+    makeReleaseArchive({ platform: "macos-arm64", sandbox: directory });
+    makeReleaseArchive({ platform: "linux-x64", sandbox: directory });
+    writeReleaseChecksums(directory, RELEASE_VERSION);
+    const outputPath = path.join(directory, "catalog", "stable.tsv");
+
+    writeStableReleaseCatalog({
+      directory,
+      outputPath,
+      sourceCommit: SOURCE_COMMIT,
+      version: RELEASE_VERSION
+    });
+
+    const fields = readFileSync(outputPath, "utf-8").trim().split("\t");
+    expect(fields.slice(0, 4)).toStrictEqual([
+      "1",
+      RELEASE_VERSION,
+      `monke-tools-v${RELEASE_VERSION}`,
+      SOURCE_COMMIT
+    ]);
+    expect(fields.slice(4)).toStrictEqual(
+      [
+        releaseArchiveName(RELEASE_VERSION, "macos-arm64"),
+        releaseArchiveName(RELEASE_VERSION, "linux-x64"),
+        releaseChecksumsName(RELEASE_VERSION)
+      ].map(
+        (assetName) =>
+          `sha256:${hash("sha256", readFileSync(path.join(directory, assetName)), "hex")}`
+      )
+    );
   });
 
   test("builds an official bundle whose executable reports the selected version", () => {

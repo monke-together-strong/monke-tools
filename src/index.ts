@@ -5,6 +5,7 @@ import { Argument, Command, Option } from "@commander-js/extra-typings";
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runDiff, runDiffInteractive } from "./diff.ts";
+import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
 import {
   expectedReleaseIdentityFromEnvironment,
   runActivateLocalInstall,
@@ -13,7 +14,6 @@ import {
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
-import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import { runSwing, runSwingInteractive } from "./swing.ts";
 import type { Runtime } from "./types.ts";

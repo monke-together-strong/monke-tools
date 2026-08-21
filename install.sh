@@ -2,10 +2,8 @@
 set -eu
 
 REPOSITORY=monke-together-strong/monke-tools
-RELEASES_API="https://api.github.com/repos/$REPOSITORY/releases"
+RELEASE_CATALOG_URL="https://github.com/$REPOSITORY/releases/download/monke-tools-catalog/stable.tsv"
 SUPPORTED_PLATFORMS='macOS arm64, Linux x64'
-RELEASES_PER_PAGE=100
-MAX_RELEASE_PAGES=10000
 
 SYSTEM=$(uname -s)
 MACHINE=$(uname -m)
@@ -50,6 +48,16 @@ github_curl() {
   curl --proto '=https' --tlsv1.2 -fsSL "$@"
 }
 
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{ print $1 }'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{ print $1 }'
+  else
+    return 1
+  fi
+}
+
 stable_version() {
   printf '%s\n' "$1" | awk -F. '
     NF != 3 { exit 1 }
@@ -61,226 +69,34 @@ stable_version() {
   '
 }
 
-version_is_greater() {
-  awk -v candidate="$1" -v current="$2" 'BEGIN {
-    split(candidate, left, ".")
-    split(current, right, ".")
-    for (i = 1; i <= 3; i += 1) {
-      if (length(left[i]) > length(right[i])) exit 0
-      if (length(left[i]) < length(right[i])) exit 1
-      if (("v" left[i]) > ("v" right[i])) exit 0
-      if (("v" left[i]) < ("v" right[i])) exit 1
-    }
-    exit 1
-  }'
-}
-
-parse_release_page() {
-  awk '
-    function emit() {
-      if (tag != "" && draft != "" && prerelease != "") {
-        print tag "\t" draft "\t" prerelease
-        tag = ""
-        draft = ""
-        prerelease = ""
-      }
-    }
-    {
-      remaining = $0
-      while (match(remaining, /(^|[^\\])"(tag_name|draft|prerelease)"[[:space:]]*:[[:space:]]*("[^"]*"|true|false)/)) {
-        token = substr(remaining, RSTART, RLENGTH)
-        sub(/^[^"]/, "", token)
-        if (token ~ /^"tag_name"/) {
-          sub(/^"tag_name"[[:space:]]*:[[:space:]]*"/, "", token)
-          sub(/"$/, "", token)
-          tag = token
-        } else if (token ~ /^"draft"/) {
-          sub(/^"draft"[[:space:]]*:[[:space:]]*/, "", token)
-          draft = token
-        } else {
-          sub(/^"prerelease"[[:space:]]*:[[:space:]]*/, "", token)
-          prerelease = token
-        }
-        emit()
-        remaining = substr(remaining, RSTART + RLENGTH)
-      }
-    }
-    END {
-      if (tag != "" || draft != "" || prerelease != "") exit 2
-    }
-  ' "$1"
-}
-
-parse_selected_release() {
-  awk -v target="$2" '
-    function finish_object() {
-      if (names[depth] == target) {
-        matches += 1
-        if (digests[depth] == "") invalid = 1
-        result = digests[depth]
-      }
-      delete names[depth]
-      delete digests[depth]
-      delete keys[depth]
-      delete expecting[depth]
-    }
-    {
-      for (position = 1; position <= length($0); position += 1) {
-        character = substr($0, position, 1)
-        if (in_string) {
-          if (escaped) {
-            value = value character
-            escaped = 0
-          } else if (character == "\\") {
-            escaped = 1
-          } else if (character == "\"") {
-            in_string = 0
-            if (string_is_value) {
-              if (depth == 1 && keys[depth] == "tag_name") {
-                tag_matches += 1
-                tag = value
-              }
-              if (depth == 1 && keys[depth] == "target_commitish") {
-                commit_matches += 1
-                commit = value
-              }
-              if (keys[depth] == "name") names[depth] = value
-              if (keys[depth] == "digest") digests[depth] = value
-              expecting[depth] = 0
-            } else {
-              pending = value
-            }
-          } else {
-            value = value character
-          }
-          continue
-        }
-
-        if (character == "{") {
-          expecting[depth] = 0
-          depth += 1
-        } else if (character == "}") {
-          finish_object()
-          depth -= 1
-        } else if (character == "\"") {
-          in_string = 1
-          string_is_value = expecting[depth]
-          value = ""
-        } else if (character == ":") {
-          keys[depth] = pending
-          pending = ""
-          expecting[depth] = 1
-        } else if (expecting[depth] && substr($0, position, 4) == "true") {
-          if (depth == 1 && keys[depth] == "draft") {
-            draft_matches += 1
-            draft = "true"
-          }
-          if (depth == 1 && keys[depth] == "prerelease") {
-            prerelease_matches += 1
-            prerelease = "true"
-          }
-          expecting[depth] = 0
-          position += 3
-        } else if (expecting[depth] && substr($0, position, 5) == "false") {
-          if (depth == 1 && keys[depth] == "draft") {
-            draft_matches += 1
-            draft = "false"
-          }
-          if (depth == 1 && keys[depth] == "prerelease") {
-            prerelease_matches += 1
-            prerelease = "false"
-          }
-          expecting[depth] = 0
-          position += 4
-        } else if (character == ",") {
-          keys[depth] = ""
-          expecting[depth] = 0
-          pending = ""
-        }
-      }
-    }
-    END {
-      if (matches == 0) exit 3
-      if (matches != 1 || invalid) exit 4
-      if (tag_matches != 1 || commit_matches != 1 || draft_matches != 1 || prerelease_matches != 1) exit 5
-      if (draft != "false" || prerelease != "false") exit 6
-      print tag "\t" commit "\t" result
-    }
-  ' "$1"
-}
-
-page=1
-selected_version=
-selected_tag=
-selected_metadata="$WORK_DIRECTORY/selected-release.json"
-while [ "$page" -le "$MAX_RELEASE_PAGES" ]; do
-  page_file="$WORK_DIRECTORY/releases-$page.json"
-  if ! github_curl -o "$page_file" "$RELEASES_API?per_page=$RELEASES_PER_PAGE&page=$page"; then
-    printf 'GitHub Release lookup failed on page %s\n' "$page" >&2
-    exit 1
-  fi
-  empty_check=$(tr -d '[:space:]' <"$page_file")
-  if [ "$empty_check" = '[]' ]; then
-    break
-  fi
-
-  candidates="$WORK_DIRECTORY/release-candidates-$page.tsv"
-  if ! parse_release_page "$page_file" >"$candidates" || [ ! -s "$candidates" ]; then
-    printf 'GitHub Release lookup returned malformed metadata on page %s\n' "$page" >&2
-    exit 1
-  fi
-
-  tab=$(printf '\t')
-  while IFS="$tab" read -r tag draft prerelease; do
-    case "$tag" in
-      monke-tools-v*) version=${tag#monke-tools-v} ;;
-      *) version= ;;
-    esac
-    if [ "$draft" = false ] && [ "$prerelease" = false ] && [ -n "$version" ] && stable_version "$version"; then
-      if [ -z "$selected_version" ] || version_is_greater "$version" "$selected_version"; then
-        selected_version=$version
-        selected_tag=$tag
-      fi
-    fi
-  done <"$candidates"
-  page=$((page + 1))
-done
-
-if [ -z "$selected_version" ]; then
-  printf 'No stable monke-tools Release was found\n' >&2
-  exit 1
-fi
-if [ "$page" -gt "$MAX_RELEASE_PAGES" ]; then
-  printf 'GitHub Release lookup exceeded the pagination safety limit\n' >&2
+release_catalog="$WORK_DIRECTORY/stable.tsv"
+if ! github_curl -o "$release_catalog" "$RELEASE_CATALOG_URL"; then
+  printf 'Stable Release catalog lookup failed\n' >&2
   exit 1
 fi
 
-if ! github_curl -o "$selected_metadata" "$RELEASES_API/tags/$selected_tag"; then
-  printf 'GitHub Release metadata lookup failed for %s\n' "$selected_tag" >&2
+selected_contract="$WORK_DIRECTORY/selected-release.tsv"
+if ! awk -F '\t' '
+  NR == 1 && NF == 7 && $1 == "1" { print $2 "\t" $3 "\t" $4 "\t" $5 "\t" $6 "\t" $7; valid = 1; next }
+  { invalid = 1 }
+  END { if (!valid || invalid) exit 1 }
+' "$release_catalog" >"$selected_contract"; then
+  printf 'Stable Release catalog metadata is malformed\n' >&2
+  exit 1
+fi
+
+tab=$(printf '\t')
+IFS="$tab" read -r selected_version selected_tag selected_commit macos_digest linux_digest checksums_digest < "$selected_contract"
+if ! stable_version "$selected_version" || [ "$selected_tag" != "monke-tools-v$selected_version" ]; then
+  printf 'Stable Release catalog identity is invalid\n' >&2
   exit 1
 fi
 archive_name="$selected_tag-$PLATFORM.tar.gz"
 checksums_name="$selected_tag-checksums.txt"
-selected_contract="$WORK_DIRECTORY/selected-release.tsv"
-if parse_selected_release "$selected_metadata" "$archive_name" > "$selected_contract"; then
-  IFS="$tab" read -r metadata_tag selected_commit asset_digest < "$selected_contract"
-else
-  contract_status=$?
-  if [ "$contract_status" -eq 3 ]; then
-    printf 'Selected Release is missing platform asset %s\n' "$archive_name" >&2
-  elif [ "$contract_status" -eq 5 ]; then
-    printf 'Selected Release identity metadata is missing or ambiguous\n' >&2
-  elif [ "$contract_status" -eq 6 ]; then
-    printf 'Selected Release is a draft or prerelease\n' >&2
-  else
-    printf 'Selected Release platform asset metadata is ambiguous or incomplete\n' >&2
-  fi
-  exit 1
-fi
-if [ "$metadata_tag" != "$selected_tag" ]; then
-  printf 'Selected Release tag metadata does not match %s\n' "$selected_tag" >&2
-  exit 1
-fi
+case "$PLATFORM" in
+  macos-arm64) asset_digest=$macos_digest ;;
+  linux-x64) asset_digest=$linux_digest ;;
+esac
 case "$selected_commit" in
   ????????????????????????????????????????) ;;
   *) printf 'Selected Release commit metadata is invalid\n' >&2; exit 1 ;;
@@ -291,7 +107,17 @@ esac
 
 case "$asset_digest" in
   sha256:????????????????????????????????????????????????????????????????) ;;
-  *) printf 'Selected Release asset has no valid SHA-256 digest metadata\n' >&2; exit 1 ;;
+  *) printf 'Stable Release catalog is missing valid platform asset digest metadata\n' >&2; exit 1 ;;
+esac
+case "${asset_digest#sha256:}" in
+  *[!0-9a-f]*) printf 'Stable Release catalog has invalid platform asset digest metadata\n' >&2; exit 1 ;;
+esac
+case "$checksums_digest" in
+  sha256:????????????????????????????????????????????????????????????????) ;;
+  *) printf 'Stable Release catalog has no valid checksums digest metadata\n' >&2; exit 1 ;;
+esac
+case "${checksums_digest#sha256:}" in
+  *[!0-9a-f]*) printf 'Stable Release catalog has invalid checksums digest metadata\n' >&2; exit 1 ;;
 esac
 
 archive_path="$WORK_DIRECTORY/$archive_name"
@@ -303,6 +129,14 @@ if ! github_curl -o "$archive_path" "$release_download/$archive_name"; then
 fi
 if ! github_curl -o "$checksums_path" "$release_download/$checksums_name"; then
   printf 'Release checksums download failed: %s\n' "$checksums_name" >&2
+  exit 1
+fi
+if ! actual_checksums_digest=$(sha256_file "$checksums_path"); then
+  printf 'SHA-256 verification is unavailable; install sha256sum or shasum\n' >&2
+  exit 1
+fi
+if [ "$actual_checksums_digest" != "${checksums_digest#sha256:}" ]; then
+  printf 'Release checksums do not match stable catalog digest metadata\n' >&2
   exit 1
 fi
 
@@ -318,11 +152,7 @@ expected_checksum=$(awk -v name="$archive_name" '
   exit 1
 }
 
-if command -v sha256sum >/dev/null 2>&1; then
-  actual_checksum=$(sha256sum "$archive_path" | awk '{ print $1 }')
-elif command -v shasum >/dev/null 2>&1; then
-  actual_checksum=$(shasum -a 256 "$archive_path" | awk '{ print $1 }')
-else
+if ! actual_checksum=$(sha256_file "$archive_path"); then
   printf 'SHA-256 verification is unavailable; install sha256sum or shasum\n' >&2
   exit 1
 fi

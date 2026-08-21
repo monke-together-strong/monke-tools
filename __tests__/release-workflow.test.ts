@@ -29,7 +29,8 @@ const JobSchema = looseObject({
 const WorkflowSchema = looseObject({
   concurrency: looseObject({
     "cancel-in-progress": literal(false),
-    group: stringSchema()
+    group: stringSchema(),
+    queue: literal("max")
   }),
   jobs: record(stringSchema(), JobSchema),
   on: looseObject({ push: looseObject({ branches: arraySchema(stringSchema()) }) })
@@ -80,7 +81,7 @@ describe("Mainline publication workflow", () => {
     const { parsed } = readWorkflow();
     expect(parsed.on.push.branches).toStrictEqual(["main"]);
     expect(parsed.concurrency["cancel-in-progress"]).toBeFalsy();
-    expect(parsed.concurrency).not.toHaveProperty("queue");
+    expect(parsed.concurrency.queue).toBe("max");
 
     const prepare = JobSchema.parse(parsed.jobs["prepare-release"]);
     const selection = StepSchema.parse(
@@ -89,7 +90,8 @@ describe("Mainline publication workflow", () => {
     expect(selection.run).toContain("release-bundle.ts relevant");
     expect(selection.run).toContain("release-bundle.ts next-version");
     expect(selection.run).toContain("git cat-file -e");
-    expect(selection.run).toContain("BEFORE_SHA=0000000000000000000000000000000000000000");
+    expect(selection.run).toContain("relevant=true");
+    expect(selection.run).not.toContain("BEFORE_SHA=0000000000000000000000000000000000000000");
   });
 
   test("checks main without repeating the pull-request unit test command", () => {
@@ -139,6 +141,16 @@ describe("Mainline publication workflow", () => {
     expect(stepIndex(publish, "Upload all Release assets")).toBeLessThan(
       stepIndex(publish, "Publish immutable Release")
     );
+    expect(stepIndex(publish, "Publish immutable Release")).toBeLessThan(
+      stepIndex(publish, "Publish stable Release catalog")
+    );
+    const publishCatalog = StepSchema.parse(
+      publish.steps.find((step) => step.name === "Publish stable Release catalog")
+    );
+    expect(publishCatalog.run).toContain("monke-tools-catalog");
+    expect(publishCatalog.run).toContain("stable.tsv");
+    expect(publishCatalog.run).toContain("release-bundle.ts catalog");
+    expect(publishCatalog.run).toContain("gh release upload");
   });
 
   test("keeps existing package publication independent", () => {

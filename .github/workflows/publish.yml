@@ -7,6 +7,7 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
@@ -39,12 +40,15 @@ jobs:
           AFTER_SHA: ${{ github.sha }}
           BEFORE_SHA: ${{ github.event.before }}
         run: |
-          if [ -z "$BEFORE_SHA" ] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
-            BEFORE_SHA=0000000000000000000000000000000000000000
+          if [ -z "$BEFORE_SHA" ] ||
+            [ "$BEFORE_SHA" = 0000000000000000000000000000000000000000 ] ||
+            ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            relevant=true
+          else
+            relevant="$(bun run scripts/release-bundle.ts relevant \
+              --before "$BEFORE_SHA" \
+              --after "$AFTER_SHA")"
           fi
-          relevant="$(bun run scripts/release-bundle.ts relevant \
-            --before "$BEFORE_SHA" \
-            --after "$AFTER_SHA")"
           printf 'relevant=%s\n' "$relevant" >> "$GITHUB_OUTPUT"
           if [ "$relevant" != true ]; then
             exit 0
@@ -183,3 +187,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.prepare-release.outputs.version }}
         run: gh release edit "monke-tools-v${VERSION}" --draft=false
+
+      - name: Publish stable Release catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          catalog_tag=monke-tools-catalog
+          catalog_path="$RUNNER_TEMP/stable.tsv"
+          bun run scripts/release-bundle.ts catalog \
+            --directory "$RUNNER_TEMP/release-assets" \
+            --output "$catalog_path" \
+            --source-commit "$SOURCE_COMMIT" \
+            --version "$VERSION"
+          if ! gh release view "$catalog_tag" >/dev/null 2>&1; then
+            gh release create "$catalog_tag" \
+              --prerelease \
+              --target "$SOURCE_COMMIT" \
+              --title "monke-tools stable Release catalog" \
+              --notes "Mutable pointer used only to discover the latest verified stable monke-tools Release."
+          fi
+          gh release upload "$catalog_tag" "$catalog_path" --clobber

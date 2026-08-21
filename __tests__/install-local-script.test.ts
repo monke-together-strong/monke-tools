@@ -80,6 +80,33 @@ ${changeDuringBuild ? `/usr/bin/touch ${JSON.stringify(sourceChangedMarker)}` : 
 }
 
 describe("Local install refresh script", () => {
+  test("recovers an installation lock left by a dead process", () => {
+    const sandbox = makeTempDir("install-local-dead-lock");
+    const checkout = path.join(sandbox, "checkout");
+    const binDirectory = path.join(sandbox, "bin");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const lockPath = path.join(monkeHome, "locks", "installation.lock");
+    prepareInstallFixture(checkout, binDirectory, false);
+    mkdirSync(path.dirname(lockPath), { recursive: true });
+    writeFileSync(lockPath, '{"acquiredAt":0,"pid":999999999}\n', "utf-8");
+
+    const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
+      cwd: checkout,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        BUN_LOG: path.join(sandbox, "bun.log"),
+        HOME: path.join(sandbox, "home"),
+        MONKE_HOME: monkeHome,
+        MONKE_TOOLS_LOG: path.join(sandbox, "monke-tools.log"),
+        PATH: `${binDirectory}:/usr/bin:/bin`
+      }
+    });
+
+    expect(result.status).toBe(0);
+    expect(existsSync(lockPath)).toBeFalsy();
+  });
+
   test("builds a unique versioned Local install and delegates activation with provenance", () => {
     const sandbox = makeTempDir("install-local-script");
     const checkout = path.join(sandbox, "checkout");

@@ -30,6 +30,11 @@ acquire_installation_lock() {
       return
     fi
 
+    lock_pid=$(sed -n 's/^[[:space:]]*{"acquiredAt":[0-9][0-9]*,"pid":\([1-9][0-9]*\)}[[:space:]]*$/\1/p' "$INSTALLATION_LOCK" 2>/dev/null || true)
+    if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+      rm -f -- "$INSTALLATION_LOCK"
+    fi
+
     attempts=$((attempts + 1))
     sleep 0.05
   done
