@@ -182,9 +182,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     toolBuildIdentity: options?.toolBuildIdentity ?? DEFAULT_TOOL_BUILD_IDENTITY,
     toolInstallRoot: options?.toolInstallRoot ?? resolveRunningToolInstallRoot(),
     writeStderr,
-    writeStdout(text: string) {
-      writeStdout(text);
-    }
+    writeStdout
   };
 }
 

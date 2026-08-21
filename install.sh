@@ -18,16 +18,18 @@ case "$SYSTEM:$MACHINE" in
     ;;
 esac
 
-TEMP_ROOT=${TMPDIR:-/tmp}
-WORK_DIRECTORY=$(mktemp -d "$TEMP_ROOT/monke-tools-install.XXXXXX")
+MONKE_HOME_ROOT=${MONKE_HOME:-"${HOME:?HOME is required when MONKE_HOME is unset}/.monke"}
+mkdir -p "$MONKE_HOME_ROOT/install-staging"
+STAGING_ROOT=$(CDPATH= cd -- "$MONKE_HOME_ROOT/install-staging" && pwd)
+WORK_DIRECTORY=$(mktemp -d "$STAGING_ROOT/update-bootstrap-XXXXXX")
 case "$WORK_DIRECTORY" in
-  "$TEMP_ROOT"/monke-tools-install.*) ;;
+  "$STAGING_ROOT"/update-bootstrap-*) ;;
   *) printf 'Could not create a safe Release bootstrap directory\n' >&2; exit 1 ;;
 esac
 
 cleanup() {
   case "${WORK_DIRECTORY:-}" in
-    "$TEMP_ROOT"/monke-tools-install.*)
+    "$STAGING_ROOT"/update-bootstrap-*)
       if [ -d "$WORK_DIRECTORY" ] && [ ! -L "$WORK_DIRECTORY" ]; then
         rm -rf -- "$WORK_DIRECTORY"
       fi

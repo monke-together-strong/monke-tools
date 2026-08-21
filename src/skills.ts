@@ -74,6 +74,12 @@ export interface ResolvedSkillInstallTarget {
   namespacePath: string;
 }
 
+/** Noninteractive Skill targets supplied by install automation. */
+export interface ExplicitSkillTargetSelection {
+  builtInTargetKinds?: BuiltInSkillInstallTargetKind[];
+  customTargetPath?: string;
+}
+
 /** Resolve stored Skill install target preferences into concrete Agent skill root paths. */
 export function resolveSkillInstallTargets(options: {
   homeDirectory: string;
@@ -156,16 +162,15 @@ function loadFixedToolInstall(runtime: Runtime, monkeHome: string) {
   return loadToolInstall(fixedRoot);
 }
 
-/** Record the Installed source checkout and refresh or configure Distributed skill targets. */
+/** Reconcile source-backed guidance from a Local checkout under the installation lock. */
 export function runLocalInstallSkills(
   runtime: Runtime,
   sourceCheckout: string,
-  targetKinds?: BuiltInSkillInstallTargetKind[],
-  customTarget?: string
+  explicitTargets?: ExplicitSkillTargetSelection
 ) {
   const monkeHome = getMonkeHome(runtime);
   return withInstallationLockAsync(monkeHome, () =>
-    runInstallSkillsLocked(runtime, sourceCheckout, targetKinds, customTarget)
+    runInstallSkillsLocked(runtime, sourceCheckout, explicitTargets)
   );
 }
 
@@ -173,18 +178,13 @@ export function runLocalInstallSkills(
 export async function runInstallSkillsLocked(
   runtime: Runtime,
   guidanceSourceRoot: string,
-  targetKinds?: BuiltInSkillInstallTargetKind[],
-  customTarget?: string
+  explicitTargets?: ExplicitSkillTargetSelection
 ) {
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
   const resolvedGuidanceSourceRoot = path.resolve(guidanceSourceRoot);
-  const explicitPreference = explicitSkillInstallPreference(
-    homeDirectory,
-    targetKinds,
-    customTarget
-  );
+  const explicitPreference = explicitSkillInstallPreference(homeDirectory, explicitTargets);
   const nextPreference = explicitPreference ?? config.skillInstallPreference;
   const nextConfig: GlobalMonkeConfig = { version: 1 };
   if (nextPreference) {
@@ -216,34 +216,36 @@ export async function runInstallSkillsLocked(
 
 function explicitSkillInstallPreference(
   homeDirectory: string,
-  targetKinds: BuiltInSkillInstallTargetKind[] | undefined,
-  customTarget: string | undefined
+  explicitTargets: ExplicitSkillTargetSelection | undefined
 ) {
-  if (targetKinds === undefined && customTarget === undefined) {
+  if (explicitTargets === undefined) {
     return;
   }
-  const targets: SkillInstallTargetPreference[] = targetKinds?.map((kind) => ({ kind })) ?? [];
-  if (customTarget !== undefined) {
+  const targets: SkillInstallTargetPreference[] =
+    explicitTargets.builtInTargetKinds?.map((kind) => ({ kind })) ?? [];
+  if (explicitTargets.customTargetPath !== undefined) {
     targets.push({
       kind: "custom",
-      path: normalizeCustomSkillRoot({ homeDirectory, input: customTarget })
+      path: normalizeCustomSkillRoot({
+        homeDirectory,
+        input: explicitTargets.customTargetPath
+      })
     });
   }
   return { targets } satisfies SkillInstallPreference;
 }
 
-/** Preflight destinations known before Release core activation. */
+/** Preflight known guidance destinations before Local or Release core activation. */
 export function preflightInstallGuidance(
   runtime: Runtime,
   guidanceSourceRoot: string,
-  targetKinds?: BuiltInSkillInstallTargetKind[],
-  customTarget?: string
+  explicitTargets?: ExplicitSkillTargetSelection
 ) {
   const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
   const previousPreference = config.skillInstallPreference;
   const homeDirectory = getHomeDirectory(runtime);
   const nextPreference =
-    explicitSkillInstallPreference(homeDirectory, targetKinds, customTarget) ?? previousPreference;
+    explicitSkillInstallPreference(homeDirectory, explicitTargets) ?? previousPreference;
   if (!nextPreference && !previousPreference) {
     return;
   }
@@ -353,23 +355,13 @@ export async function runReleaseInstallSkillsLocked(
   runtime: Runtime,
   releaseInstallRoot: string,
   options: {
-    customTarget?: string;
+    explicitTargets?: ExplicitSkillTargetSelection;
     interactive: boolean;
-    targetKinds?: BuiltInSkillInstallTargetKind[];
   }
 ) {
   const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
-  if (
-    options.targetKinds !== undefined ||
-    options.customTarget !== undefined ||
-    config.skillInstallPreference
-  ) {
-    await runInstallSkillsLocked(
-      runtime,
-      releaseInstallRoot,
-      options.targetKinds,
-      options.customTarget
-    );
+  if (options.explicitTargets !== undefined || config.skillInstallPreference) {
+    await runInstallSkillsLocked(runtime, releaseInstallRoot, options.explicitTargets);
     return;
   }
   if (options.interactive) {
@@ -438,7 +430,9 @@ export function reconcileSkillNamespaces(options: {
     try {
       prepareSkillTargetPlan(target, skillSourceTree).reconcile();
       reconcileGlobalInstructions(target, options);
-      options.writeMessage(`Linked ${SKILL_NAMESPACE} skills at ${managedLocation(target)}\n`);
+      options.writeMessage(
+        `Linked ${SKILL_NAMESPACE} skills at ${skillTargetPolicy(target).managedLocation}\n`
+      );
     } catch (error) {
       const message = errorMessage(error);
       failures.push(`${target.agentSkillRoot}: ${message}`);
@@ -888,10 +882,6 @@ function skillTargetPolicy(target: ResolvedSkillInstallTarget) {
     layout,
     managedLocation: layout === "flat" ? target.agentSkillRoot : target.namespacePath
   };
-}
-
-function managedLocation(target: ResolvedSkillInstallTarget) {
-  return skillTargetPolicy(target).managedLocation;
 }
 
 function targetKey(target: ResolvedSkillInstallTarget) {

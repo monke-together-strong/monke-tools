@@ -1,10 +1,12 @@
 import { hash } from "node:crypto";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   readlinkSync,
+  renameSync,
   rmSync,
   symlinkSync
 } from "node:fs";
@@ -776,6 +778,17 @@ describe("Release update", () => {
       const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
       const olderInstall = prepareActiveRelease(monkeHome, "1.2.2", false);
       const sameReleasePredecessor = prepareActiveRelease(monkeHome, "1.2.4", false);
+      const strandedBackup = path.join(
+        monkeHome,
+        "install-backups",
+        path.basename(sameReleasePredecessor)
+      );
+      mkdirSync(path.dirname(strandedBackup), { recursive: true });
+      if (phase === "final-rename") {
+        renameSync(sameReleasePredecessor, strandedBackup);
+      } else {
+        cpSync(sameReleasePredecessor, strandedBackup, { recursive: true });
+      }
       const candidate = prepareReleaseAsset(sandbox, "1.2.4");
 
       const update = runCliAsync(
@@ -812,6 +825,7 @@ describe("Release update", () => {
       expect(existsSync(predecessor)).toBeTruthy();
       expect(existsSync(olderInstall)).toBeTruthy();
       expect(existsSync(sameReleasePredecessor)).toBeTruthy();
+      expect(existsSync(path.join(monkeHome, "install-backups"))).toBeFalsy();
       const stagingRoot = path.join(monkeHome, "install-staging");
       expect(existsSync(stagingRoot) ? readdirSync(stagingRoot) : []).toStrictEqual([]);
     }

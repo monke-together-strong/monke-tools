@@ -475,7 +475,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - A Codiff reconciliation failure after **Install activation** leaves the new Local **Active tool install** selected and is separately retryable with `mt install-dependencies`.
 - A **Local install refresh** delegates skill configuration and target reconciliation to monke-tools rather than reimplementing those rules in shell.
 - A **Local install refresh** uses the stored **Skill install preference** instead of assuming a default **Skill install target**.
-- A **Local install refresh** may replace the stored **Skill install preference** with one or more explicitly supplied built-in **Skill install targets** without running **Skills Configure**.
+- A **Local install refresh** may replace the stored **Skill install preference** with explicitly supplied built-in **Skill install targets** and one **Custom skill install target** without running **Skills Configure**.
 - A **Local install refresh** may run **Skills Configure** after installing the `mt` command when no **Skill install preference** exists.
 - A **Local install refresh** always includes skill installation; it is not a binary-only operation.
 - Reconciling a **Skill install target** creates the **Agent skill root** when it is missing.

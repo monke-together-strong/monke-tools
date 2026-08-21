@@ -10,6 +10,7 @@ import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup 
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
+import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import { runSwing, runSwingInteractive } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 import { runUpdate } from "./update.ts";
@@ -144,10 +145,9 @@ function createProgram(
     .action((bundleRoot, options) =>
       runActivateReleaseInstall(runtime, {
         bundleRoot,
-        customTarget: options.customTarget,
+        explicitTargets: explicitSkillTargets(options.targets, options.customTarget),
         installationLockHeld: options.installationLockHeld === true,
-        interactive: options.interactive === true,
-        targetKinds: options.targets
+        interactive: options.interactive === true
       })
     );
 
@@ -171,15 +171,14 @@ function createProgram(
     .action((stagedInstall, sourceCheckout, options) =>
       runActivateLocalInstall(runtime, {
         createdAt: options.createdAt,
-        customTarget: options.customTarget,
         dirty: options.dirty === true,
+        explicitTargets: explicitSkillTargets(options.targets, options.customTarget),
         installationLockHeld: options.installationLockHeld === true,
         installId: options.installId,
         platform: options.platform,
         sourceCheckout,
         sourceCommit: options.sourceCommit,
-        stagedInstall,
-        targetKinds: options.targets
+        stagedInstall
       })
     );
 
@@ -215,10 +214,24 @@ function createProgram(
       ).choices(["codex", "claude", "cursor"])
     )
     .action((sourceCheckout, options) =>
-      runLocalInstallSkills(runtime, sourceCheckout, options.targets, options.customTarget)
+      runLocalInstallSkills(
+        runtime,
+        sourceCheckout,
+        explicitSkillTargets(options.targets, options.customTarget)
+      )
     );
 
   return program;
+}
+
+function explicitSkillTargets(
+  builtInTargetKinds: ExplicitSkillTargetSelection["builtInTargetKinds"],
+  customTargetPath: string | undefined
+): ExplicitSkillTargetSelection | undefined {
+  if (builtInTargetKinds === undefined && customTargetPath === undefined) {
+    return undefined;
+  }
+  return { builtInTargetKinds, customTargetPath };
 }
 
 if (import.meta.main) {

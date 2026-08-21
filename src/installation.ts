@@ -19,7 +19,6 @@ import { number, strictObject } from "zod";
 
 import { reconcileCodiff, MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
-import type { BuiltInSkillInstallTargetKind } from "./global-config.ts";
 import {
   INSTALL_MANIFEST_FILENAME,
   LocalInstallManifestSchema,
@@ -42,6 +41,7 @@ import {
   runInstallSkillsLocked,
   runReleaseInstallSkillsLocked
 } from "./skills.ts";
+import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
@@ -53,23 +53,21 @@ const MANAGED_STAGING_DIRECTORY_PATTERN = /^(?:local|release|update)-[A-Za-z0-9.
 
 export interface ActivateLocalInstallOptions {
   createdAt: string;
-  customTarget?: string;
   dirty: boolean;
+  explicitTargets?: ExplicitSkillTargetSelection;
   installationLockHeld?: boolean;
   installId: string;
   platform: string;
   sourceCheckout: string;
   sourceCommit: string;
   stagedInstall: string;
-  targetKinds?: BuiltInSkillInstallTargetKind[];
 }
 
 export interface ActivateReleaseInstallOptions {
   bundleRoot: string;
-  customTarget?: string;
+  explicitTargets?: ExplicitSkillTargetSelection;
   installationLockHeld?: boolean;
   interactive?: boolean;
-  targetKinds?: BuiltInSkillInstallTargetKind[];
 }
 
 /** Activate a verified Release bundle and finish its installation-adjacent work. */
@@ -81,9 +79,9 @@ export async function runActivateReleaseInstall(
   const homeDirectory = getHomeDirectory(runtime);
   const sourceBundle = path.resolve(options.bundleRoot);
   const sourceManifest = validateReleaseBundle(runtime, sourceBundle);
-  preflightInstallGuidance(runtime, sourceBundle, options.targetKinds, options.customTarget);
+  preflightInstallGuidance(runtime, sourceBundle, options.explicitTargets);
   const activate = async () => {
-    preflightInstallGuidance(runtime, sourceBundle, options.targetKinds, options.customTarget);
+    preflightInstallGuidance(runtime, sourceBundle, options.explicitTargets);
     const stagingRoot = path.join(monkeHome, "install-staging");
     const stagedInstall = path.join(stagingRoot, `release-${randomUUID()}`);
     const stagingRootExisted = existsSync(stagingRoot);
@@ -96,7 +94,7 @@ export async function runActivateReleaseInstall(
       if (JSON.stringify(manifest) !== JSON.stringify(sourceManifest)) {
         throw new MonkeError("Release bundle changed while it was being staged");
       }
-      preflightInstallGuidance(runtime, stagedInstall, options.targetKinds, options.customTarget);
+      preflightInstallGuidance(runtime, stagedInstall, options.explicitTargets);
     } catch (error) {
       rmSync(stagedInstall, { force: true, recursive: true });
       if (!stagingRootExisted && readdirSync(stagingRoot).length === 0) {
@@ -144,9 +142,8 @@ export async function runActivateReleaseInstall(
     }
     try {
       await runReleaseInstallSkillsLocked(runtime, installRoot, {
-        customTarget: options.customTarget,
-        interactive: options.interactive === true,
-        targetKinds: options.targetKinds
+        explicitTargets: options.explicitTargets,
+        interactive: options.interactive === true
       });
     } catch (error) {
       postActivationFailures.push(
@@ -184,11 +181,55 @@ function prepareValidatedInactiveInstallCollision(
   activeInstallRoot: string | null
 ) {
   const installRoot = path.join(monkeHome, "installs", installId);
+  const backupsRoot = path.join(monkeHome, "install-backups");
+  const backupRoot = path.join(backupsRoot, installId);
+  assertDirectChildPath(backupRoot, backupsRoot, "collision backup");
+
+  const backupStat = lstatSync(backupRoot, { throwIfNoEntry: false });
+  if (backupStat) {
+    assertValidatedInstallCollision(backupRoot, installId);
+    const installStat = lstatSync(installRoot, { throwIfNoEntry: false });
+    if (!installStat) {
+      mkdirSync(path.dirname(installRoot), { recursive: true });
+      renameSync(backupRoot, installRoot);
+    } else if (activeInstallRoot === installRoot) {
+      rmSync(backupRoot, { recursive: true });
+    } else {
+      assertValidatedInstallCollision(installRoot, installId);
+      rmSync(installRoot, { recursive: true });
+      renameSync(backupRoot, installRoot);
+    }
+    removeEmptyDirectory(backupsRoot);
+  }
+
   const stat = lstatSync(installRoot, { throwIfNoEntry: false });
   if (!stat) {
     return null;
   }
   if (installRoot === activeInstallRoot || !stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new MonkeError(`Tool install identity already exists: ${installId}`);
+  }
+  assertValidatedInstallCollision(installRoot, installId);
+  mkdirSync(backupsRoot, { recursive: true });
+  assertDirectory(backupsRoot, "Install backup root is invalid");
+  renameSync(installRoot, backupRoot);
+  return {
+    discard() {
+      rmSync(backupRoot, { force: true, recursive: true });
+      removeEmptyDirectory(backupsRoot);
+    },
+    restore() {
+      if (lstatSync(backupRoot, { throwIfNoEntry: false })) {
+        renameSync(backupRoot, installRoot);
+        removeEmptyDirectory(backupsRoot);
+      }
+    }
+  };
+}
+
+function assertValidatedInstallCollision(installRoot: string, installId: string) {
+  const stat = lstatSync(installRoot, { throwIfNoEntry: false });
+  if (!stat?.isDirectory() || stat.isSymbolicLink()) {
     throw new MonkeError(`Tool install identity already exists: ${installId}`);
   }
   try {
@@ -201,19 +242,15 @@ function prepareValidatedInactiveInstallCollision(
   } catch {
     throw new MonkeError(`Tool install identity already exists: ${installId}`);
   }
-  const backupRoot = path.join(monkeHome, "install-staging", `release-collision-${randomUUID()}`);
-  assertDirectChildPath(backupRoot, path.join(monkeHome, "install-staging"), "collision backup");
-  renameSync(installRoot, backupRoot);
-  return {
-    discard() {
-      rmSync(backupRoot, { force: true, recursive: true });
-    },
-    restore() {
-      if (lstatSync(backupRoot, { throwIfNoEntry: false })) {
-        renameSync(backupRoot, installRoot);
-      }
-    }
-  };
+}
+
+function removeEmptyDirectory(directory: string) {
+  if (
+    lstatSync(directory, { throwIfNoEntry: false })?.isDirectory() &&
+    readdirSync(directory).length === 0
+  ) {
+    rmdirSync(directory);
+  }
 }
 
 /** Activate a fully built Local tool install and finish its installation-adjacent work. */
@@ -224,7 +261,7 @@ export async function runActivateLocalInstall(
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const sourceCheckout = path.resolve(options.sourceCheckout);
-  preflightInstallGuidance(runtime, sourceCheckout, options.targetKinds, options.customTarget);
+  preflightInstallGuidance(runtime, sourceCheckout, options.explicitTargets);
   const activate = async () => {
     const stagedInstall = path.resolve(options.stagedInstall);
     assertDirectChildPath(
@@ -258,7 +295,7 @@ export async function runActivateLocalInstall(
     if (!existsSync(path.join(sourceCheckout, "skills"))) {
       throw new MonkeError(`Skill source tree is missing: ${path.join(sourceCheckout, "skills")}`);
     }
-    preflightInstallGuidance(runtime, sourceCheckout, options.targetKinds, options.customTarget);
+    preflightInstallGuidance(runtime, sourceCheckout, options.explicitTargets);
 
     const predecessor = resolveActiveInstallRoot(monkeHome);
     const installRoot = activateStagedInstall({
@@ -279,12 +316,7 @@ export async function runActivateLocalInstall(
     const stableCommand = path.join(homeDirectory, ".local", "bin", "mt");
     runShellInstall(runtime, { binary: stableCommand });
     try {
-      await runInstallSkillsLocked(
-        runtime,
-        sourceCheckout,
-        options.targetKinds,
-        options.customTarget
-      );
+      await runInstallSkillsLocked(runtime, sourceCheckout, options.explicitTargets);
     } catch (error) {
       throw new MonkeError(
         `The Local tool install is active, but Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(error)}`
