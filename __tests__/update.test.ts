@@ -200,7 +200,7 @@ describe("Release update", () => {
       })
     );
 
-    expect(stderr).toContain("Update available: 1.2.3 -> 1.2.4");
+    expect(stderr).toContain("Release update available: 1.2.3 -> 1.2.4");
     expect(stderr).not.toContain("Checking the stable");
     expect(stderr).not.toContain("\u001B[");
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
@@ -350,7 +350,7 @@ describe("Release update", () => {
     expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
   });
 
-  test("update transitions a dirty Local install to Release mode without touching its source checkout", async () => {
+  test("a Release update replaces a dirty Local tool install without touching its source checkout", async () => {
     const sandbox = makeTempDir("local-to-release-update");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -449,7 +449,7 @@ describe("Release update", () => {
     expect(stderr).toContain("vp run install:local");
   });
 
-  test("a bare update on the current clean Release performs no replacement", async () => {
+  test("a bare Release update on the matching clean Release install performs no replacement", async () => {
     const sandbox = makeTempDir("release-update-current");
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
@@ -468,7 +468,7 @@ describe("Release update", () => {
         platform: "linux",
         releaseDistribution: {
           async downloadReleaseAsset() {
-            throw new Error("a current Release must not be downloaded again");
+            throw new Error("the matching Release install must not be downloaded again");
           },
           async listReleases(page) {
             return page === 1 ? [release("1.2.3")] : [];
@@ -479,7 +479,9 @@ describe("Release update", () => {
       })
     );
 
-    expect(stderr).toContain("monke-tools 1.2.3 is current");
+    expect(stderr).toContain(
+      "Active tool install 1.2.3 already matches the selected stable Release"
+    );
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
       path.join("installs", "release-1.2.3-linux-x64")
     );
@@ -525,7 +527,7 @@ describe("Release update", () => {
     expect(readdirSync(stagingRoot)).toStrictEqual([]);
   });
 
-  test("concurrent updates serialize and the follower rechecks the Active install", async () => {
+  test("concurrent updates serialize and the follower rechecks the Active tool install", async () => {
     const sandbox = makeTempDir("release-update-concurrent");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");

@@ -232,13 +232,15 @@ function reportAvailability(
   manifest: ToolInstallManifest,
   selectedVersion: string
 ) {
-  const current =
+  const activeToolBuildIdentity =
     manifest.installKind === "release" ? manifest.releaseVersion : manifest.toolBuildIdentity;
   const logger = createLogger(runtime);
   if (isUpdateAvailable(manifest, selectedVersion)) {
-    logger.info(`Update available: ${current} -> ${selectedVersion}`);
+    logger.info(`Release update available: ${activeToolBuildIdentity} -> ${selectedVersion}`);
   } else {
-    logger.success(`monke-tools ${current} is current`);
+    logger.success(
+      `Active tool install ${activeToolBuildIdentity} already matches the selected stable Release`
+    );
   }
 }
 

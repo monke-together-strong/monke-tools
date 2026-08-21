@@ -40,10 +40,6 @@ const LockMetadataSchema = z.object({
 });
 const LockPidSchema = z.number().int().positive();
 const LockTimestampSchema = z.number();
-interface LockAttempt {
-  release?: () => void;
-  wait: boolean;
-}
 const ReleaseCatalogAssetSchema = z.looseObject({
   browser_download_url: z.url(),
   digest: z.string().nullable().optional(),
@@ -501,7 +497,7 @@ function prepareLockAcquisition(lockPath: string) {
   return Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
 }
 
-function tryAcquireLockPath(lockPath: string): LockAttempt {
+function tryAcquireLockPath(lockPath: string) {
   let fileDescriptor: number | null = null;
   try {
     fileDescriptor = openSync(lockPath, "wx");
