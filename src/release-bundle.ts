@@ -58,6 +58,7 @@ const ChecksumEntriesSchema = arraySchema(ChecksumEntrySchema).superRefine((entr
 const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
 const RELEASE_INPUTS = [
   ".github/workflows/publish.yml",
+  "install.sh",
   "instructions/GLOBAL.md",
   "package.json",
   "scripts/install-local.sh",

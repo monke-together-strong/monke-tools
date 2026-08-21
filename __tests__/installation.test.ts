@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -15,7 +16,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { loadGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
-import { loadLocalInstall } from "../src/install-manifest.ts";
+import { loadLocalInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { makeTempDir, write, writeGlobalInstructionsSource } from "./helpers.ts";
 
@@ -36,6 +37,45 @@ function prepareStagedInstall(monkeHome: string, installId: string) {
   writeFileSync(executable, "#!/bin/sh\nexit 0\n", "utf-8");
   chmodSync(executable, 0o755);
   return stagedInstall;
+}
+
+function prepareReleaseBundle(
+  sandbox: string,
+  options: { platform?: "linux-x64" | "macos-arm64" } = {}
+) {
+  const bundleRoot = path.join(sandbox, "bundle");
+  const platform = options.platform ?? "linux-x64";
+  const skillContents = "---\nname: example\n---\n";
+  const referenceContents = "Release reference.\n";
+  write(bundleRoot, "skills/internal/example/SKILL.md", skillContents);
+  write(bundleRoot, "skills/references/internal/example.md", referenceContents);
+  write(bundleRoot, "instructions/GLOBAL.md", "Release baseline.\n");
+  write(bundleRoot, "skills/codex/.keep", "\n");
+  write(bundleRoot, "skills/imported/.keep", "\n");
+  write(bundleRoot, "install.sh", "#!/bin/sh\nexit 0\n");
+  write(bundleRoot, "mt", "#!/bin/sh\nexit 0\n");
+  chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
+  chmodSync(path.join(bundleRoot, "mt"), 0o755);
+  const hash = (contents: string) => createHash("sha256").update(contents).digest("hex");
+  const manifest = {
+    artifactName: `monke-tools-v1.2.3-${platform}.tar.gz`,
+    guidanceHashes: {
+      "skills/codex/.keep": hash("\n"),
+      "skills/imported/.keep": hash("\n"),
+      "skills/internal/example/SKILL.md": hash(skillContents),
+      "skills/references/internal/example.md": hash(referenceContents)
+    },
+    installKind: "release",
+    minimumCodiffVersion: "1.9.0",
+    platform,
+    releaseTag: "monke-tools-v1.2.3",
+    releaseVersion: "1.2.3",
+    schemaVersion: 1,
+    sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+    toolBuildIdentity: "1.2.3"
+  } as const;
+  write(bundleRoot, "install-manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
+  return { bundleRoot, manifest };
 }
 
 async function activateLocal(options: {
@@ -92,6 +132,231 @@ async function activateLocal(options: {
 }
 
 describe("versioned installation lifecycle", () => {
+  test("a verified bundle activates one complete Release install with writable projected guidance", async () => {
+    const sandbox = makeTempDir("release-install-activation");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox);
+
+    await runCliAsync(
+      ["activate-release-install", release.bundleRoot, "--targets", "codex"],
+      createRuntime({
+        architecture: "x64",
+        cwd: sandbox,
+        env: {
+          CODEX_HOME: path.join(home, ".codex"),
+          HOME: home,
+          MONKE_HOME: monkeHome,
+          PATH: "/usr/bin:/bin",
+          SHELL: "/bin/zsh"
+        },
+        onStderr() {},
+        onStdout() {},
+        platform: "linux",
+        toolBuildIdentity: "1.2.3"
+      })
+    );
+
+    const installRoot = path.join(monkeHome, "installs", "release-1.2.3-linux-x64");
+    const projectedSkill = path.join(
+      home,
+      ".codex",
+      "skills",
+      "monke-tools",
+      "internal",
+      "example",
+      "SKILL.md"
+    );
+    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+      path.join("installs", "release-1.2.3-linux-x64")
+    );
+    expect(realpathSync(path.join(home, ".local", "bin", "mt"))).toBe(path.join(installRoot, "mt"));
+    expect(
+      JSON.parse(readFileSync(path.join(installRoot, "install-manifest.json"), "utf-8"))
+    ).toStrictEqual(release.manifest);
+    expect(realpathSync(projectedSkill)).toBe(
+      path.join(installRoot, "skills", "internal", "example", "SKILL.md")
+    );
+    expect(lstatSync(realpathSync(projectedSkill)).isFile()).toBeTruthy();
+    writeFileSync(projectedSkill, "Locally customized.\n", "utf-8");
+    expect(readFileSync(path.join(installRoot, "skills/internal/example/SKILL.md"), "utf-8")).toBe(
+      "Locally customized.\n"
+    );
+    expect(
+      ReleaseInstallManifestSchema.parse(
+        JSON.parse(readFileSync(path.join(installRoot, "install-manifest.json"), "utf-8"))
+      ).guidanceHashes
+    ).toStrictEqual(release.manifest.guidanceHashes);
+    expect(readFileSync(path.join(home, ".codex", "AGENTS.md"), "utf-8")).toContain(
+      "Release baseline."
+    );
+  });
+
+  test("a noninteractive Release install without targets activates core and recommends repair", async () => {
+    const sandbox = makeTempDir("release-install-noninteractive");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox);
+    let stderr = "";
+
+    await runCliAsync(
+      ["activate-release-install", release.bundleRoot],
+      createRuntime({
+        architecture: "x64",
+        cwd: sandbox,
+        env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
+        onMultiSelect() {
+          throw new Error("Noninteractive Release install must not prompt");
+        },
+        onStderr(text) {
+          stderr += text;
+        },
+        onStdout() {},
+        platform: "linux",
+        toolBuildIdentity: "1.2.3"
+      })
+    );
+
+    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+      path.join("installs", "release-1.2.3-linux-x64")
+    );
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();
+    expect(existsSync(path.join(home, ".codex", "skills", "monke-tools"))).toBeFalsy();
+    expect(stderr).toContain("mt skills configure");
+
+    const installRoot = path.join(monkeHome, "installs", "release-1.2.3-linux-x64");
+    await runCliAsync(
+      ["skills", "configure"],
+      createRuntime({
+        cwd: sandbox,
+        env: { HOME: home, MONKE_HOME: monkeHome },
+        multiSelectValues: [["codex"]],
+        onStderr() {},
+        onStdout() {},
+        toolInstallRoot: installRoot
+      })
+    );
+    expect(readlinkSync(path.join(home, ".codex", "skills", "monke-tools", "internal"))).toBe(
+      path.join(installRoot, "skills", "internal")
+    );
+  });
+
+  test("an interactive Release install asks for targets only after core activation", async () => {
+    const sandbox = makeTempDir("release-install-interactive");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox);
+    let activeWhenPrompted = false;
+
+    await runCliAsync(
+      ["activate-release-install", release.bundleRoot, "--interactive"],
+      createRuntime({
+        architecture: "x64",
+        cwd: sandbox,
+        env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
+        multiSelectValues: [["cursor"]],
+        onMultiSelect() {
+          activeWhenPrompted = existsSync(path.join(monkeHome, "current"));
+        },
+        onStderr() {},
+        onStdout() {},
+        platform: "linux",
+        toolBuildIdentity: "1.2.3"
+      })
+    );
+
+    expect(activeWhenPrompted).toBeTruthy();
+    expect(readlinkSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"))).toBe(
+      path.join(monkeHome, "installs", "release-1.2.3-linux-x64", "skills", "internal")
+    );
+  });
+
+  test("known Global instruction failures are rejected before Release activation", async () => {
+    const sandbox = makeTempDir("release-install-preflight");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox);
+    mkdirSync(path.join(home, ".codex", "AGENTS.md"), { recursive: true });
+
+    await expect(
+      runCliAsync(
+        ["activate-release-install", release.bundleRoot, "--targets", "codex"],
+        createRuntime({
+          architecture: "x64",
+          cwd: sandbox,
+          env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
+          onStderr() {},
+          onStdout() {},
+          platform: "linux",
+          toolBuildIdentity: "1.2.3"
+        })
+      )
+    ).rejects.toThrow(/Global agent instructions/u);
+
+    expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
+    expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
+  });
+
+  test("post-activation projection failure leaves Release core active with repair guidance", async () => {
+    const sandbox = makeTempDir("release-install-projection-failure");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox);
+    mkdirSync(path.join(home, ".codex", "skills", "monke-tools", "internal"), {
+      recursive: true
+    });
+
+    await expect(
+      runCliAsync(
+        ["activate-release-install", release.bundleRoot, "--targets", "codex"],
+        createRuntime({
+          architecture: "x64",
+          cwd: sandbox,
+          env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
+          onStderr() {},
+          onStdout() {},
+          platform: "linux",
+          toolBuildIdentity: "1.2.3"
+        })
+      )
+    ).rejects.toThrow(/Release install is active[\s\S]*mt skills configure[\s\S]*\.codex\/skills/u);
+
+    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+      path.join("installs", "release-1.2.3-linux-x64")
+    );
+  });
+
+  test("Codiff failure after activation leaves the new Release install active", async () => {
+    const sandbox = makeTempDir("release-install-codiff-failure");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox, { platform: "macos-arm64" });
+
+    await expect(
+      runCliAsync(
+        ["activate-release-install", release.bundleRoot],
+        createRuntime({
+          architecture: "arm64",
+          cwd: sandbox,
+          env: {
+            HOME: home,
+            MONKE_HOME: monkeHome,
+            PATH: path.join(sandbox, "empty-bin"),
+            SHELL: "/bin/zsh"
+          },
+          onStderr() {},
+          onStdout() {},
+          platform: "darwin",
+          toolBuildIdentity: "1.2.3"
+        })
+      )
+    ).rejects.toThrow(/Release install is active[\s\S]*Retry with: mt install-dependencies/u);
+
+    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+      path.join("installs", "release-1.2.3-macos-arm64")
+    );
+  });
+
   test("rejects a manifest whose Codiff minimum cannot be consumed", () => {
     const installRoot = makeTempDir("invalid-install-manifest");
     writeFileSync(

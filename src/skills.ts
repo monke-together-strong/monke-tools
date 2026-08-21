@@ -24,8 +24,12 @@ import type {
   SkillInstallTargetKind,
   SkillInstallTargetPreference
 } from "./global-config.ts";
-import { reconcileGlobalInstructions, removeGlobalInstructions } from "./global-instructions.ts";
-import { loadActiveLocalInstall, loadLocalInstall } from "./install-manifest.ts";
+import {
+  preflightGlobalInstructions,
+  reconcileGlobalInstructions,
+  removeGlobalInstructions
+} from "./global-instructions.ts";
+import { loadActiveToolInstall, loadToolInstall } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
 import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
@@ -96,12 +100,14 @@ async function runSkillsConfigureLocked(runtime: Runtime, sourceCheckoutOverride
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
-  const runningInstall = loadRunningLocalInstall(runtime, monkeHome);
-  const sourceCheckout = sourceCheckoutOverride ?? runningInstall?.manifest.sourceCheckout;
+  const runningInstall = loadRunningToolInstall(runtime, monkeHome);
+  const sourceCheckout =
+    sourceCheckoutOverride ??
+    (runningInstall?.manifest.installKind === "local"
+      ? runningInstall.manifest.sourceCheckout
+      : runningInstall?.installRoot);
   if (!sourceCheckout) {
-    throw new MonkeError(
-      "Installed source checkout is not configured; run bun run install:local from the monke-tools checkout first"
-    );
+    throw new MonkeError("Active tool install is not configured; install monke-tools first");
   }
   resolveSkillSourceTree(sourceCheckout);
 
@@ -130,12 +136,12 @@ async function runSkillsConfigureLocked(runtime: Runtime, sourceCheckoutOverride
   createLogger(runtime).success("Configured monke-tools skills");
 }
 
-function loadRunningLocalInstall(runtime: Runtime, monkeHome: string) {
+function loadRunningToolInstall(runtime: Runtime, monkeHome: string) {
   const toolInstallRoot = path.resolve(runtime.toolInstallRoot);
   if (path.dirname(toolInstallRoot) === path.join(path.resolve(monkeHome), "installs")) {
-    return loadLocalInstall(toolInstallRoot);
+    return loadToolInstall(toolInstallRoot);
   }
-  return loadActiveLocalInstall(monkeHome);
+  return loadActiveToolInstall(monkeHome);
 }
 
 /** Record the Installed source checkout and refresh or configure Distributed skill targets. */
@@ -189,6 +195,61 @@ export async function runLocalInstallSkillsLocked(
   });
   createLogger(runtime).success(
     explicitPreference ? "Configured monke-tools skills" : "Refreshed monke-tools skills"
+  );
+}
+
+/** Preflight destinations known before Release core activation. */
+export function preflightReleaseInstallSkills(
+  runtime: Runtime,
+  releaseRoot: string,
+  targetKinds?: BuiltInSkillInstallTargetKind[]
+) {
+  const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
+  const preference: SkillInstallPreference | undefined = targetKinds
+    ? { targets: targetKinds.map((kind) => ({ kind })) }
+    : config.skillInstallPreference;
+  if (!preference) {
+    return;
+  }
+  const targets = resolveSkillInstallTargets({
+    homeDirectory: getHomeDirectory(runtime),
+    preference
+  });
+  const failures: string[] = [];
+  for (const target of targets) {
+    try {
+      preflightGlobalInstructions(target, {
+        cwd: runtime.cwd,
+        environment: runtime.env,
+        homeDirectory: getHomeDirectory(runtime),
+        sourceCheckout: releaseRoot
+      });
+    } catch (error) {
+      failures.push(`${target.agentSkillRoot}: ${errorMessage(error)}`);
+    }
+  }
+  if (failures.length > 0) {
+    throw new MonkeError(`Global agent instructions preflight failed:\n${failures.join("\n")}`);
+  }
+}
+
+/** Reconcile Release-mode guidance after core activation. */
+export async function runReleaseInstallSkillsLocked(
+  runtime: Runtime,
+  releaseRoot: string,
+  options: { interactive: boolean; targetKinds?: BuiltInSkillInstallTargetKind[] }
+) {
+  const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
+  if (options.targetKinds || config.skillInstallPreference) {
+    await runLocalInstallSkillsLocked(runtime, releaseRoot, options.targetKinds);
+    return;
+  }
+  if (options.interactive) {
+    await runSkillsConfigureLocked(runtime, releaseRoot);
+    return;
+  }
+  createLogger(runtime).hint(
+    "No Skill install targets were selected. Configure them later with: mt skills configure"
   );
 }
 

@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   boolean as booleanSchema,
   enum as enumSchema,
+  discriminatedUnion,
   iso,
   literal,
   record,
@@ -84,9 +85,14 @@ export const LocalInstallManifestSchema = strictObject({
   sourceDirty: booleanSchema(),
   toolBuildIdentity: stringSchema().min(1)
 });
+export const ToolInstallManifestSchema = discriminatedUnion("installKind", [
+  LocalInstallManifestSchema,
+  ReleaseInstallManifestSchema
+]);
 
 export type LocalInstallManifest = output<typeof LocalInstallManifestSchema>;
 export type ReleaseInstallManifest = output<typeof ReleaseInstallManifestSchema>;
+export type ToolInstallManifest = output<typeof ToolInstallManifestSchema>;
 
 /** Load the self-describing Active tool install when one is selected. */
 export function loadActiveLocalInstall(monkeHome: string) {
@@ -98,8 +104,27 @@ export function loadActiveLocalInstall(monkeHome: string) {
   return loadLocalInstall(installRoot);
 }
 
+/** Load the self-describing Active tool install, regardless of install kind. */
+export function loadActiveToolInstall(monkeHome: string) {
+  const installRoot = resolveActiveInstallRoot(monkeHome);
+  return installRoot === null ? null : loadToolInstall(installRoot);
+}
+
 /** Load a local install manifest from a root already resolved by the running command. */
 export function loadLocalInstall(installRoot: string) {
+  const loaded = loadToolInstall(installRoot);
+  return {
+    installRoot: loaded.installRoot,
+    manifest: parseBoundaryValue(
+      LocalInstallManifestSchema,
+      loaded.manifest,
+      "Local Tool Install manifest"
+    )
+  };
+}
+
+/** Load a Tool Install manifest from a resolved versioned install root. */
+export function loadToolInstall(installRoot: string) {
   const manifestPath = path.join(installRoot, INSTALL_MANIFEST_FILENAME);
   if (!existsSync(manifestPath)) {
     throw new MonkeError(`Tool Install manifest is missing: ${manifestPath}`);
@@ -113,7 +138,7 @@ export function loadLocalInstall(installRoot: string) {
   }
   return {
     installRoot: path.resolve(installRoot),
-    manifest: parseBoundaryValue(LocalInstallManifestSchema, value, "Tool Install manifest")
+    manifest: parseBoundaryValue(ToolInstallManifestSchema, value, "Tool Install manifest")
   };
 }
 

@@ -1,5 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -21,14 +22,24 @@ import type { BuiltInSkillInstallTargetKind } from "./global-config.ts";
 import {
   INSTALL_MANIFEST_FILENAME,
   LocalInstallManifestSchema,
+  ReleaseInstallManifestSchema,
+  ToolInstallManifestSchema,
   resolveActiveInstallRoot
 } from "./install-manifest.ts";
-import type { LocalInstallManifest } from "./install-manifest.ts";
+import type {
+  LocalInstallManifest,
+  ReleaseInstallManifest,
+  ToolInstallManifest
+} from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
 import { assertDirectChildPath } from "./path-boundary.ts";
 import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
-import { runLocalInstallSkillsLocked } from "./skills.ts";
+import {
+  preflightReleaseInstallSkills,
+  runLocalInstallSkillsLocked,
+  runReleaseInstallSkillsLocked
+} from "./skills.ts";
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
@@ -47,6 +58,84 @@ export interface ActivateLocalInstallOptions {
   sourceCommit: string;
   stagedInstall: string;
   targetKinds?: BuiltInSkillInstallTargetKind[];
+}
+
+export interface ActivateReleaseInstallOptions {
+  bundleRoot: string;
+  interactive?: boolean;
+  targetKinds?: BuiltInSkillInstallTargetKind[];
+}
+
+/** Activate a verified Release bundle and finish its installation-adjacent work. */
+export async function runActivateReleaseInstall(
+  runtime: Runtime,
+  options: ActivateReleaseInstallOptions
+) {
+  const monkeHome = getMonkeHome(runtime);
+  const homeDirectory = getHomeDirectory(runtime);
+  const sourceBundle = path.resolve(options.bundleRoot);
+  const activated = await withInstallationLockAsync(monkeHome, async () => {
+    const stagingRoot = path.join(monkeHome, "install-staging");
+    const stagedInstall = path.join(stagingRoot, `release-${randomUUID()}`);
+    mkdirSync(stagingRoot, { recursive: true });
+    assertDirectChildPath(stagedInstall, stagingRoot, "staged Release tool install");
+    cpSync(sourceBundle, stagedInstall, { recursive: true });
+
+    const manifest = validateReleaseBundle(runtime, stagedInstall);
+    const installId = releaseInstallId(manifest);
+    preflightReleaseInstallSkills(runtime, stagedInstall, options.targetKinds);
+
+    const predecessor = resolveActiveInstallRoot(monkeHome);
+    const installRoot = activateStagedInstall({
+      homeDirectory,
+      installId,
+      manifest,
+      monkeHome,
+      stagedInstall
+    });
+    cleanupManagedInstalls(
+      monkeHome,
+      new Set([installRoot, ...(predecessor ? [predecessor] : [])])
+    );
+    cleanupStaleStagingDirectories(monkeHome, stagedInstall);
+
+    const postActivationFailures: string[] = [];
+    try {
+      runShellInstall(runtime, { binary: path.join(homeDirectory, ".local", "bin", "mt") });
+    } catch (error) {
+      postActivationFailures.push(
+        `Shell integration is incomplete. Retry with: mt shell install\n${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    try {
+      await runReleaseInstallSkillsLocked(runtime, installRoot, {
+        interactive: options.interactive === true,
+        targetKinds: options.targetKinds
+      });
+    } catch (error) {
+      postActivationFailures.push(
+        `Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    try {
+      reconcileCodiff(runtime, manifest.minimumCodiffVersion);
+    } catch (error) {
+      postActivationFailures.push(
+        `Codiff reconciliation failed. Retry with: mt install-dependencies\n${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    if (postActivationFailures.length > 0) {
+      throw new MonkeError(
+        `The Release install is active, but ${postActivationFailures.length} post-activation step(s) are incomplete:\n${postActivationFailures.join("\n")}`
+      );
+    }
+    return { installId, manifest };
+  });
+
+  createLogger(runtime).success(
+    `Activated Release install ${activated.manifest.releaseVersion} at ${path.join(monkeHome, "installs", activated.installId)}`
+  );
 }
 
 /** Activate a fully built Local tool install and finish its installation-adjacent work. */
@@ -94,6 +183,7 @@ export async function runActivateLocalInstall(
     const predecessor = resolveActiveInstallRoot(monkeHome);
     const installRoot = activateStagedInstall({
       homeDirectory,
+      installId: manifest.installId,
       manifest,
       monkeHome,
       stagedInstall
@@ -135,15 +225,16 @@ export async function runActivateLocalInstall(
 
 function activateStagedInstall(options: {
   homeDirectory: string;
-  manifest: LocalInstallManifest;
+  installId: string;
+  manifest: ToolInstallManifest;
   monkeHome: string;
   stagedInstall: string;
 }) {
   const installsRoot = path.join(options.monkeHome, "installs");
-  const installRoot = path.join(installsRoot, options.manifest.installId);
+  const installRoot = path.join(installsRoot, options.installId);
   mkdirSync(installsRoot, { recursive: true });
   if (lstatSync(installRoot, { throwIfNoEntry: false })) {
-    throw new MonkeError(`Managed install identity already exists: ${options.manifest.installId}`);
+    throw new MonkeError(`Managed install identity already exists: ${options.installId}`);
   }
   const stableMt = path.join(options.homeDirectory, ".local", "bin", "mt");
   const stableMonke = path.join(options.homeDirectory, ".local", "bin", "monke");
@@ -211,10 +302,10 @@ function cleanupManagedInstalls(monkeHome: string, retainedRoots: Set<string>) {
       continue;
     }
     try {
-      const manifest = LocalInstallManifestSchema.parse(
+      const manifest = ToolInstallManifestSchema.parse(
         JSON.parse(readFileSync(manifestPath, "utf-8"))
       );
-      if (manifest.installId !== entry.name) {
+      if (installIdForManifest(manifest) !== entry.name) {
         continue;
       }
     } catch {
@@ -225,6 +316,86 @@ function cleanupManagedInstalls(monkeHome: string, retainedRoots: Set<string>) {
       rmSync(installRoot, { recursive: true });
     }
   }
+}
+
+function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
+  const resolvedRoot = path.resolve(bundleRoot);
+  assertDirectory(resolvedRoot, "Release bundle is missing");
+  assertExecutableFile(path.join(resolvedRoot, "mt"));
+  assertExecutableFile(path.join(resolvedRoot, "install.sh"));
+  assertRegularFile(path.join(resolvedRoot, "instructions", "GLOBAL.md"));
+  const manifestPath = path.join(resolvedRoot, INSTALL_MANIFEST_FILENAME);
+  let manifest: ReleaseInstallManifest;
+  try {
+    manifest = ReleaseInstallManifestSchema.parse(JSON.parse(readFileSync(manifestPath, "utf-8")));
+  } catch {
+    throw new MonkeError(`Invalid Release Install manifest: ${manifestPath}`);
+  }
+  if (manifest.toolBuildIdentity !== runtime.toolBuildIdentity) {
+    throw new MonkeError("Release executable identity does not match its Install manifest");
+  }
+  if (manifest.platform !== releasePlatform(runtime)) {
+    throw new MonkeError(`Release bundle platform does not match ${releasePlatform(runtime)}`);
+  }
+  const actualHashes = hashReleaseGuidance(resolvedRoot);
+  if (
+    JSON.stringify(Object.keys(actualHashes)) !==
+      JSON.stringify(Object.keys(manifest.guidanceHashes)) ||
+    Object.keys(actualHashes).some(
+      (filePath) => actualHashes[filePath] !== manifest.guidanceHashes[filePath]
+    )
+  ) {
+    throw new MonkeError("Release guidance does not match its original hashes");
+  }
+  return manifest;
+}
+
+function hashReleaseGuidance(bundleRoot: string) {
+  const hashes: Record<string, string> = {};
+  for (const folder of ["codex", "imported", "internal", "references"]) {
+    const root = path.join(bundleRoot, "skills", folder);
+    assertDirectory(root, "Release guidance folder is missing");
+    for (const filePath of listRegularFiles(root)) {
+      const relativePath = path.relative(bundleRoot, filePath).replaceAll(path.sep, "/");
+      hashes[relativePath] = createHash("sha256").update(readFileSync(filePath)).digest("hex");
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(hashes).toSorted(([left], [right]) => left.localeCompare(right))
+  );
+}
+
+function listRegularFiles(root: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listRegularFiles(entryPath));
+    } else if (entry.isFile()) {
+      files.push(entryPath);
+    } else {
+      throw new MonkeError(`Release guidance contains an unsupported entry: ${entryPath}`);
+    }
+  }
+  return files;
+}
+
+function releasePlatform(runtime: Runtime) {
+  if (runtime.platform === "darwin" && runtime.architecture === "arm64") {
+    return "macos-arm64";
+  }
+  if (runtime.platform === "linux" && runtime.architecture === "x64") {
+    return "linux-x64";
+  }
+  throw new MonkeError("Unsupported Release platform; supported platforms: macOS arm64, Linux x64");
+}
+
+function releaseInstallId(manifest: ReleaseInstallManifest) {
+  return `release-${manifest.releaseVersion}-${manifest.platform}`;
+}
+
+function installIdForManifest(manifest: ToolInstallManifest) {
+  return manifest.installKind === "local" ? manifest.installId : releaseInstallId(manifest);
 }
 
 function cleanupStaleStagingDirectories(monkeHome: string, activeStage: string) {
@@ -260,6 +431,13 @@ function assertExecutableFile(executable: string) {
   const stat = lstatSync(executable, { throwIfNoEntry: false });
   if (!stat?.isFile()) {
     throw new MonkeError(`Staged mt executable is missing: ${executable}`);
+  }
+}
+
+function assertRegularFile(filePath: string) {
+  const stat = lstatSync(filePath, { throwIfNoEntry: false });
+  if (!stat?.isFile()) {
+    throw new MonkeError(`Release bundle file is missing: ${filePath}`);
   }
 }
 

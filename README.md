@@ -17,6 +17,35 @@ vp run test
 
 `monke-tools` remains intentionally Bun-native. Use `vp run test` instead of the built-in `vp test` so Vitest runs under Bun, and use `vp run install:local` instead of `vp build` or `vp pack` because the installed artifact is a Bun-compiled standalone executable rather than a Vite web app or JavaScript library package.
 
+## Public Release install
+
+Install the newest stable public Release with the bootstrap from `main`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/monke-together-strong/monke-tools/main/install.sh | sh
+```
+
+To inspect the bootstrap before running it:
+
+```bash
+curl -fsSLo monke-tools-install.sh https://raw.githubusercontent.com/monke-together-strong/monke-tools/main/install.sh
+less monke-tools-install.sh
+sh monke-tools-install.sh
+rm monke-tools-install.sh
+```
+
+The bootstrap supports macOS arm64 and Linux x64. It queries every page needed from GitHub's Releases API, ignores drafts, prereleases, and other tag families, then selects the highest stable `monke-tools-v<version>` Release. `GH_TOKEN` takes precedence over `GITHUB_TOKEN` when either is already set; public anonymous access is used otherwise. It downloads the platform archive and published checksums over HTTPS and requires the archive's SHA-256 to match both the checksums asset and GitHub's asset-digest metadata before it runs the installer contained in that bundle. Lookup, platform, download, checksum, or extraction failures do not invoke installation logic.
+
+The bundle installer activates the executable, Install manifest, Distributed guidance, and Global agent instructions from the same version under `~/.monke/installs`, behind the atomic `~/.monke/current` pointer. In a terminal it asks for Skill install targets after core activation. Automation can select built-in targets without prompting:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/monke-together-strong/monke-tools/main/install.sh | sh -s -- --targets codex claude cursor
+```
+
+A noninteractive install without explicit or previously saved targets leaves the valid core install active and recommends `mt skills configure`; use that command to select targets later. Release-mode Skill and reference projections point into ordinary writable files in the Active tool install, while their original hashes remain in its Install manifest.
+
+Only the current Bash or Zsh startup file is configured. Unsupported shells are left unchanged and receive manual PATH guidance. On Apple Silicon Macs, Codiff is reconciled after core activation using the Release manifest's minimum version: a missing or outdated Homebrew-owned Codiff is installed or upgraded through the checksummed cask. A Skill, Global instruction, or Codiff failure after activation leaves the Release core active. Retry target reconciliation with `mt skills configure` and dependency reconciliation with `mt install-dependencies`.
+
 ## Local install
 
 ```bash
@@ -41,7 +70,7 @@ The `create-pr` skill reads repository-root `PR.md` guidance when present, other
 
 A qualifying push to `main` continuously publishes the next stable patch Release under a `monke-tools-v<version>` tag. The version is derived from the highest existing stable monke-tools tag inside the serialized publication workflow and is not committed back to `main`. Release-owned inputs are CLI source, root dependencies and build configuration, Distributed skills and references, Global agent instructions, Local and Release installer behavior, and Release packaging behavior. Documentation-only changes and changes confined to other workspace packages do not publish an `mt` Release.
 
-Each Release contains complete archives for macOS arm64 and Linux x64 plus one checksums asset. Platform jobs compile the selected version into `mt`, build the archive, execute `mt --version`, and run the shared archive verifier. Publication waits for both jobs, generates checksums covering both archives, and re-verifies their manifests, source commit, platform identities, guidance hashes, and checksums before attaching every asset to a draft and making it public. Repository Release immutability then binds the tag, commit, and assets.
+Each Release contains complete archives for macOS arm64 and Linux x64 plus one checksums asset. Platform jobs compile the selected version into `mt`, build the archive, execute `mt --version`, and run the shared archive verifier. Publication waits for both jobs, generates checksums covering both archives, and re-verifies their manifests, source commit, platform identities, guidance hashes, and checksums before attaching every asset to a draft and making it public. Repository Release immutability then binds the tag, commit, and assets. The public `install.sh` bootstrap is also a release-owned input, so changes to discovery or verification behavior trigger a new Mainline release.
 
 Pull-request CI remains the full-test boundary. A direct `main` push runs `vp check` plus the two platform builds and Release contract validation, but it does not rerun `vp run test`. Existing Tegami package versioning and publication continues independently in the same workflow.
 

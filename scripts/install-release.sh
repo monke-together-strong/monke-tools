@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-BUNDLE_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+BUNDLE_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 
 case "${1:-}" in
   --verify)
@@ -22,7 +22,12 @@ case "${1:-}" in
     "$BUNDLE_ROOT/mt" --version >/dev/null
     ;;
   *)
-    printf '%s\n' 'Install this bundle through the supported monke-tools Release bootstrap.' >&2
-    exit 2
+    if [ -t 0 ]; then
+      exec "$BUNDLE_ROOT/mt" activate-release-install "$BUNDLE_ROOT" --interactive "$@"
+    fi
+    if [ -t 1 ] && [ -r /dev/tty ] && (: </dev/tty) 2>/dev/null; then
+      exec "$BUNDLE_ROOT/mt" activate-release-install "$BUNDLE_ROOT" --interactive "$@" </dev/tty
+    fi
+    exec "$BUNDLE_ROOT/mt" activate-release-install "$BUNDLE_ROOT" "$@"
     ;;
 esac

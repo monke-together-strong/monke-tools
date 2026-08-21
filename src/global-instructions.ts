@@ -29,6 +29,26 @@ const ConfiguredDirectorySchema = z.string().refine((value) => value.trim().leng
   message: "Must not be empty"
 });
 
+/** Validate a known Global instruction destination without changing it. */
+export function preflightGlobalInstructions(
+  target: { kind: SkillInstallTargetKind },
+  options: GlobalInstructionsOptions & { sourceCheckout: string }
+) {
+  const destinationPath = globalInstructionsPath(target, options);
+  if (destinationPath === null) {
+    return;
+  }
+  const body = readFileSync(
+    path.join(options.sourceCheckout, GLOBAL_INSTRUCTIONS_RELATIVE_PATH),
+    "utf-8"
+  );
+  const destinationStat = lstatSync(destinationPath, { throwIfNoEntry: false });
+  const existingContent = destinationStat
+    ? readFileSync(resolveInstructionFile(destinationPath), "utf-8")
+    : null;
+  reconcileManagedInstructions(existingContent, body, target.kind === "codex");
+}
+
 /** Reconcile the selected harness's Managed instruction section from the source snapshot. */
 export function reconcileGlobalInstructions(
   target: { kind: SkillInstallTargetKind },

@@ -287,6 +287,7 @@ describe("Mainline Release selection", () => {
     ["src/index.ts", true],
     ["skills/codex/codex-chrome-use/SKILL.md", true],
     ["skills/internal/implement/SKILL.md", true],
+    ["install.sh", true],
     ["scripts/install-release.sh", true],
     ["bun.lock", false],
     ["README.md", false],

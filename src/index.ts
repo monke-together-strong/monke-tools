@@ -5,7 +5,7 @@ import { Argument, Command, Option } from "@commander-js/extra-typings";
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runDiff, runDiffInteractive } from "./diff.ts";
-import { runActivateLocalInstall } from "./installation.ts";
+import { runActivateLocalInstall, runActivateReleaseInstall } from "./installation.ts";
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
@@ -122,6 +122,24 @@ function createProgram(
     .action(() => {
       runInstallDependencies(runtime);
     });
+
+  program
+    .command("activate-release-install", { hidden: true })
+    .argument("<bundle-root>")
+    .option("--interactive")
+    .addOption(
+      new Option(
+        "--targets <targets...>",
+        "Replace the saved Skill install preference with built-in targets"
+      ).choices(["codex", "claude", "cursor"])
+    )
+    .action((bundleRoot, options) =>
+      runActivateReleaseInstall(runtime, {
+        bundleRoot,
+        interactive: options.interactive === true,
+        targetKinds: options.targets
+      })
+    );
 
   program
     .command("activate-local-install", { hidden: true })

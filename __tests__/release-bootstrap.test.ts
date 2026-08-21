@@ -1,0 +1,278 @@
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
+
+import { makeTempDir, write, writeExecutable } from "./helpers.ts";
+
+const repositoryRoot = path.resolve(import.meta.dirname, "..");
+
+interface ReleaseResponse {
+  assets?: { digest: string; name: string }[];
+  body?: string;
+  draft: boolean;
+  prerelease: boolean;
+  tag_name: string;
+}
+
+function sha256(contents: Uint8Array) {
+  return createHash("sha256").update(contents).digest("hex");
+}
+
+function prepareBootstrapFixture(
+  options: {
+    corruptChecksum?: boolean;
+    failDownload?: boolean;
+    failLookup?: boolean;
+    invalidArchive?: boolean;
+    machine?: string;
+    missingAsset?: boolean;
+    system?: string;
+  } = {}
+) {
+  const sandbox = makeTempDir("release-bootstrap");
+  const bin = path.join(sandbox, "bin");
+  const responses = path.join(sandbox, "responses");
+  const bundleRoot = path.join(sandbox, "bundle");
+  const platform = options.system === "Darwin" ? "macos-arm64" : "linux-x64";
+  const archiveName = `monke-tools-v1.2.3-${platform}.tar.gz`;
+  const checksumName = "monke-tools-v1.2.3-checksums.txt";
+  const archivePath = path.join(responses, archiveName);
+  const checksumPath = path.join(responses, checksumName);
+  const installLog = path.join(sandbox, "install.log");
+  const curlLog = path.join(sandbox, "curl.log");
+  mkdirSync(responses, { recursive: true });
+  writeExecutable(
+    path.join(bundleRoot, "install.sh"),
+    `#!/bin/sh
+printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
+`
+  );
+  if (options.invalidArchive) {
+    write(responses, archiveName, "not a tar archive\n");
+  } else {
+    Bun.spawnSync({ cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, "."] });
+  }
+  const archiveHash = sha256(readFileSync(archivePath));
+  write(
+    responses,
+    checksumName,
+    `${options.corruptChecksum ? "0".repeat(64) : archiveHash}  ${archiveName}\n`
+  );
+  const releasePage = (...values: ReleaseResponse[]) => `${JSON.stringify(values)}\n`;
+  const selectedRelease: ReleaseResponse = {
+    assets: options.missingAsset
+      ? [{ digest: `sha256:${sha256(readFileSync(checksumPath))}`, name: checksumName }]
+      : [
+          { digest: `sha256:${archiveHash}`, name: archiveName },
+          { digest: `sha256:${sha256(readFileSync(checksumPath))}`, name: checksumName }
+        ],
+    draft: false,
+    prerelease: false,
+    tag_name: "monke-tools-v1.2.3"
+  };
+  write(
+    responses,
+    "page-1.json",
+    releasePage(
+      {
+        body: 'Example text containing "draft": false and "tag_name": "monke-tools-v99.0.0".',
+        draft: false,
+        prerelease: false,
+        tag_name: "@monke/other@9.0.0"
+      },
+      { draft: false, prerelease: false, tag_name: "monke-tools-v1.2.2" }
+    )
+  );
+  write(
+    responses,
+    "page-2.json",
+    releasePage(
+      { draft: false, prerelease: true, tag_name: "monke-tools-v1.3.0" },
+      selectedRelease,
+      { draft: true, prerelease: false, tag_name: "monke-tools-v9.0.0" }
+    )
+  );
+  write(responses, "page-3.json", "[]\n");
+  write(responses, "selected-release.json", `${JSON.stringify(selectedRelease)}\n`);
+  writeExecutable(
+    path.join(bin, "uname"),
+    `#!/bin/sh
+case "$1" in
+  -s) printf '%s\n' ${JSON.stringify(options.system ?? "Linux")} ;;
+  -m) printf '%s\n' ${JSON.stringify(options.machine ?? "x86_64")} ;;
+esac
+`
+  );
+  writeExecutable(
+    path.join(bin, "curl"),
+    `#!/bin/sh
+set -eu
+output=
+url=
+read_config=false
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o|--output) output=$2; shift 2 ;;
+    --config) [ "$2" = - ] && read_config=true; shift 2 ;;
+    http://*|https://*) url=$1; shift ;;
+    *) shift ;;
+  esac
+done
+[ "$read_config" = false ] || cat >/dev/null
+printf '%s\n' "$url" >> ${JSON.stringify(curlLog)}
+${options.failLookup ? "case \"$url\" in *'page=1') exit 88 ;; esac" : ""}
+${options.failDownload ? `case "$url" in *${archiveName}) exit 89 ;; esac` : ""}
+case "$url" in
+  */releases/tags/monke-tools-v1.2.3) source=${JSON.stringify(path.join(responses, "selected-release.json"))} ;;
+  *'page=1') source=${JSON.stringify(path.join(responses, "page-1.json"))} ;;
+  *'page=2') source=${JSON.stringify(path.join(responses, "page-2.json"))} ;;
+  *'page=3') source=${JSON.stringify(path.join(responses, "page-3.json"))} ;;
+  *${archiveName}) source=${JSON.stringify(archivePath)} ;;
+  *${checksumName}) source=${JSON.stringify(checksumPath)} ;;
+  *) printf 'unexpected URL: %s\n' "$url" >&2; exit 91 ;;
+esac
+if [ -n "$output" ]; then cp "$source" "$output"; else cat "$source"; fi
+`
+  );
+  return { archiveName, bin, curlLog, installLog, sandbox };
+}
+
+describe("public Release bootstrap", () => {
+  test("selects and verifies the highest paginated stable Release", () => {
+    const fixture = prepareBootstrapFixture();
+    const secret = "github-token-must-not-be-logged";
+    const result = Bun.spawnSync({
+      cmd: ["sh", path.join(repositoryRoot, "install.sh"), "--targets", "codex"],
+      env: {
+        GH_TOKEN: secret,
+        HOME: path.join(fixture.sandbox, "home"),
+        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
+        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
+        PATH: `${fixture.bin}:/usr/bin:/bin`,
+        SHELL: "/bin/sh"
+      },
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(fixture.installLog, "utf-8").split("\n").filter(Boolean)).toStrictEqual([
+      "--targets",
+      "codex"
+    ]);
+    const curlLog = readFileSync(fixture.curlLog, "utf-8");
+    expect(curlLog).toContain("page=3");
+    expect(curlLog).toContain("monke-tools-v1.2.3-linux-x64.tar.gz");
+    expect(curlLog).not.toContain(secret);
+  });
+
+  test("maps Apple Silicon Macs to the macOS Release asset", () => {
+    const fixture = prepareBootstrapFixture({ machine: "arm64", system: "Darwin" });
+    const result = Bun.spawnSync({
+      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
+      env: {
+        HOME: path.join(fixture.sandbox, "home"),
+        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
+        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
+        PATH: `${fixture.bin}:/usr/bin:/bin`,
+        SHELL: "/bin/sh"
+      },
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(fixture.curlLog, "utf-8")).toContain(fixture.archiveName);
+  });
+
+  test("uses GITHUB_TOKEN without exposing it in command logs", () => {
+    const fixture = prepareBootstrapFixture();
+    const secret = "fallback-github-token-must-not-be-logged";
+    const result = Bun.spawnSync({
+      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
+      env: {
+        GITHUB_TOKEN: secret,
+        HOME: path.join(fixture.sandbox, "home"),
+        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
+        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
+        PATH: `${fixture.bin}:/usr/bin:/bin`,
+        SHELL: "/bin/sh"
+      },
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(fixture.curlLog, "utf-8")).not.toContain(secret);
+  });
+
+  test("unsupported platforms fail before network access or installation changes", () => {
+    const fixture = prepareBootstrapFixture({ machine: "x86_64", system: "Darwin" });
+    const result = Bun.spawnSync({
+      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
+      env: {
+        HOME: path.join(fixture.sandbox, "home"),
+        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
+        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
+        PATH: `${fixture.bin}:/usr/bin:/bin`,
+        SHELL: "/bin/sh"
+      },
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain("macOS arm64, Linux x64");
+    expect(existsSync(fixture.curlLog)).toBeFalsy();
+    expect(existsSync(fixture.installLog)).toBeFalsy();
+  });
+
+  test("checksum failure prevents bundle-owned installer delegation", () => {
+    const fixture = prepareBootstrapFixture({ corruptChecksum: true });
+    const result = Bun.spawnSync({
+      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
+      env: {
+        HOME: path.join(fixture.sandbox, "home"),
+        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
+        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
+        PATH: `${fixture.bin}:/usr/bin:/bin`,
+        SHELL: "/bin/sh"
+      },
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain("checksum");
+    expect(existsSync(fixture.installLog)).toBeFalsy();
+  });
+
+  test.each([
+    { expected: "GitHub Release lookup failed", options: { failLookup: true } },
+    { expected: "archive download failed", options: { failDownload: true } },
+    { expected: "missing platform asset", options: { missingAsset: true } },
+    { expected: "archive extraction failed", options: { invalidArchive: true } }
+  ])("$expected prevents installer delegation", ({ expected, options }) => {
+    const fixture = prepareBootstrapFixture(options);
+    const monkeHome = path.join(fixture.sandbox, "monke-home");
+    const result = Bun.spawnSync({
+      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
+      env: {
+        HOME: path.join(fixture.sandbox, "home"),
+        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
+        MONKE_HOME: monkeHome,
+        PATH: `${fixture.bin}:/usr/bin:/bin`,
+        SHELL: "/bin/sh"
+      },
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain(expected);
+    expect(existsSync(fixture.installLog)).toBeFalsy();
+    expect(existsSync(monkeHome)).toBeFalsy();
+  });
+});
