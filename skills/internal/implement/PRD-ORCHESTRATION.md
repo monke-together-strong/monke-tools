@@ -1,8 +1,8 @@
 # PRD Orchestration
 
-Use this when /implement is given a PRD that has implementation issues attached.
+Use this when `$implement` is given a PRD that has implementation issues attached.
 
-The PRD `/implement` thread is a coordinator.
+The PRD `$implement` thread is a coordinator.
 
 A separate thread is only a conversation boundary. Keep work in the current
 checkout/worktree by default. Do not create or switch branches/worktrees unless
@@ -19,7 +19,7 @@ the user explicitly asks for filesystem isolation.
 4. Order the issues by their `Blocked by` relationships.
 5. For each attached issue, create a fresh separate thread, not a fork, using
    the delegation prompt template below.
-6. Monitor the current issue implementation with `/polling` using an
+6. Monitor the current issue implementation with `$polling` using an
    eight-minute heartbeat. A blocker or clear course deviation is work to do;
    completion ends that issue's polling loop; otherwise keep waiting.
 7. When a worker or review reports a finding deferred to a later attached issue
@@ -35,7 +35,7 @@ When creating a thread for an attached issue, use this template and do
 not add generic repo/process reminders.
 
 ```text
-/implement <attached issue URL>
+$implement <attached issue URL>
 
 Parent PRD: <parent PRD URL>. Use it as background context for product intent and constraints only, do not implement the entire PRD.
 ```

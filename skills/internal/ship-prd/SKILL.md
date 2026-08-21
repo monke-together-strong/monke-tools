@@ -13,36 +13,36 @@ grill-me session has already completed; do not run grill-me.
 
 1. Resolve the PRD reference.
    - If the user explicitly passed a PRD issue, path, or link, use it. Do not
-     run `/to-spec`.
-   - Otherwise, run `/to-spec` in the current thread. Then make sure all
+     run `$to-spec`.
+   - Otherwise, run `$to-spec` in the current thread. Then make sure all
      decisions from the grill-me session have been captured. Update the PRD
      before continuing if anything important is missing.
 2. Identify the durable PRD reference: issue URL/number, local file path, or
    document link. Do not start implementation from a chat-only PRD.
 3. Decide whether to create task issues before implementation.
    - If the user explicitly says "with issues", "use issues", "break into
-     issues", "run to-tickets", or similar, run `/to-tickets` before
+     issues", "run to-tickets", or similar, run `$to-tickets` before
      implementation. This is a routing override, not a suggestion.
 4. Spawn the implementation checkout worktree with monke tools:
    `mt spawn <session-name> --codex`
 5. Create a Codex thread in that new worktree's Codex project and confirm it is visible there, with the following message:
-   `/implement <durable PRD reference>`
+   `$implement <durable PRD reference>`
    - Do not restate repo, branch, test, or completion instructions already
-     owned by `/implement`, repo docs, or the PRD.
-   - If `/to-tickets` was run, pass the same parent PRD reference after the
+     owned by `$implement`, repo docs, or the PRD.
+   - If `$to-tickets` was run, pass the same parent PRD reference after the
      issues are created.
-   - If `/implement` stops after setup, planning, or branch creation without
+   - If `$implement` stops after setup, planning, or branch creation without
      commits and verification, treat it as incomplete and resume or report the
      blocker.
-6. After implementation completes, commit if needed then run `/autoreview` on a separate
+6. After implementation completes, commit if needed then run `$autoreview` on a separate
    thread, pass it the PRD. When the change has a user-visible surface (UI,
    CLI, API, generated artifact), the same thread pairs it with
-   `behavior-validator`, using the PRD as the behavior contract. Wait for the
+   `$behavior-validator`, using the PRD as the behavior contract. Wait for the
    thread to finish before creating the PR.
-   - Always run this. Do not treat `/implement`, `/code-review`, tests, lint, or
+   - Always run this. Do not treat `$implement`, `$code-review`, tests, lint, or
      screenshots from implementation as a substitute.
 7. Create a ready-for-review PR from the current thread.
-8. Run `/shepherd-pr` on a separate thread, then stop. The shepherding
+8. Run `$shepherd-pr` on a separate thread, then stop. The shepherding
    thread owns polling and follow-up until merge-ready. It must not merge.
 
 ## Thread Titles
@@ -64,22 +64,22 @@ creation time; do not create them with generic titles and rename later.
 
 ## Monitoring
 
-Monitor the implementation and review threads with `/polling` using an
+Monitor the implementation and review threads with `$polling` using an
 eight-minute heartbeat. A blocker or clear course deviation is work to do;
 completion ends that thread's polling loop; otherwise keep waiting.
 
 ## Task Issues
 
-"With issues" means: run `/to-tickets` before launching `/implement`, then run
-`/implement` against the parent PRD reference. Do not choose task ordering in
-this skill; `/implement` owns direct PRD implementation versus attached issue
+"With issues" means: run `$to-tickets` before launching `$implement`, then run
+`$implement` against the parent PRD reference. Do not choose task ordering in
+this skill; `$implement` owns direct PRD implementation versus attached issue
 orchestration.
 
 ## Boundaries
-- Do not paste the full PRD body or extra constraints into `/implement`; use
-  the slash command with the durable reference.
+- Do not paste the full PRD body or extra constraints into `$implement`; invoke
+  the skill with the durable reference.
 - Do not create extra code commits from this orchestration thread.
-- Let `/implement` own implementation commits.
-- Let the review thread own closeout fixes and reruns for `/autoreview` and
-  `behavior-validator` findings.
-- Let `/shepherd-pr` own PR polling and reviewer follow-up after the PR exists.
+- Let `$implement` own implementation commits.
+- Let the review thread own closeout fixes and reruns for `$autoreview` and
+  `$behavior-validator` findings.
+- Let `$shepherd-pr` own PR polling and reviewer follow-up after the PR exists.

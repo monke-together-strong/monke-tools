@@ -47,7 +47,7 @@ base or current `HEAD` to its full commit SHA before implementation starts and
 record it as the final-review fixed point. Keep it unchanged through every
 closeout rerun.
 
-Use /tdd where possible, at pre-agreed seams.
+Use `$tdd` where possible, at pre-agreed seams.
 
 Run targeted typechecking, linting, and single test files regularly.
 

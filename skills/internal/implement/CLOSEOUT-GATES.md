@@ -2,7 +2,7 @@
 
 Use this procedure when an implementation thread delegates final verification to
 a closeout verifier subagent. The verifier may inspect the work target, run
-commands, collect evidence, and run `/code-review`, but it must not spawn
+commands, collect evidence, and run `$code-review`, but it must not spawn
 another verifier, make source changes, or commit.
 
 Inputs:
@@ -39,7 +39,7 @@ disposition:
 - accepted out of scope, with the reason
 
 Implementation-thread evidence is enough only when it is auditably specific. If
-an item is missing, block before `/code-review`. For red/green or before/after
+an item is missing, block before `$code-review`. For red/green or before/after
 requirements, both sides must be traceable.
 
 ## Work Evidence Gate
@@ -64,13 +64,13 @@ closeout list.
 
 ## Review Gate
 
-Run `/code-review` exactly as specified by the code-review skill.
+Run `$code-review` exactly as specified by the code-review skill.
 
-- Work target present: `/code-review <review fixed point> <work target>`
-- Work target `none`: `/code-review <review fixed point>`; report that Spec may
+- Work target present: `$code-review <review fixed point> <work target>`
+- Work target `none`: `$code-review <review fixed point>`; report that Spec may
   skip for lack of a source
 
-This authorizes all `/code-review` sub-agents.
+This authorizes all `$code-review` sub-agents.
 
 ## Tracker Closeout
 
