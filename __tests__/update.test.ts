@@ -26,6 +26,7 @@ const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 function prepareActiveRelease(monkeHome: string, version: string, activate = true) {
   const installRoot = path.join(monkeHome, "installs", `release-${version}-linux-x64`);
   const guidance = {
+    "instructions/GLOBAL.md": "Release baseline.\n",
     "skills/codex/.keep": "\n",
     "skills/imported/.keep": "\n",
     "skills/internal/example/SKILL.md": "---\nname: example\n---\n",
@@ -139,6 +140,7 @@ function prepareReleaseAsset(
   const checksumsName = `${tag}-checksums.txt`;
   const bundleRoot = path.join(sandbox, `bundle-${version}`);
   const guidance = {
+    "instructions/GLOBAL.md": `Release ${version} baseline.\n`,
     "skills/codex/.keep": "\n",
     "skills/imported/.keep": "\n",
     "skills/internal/example/SKILL.md": `---\nname: example-${version}\n---\n`,
@@ -147,7 +149,6 @@ function prepareReleaseAsset(
   for (const [filePath, contents] of Object.entries(guidance)) {
     write(bundleRoot, filePath, contents);
   }
-  write(bundleRoot, "instructions/GLOBAL.md", `Release ${version} baseline.\n`);
   writeExecutable(path.join(bundleRoot, "install.sh"), "#!/bin/sh\nexit 0\n");
   const executableContents = `#!/bin/sh\nprintf '%s\\n' '${version}'\n`;
   writeExecutable(path.join(bundleRoot, "mt"), executableContents);

@@ -66,6 +66,7 @@ function prepareReleaseBundle(
     artifactName: `monke-tools-v1.2.3-${platform}.tar.gz`,
     createdAt: "2026-08-21T12:34:56.000Z",
     guidanceHashes: {
+      "instructions/GLOBAL.md": hash("sha256", "Release baseline.\n", "hex"),
       "skills/codex/.keep": hash("sha256", "\n", "hex"),
       "skills/imported/.keep": hash("sha256", "\n", "hex"),
       "skills/internal/example/SKILL.md": hash("sha256", skillContents, "hex"),

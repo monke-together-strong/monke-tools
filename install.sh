@@ -111,7 +111,7 @@ parse_release_page() {
   ' "$1"
 }
 
-parse_asset_digest() {
+parse_selected_release() {
   awk -v target="$2" '
     function finish_object() {
       if (names[depth] == target) {
@@ -136,6 +136,14 @@ parse_asset_digest() {
           } else if (character == "\"") {
             in_string = 0
             if (string_is_value) {
+              if (depth == 1 && keys[depth] == "tag_name") {
+                tag_matches += 1
+                tag = value
+              }
+              if (depth == 1 && keys[depth] == "target_commitish") {
+                commit_matches += 1
+                commit = value
+              }
               if (keys[depth] == "name") names[depth] = value
               if (keys[depth] == "digest") digests[depth] = value
               expecting[depth] = 0
@@ -172,63 +180,8 @@ parse_asset_digest() {
     END {
       if (matches == 0) exit 3
       if (matches != 1 || invalid) exit 4
-      print result
-    }
-  ' "$1"
-}
-
-parse_top_level_string() {
-  awk -v target="$2" '
-    {
-      for (position = 1; position <= length($0); position += 1) {
-        character = substr($0, position, 1)
-        if (in_string) {
-          if (escaped) {
-            value = value character
-            escaped = 0
-          } else if (character == "\\") {
-            escaped = 1
-          } else if (character == "\"") {
-            in_string = 0
-            if (string_is_value) {
-              if (depth == 1 && keys[depth] == target) {
-                matches += 1
-                result = value
-              }
-              expecting[depth] = 0
-            } else {
-              pending = value
-            }
-          } else {
-            value = value character
-          }
-          continue
-        }
-        if (character == "{") {
-          expecting[depth] = 0
-          depth += 1
-        } else if (character == "}") {
-          delete keys[depth]
-          delete expecting[depth]
-          depth -= 1
-        } else if (character == "\"") {
-          in_string = 1
-          string_is_value = expecting[depth]
-          value = ""
-        } else if (character == ":") {
-          keys[depth] = pending
-          pending = ""
-          expecting[depth] = 1
-        } else if (character == ",") {
-          keys[depth] = ""
-          expecting[depth] = 0
-          pending = ""
-        }
-      }
-    }
-    END {
-      if (matches != 1) exit 1
-      print result
+      if (tag_matches != 1 || commit_matches != 1) exit 5
+      print tag "\t" commit "\t" result
     }
   ' "$1"
 }
@@ -283,14 +236,22 @@ if ! github_curl -o "$selected_metadata" "$RELEASES_API/tags/$selected_tag"; the
   printf 'GitHub Release metadata lookup failed for %s\n' "$selected_tag" >&2
   exit 1
 fi
-metadata_tag=$(parse_top_level_string "$selected_metadata" tag_name) || {
-  printf 'Selected Release tag metadata is missing or ambiguous\n' >&2
+archive_name="$selected_tag-$PLATFORM.tar.gz"
+checksums_name="$selected_tag-checksums.txt"
+selected_contract="$WORK_DIRECTORY/selected-release.tsv"
+if parse_selected_release "$selected_metadata" "$archive_name" > "$selected_contract"; then
+  IFS="$tab" read -r metadata_tag selected_commit asset_digest < "$selected_contract"
+else
+  contract_status=$?
+  if [ "$contract_status" -eq 3 ]; then
+    printf 'Selected Release is missing platform asset %s\n' "$archive_name" >&2
+  elif [ "$contract_status" -eq 5 ]; then
+    printf 'Selected Release identity metadata is missing or ambiguous\n' >&2
+  else
+    printf 'Selected Release platform asset metadata is ambiguous or incomplete\n' >&2
+  fi
   exit 1
-}
-selected_commit=$(parse_top_level_string "$selected_metadata" target_commitish) || {
-  printf 'Selected Release commit metadata is missing or ambiguous\n' >&2
-  exit 1
-}
+fi
 if [ "$metadata_tag" != "$selected_tag" ]; then
   printf 'Selected Release tag metadata does not match %s\n' "$selected_tag" >&2
   exit 1
@@ -303,19 +264,6 @@ case "$selected_commit" in
   *[!0-9a-f]*) printf 'Selected Release commit metadata is invalid\n' >&2; exit 1 ;;
 esac
 
-archive_name="$selected_tag-$PLATFORM.tar.gz"
-checksums_name="$selected_tag-checksums.txt"
-if asset_digest=$(parse_asset_digest "$selected_metadata" "$archive_name"); then
-  :
-else
-  asset_status=$?
-  if [ "$asset_status" -eq 3 ]; then
-    printf 'Selected Release is missing platform asset %s\n' "$archive_name" >&2
-  else
-    printf 'Selected Release platform asset metadata is ambiguous or incomplete\n' >&2
-  fi
-  exit 1
-fi
 case "$asset_digest" in
   sha256:????????????????????????????????????????????????????????????????) ;;
   *) printf 'Selected Release asset has no valid SHA-256 digest metadata\n' >&2; exit 1 ;;

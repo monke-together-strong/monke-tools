@@ -58,7 +58,7 @@ export const ReleaseInstallManifestSchema = strictObject({
   createdAt: iso.datetime(),
   guidanceHashes: record(
     stringSchema().regex(
-      /^skills\/(?:codex|imported|internal|references)\/.+/u,
+      /^(?:instructions\/GLOBAL\.md|skills\/(?:codex|imported|internal|references)\/.+)$/u,
       "must be a projected guidance path"
     ),
     stringSchema().regex(/^[0-9a-f]{64}$/u, "must be a SHA-256 hash")

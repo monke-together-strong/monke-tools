@@ -247,6 +247,11 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
     if (manifest.artifactName !== expectedArchiveName) {
       throw new Error(`Release manifest artifact identity does not match ${expectedArchiveName}`);
     }
+    if (manifest.minimumCodiffVersion !== MINIMUM_CODIFF_VERSION_TEXT) {
+      throw new Error(
+        `Release manifest Codiff minimum does not match ${MINIMUM_CODIFF_VERSION_TEXT}`
+      );
+    }
     if (
       manifest.artifactDigest !==
       hash("sha256", readFileSync(path.join(extractedRoot, "mt")), "hex")

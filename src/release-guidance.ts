@@ -8,18 +8,23 @@ export const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "refer
 
 /** Hash the ordinary guidance files included in a Release bundle. */
 export function hashReleaseGuidance(bundleRoot: string) {
-  const hashes: Record<string, string> = {};
+  const globalInstructions = path.join(bundleRoot, "instructions", "GLOBAL.md");
+  const globalStat = lstatSync(globalInstructions, { throwIfNoEntry: false });
+  if (!globalStat?.isFile() || globalStat.isSymbolicLink()) {
+    throw new MonkeError(`Release guidance file is missing: ${globalInstructions}`);
+  }
+  const hashes = new Map([
+    ["instructions/GLOBAL.md", hash("sha256", readFileSync(globalInstructions), "hex")]
+  ]);
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     const root = path.join(bundleRoot, "skills", folder);
     assertGuidanceDirectory(root);
     for (const filePath of listRegularFiles(root)) {
       const relativePath = path.relative(bundleRoot, filePath).replaceAll(path.sep, "/");
-      hashes[relativePath] = hash("sha256", readFileSync(filePath), "hex");
+      hashes.set(relativePath, hash("sha256", readFileSync(filePath), "hex"));
     }
   }
-  return Object.fromEntries(
-    Object.entries(hashes).toSorted(([left], [right]) => left.localeCompare(right))
-  );
+  return Object.fromEntries([...hashes].toSorted(([left], [right]) => left.localeCompare(right)));
 }
 
 /** Require the same sorted Release guidance paths and hashes on both sides. */
@@ -43,6 +48,14 @@ export function findChangedReleaseGuidancePaths(
   expected: Record<string, string>
 ) {
   const actual = new Map<string, string | null>();
+  const globalInstructions = path.join(bundleRoot, "instructions", "GLOBAL.md");
+  const globalStat = lstatSync(globalInstructions, { throwIfNoEntry: false });
+  actual.set(
+    "instructions/GLOBAL.md",
+    globalStat?.isFile() && !globalStat.isSymbolicLink()
+      ? hash("sha256", readFileSync(globalInstructions), "hex")
+      : null
+  );
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     collectGuidanceEntries(path.join(bundleRoot, "skills", folder), bundleRoot, actual);
   }

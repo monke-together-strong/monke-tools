@@ -23,6 +23,7 @@ interface ManifestOverrides {
   artifactDigest?: string;
   createdAt?: string;
   guidanceHashes?: Record<string, string>;
+  minimumCodiffVersion?: string;
   platform?: "linux-x64" | "macos-arm64";
   schemaVersion?: number;
   toolBuildIdentity?: string;
@@ -34,6 +35,7 @@ interface ReleaseFixtureOptions {
   missingPath?: string;
   platform?: "linux-x64" | "macos-arm64";
   sandbox?: string;
+  tamperGlobalInstructions?: boolean;
 }
 
 function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
@@ -74,6 +76,7 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
         artifactName: archiveName,
         createdAt: "2026-08-21T12:34:56.000Z",
         guidanceHashes: {
+          "instructions/GLOBAL.md": hash("sha256", "# Global\n", "hex"),
           "skills/internal/example/SKILL.md": hash("sha256", skillContents, "hex"),
           "skills/references/internal/example.md": hash("sha256", referenceContents, "hex")
         },
@@ -96,6 +99,9 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
     const extraPath = path.join(bundleRoot, options.extraPath);
     mkdirSync(path.dirname(extraPath), { recursive: true });
     writeFileSync(extraPath, "unexpected\n", "utf-8");
+  }
+  if (options.tamperGlobalInstructions) {
+    writeFileSync(path.join(bundleRoot, "instructions", "GLOBAL.md"), "# Stale Global\n", "utf-8");
   }
   if (options.missingPath) {
     rmSync(path.join(bundleRoot, options.missingPath), { force: true, recursive: true });
@@ -170,6 +176,11 @@ describe("Release bundle verifier", () => {
       expected: /guidance hashes do not match/u,
       fixture: { manifest: { guidanceHashes: {} } },
       name: "changed Distributed guidance"
+    },
+    {
+      expected: /guidance hashes do not match/u,
+      fixture: { tamperGlobalInstructions: true },
+      name: "changed Global instructions"
     },
     {
       expected: /schemaVersion/u,
@@ -252,6 +263,26 @@ describe("Release bundle verifier", () => {
       "linux-x64"
     ]);
     expect(readFileSync(checksumPath, "utf-8").trim().split("\n")).toHaveLength(2);
+  });
+
+  test("requires one Codiff policy across platform archives", () => {
+    const directory = makeTempDir("release-assets-codiff-policy");
+    const source = makeReleaseArchive({ platform: "macos-arm64", sandbox: directory });
+    makeReleaseArchive({
+      manifest: { minimumCodiffVersion: "2.0.0" },
+      platform: "linux-x64",
+      sandbox: directory
+    });
+    writeReleaseChecksums(directory, RELEASE_VERSION);
+
+    expect(() =>
+      verifyReleaseAssets({
+        directory,
+        expectedGuidanceRoot: source.bundleRoot,
+        sourceCommit: SOURCE_COMMIT,
+        version: RELEASE_VERSION
+      })
+    ).toThrow(/Codiff minimum does not match 1\.9\.0/u);
   });
 
   test("builds an official bundle whose executable reports the selected version", () => {
