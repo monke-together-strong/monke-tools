@@ -354,11 +354,6 @@ export function withGlobalLock<T>(home: string, callback: () => T) {
   return withLockPath(path.join(home, "lock"), callback);
 }
 
-/** Run a synchronous installation mutation under the machine-wide installation lock. */
-export function withInstallationLock<T>(home: string, callback: () => T) {
-  return withLockPath(path.join(home, "locks", "installation.lock"), callback);
-}
-
 /** Run an asynchronous installation mutation under the machine-wide installation lock. */
 export async function withInstallationLockAsync<T>(home: string, callback: () => Promise<T>) {
   const release = acquireLockPath(path.join(home, "locks", "installation.lock"));

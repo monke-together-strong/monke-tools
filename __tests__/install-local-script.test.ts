@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   readlinkSync,
@@ -50,6 +51,7 @@ esac
     path.join(binDirectory, "bun"),
     `#!/bin/sh
 set -eu
+[ -f "$MONKE_HOME/locks/installation.lock" ]
 printf '%s\n' "$*" >> "$BUN_LOG"
 outfile=
 while [ "$#" -gt 0 ]; do
@@ -65,6 +67,7 @@ done
 /bin/cat > "$outfile" <<'EOF'
 #!/bin/sh
 set -eu
+[ -f "$MONKE_HOME/locks/installation.lock" ]
 printf '%s\n' "$*" >> "$MONKE_TOOLS_LOG"
 EOF
 /bin/chmod +x "$outfile"
@@ -116,7 +119,8 @@ describe("Local install refresh script", () => {
     expect(sourceCheckout).toBe(checkout);
     expect(activation).toContain(`--install-id ${path.basename(stagedInstall)}`);
     expect(activation).toContain("--source-commit 0123456789abcdef0123456789abcdef01234567");
-    expect(activation).toContain("--dirty --targets codex");
+    expect(activation).toContain("--dirty --installation-lock-held --targets codex");
+    expect(existsSync(path.join(monkeHome, "locks", "installation.lock"))).toBeFalsy();
   });
 
   test("two builds from the same commit receive distinct install identities", () => {

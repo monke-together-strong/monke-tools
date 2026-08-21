@@ -28,9 +28,13 @@ const GlobalMonkeConfigSchema = z.strictObject({
   skillInstallPreference: SkillInstallPreferenceSchema.optional(),
   version: z.literal(1, { error: "must be 1" })
 });
+const PersistedGlobalMonkeConfigSchema = GlobalMonkeConfigSchema.extend({
+  installedSourceCheckout: AbsolutePathSchema.optional()
+});
 
 type ParsedSkillInstallPreference = z.output<typeof SkillInstallPreferenceSchema>;
 type ParsedGlobalMonkeConfig = z.output<typeof GlobalMonkeConfigSchema>;
+type ParsedPersistedGlobalMonkeConfig = z.output<typeof PersistedGlobalMonkeConfigSchema>;
 
 /** Built-in Agent skill roots supported by monke-tools. */
 export type BuiltInSkillInstallTargetKind = "codex" | "claude" | "cursor";
@@ -79,7 +83,7 @@ export function loadGlobalMonkeConfig(home: string): GlobalMonkeConfig {
   }
 
   return normalizeGlobalMonkeConfig(
-    parseOwnedYamlFile(configPath, GlobalMonkeConfigSchema),
+    parseOwnedYamlFile(configPath, PersistedGlobalMonkeConfigSchema),
     configPath
   );
 }
@@ -101,7 +105,7 @@ function getGlobalConfigPath(home: string) {
 }
 
 function normalizeGlobalMonkeConfig(
-  config: ParsedGlobalMonkeConfig,
+  config: ParsedGlobalMonkeConfig | ParsedPersistedGlobalMonkeConfig,
   configPath: string
 ): GlobalMonkeConfig {
   const skillInstallPreference =

@@ -13,6 +13,8 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import * as z from "zod";
+
 import { reconcileCodiff, MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
 import { MonkeError } from "./errors.ts";
 import type { BuiltInSkillInstallTargetKind } from "./global-config.ts";
@@ -23,15 +25,22 @@ import {
 } from "./install-manifest.ts";
 import type { LocalInstallManifest } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
+import { assertDirectChildPath } from "./path-boundary.ts";
 import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
 import { runLocalInstallSkillsLocked } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
+const InstallationLockMetadataSchema = z.strictObject({
+  acquiredAt: z.number().int().nonnegative(),
+  pid: z.number().int().positive()
+});
+
 export interface ActivateLocalInstallOptions {
   createdAt: string;
   dirty: boolean;
+  installationLockHeld?: boolean;
   installId: string;
   platform: string;
   sourceCheckout: string;
@@ -47,38 +56,41 @@ export async function runActivateLocalInstall(
 ) {
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
-  const sourceCheckout = path.resolve(options.sourceCheckout);
-  const stagedInstall = path.resolve(options.stagedInstall);
-  const expectedStagingRoot = path.join(monkeHome, "install-staging");
-  assertDirectChild(stagedInstall, expectedStagingRoot, "staged Local tool install");
-  assertDirectory(stagedInstall, "Staged Local tool install is missing");
-  assertExecutableFile(path.join(stagedInstall, "mt"));
+  const activate = async () => {
+    const sourceCheckout = path.resolve(options.sourceCheckout);
+    const stagedInstall = path.resolve(options.stagedInstall);
+    assertDirectChildPath(
+      stagedInstall,
+      path.join(monkeHome, "install-staging"),
+      "staged Local tool install"
+    );
+    assertDirectory(stagedInstall, "Staged Local tool install is missing");
+    assertExecutableFile(path.join(stagedInstall, "mt"));
 
-  const manifest = parseBoundaryValue(
-    LocalInstallManifestSchema,
-    {
-      createdAt: options.createdAt,
-      createdBy: "bun run install:local",
-      installId: options.installId,
-      installKind: "local",
-      minimumCodiffVersion: MINIMUM_CODIFF_VERSION_TEXT,
-      platform: options.platform,
-      schemaVersion: 1,
-      sourceCheckout,
-      sourceCommit: options.sourceCommit,
-      sourceDirty: options.dirty,
-      toolBuildIdentity: runtime.toolBuildIdentity
-    },
-    "Local Install manifest"
-  );
-  if (path.basename(stagedInstall) !== manifest.installId) {
-    throw new MonkeError("Staged Local tool install identity does not match --install-id");
-  }
-  if (!existsSync(path.join(sourceCheckout, "skills"))) {
-    throw new MonkeError(`Skill source tree is missing: ${path.join(sourceCheckout, "skills")}`);
-  }
+    const manifest = parseBoundaryValue(
+      LocalInstallManifestSchema,
+      {
+        createdAt: options.createdAt,
+        createdBy: "bun run install:local",
+        installId: options.installId,
+        installKind: "local",
+        minimumCodiffVersion: MINIMUM_CODIFF_VERSION_TEXT,
+        platform: options.platform,
+        schemaVersion: 1,
+        sourceCheckout,
+        sourceCommit: options.sourceCommit,
+        sourceDirty: options.dirty,
+        toolBuildIdentity: runtime.toolBuildIdentity
+      },
+      "Local Install manifest"
+    );
+    if (path.basename(stagedInstall) !== manifest.installId) {
+      throw new MonkeError("Staged Local tool install identity does not match --install-id");
+    }
+    if (!existsSync(path.join(sourceCheckout, "skills"))) {
+      throw new MonkeError(`Skill source tree is missing: ${path.join(sourceCheckout, "skills")}`);
+    }
 
-  await withInstallationLockAsync(monkeHome, async () => {
     const predecessor = resolveActiveInstallRoot(monkeHome);
     const installRoot = activateStagedInstall({
       homeDirectory,
@@ -104,7 +116,17 @@ export async function runActivateLocalInstall(
         `The Local tool install is active, but Codiff reconciliation failed. Retry with: mt install-dependencies\n${error instanceof Error ? error.message : String(error)}`
       );
     }
-  });
+
+    return manifest;
+  };
+
+  let manifest: LocalInstallManifest;
+  if (options.installationLockHeld === true) {
+    assertInheritedInstallationLock(monkeHome);
+    manifest = await activate();
+  } else {
+    manifest = await withInstallationLockAsync(monkeHome, activate);
+  }
 
   createLogger(runtime).success(
     `Activated Local tool install ${manifest.toolBuildIdentity} at ${path.join(monkeHome, "installs", manifest.installId)}`
@@ -241,8 +263,27 @@ function assertExecutableFile(executable: string) {
   }
 }
 
-function assertDirectChild(candidate: string, parent: string, label: string) {
-  if (path.dirname(candidate) !== path.resolve(parent)) {
-    throw new MonkeError(`${label} must be a direct child of ${path.resolve(parent)}`);
+function assertInheritedInstallationLock(monkeHome: string) {
+  const lockPath = path.join(monkeHome, "locks", "installation.lock");
+  const stat = lstatSync(lockPath, { throwIfNoEntry: false });
+  if (!stat?.isFile() || stat.isSymbolicLink()) {
+    throw new MonkeError(`Inherited installation lock is missing: ${lockPath}`);
+  }
+
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(lockPath, "utf-8"));
+  } catch {
+    throw new MonkeError(`Inherited installation lock is invalid: ${lockPath}`);
+  }
+  const metadata = parseBoundaryValue(
+    InstallationLockMetadataSchema,
+    value,
+    "inherited installation lock"
+  );
+  if (metadata.pid !== process.ppid) {
+    throw new MonkeError(
+      `Inherited installation lock is not owned by the parent process: ${lockPath}`
+    );
   }
 }

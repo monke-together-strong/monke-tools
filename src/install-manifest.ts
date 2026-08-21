@@ -4,6 +4,7 @@ import path from "node:path";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
+import { assertDirectChildPath } from "./path-boundary.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
 export const INSTALL_MANIFEST_FILENAME = "install-manifest.json";
@@ -18,7 +19,9 @@ export const LocalInstallManifestSchema = z.strictObject({
   createdBy: z.literal("bun run install:local"),
   installId: InstallIdSchema,
   installKind: z.literal("local"),
-  minimumCodiffVersion: z.string().min(1),
+  minimumCodiffVersion: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/u, "must use major.minor.patch numeric version syntax"),
   platform: z.string().min(1),
   schemaVersion: z.literal(1),
   sourceCheckout: z
@@ -72,18 +75,12 @@ export function resolveActiveInstallRoot(monkeHome: string) {
   }
   try {
     const installRoot = realpathSync.native(currentPointer);
-    assertDirectChild(installRoot, path.join(monkeHome, "installs"), "Active tool install");
+    assertDirectChildPath(installRoot, path.join(monkeHome, "installs"), "Active tool install");
     return installRoot;
   } catch (error) {
     if (error instanceof MonkeError) {
       throw error;
     }
     throw new MonkeError(`Active install pointer is invalid: ${currentPointer}`);
-  }
-}
-
-function assertDirectChild(candidate: string, parent: string, label: string) {
-  if (path.dirname(candidate) !== path.resolve(parent)) {
-    throw new MonkeError(`${label} must be a direct child of ${path.resolve(parent)}`);
   }
 }

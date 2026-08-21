@@ -35,16 +35,30 @@ describe("global configuration", () => {
     });
   });
 
-  test("global monke config rejects duplicated Active install identity", () => {
+  test("global monke config migrates legacy source identity while preserving preferences", () => {
     const home = makeTempDir("global-config-active-identity");
+    const customSkillRoot = path.join(home, "custom-skills");
     writeInvalidConfig(
       home,
       `version: 1
 installedSourceCheckout: /tmp/monke-tools
+skillInstallPreference:
+  targets:
+    - kind: codex
+    - kind: custom
+      path: ${customSkillRoot}
 `
     );
 
-    expect(() => loadGlobalMonkeConfig(home)).toThrow(/installedSourceCheckout/u);
+    const migrated = loadGlobalMonkeConfig(home);
+    expect(migrated).toStrictEqual({
+      skillInstallPreference: {
+        targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
+      },
+      version: 1
+    });
+    saveGlobalMonkeConfig(home, migrated);
+    expect(parse(read(home, "config.yml"))).toStrictEqual(migrated);
   });
 
   test("global monke config rejects empty preferences and relative custom paths", () => {

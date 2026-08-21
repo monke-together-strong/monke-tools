@@ -15,6 +15,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { loadGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
+import { loadLocalInstall } from "../src/install-manifest.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { makeTempDir, write, writeGlobalInstructionsSource } from "./helpers.ts";
 
@@ -44,6 +45,7 @@ async function activateLocal(options: {
   monkeHome: string;
   onMutationOutput?: () => void;
   sourceCheckout: string;
+  targetKinds?: string[];
 }) {
   const stagedInstall = prepareStagedInstall(options.monkeHome, options.installId);
   const args = [
@@ -57,10 +59,12 @@ async function activateLocal(options: {
     "--created-at",
     "2026-08-20T12:34:56.000Z",
     "--platform",
-    "darwin-arm64",
-    "--targets",
-    "codex"
+    "darwin-arm64"
   ];
+  const targetKinds = options.targetKinds ?? ["codex"];
+  if (targetKinds.length > 0) {
+    args.push("--targets", ...targetKinds);
+  }
   if (options.dirty === true) {
     args.push("--dirty");
   }
@@ -88,6 +92,28 @@ async function activateLocal(options: {
 }
 
 describe("versioned installation lifecycle", () => {
+  test("rejects a manifest whose Codiff minimum cannot be consumed", () => {
+    const installRoot = makeTempDir("invalid-install-manifest");
+    writeFileSync(
+      path.join(installRoot, "install-manifest.json"),
+      JSON.stringify({
+        createdAt: "2026-08-20T12:34:56.000Z",
+        createdBy: "bun run install:local",
+        installId: "local-invalid",
+        installKind: "local",
+        minimumCodiffVersion: "newest",
+        platform: "darwin-arm64",
+        schemaVersion: 1,
+        sourceCheckout: installRoot,
+        sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+        sourceDirty: false,
+        toolBuildIdentity: "local+0123456"
+      })
+    );
+
+    expect(() => loadLocalInstall(installRoot)).toThrow(/minimumCodiffVersion/u);
+  });
+
   test("Local refresh atomically activates a self-describing install behind the stable command", async () => {
     const sandbox = makeTempDir("local-install-activation");
     const home = path.join(sandbox, "home");
@@ -172,6 +198,43 @@ describe("versioned installation lifecycle", () => {
     expect(
       lstatSync(path.join(monkeHome, "installs", "release-external")).isSymbolicLink()
     ).toBeTruthy();
+  });
+
+  test("Local refresh migrates legacy Global config and preserves its Skill preference", async () => {
+    const sandbox = makeTempDir("local-install-legacy-config");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const sourceCheckout = path.join(sandbox, "source");
+    prepareSource(sourceCheckout);
+    write(
+      monkeHome,
+      "config.yml",
+      `version: 1
+installedSourceCheckout: /previous/checkout
+skillInstallPreference:
+  targets:
+    - kind: cursor
+`
+    );
+
+    await activateLocal({
+      home,
+      installId: "local-migrated",
+      monkeHome,
+      sourceCheckout,
+      targetKinds: []
+    });
+
+    expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
+      skillInstallPreference: { targets: [{ kind: "cursor" }] },
+      version: 1
+    });
+    expect(readFileSync(path.join(monkeHome, "config.yml"), "utf-8")).not.toContain(
+      "installedSourceCheckout"
+    );
+    expect(readlinkSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"))).toBe(
+      path.join(sourceCheckout, "skills", "internal")
+    );
   });
 
   test("failed activation preserves the previous Active tool install and skips cleanup", async () => {

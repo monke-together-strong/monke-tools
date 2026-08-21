@@ -132,6 +132,7 @@ function createProgram(
     .requiredOption("--created-at <timestamp>")
     .requiredOption("--platform <platform>")
     .option("--dirty")
+    .option("--installation-lock-held")
     .addOption(
       new Option(
         "--targets <targets...>",
@@ -142,6 +143,7 @@ function createProgram(
       runActivateLocalInstall(runtime, {
         createdAt: options.createdAt,
         dirty: options.dirty === true,
+        installationLockHeld: options.installationLockHeld === true,
         installId: options.installId,
         platform: options.platform,
         sourceCheckout,
