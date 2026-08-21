@@ -130,11 +130,6 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
     previousPreference,
     homeDirectory
   );
-  saveGlobalMonkeConfig(monkeHome, {
-    skillInstallPreference: nextPreference,
-    version: 1
-  });
-
   reconcileSkillNamespaces({
     cwd: runtime.cwd,
     environment: runtime.env,
@@ -145,6 +140,10 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
     writeMessage(message) {
       runtime.writeStderr(message);
     }
+  });
+  saveGlobalMonkeConfig(monkeHome, {
+    skillInstallPreference: nextPreference,
+    version: 1
   });
   createLogger(runtime).success("Configured monke-tools skills");
 }
@@ -204,8 +203,6 @@ export async function runInstallSkillsLocked(
     nextConfig.skillInstallPreference = nextPreference;
   }
 
-  saveGlobalMonkeConfig(monkeHome, nextConfig);
-
   if (!nextPreference) {
     await runSkillsConfigureLocked(runtime, resolvedGuidanceSourceRoot);
     return;
@@ -222,6 +219,7 @@ export async function runInstallSkillsLocked(
       runtime.writeStderr(message);
     }
   });
+  saveGlobalMonkeConfig(monkeHome, nextConfig);
   createLogger(runtime).success(
     explicitPreference ? "Configured monke-tools skills" : "Refreshed monke-tools skills"
   );

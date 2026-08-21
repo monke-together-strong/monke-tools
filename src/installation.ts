@@ -1,6 +1,8 @@
 import { hash, randomUUID } from "node:crypto";
 import {
+  accessSync,
   cpSync,
+  constants as fsConstants,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -26,11 +28,7 @@ import {
   resolveActiveInstallRoot,
   installIdForManifest
 } from "./install-manifest.ts";
-import type {
-  LocalInstallManifest,
-  ReleaseInstallManifest,
-  ToolInstallManifest
-} from "./install-manifest.ts";
+import type { ReleaseInstallManifest, ToolInstallManifest } from "./install-manifest.ts";
 import {
   assertManagedInstallRoot,
   cleanupInactiveToolInstalls,
@@ -40,7 +38,7 @@ import {
   writeCollisionRecovery
 } from "./install-recovery.ts";
 import { createLogger } from "./logger.ts";
-import { assertDirectChildPath } from "./path-boundary.ts";
+import { assertDirectChildPath, assertDirectoryMutationAccess } from "./path-boundary.ts";
 import { assertReleaseGuidanceHashes, hashReleaseGuidance } from "./release-guidance.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
@@ -173,14 +171,11 @@ export async function runActivateReleaseInstall(
     }
     return { installId, manifest };
   };
-  let activated: Awaited<ReturnType<typeof activate>>;
-  if (options.installationLockHeld === true) {
-    assertInheritedInstallationLock(monkeHome);
-    reconcilePendingInstallBackups(monkeHome);
-    activated = await activate();
-  } else {
-    activated = await withInstallMutationLockAsync(monkeHome, activate);
-  }
+  const activated = await runInstallationMutation(
+    monkeHome,
+    options.installationLockHeld === true,
+    activate
+  );
 
   createLogger(runtime).success(
     `Activated Release install ${activated.manifest.releaseVersion} at ${path.join(monkeHome, "installs", activated.installId)}`
@@ -319,14 +314,11 @@ export async function runActivateLocalInstall(
     return manifest;
   };
 
-  let manifest: LocalInstallManifest;
-  if (options.installationLockHeld === true) {
-    assertInheritedInstallationLock(monkeHome);
-    reconcilePendingInstallBackups(monkeHome);
-    manifest = await activate();
-  } else {
-    manifest = await withInstallMutationLockAsync(monkeHome, activate);
-  }
+  const manifest = await runInstallationMutation(
+    monkeHome,
+    options.installationLockHeld === true,
+    activate
+  );
 
   createLogger(runtime).success(
     `Activated Local tool install ${manifest.toolBuildIdentity} at ${path.join(monkeHome, "installs", manifest.installId)}`
@@ -353,6 +345,7 @@ function activateStagedInstall(options: {
   assertCommandEntryCanBeReplaced(stableMt);
   assertCommandEntryCanBeReplaced(stableMonke);
   assertCommandEntryCanBeReplaced(obsoleteCommand);
+  assertDirectoryMutationAccess(path.dirname(stableMt), "Stable command destination");
 
   writeFileSync(
     path.join(options.stagedInstall, INSTALL_MANIFEST_FILENAME),
@@ -369,8 +362,11 @@ function activateStagedInstall(options: {
 
   const currentPointer = path.join(options.monkeHome, "current");
   const temporaryPointer = `${currentPointer}.${randomUUID()}.tmp`;
-  symlinkSync(path.relative(options.monkeHome, installRoot), temporaryPointer, "dir");
   try {
+    installStableCommand(stableMt, path.join(currentPointer, "mt"));
+    installStableCommand(stableMonke, stableMt);
+    rmSync(obsoleteCommand, { force: true });
+    symlinkSync(path.relative(options.monkeHome, installRoot), temporaryPointer, "dir");
     options.runtime.installationActivationBoundary?.("pointer-replacement");
     renameSync(temporaryPointer, currentPointer);
   } catch (error) {
@@ -378,11 +374,20 @@ function activateStagedInstall(options: {
     rmSync(installRoot, { recursive: true });
     throw error;
   }
-
-  installStableCommand(stableMt, path.join(currentPointer, "mt"));
-  installStableCommand(stableMonke, stableMt);
-  rmSync(obsoleteCommand, { force: true });
   return installRoot;
+}
+
+async function runInstallationMutation<T>(
+  monkeHome: string,
+  installationLockHeld: boolean,
+  mutate: () => Promise<T>
+) {
+  if (!installationLockHeld) {
+    return await withInstallMutationLockAsync(monkeHome, mutate);
+  }
+  assertInheritedInstallationLock(monkeHome);
+  reconcilePendingInstallBackups(monkeHome);
+  return await mutate();
 }
 
 function installStableCommand(commandPath: string, targetPath: string) {
@@ -483,6 +488,11 @@ function assertExecutableFile(executable: string) {
   const stat = lstatSync(executable, { throwIfNoEntry: false });
   if (!stat?.isFile()) {
     throw new MonkeError(`Staged mt executable is missing: ${executable}`);
+  }
+  try {
+    accessSync(executable, fsConstants.X_OK);
+  } catch {
+    throw new MonkeError(`Staged executable is not executable: ${executable}`);
   }
 }
 

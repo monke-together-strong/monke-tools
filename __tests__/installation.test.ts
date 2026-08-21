@@ -85,6 +85,7 @@ function prepareReleaseBundle(
 
 async function activateLocal(options: {
   dirty?: boolean;
+  executableMode?: number;
   home: string;
   installId: string;
   monkeHome: string;
@@ -93,6 +94,9 @@ async function activateLocal(options: {
   targetKinds?: string[];
 }) {
   const stagedInstall = prepareStagedInstall(options.monkeHome, options.installId);
+  if (options.executableMode !== undefined) {
+    chmodSync(path.join(stagedInstall, "mt"), options.executableMode);
+  }
   const args = [
     "activate-local-install",
     stagedInstall,
@@ -621,6 +625,42 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(home, ".bashrc"))).toBeFalsy();
     expect(lockObserved).toBeTruthy();
     expect(existsSync(path.join(monkeHome, "locks", "installation.lock"))).toBeFalsy();
+  });
+
+  test("Local refresh rejects a staged mt without execute permission", async () => {
+    const sandbox = makeTempDir("local-install-not-executable");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const sourceCheckout = path.join(sandbox, "source");
+    prepareSource(sourceCheckout);
+
+    await expect(
+      activateLocal({
+        executableMode: 0o644,
+        home,
+        installId: "local-not-executable",
+        monkeHome,
+        sourceCheckout
+      })
+    ).rejects.toThrow("Staged executable is not executable");
+    expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
+  });
+
+  test("Local refresh rejects an unwritable stable command destination before activation", async () => {
+    const sandbox = makeTempDir("local-install-stable-command-preflight");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const sourceCheckout = path.join(sandbox, "source");
+    prepareSource(sourceCheckout);
+    mkdirSync(path.join(home, ".local", "bin"), { recursive: true });
+    chmodSync(path.join(home, ".local", "bin"), 0o555);
+
+    await expect(
+      activateLocal({ home, installId: "local-no-command", monkeHome, sourceCheckout })
+    ).rejects.toThrow("Stable command destination is not writable and searchable");
+    expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
+    expect(existsSync(path.join(monkeHome, "installs", "local-no-command"))).toBeFalsy();
+    chmodSync(path.join(home, ".local", "bin"), 0o755);
   });
 
   test("Local refresh replaces a Release install and projects source-backed guidance", async () => {

@@ -1,5 +1,5 @@
-name: Check Mainline
-description: Install dependencies and run the shared Mainline static check
+name: Setup Mainline
+description: Set up Vite+ and install frozen workspace dependencies
 
 runs:
   using: composite
@@ -12,7 +12,3 @@ runs:
     - name: Install deps
       shell: bash
       run: vp install --frozen-lockfile
-
-    - name: Check
-      shell: bash
-      run: vp check

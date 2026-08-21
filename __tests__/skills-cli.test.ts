@@ -128,6 +128,60 @@ describe("skills CLI", () => {
     ).rejects.toThrow("does not match the Active Local install");
   });
 
+  test("failed deselected-target cleanup remains repairable with mt skills configure", async () => {
+    const sandbox = makeTempDir("skills-local-install-cleanup-repair");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const sourceCheckout = path.join(sandbox, "source");
+    const flatManifest = path.join(osHome, ".claude", "skills", ".monke-tools-flat-skills.json");
+    writeSkillSource(sourceCheckout);
+    selectActiveLocalInstall(monkeHome, sourceCheckout);
+    saveGlobalMonkeConfig(monkeHome, {
+      skillInstallPreference: { targets: [{ kind: "claude" }] },
+      version: 1
+    });
+    write(path.dirname(flatManifest), path.basename(flatManifest), "{}\n");
+
+    await expect(
+      runCliAsync(
+        ["skills", "local-install", sourceCheckout, "--targets", "codex"],
+        createRuntime({
+          cwd: sandbox,
+          env: skillsEnvironment(osHome, monkeHome),
+          onStderr() {},
+          onStdout() {}
+        })
+      )
+    ).rejects.toThrow("Failed to reconcile 1 Skill install target");
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toStrictEqual({
+      targets: [{ kind: "claude" }]
+    });
+
+    write(
+      path.dirname(flatManifest),
+      path.basename(flatManifest),
+      `${JSON.stringify({
+        links: [],
+        managedBy: "monke-tools",
+        supportingLinks: [],
+        version: 1
+      })}\n`
+    );
+    await runCliAsync(
+      ["skills", "configure"],
+      createRuntime({
+        cwd: sandbox,
+        env: skillsEnvironment(osHome, monkeHome),
+        multiSelectValues: [["codex"]],
+        onStderr() {},
+        onStdout() {}
+      })
+    );
+    expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toStrictEqual({
+      targets: [{ kind: "codex" }]
+    });
+  });
+
   test("mt skills local-install installs shared Global agent instructions for Codex and Claude", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions");
     const monkeHome = path.join(sandbox, "monke-home");

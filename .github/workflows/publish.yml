@@ -23,8 +23,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
+
       - name: Check
-        uses: ./.github/actions/check-mainline
+        run: vp check
 
   prepare-release:
     name: Select Mainline Release
@@ -41,13 +44,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
-        with:
-          cache: true
-
-      - name: Install deps
-        run: vp install --frozen-lockfile
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
 
       - name: Select Mainline release
         id: release
@@ -86,13 +84,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
-        with:
-          cache: true
-
-      - name: Install deps
-        run: vp install --frozen-lockfile
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
 
       - name: Build Release bundle
         env:
@@ -142,13 +135,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
-        with:
-          cache: true
-
-      - name: Install deps
-        run: vp install --frozen-lockfile
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
 
       - name: Download all verified archives
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

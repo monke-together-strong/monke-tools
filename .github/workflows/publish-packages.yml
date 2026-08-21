@@ -23,8 +23,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
+
       - name: Check
-        uses: ./.github/actions/check-mainline
+        run: vp check
 
   publish:
     name: Version Or Publish
@@ -42,11 +45,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
-        with:
-          cache: true
-
       - name: Setup Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -56,8 +54,8 @@ jobs:
         # Tegami packs with Bun but publishes through npm; trusted publishing requires npm 11.5.1+.
         run: npm install --global npm@11.5.1
 
-      - name: Install deps
-        run: vp install --frozen-lockfile
+      - name: Setup Mainline
+        uses: ./.github/actions/setup-mainline
 
       - name: Version or publish packages
         run: vp run tegami ci

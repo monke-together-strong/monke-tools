@@ -43,12 +43,12 @@ const packageWorkflowPath = path.join(
   "workflows",
   "publish-packages.yml"
 );
-const checkActionPath = path.join(
+const setupActionPath = path.join(
   import.meta.dirname,
   "..",
   ".github",
   "actions",
-  "check-mainline",
+  "setup-mainline",
   "action.yml"
 );
 
@@ -78,10 +78,11 @@ describe("Mainline publication workflow", () => {
 
   test("checks main without repeating the pull-request unit test command", () => {
     const { source } = readWorkflow();
-    const checkAction = readFileSync(checkActionPath, "utf-8");
-    expect(source).toContain("./.github/actions/check-mainline");
-    expect(checkAction).toContain("vp check");
-    expect(checkAction).not.toContain("vp run test");
+    const setupAction = readFileSync(setupActionPath, "utf-8");
+    expect(source).toContain("./.github/actions/setup-mainline");
+    expect(setupAction).toContain("vp install --frozen-lockfile");
+    expect(source).toContain("vp check");
+    expect(source).not.toContain("vp run test");
   });
 
   test("builds and verifies both supported platform archives", () => {
@@ -120,6 +121,6 @@ describe("Mainline publication workflow", () => {
     const packageSource = readFileSync(packageWorkflowPath, "utf-8");
     expect(source).not.toContain("vp run tegami ci");
     expect(packageSource).toContain("vp run tegami ci");
-    expect(packageSource).toContain("./.github/actions/check-mainline");
+    expect(packageSource).toContain("./.github/actions/setup-mainline");
   });
 });
