@@ -92,6 +92,7 @@ export async function runActivateReleaseInstall(
       if (JSON.stringify(manifest) !== JSON.stringify(sourceManifest)) {
         throw new MonkeError("Release bundle changed while it was being staged");
       }
+      preflightReleaseInstallSkills(runtime, stagedInstall, options.targetKinds);
     } catch (error) {
       rmSync(stagedInstall, { force: true, recursive: true });
       if (!stagingRootExisted && readdirSync(stagingRoot).length === 0) {
