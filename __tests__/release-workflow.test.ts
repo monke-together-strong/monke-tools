@@ -20,10 +20,11 @@ const StepSchema = looseObject({
 });
 const JobSchema = looseObject({
   needs: union([stringSchema(), arraySchema(stringSchema())]).optional(),
-  steps: arraySchema(StepSchema),
+  steps: arraySchema(StepSchema).default([]),
   strategy: looseObject({
     matrix: looseObject({ include: arraySchema(record(stringSchema(), stringSchema())) })
-  }).optional()
+  }).optional(),
+  uses: stringSchema().optional()
 });
 const WorkflowSchema = looseObject({
   concurrency: looseObject({
@@ -43,6 +44,13 @@ const packageWorkflowPath = path.join(
   "workflows",
   "publish-packages.yml"
 );
+const pullRequestWorkflowPath = path.join(
+  import.meta.dirname,
+  "..",
+  ".github",
+  "workflows",
+  "pr.yml"
+);
 const setupActionPath = path.join(
   import.meta.dirname,
   "..",
@@ -50,6 +58,13 @@ const setupActionPath = path.join(
   "actions",
   "setup-mainline",
   "action.yml"
+);
+const verifyWorkflowPath = path.join(
+  import.meta.dirname,
+  "..",
+  ".github",
+  "workflows",
+  "verify-mainline.yml"
 );
 
 function readWorkflow() {
@@ -79,10 +94,15 @@ describe("Mainline publication workflow", () => {
   test("checks main without repeating the pull-request unit test command", () => {
     const { source } = readWorkflow();
     const setupAction = readFileSync(setupActionPath, "utf-8");
-    expect(source).toContain("./.github/actions/setup-mainline");
+    const pullRequestSource = readFileSync(pullRequestWorkflowPath, "utf-8");
+    const verifySource = readFileSync(verifyWorkflowPath, "utf-8");
+    expect(source).toContain("./.github/workflows/verify-mainline.yml");
+    expect(verifySource).toContain("./.github/actions/setup-mainline");
     expect(setupAction).toContain("vp install --frozen-lockfile");
-    expect(source).toContain("vp check");
+    expect(verifySource).toContain("vp check");
     expect(source).not.toContain("vp run test");
+    expect(verifySource).not.toContain("vp run test");
+    expect(pullRequestSource).toContain("vp run test");
   });
 
   test("builds and verifies both supported platform archives", () => {
@@ -121,6 +141,6 @@ describe("Mainline publication workflow", () => {
     const packageSource = readFileSync(packageWorkflowPath, "utf-8");
     expect(source).not.toContain("vp run tegami ci");
     expect(packageSource).toContain("vp run tegami ci");
-    expect(packageSource).toContain("./.github/actions/setup-mainline");
+    expect(packageSource).toContain("./.github/workflows/verify-mainline.yml");
   });
 });

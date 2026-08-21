@@ -22,12 +22,12 @@ import * as z from "zod";
 
 import { DEFAULT_TOOL_BUILD_IDENTITY } from "./build-identity.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
+import { ReleaseCatalogPageSchema } from "./release-catalog-schema.ts";
 import type {
   ExecOptions,
   ExecResult,
   InstallationActivationPhase,
   MultiSelectPrompt,
-  ReleaseCatalogEntry,
   ReleaseDistribution,
   Runtime,
   SelectPrompt
@@ -43,20 +43,6 @@ const LockMetadataSchema = z.object({
 });
 const LockPidSchema = z.number().int().positive();
 const LockTimestampSchema = z.number();
-const ReleaseCatalogAssetSchema = z.looseObject({
-  browser_download_url: z.url(),
-  digest: z.string().nullable().optional(),
-  name: z.string()
-});
-const ReleaseCatalogPageSchema: z.ZodType<ReleaseCatalogEntry[]> = z.array(
-  z.looseObject({
-    assets: z.array(ReleaseCatalogAssetSchema),
-    draft: z.boolean(),
-    prerelease: z.boolean(),
-    tag_name: z.string(),
-    target_commitish: z.string()
-  })
-);
 
 /** Runtime construction options for CLI commands and integration-style tests. */
 export interface RuntimeOptions {

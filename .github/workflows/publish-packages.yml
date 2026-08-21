@@ -14,20 +14,7 @@ permissions:
 
 jobs:
   verify:
-    name: Check Mainline
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-
-      - name: Setup Mainline
-        uses: ./.github/actions/setup-mainline
-
-      - name: Check
-        run: vp check
+    uses: ./.github/workflows/verify-mainline.yml
 
   publish:
     name: Version Or Publish

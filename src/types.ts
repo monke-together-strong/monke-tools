@@ -1,4 +1,7 @@
+import type { ReleaseCatalogEntry } from "./release-catalog-schema.ts";
 import type { SessionRepoState } from "./state-schema.ts";
+
+export type { ReleaseCatalogAsset, ReleaseCatalogEntry } from "./release-catalog-schema.ts";
 
 export interface Runtime {
   /** Architecture of the machine running this command. */
@@ -42,20 +45,6 @@ export interface ReleaseDistribution {
   downloadReleaseAsset: (url: string) => Promise<Uint8Array>;
   /** List one 100-item page from the official GitHub Releases catalog. */
   listReleases: (page: number) => Promise<ReleaseCatalogEntry[]>;
-}
-
-export interface ReleaseCatalogAsset {
-  browser_download_url: string;
-  digest?: string | null;
-  name: string;
-}
-
-export interface ReleaseCatalogEntry {
-  assets: ReleaseCatalogAsset[];
-  draft: boolean;
-  prerelease: boolean;
-  tag_name: string;
-  target_commitish: string;
 }
 
 export interface ExecOptions {

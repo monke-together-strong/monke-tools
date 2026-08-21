@@ -94,6 +94,7 @@ interface VerifyReleaseArchiveOptions {
   archivePath: string;
   checksumPath?: string;
   expectedGuidanceRoot?: string;
+  expectedMinimumCodiffVersion?: string;
   expectedPlatform: output<typeof ReleasePlatformSchema>;
   expectedSourceCommit: string;
   expectedVersion: string;
@@ -247,9 +248,12 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
     if (manifest.artifactName !== expectedArchiveName) {
       throw new Error(`Release manifest artifact identity does not match ${expectedArchiveName}`);
     }
-    if (manifest.minimumCodiffVersion !== MINIMUM_CODIFF_VERSION_TEXT) {
+    if (
+      options.expectedMinimumCodiffVersion !== undefined &&
+      manifest.minimumCodiffVersion !== options.expectedMinimumCodiffVersion
+    ) {
       throw new Error(
-        `Release manifest Codiff minimum does not match ${MINIMUM_CODIFF_VERSION_TEXT}`
+        `Release manifest Codiff minimum does not match ${options.expectedMinimumCodiffVersion}`
       );
     }
     if (
@@ -315,6 +319,7 @@ export function verifyReleaseAssets(options: {
       archivePath: path.join(directory, releaseArchiveName(options.version, platform)),
       checksumPath,
       expectedGuidanceRoot: options.expectedGuidanceRoot,
+      expectedMinimumCodiffVersion: MINIMUM_CODIFF_VERSION_TEXT,
       expectedPlatform: platform,
       expectedSourceCommit: options.sourceCommit,
       expectedVersion: options.version,
@@ -552,6 +557,7 @@ export function runReleaseBundleCli(arguments_: string[]) {
         archivePath: requiredOption(arguments_, "--archive"),
         checksumPath: optionalOption(arguments_, "--checksums"),
         expectedGuidanceRoot: repositoryRoot,
+        expectedMinimumCodiffVersion: MINIMUM_CODIFF_VERSION_TEXT,
         expectedPlatform: ReleasePlatformSchema.parse(requiredOption(arguments_, "--platform")),
         expectedSourceCommit: requiredOption(arguments_, "--source-commit"),
         expectedVersion: requiredOption(arguments_, "--version")

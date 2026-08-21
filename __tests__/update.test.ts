@@ -133,6 +133,7 @@ function prepareReleaseAsset(
   options: {
     manifestPlatform?: "linux-x64" | "macos-arm64";
     manifestSourceCommit?: string;
+    minimumCodiffVersion?: string;
   } = {}
 ) {
   const tag = `monke-tools-v${version}`;
@@ -163,7 +164,7 @@ function prepareReleaseAsset(
       ])
     ),
     installKind: "release",
-    minimumCodiffVersion: "1.9.0",
+    minimumCodiffVersion: options.minimumCodiffVersion ?? "1.9.0",
     platform: options.manifestPlatform ?? "linux-x64",
     releaseTag: tag,
     releaseVersion: version,
@@ -281,7 +282,9 @@ describe("Release update", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
     const olderInstall = prepareActiveRelease(monkeHome, "1.2.2", false);
-    const candidate = prepareReleaseAsset(sandbox, "1.2.4");
+    const candidate = prepareReleaseAsset(sandbox, "1.2.4", {
+      minimumCodiffVersion: "2.0.0"
+    });
     const stagingRoot = path.join(monkeHome, "install-staging");
     mkdirSync(path.join(stagingRoot, "update-interrupted"), { recursive: true });
     mkdirSync(path.join(stagingRoot, "release-interrupted"), { recursive: true });
