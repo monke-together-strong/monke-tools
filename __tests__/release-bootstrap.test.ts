@@ -104,7 +104,7 @@ printf '%s\n' "$url" >> ${JSON.stringify(curlLog)}
 ${options.failLookup ? 'case "$url" in *stable.tsv) exit 88 ;; esac' : ""}
 ${options.failDownload ? `case "$url" in *${archiveName}) exit 89 ;; esac` : ""}
 case "$url" in
-  */releases/download/monke-tools-catalog/stable.tsv) source=${JSON.stringify(path.join(responses, "stable.tsv"))} ;;
+  */monke-tools-release-catalog/stable.tsv) source=${JSON.stringify(path.join(responses, "stable.tsv"))} ;;
   *${archiveName}) source=${JSON.stringify(archivePath)} ;;
   *${checksumName}) source=${JSON.stringify(checksumPath)} ;;
   *) printf 'unexpected URL: %s\n' "$url" >&2; exit 91 ;;
@@ -161,7 +161,7 @@ describe("public Release bootstrap", () => {
       "codex"
     ]);
     const curlLog = readFileSync(fixture.curlLog, "utf-8");
-    expect(curlLog).toContain("/releases/download/monke-tools-catalog/stable.tsv");
+    expect(curlLog).toContain("/monke-tools-release-catalog/stable.tsv");
     expect(curlLog).toContain("monke-tools-v1.2.3-linux-x64.tar.gz");
     expect(curlLog).not.toContain("api.github.com");
     expect(curlLog).not.toContain(secret);

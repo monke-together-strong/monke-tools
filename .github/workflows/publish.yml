@@ -194,18 +194,34 @@ jobs:
           SOURCE_COMMIT: ${{ github.sha }}
           VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
-          catalog_tag=monke-tools-catalog
+          catalog_branch=monke-tools-release-catalog
           catalog_path="$RUNNER_TEMP/stable.tsv"
           bun run scripts/release-bundle.ts catalog \
             --directory "$RUNNER_TEMP/release-assets" \
             --output "$catalog_path" \
             --source-commit "$SOURCE_COMMIT" \
             --version "$VERSION"
-          if ! gh release view "$catalog_tag" >/dev/null 2>&1; then
-            gh release create "$catalog_tag" \
-              --prerelease \
-              --target "$SOURCE_COMMIT" \
-              --title "monke-tools stable Release catalog" \
-              --notes "Mutable pointer used only to discover the latest verified stable monke-tools Release."
+
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$catalog_branch" --silent; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/heads/$catalog_branch" \
+              -f sha="$SOURCE_COMMIT" >/dev/null
           fi
-          gh release upload "$catalog_tag" "$catalog_path" --clobber
+
+          catalog_content="$(base64 < "$catalog_path" | tr -d '\n')"
+          catalog_sha="$(
+            gh api "repos/$GITHUB_REPOSITORY/contents/stable.tsv?ref=$catalog_branch" \
+              --jq .sha 2>/dev/null || true
+          )"
+          if [ -n "$catalog_sha" ]; then
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/stable.tsv" \
+              -f branch="$catalog_branch" \
+              -f message="Update stable monke-tools Release catalog to v${VERSION}" \
+              -f content="$catalog_content" \
+              -f sha="$catalog_sha" >/dev/null
+          else
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/stable.tsv" \
+              -f branch="$catalog_branch" \
+              -f message="Publish stable monke-tools Release catalog for v${VERSION}" \
+              -f content="$catalog_content" >/dev/null
+          fi

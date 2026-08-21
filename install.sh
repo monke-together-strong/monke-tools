@@ -2,7 +2,7 @@
 set -eu
 
 REPOSITORY=monke-together-strong/monke-tools
-RELEASE_CATALOG_URL="https://github.com/$REPOSITORY/releases/download/monke-tools-catalog/stable.tsv"
+RELEASE_CATALOG_URL="https://raw.githubusercontent.com/$REPOSITORY/monke-tools-release-catalog/stable.tsv"
 SUPPORTED_PLATFORMS='macOS arm64, Linux x64'
 
 SYSTEM=$(uname -s)
