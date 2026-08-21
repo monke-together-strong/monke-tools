@@ -778,7 +778,7 @@ describe("skills CLI", () => {
     );
   });
 
-  test("mt skills configure fails clearly when the installed source checkout is missing", async () => {
+  test("mt skills configure fails clearly when the guidance source root is missing", async () => {
     const sandbox = makeTempDir("skills-configure-missing-source");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -795,7 +795,7 @@ describe("skills CLI", () => {
           onStdout() {}
         })
       )
-    ).rejects.toThrow(`Installed source checkout is missing: ${missingCheckout}`);
+    ).rejects.toThrow(`Guidance source root is missing: ${missingCheckout}`);
     expect(loadGlobalMonkeConfig(monkeHome).skillInstallPreference).toBeUndefined();
   });
 });

@@ -14,10 +14,11 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { loadGlobalMonkeConfig } from "../src/global-config.ts";
+import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { loadLocalInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
 import { createRuntime } from "../src/runtime.ts";
+import type { RuntimeOptions } from "../src/runtime.ts";
 import { makeTempDir, write, writeGlobalInstructionsSource } from "./helpers.ts";
 
 function prepareSource(sourceCheckout: string) {
@@ -131,6 +132,37 @@ async function activateLocal(options: {
   );
 }
 
+function activateRelease(options: {
+  args?: string[];
+  bundleRoot: string;
+  home: string;
+  monkeHome: string;
+  runtime?: RuntimeOptions;
+  sandbox: string;
+}) {
+  const runtimeOptions = options.runtime ?? {};
+  return runCliAsync(
+    ["activate-release-install", options.bundleRoot, ...(options.args ?? [])],
+    createRuntime({
+      architecture: "x64",
+      onStderr() {},
+      onStdout() {},
+      platform: "linux",
+      toolBuildIdentity: "1.2.3",
+      ...runtimeOptions,
+      cwd: options.sandbox,
+      env: {
+        CODEX_HOME: path.join(options.home, ".codex"),
+        HOME: options.home,
+        MONKE_HOME: options.monkeHome,
+        PATH: "/usr/bin:/bin",
+        SHELL: "/bin/zsh",
+        ...runtimeOptions.env
+      }
+    })
+  );
+}
+
 describe("versioned installation lifecycle", () => {
   test("a verified bundle activates one complete Release install with writable projected guidance", async () => {
     const sandbox = makeTempDir("release-install-activation");
@@ -138,24 +170,13 @@ describe("versioned installation lifecycle", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const release = prepareReleaseBundle(sandbox);
 
-    await runCliAsync(
-      ["activate-release-install", release.bundleRoot, "--targets", "codex"],
-      createRuntime({
-        architecture: "x64",
-        cwd: sandbox,
-        env: {
-          CODEX_HOME: path.join(home, ".codex"),
-          HOME: home,
-          MONKE_HOME: monkeHome,
-          PATH: "/usr/bin:/bin",
-          SHELL: "/bin/zsh"
-        },
-        onStderr() {},
-        onStdout() {},
-        platform: "linux",
-        toolBuildIdentity: "1.2.3"
-      })
-    );
+    await activateRelease({
+      args: ["--targets", "codex"],
+      bundleRoot: release.bundleRoot,
+      home,
+      monkeHome,
+      sandbox
+    });
 
     const installRoot = path.join(monkeHome, "installs", "release-1.2.3-linux-x64");
     const projectedSkill = path.join(
@@ -199,23 +220,20 @@ describe("versioned installation lifecycle", () => {
     const release = prepareReleaseBundle(sandbox);
     let stderr = "";
 
-    await runCliAsync(
-      ["activate-release-install", release.bundleRoot],
-      createRuntime({
-        architecture: "x64",
-        cwd: sandbox,
-        env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
+    await activateRelease({
+      bundleRoot: release.bundleRoot,
+      home,
+      monkeHome,
+      runtime: {
         onMultiSelect() {
           throw new Error("Noninteractive Release install must not prompt");
         },
         onStderr(text) {
           stderr += text;
-        },
-        onStdout() {},
-        platform: "linux",
-        toolBuildIdentity: "1.2.3"
-      })
-    );
+        }
+      },
+      sandbox
+    });
 
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
       path.join("installs", "release-1.2.3-linux-x64")
@@ -248,22 +266,19 @@ describe("versioned installation lifecycle", () => {
     const release = prepareReleaseBundle(sandbox);
     let activeWhenPrompted = false;
 
-    await runCliAsync(
-      ["activate-release-install", release.bundleRoot, "--interactive"],
-      createRuntime({
-        architecture: "x64",
-        cwd: sandbox,
-        env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
+    await activateRelease({
+      args: ["--interactive"],
+      bundleRoot: release.bundleRoot,
+      home,
+      monkeHome,
+      runtime: {
         multiSelectValues: [["cursor"]],
         onMultiSelect() {
           activeWhenPrompted = existsSync(path.join(monkeHome, "current"));
-        },
-        onStderr() {},
-        onStdout() {},
-        platform: "linux",
-        toolBuildIdentity: "1.2.3"
-      })
-    );
+        }
+      },
+      sandbox
+    });
 
     expect(activeWhenPrompted).toBeTruthy();
     expect(readlinkSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"))).toBe(
@@ -279,18 +294,13 @@ describe("versioned installation lifecycle", () => {
     mkdirSync(path.join(home, ".codex", "AGENTS.md"), { recursive: true });
 
     await expect(
-      runCliAsync(
-        ["activate-release-install", release.bundleRoot, "--targets", "codex"],
-        createRuntime({
-          architecture: "x64",
-          cwd: sandbox,
-          env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
-          onStderr() {},
-          onStdout() {},
-          platform: "linux",
-          toolBuildIdentity: "1.2.3"
-        })
-      )
+      activateRelease({
+        args: ["--targets", "codex"],
+        bundleRoot: release.bundleRoot,
+        home,
+        monkeHome,
+        sandbox
+      })
     ).rejects.toThrow(/Global agent instructions/u);
 
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
@@ -305,18 +315,13 @@ describe("versioned installation lifecycle", () => {
     writeFileSync(path.join(release.bundleRoot, "skills/internal/example/SKILL.md"), "changed\n");
 
     await expect(
-      runCliAsync(
-        ["activate-release-install", release.bundleRoot, "--targets", "codex"],
-        createRuntime({
-          architecture: "x64",
-          cwd: sandbox,
-          env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
-          onStderr() {},
-          onStdout() {},
-          platform: "linux",
-          toolBuildIdentity: "1.2.3"
-        })
-      )
+      activateRelease({
+        args: ["--targets", "codex"],
+        bundleRoot: release.bundleRoot,
+        home,
+        monkeHome,
+        sandbox
+      })
     ).rejects.toThrow(/original hashes/u);
 
     expect(existsSync(monkeHome)).toBeFalsy();
@@ -341,18 +346,13 @@ describe("versioned installation lifecycle", () => {
 
       try {
         await expect(
-          runCliAsync(
-            ["activate-release-install", release.bundleRoot, "--targets", "codex"],
-            createRuntime({
-              architecture: "x64",
-              cwd: sandbox,
-              env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
-              onStderr() {},
-              onStdout() {},
-              platform: "linux",
-              toolBuildIdentity: "1.2.3"
-            })
-          )
+          activateRelease({
+            args: ["--targets", "codex"],
+            bundleRoot: release.bundleRoot,
+            home,
+            monkeHome,
+            sandbox
+          })
         ).rejects.toThrow(/not writable/u);
       } finally {
         chmodSync(
@@ -366,6 +366,31 @@ describe("versioned installation lifecycle", () => {
     }
   );
 
+  test("saved deselected Global instructions are preflighted before Release activation", async () => {
+    const sandbox = makeTempDir("release-install-saved-target-preflight");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox);
+    saveGlobalMonkeConfig(monkeHome, {
+      skillInstallPreference: { targets: [{ kind: "claude" }] },
+      version: 1
+    });
+    mkdirSync(path.join(home, ".claude", "CLAUDE.md"), { recursive: true });
+
+    await expect(
+      activateRelease({
+        args: ["--targets", "cursor"],
+        bundleRoot: release.bundleRoot,
+        home,
+        monkeHome,
+        sandbox
+      })
+    ).rejects.toThrow(/Global agent instructions/u);
+
+    expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
+    expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
+  });
+
   test("post-activation projection failure leaves Release core active with repair guidance", async () => {
     const sandbox = makeTempDir("release-install-projection-failure");
     const home = path.join(sandbox, "home");
@@ -376,18 +401,13 @@ describe("versioned installation lifecycle", () => {
     });
 
     await expect(
-      runCliAsync(
-        ["activate-release-install", release.bundleRoot, "--targets", "codex"],
-        createRuntime({
-          architecture: "x64",
-          cwd: sandbox,
-          env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
-          onStderr() {},
-          onStdout() {},
-          platform: "linux",
-          toolBuildIdentity: "1.2.3"
-        })
-      )
+      activateRelease({
+        args: ["--targets", "codex"],
+        bundleRoot: release.bundleRoot,
+        home,
+        monkeHome,
+        sandbox
+      })
     ).rejects.toThrow(/Release install is active[\s\S]*mt skills configure[\s\S]*\.codex\/skills/u);
 
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
@@ -402,23 +422,19 @@ describe("versioned installation lifecycle", () => {
     const release = prepareReleaseBundle(sandbox, { platform: "macos-arm64" });
 
     await expect(
-      runCliAsync(
-        ["activate-release-install", release.bundleRoot],
-        createRuntime({
+      activateRelease({
+        bundleRoot: release.bundleRoot,
+        home,
+        monkeHome,
+        runtime: {
           architecture: "arm64",
-          cwd: sandbox,
           env: {
-            HOME: home,
-            MONKE_HOME: monkeHome,
-            PATH: path.join(sandbox, "empty-bin"),
-            SHELL: "/bin/zsh"
+            PATH: path.join(sandbox, "empty-bin")
           },
-          onStderr() {},
-          onStdout() {},
-          platform: "darwin",
-          toolBuildIdentity: "1.2.3"
-        })
-      )
+          platform: "darwin"
+        },
+        sandbox
+      })
     ).rejects.toThrow(/Release install is active[\s\S]*Retry with: mt install-dependencies/u);
 
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(

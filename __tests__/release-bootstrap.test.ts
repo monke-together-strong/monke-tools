@@ -144,22 +144,32 @@ if [ -n "$output" ]; then cp "$source" "$output"; else cat "$source"; fi
   return { archiveName, bin, curlLog, installLog, sandbox };
 }
 
+function runBootstrap(
+  fixture: ReturnType<typeof prepareBootstrapFixture>,
+  options: { args?: string[]; env?: Record<string, string> } = {}
+) {
+  return Bun.spawnSync({
+    cmd: ["sh", path.join(repositoryRoot, "install.sh"), ...(options.args ?? [])],
+    env: {
+      HOME: path.join(fixture.sandbox, "home"),
+      MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
+      MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
+      PATH: `${fixture.bin}:/usr/bin:/bin`,
+      SHELL: "/bin/sh",
+      ...options.env
+    },
+    stderr: "pipe",
+    stdout: "pipe"
+  });
+}
+
 describe("public Release bootstrap", () => {
   test("selects and verifies the highest paginated stable Release", () => {
     const fixture = prepareBootstrapFixture();
     const secret = "github-token-must-not-be-logged";
-    const result = Bun.spawnSync({
-      cmd: ["sh", path.join(repositoryRoot, "install.sh"), "--targets", "codex"],
-      env: {
-        GH_TOKEN: secret,
-        HOME: path.join(fixture.sandbox, "home"),
-        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
-        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
-        PATH: `${fixture.bin}:/usr/bin:/bin`,
-        SHELL: "/bin/sh"
-      },
-      stderr: "pipe",
-      stdout: "pipe"
+    const result = runBootstrap(fixture, {
+      args: ["--targets", "codex"],
+      env: { GH_TOKEN: secret }
     });
 
     expect(result.exitCode).toBe(0);
@@ -175,18 +185,7 @@ describe("public Release bootstrap", () => {
 
   test("maps Apple Silicon Macs to the macOS Release asset", () => {
     const fixture = prepareBootstrapFixture({ machine: "arm64", system: "Darwin" });
-    const result = Bun.spawnSync({
-      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
-      env: {
-        HOME: path.join(fixture.sandbox, "home"),
-        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
-        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
-        PATH: `${fixture.bin}:/usr/bin:/bin`,
-        SHELL: "/bin/sh"
-      },
-      stderr: "pipe",
-      stdout: "pipe"
-    });
+    const result = runBootstrap(fixture);
 
     expect(result.exitCode).toBe(0);
     expect(readFileSync(fixture.curlLog, "utf-8")).toContain(fixture.archiveName);
@@ -198,18 +197,7 @@ describe("public Release bootstrap", () => {
       olderVersion: "9007199254740992.0.0",
       selectedVersion
     });
-    const result = Bun.spawnSync({
-      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
-      env: {
-        HOME: path.join(fixture.sandbox, "home"),
-        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
-        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
-        PATH: `${fixture.bin}:/usr/bin:/bin`,
-        SHELL: "/bin/sh"
-      },
-      stderr: "pipe",
-      stdout: "pipe"
-    });
+    const result = runBootstrap(fixture);
 
     expect(result.exitCode).toBe(0);
     expect(readFileSync(fixture.curlLog, "utf-8")).toContain(
@@ -220,19 +208,7 @@ describe("public Release bootstrap", () => {
   test("uses GITHUB_TOKEN without exposing it in command logs", () => {
     const fixture = prepareBootstrapFixture();
     const secret = "fallback-github-token-must-not-be-logged";
-    const result = Bun.spawnSync({
-      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
-      env: {
-        GITHUB_TOKEN: secret,
-        HOME: path.join(fixture.sandbox, "home"),
-        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
-        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
-        PATH: `${fixture.bin}:/usr/bin:/bin`,
-        SHELL: "/bin/sh"
-      },
-      stderr: "pipe",
-      stdout: "pipe"
-    });
+    const result = runBootstrap(fixture, { env: { GITHUB_TOKEN: secret } });
 
     expect(result.exitCode).toBe(0);
     expect(readFileSync(fixture.curlLog, "utf-8")).not.toContain(secret);
@@ -240,18 +216,7 @@ describe("public Release bootstrap", () => {
 
   test("unsupported platforms fail before network access or installation changes", () => {
     const fixture = prepareBootstrapFixture({ machine: "x86_64", system: "Darwin" });
-    const result = Bun.spawnSync({
-      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
-      env: {
-        HOME: path.join(fixture.sandbox, "home"),
-        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
-        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
-        PATH: `${fixture.bin}:/usr/bin:/bin`,
-        SHELL: "/bin/sh"
-      },
-      stderr: "pipe",
-      stdout: "pipe"
-    });
+    const result = runBootstrap(fixture);
 
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr.toString()).toContain("macOS arm64, Linux x64");
@@ -261,18 +226,7 @@ describe("public Release bootstrap", () => {
 
   test("checksum failure prevents bundle-owned installer delegation", () => {
     const fixture = prepareBootstrapFixture({ corruptChecksum: true });
-    const result = Bun.spawnSync({
-      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
-      env: {
-        HOME: path.join(fixture.sandbox, "home"),
-        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
-        MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
-        PATH: `${fixture.bin}:/usr/bin:/bin`,
-        SHELL: "/bin/sh"
-      },
-      stderr: "pipe",
-      stdout: "pipe"
-    });
+    const result = runBootstrap(fixture);
 
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr.toString()).toContain("checksum");
@@ -287,18 +241,7 @@ describe("public Release bootstrap", () => {
   ])("$expected prevents installer delegation", ({ expected, options }) => {
     const fixture = prepareBootstrapFixture(options);
     const monkeHome = path.join(fixture.sandbox, "monke-home");
-    const result = Bun.spawnSync({
-      cmd: ["sh", path.join(repositoryRoot, "install.sh")],
-      env: {
-        HOME: path.join(fixture.sandbox, "home"),
-        MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
-        MONKE_HOME: monkeHome,
-        PATH: `${fixture.bin}:/usr/bin:/bin`,
-        SHELL: "/bin/sh"
-      },
-      stderr: "pipe",
-      stdout: "pipe"
-    });
+    const result = runBootstrap(fixture);
 
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr.toString()).toContain(expected);

@@ -39,7 +39,7 @@ import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./run
 import { runShellInstall } from "./shell.ts";
 import {
   preflightReleaseInstallSkills,
-  runLocalInstallSkillsLocked,
+  runInstallSkillsLocked,
   runReleaseInstallSkillsLocked
 } from "./skills.ts";
 import type { Runtime } from "./types.ts";
@@ -212,7 +212,7 @@ export async function runActivateLocalInstall(
 
     const stableCommand = path.join(homeDirectory, ".local", "bin", "mt");
     runShellInstall(runtime, { binary: stableCommand });
-    await runLocalInstallSkillsLocked(runtime, sourceCheckout, options.targetKinds);
+    await runInstallSkillsLocked(runtime, sourceCheckout, options.targetKinds);
 
     try {
       reconcileCodiff(runtime, manifest.minimumCodiffVersion);

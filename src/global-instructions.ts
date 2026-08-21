@@ -34,7 +34,7 @@ const ConfiguredDirectorySchema = z.string().refine((value) => value.trim().leng
 /** Validate a known Global instruction destination without changing it. */
 export function preflightGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
-  options: GlobalInstructionsOptions & { sourceCheckout: string }
+  options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
 ) {
   const prepared = prepareGlobalInstructions(target, options);
   if (prepared === null) {
@@ -46,7 +46,7 @@ export function preflightGlobalInstructions(
 /** Reconcile the selected harness's Managed instruction section from the source snapshot. */
 export function reconcileGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
-  options: GlobalInstructionsOptions & { sourceCheckout: string }
+  options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
 ) {
   const prepared = prepareGlobalInstructions(target, options);
   if (prepared === null) {
@@ -58,7 +58,7 @@ export function reconcileGlobalInstructions(
 
 function prepareGlobalInstructions(
   target: { kind: SkillInstallTargetKind },
-  options: GlobalInstructionsOptions & { sourceCheckout: string }
+  options: GlobalInstructionsOptions & { guidanceSourceRoot: string }
 ) {
   const destinationPath = globalInstructionsPath(target, options);
   if (destinationPath === null) {
@@ -66,7 +66,7 @@ function prepareGlobalInstructions(
   }
   const filePath = resolveInstructionFile(destinationPath);
   const body = readFileSync(
-    path.join(options.sourceCheckout, GLOBAL_INSTRUCTIONS_RELATIVE_PATH),
+    path.join(options.guidanceSourceRoot, GLOBAL_INSTRUCTIONS_RELATIVE_PATH),
     "utf-8"
   );
   const existingContent = existsSync(filePath) ? readFileSync(filePath, "utf-8") : null;

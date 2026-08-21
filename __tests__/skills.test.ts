@@ -65,12 +65,12 @@ describe("skills", () => {
 
     reconcileSkillNamespaces({
       cwd: sandbox,
+      guidanceSourceRoot: sourceCheckout,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "codex" }, { kind: "cursor" }, { kind: "custom", path: customSkillRoot }]
       },
       previousPreference: null,
-      sourceCheckout,
       writeMessage() {}
     });
 
@@ -108,12 +108,12 @@ describe("skills", () => {
 
     reconcileSkillNamespaces({
       cwd: sandbox,
+      guidanceSourceRoot: sourceCheckout,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "claude" }]
       },
       previousPreference: null,
-      sourceCheckout,
       writeMessage() {}
     });
 
@@ -146,6 +146,7 @@ describe("skills", () => {
 
     reconcileSkillNamespaces({
       cwd: sandbox,
+      guidanceSourceRoot: sourceCheckout,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "codex" }]
@@ -153,7 +154,6 @@ describe("skills", () => {
       previousPreference: {
         targets: [{ kind: "claude" }]
       },
-      sourceCheckout,
       writeMessage() {}
     });
 
@@ -191,12 +191,12 @@ describe("skills", () => {
 
     reconcileSkillNamespaces({
       cwd: sandbox,
+      guidanceSourceRoot: sourceCheckout,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "custom", path: customSkillRoot }, { kind: "claude" }]
       },
       previousPreference: null,
-      sourceCheckout,
       writeMessage() {}
     });
 
@@ -231,6 +231,7 @@ describe("skills", () => {
 
     reconcileSkillNamespaces({
       cwd: sandbox,
+      guidanceSourceRoot: sourceCheckout,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "custom", path: customSkillRoot }]
@@ -238,7 +239,6 @@ describe("skills", () => {
       previousPreference: {
         targets: [{ kind: "custom", path: customSkillRoot }, { kind: "claude" }]
       },
-      sourceCheckout,
       writeMessage() {}
     });
     expect(existsSync(path.join(sandbox, ".claude", "references"))).toBeFalsy();
@@ -263,10 +263,10 @@ describe("skills", () => {
     expect(() => {
       reconcileSkillNamespaces({
         cwd: sandbox,
+        guidanceSourceRoot: sourceCheckout,
         homeDirectory: sandbox,
         nextPreference: { targets: [{ kind: "claude" }] },
         previousPreference: { targets: [{ kind: "claude" }] },
-        sourceCheckout,
         writeMessage() {}
       });
     }).toThrow(/Invalid monke-tools flat Skill manifest/u);
@@ -287,12 +287,12 @@ describe("skills", () => {
     expect(() => {
       reconcileSkillNamespaces({
         cwd: sandbox,
+        guidanceSourceRoot: sourceCheckout,
         homeDirectory: sandbox,
         nextPreference: {
           targets: [{ kind: "codex" }, { kind: "custom", path: blockedSkillRoot }]
         },
         previousPreference: null,
-        sourceCheckout,
         writeMessage() {}
       });
     }).toThrow(/Failed to reconcile 1 Skill install target/u);
@@ -316,6 +316,7 @@ describe("skills", () => {
     expect(() => {
       reconcileSkillNamespaces({
         cwd: sandbox,
+        guidanceSourceRoot: sourceCheckout,
         homeDirectory: sandbox,
         nextPreference: {
           targets: [{ kind: "codex" }]
@@ -323,7 +324,6 @@ describe("skills", () => {
         previousPreference: {
           targets: [{ kind: "claude" }]
         },
-        sourceCheckout,
         writeMessage() {}
       });
     }).toThrow(/Failed to reconcile 1 Skill install target/u);
@@ -345,17 +345,18 @@ describe("skills", () => {
     );
     reconcileSkillNamespaces({
       cwd: sandbox,
+      guidanceSourceRoot: sourceCheckout,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "custom", path: oldSkillRoot }]
       },
       previousPreference: null,
-      sourceCheckout,
       writeMessage() {}
     });
 
     reconcileSkillNamespaces({
       cwd: sandbox,
+      guidanceSourceRoot: sourceCheckout,
       homeDirectory: sandbox,
       nextPreference: {
         targets: [{ kind: "codex" }]
@@ -363,7 +364,6 @@ describe("skills", () => {
       previousPreference: {
         targets: [{ kind: "custom", path: oldSkillRoot }]
       },
-      sourceCheckout,
       writeMessage() {}
     });
 
