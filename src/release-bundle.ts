@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
+import { hash } from "node:crypto";
 import {
   accessSync,
   chmodSync,
@@ -24,9 +25,9 @@ import { array as arraySchema, string as stringSchema } from "zod";
 import type { output } from "zod";
 
 import { MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
-import { sha256File } from "./digest.ts";
 import {
   FullCommitSchema,
+  RELEASE_PLATFORM_VALUES,
   RELEASE_TAG_PREFIX,
   ReleaseInstallManifestSchema,
   ReleasePlatformSchema,
@@ -42,6 +43,9 @@ import {
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const CHECKSUM_PATTERN = /^(?<hash>[0-9a-f]{64}) {2}(?<name>[^/\s]+)$/u;
+const LEADING_ARCHIVE_PATH_PATTERN = /^\.\/?/u;
+const TRAILING_SLASH_PATTERN = /\/$/u;
+const ZERO_COMMIT_PATTERN = /^0{40}$/u;
 const ChecksumEntrySchema = stringSchema()
   .regex(CHECKSUM_PATTERN, "must be a SHA-256 hash followed by two spaces and an asset name")
   .transform((line) => {
@@ -77,7 +81,7 @@ const RELEASE_INPUTS = [
   "vite.config.ts"
 ] as const;
 
-export const SUPPORTED_RELEASE_PLATFORMS = ["macos-arm64", "linux-x64"] as const;
+export const SUPPORTED_RELEASE_PLATFORMS = RELEASE_PLATFORM_VALUES;
 
 interface BuildReleaseBundleOptions {
   createdAt?: string;
@@ -151,7 +155,7 @@ export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
     copyBundleInputs(bundleRoot);
 
     const manifest: ReleaseInstallManifest = ReleaseInstallManifestSchema.parse({
-      artifactDigest: sha256File(path.join(bundleRoot, "mt")),
+      artifactDigest: hash("sha256", readFileSync(path.join(bundleRoot, "mt")), "hex"),
       artifactName: archiveName,
       createdAt: options.createdAt ?? new Date().toISOString(),
       guidanceHashes: hashReleaseGuidance(bundleRoot),
@@ -188,7 +192,10 @@ export function writeReleaseChecksums(directory: string, version: string) {
   }
   const checksumPath = path.join(outputDirectory, releaseChecksumsName(version));
   const contents = archiveNames
-    .map((archiveName) => `${sha256File(path.join(outputDirectory, archiveName))}  ${archiveName}`)
+    .map(
+      (archiveName) =>
+        `${hash("sha256", readFileSync(path.join(outputDirectory, archiveName)), "hex")}  ${archiveName}`
+    )
     .join("\n");
   writeFileSync(checksumPath, `${contents}\n`, "utf-8");
   return checksumPath;
@@ -241,7 +248,10 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
     if (manifest.artifactName !== expectedArchiveName) {
       throw new Error(`Release manifest artifact identity does not match ${expectedArchiveName}`);
     }
-    if (manifest.artifactDigest !== sha256File(path.join(extractedRoot, "mt"))) {
+    if (
+      manifest.artifactDigest !==
+      hash("sha256", readFileSync(path.join(extractedRoot, "mt")), "hex")
+    ) {
       throw new Error("Release manifest artifact digest does not match its executable");
     }
     assertReleaseGuidanceHashes(manifest.guidanceHashes, hashReleaseGuidance(extractedRoot));
@@ -354,7 +364,7 @@ function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
   if (expected === undefined) {
     throw new Error(`Release checksum is missing for ${archiveName}`);
   }
-  if (expected !== sha256File(archivePath)) {
+  if (expected !== hash("sha256", readFileSync(archivePath), "hex")) {
     throw new Error(`Release checksum mismatch for ${archiveName}`);
   }
 }
@@ -373,7 +383,9 @@ function listArchiveEntries(archivePath: string) {
     .trim()
     .split("\n")
     .filter(Boolean)
-    .map((entry) => entry.replace(/^\.\/?/u, "").replace(/\/$/u, ""))
+    .map((entry) =>
+      entry.replace(LEADING_ARCHIVE_PATH_PATTERN, "").replace(TRAILING_SLASH_PATTERN, "")
+    )
     .filter(Boolean);
 }
 
@@ -485,7 +497,7 @@ function optionalOption(arguments_: string[], name: string) {
 
 function changedPaths(before: string, after: string) {
   FullCommitSchema.parse(after);
-  if (/^0{40}$/u.test(before)) {
+  if (ZERO_COMMIT_PATTERN.test(before)) {
     return run("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", after])
       .trim()
       .split("\n")

@@ -1,3 +1,4 @@
+import { hash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -11,7 +12,6 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { sha256 } from "../src/digest.ts";
 import { saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
@@ -38,7 +38,10 @@ function prepareActiveRelease(monkeHome: string, version: string, activate = tru
       artifactName: `monke-tools-v${version}-linux-x64.tar.gz`,
       createdAt: "2026-08-21T12:34:56.000Z",
       guidanceHashes: Object.fromEntries(
-        Object.entries(guidance).map(([filePath, contents]) => [filePath, sha256(contents)])
+        Object.entries(guidance).map(([filePath, contents]) => [
+          filePath,
+          hash("sha256", contents, "hex")
+        ])
       ),
       installKind: "release",
       minimumCodiffVersion: "1.9.0",
@@ -64,11 +67,7 @@ function prepareActiveLocal(
 ) {
   const sourceCommit = options.sourceCommit ?? SOURCE_COMMIT;
   const sourceDirty = options.sourceDirty ?? true;
-  const installId = sourceDirty
-    ? "local-dirty"
-    : sourceCommit === SOURCE_COMMIT
-      ? "local-clean-same"
-      : "local-clean-different";
+  const installId = localInstallId(sourceDirty, sourceCommit);
   const toolBuildIdentity = `local+${sourceCommit.slice(0, 7)}${sourceDirty ? "-dirty" : ""}`;
   const installRoot = path.join(monkeHome, "installs", installId);
   writeExecutable(path.join(installRoot, "mt"), "#!/bin/sh\nexit 0\n");
@@ -92,6 +91,13 @@ function prepareActiveLocal(
   mkdirSync(monkeHome, { recursive: true });
   symlinkSync(path.relative(monkeHome, installRoot), path.join(monkeHome, "current"), "dir");
   return installRoot;
+}
+
+function localInstallId(sourceDirty: boolean, sourceCommit: string) {
+  if (sourceDirty) {
+    return "local-dirty";
+  }
+  return sourceCommit === SOURCE_COMMIT ? "local-clean-same" : "local-clean-different";
 }
 
 function release(version: string, options: { draft?: boolean; prerelease?: boolean } = {}) {
@@ -142,11 +148,14 @@ function prepareReleaseAsset(
   const executableContents = `#!/bin/sh\nprintf '%s\\n' '${version}'\n`;
   writeExecutable(path.join(bundleRoot, "mt"), executableContents);
   const manifest = {
-    artifactDigest: sha256(executableContents),
+    artifactDigest: hash("sha256", executableContents, "hex"),
     artifactName: archiveName,
     createdAt: "2026-08-21T12:34:56.000Z",
     guidanceHashes: Object.fromEntries(
-      Object.entries(guidance).map(([filePath, contents]) => [filePath, sha256(contents)])
+      Object.entries(guidance).map(([filePath, contents]) => [
+        filePath,
+        hash("sha256", contents, "hex")
+      ])
     ),
     installKind: "release",
     minimumCodiffVersion: "1.9.0",
@@ -162,14 +171,14 @@ function prepareReleaseAsset(
   const tar = Bun.spawnSync({ cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, "."] });
   expect(tar.exitCode).toBe(0);
   const archive = new Uint8Array(readFileSync(archivePath));
-  const checksums = new TextEncoder().encode(`${sha256(archive)}  ${archiveName}\n`);
+  const checksums = new TextEncoder().encode(`${hash("sha256", archive, "hex")}  ${archiveName}\n`);
   const metadata = release(version);
   const [archiveAsset, checksumsAsset] = metadata.assets;
   if (!archiveAsset || !checksumsAsset) {
     throw new Error("Release test fixture assets are missing");
   }
-  archiveAsset.digest = `sha256:${sha256(archive)}`;
-  checksumsAsset.digest = `sha256:${sha256(checksums)}`;
+  archiveAsset.digest = `sha256:${hash("sha256", archive, "hex")}`;
+  checksumsAsset.digest = `sha256:${hash("sha256", checksums, "hex")}`;
   return { archive, archiveName, checksums, checksumsName, manifest, metadata };
 }
 
@@ -360,6 +369,43 @@ describe("Release update", () => {
     );
     expect(catalogCalled).toBeFalsy();
     expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
+  });
+
+  test("guidance customized during download stops update before activation", async () => {
+    const sandbox = makeTempDir("release-update-customized-during-download");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
+    const candidate = prepareReleaseAsset(sandbox, "1.2.4");
+
+    const update = runCliAsync(
+      ["update"],
+      createRuntime({
+        architecture: "x64",
+        cwd: sandbox,
+        env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+        onStderr() {},
+        onStdout() {},
+        platform: "linux",
+        releaseDistribution: {
+          async downloadReleaseAsset(url) {
+            write(installRoot, "skills/internal/example/SKILL.md", "edited during download\n");
+            return url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums;
+          },
+          async listReleases(page) {
+            return page === 1 ? [candidate.metadata] : [];
+          }
+        },
+        toolBuildIdentity: "1.2.3",
+        toolInstallRoot: installRoot
+      })
+    );
+
+    await expect(update).rejects.toThrow(/Customized release install[\s\S]*example\/SKILL\.md/u);
+    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+      path.join("installs", "release-1.2.3-linux-x64")
+    );
+    expect(existsSync(path.join(monkeHome, "installs", "release-1.2.4-linux-x64"))).toBeFalsy();
+    expect(readdirSync(path.join(monkeHome, "install-staging"))).toStrictEqual([]);
   });
 
   test.each([
@@ -656,15 +702,13 @@ describe("Release update", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
     const olderInstall = prepareActiveRelease(monkeHome, "1.2.2", false);
-    const candidate = prepareReleaseAsset(
-      sandbox,
-      "1.2.4",
-      failure === "manifest provenance"
-        ? { manifestSourceCommit: "f".repeat(40) }
-        : failure === "manifest platform"
-          ? { manifestPlatform: "macos-arm64" }
-          : {}
-    );
+    let fixtureOptions: Parameters<typeof prepareReleaseAsset>[2] = {};
+    if (failure === "manifest provenance") {
+      fixtureOptions = { manifestSourceCommit: "f".repeat(40) };
+    } else if (failure === "manifest platform") {
+      fixtureOptions = { manifestPlatform: "macos-arm64" };
+    }
+    const candidate = prepareReleaseAsset(sandbox, "1.2.4", fixtureOptions);
     const [archiveAsset, checksumsAsset] = candidate.metadata.assets;
     if (!archiveAsset || !checksumsAsset) {
       throw new Error("Release test fixture assets are missing");
@@ -676,15 +720,15 @@ describe("Release update", () => {
       candidate.checksums = new TextEncoder().encode(
         `${"0".repeat(64)}  ${candidate.archiveName}\n`
       );
-      checksumsAsset.digest = `sha256:${sha256(candidate.checksums)}`;
+      checksumsAsset.digest = `sha256:${hash("sha256", candidate.checksums, "hex")}`;
     }
     if (failure === "archive structure") {
       candidate.archive = new TextEncoder().encode("not a Release archive\n");
       candidate.checksums = new TextEncoder().encode(
-        `${sha256(candidate.archive)}  ${candidate.archiveName}\n`
+        `${hash("sha256", candidate.archive, "hex")}  ${candidate.archiveName}\n`
       );
-      archiveAsset.digest = `sha256:${sha256(candidate.archive)}`;
-      checksumsAsset.digest = `sha256:${sha256(candidate.checksums)}`;
+      archiveAsset.digest = `sha256:${hash("sha256", candidate.archive, "hex")}`;
+      checksumsAsset.digest = `sha256:${hash("sha256", candidate.checksums, "hex")}`;
     }
 
     const update = runCliAsync(

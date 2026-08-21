@@ -135,7 +135,7 @@ describe("Local install refresh script", () => {
       PATH: `${binDirectory}:/usr/bin:/bin`
     };
 
-    for (let index = 0; index < 2; index += 1) {
+    for (const _attempt of [1, 2]) {
       const result = spawnSync("sh", [path.join(checkout, "scripts", "install-local.sh")], {
         cwd: checkout,
         encoding: "utf-8",

@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
+import { hash } from "node:crypto";
 import {
   accessSync,
   closeSync,
@@ -20,7 +21,6 @@ import { isCancel, multiselect as clackMultiSelect, select as clackSelect } from
 import * as z from "zod";
 
 import { DEFAULT_TOOL_BUILD_IDENTITY } from "./build-identity.ts";
-import { sha256 } from "./digest.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import type {
   ExecOptions,
@@ -410,7 +410,7 @@ export function getHomeDirectory(runtime: Runtime) {
 }
 
 export function hashKey(value: string) {
-  return sha256(value);
+  return hash("sha256", value, "hex");
 }
 
 export function findExecutable(command: string, env: Record<string, string | undefined>) {
@@ -454,23 +454,23 @@ export async function withInstallationLockAsync<T>(home: string, callback: () =>
   }
 }
 
-async function acquireLockPathAsync(lockPath: string) {
+function acquireLockPathAsync(lockPath: string) {
   const deadline = prepareLockAcquisition(lockPath);
-  while (true) {
-    const attempt = tryAcquireLockPath(lockPath);
-    if (attempt.release) {
-      return attempt.release;
-    }
-    assertLockDeadline(lockPath, deadline);
-    if (attempt.wait) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Lock retries must remain sequential.
-      await new Promise<void>((resolve) => {
-        setTimeout(() => {
-          resolve();
-        }, LOCK_RETRY_INTERVAL_MS);
-      });
-    }
-  }
+  return new Promise<() => void>((resolve, reject) => {
+    const poll = () => {
+      try {
+        const attempt = tryAcquireLockBeforeDeadline(lockPath, deadline);
+        if (attempt.release) {
+          resolve(attempt.release);
+          return;
+        }
+        setTimeout(poll, attempt.wait ? LOCK_RETRY_INTERVAL_MS : 0);
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+    poll();
+  });
 }
 
 /** Run a synchronous callback while holding a lock scoped inside the monke home directory. */
@@ -490,15 +490,22 @@ function withLockPath<T>(lockPath: string, callback: () => T) {
 function acquireLockPath(lockPath: string) {
   const deadline = prepareLockAcquisition(lockPath);
   while (true) {
-    const attempt = tryAcquireLockPath(lockPath);
+    const attempt = tryAcquireLockBeforeDeadline(lockPath, deadline);
     if (attempt.release) {
       return attempt.release;
     }
-    assertLockDeadline(lockPath, deadline);
     if (attempt.wait) {
       sleep(LOCK_RETRY_INTERVAL_MS);
     }
   }
+}
+
+function tryAcquireLockBeforeDeadline(lockPath: string, deadline: number) {
+  const attempt = tryAcquireLockPath(lockPath);
+  if (!attempt.release) {
+    assertLockDeadline(lockPath, deadline);
+  }
+  return attempt;
 }
 
 function prepareLockAcquisition(lockPath: string) {

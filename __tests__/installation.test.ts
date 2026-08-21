@@ -1,3 +1,4 @@
+import { hash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -13,7 +14,6 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { sha256 } from "../src/digest.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { loadLocalInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
@@ -59,14 +59,14 @@ function prepareReleaseBundle(
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
   chmodSync(path.join(bundleRoot, "mt"), 0o755);
   const manifest = {
-    artifactDigest: sha256(executableContents),
+    artifactDigest: hash("sha256", executableContents, "hex"),
     artifactName: `monke-tools-v1.2.3-${platform}.tar.gz`,
     createdAt: "2026-08-21T12:34:56.000Z",
     guidanceHashes: {
-      "skills/codex/.keep": sha256("\n"),
-      "skills/imported/.keep": sha256("\n"),
-      "skills/internal/example/SKILL.md": sha256(skillContents),
-      "skills/references/internal/example.md": sha256(referenceContents)
+      "skills/codex/.keep": hash("sha256", "\n", "hex"),
+      "skills/imported/.keep": hash("sha256", "\n", "hex"),
+      "skills/internal/example/SKILL.md": hash("sha256", skillContents, "hex"),
+      "skills/references/internal/example.md": hash("sha256", referenceContents, "hex")
     },
     installKind: "release",
     minimumCodiffVersion: "1.9.0",
@@ -304,6 +304,33 @@ describe("versioned installation lifecycle", () => {
         sandbox
       })
     ).rejects.toThrow(/Global agent instructions/u);
+
+    expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
+    expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
+  });
+
+  test("a read-only Skill destination is rejected before Release activation", async () => {
+    const sandbox = makeTempDir("release-install-read-only-skills");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox);
+    const skillRoot = path.join(home, ".codex", "skills");
+    mkdirSync(skillRoot, { recursive: true });
+    chmodSync(skillRoot, 0o555);
+
+    try {
+      await expect(
+        activateRelease({
+          args: ["--targets", "codex"],
+          bundleRoot: release.bundleRoot,
+          home,
+          monkeHome,
+          sandbox
+        })
+      ).rejects.toThrow(/destination preflight failed[\s\S]*not writable/u);
+    } finally {
+      chmodSync(skillRoot, 0o755);
+    }
 
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
     expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
@@ -788,7 +815,7 @@ skillInstallPreference:
     );
   });
 
-  test("Skills Configure re-reads the Active tool install after acquiring the mutation lock", async () => {
+  test("Skills Configure rejects a fixed install root that stopped being Active", async () => {
     const sandbox = makeTempDir("local-install-configure");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -821,14 +848,14 @@ skillInstallPreference:
       sourceCheckout: secondSourceCheckout
     });
 
-    await runCliAsync(["skills", "configure"], runningCommand);
+    await expect(runCliAsync(["skills", "configure"], runningCommand)).rejects.toThrow(
+      /Active tool install changed[\s\S]*rerun mt skills configure/u
+    );
 
     expect(loadGlobalMonkeConfig(monkeHome)).toStrictEqual({
-      skillInstallPreference: { targets: [{ kind: "cursor" }] },
+      skillInstallPreference: { targets: [{ kind: "codex" }] },
       version: 1
     });
-    expect(readlinkSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"))).toBe(
-      path.join(secondSourceCheckout, "skills", "internal")
-    );
+    expect(existsSync(path.join(home, ".cursor", "skills", "monke-tools"))).toBeFalsy();
   });
 });

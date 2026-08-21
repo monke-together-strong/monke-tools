@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { hash, randomUUID } from "node:crypto";
 import {
   cpSync,
   existsSync,
@@ -18,7 +18,6 @@ import path from "node:path";
 import { number, strictObject } from "zod";
 
 import { reconcileCodiff, MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
-import { sha256File } from "./digest.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import type { BuiltInSkillInstallTargetKind } from "./global-config.ts";
 import {
@@ -50,6 +49,7 @@ const InstallationLockMetadataSchema = strictObject({
   acquiredAt: number().int().nonnegative(),
   pid: number().int().positive()
 });
+const MANAGED_STAGING_DIRECTORY_PATTERN = /^(?:local|release|update)-[A-Za-z0-9._-]+$/u;
 
 export interface ActivateLocalInstallOptions {
   createdAt: string;
@@ -401,7 +401,9 @@ function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
   ) {
     throw new MonkeError("Release executable identity does not match its Install manifest");
   }
-  if (manifest.artifactDigest !== sha256File(path.join(resolvedRoot, "mt"))) {
+  if (
+    manifest.artifactDigest !== hash("sha256", readFileSync(path.join(resolvedRoot, "mt")), "hex")
+  ) {
     throw new MonkeError("Release executable digest does not match its Install manifest");
   }
   if (manifest.platform !== releasePlatform(runtime)) {
@@ -440,7 +442,7 @@ export function cleanupStaleStagingDirectories(monkeHome: string, activeStage?: 
       candidate === activeStage ||
       !entry.isDirectory() ||
       entry.isSymbolicLink() ||
-      !/^(?:local|release|update)-[A-Za-z0-9._-]+$/u.test(entry.name)
+      !MANAGED_STAGING_DIRECTORY_PATTERN.test(entry.name)
     ) {
       continue;
     }

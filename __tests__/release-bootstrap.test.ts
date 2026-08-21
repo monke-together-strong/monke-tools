@@ -1,9 +1,9 @@
+import { hash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { sha256 } from "../src/digest.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
@@ -55,7 +55,7 @@ printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
   } else {
     Bun.spawnSync({ cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, "."] });
   }
-  const archiveHash = sha256(readFileSync(archivePath));
+  const archiveHash = hash("sha256", readFileSync(archivePath), "hex");
   write(
     responses,
     checksumName,
@@ -64,10 +64,18 @@ printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
   const releasePage = (...values: ReleaseResponse[]) => `${JSON.stringify(values)}\n`;
   const selectedRelease: ReleaseResponse = {
     assets: options.missingAsset
-      ? [{ digest: `sha256:${sha256(readFileSync(checksumPath))}`, name: checksumName }]
+      ? [
+          {
+            digest: `sha256:${hash("sha256", readFileSync(checksumPath), "hex")}`,
+            name: checksumName
+          }
+        ]
       : [
           { digest: `sha256:${archiveHash}`, name: archiveName },
-          { digest: `sha256:${sha256(readFileSync(checksumPath))}`, name: checksumName }
+          {
+            digest: `sha256:${hash("sha256", readFileSync(checksumPath), "hex")}`,
+            name: checksumName
+          }
         ],
     draft: false,
     prerelease: false,

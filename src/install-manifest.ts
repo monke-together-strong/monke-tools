@@ -24,7 +24,7 @@ export const StableSemanticVersionSchema = stringSchema().regex(
   "must use stable major.minor.patch semantic version syntax"
 );
 export const RELEASE_TAG_PREFIX = "monke-tools-v";
-const RELEASE_PLATFORM_VALUES = ["linux-x64", "macos-arm64"] as const;
+export const RELEASE_PLATFORM_VALUES = ["macos-arm64", "linux-x64"] as const;
 const InstallIdSchema = stringSchema()
   .min(1)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u, "must contain only install identity characters");

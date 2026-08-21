@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
+import { hash } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { sha256 } from "../src/digest.ts";
 import {
   buildReleaseBundle,
   deriveNextReleaseVersion,
@@ -70,12 +70,12 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
     path.join(bundleRoot, "install-manifest.json"),
     `${JSON.stringify(
       {
-        artifactDigest: sha256(executableContents),
+        artifactDigest: hash("sha256", executableContents, "hex"),
         artifactName: archiveName,
         createdAt: "2026-08-21T12:34:56.000Z",
         guidanceHashes: {
-          "skills/internal/example/SKILL.md": sha256(skillContents),
-          "skills/references/internal/example.md": sha256(referenceContents)
+          "skills/internal/example/SKILL.md": hash("sha256", skillContents, "hex"),
+          "skills/references/internal/example.md": hash("sha256", referenceContents, "hex")
         },
         installKind: "release",
         minimumCodiffVersion: "1.9.0",
@@ -108,7 +108,11 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
     throw new Error(`Could not create Release fixture: ${tar.stderr}`);
   }
   const checksumPath = path.join(sandbox, `monke-tools-v${RELEASE_VERSION}-checksums.txt`);
-  writeFileSync(checksumPath, `${sha256(readFileSync(archivePath))}  ${archiveName}\n`, "utf-8");
+  writeFileSync(
+    checksumPath,
+    `${hash("sha256", readFileSync(archivePath), "hex")}  ${archiveName}\n`,
+    "utf-8"
+  );
   return { archivePath, bundleRoot, checksumPath };
 }
 

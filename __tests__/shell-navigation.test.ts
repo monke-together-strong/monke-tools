@@ -271,7 +271,7 @@ apps:
       const stableBinary = path.join(shellHome, ".local", "bin", "mt");
       const results = [];
 
-      for (let index = 0; index < 2; index += 1) {
+      for (const _attempt of [1, 2]) {
         results.push(
           runMonke({
             args: ["shell", "install", "--binary", stableBinary],

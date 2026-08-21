@@ -1,8 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { hash, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { sha256 } from "./digest.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import {
   FullCommitSchema,
@@ -28,6 +27,7 @@ import { getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import type { ReleaseCatalogAsset, ReleaseCatalogEntry, Runtime } from "./types.ts";
 
 const MAX_RELEASE_PAGES = 10_000;
+const RELEASE_ASSET_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 
 export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
   const monkeHome = getMonkeHome(runtime);
@@ -66,7 +66,8 @@ export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
         runtime,
         contract,
         selected.version,
-        selected.release.target_commitish
+        selected.release.target_commitish,
+        lockedActive
       );
     } catch (error) {
       if (
@@ -142,7 +143,7 @@ function assertSelectedReleaseContract(
   const archive = selectAsset(selected.release.assets, archiveName);
   const checksums = selectAsset(selected.release.assets, checksumsName);
   for (const asset of [archive, checksums]) {
-    if (!/^sha256:[0-9a-f]{64}$/u.test(asset.digest ?? "")) {
+    if (!RELEASE_ASSET_DIGEST_PATTERN.test(asset.digest ?? "")) {
       throw new MonkeError(`Selected Release asset has no valid SHA-256 digest: ${asset.name}`);
     }
     const expectedUrl = `https://github.com/monke-together-strong/monke-tools/releases/download/${selected.release.tag_name}/${asset.name}`;
@@ -157,7 +158,8 @@ async function downloadAndActivate(
   runtime: Runtime,
   contract: ReturnType<typeof assertSelectedReleaseContract>,
   version: string,
-  sourceCommit: string
+  sourceCommit: string,
+  expectedActive: NonNullable<ReturnType<typeof loadActiveToolInstall>>
 ) {
   const monkeHome = getMonkeHome(runtime);
   const stagingRoot = path.join(monkeHome, "install-staging");
@@ -192,6 +194,11 @@ async function downloadAndActivate(
     const bundleRoot = path.join(updateRoot, `bundle-${randomUUID()}`);
     mkdirSync(bundleRoot);
     runtime.exec("tar", ["-xzf", archivePath, "-C", bundleRoot]);
+    const activeBeforeActivation = loadActiveToolInstall(monkeHome);
+    if (activeBeforeActivation?.installRoot !== expectedActive.installRoot) {
+      throw new MonkeError("The Active tool install changed while update was in progress");
+    }
+    assertReleaseInstallNotCustomized(activeBeforeActivation);
     await runActivateReleaseInstall(runtime, { bundleRoot, installationLockHeld: true });
   } finally {
     rmSync(updateRoot, { force: true, recursive: true });
@@ -220,7 +227,7 @@ function reportLocalTransition(runtime: Runtime, sourceCheckout: string) {
 
 function assertAssetDigest(contents: Uint8Array, asset: ReleaseCatalogAsset) {
   const expected = asset.digest?.slice("sha256:".length);
-  const actual = sha256(contents);
+  const actual = hash("sha256", contents, "hex");
   if (actual !== expected) {
     throw new MonkeError(
       `Downloaded Release asset digest does not match GitHub metadata: ${asset.name}`

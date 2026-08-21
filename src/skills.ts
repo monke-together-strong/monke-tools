@@ -1,4 +1,6 @@
 import {
+  accessSync,
+  constants as fsConstants,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -30,7 +32,11 @@ import {
   reconcileGlobalInstructions,
   removeGlobalInstructions
 } from "./global-instructions.ts";
-import { loadActiveToolInstall } from "./install-manifest.ts";
+import {
+  loadActiveToolInstall,
+  loadToolInstall,
+  resolveActiveInstallRoot
+} from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
 import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
@@ -101,7 +107,7 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
-  const activeInstall = loadActiveToolInstall(monkeHome);
+  const activeInstall = loadFixedToolInstall(runtime, monkeHome);
   const guidanceSourceRoot =
     guidanceSourceRootOverride ??
     (activeInstall?.manifest.installKind === "local"
@@ -135,6 +141,20 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
     }
   });
   createLogger(runtime).success("Configured monke-tools skills");
+}
+
+function loadFixedToolInstall(runtime: Runtime, monkeHome: string) {
+  const fixedRoot = path.resolve(runtime.toolInstallRoot);
+  const installsRoot = path.join(path.resolve(monkeHome), "installs");
+  if (path.dirname(fixedRoot) !== installsRoot) {
+    return loadActiveToolInstall(monkeHome);
+  }
+  if (resolveActiveInstallRoot(monkeHome) !== fixedRoot) {
+    throw new MonkeError(
+      "The Active tool install changed while Skills Configure was waiting; rerun mt skills configure"
+    );
+  }
+  return loadToolInstall(fixedRoot);
 }
 
 /** Record the Installed source checkout and refresh or configure Distributed skill targets. */
@@ -214,6 +234,7 @@ export function preflightReleaseInstallSkills(
       continue;
     }
     try {
+      preflightSkillTargetRemoval(target);
       preflightRemoveGlobalInstructions(target, {
         cwd: runtime.cwd,
         environment: runtime.env,
@@ -237,7 +258,7 @@ export function preflightReleaseInstallSkills(
     }
   }
   if (failures.length > 0) {
-    throw new MonkeError(`Global agent instructions preflight failed:\n${failures.join("\n")}`);
+    throw new MonkeError(`Release guidance destination preflight failed:\n${failures.join("\n")}`);
   }
 }
 
@@ -245,11 +266,14 @@ function preflightOneSkillTarget(target: ResolvedSkillInstallTarget, guidanceSou
   const skillSourceTree = resolveSkillSourceTree(guidanceSourceRoot);
   if (skillInstallLayoutForTarget(target) === "flat") {
     const previousManifest = readFlatManifest(target);
-    assertFlatLinksCanBeManaged(target, discoverFlatSkillLinks(skillSourceTree), previousManifest);
-    assertFlatSupportingLinksCanBeManaged(
-      discoverFlatSupportingLinks(target, skillSourceTree),
-      previousManifest
-    );
+    const links = discoverFlatSkillLinks(skillSourceTree);
+    const supportingLinks = discoverFlatSupportingLinks(target, skillSourceTree);
+    assertWritableDirectory(target.agentSkillRoot, "Agent Skill root");
+    for (const link of supportingLinks) {
+      assertWritableDirectory(path.dirname(link.targetPath), "Reference link parent");
+    }
+    assertFlatLinksCanBeManaged(target, links, previousManifest);
+    assertFlatSupportingLinksCanBeManaged(supportingLinks, previousManifest);
     return;
   }
 
@@ -257,6 +281,10 @@ function preflightOneSkillTarget(target: ResolvedSkillInstallTarget, guidanceSou
   if (namespaceStat && !namespaceStat.isDirectory() && !namespaceStat.isSymbolicLink()) {
     throw new MonkeError(`Refusing to overwrite Skill namespace at ${target.namespacePath}`);
   }
+  assertWritableDirectory(
+    namespaceStat?.isDirectory() === true ? target.namespacePath : target.agentSkillRoot,
+    "Skill namespace destination"
+  );
   if (!namespaceStat?.isDirectory()) {
     return;
   }
@@ -268,6 +296,46 @@ function preflightOneSkillTarget(target: ResolvedSkillInstallTarget, guidanceSou
     if (linkStat && !linkStat.isSymbolicLink()) {
       throw new MonkeError(`Refusing to overwrite non-managed Skill folder at ${linkPath}`);
     }
+  }
+}
+
+function preflightSkillTargetRemoval(target: ResolvedSkillInstallTarget) {
+  const namespaceStat = lstatSync(target.namespacePath, { throwIfNoEntry: false });
+  const manifest = target.kind === "claude" ? readFlatManifest(target) : null;
+  if (!namespaceStat && !manifest) {
+    return;
+  }
+  assertWritableDirectory(target.agentSkillRoot, "Agent Skill root");
+  if (namespaceStat?.isDirectory() === true) {
+    assertWritableDirectory(target.namespacePath, "Skill namespace");
+  }
+  for (const link of manifest?.supportingLinks ?? []) {
+    assertWritableDirectory(path.dirname(link.targetPath), "Reference link parent");
+  }
+}
+
+function assertWritableDirectory(directory: string, label: string) {
+  let candidate = path.resolve(directory);
+  let stat = lstatSync(candidate, { throwIfNoEntry: false });
+  while (!stat) {
+    const parent = path.dirname(candidate);
+    if (parent === candidate) {
+      throw new MonkeError(`${label} has no existing parent: ${directory}`);
+    }
+    candidate = parent;
+    stat = lstatSync(candidate, { throwIfNoEntry: false });
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new MonkeError(`${label} is not a writable directory: ${candidate}`);
+  }
+  // oxlint-disable-next-line eslint/no-bitwise -- POSIX write permission bits make readonly preflight deterministic, including as root.
+  if ((stat.mode & 0o222) === 0) {
+    throw new MonkeError(`${label} is not writable: ${candidate}`);
+  }
+  try {
+    accessSync(candidate, fsConstants.W_OK);
+  } catch {
+    throw new MonkeError(`${label} is not writable: ${candidate}`);
   }
 }
 
