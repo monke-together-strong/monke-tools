@@ -22,6 +22,8 @@ export const StableSemanticVersionSchema = stringSchema().regex(
   /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u,
   "must use stable major.minor.patch semantic version syntax"
 );
+const RELEASE_TAG_PREFIX = "monke-tools-v";
+const RELEASE_PLATFORM_VALUES = ["linux-x64", "macos-arm64"] as const;
 const InstallIdSchema = stringSchema()
   .min(1)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u, "must contain only install identity characters");
@@ -29,13 +31,27 @@ export const FullCommitSchema = stringSchema().regex(
   /^[0-9a-f]{40}$/u,
   "must be a full Git commit SHA"
 );
-export const ReleasePlatformSchema = enumSchema(["linux-x64", "macos-arm64"]);
-export const ReleaseTagSchema = stringSchema().regex(
-  /^monke-tools-v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u
+export const ReleasePlatformSchema = enumSchema(RELEASE_PLATFORM_VALUES);
+export const ReleaseTagSchema = stringSchema().refine(
+  (value) =>
+    value.startsWith(RELEASE_TAG_PREFIX) &&
+    StableSemanticVersionSchema.safeParse(value.slice(RELEASE_TAG_PREFIX.length)).success,
+  "must use the monke-tools-v<semver> stable Release tag syntax"
 );
 export const ReleaseInstallManifestSchema = strictObject({
-  artifactName: stringSchema().regex(
-    /^monke-tools-v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)-(?:linux-x64|macos-arm64)\.tar\.gz$/u
+  artifactName: stringSchema().refine(
+    (value) =>
+      RELEASE_PLATFORM_VALUES.some((platform) => {
+        const suffix = `-${platform}.tar.gz`;
+        return (
+          value.startsWith(RELEASE_TAG_PREFIX) &&
+          value.endsWith(suffix) &&
+          StableSemanticVersionSchema.safeParse(
+            value.slice(RELEASE_TAG_PREFIX.length, -suffix.length)
+          ).success
+        );
+      }),
+    "must use the predictable versioned Release archive name"
   ),
   guidanceHashes: record(
     stringSchema().regex(

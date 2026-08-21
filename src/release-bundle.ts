@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { array as arraySchema, string as stringSchema } from "zod";
 import type { output } from "zod";
 
 import { MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
@@ -36,6 +37,24 @@ import type { ReleaseInstallManifest } from "./install-manifest.ts";
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const RELEASE_TAG_PREFIX = "monke-tools-v";
 const CHECKSUM_PATTERN = /^(?<hash>[0-9a-f]{64}) {2}(?<name>[^/\s]+)$/u;
+const ChecksumEntrySchema = stringSchema()
+  .regex(CHECKSUM_PATTERN, "must be a SHA-256 hash followed by two spaces and an asset name")
+  .transform((line) => {
+    const match = CHECKSUM_PATTERN.exec(line);
+    if (!match?.groups?.hash || !match.groups.name) {
+      throw new Error("Validated Release checksum line could not be parsed");
+    }
+    return { hash: match.groups.hash, name: match.groups.name };
+  });
+const ChecksumEntriesSchema = arraySchema(ChecksumEntrySchema).superRefine((entries, context) => {
+  const names = new Set<string>();
+  for (const entry of entries) {
+    if (names.has(entry.name)) {
+      context.addIssue({ code: "custom", message: `duplicate checksum entry: ${entry.name}` });
+    }
+    names.add(entry.name);
+  }
+});
 const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
 const RELEASE_INPUTS = [
   ".github/workflows/publish.yml",
@@ -73,14 +92,14 @@ interface VerifyReleaseArchiveOptions {
 }
 
 export function releaseArchiveName(version: string, platform: string) {
-  parseSemanticVersion(version);
-  ReleasePlatformSchema.parse(platform);
-  return `${RELEASE_TAG_PREFIX}${version}-${platform}.tar.gz`;
+  const parsedVersion = StableSemanticVersionSchema.parse(version);
+  const parsedPlatform = ReleasePlatformSchema.parse(platform);
+  return `${RELEASE_TAG_PREFIX}${parsedVersion}-${parsedPlatform}.tar.gz`;
 }
 
 export function releaseChecksumsName(version: string) {
-  parseSemanticVersion(version);
-  return `${RELEASE_TAG_PREFIX}${version}-checksums.txt`;
+  const parsedVersion = StableSemanticVersionSchema.parse(version);
+  return `${RELEASE_TAG_PREFIX}${parsedVersion}-checksums.txt`;
 }
 
 export function isReleaseOwnedPath(filePath: string) {
@@ -110,9 +129,9 @@ export function deriveNextReleaseVersion(tags: string[]) {
 }
 
 export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
-  const version = semanticVersionText(options.version);
+  const version = StableSemanticVersionSchema.parse(options.version);
   const platform = ReleasePlatformSchema.parse(options.platform);
-  const sourceCommit = fullCommit(options.sourceCommit);
+  const sourceCommit = FullCommitSchema.parse(options.sourceCommit);
   const outputDirectory = path.resolve(options.outputDirectory);
   const archiveName = releaseArchiveName(version, platform);
   const archivePath = path.join(outputDirectory, archiveName);
@@ -169,9 +188,9 @@ export function writeReleaseChecksums(directory: string, version: string) {
 
 export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): ReleaseInstallManifest {
   const archivePath = path.resolve(options.archivePath);
-  const expectedVersion = semanticVersionText(options.expectedVersion);
+  const expectedVersion = StableSemanticVersionSchema.parse(options.expectedVersion);
   const expectedPlatform = ReleasePlatformSchema.parse(options.expectedPlatform);
-  const expectedSourceCommit = fullCommit(options.expectedSourceCommit);
+  const expectedSourceCommit = FullCommitSchema.parse(options.expectedSourceCommit);
   const expectedArchiveName = releaseArchiveName(expectedVersion, expectedPlatform);
   if (path.basename(archivePath) !== expectedArchiveName) {
     throw new Error(
@@ -361,17 +380,10 @@ function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
 }
 
 function readChecksums(checksumPath: string) {
+  const lines = readFileSync(checksumPath, "utf-8").trim().split("\n");
   const checksums = new Map<string, string>();
-  for (const line of readFileSync(checksumPath, "utf-8").trim().split("\n")) {
-    const match = CHECKSUM_PATTERN.exec(line);
-    if (!match?.groups) {
-      throw new Error(`Malformed Release checksum line: ${line}`);
-    }
-    const { hash, name } = match.groups;
-    if (hash === undefined || name === undefined || checksums.has(name)) {
-      throw new Error(`Malformed or duplicate Release checksum entry: ${line}`);
-    }
-    checksums.set(name, hash);
+  for (const entry of ChecksumEntriesSchema.parse(lines)) {
+    checksums.set(entry.name, entry.hash);
   }
   return checksums;
 }
@@ -464,15 +476,6 @@ function parseSemanticVersion(value: string): [bigint, bigint, bigint] {
   return [BigInt(parts[0] ?? ""), BigInt(parts[1] ?? ""), BigInt(parts[2] ?? "")];
 }
 
-function semanticVersionText(value: string) {
-  parseSemanticVersion(value);
-  return value;
-}
-
-function fullCommit(value: string) {
-  return FullCommitSchema.parse(value);
-}
-
 function compareSemanticVersions(left: bigint[], right: bigint[]) {
   for (const index of [0, 1, 2]) {
     const leftPart = left[index] ?? 0n;
@@ -510,14 +513,14 @@ function optionalOption(arguments_: string[], name: string) {
 }
 
 function changedPaths(before: string, after: string) {
-  fullCommit(after);
+  FullCommitSchema.parse(after);
   if (/^0{40}$/u.test(before)) {
     return run("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", after])
       .trim()
       .split("\n")
       .filter(Boolean);
   }
-  fullCommit(before);
+  FullCommitSchema.parse(before);
   return run("git", ["diff", "--name-only", "--no-renames", before, after])
     .trim()
     .split("\n")
