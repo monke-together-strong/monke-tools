@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   accessSync,
   chmodSync,
@@ -25,6 +24,7 @@ import { array as arraySchema, string as stringSchema } from "zod";
 import type { output } from "zod";
 
 import { MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
+import { sha256File } from "./digest.ts";
 import {
   FullCommitSchema,
   RELEASE_TAG_PREFIX,
@@ -80,6 +80,7 @@ const RELEASE_INPUTS = [
 export const SUPPORTED_RELEASE_PLATFORMS = ["macos-arm64", "linux-x64"] as const;
 
 interface BuildReleaseBundleOptions {
+  createdAt?: string;
   outputDirectory: string;
   platform: output<typeof ReleasePlatformSchema>;
   sourceCommit: string;
@@ -150,7 +151,9 @@ export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
     copyBundleInputs(bundleRoot);
 
     const manifest: ReleaseInstallManifest = ReleaseInstallManifestSchema.parse({
+      artifactDigest: sha256File(path.join(bundleRoot, "mt")),
       artifactName: archiveName,
+      createdAt: options.createdAt ?? new Date().toISOString(),
       guidanceHashes: hashReleaseGuidance(bundleRoot),
       installKind: "release",
       minimumCodiffVersion: MINIMUM_CODIFF_VERSION_TEXT,
@@ -185,7 +188,7 @@ export function writeReleaseChecksums(directory: string, version: string) {
   }
   const checksumPath = path.join(outputDirectory, releaseChecksumsName(version));
   const contents = archiveNames
-    .map((archiveName) => `${hashFile(path.join(outputDirectory, archiveName))}  ${archiveName}`)
+    .map((archiveName) => `${sha256File(path.join(outputDirectory, archiveName))}  ${archiveName}`)
     .join("\n");
   writeFileSync(checksumPath, `${contents}\n`, "utf-8");
   return checksumPath;
@@ -237,6 +240,9 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
     }
     if (manifest.artifactName !== expectedArchiveName) {
       throw new Error(`Release manifest artifact identity does not match ${expectedArchiveName}`);
+    }
+    if (manifest.artifactDigest !== sha256File(path.join(extractedRoot, "mt"))) {
+      throw new Error("Release manifest artifact digest does not match its executable");
     }
     assertReleaseGuidanceHashes(manifest.guidanceHashes, hashReleaseGuidance(extractedRoot));
     if (options.expectedGuidanceRoot) {
@@ -341,10 +347,6 @@ function copyBundleInputs(bundleRoot: string) {
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
 }
 
-function hashFile(filePath: string) {
-  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
-}
-
 function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
   const checksums = readChecksums(checksumPath);
   const archiveName = path.basename(archivePath);
@@ -352,7 +354,7 @@ function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
   if (expected === undefined) {
     throw new Error(`Release checksum is missing for ${archiveName}`);
   }
-  if (expected !== hashFile(archivePath)) {
+  if (expected !== sha256File(archivePath)) {
     throw new Error(`Release checksum mismatch for ${archiveName}`);
   }
 }

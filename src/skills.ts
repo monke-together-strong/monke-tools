@@ -30,7 +30,7 @@ import {
   reconcileGlobalInstructions,
   removeGlobalInstructions
 } from "./global-instructions.ts";
-import { loadActiveToolInstall, loadToolInstall } from "./install-manifest.ts";
+import { loadActiveToolInstall } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
 import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
@@ -101,12 +101,12 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
-  const runningInstall = loadRunningToolInstall(runtime, monkeHome);
+  const activeInstall = loadActiveToolInstall(monkeHome);
   const guidanceSourceRoot =
     guidanceSourceRootOverride ??
-    (runningInstall?.manifest.installKind === "local"
-      ? runningInstall.manifest.sourceCheckout
-      : runningInstall?.installRoot);
+    (activeInstall?.manifest.installKind === "local"
+      ? activeInstall.manifest.sourceCheckout
+      : activeInstall?.installRoot);
   if (!guidanceSourceRoot) {
     throw new MonkeError("Active tool install is not configured; install monke-tools first");
   }
@@ -135,14 +135,6 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
     }
   });
   createLogger(runtime).success("Configured monke-tools skills");
-}
-
-function loadRunningToolInstall(runtime: Runtime, monkeHome: string) {
-  const toolInstallRoot = path.resolve(runtime.toolInstallRoot);
-  if (path.dirname(toolInstallRoot) === path.join(path.resolve(monkeHome), "installs")) {
-    return loadToolInstall(toolInstallRoot);
-  }
-  return loadActiveToolInstall(monkeHome);
 }
 
 /** Record the Installed source checkout and refresh or configure Distributed skill targets. */
@@ -233,6 +225,7 @@ export function preflightReleaseInstallSkills(
   }
   for (const target of nextTargets.values()) {
     try {
+      preflightOneSkillTarget(target, bundleRoot);
       preflightGlobalInstructions(target, {
         cwd: runtime.cwd,
         environment: runtime.env,
@@ -245,6 +238,36 @@ export function preflightReleaseInstallSkills(
   }
   if (failures.length > 0) {
     throw new MonkeError(`Global agent instructions preflight failed:\n${failures.join("\n")}`);
+  }
+}
+
+function preflightOneSkillTarget(target: ResolvedSkillInstallTarget, guidanceSourceRoot: string) {
+  const skillSourceTree = resolveSkillSourceTree(guidanceSourceRoot);
+  if (skillInstallLayoutForTarget(target) === "flat") {
+    const previousManifest = readFlatManifest(target);
+    assertFlatLinksCanBeManaged(target, discoverFlatSkillLinks(skillSourceTree), previousManifest);
+    assertFlatSupportingLinksCanBeManaged(
+      discoverFlatSupportingLinks(target, skillSourceTree),
+      previousManifest
+    );
+    return;
+  }
+
+  const namespaceStat = lstatSync(target.namespacePath, { throwIfNoEntry: false });
+  if (namespaceStat && !namespaceStat.isDirectory() && !namespaceStat.isSymbolicLink()) {
+    throw new MonkeError(`Refusing to overwrite Skill namespace at ${target.namespacePath}`);
+  }
+  if (!namespaceStat?.isDirectory()) {
+    return;
+  }
+  const sourceFolders =
+    target.kind === "codex" ? CODEX_NAMESPACE_SOURCE_FOLDERS : SHARED_NAMESPACE_SOURCE_FOLDERS;
+  for (const name of sourceFolders) {
+    const linkPath = path.join(target.namespacePath, name);
+    const linkStat = lstatSync(linkPath, { throwIfNoEntry: false });
+    if (linkStat && !linkStat.isSymbolicLink()) {
+      throw new MonkeError(`Refusing to overwrite non-managed Skill folder at ${linkPath}`);
+    }
   }
 }
 

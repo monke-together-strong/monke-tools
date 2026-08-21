@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vite-plus/test";
-import * as z from "zod";
+import { object, string } from "zod";
 
 import { makeTempDir, writeExecutable } from "./helpers.ts";
 
@@ -206,9 +206,9 @@ describe("Local install refresh script", () => {
     expect(readlinkSync(stableCommand)).toBe(path.join(monkeHome, "current", "mt"));
     const activeRoot = realpathSync(path.join(monkeHome, "current"));
     expect(realpathSync(stableCommand)).toBe(path.join(activeRoot, "mt"));
-    const manifest = z
-      .object({ sourceCheckout: z.string(), toolBuildIdentity: z.string() })
-      .parse(JSON.parse(readFileSync(path.join(activeRoot, "install-manifest.json"), "utf-8")));
+    const manifest = object({ sourceCheckout: string(), toolBuildIdentity: string() }).parse(
+      JSON.parse(readFileSync(path.join(activeRoot, "install-manifest.json"), "utf-8"))
+    );
     const version = spawnSync(stableCommand, ["--version"], { encoding: "utf-8" });
     expect(version.status).toBe(0);
     expect(version.stdout.trim()).toBe(manifest.toolBuildIdentity);

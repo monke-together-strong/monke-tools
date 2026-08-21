@@ -40,6 +40,7 @@ export const ReleaseTagSchema = stringSchema().refine(
   "must use the monke-tools-v<semver> stable Release tag syntax"
 );
 export const ReleaseInstallManifestSchema = strictObject({
+  artifactDigest: stringSchema().regex(/^[0-9a-f]{64}$/u, "must be a SHA-256 hash"),
   artifactName: stringSchema().refine(
     (value) =>
       RELEASE_PLATFORM_VALUES.some((platform) => {
@@ -54,6 +55,7 @@ export const ReleaseInstallManifestSchema = strictObject({
       }),
     "must use the predictable versioned Release archive name"
   ),
+  createdAt: iso.datetime(),
   guidanceHashes: record(
     stringSchema().regex(
       /^skills\/(?:codex|imported|internal|references)\/.+/u,

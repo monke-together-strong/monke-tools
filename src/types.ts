@@ -11,6 +11,8 @@ export interface Runtime {
   exec: (command: string, args?: string[], options?: ExecOptions) => ExecResult;
   /** Run a command without blocking independent startup work. */
   execAsync: (command: string, args?: string[], options?: ExecOptions) => Promise<ExecResult>;
+  /** Optional injected activation boundary used to prove atomic failure behavior. */
+  readonly installationActivationBoundary?: (phase: InstallationActivationPhase) => void;
   /** Select multiple values from an interactive terminal picker. */
   multiSelect: (prompt: MultiSelectPrompt) => Promise<string[]>;
   /** Operating system of the machine running this command. */
@@ -32,6 +34,8 @@ export interface Runtime {
   /** Write CLI output to stdout. */
   writeStdout: (text: string) => void;
 }
+
+export type InstallationActivationPhase = "final-rename" | "pointer-replacement";
 
 export interface ReleaseDistribution {
   /** Download one asset selected from an official GitHub Release. */

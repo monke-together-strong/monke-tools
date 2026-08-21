@@ -259,28 +259,44 @@ apps:
     );
   });
 
-  test("shell install refreshes only the current supported shell startup file idempotently", () => {
-    const sandbox = makeTempDir("shell-install");
-    const monkeHome = path.join(sandbox, "monke-home");
-    const shellHome = path.join(sandbox, "shell-home");
+  test.each([
+    ["bash", ".bashrc", ".zshrc"],
+    ["zsh", ".zshrc", ".bashrc"]
+  ] as const)(
+    "%s shell install reports and idempotently refreshes only its startup file",
+    (shell, startupFile, otherStartupFile) => {
+      const sandbox = makeTempDir(`shell-install-${shell}`);
+      const monkeHome = path.join(sandbox, "monke-home");
+      const shellHome = path.join(sandbox, "shell-home");
+      const stableBinary = path.join(shellHome, ".local", "bin", "mt");
+      const results = [];
 
-    for (let index = 0; index < 2; index += 1) {
-      runMonke({
-        args: ["shell", "install", "--binary", "/opt/mt"],
-        cwd: sandbox,
-        extraEnv: {
-          HOME: shellHome,
-          SHELL: "/bin/zsh"
-        },
-        monkeHome
-      });
+      for (let index = 0; index < 2; index += 1) {
+        results.push(
+          runMonke({
+            args: ["shell", "install", "--binary", stableBinary],
+            cwd: sandbox,
+            extraEnv: {
+              HOME: shellHome,
+              SHELL: `/bin/${shell}`
+            },
+            monkeHome
+          })
+        );
+      }
+
+      const contents = read(shellHome, startupFile);
+      expect(contents.match(/monke-tools shell integration/gu)).toHaveLength(2);
+      expect(contents).toContain(`'${stableBinary}' shell init`);
+      expect(existsSync(path.join(shellHome, otherStartupFile))).toBeFalsy();
+      for (const result of results) {
+        expect(result.stderr).toContain(
+          `Installed shell integration in ${path.join(shellHome, startupFile)}`
+        );
+        expect(result.stderr).toContain("Restart your shell");
+      }
     }
-
-    const contents = read(shellHome, ".zshrc");
-    expect(contents.match(/monke-tools shell integration/gu)).toHaveLength(2);
-    expect(contents).toContain("'/opt/mt' shell init");
-    expect(existsSync(path.join(shellHome, ".bashrc"))).toBeFalsy();
-  });
+  );
 
   test("shell install leaves startup files untouched for an unsupported current shell", () => {
     const sandbox = makeTempDir("shell-install-unsupported");

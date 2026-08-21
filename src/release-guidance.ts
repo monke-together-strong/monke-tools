@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, readdirSync } from "node:fs";
+import { lstatSync, readdirSync } from "node:fs";
 import path from "node:path";
 
+import { sha256File } from "./digest.ts";
 import { MonkeError } from "./errors.ts";
 
 export const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
@@ -14,7 +14,7 @@ export function hashReleaseGuidance(bundleRoot: string) {
     assertGuidanceDirectory(root);
     for (const filePath of listRegularFiles(root)) {
       const relativePath = path.relative(bundleRoot, filePath).replaceAll(path.sep, "/");
-      hashes[relativePath] = createHash("sha256").update(readFileSync(filePath)).digest("hex");
+      hashes[relativePath] = sha256File(filePath);
     }
   }
   return Object.fromEntries(
@@ -66,7 +66,7 @@ function collectGuidanceEntries(
     if (entry.isDirectory() && !entry.isSymbolicLink()) {
       collectGuidanceEntries(entryPath, bundleRoot, entries);
     } else if (entry.isFile()) {
-      entries.set(relativePath, createHash("sha256").update(readFileSync(entryPath)).digest("hex"));
+      entries.set(relativePath, sha256File(entryPath));
     } else {
       entries.set(relativePath, null);
     }

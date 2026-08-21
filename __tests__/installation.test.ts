@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -14,6 +13,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
+import { sha256 } from "../src/digest.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { loadLocalInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
@@ -54,17 +54,19 @@ function prepareReleaseBundle(
   write(bundleRoot, "skills/codex/.keep", "\n");
   write(bundleRoot, "skills/imported/.keep", "\n");
   write(bundleRoot, "install.sh", "#!/bin/sh\nexit 0\n");
-  write(bundleRoot, "mt", "#!/bin/sh\nprintf '1.2.3\\n'\n");
+  const executableContents = "#!/bin/sh\nprintf '1.2.3\\n'\n";
+  write(bundleRoot, "mt", executableContents);
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
   chmodSync(path.join(bundleRoot, "mt"), 0o755);
-  const hash = (contents: string) => createHash("sha256").update(contents).digest("hex");
   const manifest = {
+    artifactDigest: sha256(executableContents),
     artifactName: `monke-tools-v1.2.3-${platform}.tar.gz`,
+    createdAt: "2026-08-21T12:34:56.000Z",
     guidanceHashes: {
-      "skills/codex/.keep": hash("\n"),
-      "skills/imported/.keep": hash("\n"),
-      "skills/internal/example/SKILL.md": hash(skillContents),
-      "skills/references/internal/example.md": hash(referenceContents)
+      "skills/codex/.keep": sha256("\n"),
+      "skills/imported/.keep": sha256("\n"),
+      "skills/internal/example/SKILL.md": sha256(skillContents),
+      "skills/references/internal/example.md": sha256(referenceContents)
     },
     installKind: "release",
     minimumCodiffVersion: "1.9.0",
@@ -433,7 +435,7 @@ describe("versioned installation lifecycle", () => {
     }
   );
 
-  test("post-activation projection failure leaves Release core active with repair guidance", async () => {
+  test("predictable Skill projection collisions fail before Release activation", async () => {
     const sandbox = makeTempDir("release-install-projection-failure");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -450,11 +452,9 @@ describe("versioned installation lifecycle", () => {
         monkeHome,
         sandbox
       })
-    ).rejects.toThrow(/Release install is active[\s\S]*mt skills configure[\s\S]*\.codex\/skills/u);
+    ).rejects.toThrow(/preflight failed[\s\S]*Refusing to overwrite non-managed Skill folder/u);
 
-    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
-      path.join("installs", "release-1.2.3-linux-x64")
-    );
+    expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
   });
 
   test("Codiff failure after activation leaves the new Release install active", async () => {
@@ -561,6 +561,63 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(home, ".bashrc"))).toBeFalsy();
     expect(lockObserved).toBeTruthy();
     expect(existsSync(path.join(monkeHome, "locks", "installation.lock"))).toBeFalsy();
+  });
+
+  test("Local refresh replaces a Release install and projects source-backed guidance", async () => {
+    const sandbox = makeTempDir("release-to-local-refresh");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const sourceCheckout = path.join(sandbox, "source");
+    const release = prepareReleaseBundle(sandbox);
+    prepareSource(sourceCheckout);
+
+    await activateRelease({
+      args: ["--targets", "codex"],
+      bundleRoot: release.bundleRoot,
+      home,
+      monkeHome,
+      sandbox
+    });
+    const releaseInstall = path.join(monkeHome, "installs", "release-1.2.3-linux-x64");
+
+    await activateLocal({
+      home,
+      installId: "local-after-release",
+      monkeHome,
+      sourceCheckout
+    });
+
+    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+      path.join("installs", "local-after-release")
+    );
+    expect(existsSync(releaseInstall)).toBeTruthy();
+    expect(readlinkSync(path.join(home, ".codex", "skills", "monke-tools", "internal"))).toBe(
+      path.join(sourceCheckout, "skills", "internal")
+    );
+  });
+
+  test("ordinary CLI commands do not acquire or wait for the installation lock", async () => {
+    const sandbox = makeTempDir("ordinary-command-installation-lock");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const lockPath = path.join(monkeHome, "locks", "installation.lock");
+    mkdirSync(path.dirname(lockPath), { recursive: true });
+    writeFileSync(lockPath, JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }), "utf-8");
+    let stdout = "";
+
+    await runCliAsync(
+      ["home"],
+      createRuntime({
+        cwd: sandbox,
+        env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+        onStderr() {},
+        onStdout(text) {
+          stdout += text;
+        }
+      })
+    );
+
+    expect(stdout).toBe(`${monkeHome}\n`);
+    expect(existsSync(lockPath)).toBeTruthy();
   });
 
   test("Local refresh keeps the stable command link and only one predecessor", async () => {
@@ -731,7 +788,7 @@ skillInstallPreference:
     );
   });
 
-  test("a running Skills Configure command keeps its resolved install root across later activation", async () => {
+  test("Skills Configure re-reads the Active tool install after acquiring the mutation lock", async () => {
     const sandbox = makeTempDir("local-install-configure");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -771,7 +828,7 @@ skillInstallPreference:
       version: 1
     });
     expect(readlinkSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"))).toBe(
-      path.join(firstSourceCheckout, "skills", "internal")
+      path.join(secondSourceCheckout, "skills", "internal")
     );
   });
 });

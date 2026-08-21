@@ -1,6 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   accessSync,
   closeSync,
@@ -21,10 +20,12 @@ import { isCancel, multiselect as clackMultiSelect, select as clackSelect } from
 import * as z from "zod";
 
 import { DEFAULT_TOOL_BUILD_IDENTITY } from "./build-identity.ts";
+import { sha256 } from "./digest.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import type {
   ExecOptions,
   ExecResult,
+  InstallationActivationPhase,
   MultiSelectPrompt,
   ReleaseCatalogEntry,
   ReleaseDistribution,
@@ -66,6 +67,8 @@ export interface RuntimeOptions {
   cwd?: string;
   /** Environment overrides merged over the process environment. */
   env?: Record<string, string | undefined>;
+  /** Optional injected activation boundary used by failure-behavior tests. */
+  installationActivationBoundary?: (phase: InstallationActivationPhase) => void;
   /** Scripted selected value sets used by tests for Clack-style multi-select prompts. */
   multiSelectValues?: string[][];
   /** Optional observer used by tests and embedding callers to inspect multi-select prompts. */
@@ -122,6 +125,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     execAsync(command: string, args: string[] = [], execOptions?: ExecOptions) {
       return executeCommandAsync(runtimeEnv, runtimeCwd, command, args, execOptions);
     },
+    installationActivationBoundary: resolveInstallationActivationBoundary(options),
     async multiSelect(prompt) {
       options?.onMultiSelect?.(prompt);
       if (scriptedMultiSelectValues !== null) {
@@ -194,6 +198,10 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       writeStdout(text);
     }
   };
+}
+
+function resolveInstallationActivationBoundary(options: RuntimeOptions | undefined) {
+  return options?.installationActivationBoundary;
 }
 
 function resolveStderrIsTTY(options: RuntimeOptions | undefined) {
@@ -402,7 +410,7 @@ export function getHomeDirectory(runtime: Runtime) {
 }
 
 export function hashKey(value: string) {
-  return createHash("sha256").update(value).digest("hex");
+  return sha256(value);
 }
 
 export function findExecutable(command: string, env: Record<string, string | undefined>) {

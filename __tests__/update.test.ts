@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -12,16 +11,13 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
+import { sha256 } from "../src/digest.ts";
 import { saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
 const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
-
-function sha256(contents: string) {
-  return createHash("sha256").update(contents).digest("hex");
-}
 
 function prepareActiveRelease(monkeHome: string, version: string, activate = true) {
   const installRoot = path.join(monkeHome, "installs", `release-${version}-linux-x64`);
@@ -38,7 +34,9 @@ function prepareActiveRelease(monkeHome: string, version: string, activate = tru
     installRoot,
     "install-manifest.json",
     `${JSON.stringify({
+      artifactDigest: "0".repeat(64),
       artifactName: `monke-tools-v${version}-linux-x64.tar.gz`,
+      createdAt: "2026-08-21T12:34:56.000Z",
       guidanceHashes: Object.fromEntries(
         Object.entries(guidance).map(([filePath, contents]) => [filePath, sha256(contents)])
       ),
@@ -59,8 +57,20 @@ function prepareActiveRelease(monkeHome: string, version: string, activate = tru
   return installRoot;
 }
 
-function prepareActiveLocal(monkeHome: string, sourceCheckout: string) {
-  const installRoot = path.join(monkeHome, "installs", "local-dirty");
+function prepareActiveLocal(
+  monkeHome: string,
+  sourceCheckout: string,
+  options: { sourceCommit?: string; sourceDirty?: boolean } = {}
+) {
+  const sourceCommit = options.sourceCommit ?? SOURCE_COMMIT;
+  const sourceDirty = options.sourceDirty ?? true;
+  const installId = sourceDirty
+    ? "local-dirty"
+    : sourceCommit === SOURCE_COMMIT
+      ? "local-clean-same"
+      : "local-clean-different";
+  const toolBuildIdentity = `local+${sourceCommit.slice(0, 7)}${sourceDirty ? "-dirty" : ""}`;
+  const installRoot = path.join(monkeHome, "installs", installId);
   writeExecutable(path.join(installRoot, "mt"), "#!/bin/sh\nexit 0\n");
   write(
     installRoot,
@@ -68,15 +78,15 @@ function prepareActiveLocal(monkeHome: string, sourceCheckout: string) {
     `${JSON.stringify({
       createdAt: "2026-08-21T12:34:56.000Z",
       createdBy: "bun run install:local",
-      installId: "local-dirty",
+      installId,
       installKind: "local",
       minimumCodiffVersion: "1.9.0",
       platform: "linux-x64",
       schemaVersion: 1,
       sourceCheckout,
-      sourceCommit: SOURCE_COMMIT,
-      sourceDirty: true,
-      toolBuildIdentity: "local+0123456-dirty"
+      sourceCommit,
+      sourceDirty,
+      toolBuildIdentity
     })}\n`
   );
   mkdirSync(monkeHome, { recursive: true });
@@ -109,7 +119,10 @@ function release(version: string, options: { draft?: boolean; prerelease?: boole
 function prepareReleaseAsset(
   sandbox: string,
   version: string,
-  options: { manifestSourceCommit?: string } = {}
+  options: {
+    manifestPlatform?: "linux-x64" | "macos-arm64";
+    manifestSourceCommit?: string;
+  } = {}
 ) {
   const tag = `monke-tools-v${version}`;
   const archiveName = `${tag}-linux-x64.tar.gz`;
@@ -126,15 +139,18 @@ function prepareReleaseAsset(
   }
   write(bundleRoot, "instructions/GLOBAL.md", `Release ${version} baseline.\n`);
   writeExecutable(path.join(bundleRoot, "install.sh"), "#!/bin/sh\nexit 0\n");
-  writeExecutable(path.join(bundleRoot, "mt"), `#!/bin/sh\nprintf '%s\\n' '${version}'\n`);
+  const executableContents = `#!/bin/sh\nprintf '%s\\n' '${version}'\n`;
+  writeExecutable(path.join(bundleRoot, "mt"), executableContents);
   const manifest = {
+    artifactDigest: sha256(executableContents),
     artifactName: archiveName,
+    createdAt: "2026-08-21T12:34:56.000Z",
     guidanceHashes: Object.fromEntries(
       Object.entries(guidance).map(([filePath, contents]) => [filePath, sha256(contents)])
     ),
     installKind: "release",
     minimumCodiffVersion: "1.9.0",
-    platform: "linux-x64",
+    platform: options.manifestPlatform ?? "linux-x64",
     releaseTag: tag,
     releaseVersion: version,
     schemaVersion: 1,
@@ -146,19 +162,15 @@ function prepareReleaseAsset(
   const tar = Bun.spawnSync({ cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, "."] });
   expect(tar.exitCode).toBe(0);
   const archive = new Uint8Array(readFileSync(archivePath));
-  const checksums = new TextEncoder().encode(`${sha256Bytes(archive)}  ${archiveName}\n`);
+  const checksums = new TextEncoder().encode(`${sha256(archive)}  ${archiveName}\n`);
   const metadata = release(version);
   const [archiveAsset, checksumsAsset] = metadata.assets;
   if (!archiveAsset || !checksumsAsset) {
     throw new Error("Release test fixture assets are missing");
   }
-  archiveAsset.digest = `sha256:${sha256Bytes(archive)}`;
-  checksumsAsset.digest = `sha256:${sha256Bytes(checksums)}`;
+  archiveAsset.digest = `sha256:${sha256(archive)}`;
+  checksumsAsset.digest = `sha256:${sha256(checksums)}`;
   return { archive, archiveName, checksums, checksumsName, manifest, metadata };
-}
-
-function sha256Bytes(contents: Uint8Array) {
-  return createHash("sha256").update(contents).digest("hex");
 }
 
 describe("Release update", () => {
@@ -350,56 +362,66 @@ describe("Release update", () => {
     expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
   });
 
-  test("a Release update replaces a dirty Local tool install without touching its source checkout", async () => {
-    const sandbox = makeTempDir("local-to-release-update");
-    const home = path.join(sandbox, "home");
-    const monkeHome = path.join(sandbox, "monke-home");
-    const sourceCheckout = path.join(sandbox, "source checkout");
-    write(sourceCheckout, "unfinished.txt", "maintainer work\n");
-    prepareActiveRelease(monkeHome, "1.2.4", false);
-    const localInstall = prepareActiveLocal(monkeHome, sourceCheckout);
-    const candidate = prepareReleaseAsset(sandbox, "1.2.4");
-    let stderr = "";
+  test.each([
+    ["dirty", true, SOURCE_COMMIT],
+    ["clean at the Release commit", false, SOURCE_COMMIT],
+    ["clean at a different commit", false, "f".repeat(40)]
+  ])(
+    "a Release update replaces a %s Local tool install without touching its source checkout",
+    async (_state, sourceDirty, sourceCommit) => {
+      const sandbox = makeTempDir("local-to-release-update");
+      const home = path.join(sandbox, "home");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const sourceCheckout = path.join(sandbox, "source checkout");
+      write(sourceCheckout, "unfinished.txt", "maintainer work\n");
+      prepareActiveRelease(monkeHome, "1.2.4", false);
+      const localInstall = prepareActiveLocal(monkeHome, sourceCheckout, {
+        sourceCommit,
+        sourceDirty
+      });
+      const candidate = prepareReleaseAsset(sandbox, "1.2.4");
+      let stderr = "";
 
-    await runCliAsync(
-      ["update"],
-      createRuntime({
-        architecture: "x64",
-        cwd: sandbox,
-        env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
-        onMultiSelect() {
-          throw new Error("update must not prompt");
-        },
-        onStderr(text) {
-          stderr += text;
-        },
-        onStdout() {},
-        platform: "linux",
-        releaseDistribution: {
-          async downloadReleaseAsset(url) {
-            return url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums;
+      await runCliAsync(
+        ["update"],
+        createRuntime({
+          architecture: "x64",
+          cwd: sandbox,
+          env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
+          onMultiSelect() {
+            throw new Error("update must not prompt");
           },
-          async listReleases(page) {
-            return page === 1 ? [candidate.metadata] : [];
-          }
-        },
-        toolBuildIdentity: "local+0123456-dirty",
-        toolInstallRoot: localInstall
-      })
-    );
+          onStderr(text) {
+            stderr += text;
+          },
+          onStdout() {},
+          platform: "linux",
+          releaseDistribution: {
+            async downloadReleaseAsset(url) {
+              return url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums;
+            },
+            async listReleases(page) {
+              return page === 1 ? [candidate.metadata] : [];
+            }
+          },
+          toolBuildIdentity: `local+${sourceCommit.slice(0, 7)}${sourceDirty ? "-dirty" : ""}`,
+          toolInstallRoot: localInstall
+        })
+      );
 
-    expect(readFileSync(path.join(sourceCheckout, "unfinished.txt"), "utf-8")).toBe(
-      "maintainer work\n"
-    );
-    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
-      path.join("installs", "release-1.2.4-linux-x64")
-    );
-    expect(stderr).toContain("Release install in place of the Local tool install");
-    expect(stderr).toContain(sourceCheckout);
-    expect(stderr).toContain("vp run install:local");
-  });
+      expect(readFileSync(path.join(sourceCheckout, "unfinished.txt"), "utf-8")).toBe(
+        "maintainer work\n"
+      );
+      expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+        path.join("installs", "release-1.2.4-linux-x64")
+      );
+      expect(stderr).toContain("Release install in place of the Local tool install");
+      expect(stderr).toContain(sourceCheckout);
+      expect(stderr).toContain("vp run install:local");
+    }
+  );
 
-  test("a post-activation failure still reports the completed Local-to-Release transition", async () => {
+  test("a predictable projection collision preserves the Local tool install", async () => {
     const sandbox = makeTempDir("local-to-release-partial-update");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -440,53 +462,54 @@ describe("Release update", () => {
       })
     );
 
-    await expect(update).rejects.toThrow(/Release install is active[\s\S]*mt skills configure/u);
+    await expect(update).rejects.toThrow(/preflight failed[\s\S]*non-managed Skill folder/u);
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
-      path.join("installs", "release-1.2.4-linux-x64")
+      path.join("installs", "local-dirty")
     );
-    expect(stderr).toContain("Release install in place of the Local tool install");
-    expect(stderr).toContain(sourceCheckout);
-    expect(stderr).toContain("vp run install:local");
+    expect(stderr).not.toContain("Release install in place of the Local tool install");
   });
 
-  test("a bare Release update on the matching clean Release install performs no replacement", async () => {
-    const sandbox = makeTempDir("release-update-current");
-    const monkeHome = path.join(sandbox, "monke-home");
-    const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
-    let stderr = "";
+  test.each([["update"], ["update", "--check"]])(
+    "%s on the matching clean Release install performs no replacement",
+    async (...arguments_) => {
+      const sandbox = makeTempDir("release-update-current");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
+      let stderr = "";
 
-    await runCliAsync(
-      ["update"],
-      createRuntime({
-        architecture: "x64",
-        cwd: sandbox,
-        env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
-        onStderr(text) {
-          stderr += text;
-        },
-        onStdout() {},
-        platform: "linux",
-        releaseDistribution: {
-          async downloadReleaseAsset() {
-            throw new Error("the matching Release install must not be downloaded again");
+      await runCliAsync(
+        arguments_,
+        createRuntime({
+          architecture: "x64",
+          cwd: sandbox,
+          env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+          onStderr(text) {
+            stderr += text;
           },
-          async listReleases(page) {
-            return page === 1 ? [release("1.2.3")] : [];
-          }
-        },
-        toolBuildIdentity: "1.2.3",
-        toolInstallRoot: installRoot
-      })
-    );
+          onStdout() {},
+          platform: "linux",
+          releaseDistribution: {
+            async downloadReleaseAsset() {
+              throw new Error("the matching Release install must not be downloaded again");
+            },
+            async listReleases(page) {
+              return page === 1 ? [release("1.2.3")] : [];
+            }
+          },
+          toolBuildIdentity: "1.2.3",
+          toolInstallRoot: installRoot
+        })
+      );
 
-    expect(stderr).toContain(
-      "Active tool install 1.2.3 already matches the selected stable Release"
-    );
-    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
-      path.join("installs", "release-1.2.3-linux-x64")
-    );
-    expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
-  });
+      expect(stderr).toContain(
+        "Active tool install 1.2.3 already matches the selected stable Release"
+      );
+      expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+        path.join("installs", "release-1.2.3-linux-x64")
+      );
+      expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
+    }
+  );
 
   test("a failed download preserves installs while cleaning recognized stale staging", async () => {
     const sandbox = makeTempDir("release-update-download-failure");
@@ -626,7 +649,8 @@ describe("Release update", () => {
     ["GitHub digest", /digest does not match GitHub metadata/u],
     ["published checksum", /checksum mismatch/u],
     ["archive structure", /tar .* failed/u],
-    ["manifest provenance", /source commit does not match/u]
+    ["manifest provenance", /source commit does not match/u],
+    ["manifest platform", /platform does not match linux-x64/u]
   ])("a %s failure preserves the complete previous installation", async (failure, expected) => {
     const sandbox = makeTempDir("release-update-failure");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -635,7 +659,11 @@ describe("Release update", () => {
     const candidate = prepareReleaseAsset(
       sandbox,
       "1.2.4",
-      failure === "manifest provenance" ? { manifestSourceCommit: "f".repeat(40) } : {}
+      failure === "manifest provenance"
+        ? { manifestSourceCommit: "f".repeat(40) }
+        : failure === "manifest platform"
+          ? { manifestPlatform: "macos-arm64" }
+          : {}
     );
     const [archiveAsset, checksumsAsset] = candidate.metadata.assets;
     if (!archiveAsset || !checksumsAsset) {
@@ -648,15 +676,15 @@ describe("Release update", () => {
       candidate.checksums = new TextEncoder().encode(
         `${"0".repeat(64)}  ${candidate.archiveName}\n`
       );
-      checksumsAsset.digest = `sha256:${sha256Bytes(candidate.checksums)}`;
+      checksumsAsset.digest = `sha256:${sha256(candidate.checksums)}`;
     }
     if (failure === "archive structure") {
       candidate.archive = new TextEncoder().encode("not a Release archive\n");
       candidate.checksums = new TextEncoder().encode(
-        `${sha256Bytes(candidate.archive)}  ${candidate.archiveName}\n`
+        `${sha256(candidate.archive)}  ${candidate.archiveName}\n`
       );
-      archiveAsset.digest = `sha256:${sha256Bytes(candidate.archive)}`;
-      checksumsAsset.digest = `sha256:${sha256Bytes(candidate.checksums)}`;
+      archiveAsset.digest = `sha256:${sha256(candidate.archive)}`;
+      checksumsAsset.digest = `sha256:${sha256(candidate.checksums)}`;
     }
 
     const update = runCliAsync(
@@ -694,6 +722,55 @@ describe("Release update", () => {
     const stagingRoot = path.join(monkeHome, "install-staging");
     expect(existsSync(stagingRoot) ? readdirSync(stagingRoot) : []).toStrictEqual([]);
   });
+
+  test.each(["final-rename", "pointer-replacement"] as const)(
+    "an injected %s failure preserves the Active install and all predecessors",
+    async (phase) => {
+      const sandbox = makeTempDir(`release-update-${phase}`);
+      const home = path.join(sandbox, "home");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
+      const olderInstall = prepareActiveRelease(monkeHome, "1.2.2", false);
+      const candidate = prepareReleaseAsset(sandbox, "1.2.4");
+
+      const update = runCliAsync(
+        ["update"],
+        createRuntime({
+          architecture: "x64",
+          cwd: sandbox,
+          env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
+          installationActivationBoundary(currentPhase) {
+            if (currentPhase === phase) {
+              throw new Error(`injected ${phase} failure`);
+            }
+          },
+          onStderr() {},
+          onStdout() {},
+          platform: "linux",
+          releaseDistribution: {
+            async downloadReleaseAsset(url) {
+              return url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums;
+            },
+            async listReleases(page) {
+              return page === 1 ? [candidate.metadata] : [];
+            }
+          },
+          toolBuildIdentity: "1.2.3",
+          toolInstallRoot: predecessor
+        })
+      );
+
+      await expect(update).rejects.toThrow(`injected ${phase} failure`);
+      expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+        path.join("installs", "release-1.2.3-linux-x64")
+      );
+      expect(existsSync(predecessor)).toBeTruthy();
+      expect(existsSync(olderInstall)).toBeTruthy();
+      expect(existsSync(path.join(monkeHome, "installs", "release-1.2.4-linux-x64"))).toBeFalsy();
+      const stagingRoot = path.join(monkeHome, "install-staging");
+      expect(existsSync(stagingRoot) ? readdirSync(stagingRoot) : []).toStrictEqual([]);
+    }
+  );
 
   test.each([
     ["exact versions", ["update", "1.2.4"]],

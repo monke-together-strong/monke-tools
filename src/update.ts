@@ -1,7 +1,8 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { sha256 } from "./digest.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import {
   FullCommitSchema,
@@ -219,7 +220,7 @@ function reportLocalTransition(runtime: Runtime, sourceCheckout: string) {
 
 function assertAssetDigest(contents: Uint8Array, asset: ReleaseCatalogAsset) {
   const expected = asset.digest?.slice("sha256:".length);
-  const actual = createHash("sha256").update(contents).digest("hex");
+  const actual = sha256(contents);
   if (actual !== expected) {
     throw new MonkeError(
       `Downloaded Release asset digest does not match GitHub metadata: ${asset.name}`

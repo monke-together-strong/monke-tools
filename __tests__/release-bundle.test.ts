@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
+import { sha256 } from "../src/digest.ts";
 import {
   buildReleaseBundle,
   deriveNextReleaseVersion,
@@ -20,6 +20,8 @@ import { makeTempDir } from "./helpers.ts";
 const RELEASE_VERSION = "1.2.3";
 const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 interface ManifestOverrides {
+  artifactDigest?: string;
+  createdAt?: string;
   guidanceHashes?: Record<string, string>;
   platform?: "linux-x64" | "macos-arm64";
   schemaVersion?: number;
@@ -34,10 +36,6 @@ interface ReleaseFixtureOptions {
   sandbox?: string;
 }
 
-function sha256(contents: Buffer | string) {
-  return createHash("sha256").update(contents).digest("hex");
-}
-
 function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   const sandbox = options.sandbox ?? makeTempDir("release-bundle");
   const platform = options.platform ?? "macos-arm64";
@@ -46,6 +44,7 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   const archivePath = path.join(sandbox, archiveName);
   const skillContents = "# Example skill\n";
   const referenceContents = "# Example reference\n";
+  const executableContents = `#!/bin/sh\nprintf '%s\\n' '${options.executableVersion ?? RELEASE_VERSION}'\n`;
 
   mkdirSync(path.join(bundleRoot, "instructions"), { recursive: true });
   mkdirSync(path.join(bundleRoot, "skills", "codex"), { recursive: true });
@@ -63,10 +62,7 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
     "utf-8"
   );
   writeFileSync(path.join(bundleRoot, "instructions", "GLOBAL.md"), "# Global\n", "utf-8");
-  writeFileSync(
-    path.join(bundleRoot, "mt"),
-    `#!/bin/sh\nprintf '%s\\n' '${options.executableVersion ?? RELEASE_VERSION}'\n`
-  );
+  writeFileSync(path.join(bundleRoot, "mt"), executableContents);
   writeFileSync(path.join(bundleRoot, "install.sh"), "#!/bin/sh\nexit 0\n");
   chmodSync(path.join(bundleRoot, "mt"), 0o755);
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
@@ -74,7 +70,9 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
     path.join(bundleRoot, "install-manifest.json"),
     `${JSON.stringify(
       {
+        artifactDigest: sha256(executableContents),
         artifactName: archiveName,
+        createdAt: "2026-08-21T12:34:56.000Z",
         guidanceHashes: {
           "skills/internal/example/SKILL.md": sha256(skillContents),
           "skills/references/internal/example.md": sha256(referenceContents)
@@ -128,10 +126,22 @@ describe("Release bundle verifier", () => {
     });
 
     expect(manifest.artifactName).toBe(path.basename(fixture.archivePath));
+    expect(manifest.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(manifest.createdAt).toBe("2026-08-21T12:34:56.000Z");
     expect(manifest.guidanceHashes).toHaveProperty("skills/internal/example/SKILL.md");
   });
 
   const invalidBundles = [
+    {
+      expected: /artifact digest does not match/u,
+      fixture: { manifest: { artifactDigest: "0".repeat(64) } },
+      name: "mismatched executable digest"
+    },
+    {
+      expected: /createdAt/u,
+      fixture: { manifest: { createdAt: "not-a-time" } },
+      name: "invalid creation time"
+    },
     {
       expected: /entry is missing: instructions\/GLOBAL\.md/u,
       fixture: { missingPath: "instructions/GLOBAL.md" },
@@ -259,6 +269,8 @@ describe("Release bundle verifier", () => {
     });
 
     expect(manifest.toolBuildIdentity).toBe(RELEASE_VERSION);
+    expect(manifest.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(Date.parse(manifest.createdAt)).not.toBeNaN();
   });
 });
 

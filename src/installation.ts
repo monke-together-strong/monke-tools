@@ -15,9 +15,10 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import * as z from "zod";
+import { number, strictObject } from "zod";
 
 import { reconcileCodiff, MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
+import { sha256File } from "./digest.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import type { BuiltInSkillInstallTargetKind } from "./global-config.ts";
 import {
@@ -45,9 +46,9 @@ import {
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
-const InstallationLockMetadataSchema = z.strictObject({
-  acquiredAt: z.number().int().nonnegative(),
-  pid: z.number().int().positive()
+const InstallationLockMetadataSchema = strictObject({
+  acquiredAt: number().int().nonnegative(),
+  pid: number().int().positive()
 });
 
 export interface ActivateLocalInstallOptions {
@@ -110,6 +111,7 @@ export async function runActivateReleaseInstall(
       installId,
       manifest,
       monkeHome,
+      runtime,
       stagedInstall
     });
     cleanupInactiveToolInstalls(
@@ -235,6 +237,7 @@ export async function runActivateLocalInstall(
       installId: manifest.installId,
       manifest,
       monkeHome,
+      runtime,
       stagedInstall
     });
 
@@ -277,6 +280,7 @@ function activateStagedInstall(options: {
   installId: string;
   manifest: ToolInstallManifest;
   monkeHome: string;
+  runtime: Runtime;
   stagedInstall: string;
 }) {
   const installsRoot = path.join(options.monkeHome, "installs");
@@ -297,15 +301,23 @@ function activateStagedInstall(options: {
     `${JSON.stringify(options.manifest, null, 2)}\n`,
     "utf-8"
   );
-  renameSync(options.stagedInstall, installRoot);
+  try {
+    options.runtime.installationActivationBoundary?.("final-rename");
+    renameSync(options.stagedInstall, installRoot);
+  } catch (error) {
+    rmSync(options.stagedInstall, { force: true, recursive: true });
+    throw error;
+  }
 
   const currentPointer = path.join(options.monkeHome, "current");
   const temporaryPointer = `${currentPointer}.${randomUUID()}.tmp`;
   symlinkSync(path.relative(options.monkeHome, installRoot), temporaryPointer, "dir");
   try {
+    options.runtime.installationActivationBoundary?.("pointer-replacement");
     renameSync(temporaryPointer, currentPointer);
   } catch (error) {
     rmSync(temporaryPointer, { force: true });
+    rmSync(installRoot, { recursive: true });
     throw error;
   }
 
@@ -388,6 +400,9 @@ function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
     executableIdentity.stdout.trim() !== manifest.toolBuildIdentity
   ) {
     throw new MonkeError("Release executable identity does not match its Install manifest");
+  }
+  if (manifest.artifactDigest !== sha256File(path.join(resolvedRoot, "mt"))) {
+    throw new MonkeError("Release executable digest does not match its Install manifest");
   }
   if (manifest.platform !== releasePlatform(runtime)) {
     throw new MonkeError(`Release bundle platform does not match ${releasePlatform(runtime)}`);

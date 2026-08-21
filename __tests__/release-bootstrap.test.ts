@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
+import { sha256 } from "../src/digest.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
@@ -14,10 +14,6 @@ interface ReleaseResponse {
   draft: boolean;
   prerelease: boolean;
   tag_name: string;
-}
-
-function sha256(contents: Uint8Array) {
-  return createHash("sha256").update(contents).digest("hex");
 }
 
 function prepareBootstrapFixture(
