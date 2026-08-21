@@ -14,7 +14,10 @@ interface ReleaseResponse {
   draft: boolean;
   prerelease: boolean;
   tag_name: string;
+  target_commitish?: string;
 }
+
+const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
 function prepareBootstrapFixture(
   options: {
@@ -26,6 +29,7 @@ function prepareBootstrapFixture(
     missingAsset?: boolean;
     olderVersion?: string;
     selectedVersion?: string;
+    sourceCommit?: string;
     system?: string;
   } = {}
 ) {
@@ -44,6 +48,7 @@ function prepareBootstrapFixture(
   const installLog = path.join(sandbox, "install.log");
   const bundlePathLog = path.join(sandbox, "bundle-path.log");
   const bootstrapOwnerLog = path.join(sandbox, "bootstrap-owner.log");
+  const releaseIdentityLog = path.join(sandbox, "release-identity.log");
   const curlLog = path.join(sandbox, "curl.log");
   mkdirSync(responses, { recursive: true });
   writeExecutable(
@@ -51,6 +56,11 @@ function prepareBootstrapFixture(
     `#!/bin/sh
 printf '%s\n' "$0" > "$MONKE_BOOTSTRAP_TEST_BUNDLE_PATH_LOG"
 cat "$(dirname "$(dirname "$0")")/.monke-tools-bootstrap-pid" > "$MONKE_BOOTSTRAP_TEST_OWNER_LOG"
+printf '%s\n' \
+  "$MONKE_TOOLS_EXPECTED_RELEASE_VERSION" \
+  "$MONKE_TOOLS_EXPECTED_RELEASE_TAG" \
+  "$MONKE_TOOLS_EXPECTED_ARTIFACT_NAME" \
+  "$MONKE_TOOLS_EXPECTED_SOURCE_COMMIT" > "$MONKE_BOOTSTRAP_TEST_IDENTITY_LOG"
 printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
 `
   );
@@ -83,7 +93,8 @@ printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
         ],
     draft: false,
     prerelease: false,
-    tag_name: selectedTag
+    tag_name: selectedTag,
+    target_commitish: options.sourceCommit ?? SOURCE_COMMIT
   };
   write(
     responses,
@@ -149,7 +160,16 @@ esac
 if [ -n "$output" ]; then cp "$source" "$output"; else cat "$source"; fi
 `
   );
-  return { archiveName, bin, bootstrapOwnerLog, bundlePathLog, curlLog, installLog, sandbox };
+  return {
+    archiveName,
+    bin,
+    bootstrapOwnerLog,
+    bundlePathLog,
+    curlLog,
+    installLog,
+    releaseIdentityLog,
+    sandbox
+  };
 }
 
 function runBootstrap(
@@ -161,6 +181,7 @@ function runBootstrap(
     env: {
       HOME: path.join(fixture.sandbox, "home"),
       MONKE_BOOTSTRAP_TEST_BUNDLE_PATH_LOG: fixture.bundlePathLog,
+      MONKE_BOOTSTRAP_TEST_IDENTITY_LOG: fixture.releaseIdentityLog,
       MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
       MONKE_BOOTSTRAP_TEST_OWNER_LOG: fixture.bootstrapOwnerLog,
       MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
@@ -192,6 +213,12 @@ describe("public Release bootstrap", () => {
     expect(curlLog).toContain("monke-tools-v1.2.3-linux-x64.tar.gz");
     expect(curlLog).not.toContain(secret);
     expect(readFileSync(fixture.bootstrapOwnerLog, "utf-8")).toMatch(/^\d+\n$/u);
+    expect(readFileSync(fixture.releaseIdentityLog, "utf-8").trim().split("\n")).toStrictEqual([
+      "1.2.3",
+      "monke-tools-v1.2.3",
+      "monke-tools-v1.2.3-linux-x64.tar.gz",
+      SOURCE_COMMIT
+    ]);
     const monkeHome = path.join(fixture.sandbox, "monke-home");
     expect(
       readFileSync(fixture.bundlePathLog, "utf-8")
@@ -248,6 +275,15 @@ describe("public Release bootstrap", () => {
 
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr.toString()).toContain("checksum");
+    expect(existsSync(fixture.installLog)).toBeFalsy();
+  });
+
+  test("invalid selected commit metadata prevents bundle-owned installer delegation", () => {
+    const fixture = prepareBootstrapFixture({ sourceCommit: "main" });
+    const result = runBootstrap(fixture);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain("commit metadata is invalid");
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 

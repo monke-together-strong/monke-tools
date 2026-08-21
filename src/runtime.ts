@@ -655,7 +655,7 @@ function tryEvictStaleLock(lockPath: string) {
   return true;
 }
 
-function isProcessRunning(pid: number) {
+export function isProcessRunning(pid: number) {
   try {
     process.kill(pid, 0);
     return true;
@@ -668,7 +668,7 @@ function isProcessRunning(pid: number) {
         return false;
       }
     }
-    return false;
+    return true;
   }
 }
 

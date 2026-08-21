@@ -42,7 +42,7 @@ import {
   executableFileProblem
 } from "./path-boundary.ts";
 import { assertReleaseGuidanceHashes, hashReleaseGuidance } from "./release-guidance.ts";
-import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
+import { getHomeDirectory, getMonkeHome, isProcessRunning } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
 import {
   preflightInstallGuidance,
@@ -76,9 +76,42 @@ export interface ActivateLocalInstallOptions {
 
 export interface ActivateReleaseInstallOptions {
   bundleRoot: string;
+  expectedReleaseIdentity?: ExpectedReleaseIdentity;
   explicitTargets?: ExplicitSkillTargetSelection;
   installationLockHeld?: boolean;
   interactive?: boolean;
+}
+
+interface ExpectedReleaseIdentity {
+  artifactName: string;
+  releaseTag: string;
+  releaseVersion: string;
+  sourceCommit: string;
+}
+
+/** Read the catalog identity handed from the public bootstrap to its bundled executable. */
+export function expectedReleaseIdentityFromEnvironment(
+  environment: NodeJS.ProcessEnv
+): ExpectedReleaseIdentity | undefined {
+  const identity = {
+    artifactName: environment.MONKE_TOOLS_EXPECTED_ARTIFACT_NAME,
+    releaseTag: environment.MONKE_TOOLS_EXPECTED_RELEASE_TAG,
+    releaseVersion: environment.MONKE_TOOLS_EXPECTED_RELEASE_VERSION,
+    sourceCommit: environment.MONKE_TOOLS_EXPECTED_SOURCE_COMMIT
+  };
+  const values = Object.values(identity);
+  if (values.every((value) => value === undefined)) {
+    return undefined;
+  }
+  if (values.some((value) => value === undefined)) {
+    throw new MonkeError("Public bootstrap Release identity is incomplete");
+  }
+  return {
+    artifactName: identity.artifactName ?? "",
+    releaseTag: identity.releaseTag ?? "",
+    releaseVersion: identity.releaseVersion ?? "",
+    sourceCommit: identity.sourceCommit ?? ""
+  };
 }
 
 /** Activate a verified Release bundle and finish its installation-adjacent work. */
@@ -89,7 +122,11 @@ export async function runActivateReleaseInstall(
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const sourceBundle = path.resolve(options.bundleRoot);
-  const sourceManifest = validateReleaseBundle(runtime, sourceBundle);
+  const sourceManifest = validateReleaseBundle(
+    runtime,
+    sourceBundle,
+    options.expectedReleaseIdentity
+  );
   preflightInstallGuidance(runtime, sourceBundle, options.explicitTargets);
   const activate = async () => {
     preflightInstallGuidance(runtime, sourceBundle, options.explicitTargets);
@@ -101,7 +138,7 @@ export async function runActivateReleaseInstall(
     let manifest: ReleaseInstallManifest;
     try {
       cpSync(sourceBundle, stagedInstall, { recursive: true });
-      manifest = validateReleaseBundle(runtime, stagedInstall);
+      manifest = validateReleaseBundle(runtime, stagedInstall, options.expectedReleaseIdentity);
       if (JSON.stringify(manifest) !== JSON.stringify(sourceManifest)) {
         throw new MonkeError("Release bundle changed while it was being staged");
       }
@@ -416,7 +453,11 @@ function assertCommandEntryCanBeReplaced(commandPath: string) {
   }
 }
 
-function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
+function validateReleaseBundle(
+  runtime: Runtime,
+  bundleRoot: string,
+  expectedIdentity?: ExpectedReleaseIdentity
+) {
   const resolvedRoot = path.resolve(bundleRoot);
   assertDirectory(resolvedRoot, "Release bundle is missing");
   assertExecutableFile(path.join(resolvedRoot, "mt"), "Release mt executable");
@@ -428,6 +469,15 @@ function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
     manifest = ReleaseInstallManifestSchema.parse(JSON.parse(readFileSync(manifestPath, "utf-8")));
   } catch {
     throw new MonkeError(`Invalid Release Install manifest: ${manifestPath}`);
+  }
+  if (
+    expectedIdentity &&
+    (manifest.artifactName !== expectedIdentity.artifactName ||
+      manifest.releaseTag !== expectedIdentity.releaseTag ||
+      manifest.releaseVersion !== expectedIdentity.releaseVersion ||
+      manifest.sourceCommit !== expectedIdentity.sourceCommit)
+  ) {
+    throw new MonkeError("Release Install manifest does not match the selected GitHub Release");
   }
   const executableIdentity = runtime.exec(path.join(resolvedRoot, "mt"), ["--version"], {
     allowFailure: true
@@ -496,12 +546,7 @@ function isAbandonedPublicBootstrap(candidate: string, modifiedAt: number) {
   if (!Number.isSafeInteger(pid) || pid <= 0) {
     return age >= PUBLIC_BOOTSTRAP_CREATION_GRACE_MS;
   }
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch {
-    return true;
-  }
+  return !isProcessRunning(pid);
 }
 
 function assertDirectory(directory: string, message: string) {

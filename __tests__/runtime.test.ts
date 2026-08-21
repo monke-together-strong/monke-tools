@@ -3,10 +3,25 @@ import path from "node:path";
 
 import { describe, expect, test, vi } from "vite-plus/test";
 
-import { createRuntime, withGlobalLock } from "../src/runtime.ts";
+import { createRuntime, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
 import { makeTempDir } from "./helpers.ts";
 
 describe("runtime", () => {
+  test.each([
+    ["EPERM", true],
+    ["ESRCH", false],
+    ["EIO", true]
+  ])("process liveness treats %s conservatively", (code, expected) => {
+    const killMock = vi.spyOn(process, "kill").mockImplementation(() => {
+      throw Object.assign(new Error(code), { code });
+    });
+    try {
+      expect(isProcessRunning(1234)).toBe(expected);
+    } finally {
+      killMock.mockRestore();
+    }
+  });
+
   test("createRuntime surfaces signal-terminated commands as failures", () => {
     const runtime = createRuntime();
 

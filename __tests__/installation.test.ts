@@ -184,6 +184,14 @@ describe("versioned installation lifecycle", () => {
       bundleRoot: release.bundleRoot,
       home,
       monkeHome,
+      runtime: {
+        env: {
+          MONKE_TOOLS_EXPECTED_ARTIFACT_NAME: release.manifest.artifactName,
+          MONKE_TOOLS_EXPECTED_RELEASE_TAG: release.manifest.releaseTag,
+          MONKE_TOOLS_EXPECTED_RELEASE_VERSION: release.manifest.releaseVersion,
+          MONKE_TOOLS_EXPECTED_SOURCE_COMMIT: release.manifest.sourceCommit
+        }
+      },
       sandbox
     });
 
@@ -663,6 +671,31 @@ describe("versioned installation lifecycle", () => {
       })
     ).rejects.toThrow("Release installer is missing");
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
+  });
+
+  test("Release activation rejects a manifest outside the selected catalog identity", async () => {
+    const sandbox = makeTempDir("release-install-catalog-mismatch");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const release = prepareReleaseBundle(sandbox);
+
+    await expect(
+      activateRelease({
+        bundleRoot: release.bundleRoot,
+        home,
+        monkeHome,
+        runtime: {
+          env: {
+            MONKE_TOOLS_EXPECTED_ARTIFACT_NAME: release.manifest.artifactName,
+            MONKE_TOOLS_EXPECTED_RELEASE_TAG: release.manifest.releaseTag,
+            MONKE_TOOLS_EXPECTED_RELEASE_VERSION: release.manifest.releaseVersion,
+            MONKE_TOOLS_EXPECTED_SOURCE_COMMIT: "f".repeat(40)
+          }
+        },
+        sandbox
+      })
+    ).rejects.toThrow("does not match the selected GitHub Release");
+    expect(existsSync(monkeHome)).toBeFalsy();
   });
 
   test("Local refresh rejects an unwritable stable command destination before activation", async () => {

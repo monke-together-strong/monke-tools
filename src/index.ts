@@ -5,7 +5,11 @@ import { Argument, Command, Option } from "@commander-js/extra-typings";
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runDiff, runDiffInteractive } from "./diff.ts";
-import { runActivateLocalInstall, runActivateReleaseInstall } from "./installation.ts";
+import {
+  expectedReleaseIdentityFromEnvironment,
+  runActivateLocalInstall,
+  runActivateReleaseInstall
+} from "./installation.ts";
 import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
@@ -145,6 +149,7 @@ function createProgram(
     .action((bundleRoot, options) =>
       runActivateReleaseInstall(runtime, {
         bundleRoot,
+        expectedReleaseIdentity: expectedReleaseIdentityFromEnvironment(runtime.env),
         explicitTargets: explicitSkillTargets(options.targets, options.customTarget),
         installationLockHeld: options.installationLockHeld === true,
         interactive: options.interactive === true
