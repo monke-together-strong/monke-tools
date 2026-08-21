@@ -106,7 +106,8 @@ describe("shell navigation", () => {
       args: ["shell", "install", "--binary", "/opt/mt"],
       cwd: repoRoot,
       extraEnv: {
-        HOME: shellHome
+        HOME: shellHome,
+        SHELL: "/bin/zsh"
       },
       monkeHome
     });
