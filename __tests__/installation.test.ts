@@ -309,14 +309,17 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
   });
 
-  test("a read-only Skill destination is rejected before Release activation", async () => {
+  test.each([
+    ["read-only", 0o555],
+    ["unsearchable", 0o666]
+  ])("a %s Skill destination is rejected before Release activation", async (_state, mode) => {
     const sandbox = makeTempDir("release-install-read-only-skills");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
     const release = prepareReleaseBundle(sandbox);
     const skillRoot = path.join(home, ".codex", "skills");
     mkdirSync(skillRoot, { recursive: true });
-    chmodSync(skillRoot, 0o555);
+    chmodSync(skillRoot, mode);
 
     try {
       await expect(
@@ -763,6 +766,33 @@ skillInstallPreference:
     );
     expect(existsSync(path.join(monkeHome, "installs", "local-first"))).toBeTruthy();
     expect(existsSync(path.join(monkeHome, "installs", "local-second"))).toBeTruthy();
+  });
+
+  test("Local refresh preflights predictable Skill collisions before activation", async () => {
+    const sandbox = makeTempDir("local-install-projection-preflight");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const sourceCheckout = path.join(sandbox, "source");
+    prepareSource(sourceCheckout);
+    await activateLocal({ home, installId: "local-first", monkeHome, sourceCheckout });
+    mkdirSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"), {
+      recursive: true
+    });
+
+    await expect(
+      activateLocal({
+        home,
+        installId: "local-collision",
+        monkeHome,
+        sourceCheckout,
+        targetKinds: ["cursor"]
+      })
+    ).rejects.toThrow(/destination preflight failed[\s\S]*non-managed Skill folder/u);
+
+    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+      path.join("installs", "local-first")
+    );
+    expect(existsSync(path.join(monkeHome, "installs", "local-collision"))).toBeFalsy();
   });
 
   test("Codiff failure after activation leaves the new Local tool install active", async () => {

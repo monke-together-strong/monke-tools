@@ -57,6 +57,7 @@ function dependencyRuntime(options: {
   architecture?: string;
   binDirectory: string;
   platform?: NodeJS.Platform;
+  toolInstallRoot?: string;
 }) {
   return createRuntime({
     architecture: options.architecture ?? "arm64",
@@ -64,7 +65,8 @@ function dependencyRuntime(options: {
     env: { PATH: options.binDirectory },
     onStderr() {},
     onStdout() {},
-    platform: options.platform ?? "darwin"
+    platform: options.platform ?? "darwin",
+    toolInstallRoot: options.toolInstallRoot
   });
 }
 
@@ -119,6 +121,51 @@ describe("dependency installation", () => {
       "list --cask nkzw-tech/tap/codiff\nupgrade --cask nkzw-tech/tap/codiff\n"
     );
     expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.10.1\n");
+  });
+
+  test("the running Release manifest supplies the required Codiff minimum", () => {
+    const sandbox = makeTempDir("install-dependencies-release-minimum");
+    const binDirectory = path.join(sandbox, "bin");
+    const versionFile = path.join(sandbox, "codiff-version");
+    const brewLog = path.join(sandbox, "brew.log");
+    const installRoot = path.join(sandbox, "install");
+    writeFileSync(versionFile, "codiff v1.10.1\n", "utf-8");
+    installCodiff(binDirectory, versionFile);
+    installBrew({
+      afterVersion: "2.0.1",
+      binDirectory,
+      logPath: brewLog,
+      versionFile
+    });
+    mkdirSync(installRoot, { recursive: true });
+    writeFileSync(
+      path.join(installRoot, "install-manifest.json"),
+      `${JSON.stringify({
+        artifactDigest: "0".repeat(64),
+        artifactName: "monke-tools-v2.0.0-macos-arm64.tar.gz",
+        createdAt: "2026-08-21T12:34:56.000Z",
+        guidanceHashes: {},
+        installKind: "release",
+        minimumCodiffVersion: "2.0.0",
+        platform: "macos-arm64",
+        releaseTag: "monke-tools-v2.0.0",
+        releaseVersion: "2.0.0",
+        schemaVersion: 1,
+        sourceCommit: "0123456789abcdef0123456789abcdef01234567",
+        toolBuildIdentity: "2.0.0"
+      })}\n`,
+      "utf-8"
+    );
+
+    runCli(
+      ["install-dependencies"],
+      dependencyRuntime({ binDirectory, toolInstallRoot: installRoot })
+    );
+
+    expect(readFileSync(brewLog, "utf-8")).toBe(
+      "list --cask nkzw-tech/tap/codiff\nupgrade --cask nkzw-tech/tap/codiff\n"
+    );
+    expect(readFileSync(versionFile, "utf-8")).toBe("codiff v2.0.1\n");
   });
 
   test.each(["codiff v1.8.9\n", "not the official Codiff CLI\n"])(

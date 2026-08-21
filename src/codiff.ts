@@ -26,7 +26,7 @@ export async function verifyCodiffAsync(runtime: Runtime) {
 /** Reconcile Codiff to a minimum-compatible version on supported Homebrew platforms. */
 export function reconcileCodiff(
   runtime: Runtime,
-  minimumVersionText = MINIMUM_CODIFF_VERSION_TEXT
+  minimumVersionText: string | undefined = MINIMUM_CODIFF_VERSION_TEXT
 ) {
   if (runtime.platform !== "darwin" || runtime.architecture !== "arm64") {
     return;

@@ -38,7 +38,7 @@ import { assertReleaseGuidanceHashes, hashReleaseGuidance } from "./release-guid
 import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
 import {
-  preflightReleaseInstallSkills,
+  preflightInstallGuidance,
   runInstallSkillsLocked,
   runReleaseInstallSkillsLocked
 } from "./skills.ts";
@@ -79,9 +79,9 @@ export async function runActivateReleaseInstall(
   const homeDirectory = getHomeDirectory(runtime);
   const sourceBundle = path.resolve(options.bundleRoot);
   const sourceManifest = validateReleaseBundle(runtime, sourceBundle);
-  preflightReleaseInstallSkills(runtime, sourceBundle, options.targetKinds);
+  preflightInstallGuidance(runtime, sourceBundle, options.targetKinds);
   const activate = async () => {
-    preflightReleaseInstallSkills(runtime, sourceBundle, options.targetKinds);
+    preflightInstallGuidance(runtime, sourceBundle, options.targetKinds);
     const stagingRoot = path.join(monkeHome, "install-staging");
     const stagedInstall = path.join(stagingRoot, `release-${randomUUID()}`);
     const stagingRootExisted = existsSync(stagingRoot);
@@ -94,7 +94,7 @@ export async function runActivateReleaseInstall(
       if (JSON.stringify(manifest) !== JSON.stringify(sourceManifest)) {
         throw new MonkeError("Release bundle changed while it was being staged");
       }
-      preflightReleaseInstallSkills(runtime, stagedInstall, options.targetKinds);
+      preflightInstallGuidance(runtime, stagedInstall, options.targetKinds);
     } catch (error) {
       rmSync(stagedInstall, { force: true, recursive: true });
       if (!stagingRootExisted && readdirSync(stagingRoot).length === 0) {
@@ -196,8 +196,9 @@ export async function runActivateLocalInstall(
 ) {
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
+  const sourceCheckout = path.resolve(options.sourceCheckout);
+  preflightInstallGuidance(runtime, sourceCheckout, options.targetKinds);
   const activate = async () => {
-    const sourceCheckout = path.resolve(options.sourceCheckout);
     const stagedInstall = path.resolve(options.stagedInstall);
     assertDirectChildPath(
       stagedInstall,
@@ -230,6 +231,7 @@ export async function runActivateLocalInstall(
     if (!existsSync(path.join(sourceCheckout, "skills"))) {
       throw new MonkeError(`Skill source tree is missing: ${path.join(sourceCheckout, "skills")}`);
     }
+    preflightInstallGuidance(runtime, sourceCheckout, options.targetKinds);
 
     const predecessor = resolveActiveInstallRoot(monkeHome);
     const installRoot = activateStagedInstall({

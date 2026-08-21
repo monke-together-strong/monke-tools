@@ -41,6 +41,11 @@ import {
   validateWorktreeForSession
 } from "./git.ts";
 import type { DefaultBranchRef } from "./git.ts";
+import {
+  INSTALL_MANIFEST_FILENAME,
+  loadActiveToolInstall,
+  loadToolInstall
+} from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
 import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
@@ -729,8 +734,16 @@ function loadResolvedGraphForSession(
 
 /** Load the session graph for cleanup, tolerating missing repo config. */
 export function runInstallDependencies(runtime: Runtime) {
-  reconcileCodiff(runtime);
+  reconcileCodiff(runtime, minimumCodiffVersionForRuntime(runtime));
   createLogger(runtime).success("Verified monke-tools runtime dependencies");
+}
+
+function minimumCodiffVersionForRuntime(runtime: Runtime) {
+  const fixedManifest = path.join(runtime.toolInstallRoot, INSTALL_MANIFEST_FILENAME);
+  if (existsSync(fixedManifest)) {
+    return loadToolInstall(runtime.toolInstallRoot).manifest.minimumCodiffVersion;
+  }
+  return loadActiveToolInstall(getMonkeHome(runtime))?.manifest.minimumCodiffVersion;
 }
 
 export function runMaterialize(runtime: Runtime) {

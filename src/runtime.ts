@@ -35,6 +35,7 @@ import type {
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
 const LOCK_RETRY_INTERVAL_MS = 50;
+const RELEASE_CATALOG_PAGE_SIZE = 100;
 const STALE_LOCK_AGE_MS = 60_000;
 const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
@@ -242,7 +243,7 @@ function createGitHubReleaseDistribution(
     async listReleases(page) {
       try {
         const response = await request(
-          `https://api.github.com/repos/${repository}/releases?per_page=100&page=${page}`
+          `https://api.github.com/repos/${repository}/releases?per_page=${RELEASE_CATALOG_PAGE_SIZE}&page=${page}`
         );
         const body: unknown = await response.json();
         return ReleaseCatalogPageSchema.parse(body);

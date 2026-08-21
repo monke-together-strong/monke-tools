@@ -15,6 +15,7 @@ import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import type { SkillInstallTargetKind } from "./global-config.ts";
+import { assertDirectoryMutationAccess } from "./path-boundary.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
 const GLOBAL_INSTRUCTIONS_RELATIVE_PATH = path.join("instructions", "GLOBAL.md");
@@ -98,24 +99,7 @@ function assertGlobalInstructionsWritable(filePath: string) {
     }
   }
 
-  let ancestor = path.dirname(filePath);
-  while (!existsSync(ancestor)) {
-    const parent = path.dirname(ancestor);
-    if (parent === ancestor) {
-      throw new MonkeError(`Global agent instructions parent is not writable: ${filePath}`);
-    }
-    ancestor = parent;
-  }
-  const ancestorStat = statSync(ancestor);
-  if (!ancestorStat.isDirectory()) {
-    throw new MonkeError(`Global agent instructions parent is not a directory: ${ancestor}`);
-  }
-  try {
-    accessSync(ancestor, fsConstants.W_OK);
-    accessSync(ancestor, fsConstants.X_OK);
-  } catch {
-    throw new MonkeError(`Global agent instructions parent is not writable: ${ancestor}`);
-  }
+  assertDirectoryMutationAccess(path.dirname(filePath), "Global agent instructions parent");
 }
 
 /** Remove the selected harness's Managed instruction section without touching user guidance. */

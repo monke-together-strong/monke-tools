@@ -17,6 +17,7 @@ import { object, string } from "zod";
 import { makeTempDir, writeExecutable } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
+const INSTALL_ID_ARGUMENT_PATTERN = /--install-id (?<identity>\S+)/u;
 
 function prepareInstallFixture(checkout: string, binDirectory: string, dirty: boolean) {
   mkdirSync(path.join(checkout, "scripts"), { recursive: true });
@@ -147,7 +148,7 @@ describe("Local install refresh script", () => {
     const installIdentities = readFileSync(monkeToolsLog, "utf-8")
       .trim()
       .split("\n")
-      .map((line) => /--install-id (?<identity>\S+)/u.exec(line)?.groups?.identity);
+      .map((line) => INSTALL_ID_ARGUMENT_PATTERN.exec(line)?.groups?.identity);
     expect(new Set(installIdentities).size).toBe(2);
   });
 

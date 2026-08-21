@@ -1,6 +1,4 @@
 import {
-  accessSync,
-  constants as fsConstants,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -38,6 +36,7 @@ import {
   resolveActiveInstallRoot
 } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
+import { assertDirectoryMutationAccess } from "./path-boundary.ts";
 import { getHomeDirectory, getMonkeHome, withInstallationLockAsync } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
@@ -212,7 +211,7 @@ export async function runInstallSkillsLocked(
 }
 
 /** Preflight destinations known before Release core activation. */
-export function preflightReleaseInstallSkills(
+export function preflightInstallGuidance(
   runtime: Runtime,
   bundleRoot: string,
   targetKinds?: BuiltInSkillInstallTargetKind[]
@@ -264,32 +263,31 @@ export function preflightReleaseInstallSkills(
 
 function preflightOneSkillTarget(target: ResolvedSkillInstallTarget, guidanceSourceRoot: string) {
   const skillSourceTree = resolveSkillSourceTree(guidanceSourceRoot);
-  if (skillInstallLayoutForTarget(target) === "flat") {
-    const previousManifest = readFlatManifest(target);
-    const links = discoverFlatSkillLinks(skillSourceTree);
-    const supportingLinks = discoverFlatSupportingLinks(target, skillSourceTree);
-    assertWritableDirectory(target.agentSkillRoot, "Agent Skill root");
-    for (const link of supportingLinks) {
-      assertWritableDirectory(path.dirname(link.targetPath), "Reference link parent");
-    }
-    assertFlatLinksCanBeManaged(target, links, previousManifest);
-    assertFlatSupportingLinksCanBeManaged(supportingLinks, previousManifest);
-    return;
-  }
+  prepareSkillTargetPlan(target, skillSourceTree).preflight();
+}
 
+function preflightNamespaceTarget(
+  target: ResolvedSkillInstallTarget,
+  sourceFolders: readonly string[]
+) {
+  assertDirectoryMutationAccess(target.agentSkillRoot, "Skill namespace destination");
   const namespaceStat = lstatSync(target.namespacePath, { throwIfNoEntry: false });
   if (namespaceStat && !namespaceStat.isDirectory() && !namespaceStat.isSymbolicLink()) {
     throw new MonkeError(`Refusing to overwrite Skill namespace at ${target.namespacePath}`);
   }
-  assertWritableDirectory(
-    namespaceStat?.isDirectory() === true ? target.namespacePath : target.agentSkillRoot,
-    "Skill namespace destination"
-  );
+  if (namespaceStat?.isDirectory() === true) {
+    assertDirectoryMutationAccess(target.namespacePath, "Skill namespace destination");
+  }
   if (!namespaceStat?.isDirectory()) {
     return;
   }
-  const sourceFolders =
-    target.kind === "codex" ? CODEX_NAMESPACE_SOURCE_FOLDERS : SHARED_NAMESPACE_SOURCE_FOLDERS;
+  assertNamespaceLinksCanBeManaged(target, sourceFolders);
+}
+
+function assertNamespaceLinksCanBeManaged(
+  target: ResolvedSkillInstallTarget,
+  sourceFolders: readonly string[]
+) {
   for (const name of sourceFolders) {
     const linkPath = path.join(target.namespacePath, name);
     const linkStat = lstatSync(linkPath, { throwIfNoEntry: false });
@@ -299,43 +297,32 @@ function preflightOneSkillTarget(target: ResolvedSkillInstallTarget, guidanceSou
   }
 }
 
+function preflightFlatTarget(
+  target: ResolvedSkillInstallTarget,
+  links: FlatSkillLink[],
+  supportingLinks: FlatSupportingLink[]
+) {
+  const previousManifest = readFlatManifest(target);
+  assertDirectoryMutationAccess(target.agentSkillRoot, "Agent Skill root");
+  for (const link of supportingLinks) {
+    assertDirectoryMutationAccess(path.dirname(link.targetPath), "Reference link parent");
+  }
+  assertFlatLinksCanBeManaged(target, links, previousManifest);
+  assertFlatSupportingLinksCanBeManaged(supportingLinks, previousManifest);
+}
+
 function preflightSkillTargetRemoval(target: ResolvedSkillInstallTarget) {
   const namespaceStat = lstatSync(target.namespacePath, { throwIfNoEntry: false });
   const manifest = target.kind === "claude" ? readFlatManifest(target) : null;
   if (!namespaceStat && !manifest) {
     return;
   }
-  assertWritableDirectory(target.agentSkillRoot, "Agent Skill root");
+  assertDirectoryMutationAccess(target.agentSkillRoot, "Agent Skill root");
   if (namespaceStat?.isDirectory() === true) {
-    assertWritableDirectory(target.namespacePath, "Skill namespace");
+    assertDirectoryMutationAccess(target.namespacePath, "Skill namespace");
   }
   for (const link of manifest?.supportingLinks ?? []) {
-    assertWritableDirectory(path.dirname(link.targetPath), "Reference link parent");
-  }
-}
-
-function assertWritableDirectory(directory: string, label: string) {
-  let candidate = path.resolve(directory);
-  let stat = lstatSync(candidate, { throwIfNoEntry: false });
-  while (!stat) {
-    const parent = path.dirname(candidate);
-    if (parent === candidate) {
-      throw new MonkeError(`${label} has no existing parent: ${directory}`);
-    }
-    candidate = parent;
-    stat = lstatSync(candidate, { throwIfNoEntry: false });
-  }
-  if (!stat.isDirectory() || stat.isSymbolicLink()) {
-    throw new MonkeError(`${label} is not a writable directory: ${candidate}`);
-  }
-  // oxlint-disable-next-line eslint/no-bitwise -- POSIX write permission bits make readonly preflight deterministic, including as root.
-  if ((stat.mode & 0o222) === 0) {
-    throw new MonkeError(`${label} is not writable: ${candidate}`);
-  }
-  try {
-    accessSync(candidate, fsConstants.W_OK);
-  } catch {
-    throw new MonkeError(`${label} is not writable: ${candidate}`);
+    assertDirectoryMutationAccess(path.dirname(link.targetPath), "Reference link parent");
   }
 }
 
@@ -528,15 +515,14 @@ function resolveSkillSourceTree(guidanceSourceRoot: string) {
 }
 
 function reconcileOneTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
-  if (skillInstallLayoutForTarget(target) === "flat") {
-    reconcileFlatTarget(target, skillSourceTree);
-    return;
-  }
-
-  reconcileNamespaceTarget(target, skillSourceTree);
+  prepareSkillTargetPlan(target, skillSourceTree).reconcile();
 }
 
-function reconcileNamespaceTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
+function reconcileNamespaceTarget(
+  target: ResolvedSkillInstallTarget,
+  skillSourceTree: string,
+  sourceFolders: readonly string[]
+) {
   mkdirSync(target.agentSkillRoot, { recursive: true });
   if (target.kind === "claude") {
     removeFlatManagedLinks(target);
@@ -552,15 +538,7 @@ function reconcileNamespaceTarget(target: ResolvedSkillInstallTarget, skillSourc
     mkdirSync(target.namespacePath);
   }
 
-  const sourceFolders =
-    target.kind === "codex" ? CODEX_NAMESPACE_SOURCE_FOLDERS : SHARED_NAMESPACE_SOURCE_FOLDERS;
-  for (const name of sourceFolders) {
-    const linkPath = path.join(target.namespacePath, name);
-    const linkStat = lstatSync(linkPath, { throwIfNoEntry: false });
-    if (linkStat && !linkStat.isSymbolicLink()) {
-      throw new MonkeError(`Refusing to overwrite non-managed Skill folder at ${linkPath}`);
-    }
-  }
+  assertNamespaceLinksCanBeManaged(target, sourceFolders);
 
   for (const name of sourceFolders) {
     const sourcePath = path.join(skillSourceTree, name);
@@ -574,12 +552,14 @@ function reconcileNamespaceTarget(target: ResolvedSkillInstallTarget, skillSourc
   }
 }
 
-function reconcileFlatTarget(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
+function reconcileFlatTarget(
+  target: ResolvedSkillInstallTarget,
+  links: FlatSkillLink[],
+  supportingLinks: FlatSupportingLink[]
+) {
   mkdirSync(target.agentSkillRoot, { recursive: true });
   removeManagedNamespace(target);
 
-  const links = discoverFlatSkillLinks(skillSourceTree);
-  const supportingLinks = discoverFlatSupportingLinks(target, skillSourceTree);
   const previousManifest = readFlatManifest(target);
   assertFlatLinksCanBeManaged(target, links, previousManifest);
   assertFlatSupportingLinksCanBeManaged(supportingLinks, previousManifest);
@@ -845,20 +825,42 @@ function flatManifestPath(target: ResolvedSkillInstallTarget) {
   return path.join(target.agentSkillRoot, FLAT_SKILL_MANIFEST);
 }
 
-function skillInstallLayoutForTarget(target: ResolvedSkillInstallTarget) {
-  if (target.kind === "claude") {
-    return CLAUDE_SKILL_INSTALL_LAYOUT;
+function prepareSkillTargetPlan(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
+  const policy = skillTargetPolicy(target);
+  if (policy.layout === "flat") {
+    const links = discoverFlatSkillLinks(skillSourceTree);
+    const supportingLinks = discoverFlatSupportingLinks(target, skillSourceTree);
+    return {
+      preflight() {
+        preflightFlatTarget(target, links, supportingLinks);
+      },
+      reconcile() {
+        reconcileFlatTarget(target, links, supportingLinks);
+      }
+    };
   }
+  const sourceFolders =
+    target.kind === "codex" ? CODEX_NAMESPACE_SOURCE_FOLDERS : SHARED_NAMESPACE_SOURCE_FOLDERS;
+  return {
+    preflight() {
+      preflightNamespaceTarget(target, sourceFolders);
+    },
+    reconcile() {
+      reconcileNamespaceTarget(target, skillSourceTree, sourceFolders);
+    }
+  };
+}
 
-  return "namespace";
+function skillTargetPolicy(target: ResolvedSkillInstallTarget) {
+  const layout = target.kind === "claude" ? CLAUDE_SKILL_INSTALL_LAYOUT : "namespace";
+  return {
+    layout,
+    managedLocation: layout === "flat" ? target.agentSkillRoot : target.namespacePath
+  };
 }
 
 function managedLocation(target: ResolvedSkillInstallTarget) {
-  if (skillInstallLayoutForTarget(target) === "flat") {
-    return target.agentSkillRoot;
-  }
-
-  return target.namespacePath;
+  return skillTargetPolicy(target).managedLocation;
 }
 
 function targetKey(target: ResolvedSkillInstallTarget) {
