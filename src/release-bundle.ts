@@ -89,7 +89,7 @@ interface BuildReleaseBundleOptions {
 interface VerifyReleaseArchiveOptions {
   archivePath: string;
   checksumPath?: string;
-  expectedGuidanceRoot: string;
+  expectedGuidanceRoot?: string;
   expectedPlatform: output<typeof ReleasePlatformSchema>;
   expectedSourceCommit: string;
   expectedVersion: string;
@@ -239,10 +239,12 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
       throw new Error(`Release manifest artifact identity does not match ${expectedArchiveName}`);
     }
     assertReleaseGuidanceHashes(manifest.guidanceHashes, hashReleaseGuidance(extractedRoot));
-    assertReleaseGuidanceHashes(
-      manifest.guidanceHashes,
-      hashReleaseGuidance(path.resolve(options.expectedGuidanceRoot))
-    );
+    if (options.expectedGuidanceRoot) {
+      assertReleaseGuidanceHashes(
+        manifest.guidanceHashes,
+        hashReleaseGuidance(path.resolve(options.expectedGuidanceRoot))
+      );
+    }
 
     if (options.verifyExecutable !== false) {
       const version = spawnSync(path.join(extractedRoot, "mt"), ["--version"], {

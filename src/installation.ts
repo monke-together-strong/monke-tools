@@ -64,6 +64,7 @@ export interface ActivateLocalInstallOptions {
 
 export interface ActivateReleaseInstallOptions {
   bundleRoot: string;
+  installationLockHeld?: boolean;
   interactive?: boolean;
   targetKinds?: BuiltInSkillInstallTargetKind[];
 }
@@ -78,7 +79,7 @@ export async function runActivateReleaseInstall(
   const sourceBundle = path.resolve(options.bundleRoot);
   const sourceManifest = validateReleaseBundle(runtime, sourceBundle);
   preflightReleaseInstallSkills(runtime, sourceBundle, options.targetKinds);
-  const activated = await withInstallationLockAsync(monkeHome, async () => {
+  const activate = async () => {
     preflightReleaseInstallSkills(runtime, sourceBundle, options.targetKinds);
     const stagingRoot = path.join(monkeHome, "install-staging");
     const stagedInstall = path.join(stagingRoot, `release-${randomUUID()}`);
@@ -103,6 +104,7 @@ export async function runActivateReleaseInstall(
     const installId = releaseInstallId(manifest);
 
     const predecessor = resolveActiveInstallRoot(monkeHome);
+    removeValidatedInactiveInstallCollision(monkeHome, installId, predecessor);
     const installRoot = activateStagedInstall({
       homeDirectory,
       installId,
@@ -148,11 +150,41 @@ export async function runActivateReleaseInstall(
       );
     }
     return { installId, manifest };
-  });
+  };
+  const activated =
+    options.installationLockHeld === true
+      ? (assertInheritedInstallationLock(monkeHome), await activate())
+      : await withInstallationLockAsync(monkeHome, activate);
 
   createLogger(runtime).success(
     `Activated Release install ${activated.manifest.releaseVersion} at ${path.join(monkeHome, "installs", activated.installId)}`
   );
+}
+
+function removeValidatedInactiveInstallCollision(
+  monkeHome: string,
+  installId: string,
+  activeInstallRoot: string | null
+) {
+  const installRoot = path.join(monkeHome, "installs", installId);
+  const stat = lstatSync(installRoot, { throwIfNoEntry: false });
+  if (!stat) {
+    return;
+  }
+  if (installRoot === activeInstallRoot || !stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new MonkeError(`Tool install identity already exists: ${installId}`);
+  }
+  try {
+    const manifest = ToolInstallManifestSchema.parse(
+      JSON.parse(readFileSync(path.join(installRoot, INSTALL_MANIFEST_FILENAME), "utf-8"))
+    );
+    if (installIdForManifest(manifest) !== installId) {
+      throw new Error("install identity mismatch");
+    }
+  } catch {
+    throw new MonkeError(`Tool install identity already exists: ${installId}`);
+  }
+  rmSync(installRoot, { recursive: true });
 }
 
 /** Activate a fully built Local tool install and finish its installation-adjacent work. */
@@ -348,7 +380,13 @@ function validateReleaseBundle(runtime: Runtime, bundleRoot: string) {
   } catch {
     throw new MonkeError(`Invalid Release Install manifest: ${manifestPath}`);
   }
-  if (manifest.toolBuildIdentity !== runtime.toolBuildIdentity) {
+  const executableIdentity = runtime.exec(path.join(resolvedRoot, "mt"), ["--version"], {
+    allowFailure: true
+  });
+  if (
+    executableIdentity.exitCode !== 0 ||
+    executableIdentity.stdout.trim() !== manifest.toolBuildIdentity
+  ) {
     throw new MonkeError("Release executable identity does not match its Install manifest");
   }
   if (manifest.platform !== releasePlatform(runtime)) {
@@ -376,7 +414,7 @@ function installIdForManifest(manifest: ToolInstallManifest) {
   return manifest.installKind === "local" ? manifest.installId : releaseInstallId(manifest);
 }
 
-function cleanupStaleStagingDirectories(monkeHome: string, activeStage: string) {
+export function cleanupStaleStagingDirectories(monkeHome: string, activeStage?: string) {
   const stagingRoot = path.join(monkeHome, "install-staging");
   if (!existsSync(stagingRoot)) {
     return;
@@ -387,7 +425,7 @@ function cleanupStaleStagingDirectories(monkeHome: string, activeStage: string) 
       candidate === activeStage ||
       !entry.isDirectory() ||
       entry.isSymbolicLink() ||
-      !/^(?:local|release)-[A-Za-z0-9._-]+$/u.test(entry.name)
+      !/^(?:local|release|update)-[A-Za-z0-9._-]+$/u.test(entry.name)
     ) {
       continue;
     }
@@ -437,9 +475,9 @@ function assertInheritedInstallationLock(monkeHome: string) {
     value,
     "inherited installation lock"
   );
-  if (metadata.pid !== process.ppid) {
+  if (metadata.pid !== process.pid && metadata.pid !== process.ppid) {
     throw new MonkeError(
-      `Inherited installation lock is not owned by the parent process: ${lockPath}`
+      `Inherited installation lock is not owned by this process or its parent: ${lockPath}`
     );
   }
 }

@@ -22,7 +22,15 @@ import * as z from "zod";
 
 import { DEFAULT_TOOL_BUILD_IDENTITY } from "./build-identity.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
-import type { ExecOptions, ExecResult, MultiSelectPrompt, Runtime, SelectPrompt } from "./types.ts";
+import type {
+  ExecOptions,
+  ExecResult,
+  MultiSelectPrompt,
+  ReleaseCatalogEntry,
+  ReleaseDistribution,
+  Runtime,
+  SelectPrompt
+} from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
 const STALE_LOCK_AGE_MS = 60_000;
@@ -32,6 +40,20 @@ const LockMetadataSchema = z.object({
 });
 const LockPidSchema = z.number().int().positive();
 const LockTimestampSchema = z.number();
+const ReleaseCatalogAssetSchema = z.looseObject({
+  browser_download_url: z.url(),
+  digest: z.string().nullable().optional(),
+  name: z.string()
+});
+const ReleaseCatalogPageSchema: z.ZodType<ReleaseCatalogEntry[]> = z.array(
+  z.looseObject({
+    assets: z.array(ReleaseCatalogAssetSchema),
+    draft: z.boolean(),
+    prerelease: z.boolean(),
+    tag_name: z.string(),
+    target_commitish: z.string()
+  })
+);
 
 /** Runtime construction options for CLI commands and integration-style tests. */
 export interface RuntimeOptions {
@@ -55,6 +77,8 @@ export interface RuntimeOptions {
   onStdout?: (text: string) => void;
   /** Operating system override used by platform behavior tests. */
   platform?: NodeJS.Platform;
+  /** Official Release boundary override used by update behavior tests. */
+  releaseDistribution?: ReleaseDistribution;
   /** Scripted selected values used by tests for Clack-style select prompts. */
   selectValues?: string[];
   /** Scripted stdin lines used by tests for interactive prompts. */
@@ -128,6 +152,8 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
 
       return readLineFromStdin();
     },
+    releaseDistribution:
+      options?.releaseDistribution ?? createGitHubReleaseDistribution(runtimeEnv),
     async select(prompt) {
       options?.onSelect?.(prompt);
       if (options?.cancelSelect === true) {
@@ -162,6 +188,54 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     },
     writeStdout(text: string) {
       writeStdout(text);
+    }
+  };
+}
+
+function createGitHubReleaseDistribution(
+  env: Record<string, string | undefined>
+): ReleaseDistribution {
+  const repository = "monke-together-strong/monke-tools";
+  const commonHeaders = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "monke-tools",
+    "X-GitHub-Api-Version": "2022-11-28"
+  };
+  const token = env.GH_TOKEN ?? env.GITHUB_TOKEN;
+  const headers = token ? { ...commonHeaders, Authorization: `Bearer ${token}` } : commonHeaders;
+
+  const request = async (url: string) => {
+    let response: Response;
+    try {
+      response = await fetch(url, { headers });
+    } catch (error) {
+      throw new MonkeError(`GitHub Release request failed: ${errorMessage(error)}`);
+    }
+    if (!response.ok) {
+      throw new MonkeError(`GitHub Release request failed with HTTP ${response.status}`);
+    }
+    return response;
+  };
+
+  return {
+    async downloadReleaseAsset(url) {
+      const response = await request(url);
+      const body = await response.arrayBuffer();
+      return new Uint8Array(body);
+    },
+    async listReleases(page) {
+      try {
+        const response = await request(
+          `https://api.github.com/repos/${repository}/releases?per_page=100&page=${page}`
+        );
+        const body: unknown = await response.json();
+        return ReleaseCatalogPageSchema.parse(body);
+      } catch (error) {
+        if (error instanceof MonkeError) {
+          throw error;
+        }
+        throw new MonkeError(`GitHub Release metadata is invalid: ${errorMessage(error)}`);
+      }
     }
   };
 }
@@ -356,12 +430,53 @@ export function withGlobalLock<T>(home: string, callback: () => T) {
 
 /** Run an asynchronous installation mutation under the machine-wide installation lock. */
 export async function withInstallationLockAsync<T>(home: string, callback: () => Promise<T>) {
-  const release = acquireLockPath(path.join(home, "locks", "installation.lock"));
+  const release = await acquireLockPathAsync(path.join(home, "locks", "installation.lock"));
   try {
     return await callback();
   } finally {
     release();
   }
+}
+
+async function acquireLockPathAsync(lockPath: string) {
+  mkdirSync(path.dirname(lockPath), { recursive: true });
+  const deadline = Date.now() + GLOBAL_LOCK_TIMEOUT_MS;
+  let fileDescriptor: number | null = null;
+
+  while (fileDescriptor === null) {
+    try {
+      fileDescriptor = openSync(lockPath, "wx");
+      writeFileSync(
+        lockPath,
+        JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
+        "utf-8"
+      );
+    } catch (error) {
+      if (!errorMessage(error).includes("EEXIST")) {
+        throw error;
+      }
+      if (tryEvictStaleLock(lockPath)) {
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new MonkeError(`Timed out waiting for lock at ${lockPath}`);
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Lock retries must remain sequential.
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          resolve();
+        }, 50);
+      });
+    }
+  }
+
+  return () => {
+    if (fileDescriptor !== null) {
+      closeSync(fileDescriptor);
+      fileDescriptor = null;
+    }
+    rmSync(lockPath, { force: true });
+  };
 }
 
 /** Run a synchronous callback while holding a lock scoped inside the monke home directory. */

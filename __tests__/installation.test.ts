@@ -54,7 +54,7 @@ function prepareReleaseBundle(
   write(bundleRoot, "skills/codex/.keep", "\n");
   write(bundleRoot, "skills/imported/.keep", "\n");
   write(bundleRoot, "install.sh", "#!/bin/sh\nexit 0\n");
-  write(bundleRoot, "mt", "#!/bin/sh\nexit 0\n");
+  write(bundleRoot, "mt", "#!/bin/sh\nprintf '1.2.3\\n'\n");
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
   chmodSync(path.join(bundleRoot, "mt"), 0o755);
   const hash = (contents: string) => createHash("sha256").update(contents).digest("hex");

@@ -37,6 +37,42 @@ export function assertReleaseGuidanceHashes(
   }
 }
 
+/** List added, modified, removed, or unsupported Release guidance entries. */
+export function findChangedReleaseGuidancePaths(
+  bundleRoot: string,
+  expected: Record<string, string>
+) {
+  const actual = new Map<string, string | null>();
+  for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
+    collectGuidanceEntries(path.join(bundleRoot, "skills", folder), bundleRoot, actual);
+  }
+  return [...new Set([...Object.keys(expected), ...actual.keys()])]
+    .filter((filePath) => actual.get(filePath) !== expected[filePath])
+    .toSorted((left, right) => left.localeCompare(right));
+}
+
+function collectGuidanceEntries(
+  root: string,
+  bundleRoot: string,
+  entries: Map<string, string | null>
+) {
+  const stat = lstatSync(root, { throwIfNoEntry: false });
+  if (!stat?.isDirectory() || stat.isSymbolicLink()) {
+    return;
+  }
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const entryPath = path.join(root, entry.name);
+    const relativePath = path.relative(bundleRoot, entryPath).replaceAll(path.sep, "/");
+    if (entry.isDirectory() && !entry.isSymbolicLink()) {
+      collectGuidanceEntries(entryPath, bundleRoot, entries);
+    } else if (entry.isFile()) {
+      entries.set(relativePath, createHash("sha256").update(readFileSync(entryPath)).digest("hex"));
+    } else {
+      entries.set(relativePath, null);
+    }
+  }
+}
+
 function listRegularFiles(root: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {

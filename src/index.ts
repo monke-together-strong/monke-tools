@@ -12,6 +12,7 @@ import { runShellInit, runShellInstall } from "./shell.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./skills.ts";
 import { runSwing, runSwingInteractive } from "./swing.ts";
 import type { Runtime } from "./types.ts";
+import { runUpdate } from "./update.ts";
 
 /** Run the Monke Tools CLI. */
 export function runCli(argv: string[], runtime = createRuntime()) {
@@ -124,8 +125,14 @@ function createProgram(
     });
 
   program
+    .command("update")
+    .option("--check", "Check for a compatible stable Release without installing it")
+    .action((options) => runUpdate(runtime, { check: options.check === true }));
+
+  program
     .command("activate-release-install", { hidden: true })
     .argument("<bundle-root>")
+    .option("--installation-lock-held")
     .option("--interactive")
     .addOption(
       new Option(
@@ -136,6 +143,7 @@ function createProgram(
     .action((bundleRoot, options) =>
       runActivateReleaseInstall(runtime, {
         bundleRoot,
+        installationLockHeld: options.installationLockHeld === true,
         interactive: options.interactive === true,
         targetKinds: options.targets
       })

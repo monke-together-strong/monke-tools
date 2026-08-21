@@ -17,6 +17,8 @@ export interface Runtime {
   readonly platform: NodeJS.Platform;
   /** Read one interactive input line after writing a prompt. */
   readLine: (prompt: string) => string;
+  /** Official Release catalog and asset download boundary. */
+  readonly releaseDistribution: ReleaseDistribution;
   /** Select one value from an interactive terminal picker. */
   select: (prompt: SelectPrompt) => Promise<string>;
   /** Identity compiled into this mt executable. */
@@ -27,6 +29,27 @@ export interface Runtime {
   writeStderr: (text: string) => void;
   /** Write CLI output to stdout. */
   writeStdout: (text: string) => void;
+}
+
+export interface ReleaseDistribution {
+  /** Download one asset selected from an official GitHub Release. */
+  downloadReleaseAsset: (url: string) => Promise<Uint8Array>;
+  /** List one 100-item page from the official GitHub Releases catalog. */
+  listReleases: (page: number) => Promise<ReleaseCatalogEntry[]>;
+}
+
+export interface ReleaseCatalogAsset {
+  browser_download_url: string;
+  digest?: string | null;
+  name: string;
+}
+
+export interface ReleaseCatalogEntry {
+  assets: ReleaseCatalogAsset[];
+  draft: boolean;
+  prerelease: boolean;
+  tag_name: string;
+  target_commitish: string;
 }
 
 export interface ExecOptions {
