@@ -299,6 +299,36 @@ apps:
     }
   );
 
+  test("zsh install and configured-state detection honor relative ZDOTDIR", () => {
+    const sandbox = makeTempDir("shell-install-zdotdir");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const shellHome = path.join(sandbox, "shell-home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    const startupFile = path.join(repoRoot, "config", "zsh", ".zshrc");
+    const shellEnvironment = {
+      HOME: shellHome,
+      SHELL: "/bin/zsh",
+      ZDOTDIR: "config/zsh"
+    };
+
+    runMonke({
+      args: ["shell", "install", "--binary", "/opt/mt"],
+      cwd: repoRoot,
+      extraEnv: shellEnvironment,
+      monkeHome
+    });
+    const result = runMonke({
+      args: ["spawn", "banana"],
+      cwd: repoRoot,
+      extraEnv: shellEnvironment,
+      monkeHome
+    });
+
+    expect(readFileSync(startupFile, "utf-8")).toContain("monke-tools shell integration");
+    expect(existsSync(path.join(shellHome, ".zshrc"))).toBeFalsy();
+    expect(result.stderr).toContain("Shell integration is configured but not active");
+  });
+
   test("shell install leaves startup files untouched for an unsupported current shell", () => {
     const sandbox = makeTempDir("shell-install-unsupported");
     const shellHome = path.join(sandbox, "shell-home");

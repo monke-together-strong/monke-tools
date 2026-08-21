@@ -19,7 +19,7 @@ const SkillInstallTargetPreferenceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: BuiltInSkillInstallTargetKindSchema }),
   z.strictObject({ kind: z.literal("custom"), path: AbsolutePathSchema })
 ]);
-const SkillInstallPreferenceSchema = z.strictObject({
+export const SkillInstallPreferenceSchema = z.strictObject({
   targets: z.array(SkillInstallTargetPreferenceSchema).min(1, {
     error: "must be a non-empty array"
   })

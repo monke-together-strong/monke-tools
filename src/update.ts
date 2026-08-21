@@ -27,6 +27,7 @@ import type { ReleaseCatalogAsset, ReleaseCatalogEntry } from "./release-catalog
 import { findChangedReleaseGuidancePaths } from "./release-guidance.ts";
 import { getMonkeHome } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
+import { parseBoundaryValue } from "./validation.ts";
 
 const MAX_RELEASE_PAGES = 10_000;
 const RELEASE_ASSET_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
@@ -139,7 +140,11 @@ function assertSelectedReleaseContract(
   selected: Awaited<ReturnType<typeof selectLatestStableRelease>>,
   platform: ReleaseInstallManifest["platform"]
 ) {
-  FullCommitSchema.parse(selected.release.target_commitish);
+  parseBoundaryValue(
+    FullCommitSchema,
+    selected.release.target_commitish,
+    "Selected Release source commit"
+  );
   const archiveName = releaseArchiveName(selected.version, platform);
   const checksumsName = releaseChecksumsName(selected.version);
   const archive = selectAsset(selected.release.assets, archiveName);

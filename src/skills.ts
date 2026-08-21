@@ -16,7 +16,11 @@ import path from "node:path";
 import * as z from "zod";
 
 import { errorMessage, MonkeError } from "./errors.ts";
-import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
+import {
+  loadGlobalMonkeConfig,
+  saveGlobalMonkeConfig,
+  SkillInstallPreferenceSchema
+} from "./global-config.ts";
 import type {
   BuiltInSkillInstallTargetKind,
   GlobalMonkeConfig,
@@ -246,7 +250,11 @@ function explicitSkillInstallPreference(
       })
     });
   }
-  return { targets } satisfies SkillInstallPreference;
+  return parseBoundaryValue(
+    SkillInstallPreferenceSchema,
+    { targets },
+    "explicit Skill install target selection"
+  );
 }
 
 /** Preflight known guidance destinations before Local or Release core activation. */

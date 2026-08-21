@@ -43,8 +43,10 @@ describe("runtime", () => {
 
   test("Release requests fall through an empty GH_TOKEN to GITHUB_TOKEN", async () => {
     let authorization = "";
+    let signal: AbortSignal | null | undefined;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       authorization = new Headers(init?.headers).get("Authorization") ?? "";
+      signal = init?.signal;
       return new Response("[]", { status: 200 });
     });
 
@@ -56,6 +58,20 @@ describe("runtime", () => {
     }
 
     expect(authorization).toBe("Bearer fallback-token");
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test("Release asset downloads reject unapproved URLs before sending credentials", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    try {
+      const runtime = createRuntime({ env: { GITHUB_TOKEN: "secret-token" } });
+      await expect(
+        runtime.releaseDistribution.downloadReleaseAsset("https://example.com/release.tar.gz")
+      ).rejects.toThrow(/not an approved repository download/u);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   test("withGlobalLock evicts stale locks left by dead processes", () => {

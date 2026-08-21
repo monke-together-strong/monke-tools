@@ -17,7 +17,11 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
-import { writeCollisionRecovery } from "../src/install-recovery.ts";
+import {
+  cleanupInactiveToolInstalls,
+  reconcilePendingInstallBackups,
+  writeCollisionRecovery
+} from "../src/install-recovery.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
@@ -189,6 +193,27 @@ function prepareReleaseAsset(
 }
 
 describe("Release update", () => {
+  test("install recovery ignores stray backups and absent retained roots", () => {
+    const sandbox = makeTempDir("release-update-recovery-strays");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const active = prepareActiveRelease(monkeHome, "1.2.3");
+    const inactive = prepareActiveRelease(monkeHome, "1.2.2", false);
+    const strayBackup = path.join(monkeHome, "install-backups", ".DS_Store");
+    write(monkeHome, "install-backups/.DS_Store", "metadata\n");
+
+    expect(() => {
+      reconcilePendingInstallBackups(monkeHome);
+    }).not.toThrow();
+    cleanupInactiveToolInstalls(
+      monkeHome,
+      new Set([active, path.join(monkeHome, "installs", "missing-predecessor")])
+    );
+
+    expect(existsSync(strayBackup)).toBeTruthy();
+    expect(existsSync(active)).toBeTruthy();
+    expect(existsSync(inactive)).toBeFalsy();
+  });
+
   test("check resolves an Active tool install through a symlinked Monke home", async () => {
     const sandbox = makeTempDir("release-update-symlinked-home");
     const physicalRoot = path.join(sandbox, "physical-root");

@@ -66,7 +66,11 @@ function dependencyRuntime(options: {
   return createRuntime({
     architecture: options.architecture ?? "arm64",
     cwd: options.binDirectory,
-    env: { PATH: options.binDirectory },
+    env: {
+      HOME: path.join(options.binDirectory, "home"),
+      MONKE_HOME: path.join(options.binDirectory, "monke-home"),
+      PATH: options.binDirectory
+    },
     onStderr() {},
     onStdout() {},
     platform: options.platform ?? "darwin",

@@ -33,6 +33,8 @@ acquire_installation_lock() {
     lock_pid=$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$INSTALLATION_LOCK" 2>/dev/null || true)
     if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
       rm -f -- "$INSTALLATION_LOCK"
+      attempts=$((attempts + 1))
+      sleep 0.05
       continue
     fi
 

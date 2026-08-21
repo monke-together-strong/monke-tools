@@ -168,7 +168,15 @@ export async function runActivateReleaseInstall(
         stagedInstall
       });
     } catch (error) {
-      if (resolveActiveInstallRoot(monkeHome) === candidateRoot) {
+      const candidateStat = lstatSync(candidateRoot, { throwIfNoEntry: false });
+      const activeCandidateRoot =
+        candidateStat?.isDirectory() && !candidateStat.isSymbolicLink()
+          ? realpathSync.native(candidateRoot)
+          : null;
+      if (
+        activeCandidateRoot !== null &&
+        resolveActiveInstallRoot(monkeHome) === activeCandidateRoot
+      ) {
         collision?.discard();
       } else {
         collision?.restore();

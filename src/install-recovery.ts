@@ -56,6 +56,9 @@ export function reconcilePendingInstallBackups(monkeHome: string) {
 
   const activeInstallRoot = resolveActiveInstallRoot(monkeHome);
   for (const entry of readdirSync(backupsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()) {
+      continue;
+    }
     const backupRoot = path.join(backupsRoot, entry.name);
     assertDirectChildPath(backupRoot, backupsRoot, "collision backup");
     assertManagedInstallRoot(backupRoot, entry.name);
@@ -145,7 +148,12 @@ export function cleanupInactiveToolInstalls(monkeHome: string, retainedRoots: Se
   }
   const canonicalInstallsRoot = resolveManagedDirectory(installsRoot, "Managed installs root");
   const canonicalRetainedRoots = new Set(
-    [...retainedRoots].map((retainedRoot) => realpathSync.native(retainedRoot))
+    [...retainedRoots].flatMap((retainedRoot) => {
+      const retainedStat = lstatSync(retainedRoot, { throwIfNoEntry: false });
+      return retainedStat?.isDirectory() && !retainedStat.isSymbolicLink()
+        ? [realpathSync.native(retainedRoot)]
+        : [];
+    })
   );
   for (const entry of readdirSync(installsRoot, { withFileTypes: true })) {
     const installRoot = path.join(installsRoot, entry.name);

@@ -36,6 +36,7 @@ import type {
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
 const LOCK_RETRY_INTERVAL_MS = 50;
 const RELEASE_CATALOG_PAGE_SIZE = 100;
+const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
 const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
@@ -215,7 +216,10 @@ function createGitHubReleaseDistribution(
   const request = async (url: string) => {
     let response: Response;
     try {
-      response = await fetch(url, { headers });
+      response = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(RELEASE_REQUEST_TIMEOUT_MS)
+      });
     } catch (error) {
       throw new MonkeError(`GitHub Release request failed: ${errorMessage(error)}`);
     }
@@ -227,6 +231,19 @@ function createGitHubReleaseDistribution(
 
   return {
     async downloadReleaseAsset(url) {
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        throw new MonkeError("GitHub Release asset URL is invalid");
+      }
+      if (
+        parsedUrl.protocol !== "https:" ||
+        parsedUrl.hostname !== "github.com" ||
+        !parsedUrl.pathname.startsWith(`/${repository}/releases/download/`)
+      ) {
+        throw new MonkeError("GitHub Release asset URL is not an approved repository download");
+      }
       const response = await request(url);
       const body = await response.arrayBuffer();
       return new Uint8Array(body);

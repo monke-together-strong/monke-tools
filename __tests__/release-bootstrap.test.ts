@@ -3,19 +3,14 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
+import type { input } from "zod";
 
+import type { ReleaseCatalogEntrySchema } from "../src/release-catalog-schema.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 
-interface ReleaseResponse {
-  assets?: { digest: string; name: string }[];
-  body?: string;
-  draft: boolean;
-  prerelease: boolean;
-  tag_name: string;
-  target_commitish?: string;
-}
+type ReleaseResponse = input<typeof ReleaseCatalogEntrySchema>;
 
 const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
@@ -67,7 +62,10 @@ printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
   if (options.invalidArchive) {
     write(responses, archiveName, "not a tar archive\n");
   } else {
-    Bun.spawnSync({ cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, "."] });
+    const tar = Bun.spawnSync({ cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, "."] });
+    if (tar.exitCode !== 0) {
+      throw new Error(`Could not create Release bootstrap fixture: ${tar.stderr.toString()}`);
+    }
   }
   const archiveHash = hash("sha256", readFileSync(archivePath), "hex");
   write(
@@ -80,13 +78,19 @@ printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
     assets: options.missingAsset
       ? [
           {
+            browser_download_url: `https://github.com/monke-together-strong/monke-tools/releases/download/${selectedTag}/${checksumName}`,
             digest: `sha256:${hash("sha256", readFileSync(checksumPath), "hex")}`,
             name: checksumName
           }
         ]
       : [
-          { digest: `sha256:${archiveHash}`, name: archiveName },
           {
+            browser_download_url: `https://github.com/monke-together-strong/monke-tools/releases/download/${selectedTag}/${archiveName}`,
+            digest: `sha256:${archiveHash}`,
+            name: archiveName
+          },
+          {
+            browser_download_url: `https://github.com/monke-together-strong/monke-tools/releases/download/${selectedTag}/${checksumName}`,
             digest: `sha256:${hash("sha256", readFileSync(checksumPath), "hex")}`,
             name: checksumName
           }
@@ -101,21 +105,41 @@ printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
     "page-1.json",
     releasePage(
       {
+        assets: [],
         body: 'Example text containing "draft": false and "tag_name": "monke-tools-v99.0.0".',
         draft: false,
         prerelease: false,
-        tag_name: "@monke/other@9.0.0"
+        tag_name: "@monke/other@9.0.0",
+        target_commitish: SOURCE_COMMIT
       },
-      { draft: false, prerelease: false, tag_name: `monke-tools-v${olderVersion}` }
+      {
+        assets: [],
+        draft: false,
+        prerelease: false,
+        tag_name: `monke-tools-v${olderVersion}`,
+        target_commitish: SOURCE_COMMIT
+      }
     )
   );
   write(
     responses,
     "page-2.json",
     releasePage(
-      { draft: false, prerelease: true, tag_name: "monke-tools-v1.3.0" },
+      {
+        assets: [],
+        draft: false,
+        prerelease: true,
+        tag_name: "monke-tools-v1.3.0",
+        target_commitish: SOURCE_COMMIT
+      },
       selectedRelease,
-      { draft: true, prerelease: false, tag_name: "monke-tools-v9.0.0" }
+      {
+        assets: [],
+        draft: true,
+        prerelease: false,
+        tag_name: "monke-tools-v9.0.0",
+        target_commitish: SOURCE_COMMIT
+      }
     )
   );
   write(responses, "page-3.json", "[]\n");

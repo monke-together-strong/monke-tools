@@ -380,7 +380,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - When no active **Shell adapter** can accept the **Shell directory request**, monke-tools reports the target path the user should switch to manually.
 - When **Shell integration install** has configured the user's shell but no **Active shell adapter** can accept the current **Shell directory request**, monke-tools reports the target path and explains that the shell integration is configured but inactive.
 - When **Shell integration install** has not configured the user's shell, monke-tools reports the target path and explains how to configure automatic switching.
-- **Shell integration install** supports bash and zsh, targets only the user's current supported `$SHELL`, and reports the startup file it changed.
+- **Shell integration install** supports bash and zsh, targets only the user's current supported `$SHELL`, and reports the selected startup file whether it changed or was already current.
 - **Shell integration install** is idempotent and runs during **Local install refresh** and the interactive **Release installer**; unsupported shells receive manual instructions instead of startup-file changes.
 - **Shell integration install** can be rerun explicitly without refreshing skills or reinstalling the binary.
 - **Shell integration init** supports bash and zsh.

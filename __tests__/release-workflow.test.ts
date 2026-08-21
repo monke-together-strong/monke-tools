@@ -29,8 +29,7 @@ const JobSchema = looseObject({
 const WorkflowSchema = looseObject({
   concurrency: looseObject({
     "cancel-in-progress": literal(false),
-    group: stringSchema(),
-    queue: literal("max")
+    group: stringSchema()
   }),
   jobs: record(stringSchema(), JobSchema),
   on: looseObject({ push: looseObject({ branches: arraySchema(stringSchema()) }) })
@@ -81,7 +80,7 @@ describe("Mainline publication workflow", () => {
     const { parsed } = readWorkflow();
     expect(parsed.on.push.branches).toStrictEqual(["main"]);
     expect(parsed.concurrency["cancel-in-progress"]).toBeFalsy();
-    expect(parsed.concurrency.queue).toBe("max");
+    expect(parsed.concurrency).not.toHaveProperty("queue");
 
     const prepare = JobSchema.parse(parsed.jobs["prepare-release"]);
     const selection = StepSchema.parse(
@@ -131,6 +130,10 @@ describe("Mainline publication workflow", () => {
     expect(stepIndex(publish, "Verify complete Release")).toBeLessThan(
       stepIndex(publish, "Create draft Release")
     );
+    const createDraft = StepSchema.parse(
+      publish.steps.find((step) => step.name === "Create draft Release")
+    );
+    expect(createDraft.run).toContain("gh release delete");
     expect(stepIndex(publish, "Upload all Release assets")).toBeLessThan(
       stepIndex(publish, "Publish immutable Release")
     );

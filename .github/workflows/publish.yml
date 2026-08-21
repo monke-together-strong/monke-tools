@@ -7,7 +7,6 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
-  queue: max
 
 permissions:
   contents: read
@@ -156,7 +155,15 @@ jobs:
           SOURCE_COMMIT: ${{ github.sha }}
           VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
-          gh release create "monke-tools-v${VERSION}" \
+          tag="monke-tools-v${VERSION}"
+          existing_draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ "$existing_draft" = true ]; then
+            gh release delete "$tag" --yes
+          elif [ -n "$existing_draft" ]; then
+            printf 'Release %s already exists and is published\n' "$tag" >&2
+            exit 1
+          fi
+          gh release create "$tag" \
             --draft \
             --target "$SOURCE_COMMIT" \
             --title "monke-tools v${VERSION}" \

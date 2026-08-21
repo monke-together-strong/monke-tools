@@ -173,7 +173,11 @@ export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
       `${JSON.stringify(manifest, null, 2)}\n`,
       "utf-8"
     );
-    run("tar", ["-czf", archivePath, "-C", bundleRoot, "."]);
+    run("tar", ["-czf", archivePath, "-C", bundleRoot, "."], repositoryRoot, {
+      // oxlint-disable-next-line node/no-process-env -- Preserve the build environment while disabling macOS archive metadata.
+      ...process.env,
+      COPYFILE_DISABLE: "1"
+    });
     return archivePath;
   } finally {
     rmSync(temporaryRoot, { force: true, recursive: true });
@@ -281,7 +285,9 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions): Rele
         encoding: "utf-8"
       });
       if (installer.status !== 0) {
-        throw new Error(`Release installer verification failed: ${installer.stderr.trim()}`);
+        throw new Error(
+          `Release installer verification failed: ${commandFailureDetail(installer)}`
+        );
       }
     }
     return manifest;
@@ -455,6 +461,10 @@ function assertExecutable(filePath: string, label: string) {
   }
 }
 
+function commandFailureDetail(result: { error?: Error; stderr: string | null }) {
+  return result.stderr?.trim() || result.error?.message || "unknown failure";
+}
+
 function parseSemanticVersion(value: string): [bigint, bigint, bigint] {
   const parts = StableSemanticVersionSchema.parse(value).split(".");
   return [BigInt(parts[0] ?? ""), BigInt(parts[1] ?? ""), BigInt(parts[2] ?? "")];
@@ -473,8 +483,13 @@ export function compareStableSemanticVersions(left: string, right: string) {
   return 0;
 }
 
-function run(command: string, arguments_: string[], cwd = repositoryRoot) {
-  const result = spawnSync(command, arguments_, { cwd, encoding: "utf-8" });
+function run(
+  command: string,
+  arguments_: string[],
+  cwd = repositoryRoot,
+  environment?: NodeJS.ProcessEnv
+) {
+  const result = spawnSync(command, arguments_, { cwd, encoding: "utf-8", env: environment });
   if (result.status !== 0) {
     throw new Error(
       `${command} ${arguments_.join(" ")} failed: ${(result.stderr || result.stdout).trim()}`

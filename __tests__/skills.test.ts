@@ -3,10 +3,32 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { reconcileSkillNamespaces, resolveSkillInstallTargets } from "../src/skills.ts";
+import { createRuntime } from "../src/runtime.ts";
+import {
+  preflightInstallGuidance,
+  reconcileSkillNamespaces,
+  resolveSkillInstallTargets
+} from "../src/skills.ts";
 import { makeTempDir, write, writeGlobalInstructionsSource } from "./helpers.ts";
 
 describe("skills", () => {
+  test("explicit Skill target selection rejects an empty preference before mutation", () => {
+    const sandbox = makeTempDir("skill-target-empty-explicit");
+    const homeDirectory = path.join(sandbox, "home");
+
+    expect(() => {
+      preflightInstallGuidance(
+        createRuntime({
+          cwd: sandbox,
+          env: { HOME: homeDirectory, MONKE_HOME: path.join(sandbox, "monke-home") }
+        }),
+        path.join(sandbox, "guidance"),
+        { builtInTargetKinds: [] }
+      );
+    }).toThrow(/explicit Skill install target selection[\s\S]*non-empty array/u);
+    expect(existsSync(homeDirectory)).toBeFalsy();
+  });
+
   test("skill install targets resolve built-ins against OS home and normalize custom skill roots", () => {
     const homeDirectory = makeTempDir("skill-target-home");
     const monkeHome = makeTempDir("skill-target-monke-home");

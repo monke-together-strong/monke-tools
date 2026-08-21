@@ -80,7 +80,7 @@ export function runShellInstall(runtime: Runtime, options: ShellInstallOptions =
     return;
   }
 
-  const startupFile = getStartupFilePath(home, shell);
+  const startupFile = getStartupFilePath(runtime, home, shell);
   installStartupBlock(startupFile, renderStartupBlock(shell, binary));
   logger.success(`Installed shell integration in ${startupFile}`);
   logger.hint("Restart your shell to activate the updated integration.");
@@ -143,8 +143,8 @@ function isShellIntegrationConfigured(runtime: Runtime) {
   const currentShell = resolveCurrentShell(runtime);
   const startupFiles =
     currentShell === null
-      ? SUPPORTED_SHELLS.map((shell) => getStartupFilePath(home, shell))
-      : [getStartupFilePath(home, currentShell)];
+      ? SUPPORTED_SHELLS.map((shell) => getStartupFilePath(runtime, home, shell))
+      : [getStartupFilePath(runtime, home, currentShell)];
 
   return startupFiles.some((startupFile) => {
     if (!existsSync(startupFile)) {
@@ -209,8 +209,10 @@ function isSupportedShell(shellName: string): shellName is SupportedShell {
   return (SUPPORTED_SHELLS as readonly string[]).includes(shellName);
 }
 
-function getStartupFilePath(home: string, shell: SupportedShell) {
-  return path.join(home, shell === "zsh" ? ".zshrc" : ".bashrc");
+function getStartupFilePath(runtime: Runtime, home: string, shell: SupportedShell) {
+  const startupRoot =
+    shell === "zsh" && runtime.env.ZDOTDIR ? path.resolve(runtime.cwd, runtime.env.ZDOTDIR) : home;
+  return path.join(startupRoot, shell === "zsh" ? ".zshrc" : ".bashrc");
 }
 
 function shellQuote(value: string) {
