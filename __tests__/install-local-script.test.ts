@@ -105,6 +105,7 @@ describe("Local install refresh script", () => {
 
     expect(result.status).toBe(0);
     expect(existsSync(lockPath)).toBeFalsy();
+    expect(existsSync(`${lockPath}.reclaim`)).toBeFalsy();
   });
 
   test("builds a unique versioned Local install and delegates activation with provenance", () => {

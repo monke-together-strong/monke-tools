@@ -885,6 +885,12 @@ skillInstallPreference:
       monkeHome,
       sourceCheckout: firstSourceCheckout
     });
+    const fixedToolAlias = path.join(sandbox, "fixed-tool-root");
+    symlinkSync(
+      path.join(physicalRoot, "monke-home", "installs", "local-first"),
+      fixedToolAlias,
+      "dir"
+    );
 
     const runningCommand = createRuntime({
       cwd: sandbox,
@@ -895,7 +901,7 @@ skillInstallPreference:
       multiSelectValues: [["cursor"]],
       onStderr() {},
       onStdout() {},
-      toolInstallRoot: path.join(physicalRoot, "monke-home", "installs", "local-first")
+      toolInstallRoot: fixedToolAlias
     });
     await activateLocal({
       home,

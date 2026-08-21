@@ -10,6 +10,7 @@ import {
   readFileSync,
   realpathSync,
   readSync,
+  rmdirSync,
   rmSync,
   statSync,
   writeFileSync
@@ -523,10 +524,17 @@ function prepareLockAcquisition(lockPath: string) {
 }
 
 function tryAcquireLockPath(lockPath: string) {
+  if (existsSync(reclaimPathFor(lockPath))) {
+    return { wait: true };
+  }
   let fileDescriptor: number | null = null;
   try {
     fileDescriptor = openSync(lockPath, "wx");
-    writeFileSync(lockPath, JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }), "utf-8");
+    writeFileSync(
+      fileDescriptor,
+      JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
+      "utf-8"
+    );
   } catch (error) {
     if (fileDescriptor !== null) {
       closeSync(fileDescriptor);
@@ -616,6 +624,28 @@ function readLineFromStdin() {
 }
 
 function tryEvictStaleLock(lockPath: string) {
+  const reclaimPath = reclaimPathFor(lockPath);
+  try {
+    mkdirSync(reclaimPath);
+  } catch (error) {
+    if (errorMessage(error).includes("EEXIST")) {
+      return false;
+    }
+    throw error;
+  }
+
+  try {
+    return evictStaleLockUnderClaim(lockPath);
+  } finally {
+    rmdirSync(reclaimPath);
+  }
+}
+
+function reclaimPathFor(lockPath: string) {
+  return `${lockPath}.reclaim`;
+}
+
+function evictStaleLockUnderClaim(lockPath: string) {
   const staleSince = Date.now() - STALE_LOCK_AGE_MS;
 
   let fileTimestamp = 0;

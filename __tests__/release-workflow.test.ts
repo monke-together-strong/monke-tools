@@ -124,7 +124,7 @@ describe("Mainline publication workflow", () => {
     );
   });
 
-  test("validates every asset before publishing one draft-backed immutable Release", () => {
+  test("publishes immutable version assets before advancing the catalog branch", () => {
     const { parsed } = readWorkflow();
     const publish = JobSchema.parse(parsed.jobs["publish-release"]);
     expect(publish.needs).toStrictEqual(["prepare-release", "build-release"]);
@@ -147,10 +147,12 @@ describe("Mainline publication workflow", () => {
     const publishCatalog = StepSchema.parse(
       publish.steps.find((step) => step.name === "Publish stable Release catalog")
     );
-    expect(publishCatalog.run).toContain("monke-tools-catalog");
+    expect(publishCatalog.run).toContain("monke-tools-release-catalog");
     expect(publishCatalog.run).toContain("stable.tsv");
     expect(publishCatalog.run).toContain("release-bundle.ts catalog");
-    expect(publishCatalog.run).toContain("gh release upload");
+    expect(publishCatalog.run).toContain("git/ref/heads");
+    expect(publishCatalog.run).toContain("contents/stable.tsv");
+    expect(publishCatalog.run).not.toContain("gh release");
   });
 
   test("keeps existing package publication independent", () => {

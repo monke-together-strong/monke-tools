@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
@@ -68,7 +68,10 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
 }
 
 function loadFixedToolInstall(runtime: Runtime, monkeHome: string) {
-  const fixedRoot = path.resolve(runtime.toolInstallRoot);
+  const requestedFixedRoot = path.resolve(runtime.toolInstallRoot);
+  const fixedRoot = existsSync(requestedFixedRoot)
+    ? realpathSync.native(requestedFixedRoot)
+    : requestedFixedRoot;
   const configuredInstallsRoot = path.join(path.resolve(monkeHome), "installs");
   const installsRoot = existsSync(configuredInstallsRoot)
     ? resolveManagedDirectory(configuredInstallsRoot, "Managed installs root")

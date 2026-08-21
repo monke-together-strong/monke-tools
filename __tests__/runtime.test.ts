@@ -90,6 +90,23 @@ describe("runtime", () => {
 
     expect(result).toBe("acquired");
     expect(existsSync(lockPath)).toBeFalsy();
+    expect(existsSync(`${lockPath}.reclaim`)).toBeFalsy();
+  });
+
+  test("withGlobalLock waits for an in-progress stale-lock reclaim", async () => {
+    const sandbox = makeTempDir("runtime-lock-reclaim");
+    const home = path.join(sandbox, "home");
+    const reclaimPath = path.join(home, "lock.reclaim");
+    mkdirSync(reclaimPath, { recursive: true });
+    const reclaimer = Bun.spawn({
+      cmd: ["sh", "-c", 'sleep 0.1; rmdir "$1"', "sh", reclaimPath],
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+
+    expect(withGlobalLock(home, () => "acquired")).toBe("acquired");
+    await expect(reclaimer.exited).resolves.toBe(0);
+    expect(existsSync(reclaimPath)).toBeFalsy();
   });
 
   test("withGlobalLock falls back to the file timestamp for invalid lock metadata", () => {
