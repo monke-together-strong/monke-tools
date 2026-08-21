@@ -26,6 +26,7 @@ case "$WORK_DIRECTORY" in
   "$STAGING_ROOT"/public-bootstrap-*) ;;
   *) printf 'Could not create a safe Release bootstrap directory\n' >&2; exit 1 ;;
 esac
+printf '%s\n' "$$" > "$WORK_DIRECTORY/.monke-tools-bootstrap-pid"
 
 cleanup() {
   case "${WORK_DIRECTORY:-}" in

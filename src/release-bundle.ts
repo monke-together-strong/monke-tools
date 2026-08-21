@@ -3,9 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { hash } from "node:crypto";
 import {
-  accessSync,
   chmodSync,
-  constants as fsConstants,
   cpSync,
   existsSync,
   lstatSync,
@@ -14,7 +12,6 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
-  statSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,6 +32,7 @@ import {
   StableSemanticVersionSchema
 } from "./install-manifest.ts";
 import type { ReleaseInstallManifest } from "./install-manifest.ts";
+import { executableFileProblem } from "./path-boundary.ts";
 import {
   assertReleaseGuidanceHashes,
   BUNDLED_GUIDANCE_FOLDERS,
@@ -442,13 +440,7 @@ function assertNoLinks(root: string) {
 }
 
 function assertExecutable(filePath: string, label: string) {
-  const stat = statSync(filePath, { throwIfNoEntry: false });
-  if (!stat?.isFile()) {
-    throw new Error(`${label} is missing or not executable: ${filePath}`);
-  }
-  try {
-    accessSync(filePath, fsConstants.X_OK);
-  } catch {
+  if (executableFileProblem(filePath) !== null) {
     throw new Error(`${label} is missing or not executable: ${filePath}`);
   }
 }

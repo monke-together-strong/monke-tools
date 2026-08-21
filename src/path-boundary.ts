@@ -1,10 +1,24 @@
-import { accessSync, constants as fsConstants, existsSync, statSync } from "node:fs";
+import { accessSync, constants as fsConstants, existsSync, lstatSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
 
 const POSIX_EXECUTE_PERMISSION_MASK = 0o111;
 const POSIX_WRITE_PERMISSION_MASK = 0o222;
+
+/** Inspect an executable-file boundary without following symbolic links. */
+export function executableFileProblem(filePath: string): "missing" | "not-executable" | null {
+  const stat = lstatSync(filePath, { throwIfNoEntry: false });
+  if (!stat?.isFile()) {
+    return "missing";
+  }
+  try {
+    accessSync(filePath, fsConstants.X_OK);
+    return null;
+  } catch {
+    return "not-executable";
+  }
+}
 
 /** Require a path to be an immediate child of a managed directory boundary. */
 export function assertDirectChildPath(candidate: string, parent: string, label: string) {

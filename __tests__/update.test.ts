@@ -8,7 +8,8 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
-  symlinkSync
+  symlinkSync,
+  utimesSync
 } from "node:fs";
 import path from "node:path";
 
@@ -284,7 +285,12 @@ describe("Release update", () => {
     mkdirSync(path.join(stagingRoot, "update-interrupted"), { recursive: true });
     mkdirSync(path.join(stagingRoot, "release-interrupted"), { recursive: true });
     mkdirSync(path.join(stagingRoot, "manual-not-managed"), { recursive: true });
-    mkdirSync(path.join(stagingRoot, "public-bootstrap-live"), { recursive: true });
+    write(stagingRoot, "public-bootstrap-live/.monke-tools-bootstrap-pid", `${process.pid}\n`);
+    write(stagingRoot, "public-bootstrap-crashed/.monke-tools-bootstrap-pid", "2147483647\n");
+    const abandonedBootstrap = path.join(stagingRoot, "public-bootstrap-abandoned");
+    mkdirSync(abandonedBootstrap);
+    const abandonedAt = new Date(Date.now() - 10 * 60 * 1000);
+    utimesSync(abandonedBootstrap, abandonedAt, abandonedAt);
     const externalDirectory = path.join(sandbox, "external");
     mkdirSync(externalDirectory);
     symlinkSync(externalDirectory, path.join(stagingRoot, "update-external"), "dir");

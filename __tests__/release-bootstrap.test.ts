@@ -43,12 +43,14 @@ function prepareBootstrapFixture(
   const checksumPath = path.join(responses, checksumName);
   const installLog = path.join(sandbox, "install.log");
   const bundlePathLog = path.join(sandbox, "bundle-path.log");
+  const bootstrapOwnerLog = path.join(sandbox, "bootstrap-owner.log");
   const curlLog = path.join(sandbox, "curl.log");
   mkdirSync(responses, { recursive: true });
   writeExecutable(
     path.join(bundleRoot, "install.sh"),
     `#!/bin/sh
 printf '%s\n' "$0" > "$MONKE_BOOTSTRAP_TEST_BUNDLE_PATH_LOG"
+cat "$(dirname "$(dirname "$0")")/.monke-tools-bootstrap-pid" > "$MONKE_BOOTSTRAP_TEST_OWNER_LOG"
 printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
 `
   );
@@ -147,7 +149,7 @@ esac
 if [ -n "$output" ]; then cp "$source" "$output"; else cat "$source"; fi
 `
   );
-  return { archiveName, bin, bundlePathLog, curlLog, installLog, sandbox };
+  return { archiveName, bin, bootstrapOwnerLog, bundlePathLog, curlLog, installLog, sandbox };
 }
 
 function runBootstrap(
@@ -160,6 +162,7 @@ function runBootstrap(
       HOME: path.join(fixture.sandbox, "home"),
       MONKE_BOOTSTRAP_TEST_BUNDLE_PATH_LOG: fixture.bundlePathLog,
       MONKE_BOOTSTRAP_TEST_INSTALL_LOG: fixture.installLog,
+      MONKE_BOOTSTRAP_TEST_OWNER_LOG: fixture.bootstrapOwnerLog,
       MONKE_HOME: path.join(fixture.sandbox, "monke-home"),
       PATH: `${fixture.bin}:/usr/bin:/bin`,
       SHELL: "/bin/sh",
@@ -188,6 +191,7 @@ describe("public Release bootstrap", () => {
     expect(curlLog).toContain("page=3");
     expect(curlLog).toContain("monke-tools-v1.2.3-linux-x64.tar.gz");
     expect(curlLog).not.toContain(secret);
+    expect(readFileSync(fixture.bootstrapOwnerLog, "utf-8")).toMatch(/^\d+\n$/u);
     const monkeHome = path.join(fixture.sandbox, "monke-home");
     expect(
       readFileSync(fixture.bundlePathLog, "utf-8")

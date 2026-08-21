@@ -1,8 +1,6 @@
 import { hash, randomUUID } from "node:crypto";
 import {
-  accessSync,
   cpSync,
-  constants as fsConstants,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -38,7 +36,11 @@ import {
   writeCollisionRecovery
 } from "./install-recovery.ts";
 import { createLogger } from "./logger.ts";
-import { assertDirectChildPath, assertDirectoryMutationAccess } from "./path-boundary.ts";
+import {
+  assertDirectChildPath,
+  assertDirectoryMutationAccess,
+  executableFileProblem
+} from "./path-boundary.ts";
 import { assertReleaseGuidanceHashes, hashReleaseGuidance } from "./release-guidance.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
@@ -56,6 +58,9 @@ const InstallationLockMetadataSchema = strictObject({
   pid: number().int().positive()
 });
 const MANAGED_STAGING_DIRECTORY_PATTERN = /^(?:local|release|update)-[A-Za-z0-9._-]+$/u;
+const PUBLIC_BOOTSTRAP_STAGING_DIRECTORY_PATTERN = /^public-bootstrap-[A-Za-z0-9._-]+$/u;
+const PUBLIC_BOOTSTRAP_PID_FILENAME = ".monke-tools-bootstrap-pid";
+const PUBLIC_BOOTSTRAP_CREATION_GRACE_MS = 5 * 60 * 1000;
 
 export interface ActivateLocalInstallOptions {
   createdAt: string;
@@ -462,18 +467,40 @@ export function cleanupStaleStagingDirectories(monkeHome: string, activeStage?: 
   }
   for (const entry of readdirSync(stagingRoot, { withFileTypes: true })) {
     const candidate = path.join(stagingRoot, entry.name);
-    if (
-      candidate === activeStage ||
-      !entry.isDirectory() ||
-      entry.isSymbolicLink() ||
-      !MANAGED_STAGING_DIRECTORY_PATTERN.test(entry.name)
-    ) {
+    if (candidate === activeStage || !entry.isDirectory() || entry.isSymbolicLink()) {
       continue;
     }
     const finalStat = lstatSync(candidate, { throwIfNoEntry: false });
-    if (finalStat?.isDirectory() === true && !finalStat.isSymbolicLink()) {
+    if (!finalStat?.isDirectory() || finalStat.isSymbolicLink()) {
+      continue;
+    }
+    if (
+      MANAGED_STAGING_DIRECTORY_PATTERN.test(entry.name) ||
+      (PUBLIC_BOOTSTRAP_STAGING_DIRECTORY_PATTERN.test(entry.name) &&
+        isAbandonedPublicBootstrap(candidate, finalStat.mtimeMs))
+    ) {
       rmSync(candidate, { recursive: true });
     }
+  }
+}
+
+function isAbandonedPublicBootstrap(candidate: string, modifiedAt: number) {
+  const age = Date.now() - modifiedAt;
+  const pidPath = path.join(candidate, PUBLIC_BOOTSTRAP_PID_FILENAME);
+  const pidStat = lstatSync(pidPath, { throwIfNoEntry: false });
+  if (!pidStat?.isFile() || pidStat.isSymbolicLink()) {
+    return age >= PUBLIC_BOOTSTRAP_CREATION_GRACE_MS;
+  }
+  const pidText = readFileSync(pidPath, "utf-8").trim();
+  const pid = /^\d+$/u.test(pidText) ? Number(pidText) : 0;
+  if (!Number.isSafeInteger(pid) || pid <= 0) {
+    return age >= PUBLIC_BOOTSTRAP_CREATION_GRACE_MS;
+  }
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch {
+    return true;
   }
 }
 
@@ -485,13 +512,11 @@ function assertDirectory(directory: string, message: string) {
 }
 
 function assertExecutableFile(executable: string, label: string) {
-  const stat = lstatSync(executable, { throwIfNoEntry: false });
-  if (!stat?.isFile()) {
+  const problem = executableFileProblem(executable);
+  if (problem === "missing") {
     throw new MonkeError(`${label} is missing: ${executable}`);
   }
-  try {
-    accessSync(executable, fsConstants.X_OK);
-  } catch {
+  if (problem === "not-executable") {
     throw new MonkeError(`${label} is not executable: ${executable}`);
   }
 }
