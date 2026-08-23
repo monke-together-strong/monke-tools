@@ -745,7 +745,7 @@ skillInstallPreference:
           toolBuildIdentity: "local+0123456"
         })
       )
-    ).rejects.toThrow(/Staged Local tool install is missing/u);
+    ).rejects.toThrow(/Staged Local tool install is not a real directory/u);
 
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
       path.join("installs", "local-second")
