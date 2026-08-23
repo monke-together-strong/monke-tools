@@ -347,7 +347,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - A worktree in the **Monke home** managed worktree area never falls back to an Ordinary-worktree **Chop target** when its **Session state** is missing or invalid.
 - A Session **Chop target** requires valid existing **Session state**; `--force` does not reconstruct or bypass missing or invalid state.
 - A partially materialized **Session** remains a valid Session **Chop target**; Chop acts on exactly the repos and resources recorded in valid Session state and does not infer unrecorded worktrees from the current dependency graph.
-- **Chop** removes the invoking worktree last when it belongs to the selected Session; otherwise, it removes the selected Session's root worktree last.
+- **Chop** removes the invoking worktree last when it belongs to the selected Session; otherwise, it removes the Session worktree for the **Root repo** last.
 - A Session **Chop** preflight resolves and validates every cross-repo prerequisite that can be checked without side effects, including Session-state consistency, Source-checkout identity, and every recorded Session worktree, before removing any worktree.
 - Session **Chop** preflight reports every detected participating-repo failure together and removes nothing when any failure exists.
 - After the whole-Session preflight passes, **Chop** revalidates each worktree's identity and safety immediately before its removal.

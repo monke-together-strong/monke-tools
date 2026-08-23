@@ -71,7 +71,7 @@ describe("single-repo sessions", () => {
     expect(existsSync(path.join(sandbox, ".monke-worktrees"))).toBeFalsy();
   });
 
-  test("spawn --codex opens the root Session worktree as a Codex workspace", () => {
+  test("spawn --codex opens the Root repo's Session worktree as a Codex workspace", () => {
     const sandbox = makeTempDir("single-repo-codex");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1390,7 +1390,7 @@ apps:
     expect(result.stderr).toContain("Spawned or updated session banana");
   });
 
-  test("setup creates the root .env with direct external path env defaults", () => {
+  test("setup creates the Source checkout root .env with direct external path env defaults", () => {
     const sandbox = makeTempDir("setup-root-env");
     const home = path.join(sandbox, "home");
     createRepo(path.join(sandbox, "dep"), {
@@ -1431,7 +1431,7 @@ external:
     expect(read(root, ".env")).toBe("DEP_DIR=../dep\n");
   });
 
-  test("setup overwrites stale external path env values and preserves unrelated root env entries", () => {
+  test("setup overwrites stale external path env values and preserves unrelated Source checkout root env entries", () => {
     const sandbox = makeTempDir("setup-root-env-refresh");
     const home = path.join(sandbox, "home");
     createRepo(path.join(sandbox, "dep"), {

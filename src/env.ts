@@ -122,7 +122,7 @@ export function syncRootEnvFile(
   syncRootEnvFileWithRemovals(worktreeRoot, assignments, []);
 }
 
-/** Synchronize root .env assignments and remove stale root env names. */
+/** Synchronize assignments in the supplied checkout's root `.env` and remove stale names. */
 export function syncRootEnvFileWithRemovals(
   worktreeRoot: string,
   assignments: { env: string; value: string }[],
