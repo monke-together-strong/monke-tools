@@ -1,9 +1,5 @@
 import { readFileSync } from "node:fs";
 
-function trimWhitespace(value: string) {
-  return value.trim();
-}
-
 function unwrapQuotedValue(value: string) {
   if (value.length >= 2) {
     const [first] = value;
@@ -31,7 +27,7 @@ export function loadEnvFileIfPresent(filePath: string) {
   }
 
   for (const rawLine of content.split(/\r?\n/u)) {
-    const trimmed = trimWhitespace(rawLine);
+    const trimmed = rawLine.trim();
 
     if (trimmed === "" || trimmed.startsWith("#") || !trimmed.includes("=")) {
       continue;
@@ -39,14 +35,14 @@ export function loadEnvFileIfPresent(filePath: string) {
 
     const separatorIndex = trimmed.indexOf("=");
     const rawKey = trimmed.slice(0, separatorIndex);
-    const normalizedKey = trimWhitespace(rawKey.replace(/^export\s+/u, ""));
+    const normalizedKey = rawKey.replace(/^export\s+/u, "").trim();
 
     if (normalizedKey === "" || process.env[normalizedKey] !== undefined) {
       continue;
     }
 
     const rawValue = trimmed.slice(separatorIndex + 1);
-    process.env[normalizedKey] = unwrapQuotedValue(trimWhitespace(rawValue));
+    process.env[normalizedKey] = unwrapQuotedValue(rawValue.trim());
   }
 }
 
