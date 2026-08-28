@@ -44,8 +44,27 @@ import os
 from pathlib import Path
 import sys
 
-record = os.environ["AUTOREVIEW_FAKE_RECORD"]
 args = sys.argv[1:]
+if invocations := os.environ.get("AUTOREVIEW_FAKE_CODEX_INVOCATIONS"):
+    selected_env = {
+        key: os.environ.get(key)
+        for key in (
+            "HOME",
+            "USERPROFILE",
+            "XDG_CACHE_HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_STATE_HOME",
+            "CODEX_HOME",
+            "PATH",
+        )
+    }
+    with open(invocations, "a", encoding="utf-8") as file:
+        file.write(json.dumps({"argv": args, "cwd": os.getcwd(), "env": selected_env}) + "\n")
+if "--version" in args or "-v" in args:
+    print("codex-cli 0.0.0-test")
+    raise SystemExit(0)
+record = os.environ["AUTOREVIEW_FAKE_RECORD"]
 Path(record).write_text(json.dumps({"argv": args, "cwd": os.getcwd(), "stdin": sys.stdin.read()}))
 if mutation := os.environ.get("AUTOREVIEW_FAKE_MUTATE"):
     Path(mutation).write_text("mutated during review\n")
@@ -233,6 +252,45 @@ def path_excluding_command(name: str) -> str:
 class AutoreviewHardeningTests(unittest.TestCase):
     def setUp(self) -> None:
         self.helper = load_helper()
+
+    def test_outgoing_pack_scan_disables_installed_scanner_updates(self) -> None:
+        prompt = "harmless review pack\n"
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            repo = root / "repo"
+            repo.mkdir()
+            write_executable(
+                root / "trufflehog",
+                r'''#!/usr/bin/env python3
+import json
+from pathlib import Path
+import sys
+
+args = sys.argv[1:]
+if "--no-update" not in args:
+    print("updater: cannot move binary: permission denied", file=sys.stderr)
+    raise SystemExit(1)
+assert args[0] == "filesystem"
+assert set(args[2:]) == {
+    "--json", "--no-color", "--results=verified,unknown",
+    "--fail", "--fail-on-scan-errors", "--no-update",
+}
+pack = Path(args[1])
+Path(__file__).with_name("scan.json").write_text(json.dumps({
+    "pack": str(pack),
+    "prompt": pack.read_text(encoding="utf-8"),
+}))
+''',
+            )
+            with mock.patch.dict(
+                os.environ,
+                {"PATH": f"{root}{os.pathsep}{os.environ.get('PATH', '')}"},
+            ):
+                self.helper["scan_outgoing_review_pack"](repo, prompt)
+
+            record = json.loads((root / "scan.json").read_text(encoding="utf-8"))
+            self.assertEqual(record["prompt"], prompt)
+            self.assertFalse(Path(record["pack"]).parent.exists())
 
     def test_outgoing_pack_scan_reads_exact_prompt_including_deleted_lines(self) -> None:
         prompt = (
@@ -426,6 +484,120 @@ class AutoreviewHardeningTests(unittest.TestCase):
             self.assertFalse(truncated)
             self.assertEqual(reads, 1)
 
+    def test_local_base_reviews_resolved_merge_without_upstream_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            repo = init_repo(Path(tempdir))
+            source = repo / "source.txt"
+            source.write_text("common\nretained line\n", encoding="utf-8")
+            git(repo, "add", "source.txt")
+            git(repo, "commit", "-q", "-m", "base")
+            common = git(repo, "rev-parse", "HEAD").strip()
+            git(repo, "checkout", "-q", "-b", "incoming")
+            (repo / "proof.png").write_bytes(b"\x89PNG\r\n\0upstream-proof")
+            source.write_text("upstream\nretained line\n", encoding="utf-8")
+            git(repo, "add", "source.txt", "proof.png")
+            git(repo, "commit", "-q", "-m", "upstream")
+            incoming = git(repo, "rev-parse", "HEAD").strip()
+            git(repo, "checkout", "-q", "-b", "task", common)
+            source.write_text("task\nretained line\n", encoding="utf-8")
+            (repo / "committed.txt").write_text("committed task change\n", encoding="utf-8")
+            git(repo, "add", "source.txt", "committed.txt")
+            git(repo, "commit", "-q", "-m", "task")
+            with self.assertRaises(subprocess.CalledProcessError):
+                git(repo, "merge", "--no-ff", "--no-commit", "incoming")
+            self.assertEqual(git(repo, "rev-parse", "MERGE_HEAD").strip(), incoming)
+            source.write_text("resolved staged task\n", encoding="utf-8")
+            git(repo, "add", "source.txt")
+            self.assertEqual(git(repo, "diff", "--name-only", "--diff-filter=U").strip(), "")
+            source.write_text("resolved staged task\nretained line\nunstaged task\n", encoding="utf-8")
+            (repo / "notes.md").write_text("untracked task note\n", encoding="utf-8")
+            # Review reads ignore host Git settings, including Windows autocrlf.
+            # Expected patches must use the same protected Git policy.
+            staged = self.helper["git"](repo, "diff", *self.helper["SAFE_DIFF_FLAGS"], "--cached", incoming)
+            unstaged = self.helper["git"](repo, "diff", *self.helper["SAFE_DIFF_FLAGS"])
+            scanned: list[str] = []
+            sent: list[str] = []
+            report = {
+                "findings": [{
+                    "title": "Task change finding",
+                    "body": "The committed task change remains in the selected review scope.",
+                    "priority": "P0",
+                    "confidence": 0.99,
+                    "category": "bug",
+                    "code_location": {"file_path": "committed.txt", "line": 1},
+                }],
+                "overall_correctness": "patch is incorrect",
+                "overall_explanation": "Task change finding.",
+                "overall_confidence": 0.99,
+            }
+
+            def run_engine(_args, _repo, prompt):
+                sent.append(prompt)
+                return json.dumps(report)
+
+            main = self.helper["main_impl"]
+            with mock.patch.dict(main.__globals__, {
+                "repo_root": lambda: repo,
+                "scan_outgoing_review_pack": lambda _repo, prompt: scanned.append(prompt),
+                "run_engine": run_engine,
+                "resolve_engine_binary": lambda _reviewer, _repo: (True, None),
+            }):
+                for dry_run in (False, True):
+                    argv = [str(SCRIPT), "--engine", "codex", "--mode", "local", "--base", "incoming"]
+                    if dry_run:
+                        argv.append("--dry-run")
+                    with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(main(), 0 if dry_run else 1)
+
+            self.assertEqual(len(sent), 1)
+            self.assertEqual(scanned, [sent[0], sent[0]])
+            self.assertIn(f"# Staged Diff\nbase: {incoming}", sent[0])
+            self.assertIn(staged.rstrip(), sent[0])
+            self.assertIn(unstaged.rstrip(), sent[0])
+            self.assertIn("-retained line", sent[0])
+            self.assertIn("+retained line", sent[0])
+            self.assertIn('path: "notes.md"', sent[0])
+            self.assertIn("untracked task note", sent[0])
+            self.assertNotIn("diff --git a/proof.png", sent[0])
+            self.assertEqual(
+                self.helper["review_paths"](repo, "local", incoming, "HEAD"),
+                {"source.txt", "committed.txt", "notes.md"},
+            )
+            for mode in ("local", "uncommitted", "auto"):
+                self.assertEqual(self.helper["choose_target"](repo, mode, "incoming"), ("local", incoming))
+            self.assertEqual(self.helper["choose_target"](repo, "local", None), ("local", None))
+            with self.assertRaisesRegex(SystemExit, "refusing binary changes"):
+                self.helper["local_bundle"](repo)
+
+    def test_local_base_pins_named_ref_and_rejects_invalid_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            repo = init_repo(Path(tempdir))
+            (repo / "source.txt").write_text("base\n", encoding="utf-8")
+            git(repo, "add", "source.txt")
+            git(repo, "commit", "-q", "-m", "base")
+            base = git(repo, "rev-parse", "HEAD").strip()
+            git(repo, "branch", "review-base")
+            (repo / "committed.txt").write_text("committed task change\n", encoding="utf-8")
+            git(repo, "add", "committed.txt")
+            git(repo, "commit", "-q", "-m", "task")
+            (repo / "source.txt").write_text("staged task change\n", encoding="utf-8")
+            git(repo, "add", "source.txt")
+            target, pinned = self.helper["choose_target"](repo, "local", "review-base")
+            self.assertEqual((target, pinned), ("local", base))
+            snapshot = self.helper["source_tree_snapshot"](repo)
+            git(repo, "update-ref", "refs/heads/review-base", "HEAD")
+            self.assertEqual(self.helper["source_tree_snapshot"](repo), snapshot)
+            bundle, truncated = self.helper["local_bundle"](repo, pinned)
+            self.assertFalse(truncated)
+            self.assertIn("+committed task change", bundle)
+            self.assertEqual(
+                self.helper["review_paths"](repo, target, pinned, "HEAD"),
+                {"source.txt", "committed.txt"},
+            )
+            for ref, error in (("--help", "unsafe"), ("HEAD:source.txt", "unsafe"), ("", "unsafe"), ("missing-base", "unknown")):
+                with self.subTest(ref=ref), self.assertRaisesRegex(SystemExit, f"{error} base ref"):
+                    self.helper["choose_target"](repo, "local", ref)
+
     def test_tracked_binary_changes_are_blocked_in_all_modes(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             repo = init_repo(Path(tempdir))
@@ -436,9 +608,12 @@ class AutoreviewHardeningTests(unittest.TestCase):
             base = git(repo, "rev-parse", "HEAD").strip()
 
             binary.write_bytes(b"\0changed")
-            git(repo, "add", "artifact.bin")
-            with self.assertRaisesRegex(SystemExit, "refusing binary changes"):
-                self.helper["local_bundle"](repo)
+            for staged in (False, True):
+                if staged:
+                    git(repo, "add", "artifact.bin")
+                for local_base in (None, base):
+                    with self.subTest(staged=staged, base=local_base), self.assertRaisesRegex(SystemExit, "refusing binary changes"):
+                        self.helper["local_bundle"](repo, local_base)
 
             git(repo, "commit", "-q", "-m", "binary change")
             with self.assertRaisesRegex(SystemExit, "refusing binary changes"):
@@ -462,8 +637,9 @@ class AutoreviewHardeningTests(unittest.TestCase):
                 "--cacheinfo",
                 f"160000,{base},vendor/dependency",
             )
-            with self.assertRaisesRegex(SystemExit, "gitlink/submodule changes"):
-                self.helper["local_bundle"](repo)
+            for local_base in (None, base):
+                with self.subTest(base=local_base), self.assertRaisesRegex(SystemExit, "gitlink/submodule changes"):
+                    self.helper["local_bundle"](repo, local_base)
 
             git(repo, "commit", "-q", "-m", "add gitlink")
             with self.assertRaisesRegex(SystemExit, "gitlink/submodule changes"):
@@ -917,24 +1093,25 @@ class AutoreviewHardeningTests(unittest.TestCase):
     def test_bundle_above_prompt_limit_uses_complete_bounded_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             repo = init_repo(Path(tempdir))
-            prompts = self.helper["build_review_prompts"](
-                repo,
-                "commit",
-                "HEAD",
-                "# Commit Diff\n" + "safe review content\n" * 35_000,
-                "",
-                "",
-            )
+            for line_count, minimum_passes in ((35_000, 2), (200_000, 9)):
+                with self.subTest(line_count=line_count):
+                    bundle = "# Commit Diff\n" + "".join(
+                        f"+review line {index}: \U0001f99e\n" for index in range(line_count)
+                    )
+                    prompts = self.helper["build_review_prompts"](
+                        repo, "commit", "HEAD", bundle, "", ""
+                    )
 
-        self.assertGreater(len(prompts), 1)
-        self.assertTrue(
-            all(
-                len(prompt.encode("utf-8"))
-                <= self.helper["MAX_REVIEW_PROMPT_BYTES"]
-                for prompt in prompts
-            )
-        )
-        self.assertTrue(all("Oversized review bundle chunk:" in prompt for prompt in prompts))
+                    self.assertGreaterEqual(len(prompts), minimum_passes)
+                    self.assertEqual(
+                        "".join(prompt.split("# Change Bundle\n", 1)[1] for prompt in prompts),
+                        bundle,
+                    )
+                    for index, prompt in enumerate(prompts, 1):
+                        self.assertLessEqual(
+                            len(prompt.encode("utf-8")), self.helper["MAX_REVIEW_PROMPT_BYTES"]
+                        )
+                        self.assertIn(f"Oversized review bundle chunk: {index}/{len(prompts)}", prompt)
 
     def test_kimi_prompt_budget_partitions_before_argv_limits(self) -> None:
         if os.name == "nt":
@@ -945,13 +1122,13 @@ class AutoreviewHardeningTests(unittest.TestCase):
                 repo,
                 "commit",
                 "HEAD",
-                "# Commit Diff\n" + "safe review content\n" * 12_000,
+                "# Commit Diff\n" + "safe review content\n" * 35_000,
                 "",
                 "",
                 self.helper["KIMI_MAX_PROMPT_BYTES"],
             )
 
-        self.assertGreater(len(prompts), 1)
+        self.assertGreater(len(prompts), 8)
         self.assertTrue(
             all(
                 len(prompt.encode("utf-8")) <= self.helper["KIMI_MAX_PROMPT_BYTES"]
@@ -974,20 +1151,72 @@ class AutoreviewHardeningTests(unittest.TestCase):
 
         self.assertTrue(prompt.endswith(bundle))
 
-    def test_review_pass_count_is_bounded(self) -> None:
-        builder = self.helper["build_review_prompts"]
-        with tempfile.TemporaryDirectory() as tempdir:
-            repo = init_repo(Path(tempdir))
-            with mock.patch.dict(builder.__globals__, {"MAX_REVIEW_PASSES": 1}):
-                with self.assertRaisesRegex(SystemExit, "more than 1 bounded passes"):
-                    builder(
-                        repo,
-                        "commit",
-                        "HEAD",
-                        "# Commit Diff\n" + "safe review content\n" * 35_000,
-                        "",
-                        "",
+    def test_many_review_passes_preserve_late_findings_and_fail_closed(self) -> None:
+        args = argparse.Namespace(
+            engine="codex", max_priority="P0", require_finding=["late defect"]
+        )
+        prompts = [f"pass {index}" for index in range(10)]
+        finding = {
+            "title": "Late defect",
+            "body": "The last pass demonstrates the defect.",
+            "priority": "P0",
+            "confidence": 0.9,
+            "category": "bug",
+            "code_location": {"file_path": "source.txt", "line": 1},
+        }
+        for failure in (None, "scan", "engine"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tempdir:
+                repo = init_repo(Path(tempdir))
+                events = []
+
+                def scan(_repo, prompt):
+                    events.append(("scan", prompt))
+                    if failure == "scan" and prompt == prompts[8]:
+                        raise SystemExit("late scan failure")
+
+                def engine(_args, _repo, prompt):
+                    events.append(("engine", prompt))
+                    if failure == "engine" and prompt == prompts[8]:
+                        raise SystemExit("late engine failure")
+                    findings = [finding] if prompt == prompts[-1] else []
+                    return json.dumps(
+                        {
+                            "findings": findings,
+                            "overall_correctness": (
+                                "patch is incorrect" if findings else "patch is correct"
+                            ),
+                            "overall_explanation": "test review",
+                            "overall_confidence": 0.9,
+                        }
                     )
+
+                with mock.patch.dict(
+                    self.helper["run_review_passes"].__globals__,
+                    {"scan_outgoing_review_pack": scan, "run_engine": engine},
+                ), contextlib.redirect_stdout(io.StringIO()):
+                    if failure:
+                        with self.assertRaisesRegex(SystemExit, f"late {failure} failure"):
+                            self.helper["run_review_passes"](
+                                args, [args], repo, prompts, {"source.txt"}, False
+                            )
+                    else:
+                        reports = self.helper["run_review_passes"](
+                            args, [args], repo, prompts, {"source.txt"}, False
+                        )
+                        report = self.helper["merge_chunk_reports"](reports)
+                        self.helper["validate_report"](
+                            report, repo, {"source.txt"}, args.require_finding
+                        )
+                        self.assertEqual(report["overall_correctness"], "patch is incorrect")
+                        self.assertEqual(
+                            [item["title"] for item in report["findings"]], [finding["title"]]
+                        )
+                expected = [
+                    (stage, prompt) for prompt in prompts for stage in ("scan", "engine")
+                ]
+                if failure:
+                    expected = expected[:17 if failure == "scan" else 18]
+                self.assertEqual(events, expected)
 
     def test_review_patch_does_not_disclose_controls_in_omitted_paths(self) -> None:
         path = ".env.\x1b]52;c;VEVTVA==\x07\udc9b"
@@ -1316,6 +1545,57 @@ class AutoreviewHardeningTests(unittest.TestCase):
             "keyRef",
         ):
             self.assertIn(reference, validated)
+
+    def test_review_bundle_preserves_deleted_swift_status_literals(self) -> None:
+        # Regression: a deleted Swift file with status-string cases like
+        # `case "ok-empty", "ok-token":` next to value returns is not a
+        # credential. The retired heuristic scanner flagged the "ok-token"
+        # key shape as secret-like even after value redaction, so the whole
+        # deletion became unreviewable; the bundle must stay byte-identical.
+        source = (FIXTURES / "swift-benign-status-literals.swift").read_text(
+            encoding="utf-8"
+        )
+        patch = (
+            "diff --git a/apps/macos/MenuContentView.swift "
+            "b/apps/macos/MenuContentView.swift\n"
+            "deleted file mode 100644\n"
+            "--- a/apps/macos/MenuContentView.swift\n"
+            "+++ /dev/null\n"
+            f"@@ -1,{len(source.splitlines())} +0,0 @@\n"
+            + "".join(f"-{line}\n" for line in source.splitlines())
+        )
+
+        self.assertEqual(
+            self.helper["validate_review_patch"](
+                "branch diff",
+                ["apps/macos/MenuContentView.swift"],
+                patch,
+            ),
+            patch,
+        )
+
+    @unittest.skipUnless(
+        shutil.which("trufflehog"), "TruffleHog binary not installed"
+    )
+    def test_outgoing_pack_scan_accepts_deleted_swift_status_literals(self) -> None:
+        # Live-scanner companion to the regression above: TruffleHog must not
+        # flag the benign "ok-token" status literal in a deleted-file bundle.
+        source = (FIXTURES / "swift-benign-status-literals.swift").read_text(
+            encoding="utf-8"
+        )
+        prompt = (
+            "# Change Bundle\n"
+            "diff --git a/apps/macos/MenuContentView.swift "
+            "b/apps/macos/MenuContentView.swift\n"
+            "deleted file mode 100644\n"
+            "--- a/apps/macos/MenuContentView.swift\n"
+            "+++ /dev/null\n"
+            f"@@ -1,{len(source.splitlines())} +0,0 @@\n"
+            + "".join(f"-{line}\n" for line in source.splitlines())
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            repo = init_repo(Path(tempdir))
+            self.helper["scan_outgoing_review_pack"](repo, prompt)
 
     def test_review_bundle_preserves_typescript_config_paths(self) -> None:
         source = (FIXTURES / "typescript-benign-config-path-references.ts").read_text(
@@ -3528,6 +3808,248 @@ class AutoreviewHardeningTests(unittest.TestCase):
             self.assertIn("executable not found", reason)
 
     @unittest.skipIf(os.name == "nt", "the fake executable is POSIX-only")
+    def test_dry_run_rejects_codex_launcher_broken_by_isolated_home(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            repo = init_repo(root)
+            source = repo / "source.txt"
+            source.write_text("staged\n", encoding="utf-8")
+            git(repo, "add", "source.txt")
+            source_home = root / "source-codex-home"
+            direct_bin = (
+                source_home
+                / "packages"
+                / "standalone"
+                / "current"
+                / "bin"
+                / "codex"
+            )
+            direct_bin.parent.mkdir(parents=True)
+            write_executable(direct_bin, fake_codex_script())
+            source_auth = source_home / "auth.json"
+            source_auth.write_text(
+                '{"token":"test-token-placeholder"}',
+                encoding="utf-8",
+            )
+            (source_home / "config.toml").write_text(
+                'cli_auth_credentials_store = "file"\n',
+                encoding="utf-8",
+            )
+            launcher_dir = root / "launcher-bin"
+            launcher_dir.mkdir()
+            launcher = write_executable(
+                launcher_dir / "codex",
+                r'''#!/usr/bin/env python3
+import os
+from pathlib import Path
+import sys
+
+target = Path(os.environ["CODEX_HOME"]) / "packages" / "standalone" / "current" / "bin" / "codex"
+if not target.is_file():
+    print("codex: official standalone CLI is missing", file=sys.stderr)
+    raise SystemExit(127)
+os.execv(target, [str(target), *sys.argv[1:]])
+''',
+            )
+            env = os.environ.copy()
+            add_fake_trufflehog(self.helper, root, env)
+            env.update(
+                {
+                    "CODEX_HOME": str(source_home),
+                    "PATH": f"{launcher_dir}{os.pathsep}{env['PATH']}",
+                }
+            )
+
+            caller_probe = subprocess.run(
+                [str(launcher), "--version"],
+                cwd=repo,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(caller_probe.returncode, 0, caller_probe.stderr)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--mode",
+                    "local",
+                    "--engine",
+                    "codex",
+                    "--dry-run",
+                ],
+                cwd=repo,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertRegex(result.stdout, r"engine check: codex[^\n]* UNAVAILABLE")
+            self.assertIn(str(launcher), result.stdout)
+            self.assertIn("--codex-bin", result.stdout)
+            self.assertIn("CODEX_BIN", result.stdout)
+            self.assertIn("correct PATH", result.stdout)
+
+            invocations = root / "codex-invocations.jsonl"
+            env["AUTOREVIEW_FAKE_CODEX_INVOCATIONS"] = str(invocations)
+            normal_run = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--mode",
+                    "local",
+                    "--engine",
+                    "codex",
+                ],
+                cwd=repo,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                normal_run.returncode,
+                1,
+                normal_run.stdout + normal_run.stderr,
+            )
+            self.assertIn("Codex isolation preflight failed", normal_run.stderr)
+            self.assertIn(str(launcher), normal_run.stderr)
+            self.assertIn("--codex-bin", normal_run.stderr)
+            self.assertFalse(invocations.exists())
+
+    @unittest.skipIf(os.name == "nt", "the fake executable is POSIX-only")
+    def test_codex_probe_matches_run_environment_without_mutating_auth(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            repo = init_repo(root)
+            source = repo / "source.txt"
+            source.write_text("staged\n", encoding="utf-8")
+            git(repo, "add", "source.txt")
+            (root / "direct-bin").mkdir()
+            direct_bin = write_executable(
+                root / "direct-bin" / "codex",
+                fake_codex_script(),
+            )
+            source_home = root / "source-codex-home"
+            source_home.mkdir()
+            source_auth = source_home / "auth.json"
+            source_auth.write_text(
+                '{"token":"test-token-placeholder"}',
+                encoding="utf-8",
+            )
+            (source_home / "config.toml").write_text(
+                'cli_auth_credentials_store = "file"\n',
+                encoding="utf-8",
+            )
+            invocations = root / "codex-invocations.jsonl"
+            record = root / "codex-record.json"
+            env = os.environ.copy()
+            add_fake_trufflehog(self.helper, root, env)
+            env.update(
+                {
+                    "AUTOREVIEW_FAKE_CODEX_INVOCATIONS": str(invocations),
+                    "AUTOREVIEW_FAKE_RECORD": str(record),
+                    "CODEX_HOME": str(source_home),
+                }
+            )
+            auth_before = source_auth.read_bytes()
+            links_before = source_auth.stat().st_nlink
+
+            dry_run = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--mode",
+                    "local",
+                    "--engine",
+                    "codex",
+                    "--codex-bin",
+                    str(direct_bin),
+                    "--dry-run",
+                ],
+                cwd=repo,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(dry_run.returncode, 0, dry_run.stdout + dry_run.stderr)
+            self.assertRegex(dry_run.stdout, r"engine check: codex[^\n]* OK\b")
+            self.assertEqual(source_auth.read_bytes(), auth_before)
+            self.assertEqual(source_auth.stat().st_nlink, links_before)
+            probe_invocations = [
+                json.loads(line)
+                for line in invocations.read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(
+                [entry["argv"] for entry in probe_invocations],
+                [["--version"]],
+            )
+
+            invocations.unlink()
+            review = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--mode",
+                    "local",
+                    "--engine",
+                    "codex",
+                    "--codex-bin",
+                    str(direct_bin),
+                ],
+                cwd=repo,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(review.returncode, 0, review.stdout + review.stderr)
+            run_invocations = [
+                json.loads(line)
+                for line in invocations.read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(len(run_invocations), 2)
+            self.assertEqual(run_invocations[0]["argv"], ["--version"])
+            self.assertIn("exec", run_invocations[1]["argv"])
+
+            def normalized_runtime_env(invocation: dict[str, object]) -> dict[str, str]:
+                selected = invocation["env"]
+                assert isinstance(selected, dict)
+                home = Path(str(selected["HOME"]))
+                runtime_root = home.parent
+                normalized = {
+                    key: str(Path(str(selected[key])).relative_to(runtime_root))
+                    for key in (
+                        "HOME",
+                        "USERPROFILE",
+                        "XDG_CACHE_HOME",
+                        "XDG_CONFIG_HOME",
+                        "XDG_DATA_HOME",
+                        "XDG_STATE_HOME",
+                        "CODEX_HOME",
+                    )
+                }
+                normalized["PATH"] = str(selected["PATH"])
+                return normalized
+
+            self.assertEqual(
+                normalized_runtime_env(probe_invocations[0]),
+                normalized_runtime_env(run_invocations[0]),
+            )
+            self.assertEqual(
+                normalized_runtime_env(run_invocations[0]),
+                normalized_runtime_env(run_invocations[1]),
+            )
+
+    @unittest.skipIf(os.name == "nt", "the fake executable is POSIX-only")
     def test_dry_run_flag_exits_zero_when_bundle_and_engine_resolve(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)
@@ -3615,7 +4137,10 @@ class AutoreviewHardeningTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("prompt: FAILED", result.stdout)
             self.assertIn("must be outside the reviewed repository", result.stdout)
-            self.assertRegex(result.stdout, r"engine check: codex[^\n]* OK\b")
+            self.assertRegex(
+                result.stdout,
+                r"engine check: codex[^\n]* UNAVAILABLE",
+            )
 
     @unittest.skipIf(os.name == "nt", "the fake executable is POSIX-only")
     def test_dry_run_flag_exits_nonzero_when_trufflehog_missing(self) -> None:
