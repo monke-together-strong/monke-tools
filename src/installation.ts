@@ -247,7 +247,7 @@ function prepareValidatedInactiveInstallCollision(
   }
   assertManagedInstallRoot(installRoot, installId);
   mkdirSync(backupsRoot, { recursive: true });
-  assertDirectory(backupsRoot, "Install backup root is invalid");
+  resolveManagedDirectory(backupsRoot, "Install backup root");
   try {
     writeCollisionRecovery(installRoot, activeInstallRoot);
     renameSync(installRoot, backupRoot);
@@ -295,7 +295,7 @@ export async function runActivateLocalInstall(
       path.join(monkeHome, "install-staging"),
       "staged Local tool install"
     );
-    assertDirectory(stagedInstall, "Staged Local tool install is missing");
+    resolveManagedDirectory(stagedInstall, "Staged Local tool install");
     assertExecutableFile(path.join(stagedInstall, "mt"), "Staged mt executable");
 
     const manifest = parseBoundaryValue(
@@ -528,13 +528,6 @@ function isAbandonedPublicBootstrap(candidate: string, modifiedAt: number) {
     return age >= PUBLIC_BOOTSTRAP_CREATION_GRACE_MS;
   }
   return !isProcessRunning(pid);
-}
-
-function assertDirectory(directory: string, message: string) {
-  const stat = lstatSync(directory, { throwIfNoEntry: false });
-  if (!stat?.isDirectory() || stat.isSymbolicLink()) {
-    throw new MonkeError(`${message}: ${directory}`);
-  }
 }
 
 function assertExecutableFile(executable: string, label: string) {
