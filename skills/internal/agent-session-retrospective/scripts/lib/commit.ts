@@ -442,7 +442,7 @@ function validateActiveActions(section: string) {
     const fieldPositions = REQUIRED_ACTIVE_ACTION_FIELDS.map((field) => ({
       field,
       position: lines.findIndex((line) =>
-        new RegExp(`^${escapeRegExp(field)}:\\s+\\S`, "u").test(line)
+        new RegExp(`^${RegExp.escape(field)}:\\s+\\S`, "u").test(line)
       ),
     }));
     for (const { field, position } of fieldPositions) {
@@ -540,7 +540,7 @@ function validateManifestBackedPrAnalysis(
 
 function findPrAnalysisSection(text: string, item: PrWorkItemSummary) {
   const heading = `${item.repo}#${item.number}`;
-  const match = new RegExp(`^###\\s+${escapeRegExp(heading)}\\s*$`, "mu").exec(text);
+  const match = new RegExp(`^###\\s+${RegExp.escape(heading)}\\s*$`, "mu").exec(text);
   if (!match || match.index === undefined) {
     return null;
   }
@@ -553,7 +553,7 @@ function findPrAnalysisSection(text: string, item: PrWorkItemSummary) {
 function countHeading(text: string, heading: string, level = 2) {
   return [
     ...text.matchAll(
-      new RegExp(`^${"#".repeat(level)}\\s+${escapeRegExp(heading)}\\s*$`, "gmu"),
+      new RegExp(`^${"#".repeat(level)}\\s+${RegExp.escape(heading)}\\s*$`, "gmu"),
     ),
   ].length;
 }
@@ -598,7 +598,7 @@ function extractPrRepeatedPatterns(prAnalysis: string) {
 
 function extractMarkdownSection(markdown: string, heading: string, level = 2) {
   const prefix = "#".repeat(level);
-  const pattern = new RegExp(`^${prefix}\\s+${escapeRegExp(heading)}\\s*$`, "mu");
+  const pattern = new RegExp(`^${prefix}\\s+${RegExp.escape(heading)}\\s*$`, "mu");
   const match = markdown.match(pattern);
   if (!match || match.index === undefined) {
     return null;
@@ -659,8 +659,4 @@ function indentBody(body: string) {
 function firstLine(text: string) {
   const line = text.split("\n").find((entry) => entry.trim()) ?? "";
   return line.length > 200 ? `${line.slice(0, 200)}…` : line;
-}
-
-function escapeRegExp(value: string) {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

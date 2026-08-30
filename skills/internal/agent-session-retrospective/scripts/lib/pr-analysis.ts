@@ -763,7 +763,7 @@ function comparePrLabels(repoA: string, numberA: number | undefined, repoB: stri
 }
 
 export function extractSection(body: string, heading: string) {
-  const pattern = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "mu");
+  const pattern = new RegExp(`^##\\s+${RegExp.escape(heading)}\\s*$`, "mu");
   const match = body.match(pattern);
   if (!match || match.index === undefined) {
     return null;
@@ -842,8 +842,4 @@ function runText(
 
 function errorMessage(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause);
-}
-
-function escapeRegExp(value: string) {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
