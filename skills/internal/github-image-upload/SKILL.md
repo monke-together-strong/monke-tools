@@ -17,9 +17,11 @@ Accepted in local testing: `.png`, `.jpg`, `.gif`, `.webp`, `.svg`, `.mp4`, `.mo
    ```bash
    gh auth status
    gh extension list | grep -q 'drogers0/gh-image' || gh extension install drogers0/gh-image
+   gh image --version
    ```
 
    If `gh auth status` fails, stop and ask the user to run `gh auth login`.
+   Require `gh-image` v1.3.0 or newer; run `gh extension upgrade gh-image` if it is older.
    If `gh-image` setup needs manual help, use https://github.com/drogers0/gh-image.
 
 2. Upload absolute paths.
@@ -45,6 +47,6 @@ Accepted in local testing: `.png`, `.jpg`, `.gif`, `.webp`, `.svg`, `.mp4`, `.mo
 
 ## Notes
 
-- `gh-image` needs a GitHub browser `user_session` cookie, `GH_SESSION_TOKEN`, or `--token`; a normal `gh` token is not enough for the upload endpoint.
+- v1.3.0+ uses the active `gh auth` token for image/video uploads to repositories it can push to. Other cases require a browser `user_session` cookie, `GH_SESSION_TOKEN`, or `--token`.
 - Private repo attachments return 404/403 to anonymous fetches; verify through the PR, issue, or comment instead.
 - Text, data files, audio, PDFs, and ZIPs were rejected in local testing.

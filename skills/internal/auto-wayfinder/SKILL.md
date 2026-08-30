@@ -8,9 +8,6 @@ disable-model-invocation: true
 
 Run `/wayfinder` as usual, passing `<mapLink>` when one already exists.
 
-After each Wayfinder turn, open exactly one new thread with `/auto-wayfinder <mapLink>` when no human input is pending, the map has an unblocked, unclaimed frontier, and either:
+Resolve at most one ticket per thread. Wait here when human input is needed.
 
-- the map was created this turn; or
-- an existing-map turn closed its ticket.
-
-Then finish.
+After creating a map or closing a ticket, hand off any unblocked, unclaimed frontier: open exactly one fresh thread with `$auto-wayfinder <mapLink>`, confirm dispatch, then finish this thread.

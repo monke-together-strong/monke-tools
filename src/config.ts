@@ -245,7 +245,7 @@ function parseRepoConfigObject(
       `${configPath}#apps.${label}.envFile`
     );
 
-    if (normalize(absoluteEnvFilePath) === normalize(absoluteAppPath)) {
+    if (path.normalize(absoluteEnvFilePath) === path.normalize(absoluteAppPath)) {
       throw new MonkeError(`App ${label} envFile must point to a file inside the app path`);
     }
 
@@ -303,7 +303,7 @@ function parseRepoConfigObject(
     externalPathEnvOwners.set(pathEnv, label);
     const absoluteRepoRoot = path.resolve(sourceRoot, relativePath);
     const resolvedRepoRoot = resolveGitRepoRoot(runtime, absoluteRepoRoot);
-    if (normalize(resolvedRepoRoot) !== normalize(absoluteRepoRoot)) {
+    if (path.normalize(resolvedRepoRoot) !== path.normalize(absoluteRepoRoot)) {
       throw new MonkeError(
         `External dependency ${label} must point to the dependency repo root exactly: ${absoluteRepoRoot}`
       );
@@ -399,10 +399,6 @@ function resolveInside(root: string, relativePath: string, location: string) {
   return resolved;
 }
 
-function normalize(targetPath: string) {
-  return path.normalize(targetPath);
-}
-
 function parseSeedPaths(
   rawSeedPaths: string[] | undefined,
   sourceRoot: string,
@@ -421,8 +417,8 @@ function parseSeedPaths(
       relativePath,
       `${configPath}#seedPaths[${index}]`
     );
-    const normalizedPath = normalize(absolutePath);
-    if (relativePath === "." || normalizedPath === normalize(sourceRoot)) {
+    const normalizedPath = path.normalize(absolutePath);
+    if (relativePath === "." || normalizedPath === path.normalize(sourceRoot)) {
       throw new MonkeError(
         `${configPath}#seedPaths[${index}] cannot point at the repo root; seedPath "." is not allowed`
       );
