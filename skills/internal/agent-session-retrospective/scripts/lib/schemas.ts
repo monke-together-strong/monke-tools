@@ -11,7 +11,7 @@ import type {
 } from "./types.ts";
 
 const AgentKindSchema = z.enum(["codex", "claude"]);
-const CanonicalTurnSchema: z.ZodType<CanonicalTurn> = z.union([
+const CanonicalTurnSchema = z.toZod<CanonicalTurn>()(z.union([
   z.strictObject({
     error: z.string().optional(),
     exitCode: z.number().optional(),
@@ -26,9 +26,9 @@ const CanonicalTurnSchema: z.ZodType<CanonicalTurn> = z.union([
     ref: z.string(),
     text: z.string(),
   }),
-]);
+  ]));
 
-const BundleSessionSchema: z.ZodType<BundleSession> = z.strictObject({
+const BundleSessionSchema = z.toZod<BundleSession>()(z.strictObject({
   agent: AgentKindSchema,
   contentHash: z.string(),
   firstNewTurnIndex: z.number(),
@@ -40,17 +40,17 @@ const BundleSessionSchema: z.ZodType<BundleSession> = z.strictObject({
   sessionId: z.string(),
   threadSource: z.string().nullable(),
   turns: z.array(CanonicalTurnSchema),
-});
+}));
 
-export const RepoBundleSchema: z.ZodType<RepoBundle> = z.strictObject({
+export const RepoBundleSchema = z.toZod<RepoBundle>()(z.strictObject({
   priorFrictionDigest: z.array(z.string()),
   repoHash: z.string(),
   repoKey: z.string(),
   runTs: z.string(),
   sessions: z.array(BundleSessionSchema),
-});
+}));
 
-export const RepoFindingsSchema: z.ZodType<RepoFindings> = z.object({
+export const RepoFindingsSchema = z.toZod<RepoFindings>()(z.object({
   durableFixProposals: z.array(
     z.object({
       body: z.string(),
@@ -73,16 +73,16 @@ export const RepoFindingsSchema: z.ZodType<RepoFindings> = z.object({
     }),
   ).default([]),
   repoKey: z.string(),
-});
+}));
 
-export const RetrospectiveWindowSchema: z.ZodType<RetrospectiveWindow> = z.strictObject({
+export const RetrospectiveWindowSchema = z.toZod<RetrospectiveWindow>()(z.strictObject({
   since: z.string(),
   sinceSource: z.enum(["explicit", "previous-report", "first-run-default"]),
   until: z.string(),
   untilSource: z.enum(["explicit", "now"]),
-});
+}));
 
-export const FrozenSessionRecordSchema: z.ZodType<FrozenSessionRecord> = z.strictObject({
+export const FrozenSessionRecordSchema = z.toZod<FrozenSessionRecord>()(z.strictObject({
   agent: AgentKindSchema,
   analyzedAt: z.string(),
   contentHash: z.string(),
@@ -99,14 +99,14 @@ export const FrozenSessionRecordSchema: z.ZodType<FrozenSessionRecord> = z.stric
   secondary: z.array(z.string()),
   sessionId: z.string(),
   version: z.literal(1),
-});
+}));
 
-export const RepoMetaSchema: z.ZodType<RepoMeta> = z.strictObject({
+export const RepoMetaSchema = z.toZod<RepoMeta>()(z.strictObject({
   firstSeenAt: z.string(),
   lastAnalyzedAt: z.string(),
   repoKey: z.string(),
   version: z.literal(1),
-});
+}));
 
 export const RetroLockMetadataSchema = z.strictObject({
   acquiredAt: z.number().optional(),

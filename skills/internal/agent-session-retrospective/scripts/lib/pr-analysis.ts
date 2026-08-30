@@ -12,6 +12,7 @@ import {
   object,
   strictObject,
   string,
+  toZod,
 } from "zod";
 import type { output, ZodType } from "zod";
 
@@ -155,7 +156,7 @@ type GhMergeCommit = output<typeof GhMergeCommitSchema>;
 type GhPr = output<typeof GhPrSchema>;
 type GhRepo = output<typeof GhRepoSchema>;
 
-const PrAnalysisManifestSchema: ZodType<PrAnalysisManifest> = strictObject({
+const PrAnalysisManifestSchema = toZod<PrAnalysisManifest>()(strictObject({
   author: string(),
   gaps: array(
     strictObject({
@@ -190,7 +191,7 @@ const PrAnalysisManifestSchema: ZodType<PrAnalysisManifest> = strictObject({
       workItemPath: string(),
     }),
   ),
-});
+}));
 
 const DEFAULT_ORG = "monke-together-strong";
 const PR_LIST_LIMIT = 100;
