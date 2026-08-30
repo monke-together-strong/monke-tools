@@ -93,7 +93,7 @@ export type SpawnOptions =
     };
 
 export interface SpawnRunOptions {
-  /** Open the root Session worktree in Codex after it is ready. */
+  /** Open the Root repo's Session worktree in Codex after it is ready. */
   codex?: boolean;
 }
 
@@ -1007,7 +1007,9 @@ export function runSetup(runtime: Runtime) {
     }))
   );
 
-  createLogger(runtime).success(`Updated root .env for ${path.basename(context.sourceRoot)}`);
+  createLogger(runtime).success(
+    `Updated Source checkout root .env for ${path.basename(context.sourceRoot)}`
+  );
 }
 
 function materializeRepo(options: {
