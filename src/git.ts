@@ -42,15 +42,19 @@ export function resolveRepoContext(
   home?: string | null,
   options: ResolveRepoContextOptions = {}
 ) {
-  const worktreeRoot = trim(
-    runGit(runtime, cwd, ["rev-parse", "--path-format=absolute", "--show-toplevel"])
-  );
-  const gitCommonDir = trim(
-    runGit(runtime, cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
-  );
-  const currentBranch = trim(runGit(runtime, cwd, ["rev-parse", "--abbrev-ref", "HEAD"]));
+  const worktreeRoot = runGit(runtime, cwd, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--show-toplevel"
+  ]).trim();
+  const gitCommonDir = runGit(runtime, cwd, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir"
+  ]).trim();
+  const currentBranch = runGit(runtime, cwd, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
   const sourceRoot = path.dirname(gitCommonDir);
-  const isSourceCheckout = normalize(worktreeRoot) === normalize(sourceRoot);
+  const isSourceCheckout = path.normalize(worktreeRoot) === path.normalize(sourceRoot);
   const shouldInferSessionName = options.inferSessionName ?? true;
   let sessionName: string | null = null;
   if (!isSourceCheckout && shouldInferSessionName) {
@@ -150,9 +154,11 @@ function isOutsideExpectedRoot(relativeSessionPath: string) {
 }
 
 export function resolveGitRepoRoot(runtime: Runtime, checkoutPath: string) {
-  return trim(
-    runGit(runtime, checkoutPath, ["rev-parse", "--path-format=absolute", "--show-toplevel"])
-  );
+  return runGit(runtime, checkoutPath, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--show-toplevel"
+  ]).trim();
 }
 
 export function listWorktrees(runtime: Runtime, sourceRoot: string) {
@@ -250,9 +256,11 @@ export function resolveDefaultBranchRef(
 }
 
 export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string) {
-  const status = trim(
-    runGit(runtime, sourceRoot, ["status", "--porcelain", "--untracked-files=normal"])
-  );
+  const status = runGit(runtime, sourceRoot, [
+    "status",
+    "--porcelain",
+    "--untracked-files=normal"
+  ]).trim();
   if (status) {
     throw new MonkeError(
       `Source checkout is dirty: ${sourceRoot}. Commit or stash the changes, or drop --no-dirty to carry them into the new Session worktree.`
@@ -295,10 +303,12 @@ export function ensureSessionWorktree(
   );
   const pathMatch = worktrees.find(
     (entry) =>
-      normalize(entry.path) === normalize(expectedPath) && !entry.prunable && existsSync(entry.path)
+      path.normalize(entry.path) === path.normalize(expectedPath) &&
+      !entry.prunable &&
+      existsSync(entry.path)
   );
 
-  if (branchMatch && normalize(branchMatch.path) !== normalize(expectedPath)) {
+  if (branchMatch && path.normalize(branchMatch.path) !== path.normalize(expectedPath)) {
     throw new MonkeError(
       `Session "${session}" already exists at unexpected path ${branchMatch.path}; expected ${expectedPath}`
     );
@@ -418,7 +428,9 @@ export function assertFreshSessionWorktreeAvailable(
 
   const pathMatch = worktrees.find(
     (entry) =>
-      normalize(entry.path) === normalize(expectedPath) && !entry.prunable && existsSync(entry.path)
+      path.normalize(entry.path) === path.normalize(expectedPath) &&
+      !entry.prunable &&
+      existsSync(entry.path)
   );
   if (pathMatch || existsSync(expectedPath)) {
     throw new MonkeError(
@@ -437,7 +449,7 @@ export function validateWorktreeForSession(
   options: { allowBranchMismatch?: boolean } = {}
 ) {
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
-  if (normalize(worktreePath) !== normalize(expectedPath)) {
+  if (path.normalize(worktreePath) !== path.normalize(expectedPath)) {
     throw new MonkeError(
       `Expected session "${session}" worktree at ${expectedPath}, found ${worktreePath}`
     );
@@ -452,7 +464,7 @@ export function validateWorktreeForSession(
     throw new MonkeError(`Expected ${worktreePath} to be a linked session worktree`);
   }
 
-  if (normalize(context.sourceRoot) !== normalize(sourceRoot)) {
+  if (path.normalize(context.sourceRoot) !== path.normalize(sourceRoot)) {
     throw new MonkeError(
       `Expected worktree ${worktreePath} to belong to ${sourceRoot}, found ${context.sourceRoot}`
     );
@@ -490,7 +502,7 @@ function listWorktreesAfterPruningSession(
 
   const shouldPruneCachedEntries = worktrees.some(
     (entry) =>
-      (entry.branch === session || normalize(entry.path) === normalize(expectedPath)) &&
+      (entry.branch === session || path.normalize(entry.path) === path.normalize(expectedPath)) &&
       (entry.prunable || !existsSync(entry.path))
   );
   if (shouldPruneCachedEntries) {
@@ -514,14 +526,6 @@ function formatCommandDetail(result: { stderr: string; stdout: string }) {
   return detail ? `: ${detail}` : "";
 }
 
-function normalize(targetPath: string) {
-  return path.normalize(targetPath);
-}
-
 function toSessionPath(targetPath: string) {
   return targetPath.split(path.sep).join("/");
-}
-
-function trim(value: string) {
-  return value.trim();
 }

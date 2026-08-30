@@ -9,6 +9,7 @@
 
 - If asked to do too much work at once, stop and state that clearly.
 - Never remove TODO comments unless sure that it has been properly addressed
+- Do not just default to browser use when failing at a non-browser task, especially if there are explicit instructions to use non-browser tools for the task. Figure out why it's not working. Only fallback to browser if you really can't get it working, and mention the reason.
 
 ## Verification
 

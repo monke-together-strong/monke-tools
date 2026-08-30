@@ -863,7 +863,7 @@ function findMigratedGuidanceCopies(options: {
 function parseCommand(argv: string[]): ImportCommandOptions {
   const program = new Command()
     .name("bun run skills:import")
-    .description("Import external agent guidance as skills or references")
+    .description("Import guidance as Imported skills or Imported references")
     .argument("<source>")
     .option("-i, --install", "Run the monke-tools skill install command after importing")
     .option("--ref", "Import every selection as a non-discoverable reference")

@@ -74,7 +74,7 @@ repos: wrong
     );
 
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-      new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*repos`, "u")
+      new RegExp(`Invalid ${RegExp.escape(statePath)}:[\\s\\S]*repos`, "u")
     );
   });
 
@@ -118,7 +118,7 @@ typo: true
     );
 
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-      new RegExp(`Invalid ${escapeRegExp(statePath)}`, "u")
+      new RegExp(`Invalid ${RegExp.escape(statePath)}`, "u")
     );
   });
 
@@ -138,7 +138,7 @@ repos: []
     );
 
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-      new RegExp(`Invalid ${escapeRegExp(statePath)}:[\\s\\S]*version`, "u")
+      new RegExp(`Invalid ${RegExp.escape(statePath)}:[\\s\\S]*version`, "u")
     );
   });
 
@@ -374,8 +374,4 @@ function makeReservation(sourceRoot: string, blockStart: number, size: number): 
     sourceRoot,
     version: 1
   };
-}
-
-function escapeRegExp(value: string) {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

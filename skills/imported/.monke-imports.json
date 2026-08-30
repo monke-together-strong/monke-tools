@@ -34,6 +34,16 @@
     {
       "skills": [
         {
+          "kind": "skill",
+          "selector": "show-me",
+          "slug": "show-me"
+        }
+      ],
+      "source": "https://github.com/humanlayer/skills/tree/main/plugins/show-me/skills/show-me"
+    },
+    {
+      "skills": [
+        {
           "kind": "reference",
           "selector": "code-review",
           "slug": "code-review"
