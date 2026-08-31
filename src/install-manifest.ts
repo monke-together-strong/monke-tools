@@ -9,7 +9,8 @@ import {
   literal,
   record,
   strictObject,
-  string as stringSchema
+  string as stringSchema,
+  validate
 } from "zod";
 import type { output } from "zod";
 
@@ -36,7 +37,7 @@ export const ReleasePlatformSchema = enumSchema(RELEASE_PLATFORM_VALUES);
 export const ReleaseTagSchema = stringSchema().refine(
   (value) =>
     value.startsWith(RELEASE_TAG_PREFIX) &&
-    StableSemanticVersionSchema.safeParse(value.slice(RELEASE_TAG_PREFIX.length)).success,
+    validate(StableSemanticVersionSchema, value.slice(RELEASE_TAG_PREFIX.length)),
   "must use the monke-tools-v<semver> stable Release tag syntax"
 );
 export const ReleaseInstallManifestSchema = strictObject({
@@ -48,9 +49,10 @@ export const ReleaseInstallManifestSchema = strictObject({
         return (
           value.startsWith(RELEASE_TAG_PREFIX) &&
           value.endsWith(suffix) &&
-          StableSemanticVersionSchema.safeParse(
+          validate(
+            StableSemanticVersionSchema,
             value.slice(RELEASE_TAG_PREFIX.length, -suffix.length)
-          ).success
+          )
         );
       }),
     "must use the predictable versioned Release archive name"

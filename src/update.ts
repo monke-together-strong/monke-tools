@@ -2,6 +2,8 @@ import { hash, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { validate } from "zod";
+
 import { errorMessage, MonkeError } from "./errors.ts";
 import {
   FullCommitSchema,
@@ -113,11 +115,7 @@ async function selectLatestStableRelease(runtime: Runtime) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- GitHub pagination stops at the first empty page.
     const releases = await runtime.releaseDistribution.listReleases(page);
     for (const release of releases) {
-      if (
-        release.draft ||
-        release.prerelease ||
-        !ReleaseTagSchema.safeParse(release.tag_name).success
-      ) {
+      if (release.draft || release.prerelease || !validate(ReleaseTagSchema, release.tag_name)) {
         continue;
       }
       const version = release.tag_name.slice(RELEASE_TAG_PREFIX.length);

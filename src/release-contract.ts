@@ -16,7 +16,7 @@ import {
   StableSemanticVersionSchema
 } from "./install-manifest.ts";
 import type { ReleaseInstallManifest } from "./install-manifest.ts";
-import { executableFileProblem } from "./path-boundary.ts";
+import { executableFileProblem, resolveManagedDirectory } from "./path-boundary.ts";
 import {
   assertReleaseGuidanceHashes,
   BUNDLED_GUIDANCE_FOLDERS,
@@ -122,8 +122,7 @@ function validateVerifiedReleaseBundleRoot(options: {
 }
 
 function validateReleaseBundleFiles(bundleRoot: string) {
-  const resolvedRoot = path.resolve(bundleRoot);
-  assertDirectory(resolvedRoot, "Release bundle is missing");
+  const resolvedRoot = resolveManagedDirectory(bundleRoot, "Release bundle");
   assertNoLinks(resolvedRoot);
   assertExecutable(path.join(resolvedRoot, "mt"), "Release executable");
   assertExecutable(path.join(resolvedRoot, "install.sh"), "Release installer");
@@ -400,13 +399,6 @@ function assertNoLinks(root: string) {
     if (stat.isDirectory()) {
       assertNoLinks(entryPath);
     }
-  }
-}
-
-function assertDirectory(directory: string, message: string) {
-  const stat = lstatSync(directory, { throwIfNoEntry: false });
-  if (!stat?.isDirectory() || stat.isSymbolicLink()) {
-    throw new MonkeError(`${message}: ${directory}`);
   }
 }
 

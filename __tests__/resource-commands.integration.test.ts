@@ -38,15 +38,15 @@ interface ResourceCommandScenario {
 const ResourceCommandInputSchema = z.record(z.string(), z.array(z.string()));
 
 describe("resource commands", () => {
-  test("spawn runs resource commands from the worktree and writes outputs to root env and state", () => {
+  test("spawn runs Resource commands from the Session worktree and writes outputs to the session root .env and Session state", () => {
     const scenario = createResourceCommandScenario({
       module: `import { writeFileSync } from "node:fs";
 
 export default function ({ previous }) {
   writeFileSync("command-cwd.log", process.cwd() + "\\n");
   writeFileSync("command-stdin.json", JSON.stringify(previous));
-  console.log("allocator progress");
-  console.error("allocator detail");
+  console.log("Resource command progress");
+  console.error("Resource command detail");
   return {
     E2E_FLOW1_SYMBOL: "SOL/USDT:USDT",
     E2E_FLOW2_SYMBOL: "LINK/USDT:USDT",
@@ -769,19 +769,19 @@ export default function () {
       name: "default export not a function"
     },
     {
-      expected: /kind: nonzero exit 1[\s\S]*stderr before failure[\s\S]*allocator boom/u,
+      expected: /kind: nonzero exit 1[\s\S]*stderr before failure[\s\S]*Resource command boom/u,
       module: `export default function () {
   console.log("stdout before failure");
   console.error("stderr before failure");
-  throw new Error("allocator boom");
+  throw new Error("Resource command boom");
 }
 `,
       name: "thrown error"
     },
     {
-      expected: /kind: nonzero exit 1[\s\S]*async allocator boom/u,
+      expected: /kind: nonzero exit 1[\s\S]*async Resource command boom/u,
       module: `export default async function () {
-  throw new Error("async allocator boom");
+  throw new Error("async Resource command boom");
 }
 `,
       name: "rejected error"
@@ -873,8 +873,8 @@ function isDirectExecution(importMetaUrl) {
     const scenario = createResourceCommandScenario({
       module: `export default function () {
   console.log(process.env.SECRET_STDOUT);
-  console.error("allocator stderr");
-  throw new Error("allocator failed");
+  console.error("Resource command stderr");
+  throw new Error("Resource command failed");
 }
 `,
       name: "single-repo-resource-command-throw"
@@ -887,7 +887,7 @@ function isDirectExecution(importMetaUrl) {
       message = error instanceof Error ? error.message : String(error);
     }
     expect(message).toMatch(
-      /Resource command e2e-symbols failed[\s\S]*kind: nonzero exit 1[\s\S]*allocator stderr/u
+      /Resource command e2e-symbols failed[\s\S]*kind: nonzero exit 1[\s\S]*Resource command stderr/u
     );
     expect(message).not.toContain("stdout:");
     expect(message).not.toContain("secret stdout");
