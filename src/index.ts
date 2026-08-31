@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import "zod/compile";
 import { Argument, Command, Option } from "@commander-js/extra-typings";
 
 import { runChop } from "./chop.ts";

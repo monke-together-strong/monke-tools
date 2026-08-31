@@ -34,12 +34,13 @@ export interface CommandResult {
 
 export type CommandRunner = (command: string, args: string[], options?: { cwd?: string }) => CommandResult;
 
-export interface PrAnalysisGap {
-  impact: string;
-  number?: number;
-  reason: string;
-  repo: string;
-}
+const PrAnalysisGapSchema = strictObject({
+  impact: string(),
+  number: numberSchema().optional(),
+  reason: string(),
+  repo: string(),
+});
+export type PrAnalysisGap = output<typeof PrAnalysisGapSchema>;
 
 export interface PrCommitReference {
   committedDate?: string;
@@ -47,37 +48,39 @@ export interface PrCommitReference {
   sha: string;
 }
 
-export interface PrWorkItemSummary {
-  analysisPath: string;
-  commitShas: string[];
-  createdAt: string;
-  finalHeadSha?: string;
-  mergeCommitSha?: string;
-  mergedAt: string;
-  number: number;
-  openingSnapshot: {
-    confidence: "exact" | "inferred" | "unknown";
-    reason: string;
-    ref?: string;
-  };
-  repo: string;
-  title: string;
-  url: string;
-  workItemPath: string;
-}
+const PrWorkItemSummarySchema = strictObject({
+  analysisPath: string(),
+  commitShas: array(string()),
+  createdAt: string(),
+  finalHeadSha: string().optional(),
+  mergeCommitSha: string().optional(),
+  mergedAt: string(),
+  number: numberSchema(),
+  openingSnapshot: strictObject({
+    confidence: enumSchema(["exact", "inferred", "unknown"]),
+    reason: string(),
+    ref: string().optional(),
+  }),
+  repo: string(),
+  title: string(),
+  url: string(),
+  workItemPath: string(),
+});
+export type PrWorkItemSummary = output<typeof PrWorkItemSummarySchema>;
 
-export interface PrAnalysisManifest {
-  author: string;
-  gaps: PrAnalysisGap[];
-  generatedAt: string;
-  org: string;
-  runTs: string;
-  version: 1;
-  window: RetrospectiveWindow;
-  workItems: PrWorkItemSummary[];
-}
+const PrAnalysisManifestSchema = strictObject({
+  author: string(),
+  gaps: array(PrAnalysisGapSchema),
+  generatedAt: string(),
+  org: string(),
+  runTs: string(),
+  version: literal(1),
+  window: RetrospectiveWindowSchema,
+  workItems: array(PrWorkItemSummarySchema),
+});
+export type PrAnalysisManifest = output<typeof PrAnalysisManifestSchema>;
 
-export interface PrWorkItem extends PrWorkItemSummary {
+export type PrWorkItem = PrWorkItemSummary & {
   baseBranch?: string;
   changedFiles: string[];
   commitMessages: PrCommitReference[];
@@ -90,7 +93,7 @@ export interface PrWorkItem extends PrWorkItemSummary {
   };
   runTs: string;
   version: 1;
-}
+};
 
 export interface RunPrCollectOptions {
   exec?: CommandRunner;
@@ -154,43 +157,6 @@ type GhFile = output<typeof GhFileSchema>;
 type GhMergeCommit = output<typeof GhMergeCommitSchema>;
 type GhPr = output<typeof GhPrSchema>;
 type GhRepo = output<typeof GhRepoSchema>;
-
-const PrAnalysisManifestSchema: ZodType<PrAnalysisManifest> = strictObject({
-  author: string(),
-  gaps: array(
-    strictObject({
-      impact: string(),
-      number: numberSchema().optional(),
-      reason: string(),
-      repo: string(),
-    }),
-  ),
-  generatedAt: string(),
-  org: string(),
-  runTs: string(),
-  version: literal(1),
-  window: RetrospectiveWindowSchema,
-  workItems: array(
-    strictObject({
-      analysisPath: string(),
-      commitShas: array(string()),
-      createdAt: string(),
-      finalHeadSha: string().optional(),
-      mergeCommitSha: string().optional(),
-      mergedAt: string(),
-      number: numberSchema(),
-      openingSnapshot: strictObject({
-        confidence: enumSchema(["exact", "inferred", "unknown"]),
-        reason: string(),
-        ref: string().optional(),
-      }),
-      repo: string(),
-      title: string(),
-      url: string(),
-      workItemPath: string(),
-    }),
-  ),
-});
 
 const DEFAULT_ORG = "monke-together-strong";
 const PR_LIST_LIMIT = 100;

@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { validate } from "zod";
 import type { output } from "zod";
 
 import { MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
@@ -86,7 +87,7 @@ export function hasReleaseOwnedChanges(filePaths: string[]) {
 
 export function deriveNextReleaseVersion(tags: string[]) {
   const versions = tags
-    .filter((tag) => ReleaseTagSchema.safeParse(tag).success)
+    .filter((tag) => validate(ReleaseTagSchema, tag))
     .map((tag) => tag.slice(RELEASE_TAG_PREFIX.length))
     .toSorted(compareStableSemanticVersions);
   const current = parseSemanticVersion(versions.at(-1) ?? "0.0.0");
