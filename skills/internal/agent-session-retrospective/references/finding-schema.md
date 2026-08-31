@@ -1,8 +1,9 @@
 # Finding envelope (subagent contract)
 
-You are one per-repo subagent. You receive a **bundle JSON** for a single repo. Read it, find
-friction, and write a **findings JSON** to the sibling path (same directory, filename with
-`<repoHash>.json` → `<repoHash>.findings.json`).
+You are one per-repo subagent. You receive a **bundle JSON** for a single repo plus the current
+entries from `~/.monke/agent-retrospectives/accepted.md`. Read the bundle, find friction, and write
+a **findings JSON** to the sibling path (same directory, filename with `<repoHash>.json` →
+`<repoHash>.findings.json`).
 
 The script owns identity and citation validation; you own everything substantive. Keep the
 envelope thin and grounded; write free-form prose in `body`.
@@ -76,6 +77,9 @@ episode sources.
 
 ## Rules
 
+- Treat accepted entries as user-approved boundaries. Omit episodes, proposals, and repeated asks
+  whose only problem is an accepted condition. A distinct consequence outside the named boundary
+  remains eligible.
 - A **friction episode** is concrete: a real attempt → blocker → pivot, anchored to cited turns.
   Not "the agent could have been faster" — that cites nothing.
 - Lead every `durableFixProposal.body` with `Target:` and `Confidence:` lines. The body is prose;

@@ -23,6 +23,13 @@ Keep the run report-only: inspect, verify, and propose. The human owns every res
 Run `scripts/run-retrospective.ts` with `bun` from this skill's directory. Persistent state lives
 under `~/.monke/agent-retrospectives/`.
 
+## Accepted issues
+
+At the start of every run, read `~/.monke/agent-retrospectives/accepted.md` when it exists and
+capture its entries for session-bundle prompts. This file is user-owned; never edit it during a
+retrospective. An entry suppresses only the condition it names. A distinct consequence outside
+that boundary remains eligible. Keep collection unchanged so the frozen evidence stays complete.
+
 ## 1. Collect session evidence
 
 ```bash
@@ -45,7 +52,8 @@ stop with "nothing eligible" only when neither lane has evidence available.
 For every bundle, concurrently dispatch one subagent with the bundle path and
 [the finding contract](references/finding-schema.md). Each subagent writes the required sibling
 `<repoHash>.findings.json`, including empty arrays when it finds nothing. Use each transcript's
-origin and parent link to read delegated side chats as part of their task lineage.
+origin and parent link to read delegated side chats as part of their task lineage. Include the
+captured accepted entries in every prompt; the contract defines how workers apply them.
 
 **Done when** every bundle has one schema-conforming findings file.
 
@@ -59,9 +67,14 @@ an analysis or an explicit gap, as defined by the contract.
 
 ## 4. Group recurrence
 
-Read every findings file and group transcript-derived proposals and repeated asks into run-local
-candidates with stable ids (`A1`, `A2`, …). Read `runs/<runTs>/pr-analysis.md` for context, while
-keeping PR-only observations out of Session Actions.
+Immediately before grouping, reread `~/.monke/agent-retrospectives/accepted.md` when it exists.
+Exclude any current finding or prior session thread whose only problem is an accepted condition;
+do not assign it a candidate id or copy it into the report. Distinct consequences remain eligible,
+and the frozen session evidence remains unchanged.
+
+Read the remaining findings and group transcript-derived proposals and repeated asks into
+run-local candidates with stable ids (`A1`, `A2`, …). Read `runs/<runTs>/pr-analysis.md` for
+context, while keeping PR-only observations out of Session Actions.
 
 Then inspect the newest six report sets under `reports/`: each compact retrospective plus its
 session and PR source siblings when present. Cross-reference rather than copy forward. Promote a
@@ -70,8 +83,8 @@ one-off even when its earlier evidence was low-signal. Keep PR-only recurrence i
 corrective-pattern lane unless session evidence independently supports the same problem.
 
 **Done when** every current session proposal and repeated-ask cluster, and every prior session
-thread considered for promotion, belongs to one candidate or is explicitly retained as source-only
-evidence.
+thread considered for promotion, belongs to one candidate, is explicitly retained as source-only
+evidence, or is excluded by an accepted entry.
 
 ## 5. Audit current resolution
 
