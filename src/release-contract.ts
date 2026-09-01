@@ -316,8 +316,8 @@ export function readReleaseChecksums(checksumPath: string) {
 }
 
 export function compareStableSemanticVersions(left: string, right: string) {
-  const leftParts = parseSemanticVersion(left);
-  const rightParts = parseSemanticVersion(right);
+  const leftParts = parseStableSemanticVersion(left);
+  const rightParts = parseStableSemanticVersion(right);
   for (const index of [0, 1, 2]) {
     const leftPart = leftParts[index] ?? 0n;
     const rightPart = rightParts[index] ?? 0n;
@@ -326,6 +326,11 @@ export function compareStableSemanticVersions(left: string, right: string) {
     }
   }
   return 0;
+}
+
+export function parseStableSemanticVersion(value: string) {
+  const parts = StableSemanticVersionSchema.parse(value).split(".");
+  return [BigInt(parts[0] ?? ""), BigInt(parts[1] ?? ""), BigInt(parts[2] ?? "")] as const;
 }
 
 function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
@@ -416,11 +421,6 @@ function commandFailureDetail(result: {
   return (
     result.stderr?.trim() || result.stdout?.trim() || result.error?.message || "unknown failure"
   );
-}
-
-function parseSemanticVersion(value: string): [bigint, bigint, bigint] {
-  const parts = StableSemanticVersionSchema.parse(value).split(".");
-  return [BigInt(parts[0] ?? ""), BigInt(parts[1] ?? ""), BigInt(parts[2] ?? "")];
 }
 
 function run(command: string, arguments_: string[]) {
