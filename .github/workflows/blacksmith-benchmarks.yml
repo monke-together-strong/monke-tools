@@ -1,0 +1,36 @@
+name: Blacksmith Benchmarks
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify-arm:
+    name: Check And Test (ARM 2 vCPU)
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          cache: true
+
+      - name: Install deps
+        run: vp install --frozen-lockfile
+
+      - name: Check
+        run: vp check
+
+      - name: Test
+        run: vp run test
