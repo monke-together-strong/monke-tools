@@ -393,7 +393,7 @@ function pathExistsOnFilesystem(sourceRoot: string, relativePath: string) {
 function resolveInside(root: string, relativePath: string, location: string) {
   const resolved = path.resolve(root, relativePath);
   const relative = path.relative(root, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new MonkeError(`${location} must resolve inside ${root}`);
   }
   return resolved;
