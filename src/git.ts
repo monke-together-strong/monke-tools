@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
-import type { Runtime } from "./types.ts";
+import type { ExecResult, Runtime } from "./types.ts";
 
 export interface WorktreeEntry {
   branch: string | null;
@@ -521,7 +521,7 @@ function refExists(runtime: Runtime, sourceRoot: string, ref: string) {
   return result.exitCode === 0;
 }
 
-function formatCommandDetail(result: { stderr: string; stdout: string }) {
+function formatCommandDetail(result: Pick<ExecResult, "stderr" | "stdout">) {
   const detail = (result.stderr || result.stdout).trim();
   return detail ? `: ${detail}` : "";
 }

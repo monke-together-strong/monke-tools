@@ -4,7 +4,7 @@ import * as z from "zod";
 
 import { errorMessage } from "./errors.ts";
 import { resolveDefaultBranchRef } from "./git.ts";
-import type { Runtime } from "./types.ts";
+import type { ExecResult, Runtime } from "./types.ts";
 
 const GithubRepositoryLookupSchema = z.object({
   nameWithOwner: z.string().min(1)
@@ -557,7 +557,7 @@ function realpathOrNull(targetPath: string) {
   }
 }
 
-function commandDetail(result: { exitCode: number; stderr: string; stdout: string }) {
+function commandDetail(result: ExecResult) {
   return result.stderr.trim() || result.stdout.trim() || `exit code ${result.exitCode}`;
 }
 
