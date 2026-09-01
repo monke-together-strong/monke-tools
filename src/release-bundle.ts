@@ -33,6 +33,7 @@ import {
 import type { ReleaseInstallManifest } from "./install-manifest.ts";
 import {
   compareStableSemanticVersions,
+  parseStableSemanticVersion,
   readReleaseChecksums,
   releaseArchiveName,
   releaseChecksumsName,
@@ -90,7 +91,7 @@ export function deriveNextReleaseVersion(tags: string[]) {
     .filter((tag) => validate(ReleaseTagSchema, tag))
     .map((tag) => tag.slice(RELEASE_TAG_PREFIX.length))
     .toSorted(compareStableSemanticVersions);
-  const current = parseSemanticVersion(versions.at(-1) ?? "0.0.0");
+  const current = parseStableSemanticVersion(versions.at(-1) ?? "0.0.0");
   return `${String(current[0])}.${String(current[1])}.${String(current[2] + 1n)}`;
 }
 
@@ -274,11 +275,6 @@ function releaseAssetDigest(directory: string, assetName: string) {
 
 function commandFailureDetail(result: { error?: Error; stderr: string | null }) {
   return result.stderr?.trim() || result.error?.message || "unknown failure";
-}
-
-function parseSemanticVersion(value: string): [bigint, bigint, bigint] {
-  const parts = StableSemanticVersionSchema.parse(value).split(".");
-  return [BigInt(parts[0] ?? ""), BigInt(parts[1] ?? ""), BigInt(parts[2] ?? "")];
 }
 
 function run(
