@@ -1,6 +1,6 @@
 import { createLogger } from "./logger.ts";
 import { findExecutable } from "./runtime.ts";
-import type { Runtime } from "./types.ts";
+import type { ExecResult, Runtime } from "./types.ts";
 
 /** Open a local checkout as a Codex workspace. */
 export function openCodexWorkspace(runtime: Runtime, targetPath: string) {
@@ -48,12 +48,7 @@ function canRunUrlOpener(runtime: Runtime, command: string) {
     : findExecutable(command, runtime.env) !== null;
 }
 
-function formatOpenFailure(result: {
-  exitCode: number;
-  stderr: string;
-  stdout: string;
-  timedOut?: boolean;
-}) {
+function formatOpenFailure(result: ExecResult) {
   if (result.timedOut === true) {
     return "timed out";
   }
