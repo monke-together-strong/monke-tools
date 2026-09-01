@@ -104,6 +104,31 @@ apps:
     ]);
   });
 
+  test("loadResolvedGraph accepts in-repo paths whose names begin with two dots", () => {
+    const sandbox = makeTempDir("config-dotdot-prefix");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "..app/..env": "PORT=3000\n",
+      "..seed": "seeded\n",
+      "monke.yml": `seedPaths:
+  - ..seed
+apps:
+  api:
+    path: ..app
+    envFile: ..env
+    mappings:
+      - port: API_PORT
+        env: PORT
+`
+    });
+
+    const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+    const repo = graph.reposByRoot.get(root);
+
+    expect(repo?.appsByLabel.get("api")?.absoluteAppPath).toBe(path.join(root, "..app"));
+    expect(repo?.appsByLabel.get("api")?.relativeEnvFile).toBe("..env");
+    expect(repo?.seedPaths).toStrictEqual(["..seed"]);
+  });
+
   test("loadResolvedGraph rejects non-string bootstrapCommand", () => {
     const sandbox = makeTempDir("config-bootstrap-non-string");
     const root = createRepo(path.join(sandbox, "root"), {
