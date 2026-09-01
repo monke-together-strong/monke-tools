@@ -264,7 +264,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 ### Agent retrospective
 
-**Retrospective**: One read-only analysis pass that combines recent **Agent transcript** evidence with required **PR analysis**, then reports **Durable fix proposals**. The transcript lane detects **Friction episodes** and **Repeated asks** grouped by **Source checkout**; the PR lane studies **Implementation trajectories** in the same **Retrospective window**. _Avoid_: Audit, review, trace, session review
+**Retrospective**: One read-only analysis pass that combines recent **Agent transcript** evidence with required **PR analysis**, then reports **Durable fix proposals**. The transcript lane detects **Friction episodes**, **Repeated asks**, and **Standards opportunities** grouped by **Source checkout**; the PR lane studies **Implementation trajectories** in the same **Retrospective window**. _Avoid_: Audit, review, trace, session review
 
 **Implementation trajectory**: A pull request lifecycle analyzed from the state when the PR was opened to the merged outcome. _Avoid_: Session, transcript, friction episode
 
@@ -302,9 +302,11 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Friction episode**: An observed moment in an **Agent transcript** where the agent hit an issue and changed course — a neutral record of what it was attempting, the blocker, and the pivot. Not a judgment that any rule was broken. _Avoid_: Detour, violation, agent sin, mistake, error
 
-**Durable fix proposal**: A recommended lasting change to the agent working environment — a skill, `AGENTS.md`/`CLAUDE.md`, a hook, a preflight, or a Linear issue — inferred from related **Friction episodes**, **Repeated asks**, and/or recurring **Corrective change** patterns from **PR analysis**, for a human to execute. The retrospective proposes it; it never applies it. _Avoid_: Auto-fix, patch, remediation, action item
+**Durable fix proposal**: A recommended lasting change to the agent working environment — a skill, `AGENTS.md`/`CLAUDE.md`, a coding standard, a hook, a preflight, or a Linear issue — inferred from related **Friction episodes**, **Repeated asks**, **Standards opportunities**, and/or recurring **Corrective change** patterns from **PR analysis**, for a human to execute. The retrospective proposes it; it never applies it. _Avoid_: Auto-fix, patch, remediation, action item
 
-**Repeated ask**: A fix/revert/change request the user makes to agents that recurs across multiple **Agent transcripts** — the signal that the same correction keeps being needed. _Avoid_: Nag, recurring prompt, recurring instruction
+**Repeated ask**: A request about how code should be written or changed that recurs across multiple **Agent transcripts**, whether or not an agent hit a blocker or produced a defect. _Avoid_: Nag, recurring prompt, recurring instruction
+
+**Standards opportunity**: A **Repeated ask** whose underlying code-writing rule is absent, partial, or scoped incorrectly in the **Team coding baseline** or applicable **Repo coding standards**. It is a guidance gap, not necessarily a defect or standards violation. _Avoid_: Issue, preference, violation, lint finding
 
 ## Relationships
 
@@ -531,11 +533,13 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - A **Secondary repo** is observed from an **Agent transcript**'s tool activity, not declared by `monke.yml`, so it need not be a **Dependency repo** of the **Primary repo**.
 - A **Friction episode** belongs to exactly one **Agent transcript** and, once recorded, is never recomputed.
 - A **Friction episode** states a neutral observation; interpretive claims belong to a **Durable fix proposal**, not the episode.
-- A **Durable fix proposal** is synthesized from one cluster of related **Friction episodes**, **Repeated asks**, and/or recurring **Corrective change** patterns from **PR analysis**, carries its supporting evidence and a confidence, and is regenerated each run rather than frozen.
+- A **Durable fix proposal** is synthesized from one cluster of related **Friction episodes**, **Repeated asks**, **Standards opportunities**, and/or recurring **Corrective change** patterns from **PR analysis**, carries its supporting evidence and a confidence, and is regenerated each run rather than frozen.
 - The retrospective only emits a **Durable fix proposal**; it never edits a repo, skill, or config.
 - A **Durable fix proposal** may conclude that no durable fix is worth making.
-- A **Repeated ask** is found by classifying raw user messages as fix/revert/change requests and clustering similar ones across **Agent transcripts**; the messages are extracted deterministically, while the classification and clustering are regenerated each run, not frozen.
+- A **Repeated ask** is found by classifying raw user messages as requests about how code should be written or changed and clustering similar ones across **Agent transcripts**; the messages are extracted deterministically, while the classification and clustering are regenerated each run, not frozen.
 - A **Repeated ask** may correlate within one **Primary repo** or, in global synthesis, across repos.
+- A **Standards opportunity** is considered after checking both the **Team coding baseline** and the applicable **Repo coding standards**; an already-covered ask is an execution or enforcement gap, not a duplicate standard.
+- A **Standards opportunity** belongs in the **Team coding baseline** when its rule is generally applicable across repos and in **Repo coding standards** when it depends on one repo's stack, architecture, or domain.
 - A **Retrospective** is read-only: it reports **Durable fix proposals** but never edits a repo, skill, or config.
 - Every **Friction episode** cites verifiable locations in **Agent transcripts**; every **Durable fix proposal** cites verifiable supporting evidence from **Agent transcripts** and/or **PR analysis**; a citation that cannot be matched to its evidence source is rejected.
 

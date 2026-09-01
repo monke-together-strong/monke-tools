@@ -384,6 +384,7 @@ const REQUIRED_PR_HEADINGS = [
 
 const REQUIRED_SYNTHESIS_HEADINGS = [
   "Active Actions",
+  "Standards Opportunities",
   "Skill & Workflow Opportunities",
   "Resolved or Superseded",
 ];

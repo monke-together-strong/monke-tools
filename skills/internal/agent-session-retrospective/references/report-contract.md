@@ -19,6 +19,8 @@ The main report has a report title, a `Window:` line showing the resolved retros
    - **Active Actions** — unresolved, partially resolved, or unknown candidates ranked by **value ×
      recurrence**. Every action uses the problem-first field order from the synthesis contract;
      status and evidence follow.
+   - **Standards Opportunities** — one explicit standards disposition for every active action after
+     checking team-wide/global and repo-specific coding guidance.
    - **Skill & Workflow Opportunities** — one `create-skill`, `create-workflow`, `update`,
      `combine`, or `no-skill` decision for every active action.
    - **Resolved or Superseded** — current-state-verified candidates suppressed from active ranking
@@ -33,9 +35,10 @@ The source files hold the bulky evidence:
 - **PR sources** — the full PR trajectory aggregate, including one-off patterns, explicit gaps, and
   per-PR analyses.
 
-A reader should be able to identify each problem and its impact immediately, act from the main
-report alone, see why stale candidates were suppressed, and drill into linked sources only when
-they need transcript provenance.
+A reader should be able to identify each problem and its impact immediately, see recurring asks
+that expose missing standards even when no failure occurred, act from the main report alone, see
+why stale candidates were suppressed, and drill into linked sources only when they need transcript
+provenance.
 
 ## Report sets are the cross-run memory
 

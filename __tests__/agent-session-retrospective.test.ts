@@ -726,11 +726,15 @@ describe("agent session retrospective", () => {
   });
 
   describe(validateSynthesis, () => {
-    test("requires each resolution-aware synthesis section exactly once", () => {
+    test("requires each synthesis section exactly once", () => {
       const valid = [
         "### Active Actions",
         "",
         "_No active actions._",
+        "",
+        "### Standards Opportunities",
+        "",
+        "_No standards opportunities._",
         "",
         "### Skill & Workflow Opportunities",
         "",
@@ -742,6 +746,7 @@ describe("agent session retrospective", () => {
       ].join("\n");
       expect(validateSynthesis(valid)).toStrictEqual([]);
       expect(validateSynthesis("### Active Actions")).toStrictEqual([
+        "Heading `### Standards Opportunities` appears 0 time(s), expected 1.",
         "Heading `### Skill & Workflow Opportunities` appears 0 time(s), expected 1.",
         "Heading `### Resolved or Superseded` appears 0 time(s), expected 1."
       ]);
@@ -750,6 +755,7 @@ describe("agent session retrospective", () => {
           [
             "### Resolved or Superseded",
             "### Active Actions",
+            "### Standards Opportunities",
             "### Skill & Workflow Opportunities"
           ].join("\n")
         )
@@ -774,6 +780,15 @@ describe("agent session retrospective", () => {
         "Current-state evidence: Each workflow still identifies candidates differently.",
         "Remaining gap: No shared snapshot or final identity check exists.",
         "Session evidence: repo e1",
+        "",
+        "### Standards Opportunities",
+        "",
+        "#### A1 — Immutable review identity is not a coding standard",
+        "Disposition: not-a-standard",
+        "Standards checked: Global instructions, Team baseline, and repo guidance.",
+        "Evidence: A1 concerns workflow identity rather than how code is written.",
+        "Rationale: A workflow guard is the authoritative prevention surface.",
+        "Proposed wording: n/a",
         "",
         "### Skill & Workflow Opportunities",
         "",
@@ -805,6 +820,10 @@ describe("agent session retrospective", () => {
         "### Active Actions",
         "",
         "GLOBAL-SYNTHESIS",
+        "",
+        "### Standards Opportunities",
+        "",
+        "_No standards opportunities._",
         "",
         "### Skill & Workflow Opportunities",
         "",
@@ -845,6 +864,7 @@ describe("agent session retrospective", () => {
       const prAt = report.indexOf("PR Repeated Corrective Patterns");
       expect(globalAt).toBeGreaterThan(-1);
       expect(globalAt).toBeLessThan(prAt);
+      expect(report).toContain("### Standards Opportunities");
       expect(report).toContain("[session sources](ts-session-sources.md)");
       expect(report).toContain("[PR sources](ts-pr-sources.md)");
       expect(report).not.toContain("Per-repo proposals");
@@ -930,6 +950,15 @@ describe("agent session retrospective", () => {
           "Current-state evidence: The guard is absent.",
           "Remaining gap: The workflow remains unguarded.",
           "Session evidence: repo e1",
+          "",
+          "### Standards Opportunities",
+          "",
+          "#### A1 — Workflow guards do not belong in coding standards",
+          "Disposition: not-a-standard",
+          "Standards checked: Global instructions, Team baseline, and repo guidance.",
+          "Evidence: A1 concerns workflow enforcement rather than code-writing guidance.",
+          "Rationale: The preflight is the authoritative prevention surface.",
+          "Proposed wording: n/a",
           "",
           "### Skill & Workflow Opportunities",
           "",

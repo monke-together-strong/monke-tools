@@ -1,7 +1,6 @@
 ---
 name: implement
-description: Heavyweight implementation workflow with mandatory closeout.
-disable-model-invocation: true
+description: Only use when explicitly mentioned with /implement or $implement.
 ---
 
 The user's primary PRD, issue, plan, or direct request is the Work target.

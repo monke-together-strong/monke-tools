@@ -1,5 +1,5 @@
 interface:
   display_name: "Agent Session Retrospective"
-  short_description: "Review agent sessions for durable improvements"
+  short_description: "Find recurring friction and missing standards"
 policy:
   allow_implicit_invocation: false

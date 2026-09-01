@@ -69,7 +69,7 @@ episode sources.
     {
       "label": "short cluster name",
       "exampleSessionIds": ["…"],
-      "body": "The recurring ask (fix/revert/change the agent had to be told more than once) and what would stop it recurring."
+      "body": "The recurring ask about how code should be written or changed, whether it looks like a standards candidate, and what would stop it recurring."
     }
   ]
 }
@@ -98,4 +98,8 @@ episode sources.
 - Treat parent and child transcripts as one task lineage when clustering repeated asks.
   `rawUserMessages` is empty for subagent and automation transcripts because their user-role prompt
   is machine-authored delegation, not a repeated human ask.
+- Analyze `rawUserMessages` for repeated asks independently of friction. A recurring request about
+  code shape, design, quality, or working method remains eligible when the agent complied without a
+  blocker or failure. Call out likely standards candidates in the cluster body. Repeated product
+  features are not standards candidates merely because they recur.
 - Found nothing? Write the file with empty arrays. Do not invent friction to fill it.

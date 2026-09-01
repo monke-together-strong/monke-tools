@@ -20,6 +20,12 @@ Record:
 - `Current-state evidence:` what the current state proves
 - `Remaining gap:` the remaining problem, or `none`
 
+For a candidate grounded in repeated asks about code shape, design, quality, or working method,
+also audit the active Global agent instructions, the Team coding baseline, and the applicable repo
+coding standards. This audit determines whether the implied rule is absent, partial, already
+covered, or not a coding standard; an existing rule redirects the candidate toward execution or
+enforcement instead of duplicating guidance.
+
 An open tracker is `unresolved`, not resolved. A completed change is `resolved` only when the
 current authoritative state contains it and the relevant behavior is verified where practical.
 Use `unknown` when current state cannot be inspected. If evidence recurs after a verified
@@ -27,7 +33,7 @@ resolution, classify the candidate as an active regression.
 
 ## Required synthesis shape
 
-The synthesis file contains these three level-three headings exactly once and in this order.
+The synthesis file contains these four level-three headings exactly once and in this order.
 `commit` rejects a file that omits or duplicates one.
 
 ### Active Actions
@@ -65,6 +71,28 @@ fields describe only the remaining gap. Keep an unknown candidate's uncertainty 
 presenting its cause or fix as settled.
 
 Write `_No active actions._` when empty.
+
+### Standards Opportunities
+
+Give every active action exactly one disposition after inspecting both team-wide/global and
+repo-specific coding guidance:
+
+```text
+#### <action id> — <short standards opportunity name>
+Disposition: <add-team-baseline | add-repo-standard | update-team-baseline | update-repo-standard | already-covered | not-a-standard>
+Standards checked: <Global agent instructions, Team coding baseline, and repo standards inspected>
+Evidence: <the recurring asks and current standards coverage>
+Rationale: <why this is the narrowest authoritative standards surface, or why no standards change belongs here>
+Proposed wording: <a concise rule, or "n/a">
+```
+
+Use the Team coding baseline for a generally applicable rule and repo coding standards for a rule
+that depends on one repo's stack, architecture, or domain. Generality decides scope; the number of
+repos is evidence, not a mechanical threshold. Use `already-covered` when current guidance states
+the rule adequately, and `not-a-standard` for product requirements, one-off fixes, or problems
+better prevented in code or tooling.
+
+Write `_No standards opportunities._` only when there are no active actions.
 
 ### Skill & Workflow Opportunities
 
@@ -104,7 +132,8 @@ Write `_No resolved or superseded candidates._` when empty.
 ## Completion criteria
 
 The synthesis is complete when every grouped candidate appears exactly once in **Active Actions**
-or **Resolved or Superseded**, and every active action has exactly one entry in **Skill & Workflow
-Opportunities**. Every active action starts with a plain-language problem and includes the required
-summary and audit fields in order. Immediately before commit, refresh any active candidate whose
-issue, PR, branch, or installed-guidance evidence may have changed during the run.
+or **Resolved or Superseded**, and every active action has exactly one entry in **Standards
+Opportunities** and **Skill & Workflow Opportunities**. Every active action starts with a
+plain-language problem and includes the required summary and audit fields in order. Immediately
+before commit, refresh any active candidate whose issue, PR, branch, or installed-guidance evidence
+may have changed during the run.

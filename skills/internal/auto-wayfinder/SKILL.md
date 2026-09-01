@@ -1,7 +1,6 @@
 ---
 name: auto-wayfinder
-description: Advance a Wayfinder map until human input is needed or the map is complete.
-disable-model-invocation: true
+description: Only use when explicitly mentioned with /auto-wayfinder or $auto-wayfinder.
 ---
 
 # Auto Wayfinder

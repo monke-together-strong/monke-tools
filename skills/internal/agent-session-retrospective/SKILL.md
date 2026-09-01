@@ -1,6 +1,6 @@
 ---
 name: agent-session-retrospective
-description: Review agent sessions and merged PR trajectories for recurring friction and durable fixes.
+description: Review agent sessions and merged PR trajectories for recurring friction, standards gaps, and durable fixes.
 disable-model-invocation: true
 ---
 
@@ -8,7 +8,8 @@ disable-model-invocation: true
 
 Run a report-only audit of two evidence lanes:
 
-- **Session friction** — an agent attempts something, hits a blocker, and pivots.
+- **Session evidence** — friction episodes plus repeated user asks about how code should be written
+  or changed.
 - **PR trajectories** — corrective changes between a PR's opening snapshot and merged outcome.
 
 Group recurring evidence into **durable fixes**, audit whether each problem still exists, and rank
@@ -17,6 +18,12 @@ separate report lanes. Complete both lanes before synthesis; a PR lane with expl
 complete, while a transcript-only result is degraded and must name the missing PR evidence.
 Let the verified gap, rather than its landing surface, decide the fix: code, tooling, setup, and
 infrastructure are first-class alongside skill and workflow changes.
+
+A repeated code-shape, design, or quality ask is evidence even when no task failed and the agent
+hit no blocker. Treat it as a standards candidate, then check both the Team coding baseline and the
+repo's coding standards. Propose a Team-baseline change when the rule is generally applicable
+across repos, and a repo-standard change when it depends on that repo's stack, architecture, or
+domain. Generality decides scope; recurrence supplies evidence.
 
 Keep the run report-only: inspect, verify, and propose. The human owns every resulting change.
 
@@ -76,15 +83,20 @@ Read the remaining findings and group transcript-derived proposals and repeated 
 run-local candidates with stable ids (`A1`, `A2`, …). Read `runs/<runTs>/pr-analysis.md` for
 context, while keeping PR-only observations out of Session Actions.
 
+Treat every repeated ask about code shape, design, quality, or working method as a standards
+candidate even when it has no associated friction episode. Correlate these candidates across repo
+bundles before deciding whether the implied rule is team-wide or repo-specific. Repeated product
+features are not standards candidates merely because their wording recurs.
+
 Then inspect the newest six report sets under `reports/`: each compact retrospective plus its
 session and PR source siblings when present. Cross-reference rather than copy forward. Promote a
 session thread when this run corroborates prior report sets. A corroborated thread outranks a fresh
 one-off even when its earlier evidence was low-signal. Keep PR-only recurrence in the PR
 corrective-pattern lane unless session evidence independently supports the same problem.
 
-**Done when** every current session proposal and repeated-ask cluster, and every prior session
-thread considered for promotion, belongs to one candidate, is explicitly retained as source-only
-evidence, or is excluded by an accepted entry.
+**Done when** every current session proposal, repeated-ask cluster, and standards candidate, and
+every prior session thread considered for promotion, belongs to one candidate, is explicitly
+retained as source-only evidence, or is excluded by an accepted entry.
 
 ## 5. Audit current resolution
 
@@ -93,19 +105,27 @@ current authoritative surface that could resolve it. Treat transcript and prior-
 leads; current code, guidance, configuration, tracker state, or direct verification establishes
 resolution.
 
+For every standards candidate, explicitly inspect the active Global agent instructions,
+[the Team coding baseline](../../references/internal/CODING_STANDARDS.md), and documented repo
+coding standards such as `AGENTS.md`, `CLAUDE.md`, `CODING_STANDARDS.md`, or `CONTRIBUTING.md`.
+Record whether the requested rule is absent, only partially expressed, already covered, or not a
+coding standard. An already-covered recurring ask points to an execution or enforcement gap rather
+than another copy of the rule.
+
 **Done when** every candidate has one resolution status, current-state evidence, and a remaining
-gap. Classify recurrence after a verified resolution as an active regression.
+gap; every standards candidate also has explicit global and repo coverage evidence. Classify
+recurrence after a verified resolution as an active regression.
 
 ## 6. Synthesize decisions
 
 Rank active candidates by **value × recurrence**. For each one, inspect relevant existing skills and
 workflows and choose the synthesis contract's `create-skill`, `create-workflow`, `update`,
-`combine`, or `no-skill` disposition. Write the contract's exact problem-first, three-section
+`combine`, or `no-skill` disposition. Write the contract's exact problem-first, four-section
 Markdown shape to a synthesis file in the run directory.
 
 **Done when** every candidate appears exactly once in an active or resolved section, every active
-candidate has exactly one skill/workflow disposition, and every recommendation retains session and
-resolution evidence.
+candidate has exactly one standards disposition and one skill/workflow disposition, and every
+recommendation retains session and resolution evidence.
 
 ## 7. Commit the report
 
