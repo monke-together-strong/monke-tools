@@ -34,4 +34,8 @@ jobs:
         run: vp check
 
       - name: Test
-        run: vp run test
+        run: >-
+          vp run test
+          --reporter=default
+          --reporter=junit
+          --outputFile.junit=junit-vitest.xml
