@@ -34,7 +34,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24
+          node-version: 26
 
       - name: Setup npm
         # Tegami packs with Bun but publishes through npm; trusted publishing requires npm 11.5.1+.

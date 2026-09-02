@@ -137,6 +137,8 @@ STAGED_MT="$STAGED_INSTALL/mt"
 
 cd "$BUILD_DIR"
 bun build --compile \
+  --no-compile-autoload-dotenv \
+  --no-compile-autoload-bunfig \
   --define "process.env.MONKE_TOOLS_BUILD_IDENTITY=\"$TOOL_BUILD_IDENTITY\"" \
   --outfile "$STAGED_MT" \
   "$ROOT_DIR/src/index.ts"
