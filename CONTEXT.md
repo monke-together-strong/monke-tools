@@ -112,6 +112,8 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Global monke config**: Machine-local monke-tools preferences that apply across **Consumer repos** and are stored outside any repo checkout as versioned YAML at `config.yml` under the monke home directory. _Avoid_: Repo config, session state, monke.yml
 
+**Spec**: A durable work target that records agreed behavior, implementation decisions, testing decisions, and scope for an agent to execute. A PRD can serve as a Spec when it carries that implementation contract. _Avoid_: PRD when referring generically to an implementation target
+
 **Distributed skill**: Agent guidance distributed through the **Local tool install** so agents in a **Consumer repo** can use shared team workflows. _Avoid_: Package skill, copied prompt, generated instruction file
 
 **Shared distributed skill**: A **Distributed skill** available to every selected compatible **Agent harness**. _Avoid_: Default skill, universal folder, unscoped skill

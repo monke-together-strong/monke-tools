@@ -79,6 +79,8 @@ self-contained post-merge contract, and stop after the PR exists.
      ...`; use draft only when the user asks.
    - If a PR already exists for the branch, update it instead of creating a
      duplicate.
+   - If the user asks CodeRabbit to ignore the PR, add a PR comment containing
+     exactly `@coderabbitai ignore`.
 
 6. Verify and report.
    - Run `gh pr view --json url,title,body` and confirm the PR contains the
