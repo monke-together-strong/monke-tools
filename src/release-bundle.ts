@@ -236,6 +236,8 @@ function compileExecutable(
   run("bun", [
     "build",
     "--compile",
+    "--no-compile-autoload-dotenv",
+    "--no-compile-autoload-bunfig",
     "--target",
     target,
     "--define",
