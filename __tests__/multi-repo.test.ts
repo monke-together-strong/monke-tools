@@ -1316,6 +1316,71 @@ external:
     expect(completeState.generation).toStrictEqual({ number: 1, status: "complete" });
   });
 
+  test("Materialize does not reuse a materialized Dependency repo on the wrong branch", () => {
+    const sandbox = makeTempDir("multi-repo-invalid-materialized-dependency");
+    const home = path.join(sandbox, "home");
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      "app/.env": "PORT=4100\n",
+      "monke.yml": `apps:
+  dep:
+    path: app
+    envFile: .env
+    mappings:
+      - port: DEP_PORT
+        env: PORT
+`
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "app/.env": "DEP_PORT=4100\n",
+      "monke.yml": `bootstrapCommand: printf x >> root-runs
+apps:
+  root:
+    path: app
+    envFile: .env
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: root
+        env: DEP_PORT
+`
+    });
+
+    runMonke({ args: ["spawn", "retained"], cwd: root, monkeHome: home });
+    const rootWorktree = getExpectedWorktreePath(home, root, "retained");
+    const depWorktree = getExpectedWorktreePath(home, depRoot, "retained");
+    const complete = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    saveSessionState(home, {
+      ...complete,
+      generation: { ...complete.generation, status: "incomplete" }
+    });
+    git(depWorktree, ["switch", "-c", "session-local"]);
+
+    const retried = runMonkeCapturingFailure({
+      args: ["materialize"],
+      cwd: rootWorktree,
+      monkeHome: home
+    });
+
+    expect(retried.error?.message).toContain(
+      `Expected worktree ${depWorktree} to be on branch retained, found session-local`
+    );
+    expect(read(rootWorktree, "root-runs")).toBe("x");
+    const failed = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    expect(failed.repos.find((repo) => repo.sourceRoot === depRoot)).toMatchObject({
+      failure: { phase: "worktree-preparation" },
+      materializationStatus: "failed",
+      preparationStatus: "failed"
+    });
+    expect(failed.repos.find((repo) => repo.sourceRoot === root)).toMatchObject({
+      materializationStatus: "materialized"
+    });
+    expect(failed.repos.find((repo) => repo.sourceRoot === root)?.blockedBy).toBeUndefined();
+  });
+
   test("a ready repo materializes without waiting for unrelated Worktree preparation", () => {
     const sandbox = makeTempDir("multi-repo-preparation-overlap");
     const binDirectory = path.join(sandbox, "bin");

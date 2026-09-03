@@ -54,54 +54,52 @@ export async function runSessionMaterialization<TPrepared, TResult>(
   );
   const prepared = new Map<string, TPrepared>();
   const results = new Map<string, TResult>();
-
-  for (const node of options.nodes) {
-    const state = owner.repo(node.sourceRoot);
-    if (state.materializationStatus === "materialized") {
-      results.set(node.sourceRoot, node.reuse(state));
-    }
-  }
+  const reusableRoots = new Set(
+    options.nodes
+      .filter((node) => owner.repo(node.sourceRoot).materializationStatus === "materialized")
+      .map((node) => node.sourceRoot)
+  );
 
   const runPreparation = createLimiter(MAX_CONCURRENT_REPO_MATERIALIZATIONS);
   const preparationPromises = new Map(
-    options.nodes
-      .filter((node) => !results.has(node.sourceRoot))
-      .map((node) => [
-        node.sourceRoot,
-        runPreparation(async () => {
-          try {
-            const completed = await node.prepare(owner.repo(node.sourceRoot), (state) => {
-              owner.replaceRepo(state, "worktree-ready");
-            });
-            prepared.set(node.sourceRoot, completed.value);
-            owner.replaceRepo(
-              {
-                ...completed.state,
-                blockedBy: undefined,
-                failure: undefined,
-                materializationStatus: "pending",
-                preparationStatus: completed.warnings.length > 0 ? "warning" : "prepared",
-                preparationWarnings: completed.warnings.length > 0 ? completed.warnings : undefined
-              },
-              "preparation"
-            );
-            return true;
-          } catch (error) {
-            owner.patchRepo(
-              node.sourceRoot,
-              {
-                blockedBy: undefined,
-                failure: { message: errorMessage(error), phase: "worktree-preparation" },
-                materializationStatus: "failed",
-                preparationStatus: "failed",
-                preparationWarnings: undefined
-              },
-              "preparation"
-            );
-            return false;
-          }
-        })
-      ])
+    options.nodes.map((node) => [
+      node.sourceRoot,
+      runPreparation(async () => {
+        try {
+          const completed = await node.prepare(owner.repo(node.sourceRoot), (state) => {
+            owner.replaceRepo(state, "worktree-ready");
+          });
+          prepared.set(node.sourceRoot, completed.value);
+          owner.replaceRepo(
+            {
+              ...completed.state,
+              blockedBy: undefined,
+              failure: undefined,
+              materializationStatus: reusableRoots.has(node.sourceRoot)
+                ? "materialized"
+                : "pending",
+              preparationStatus: completed.warnings.length > 0 ? "warning" : "prepared",
+              preparationWarnings: completed.warnings.length > 0 ? completed.warnings : undefined
+            },
+            "preparation"
+          );
+          return true;
+        } catch (error) {
+          owner.patchRepo(
+            node.sourceRoot,
+            {
+              blockedBy: undefined,
+              failure: { message: errorMessage(error), phase: "worktree-preparation" },
+              materializationStatus: "failed",
+              preparationStatus: "failed",
+              preparationWarnings: undefined
+            },
+            "preparation"
+          );
+          return false;
+        }
+      })
+    ])
   );
 
   const runRepoMaterialization = createLimiter(MAX_CONCURRENT_REPO_MATERIALIZATIONS);
@@ -110,10 +108,6 @@ export async function runSessionMaterialization<TPrepared, TResult>(
     Promise<SessionRepoState["materializationStatus"]>
   >();
   for (const node of options.nodes) {
-    if (results.has(node.sourceRoot)) {
-      materializationPromises.set(node.sourceRoot, Promise.resolve("materialized"));
-      continue;
-    }
     const dependencyPromises = node.dependencyRoots.map((dependencyRoot) => {
       const dependency = materializationPromises.get(dependencyRoot);
       ok(
@@ -133,6 +127,7 @@ export async function runSessionMaterialization<TPrepared, TResult>(
         preparation,
         prepared,
         results,
+        reuse: reusableRoots.has(node.sourceRoot),
         runRepoMaterialization
       })
     );
@@ -160,6 +155,7 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
   preparation: Promise<boolean>;
   prepared: Map<string, TPrepared>;
   results: Map<string, TResult>;
+  reuse: boolean;
   runRepoMaterialization: <T>(run: () => Promise<T>) => Promise<T>;
 }): Promise<SessionRepoState["materializationStatus"]> {
   const [preparationComplete, dependencyStatuses] = await Promise.all([
@@ -171,6 +167,9 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
   }
   const blockingIndex = dependencyStatuses.findIndex((status) => status !== "materialized");
   if (blockingIndex !== -1) {
+    if (options.reuse) {
+      return "blocked";
+    }
     options.owner.patchRepo(
       options.node.sourceRoot,
       {
@@ -181,6 +180,12 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
       "repo-result"
     );
     return "blocked";
+  }
+
+  if (options.reuse) {
+    const state = options.owner.repo(options.node.sourceRoot);
+    options.results.set(options.node.sourceRoot, options.node.reuse(state));
+    return "materialized";
   }
 
   return await options.runRepoMaterialization(async () => {

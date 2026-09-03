@@ -307,6 +307,36 @@ describe("single-repo sessions", () => {
     });
   });
 
+  test("configured Spawn preserves Session-local edits after interrupted dirty carry", () => {
+    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
+      configured: true,
+      name: "single-repo-dirty-carry-local-edit"
+    });
+    write(worktreeRoot, "session-only.txt", "keep me\n");
+
+    expect(() =>
+      runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/incomplete dirty carry.*Session worktree contains local changes/iu);
+    expect(read(worktreeRoot, "session-only.txt")).toBe("keep me\n");
+    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
+      dirtyCarryStatus: "pending",
+      preparationStatus: "failed"
+    });
+  });
+
+  test("configured Spawn preserves a branch-switched worktree after interrupted dirty carry", () => {
+    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
+      configured: true,
+      name: "single-repo-dirty-carry-branch-switch"
+    });
+    git(worktreeRoot, ["switch", "-c", "session-local"]);
+
+    expect(() =>
+      runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/to be on branch interrupted-carry, found session-local/u);
+    expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("session-local");
+  });
+
   test("config-less Spawn retries dirty carry after interruption immediately after worktree creation", () => {
     const sandbox = makeTempDir("single-repo-configless-dirty-carry-interruption");
     const binDirectory = path.join(sandbox, "bin");
@@ -351,6 +381,36 @@ describe("single-repo sessions", () => {
       dirtyCarryStatus: "complete",
       preparationStatus: "prepared"
     });
+  });
+
+  test("config-less Spawn preserves Session-local edits after interrupted dirty carry", () => {
+    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
+      configured: false,
+      name: "single-repo-configless-dirty-carry-local-edit"
+    });
+    write(worktreeRoot, "session-only.txt", "keep me\n");
+
+    expect(() =>
+      runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/incomplete dirty carry.*Session worktree contains local changes/iu);
+    expect(read(worktreeRoot, "session-only.txt")).toBe("keep me\n");
+    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
+      dirtyCarryStatus: "pending",
+      preparationStatus: "pending"
+    });
+  });
+
+  test("config-less Spawn preserves a branch-switched worktree after interrupted dirty carry", () => {
+    const { home, repoRoot, worktreeRoot } = interruptDirtyCarryAfterWorktreeCreation({
+      configured: false,
+      name: "single-repo-configless-dirty-carry-branch-switch"
+    });
+    git(worktreeRoot, ["switch", "-c", "session-local"]);
+
+    expect(() =>
+      runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/to be on branch interrupted-carry, found session-local/u);
+    expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("session-local");
   });
 
   test("spawn without monke.yml rejects changing retained dirty policy", () => {
@@ -1104,6 +1164,38 @@ apps: {}
     expect(loadSessionState(home, repoRoot, "interrupted").generation).toStrictEqual({
       number: 1,
       status: "complete"
+    });
+  });
+
+  test("Spawn does not reuse a materialized Root repo whose Session worktree is missing", () => {
+    const sandbox = makeTempDir("single-repo-missing-materialized-root");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n"
+    });
+
+    runMonke({ args: ["spawn", "interrupted", "-m"], cwd: repoRoot, monkeHome: home });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted");
+    const complete = loadSessionState(home, repoRoot, "interrupted");
+    saveSessionState(home, {
+      ...complete,
+      generation: { ...complete.generation, status: "incomplete" }
+    });
+    git(repoRoot, ["worktree", "remove", "--force", worktreeRoot]);
+
+    const retried = runMonkeCapturingFailure({
+      args: ["spawn", "interrupted", "-m"],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(retried.error?.message).toContain(`Expected worktree to exist at ${worktreeRoot}`);
+    expect(retried.stdout).toBe("");
+    expect(existsSync(worktreeRoot)).toBeFalsy();
+    expect(loadSessionState(home, repoRoot, "interrupted").repos[0]).toMatchObject({
+      failure: { phase: "worktree-preparation" },
+      materializationStatus: "failed",
+      preparationStatus: "failed"
     });
   });
 
@@ -2184,6 +2276,40 @@ apps:
     expect(read(worktreeRoot, "seed-data/fixture.txt")).toBe("fixture\n");
   });
 });
+
+function interruptDirtyCarryAfterWorktreeCreation(options: { configured: boolean; name: string }) {
+  const sandbox = makeTempDir(options.name);
+  const binDirectory = path.join(sandbox, "bin");
+  const home = path.join(sandbox, "home");
+  const repoRoot = createRepo(
+    path.join(sandbox, "root"),
+    options.configured
+      ? { "monke.yml": "apps: {}\n", "README.md": "clean\n" }
+      : { "README.md": "clean\n" }
+  );
+  write(repoRoot, "README.md", "dirty\n");
+  const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted-carry");
+  installGitShim(binDirectory, {
+    afterCommand: {
+      args: `worktree add ${worktreeRoot} interrupted-carry`,
+      cwd: repoRoot,
+      script: 'kill -KILL "$PPID"'
+    }
+  });
+
+  const interrupted = runMonkeCapturingFailure({
+    args: ["spawn", "interrupted-carry"],
+    binDirectory,
+    cwd: repoRoot,
+    monkeHome: home
+  });
+  expect(interrupted.error).not.toBeNull();
+  expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
+    dirtyCarryStatus: "pending",
+    preparationStatus: "pending"
+  });
+  return { home, repoRoot, worktreeRoot };
+}
 
 function captureThrowMessage(action: () => void) {
   try {

@@ -434,7 +434,18 @@ function createRepoLifecycleNode(options: {
       });
       return { state: result.state, value: result };
     },
-    prepare: options.prepare,
+    async prepare(existingState, checkpoint) {
+      if (existingState.materializationStatus === "materialized") {
+        validateWorktreeForSession(
+          context.runtime,
+          context.home,
+          repoConfig.sourceRoot,
+          existingState.worktreePath,
+          context.session
+        );
+      }
+      return await options.prepare(existingState, checkpoint);
+    },
     reuse: toRepoMaterializationResult,
     sourceRoot: repoConfig.sourceRoot
   } satisfies SessionMaterializationNode<PreparedRepoWorktree, RepoMaterializationResult>;
@@ -485,7 +496,13 @@ async function ensureSpawnWorktree(request: SpawnRepoPreparationRequest) {
     existingState?.dirtyCarryStatus === "pending" &&
     existsSync(expectedWorktreePath)
   ) {
-    removeIncompleteSessionWorktree(runtime, repoConfig.sourceRoot, expectedWorktreePath);
+    removeIncompleteSessionWorktree(
+      runtime,
+      home,
+      repoConfig.sourceRoot,
+      expectedWorktreePath,
+      session
+    );
   }
   const useWorktreeBaseline =
     (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume") ||
@@ -770,7 +787,13 @@ async function prepareConfiglessWorktree(options: {
     options.existingRepoState?.dirtyCarryStatus === "pending" &&
     existsSync(expectedWorktreePath)
   ) {
-    removeIncompleteSessionWorktree(options.runtime, options.rootSourceRoot, expectedWorktreePath);
+    removeIncompleteSessionWorktree(
+      options.runtime,
+      options.home,
+      options.rootSourceRoot,
+      expectedWorktreePath,
+      options.session
+    );
   }
   const worktree = await ensureConfiglessWorktree(options);
   await carryConfiglessDirtySnapshot(options, worktree, options.dirtySnapshot);

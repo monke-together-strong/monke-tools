@@ -303,10 +303,23 @@ export async function ensureSessionWorktreeAsync(
 /** Remove an interrupted tool-owned Session worktree while retaining its Session branch. */
 export function removeIncompleteSessionWorktree(
   runtime: Runtime,
+  home: string,
   sourceRoot: string,
-  worktreePath: string
+  worktreePath: string,
+  session: string
 ) {
-  const result = runtime.exec("git", ["worktree", "remove", "--force", worktreePath], {
+  validateWorktreeForSession(runtime, home, sourceRoot, worktreePath, session);
+  const status = runGit(runtime, worktreePath, [
+    "status",
+    "--porcelain",
+    "--untracked-files=normal"
+  ]).trim();
+  if (status) {
+    throw new MonkeError(
+      `Cannot retry incomplete dirty carry: Session worktree contains local changes at ${worktreePath}`
+    );
+  }
+  const result = runtime.exec("git", ["worktree", "remove", worktreePath], {
     allowFailure: true,
     cwd: sourceRoot
   });

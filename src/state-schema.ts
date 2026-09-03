@@ -119,8 +119,12 @@ function validatePreparationLifecycle(repo: ParsedSessionRepoState, issue: Lifec
   if (repo.preparationStatus !== "warning" && repo.preparationWarnings !== undefined) {
     issue("preparationWarnings require warning preparation", ["preparationWarnings"]);
   }
-  if (repo.dirtyCarryStatus === "pending" && repo.preparationStatus !== "pending") {
-    issue("pending dirty carry requires pending preparation", ["dirtyCarryStatus"]);
+  if (
+    repo.dirtyCarryStatus === "pending" &&
+    repo.preparationStatus !== "pending" &&
+    repo.preparationStatus !== "failed"
+  ) {
+    issue("pending dirty carry requires pending or failed preparation", ["dirtyCarryStatus"]);
   }
 }
 
