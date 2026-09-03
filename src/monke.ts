@@ -35,6 +35,7 @@ import {
   ensureSessionWorktreeAsync,
   ensureFreshSessionWorktreeFromRefAsync,
   getExpectedWorktreePath,
+  removeIncompleteSessionWorktree,
   resolveDefaultBranchRef,
   resolveRepoContext,
   validateWorktreeForSession
@@ -320,7 +321,9 @@ function isConfiglessPreparedState(state: SessionState) {
     state.repos.length === 1 &&
     repo?.sourceRoot === state.rootSourceRoot &&
     repo.materializationStatus === "pending" &&
-    (repo.preparationStatus === "prepared" || repo.preparationStatus === "warning") &&
+    (repo.preparationStatus === "prepared" ||
+      repo.preparationStatus === "warning" ||
+      repo.preparationStatus === "pending") &&
     !repo.cleanupEligible &&
     repo.cleanupCommand === undefined &&
     repo.assignedPorts.length === 0 &&
@@ -339,6 +342,15 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
       getExpectedWorktreePath(execution.home, repoConfig.sourceRoot, execution.session),
       recordedState
     );
+    const dirtySnapshot = execution.dirtySnapshots.get(repoConfig.sourceRoot);
+    const tracksDirtyCarry =
+      initialState.dirtyCarryStatus === "pending" ||
+      (dirtySnapshot !== undefined &&
+        dirtySnapshotHasContent(dirtySnapshot) &&
+        !existsSync(initialState.worktreePath));
+    if (tracksDirtyCarry) {
+      initialState.dirtyCarryStatus = "pending";
+    }
     if (
       execution.sourcePlan.kind === "default-branch" &&
       execution.sourcePlan.attempt === "fresh"
@@ -358,7 +370,7 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
       initialState,
       prepare: async (lifecycleState, checkpoint) => {
         const prepared = await prepareSpawnRepoWorktree({
-          dirtySnapshot: execution.dirtySnapshots.get(repoConfig.sourceRoot),
+          dirtySnapshot,
           existingState: lifecycleState,
           getDefaultRef: execution.getDefaultRef,
           graphSource: execution.sessionState.graphSource,
@@ -367,6 +379,7 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
             checkpoint({
               ...lifecycleState,
               diffBaseRef: worktree.diffBaseRef,
+              dirtyCarryStatus: tracksDirtyCarry ? "complete" : lifecycleState.dirtyCarryStatus,
               pinnedRef: worktree.pinnedRef,
               worktreePath: worktree.worktreePath
             });
@@ -381,6 +394,7 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
           state: {
             ...lifecycleState,
             diffBaseRef: prepared.diffBaseRef,
+            dirtyCarryStatus: tracksDirtyCarry ? "complete" : lifecycleState.dirtyCarryStatus,
             pinnedRef: prepared.pinnedRef,
             worktreePath: prepared.worktreePath
           },
@@ -465,6 +479,14 @@ async function prepareSpawnRepoWorktree(request: SpawnRepoPreparationRequest) {
 
 async function ensureSpawnWorktree(request: SpawnRepoPreparationRequest) {
   const { existingState, home, repoConfig, rootSourceRoot, runtime, session, sourcePlan } = request;
+  const expectedWorktreePath = getExpectedWorktreePath(home, repoConfig.sourceRoot, session);
+  if (
+    request.dirtySnapshot !== undefined &&
+    existingState?.dirtyCarryStatus === "pending" &&
+    existsSync(expectedWorktreePath)
+  ) {
+    removeIncompleteSessionWorktree(runtime, repoConfig.sourceRoot, expectedWorktreePath);
+  }
   const useWorktreeBaseline =
     (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume") ||
     (sourcePlan.kind === "session-branch" && repoConfig.sourceRoot === rootSourceRoot);
@@ -668,7 +690,14 @@ async function spawnWithoutConfig(
   const existingRepoState = priorSessionState.repos.find(
     (repo) => repo.sourceRoot === rootSourceRoot
   );
-  const prepared = await prepareConfiglessWorktree({
+  const dirtySnapshot = captureConfiglessDirtySnapshot({
+    home,
+    options,
+    rootSourceRoot,
+    runtime,
+    session
+  });
+  const pendingWorktree = prepareConfiglessWorktreeCheckpoint({
     existingRepoState,
     home,
     options,
@@ -677,11 +706,43 @@ async function spawnWithoutConfig(
     runtime,
     session
   });
+  const tracksDirtyCarry =
+    existingRepoState?.dirtyCarryStatus === "pending" ||
+    (dirtySnapshot !== null &&
+      dirtySnapshotHasContent(dirtySnapshot) &&
+      !existsSync(pendingWorktree.worktreePath));
   saveSessionState(
     home,
     createConfiglessSessionState({
+      dirtyCarryStatus: tracksDirtyCarry ? "pending" : existingRepoState?.dirtyCarryStatus,
       existingRepoState,
       options,
+      preparationStatus: "pending",
+      prepared: pendingWorktree,
+      priorSessionState,
+      rootSourceRoot
+    })
+  );
+  const prepared = {
+    ...pendingWorktree,
+    ...(await prepareConfiglessWorktree({
+      dirtySnapshot,
+      existingRepoState,
+      home,
+      options,
+      rootDefaultRef,
+      rootSourceRoot,
+      runtime,
+      session
+    }))
+  };
+  saveSessionState(
+    home,
+    createConfiglessSessionState({
+      dirtyCarryStatus: tracksDirtyCarry ? "complete" : existingRepoState?.dirtyCarryStatus,
+      existingRepoState,
+      options,
+      preparationStatus: "prepared",
       prepared,
       priorSessionState,
       rootSourceRoot
@@ -691,6 +752,7 @@ async function spawnWithoutConfig(
 }
 
 async function prepareConfiglessWorktree(options: {
+  dirtySnapshot: DirtySnapshot | null;
   existingRepoState?: SessionRepoState;
   home: string;
   options: SpawnOptions;
@@ -699,28 +761,48 @@ async function prepareConfiglessWorktree(options: {
   runtime: Runtime;
   session: string;
 }) {
-  const dirtySnapshot = captureConfiglessDirtySnapshot(options);
+  const expectedWorktreePath = getExpectedWorktreePath(
+    options.home,
+    options.rootSourceRoot,
+    options.session
+  );
+  if (
+    options.existingRepoState?.dirtyCarryStatus === "pending" &&
+    existsSync(expectedWorktreePath)
+  ) {
+    removeIncompleteSessionWorktree(options.runtime, options.rootSourceRoot, expectedWorktreePath);
+  }
+  const worktree = await ensureConfiglessWorktree(options);
+  await carryConfiglessDirtySnapshot(options, worktree, options.dirtySnapshot);
+  return { worktreePath: worktree.path };
+}
+
+function prepareConfiglessWorktreeCheckpoint(options: {
+  existingRepoState?: SessionRepoState;
+  home: string;
+  options: SpawnOptions;
+  rootDefaultRef: PinnedDefaultBranchRef | null;
+  rootSourceRoot: string;
+  runtime: Runtime;
+  session: string;
+}) {
   const sessionBranchExisted = branchExists(
     options.runtime,
     options.rootSourceRoot,
     options.session
   );
-  const worktree = await ensureConfiglessWorktree(options);
-  const sourceHeadRef = resolveAttachedHeadRef(options.runtime, options.rootSourceRoot);
-  const diffBaseRef =
-    options.existingRepoState?.diffBaseRef ??
-    options.rootDefaultRef?.ref ??
-    resolveFreshCurrentHeadDiffBase({
-      options: options.options,
-      sessionBranchExisted,
-      sourceHeadRef,
-      worktreeCreated: worktree.created
-    });
-  await carryConfiglessDirtySnapshot(options, worktree, dirtySnapshot);
   return {
-    diffBaseRef,
+    diffBaseRef:
+      options.existingRepoState?.diffBaseRef ??
+      options.rootDefaultRef?.ref ??
+      resolveFreshCurrentHeadDiffBase({
+        options: options.options,
+        sessionBranchExisted,
+        sourceHeadRef: resolveAttachedHeadRef(options.runtime, options.rootSourceRoot),
+        worktreeCreated: true
+      }),
     pinnedRef: options.rootDefaultRef?.pinnedRef ?? options.existingRepoState?.pinnedRef,
-    worktreePath: worktree.path
+    worktreePath: getExpectedWorktreePath(options.home, options.rootSourceRoot, options.session)
   };
 }
 
@@ -749,6 +831,7 @@ function captureConfiglessDirtySnapshot(options: {
 }
 
 function ensureConfiglessWorktree(options: {
+  existingRepoState?: SessionRepoState;
   home: string;
   options: SpawnOptions;
   rootDefaultRef: PinnedDefaultBranchRef | null;
@@ -756,13 +839,22 @@ function ensureConfiglessWorktree(options: {
   runtime: Runtime;
   session: string;
 }) {
-  if (options.rootDefaultRef !== null) {
+  const retainedPinnedRef = options.existingRepoState?.pinnedRef;
+  const mustRecreateRetainedDefaultBranch =
+    options.options.mode === "default-branch" &&
+    retainedPinnedRef !== undefined &&
+    !branchExists(options.runtime, options.rootSourceRoot, options.session);
+  if (options.rootDefaultRef !== null || mustRecreateRetainedDefaultBranch) {
+    const pinnedRef = options.rootDefaultRef?.pinnedRef ?? retainedPinnedRef;
+    if (pinnedRef === undefined) {
+      throw new MonkeError(`Missing pinned default-branch ref for ${options.rootSourceRoot}`);
+    }
     return ensureFreshSessionWorktreeFromRefAsync(
       options.runtime,
       options.home,
       options.rootSourceRoot,
       options.session,
-      options.rootDefaultRef.pinnedRef
+      pinnedRef
     );
   }
   return ensureSessionWorktreeAsync(
@@ -806,8 +898,10 @@ async function carryConfiglessDirtySnapshot(
 }
 
 function createConfiglessSessionState(options: {
+  dirtyCarryStatus?: "complete" | "pending";
   existingRepoState?: SessionRepoState;
   options: SpawnOptions;
+  preparationStatus: "pending" | "prepared";
   prepared: { diffBaseRef?: string; pinnedRef?: string; worktreePath: string };
   priorSessionState: SessionState;
   rootSourceRoot: string;
@@ -827,9 +921,10 @@ function createConfiglessSessionState(options: {
           assignedPorts: [],
           cleanupEligible: false,
           diffBaseRef: prepared.diffBaseRef,
+          dirtyCarryStatus: options.dirtyCarryStatus,
           materializationStatus: "pending",
           pinnedRef: options.options.mode === "default-branch" ? prepared.pinnedRef : undefined,
-          preparationStatus: "prepared",
+          preparationStatus: options.preparationStatus,
           sourceRoot: rootSourceRoot,
           worktreePath: prepared.worktreePath
         }
@@ -1531,6 +1626,7 @@ interface MaterializeRepoOptions {
 interface RepoMaterializationContext extends MaterializeRepoOptions {
   diffBaseRef?: string;
   hasBootstrapCommand: boolean;
+  replacementCleanupAuthorityEstablished: boolean;
   resolvedResourceValues: ReturnType<typeof resolveResourceValues>;
 }
 
@@ -1585,6 +1681,7 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
     ...options,
     diffBaseRef: options.diffBaseRef || options.existingState?.diffBaseRef,
     hasBootstrapCommand: repoHasBootstrapCommand(options.repoConfig),
+    replacementCleanupAuthorityEstablished: false,
     resolvedResourceValues: resolveResourceValues({
       env: options.runtime.env,
       existingRepoState: options.existingState,
@@ -1609,17 +1706,6 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
 async function resolveCommandsBeforeAssignments(context: RepoMaterializationContext) {
   if (context.hasBootstrapCommand) {
     return;
-  }
-  if (context.repoConfig.resourceCommandsInOrder.length > 0) {
-    persistRepoMaterializationState(
-      context,
-      {
-        assignedPorts: context.existingState?.assignedPorts ?? [],
-        cleanupEligible: true,
-        resourceCommandOutputs: context.existingState?.resourceCommandOutputs ?? []
-      },
-      "cleanup-eligibility"
-    );
   }
   return await resolveRepoResourceCommands(context, context.existingState?.assignedPorts ?? []);
 }
@@ -1682,14 +1768,10 @@ async function runRepoMaterializationCommands(
       ...resolvedResourceValues.removedEnvNames,
       ...existingResourceCommandEnvNames
     ]);
-    persistRepoMaterializationState(
+    establishReplacementCleanupAuthority(
       context,
-      {
-        assignedPorts: assignments.localAssignedPorts,
-        cleanupEligible: true,
-        resourceCommandOutputs: existingState?.resourceCommandOutputs ?? []
-      },
-      "cleanup-eligibility"
+      assignments.localAssignedPorts,
+      existingState?.resourceCommandOutputs ?? []
     );
     await runBootstrapCommand(
       context.runtime,
@@ -1730,6 +1812,9 @@ function resolveRepoResourceCommands(
   return resolveResourceCommands({
     existingRepoState: context.existingState,
     home: context.home,
+    onCommandExecutionStarting(resourceCommandOutputs) {
+      establishReplacementCleanupAuthority(context, assignedPorts, resourceCommandOutputs);
+    },
     onResolvedCommandOutputs(resourceCommandOutputs) {
       persistRepoMaterializationState(
         context,
@@ -1747,6 +1832,26 @@ function resolveRepoResourceCommands(
     session: context.session,
     worktreePath: context.worktreePath
   });
+}
+
+function establishReplacementCleanupAuthority(
+  context: RepoMaterializationContext,
+  assignedPorts: AssignedPort[],
+  resourceCommandOutputs: ResourceCommandState[]
+) {
+  if (context.replacementCleanupAuthorityEstablished) {
+    return;
+  }
+  context.replacementCleanupAuthorityEstablished = true;
+  persistRepoMaterializationState(
+    context,
+    {
+      assignedPorts,
+      cleanupEligible: true,
+      resourceCommandOutputs
+    },
+    "cleanup-eligibility"
+  );
 }
 
 function persistRepoMaterializationState(
@@ -1774,37 +1879,53 @@ function createRepoMaterializationState(
   },
   checkpoint: RepoMaterializationCheckpointName
 ) {
+  const cleanupAuthority = resolveCleanupAuthority(context, state, checkpoint);
   return buildSessionRepoState({
     ...state,
-    cleanupCommand: resolveCheckpointCleanupCommand(context, checkpoint),
+    ...cleanupAuthority,
     diffBaseRef: context.diffBaseRef,
     existingState: context.existingState,
-    resourceValues:
-      state.materializationStatus === "materialized"
-        ? context.resolvedResourceValues.values
-        : preserveStaleResourceValues(
-            context.existingState?.resourceValues ?? [],
-            context.resolvedResourceValues.values
-          ),
     sourceRoot: context.repoConfig.sourceRoot,
     worktreePath: context.worktreePath
   });
 }
 
-function resolveCheckpointCleanupCommand(
+function resolveCleanupAuthority(
   context: RepoMaterializationContext,
+  state: RepoMaterializationCheckpoint & {
+    materializationStatus: SessionRepoState["materializationStatus"];
+  },
   checkpoint: RepoMaterializationCheckpointName
 ) {
-  const retainedCommand = context.existingState?.cleanupEligible
-    ? context.existingState.cleanupCommand
-    : undefined;
-  const replacementIsNotEligible =
-    checkpoint === "repo-progress" ||
-    (checkpoint === "repo-result" && !repoHasMaterializationExternalEffect(context));
-  if (context.existingState?.cleanupEligible && replacementIsNotEligible) {
-    return retainedCommand;
+  const retainExistingAuthority =
+    context.existingState?.cleanupEligible === true &&
+    context.existingState.cleanupCommand !== undefined &&
+    !context.replacementCleanupAuthorityEstablished;
+  if (retainExistingAuthority) {
+    return {
+      cleanupCommand: context.existingState?.cleanupCommand,
+      cleanupEligible: true,
+      resourceCommandOutputs: context.existingState?.resourceCommandOutputs ?? [],
+      resourceValues: context.existingState?.resourceValues ?? []
+    };
   }
-  return context.repoConfig.cleanupCommand ?? retainedCommand;
+  const retainExistingCleanupCommand =
+    context.existingState?.cleanupEligible === true &&
+    !context.replacementCleanupAuthorityEstablished;
+  return {
+    cleanupCommand: retainExistingCleanupCommand
+      ? context.existingState?.cleanupCommand
+      : (context.repoConfig.cleanupCommand ?? context.existingState?.cleanupCommand),
+    cleanupEligible: state.cleanupEligible,
+    resourceCommandOutputs: state.resourceCommandOutputs,
+    resourceValues:
+      state.materializationStatus === "materialized" || checkpoint !== "repo-progress"
+        ? context.resolvedResourceValues.values
+        : preserveStaleResourceValues(
+            context.existingState?.resourceValues ?? [],
+            context.resolvedResourceValues.values
+          )
+  };
 }
 
 function repoHasMaterializationExternalEffect(context: RepoMaterializationContext) {

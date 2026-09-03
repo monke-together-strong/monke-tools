@@ -124,6 +124,7 @@ export function resolveResourceValues(options: {
 export async function resolveResourceCommands(options: {
   existingRepoState: SessionRepoState | undefined;
   home: string;
+  onCommandExecutionStarting?: (commands: ResourceCommandState[]) => void;
   onResolvedCommandOutputs: (commands: ResourceCommandState[]) => void;
   repoConfig: RepoConfig;
   resourceValues: ResourceValueState[];
@@ -158,6 +159,13 @@ export async function resolveResourceCommands(options: {
           session: options.session,
           sourceRoot: options.repoConfig.sourceRoot
         });
+        options.onCommandExecutionStarting?.(
+          toImmediateResourceCommandStates(
+            options.repoConfig.resourceCommandsInOrder,
+            currentByName,
+            existingCommands
+          )
+        );
         currentByName.set(
           command.name,
           await runResourceCommand({

@@ -42,6 +42,7 @@ const SessionRepoStateFieldsSchema = z.strictObject({
   cleanupCommand: NonEmptyStringSchema.optional(),
   cleanupEligible: z.boolean(),
   diffBaseRef: NonEmptyStringSchema.optional(),
+  dirtyCarryStatus: z.enum(["pending", "complete"]).optional(),
   failure: MaterializationFailureSchema.optional(),
   materializationStatus: z.enum(["pending", "materialized", "failed", "blocked"]),
   pinnedRef: GitObjectIdSchema.optional(),
@@ -117,6 +118,9 @@ function validatePreparationLifecycle(repo: ParsedSessionRepoState, issue: Lifec
   }
   if (repo.preparationStatus !== "warning" && repo.preparationWarnings !== undefined) {
     issue("preparationWarnings require warning preparation", ["preparationWarnings"]);
+  }
+  if (repo.dirtyCarryStatus === "pending" && repo.preparationStatus !== "pending") {
+    issue("pending dirty carry requires pending preparation", ["dirtyCarryStatus"]);
   }
 }
 

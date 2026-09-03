@@ -265,6 +265,94 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
   });
 
+  test("configured Spawn retries dirty carry after interruption immediately after worktree creation", () => {
+    const sandbox = makeTempDir("single-repo-dirty-carry-interruption");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
+    });
+    write(repoRoot, "README.md", "dirty\n");
+    write(repoRoot, "notes.txt", "untracked\n");
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted-carry");
+    installGitShim(binDirectory, {
+      afterCommand: {
+        args: `worktree add ${worktreeRoot} interrupted-carry`,
+        cwd: repoRoot,
+        script: 'kill -KILL "$PPID"'
+      }
+    });
+
+    const interrupted = runMonkeCapturingFailure({
+      args: ["spawn", "interrupted-carry"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(interrupted.error).not.toBeNull();
+    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
+      dirtyCarryStatus: "pending",
+      preparationStatus: "pending"
+    });
+
+    runMonke({ args: ["spawn", "interrupted-carry"], cwd: repoRoot, monkeHome: home });
+
+    expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
+    expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
+    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
+      dirtyCarryStatus: "complete",
+      preparationStatus: "prepared"
+    });
+  });
+
+  test("config-less Spawn retries dirty carry after interruption immediately after worktree creation", () => {
+    const sandbox = makeTempDir("single-repo-configless-dirty-carry-interruption");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "clean\n"
+    });
+    write(repoRoot, "README.md", "dirty\n");
+    write(repoRoot, "notes.txt", "untracked\n");
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted-carry");
+    installGitShim(binDirectory, {
+      afterCommand: {
+        args: `worktree add ${worktreeRoot} interrupted-carry`,
+        cwd: repoRoot,
+        script: 'kill -KILL "$PPID"'
+      }
+    });
+
+    const interrupted = runMonkeCapturingFailure({
+      args: ["spawn", "interrupted-carry"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(interrupted.error).not.toBeNull();
+    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
+      dirtyCarryStatus: "pending",
+      preparationStatus: "pending"
+    });
+
+    const retried = runMonkeCapturingFailure({
+      args: ["spawn", "interrupted-carry"],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(retried.error?.message).toContain(`Prepared Root worktree: ${worktreeRoot}`);
+    expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
+    expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
+    expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
+      dirtyCarryStatus: "complete",
+      preparationStatus: "prepared"
+    });
+  });
+
   test("spawn without monke.yml rejects changing retained dirty policy", () => {
     const sandbox = makeTempDir("single-repo-no-config-existing-no-dirty");
     const binDirectory = path.join(sandbox, "bin");
@@ -722,6 +810,38 @@ describe("single-repo sessions", () => {
     });
     expect(retry.error?.message).toContain("Retry: mt spawn fresh -m");
     expect(loadSessionState(home, repoRoot, "fresh").spawnSource).toBe("default-branch");
+  });
+
+  test("config-less default-branch retry recreates a missing branch and worktree from retained pinnedRef", () => {
+    const sandbox = makeTempDir("single-repo-main-no-config-pinned-recovery");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "version.txt": "pinned\n"
+    });
+
+    runMonkeCapturingFailure({
+      args: ["spawn", "retained", "-m"],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retained");
+    const pinnedRef = loadSessionState(home, repoRoot, "retained").repos[0]?.pinnedRef;
+    git(repoRoot, ["worktree", "remove", "--force", worktreeRoot]);
+    git(repoRoot, ["branch", "-D", "retained"]);
+    write(repoRoot, "version.txt", "advanced\n");
+    git(repoRoot, ["add", "version.txt"]);
+    git(repoRoot, ["commit", "-m", "advance main"]);
+
+    const retried = runMonkeCapturingFailure({
+      args: ["spawn", "retained"],
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(retried.error?.message).toContain(`Prepared Root worktree: ${worktreeRoot}`);
+    expect(read(worktreeRoot, "version.txt")).toBe("pinned\n");
+    expect(git(worktreeRoot, ["rev-parse", "HEAD"])).toBe(pinnedRef);
+    expect(loadSessionState(home, repoRoot, "retained").repos[0]?.pinnedRef).toBe(pinnedRef);
   });
 
   test("spawn -m seeds configured paths from resolved default branch refs", () => {

@@ -300,6 +300,23 @@ export async function ensureSessionWorktreeAsync(
   return { created: prepared.addArguments !== null, path: prepared.path };
 }
 
+/** Remove an interrupted tool-owned Session worktree while retaining its Session branch. */
+export function removeIncompleteSessionWorktree(
+  runtime: Runtime,
+  sourceRoot: string,
+  worktreePath: string
+) {
+  const result = runtime.exec("git", ["worktree", "remove", "--force", worktreePath], {
+    allowFailure: true,
+    cwd: sourceRoot
+  });
+  if (result.exitCode !== 0 && existsSync(worktreePath)) {
+    throw new MonkeError(
+      `Failed to remove incomplete Session worktree ${worktreePath}${formatCommandDetail(result)}`
+    );
+  }
+}
+
 function prepareSessionWorktree(
   runtime: Runtime,
   home: string,
