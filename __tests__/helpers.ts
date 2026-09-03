@@ -11,16 +11,18 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterEach } from "vite-plus/test";
 import { parse } from "yaml";
 import type * as z from "zod";
 
-import { runCli, runCliAsync } from "../src/index.ts";
+import { runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
 import type { SelectPrompt } from "../src/types.ts";
 
 const tempDirectories: string[] = [];
+const runMonkeWorkerPath = fileURLToPath(new URL("run-monke-worker.ts", import.meta.url));
 const WORKTREE_ADD_BARRIER_ATTEMPTS = 400;
 const WORKTREE_ADD_BARRIER_DELAY_SECONDS = 0.01;
 const WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE = 92;
@@ -390,47 +392,36 @@ interface RunMonkeOptions {
   monkeHome: string;
 }
 
-function captureMonkeRun(options: RunMonkeOptions) {
-  let stdout = "";
-  let stderr = "";
-  const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
-
-  const runtime = createRuntime({
-    cwd: options.cwd,
-    env: {
-      MONKE_HOME: options.monkeHome,
-      PATH: pathSegments.join(path.delimiter),
-      ...options.extraEnv
-    },
-    onStderr(text) {
-      stderr += text;
-    },
-    onStdout(text) {
-      stdout += text;
-    }
-  });
-  return {
-    output: () => ({ stderr, stdout }),
-    runtime
-  };
-}
-
 export function runMonke(options: RunMonkeOptions) {
-  const captured = captureMonkeRun(options);
-
-  runCli(options.args, captured.runtime);
-  return captured.output();
+  const result = runMonkeProcess(options);
+  if (result.error) {
+    throw result.error;
+  }
+  return { stderr: result.stderr, stdout: result.stdout };
 }
 
 export function runMonkeCapturingFailure(options: RunMonkeOptions) {
-  const captured = captureMonkeRun(options);
+  return runMonkeProcess(options);
+}
 
-  try {
-    runCli(options.args, captured.runtime);
-    return { error: null, ...captured.output() };
-  } catch (error) {
-    return { error, ...captured.output() };
-  }
+function runMonkeProcess(options: RunMonkeOptions) {
+  const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
+  const result = spawnSync(process.execPath, [runMonkeWorkerPath, ...options.args], {
+    cwd: options.cwd,
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      ...options.extraEnv,
+      MONKE_HOME: options.monkeHome,
+      MONKE_TEST_PLATFORM: process.platform,
+      PATH: pathSegments.join(path.delimiter)
+    }
+  });
+  const error =
+    result.status === 0
+      ? null
+      : new Error(result.stderr || result.stdout || `mt ${options.args.join(" ")} failed`);
+  return { error, stderr: result.stderr, stdout: result.stdout };
 }
 
 export async function runMonkeAsync(options: {

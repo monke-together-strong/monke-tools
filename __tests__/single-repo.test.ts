@@ -1760,7 +1760,7 @@ apps:
     expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=3000\n");
   });
 
-  test("session-branch respawn seeds untracked env files from the source checkout", () => {
+  test("session-branch respawn seeds untracked env files from the source checkout", async () => {
     const sandbox = makeTempDir("single-repo-session-branch-seeds");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1797,7 +1797,7 @@ apps:
       onStderr() {},
       onStdout() {}
     });
-    spawnSessionFromSourceRootLocked(runtime, home, repoRoot, "respawned", {
+    await spawnSessionFromSourceRootLocked(runtime, home, repoRoot, "respawned", {
       mode: "session-branch"
     });
 

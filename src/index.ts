@@ -6,44 +6,41 @@ import { Argument, Command, Option } from "@commander-js/extra-typings";
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runDiff, runDiffInteractive } from "./diff.ts";
+import { MonkeError } from "./errors.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
 import {
   expectedReleaseIdentityFromEnvironment,
   runActivateLocalInstall,
   runActivateReleaseInstall
 } from "./installation.ts";
-import {
-  runCleanup,
-  runSpawn,
-  runSpawnAsync,
-  runInstallDependencies,
-  runMaterialize,
-  runMaterializeAsync,
-  runSetup
-} from "./monke.ts";
+import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
-import { runSwing, runSwingInteractive } from "./swing.ts";
+import { runSwing } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 import { runUpdate } from "./update.ts";
 
 /** Run the Monke Tools CLI. */
 export function runCli(argv: string[], runtime = createRuntime()) {
-  const program = createProgram(runtime, runSwing, runDiff, runSpawn, runMaterialize);
+  const program = createProgram(
+    runtime,
+    () => requireAsyncCli("swing"),
+    runDiff,
+    () => requireAsyncCli("spawn"),
+    () => requireAsyncCli("materialize")
+  );
   program.parse(argv, { from: "user" });
 }
 
 /** Run the Monke Tools CLI with async interactive prompts enabled. */
 export async function runCliAsync(argv: string[], runtime = createRuntime()) {
-  const program = createProgram(
-    runtime,
-    runSwingInteractive,
-    runDiffInteractive,
-    runSpawnAsync,
-    runMaterializeAsync
-  );
+  const program = createProgram(runtime, runSwing, runDiffInteractive, runSpawn, runMaterialize);
   await program.parseAsync(argv, { from: "user" });
+}
+
+function requireAsyncCli(command: string): never {
+  throw new MonkeError(`mt ${command} requires the async CLI runner`);
 }
 
 function createProgram(

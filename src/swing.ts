@@ -17,7 +17,7 @@ import {
 import { createLogger } from "./logger.ts";
 import { spawnSessionFromSourceRootLocked } from "./monke.ts";
 import { samePath } from "./path-identity.ts";
-import { getMonkeHome, hashKey, withGlobalLock } from "./runtime.ts";
+import { getMonkeHome, hashKey, withGlobalLockAsync } from "./runtime.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
 import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
@@ -73,27 +73,8 @@ export interface SwingOptions {
   codex?: boolean;
 }
 
-/** Navigate to an existing Source checkout or Session worktree. */
-export function runSwing(runtime: Runtime, rawTarget?: string, options: SwingOptions = {}) {
-  if (rawTarget === undefined) {
-    throw new MonkeError("Interactive Swing picker requires the async CLI runner");
-  }
-
-  const home = getMonkeHome(runtime);
-  const context = resolveRepoContext(runtime, runtime.cwd, home, {
-    allowExternalSessionWorktree: true,
-    allowSessionBranchMismatch: true
-  });
-  const currentTarget = getCurrentSwingTarget(home, context);
-  navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, rawTarget, options);
-}
-
 /** Navigate with the Clack-backed interactive Swing picker used by the real CLI. */
-export async function runSwingInteractive(
-  runtime: Runtime,
-  rawTarget?: string,
-  options: SwingOptions = {}
-) {
+export async function runSwing(runtime: Runtime, rawTarget?: string, options: SwingOptions = {}) {
   const home = getMonkeHome(runtime);
   const context = resolveRepoContext(runtime, runtime.cwd, home, {
     allowExternalSessionWorktree: true,
@@ -102,10 +83,17 @@ export async function runSwingInteractive(
   const currentTarget = getCurrentSwingTarget(home, context);
   const selectedTarget =
     rawTarget ?? (await selectSwingTarget(runtime, home, context.sourceRoot, currentTarget));
-  navigateToSwingTarget(runtime, home, context.sourceRoot, currentTarget, selectedTarget, options);
+  await navigateToSwingTarget(
+    runtime,
+    home,
+    context.sourceRoot,
+    currentTarget,
+    selectedTarget,
+    options
+  );
 }
 
-function navigateToSwingTarget(
+async function navigateToSwingTarget(
   runtime: Runtime,
   home: string,
   rootSourceRoot: string,
@@ -116,8 +104,8 @@ function navigateToSwingTarget(
   let moved = false;
   let targetPath = "";
 
-  withGlobalLock(home, () => {
-    const resolved = resolveSwingTarget(runtime, home, rootSourceRoot, selectedTarget);
+  await withGlobalLockAsync(home, async () => {
+    const resolved = await resolveSwingTarget(runtime, home, rootSourceRoot, selectedTarget);
     moved = !isSameSwingTarget(resolved.target, currentTarget);
     if (moved) {
       saveSwingHistory(home, rootSourceRoot, {
@@ -284,7 +272,7 @@ function resolveSwingTarget(
   });
 }
 
-function resolveStoredTarget(
+async function resolveStoredTarget(
   runtime: Runtime,
   home: string,
   rootSourceRoot: string,
@@ -320,7 +308,7 @@ function resolveStoredTarget(
 
     if (options.createIfMissing === true) {
       options.prepareCreate?.();
-      spawnSessionFromSourceRootLocked(runtime, home, rootSourceRoot, target.session, {
+      await spawnSessionFromSourceRootLocked(runtime, home, rootSourceRoot, target.session, {
         mode: "session-branch"
       });
       createLogger(runtime).success(`Spawned or updated session ${target.session}`);

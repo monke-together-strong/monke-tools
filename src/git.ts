@@ -285,21 +285,6 @@ export function getExpectedWorktreePath(home: string, sourceRoot: string, sessio
   return path.join(home, "worktrees", path.basename(sourceRoot), session);
 }
 
-/** Ensure the reusable Session worktree exists under Monke home. */
-export function ensureSessionWorktree(
-  runtime: Runtime,
-  home: string,
-  sourceRoot: string,
-  session: string,
-  options: { skipCleanCheck?: boolean } = {}
-) {
-  const prepared = prepareSessionWorktree(runtime, home, sourceRoot, session, options);
-  if (prepared.addArguments) {
-    runGit(runtime, sourceRoot, prepared.addArguments);
-  }
-  return { created: prepared.addArguments !== null, path: prepared.path };
-}
-
 /** Ensure the reusable Session worktree without blocking other repo preparation. */
 export async function ensureSessionWorktreeAsync(
   runtime: Runtime,
@@ -375,19 +360,6 @@ function prepareSessionWorktree(
 
   mkdirSync(path.dirname(expectedPath), { recursive: true });
   return { addArguments: ["worktree", "add", expectedPath, session], path: expectedPath };
-}
-
-/** Spawn a fresh Session worktree branch from a resolved git ref. */
-export function ensureFreshSessionWorktreeFromRef(
-  runtime: Runtime,
-  home: string,
-  sourceRoot: string,
-  session: string,
-  startRef: string
-) {
-  const prepared = prepareFreshSessionWorktree(runtime, home, sourceRoot, session, startRef);
-  runGit(runtime, sourceRoot, prepared.addArguments);
-  return { created: true, path: prepared.path };
 }
 
 /** Spawn a fresh Session worktree branch without blocking other repo preparation. */
