@@ -194,9 +194,14 @@ function validateGeneration(state: ParsedSessionState, issue: LifecycleIssue) {
   }
   if (
     state.generation.status === "complete" &&
-    state.repos.some((repo) => repo.materializationStatus !== "materialized")
+    state.repos.some(
+      (repo) => repo.materializationStatus !== "materialized" || !isPreparationComplete(repo)
+    )
   ) {
-    issue("complete generation requires every repo to be materialized", ["generation", "status"]);
+    issue("complete generation requires every repo to be prepared and materialized", [
+      "generation",
+      "status"
+    ]);
   }
 }
 

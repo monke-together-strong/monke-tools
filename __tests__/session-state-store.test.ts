@@ -194,6 +194,26 @@ typo: true
       }
     },
     {
+      name: "a complete generation with failed preparation and retained materialization",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            failure: { message: "missing worktree", phase: "worktree-preparation" },
+            materializationStatus: "materialized",
+            preparationStatus: "failed",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
       name: "failed preparation with pending materialization",
       state: {
         generation: { number: 1, status: "incomplete" },

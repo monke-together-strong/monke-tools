@@ -1403,6 +1403,47 @@ apps: {}
     expect(loadSessionState(home, repoRoot, "interrupted").generation.status).toBe("complete");
   });
 
+  test("spawn -m retry retains its pinned generation after origin main advances", () => {
+    const sandbox = makeTempDir("single-repo-remote-default-retry-pin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "bootstrapCommand: test -f allow-bootstrap\napps: {}\n",
+      "version.txt": "pinned\n"
+    });
+    const origin = path.join(sandbox, "origin.git");
+    git(repoRoot, ["init", "--bare", origin]);
+    git(repoRoot, ["remote", "add", "origin", origin]);
+    git(repoRoot, ["push", "-u", "origin", "main"]);
+    const pinnedRef = git(repoRoot, ["rev-parse", "HEAD"]);
+
+    expect(() =>
+      runMonke({ args: ["spawn", "retained", "-m"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/Bootstrap command failed/u);
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retained");
+    const failedState = loadSessionState(home, repoRoot, "retained");
+    expect(failedState.repos[0]).toMatchObject({
+      materializationStatus: "failed",
+      pinnedRef,
+      preparationStatus: "prepared"
+    });
+    write(repoRoot, "version.txt", "advanced remote\n");
+    git(repoRoot, ["add", "version.txt"]);
+    git(repoRoot, ["commit", "-m", "advance remote main"]);
+    git(repoRoot, ["push", "origin", "main"]);
+    const advancedRemoteRef = git(repoRoot, ["rev-parse", "refs/remotes/origin/main"]);
+    expect(advancedRemoteRef).not.toBe(pinnedRef);
+    git(repoRoot, ["reset", "--hard", pinnedRef]);
+    write(worktreeRoot, "allow-bootstrap", "yes\n");
+
+    runMonke({ args: ["spawn", "retained", "-m"], cwd: repoRoot, monkeHome: home });
+
+    const completeState = loadSessionState(home, repoRoot, "retained");
+    expect(completeState.repos[0]?.pinnedRef).toBe(pinnedRef);
+    expect(git(worktreeRoot, ["rev-parse", "HEAD"])).toBe(pinnedRef);
+    expect(read(worktreeRoot, "version.txt")).toBe("pinned\n");
+  });
+
   test("plain spawn retry preserves a retained default-branch source policy", () => {
     const sandbox = makeTempDir("single-repo-main-plain-retry");
     const home = path.join(sandbox, "home");
