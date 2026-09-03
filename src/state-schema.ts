@@ -42,6 +42,7 @@ export const SessionStateSchema = z.strictObject({
   repos: z.array(SessionRepoStateSchema),
   rootSourceRoot: NonEmptyStringSchema,
   session: NonEmptyStringSchema,
+  spawnSource: z.enum(["default-branch", "session-branch"]).optional(),
   version: z.literal(1)
 });
 

@@ -1,21 +1,14 @@
 import {
-  cpSync,
   copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  readlinkSync,
   readdirSync,
   readFileSync,
-  statSync,
+  symlinkSync,
   writeFileSync
 } from "node:fs";
-import {
-  copyFile as copyFileAsync,
-  cp as copyAsync,
-  mkdir as mkdirAsync,
-  readdir as readdirAsync,
-  stat as statAsync
-} from "node:fs/promises";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
@@ -44,40 +37,6 @@ export function seedWorktreeFiles(
 
   for (const relativePath of config.seedPaths) {
     seedRelativePath(config.sourceRoot, worktreeRoot, relativePath, true, seededPaths, onWarning);
-  }
-}
-
-/** Asynchronously seed local env files and configured Seed paths from the source checkout. */
-export async function seedWorktreeFilesAsync(
-  config: RepoConfig,
-  worktreeRoot: string,
-  onWarning?: (message: string) => void
-) {
-  const seededPaths = new Set<string>();
-
-  const envPaths = await listEnvFilesAsync(config.sourceRoot);
-  for (const relativePath of envPaths) {
-    // oxlint-disable-next-line no-await-in-loop -- Within one repo, ordered copies avoid races between overlapping Seed paths.
-    await seedRelativePathAsync(
-      config.sourceRoot,
-      worktreeRoot,
-      relativePath,
-      false,
-      seededPaths,
-      onWarning
-    );
-  }
-
-  for (const relativePath of config.seedPaths) {
-    // oxlint-disable-next-line no-await-in-loop -- Within one repo, ordered copies avoid races between overlapping Seed paths.
-    await seedRelativePathAsync(
-      config.sourceRoot,
-      worktreeRoot,
-      relativePath,
-      true,
-      seededPaths,
-      onWarning
-    );
   }
 }
 
@@ -266,25 +225,6 @@ function listEnvFiles(root: string, relativeRoot = "") {
   return results;
 }
 
-async function listEnvFilesAsync(root: string, relativeRoot = ""): Promise<string[]> {
-  const absoluteRoot = path.join(root, relativeRoot);
-  const entries = await readdirAsync(absoluteRoot, { withFileTypes: true });
-  const nestedResults = await Promise.all(
-    entries.map(async (entry) => {
-      if (entry.name === ".git" || entry.name === "node_modules" || entry.name === ".monke") {
-        return [];
-      }
-
-      const nextRelativePath = path.join(relativeRoot, entry.name);
-      if (entry.isDirectory()) {
-        return await listEnvFilesAsync(root, nextRelativePath);
-      }
-      return entry.isFile() && isEnvSeedFile(entry.name) ? [nextRelativePath] : [];
-    })
-  );
-  return nestedResults.flat();
-}
-
 function isEnvSeedFile(fileName: string) {
   return fileName === ".env" || fileName.startsWith(".env.");
 }
@@ -314,90 +254,39 @@ function seedRelativePath(
   }
 
   const targetPath = path.join(worktreeRoot, normalizedRelativePath);
-  const sourceIsDirectory = statSync(sourcePath).isDirectory();
   if (samePath(sourcePath, targetPath)) {
     return;
   }
+  copySeedEntry(sourcePath, targetPath);
+}
 
+function copySeedEntry(sourcePath: string, targetPath: string) {
+  const sourceStat = lstatSync(sourcePath);
   const targetStat = lstatSync(targetPath, { throwIfNoEntry: false });
   if (targetStat) {
-    if (sourceIsDirectory && targetStat.isDirectory()) {
-      cpSync(sourcePath, targetPath, {
-        errorOnExist: false,
-        force: false,
-        recursive: true
-      });
+    if (sourceStat.isDirectory() && targetStat.isDirectory()) {
+      copyMissingDirectoryEntries(sourcePath, targetPath);
     }
     return;
   }
 
   mkdirSync(path.dirname(targetPath), { recursive: true });
-  if (sourceIsDirectory) {
-    cpSync(sourcePath, targetPath, {
-      errorOnExist: false,
-      force: false,
-      recursive: true
-    });
+  if (sourceStat.isDirectory()) {
+    mkdirSync(targetPath);
+    copyMissingDirectoryEntries(sourcePath, targetPath);
     return;
   }
-
+  if (sourceStat.isSymbolicLink()) {
+    symlinkSync(readlinkSync(sourcePath), targetPath);
+    return;
+  }
   copyFileSync(sourcePath, targetPath);
 }
 
-async function seedRelativePathAsync(
-  sourceRoot: string,
-  worktreeRoot: string,
-  relativePath: string,
-  warnIfMissing: boolean,
-  seededPaths: Set<string>,
-  onWarning?: (message: string) => void
-) {
-  const normalizedRelativePath = path.normalize(relativePath);
-  if (seededPaths.has(normalizedRelativePath)) {
-    return;
+function copyMissingDirectoryEntries(sourcePath: string, targetPath: string) {
+  for (const entry of readdirSync(sourcePath)) {
+    copySeedEntry(path.join(sourcePath, entry), path.join(targetPath, entry));
   }
-  seededPaths.add(normalizedRelativePath);
-
-  const sourcePath = path.join(sourceRoot, normalizedRelativePath);
-  if (!existsSync(sourcePath)) {
-    if (warnIfMissing) {
-      onWarning?.(
-        `Warning: seedPath ${normalizedRelativePath} is missing at ${sourcePath}; skipping`
-      );
-    }
-    return;
-  }
-
-  const targetPath = path.join(worktreeRoot, normalizedRelativePath);
-  const sourceStat = await statAsync(sourcePath);
-  const sourceIsDirectory = sourceStat.isDirectory();
-  if (samePath(sourcePath, targetPath)) {
-    return;
-  }
-
-  const targetStat = lstatSync(targetPath, { throwIfNoEntry: false });
-  if (targetStat) {
-    if (sourceIsDirectory && targetStat.isDirectory()) {
-      await copyAsync(sourcePath, targetPath, {
-        errorOnExist: false,
-        force: false,
-        recursive: true
-      });
-    }
-    return;
-  }
-
-  await mkdirAsync(path.dirname(targetPath), { recursive: true });
-  if (sourceIsDirectory) {
-    await copyAsync(sourcePath, targetPath, {
-      errorOnExist: false,
-      force: false,
-      recursive: true
-    });
-    return;
-  }
-
-  await copyFileAsync(sourcePath, targetPath);
 }
 
 function readActiveAssignments(filePath: string) {

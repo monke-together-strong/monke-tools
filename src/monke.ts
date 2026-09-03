@@ -24,7 +24,6 @@ import {
   syncRootEnvFileWithRemovals,
   rewriteManagedEnvFiles,
   seedWorktreeFiles,
-  seedWorktreeFilesAsync,
   collectBaselinePortsFromRoot
 } from "./env.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
@@ -97,6 +96,21 @@ export type SpawnOptions =
       mode: "default-branch";
     };
 
+type SpawnSourcePlan =
+  | {
+      kind: "current-head";
+      spawnOptions: Extract<SpawnOptions, { mode: "current-head" }>;
+    }
+  | {
+      kind: "session-branch";
+      spawnOptions: Extract<SpawnOptions, { mode: "session-branch" }>;
+    }
+  | {
+      attempt: "fresh" | "resume";
+      kind: "default-branch";
+      spawnOptions: Extract<SpawnOptions, { mode: "default-branch" }>;
+    };
+
 export interface SpawnRunOptions {
   /** Open the Root repo's Session worktree in Codex after it is ready. */
   codex?: boolean;
@@ -120,14 +134,12 @@ interface ConfiguredSpawn {
   getDefaultRef: (sourceRoot: string) => DefaultBranchRef;
   home: string;
   reposInOrder: RepoConfig[];
-  resumeDefaultBranch: boolean;
   rootSourceRoot: string;
   rootWorktreePath: string;
   runtime: Runtime;
   session: string;
   sessionState: SessionState;
-  spawnFromDefaultBranch: boolean;
-  spawnOptions: SpawnOptions;
+  sourcePlan: SpawnSourcePlan;
 }
 
 class BootstrapCommandError extends MonkeError {
@@ -262,25 +274,21 @@ function initializeSpawn(
   session: string,
   spawnOptions: SpawnOptions
 ) {
-  const resumeDefaultBranch = resolveDefaultBranchResume(
-    home,
-    rootSourceRoot,
-    session,
-    spawnOptions
-  );
+  const sourcePlan = resolveSpawnSourcePlan(home, rootSourceRoot, session, spawnOptions);
   assertSpawnRequest(runtime, rootSourceRoot, session, spawnOptions);
   const rootWorktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
-  const spawnFromDefaultBranch = spawnOptions.mode === "default-branch";
-  const spawnFromSessionBranch = spawnOptions.mode === "session-branch";
   const getDefaultRef = createDefaultRefResolver(runtime);
   const rootDefaultRef =
-    spawnFromDefaultBranch && !resumeDefaultBranch ? getDefaultRef(rootSourceRoot) : null;
+    sourcePlan.kind === "default-branch" && sourcePlan.attempt === "fresh"
+      ? getDefaultRef(rootSourceRoot)
+      : null;
   const rootConfigExists = spawnRootConfigExists(
     runtime,
     rootSourceRoot,
     session,
     rootDefaultRef,
-    spawnFromSessionBranch || resumeDefaultBranch
+    sourcePlan.kind === "session-branch" ||
+      (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume")
   );
   if (!rootConfigExists) {
     return {
@@ -296,22 +304,14 @@ function initializeSpawn(
     };
   }
 
-  const graph = loadSpawnGraph(
-    runtime,
-    rootSourceRoot,
-    session,
-    spawnOptions,
-    getDefaultRef,
-    resumeDefaultBranch
-  );
+  const graph = loadSpawnGraph(runtime, rootSourceRoot, session, sourcePlan, getDefaultRef);
   const prepared = prepareSpawnMaterialization(
     runtime,
     home,
     rootSourceRoot,
     session,
-    spawnOptions,
-    graph.reposInMaterializationOrder,
-    resumeDefaultBranch
+    sourcePlan,
+    graph.reposInMaterializationOrder
   );
   return {
     execution: {
@@ -319,13 +319,11 @@ function initializeSpawn(
       getDefaultRef,
       home,
       reposInOrder: graph.reposInMaterializationOrder,
-      resumeDefaultBranch,
       rootSourceRoot,
       rootWorktreePath,
       runtime,
       session,
-      spawnFromDefaultBranch,
-      spawnOptions
+      sourcePlan
     } satisfies ConfiguredSpawn,
     kind: "configured" as const
   };
@@ -348,13 +346,12 @@ function createSpawnPreparationBatch(execution: ConfiguredSpawn) {
           createdDefaultWorktrees.push({ sourceRoot: repoConfig.sourceRoot, worktreePath });
         },
         repoConfig,
-        resumeDefaultBranch: execution.resumeDefaultBranch,
         rootSourceRoot: execution.rootSourceRoot,
         runtime: execution.runtime,
         session: execution.session,
         shouldSkip:
           index < execution.firstWorkIndex && repoConfig.sourceRoot !== execution.rootSourceRoot,
-        spawnOptions: execution.spawnOptions
+        sourcePlan: execution.sourcePlan
       };
       return {
         prepare: () => prepareSpawnRepoWorktree(request),
@@ -409,7 +406,7 @@ function materializeConfiguredSpawn(
         persistRepoState,
         repoConfig,
         retryCommand:
-          execution.spawnOptions.mode === "default-branch"
+          execution.sourcePlan.kind === "default-branch"
             ? `mt spawn ${execution.session} -m`
             : `mt spawn ${execution.session}`,
         rootSourceRoot: execution.rootSourceRoot,
@@ -424,8 +421,8 @@ function materializeConfiguredSpawn(
     }
   } catch (error) {
     if (
-      execution.spawnFromDefaultBranch &&
-      !execution.resumeDefaultBranch &&
+      execution.sourcePlan.kind === "default-branch" &&
+      execution.sourcePlan.attempt === "fresh" &&
       !(error instanceof BootstrapCommandError)
     ) {
       rollbackDefaultBranchSpawn({
@@ -446,7 +443,7 @@ function rollbackFailedDefaultPreparation(
   execution: ConfiguredSpawn,
   createdDefaultWorktrees: { sourceRoot: string; worktreePath: string }[]
 ) {
-  if (!execution.spawnFromDefaultBranch || execution.resumeDefaultBranch) {
+  if (execution.sourcePlan.kind !== "default-branch" || execution.sourcePlan.attempt === "resume") {
     return;
   }
   rollbackDefaultBranchSpawn({
@@ -466,12 +463,11 @@ interface SpawnRepoPreparationRequest {
   home: string;
   onCreatedFromDefault: (worktreePath: string) => void;
   repoConfig: RepoConfig;
-  resumeDefaultBranch: boolean;
   rootSourceRoot: string;
   runtime: Runtime;
   session: string;
   shouldSkip: boolean;
-  spawnOptions: SpawnOptions;
+  sourcePlan: SpawnSourcePlan;
 }
 
 function prepareSpawnRepoWorktree(request: SpawnRepoPreparationRequest) {
@@ -558,11 +554,11 @@ function warnSkippedDirtySnapshot(request: SpawnRepoPreparationRequest) {
 }
 
 function ensureSpawnWorktree(request: SpawnRepoPreparationRequest) {
-  const { home, repoConfig, rootSourceRoot, runtime, session, spawnOptions } = request;
+  const { home, repoConfig, rootSourceRoot, runtime, session, sourcePlan } = request;
   const useWorktreeBaseline =
-    request.resumeDefaultBranch ||
-    (spawnOptions.mode === "session-branch" && repoConfig.sourceRoot === rootSourceRoot);
-  if (spawnOptions.mode === "default-branch" && !request.resumeDefaultBranch) {
+    (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume") ||
+    (sourcePlan.kind === "session-branch" && repoConfig.sourceRoot === rootSourceRoot);
+  if (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "fresh") {
     const defaultRef = request.getDefaultRef(repoConfig.sourceRoot).ref;
     return {
       createdDiffBaseRef: defaultRef,
@@ -581,7 +577,7 @@ function ensureSpawnWorktree(request: SpawnRepoPreparationRequest) {
   const sessionBranchExisted = branchExists(runtime, repoConfig.sourceRoot, session);
   const sourceHeadRef = resolveAttachedHeadRef(runtime, repoConfig.sourceRoot);
   const worktree = ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session, {
-    skipCleanCheck: shouldCopyDirty(spawnOptions)
+    skipCleanCheck: shouldCopyDirty(sourcePlan.spawnOptions)
   });
   if (request.dirtySnapshot && worktree.created) {
     applyDirtySnapshot(runtime, repoConfig.sourceRoot, worktree.path, request.dirtySnapshot);
@@ -590,7 +586,7 @@ function ensureSpawnWorktree(request: SpawnRepoPreparationRequest) {
   }
   return {
     createdDiffBaseRef:
-      spawnOptions.mode === "current-head" &&
+      sourcePlan.kind === "current-head" &&
       worktree.created &&
       !sessionBranchExisted &&
       sourceHeadRef !== undefined
@@ -603,11 +599,11 @@ function ensureSpawnWorktree(request: SpawnRepoPreparationRequest) {
 }
 
 async function ensureSpawnWorktreeAsync(request: SpawnRepoPreparationRequest) {
-  const { home, repoConfig, rootSourceRoot, runtime, session, spawnOptions } = request;
+  const { home, repoConfig, rootSourceRoot, runtime, session, sourcePlan } = request;
   const useWorktreeBaseline =
-    request.resumeDefaultBranch ||
-    (spawnOptions.mode === "session-branch" && repoConfig.sourceRoot === rootSourceRoot);
-  if (spawnOptions.mode === "default-branch" && !request.resumeDefaultBranch) {
+    (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume") ||
+    (sourcePlan.kind === "session-branch" && repoConfig.sourceRoot === rootSourceRoot);
+  if (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "fresh") {
     const defaultRef = request.getDefaultRef(repoConfig.sourceRoot).ref;
     return {
       createdDiffBaseRef: defaultRef,
@@ -626,7 +622,7 @@ async function ensureSpawnWorktreeAsync(request: SpawnRepoPreparationRequest) {
   const sessionBranchExisted = branchExists(runtime, repoConfig.sourceRoot, session);
   const sourceHeadRef = resolveAttachedHeadRef(runtime, repoConfig.sourceRoot);
   const worktree = await ensureSessionWorktreeAsync(runtime, home, repoConfig.sourceRoot, session, {
-    skipCleanCheck: shouldCopyDirty(spawnOptions)
+    skipCleanCheck: shouldCopyDirty(sourcePlan.spawnOptions)
   });
   if (request.dirtySnapshot && worktree.created) {
     await applyDirtySnapshotAsync(
@@ -640,7 +636,7 @@ async function ensureSpawnWorktreeAsync(request: SpawnRepoPreparationRequest) {
   }
   return {
     createdDiffBaseRef:
-      spawnOptions.mode === "current-head" &&
+      sourcePlan.kind === "current-head" &&
       worktree.created &&
       !sessionBranchExisted &&
       sourceHeadRef !== undefined
@@ -668,22 +664,28 @@ function assertSpawnRequest(
   }
 }
 
-function resolveDefaultBranchResume(
+function resolveSpawnSourcePlan(
   home: string,
   rootSourceRoot: string,
   session: string,
-  options: SpawnOptions
-) {
-  if (
-    options.mode !== "default-branch" ||
-    !existsSync(getSessionStateFilePath(home, rootSourceRoot, session))
-  ) {
-    return false;
+  spawnOptions: SpawnOptions
+): SpawnSourcePlan {
+  if (spawnOptions.mode === "current-head") {
+    return { kind: "current-head", spawnOptions };
+  }
+  if (spawnOptions.mode === "session-branch") {
+    return { kind: "session-branch", spawnOptions };
+  }
+  if (!existsSync(getSessionStateFilePath(home, rootSourceRoot, session))) {
+    return { attempt: "fresh", kind: "default-branch", spawnOptions };
   }
 
   const state = loadSessionState(home, rootSourceRoot, session);
-  if (state.repos.some((repo) => repo.materializationComplete === false)) {
-    return true;
+  if (
+    state.spawnSource === "default-branch" &&
+    state.repos.some((repo) => repo.materializationComplete === false)
+  ) {
+    return { attempt: "resume", kind: "default-branch", spawnOptions };
   }
   throw new MonkeError(
     `Session state already exists for "${session}"; default branch spawn mode requires a fresh Session`
@@ -771,7 +773,8 @@ function spawnWithoutConfig(
   }
   const sessionState = {
     ...priorSessionState,
-    graphSource: options.mode === "current-head" ? undefined : ("session-branch" as const)
+    graphSource: options.mode === "current-head" ? undefined : ("session-branch" as const),
+    spawnSource: options.mode === "current-head" ? undefined : options.mode
   };
   saveSessionState(
     home,
@@ -798,11 +801,10 @@ function loadSpawnGraph(
   runtime: Runtime,
   rootSourceRoot: string,
   session: string,
-  options: SpawnOptions,
-  getDefaultRef: (sourceRoot: string) => DefaultBranchRef,
-  resumeDefaultBranch: boolean
+  sourcePlan: SpawnSourcePlan,
+  getDefaultRef: (sourceRoot: string) => DefaultBranchRef
 ) {
-  if (resumeDefaultBranch) {
+  if (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume") {
     return loadResolvedGraph(runtime, rootSourceRoot, {
       pathExists(sourceRoot, relativePath) {
         return gitPathExistsAtRef(runtime, sourceRoot, session, relativePath);
@@ -812,7 +814,7 @@ function loadSpawnGraph(
       }
     });
   }
-  if (options.mode === "default-branch") {
+  if (sourcePlan.kind === "default-branch") {
     return loadResolvedGraph(runtime, rootSourceRoot, {
       pathExists(sourceRoot, relativePath) {
         return gitPathExistsAtRef(runtime, sourceRoot, getDefaultRef(sourceRoot).ref, relativePath);
@@ -822,7 +824,7 @@ function loadSpawnGraph(
       }
     });
   }
-  if (options.mode === "session-branch") {
+  if (sourcePlan.kind === "session-branch") {
     return loadResolvedGraph(runtime, rootSourceRoot, {
       pathExists(sourceRoot, relativePath) {
         return sourceRoot === rootSourceRoot
@@ -844,14 +846,14 @@ function prepareSpawnMaterialization(
   home: string,
   rootSourceRoot: string,
   session: string,
-  options: SpawnOptions,
-  reposInOrder: RepoConfig[],
-  resumeDefaultBranch: boolean
+  sourcePlan: SpawnSourcePlan,
+  reposInOrder: RepoConfig[]
 ) {
-  if (options.mode === "current-head" && !options.copyDirty) {
+  const { spawnOptions } = sourcePlan;
+  if (spawnOptions.mode === "current-head" && !spawnOptions.copyDirty) {
     assertCleanCheckoutsForCurrentHeadSpawn(runtime, reposInOrder, session);
   }
-  const dirtySnapshots = shouldCopyDirty(options)
+  const dirtySnapshots = shouldCopyDirty(spawnOptions)
     ? captureDirtySnapshots(runtime, reposInOrder)
     : new Map<string, DirtySnapshot>();
   for (const [sourceRoot, dirtySnapshot] of dirtySnapshots) {
@@ -859,14 +861,15 @@ function prepareSpawnMaterialization(
   }
 
   const sessionState = loadSessionState(home, rootSourceRoot, session);
-  sessionState.graphSource = options.mode === "current-head" ? undefined : "session-branch";
+  sessionState.graphSource = sourcePlan.kind === "current-head" ? undefined : "session-branch";
+  sessionState.spawnSource = sourcePlan.kind === "current-head" ? undefined : sourcePlan.kind;
   ensureSessionPrefix(
     sessionState,
     reposInOrder.map((repo) => repo.sourceRoot)
   );
   assertUniqueExpectedWorktreePaths(home, session, reposInOrder);
   assertNoGlobalWorktreePathStateCollisions(home, session, reposInOrder);
-  if (options.mode === "default-branch" && !resumeDefaultBranch) {
+  if (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "fresh") {
     for (const repoConfig of reposInOrder) {
       assertFreshSessionWorktreeAvailable(runtime, home, repoConfig.sourceRoot, session);
     }
@@ -874,7 +877,7 @@ function prepareSpawnMaterialization(
 
   const currentIndex = reposInOrder.findIndex((repo) => repo.sourceRoot === rootSourceRoot);
   const firstWorkIndex =
-    options.mode === "default-branch" && !resumeDefaultBranch
+    sourcePlan.kind === "default-branch" && sourcePlan.attempt === "fresh"
       ? 0
       : findFirstIndexNeedingWork(runtime, home, reposInOrder, sessionState, session, currentIndex);
   return { dirtySnapshots, firstWorkIndex, sessionState };
@@ -1699,15 +1702,8 @@ async function prepareRepoWorktreeAsync(
   repoConfig: RepoConfig,
   worktreePath: string
 ) {
-  try {
-    await seedWorktreeFilesAsync(repoConfig, worktreePath, (message) => {
-      runtime.writeStderr(`${message}\n`);
-    });
-  } catch (error) {
-    throw new MonkeError(
-      `Worktree preparation failed for ${repoConfig.sourceRoot} in ${worktreePath}\n${errorMessage(error)}`
-    );
-  }
+  await Promise.resolve();
+  prepareRepoWorktree(runtime, repoConfig, worktreePath);
 }
 
 function repoHasBootstrapCommand(repoConfig: RepoConfig) {

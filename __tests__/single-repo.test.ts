@@ -935,6 +935,42 @@ apps:
     ).toThrow(/Session state already exists for "fresh"/u);
   });
 
+  test("spawn -m does not resume an incomplete current-head Session", () => {
+    const sandbox = makeTempDir("single-repo-main-current-head-state");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `bootstrapCommand: exit 9
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`
+    });
+
+    expect(() =>
+      runMonke({
+        args: ["spawn", "current-head-failure"],
+        binDirectory,
+        cwd: repoRoot,
+        monkeHome: home
+      })
+    ).toThrow(/Bootstrap command failed/u);
+
+    expect(() =>
+      runMonke({
+        args: ["spawn", "current-head-failure", "-m"],
+        binDirectory,
+        cwd: repoRoot,
+        monkeHome: home
+      })
+    ).toThrow(/default branch spawn mode requires a fresh Session/u);
+  });
+
   test("spawn -m fails when the session branch already exists", () => {
     const sandbox = makeTempDir("single-repo-main-existing-branch");
     const binDirectory = path.join(sandbox, "bin");
@@ -1466,7 +1502,7 @@ apps:
     expect(read(worktreeRoot, "bootstrap-runs")).toBe("xx");
   });
 
-  test("materialize preserves a dangling Session-local Seed symlink", () => {
+  test("materialize does not follow a nested dangling Session-local Seed symlink", () => {
     const sandbox = makeTempDir("single-seedpaths-dangling-symlink");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1474,7 +1510,7 @@ apps:
       ".gitignore": "seed-data/\n",
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `seedPaths:
-  - seed-data/profile
+  - seed-data
 apps:
   api:
     path: apps/api
