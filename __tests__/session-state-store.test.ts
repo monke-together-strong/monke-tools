@@ -401,6 +401,131 @@ typo: true
       }
     },
     {
+      name: "default-branch Spawn policy without Session-branch graph source",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            pinnedRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "default-branch",
+        version: 2
+      }
+    },
+    {
+      name: "session-branch Spawn policy without Session-branch graph source",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "session-branch",
+        version: 2
+      }
+    },
+    {
+      name: "pending dirty carry for default-branch Spawn",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        graphSource: "session-branch",
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            dirtyCarryStatus: "pending",
+            materializationStatus: "pending",
+            pinnedRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            preparationStatus: "pending",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "default-branch",
+        version: 2
+      }
+    },
+    {
+      name: "pending dirty carry when current-head Spawn disables dirty carry",
+      state: {
+        copyDirty: false,
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            dirtyCarryStatus: "pending",
+            materializationStatus: "pending",
+            preparationStatus: "pending",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "a repo blocked by itself",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            blockedBy: "/repo",
+            cleanupEligible: false,
+            materializationStatus: "blocked",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "a repo blocked by an absent dependency",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            blockedBy: "/missing",
+            cleanupEligible: false,
+            materializationStatus: "blocked",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
       name: "a pending default-branch repo without pinned identity",
       state: {
         generation: { number: 1, status: "incomplete" },

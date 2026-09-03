@@ -172,13 +172,27 @@ export const SessionStateSchema = SessionStateFieldsSchema.check((context) => {
   };
   validateGeneration(context.value, issue);
   validateRepoSet(context.value, issue);
+  validateBlockedByReferences(context.value, issue);
   validateDefaultBranchIdentity(context.value, issue);
+  validateSourcePolicy(context.value, issue);
   validateDirtyPolicy(context.value, issue);
 });
 
 function validateDirtyPolicy(state: ParsedSessionState, issue: LifecycleIssue) {
   if (state.spawnSource !== undefined && state.copyDirty !== undefined) {
     issue("copyDirty is only valid for current-HEAD Spawn", ["copyDirty"]);
+  }
+  if (
+    state.repos.some((repo) => repo.dirtyCarryStatus === "pending") &&
+    (state.spawnSource !== undefined || state.graphSource !== undefined || state.copyDirty !== true)
+  ) {
+    issue("pending dirty carry requires current-HEAD Spawn with copyDirty enabled", ["copyDirty"]);
+  }
+}
+
+function validateSourcePolicy(state: ParsedSessionState, issue: LifecycleIssue) {
+  if (state.spawnSource !== undefined && state.graphSource !== "session-branch") {
+    issue("retained Spawn source policy requires Session-branch graph source", ["graphSource"]);
   }
 }
 
@@ -238,6 +252,23 @@ function validateRepoSet(state: ParsedSessionState, issue: LifecycleIssue) {
   }
   if (state.repos.at(-1)?.sourceRoot !== state.rootSourceRoot) {
     issue("Root repo must follow its dependencies in materialization order", ["repos"]);
+  }
+}
+
+function validateBlockedByReferences(state: ParsedSessionState, issue: LifecycleIssue) {
+  for (const [index, repo] of state.repos.entries()) {
+    if (repo.blockedBy === undefined) {
+      continue;
+    }
+    const { blockedBy } = repo;
+    const dependency = state.repos.find(
+      (candidate) =>
+        !samePath(candidate.sourceRoot, repo.sourceRoot) &&
+        samePath(candidate.sourceRoot, blockedBy)
+    );
+    if (dependency === undefined) {
+      issue("blockedBy must identify another recorded repo", ["repos", index, "blockedBy"]);
+    }
   }
 }
 

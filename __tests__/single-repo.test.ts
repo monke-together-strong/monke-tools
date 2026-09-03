@@ -1444,6 +1444,38 @@ apps: {}
     expect(read(worktreeRoot, "version.txt")).toBe("pinned\n");
   });
 
+  test("Materialize rejects malformed pinned state before reading advanced Source config", () => {
+    const sandbox = makeTempDir("single-repo-malformed-pinned-materialize");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "bootstrapCommand: exit 9\napps: {}\n"
+    });
+
+    expect(() =>
+      runMonke({ args: ["spawn", "malformed", "-m"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/Bootstrap command failed/u);
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "malformed");
+    const statePath = getSessionStateFilePath(home, repoRoot, "malformed");
+    write(
+      home,
+      path.relative(home, statePath),
+      readFileSync(statePath, "utf-8").replace("graphSource: session-branch\n", "")
+    );
+    write(repoRoot, "monke.yml", "bootstrapCommand: touch live-source-config-ran\napps: {}\n");
+    git(repoRoot, ["add", "monke.yml"]);
+    git(repoRoot, ["commit", "-m", "advance Source config"]);
+
+    const result = runMonkeCapturingFailure({
+      args: ["materialize"],
+      cwd: worktreeRoot,
+      monkeHome: home
+    });
+
+    expect(result.error?.message).toMatch(/graphSource|graph source/u);
+    expect(existsSync(path.join(worktreeRoot, "live-source-config-ran"))).toBeFalsy();
+  });
+
   test("plain spawn retry preserves a retained default-branch source policy", () => {
     const sandbox = makeTempDir("single-repo-main-plain-retry");
     const home = path.join(sandbox, "home");
