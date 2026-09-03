@@ -1,6 +1,6 @@
 import { errorMessage, MonkeError } from "./errors.ts";
 import { saveSessionState } from "./session-state-store.ts";
-import type { SessionRepoState, SessionState } from "./types.ts";
+import type { SessionMaterializationCheckpoint, SessionRepoState, SessionState } from "./types.ts";
 
 const MAX_CONCURRENT_REPO_MATERIALIZATIONS = 4;
 
@@ -19,7 +19,7 @@ export interface SessionMaterializationNode<TPrepared, TResult> {
   dependencyRoots: string[];
   initialState: SessionRepoState;
   materialize: (options: {
-    checkpoint: (state: SessionRepoState) => void;
+    checkpoint: (state: SessionRepoState, phase: SessionMaterializationCheckpoint) => void;
     dependencyResults: Map<string, TResult>;
     existingState: SessionRepoState;
     prepared: TPrepared;
@@ -35,6 +35,7 @@ export interface SessionMaterializationNode<TPrepared, TResult> {
 export interface RunSessionMaterializationOptions<TPrepared, TResult> {
   home: string;
   nodes: SessionMaterializationNode<TPrepared, TResult>[];
+  onCheckpoint?: (checkpoint: SessionMaterializationCheckpoint) => void;
   retryCommand: string;
   rootSourceRoot: string;
   state: SessionState;
@@ -44,7 +45,11 @@ export interface RunSessionMaterializationOptions<TPrepared, TResult> {
 export async function runSessionMaterialization<TPrepared, TResult>(
   options: RunSessionMaterializationOptions<TPrepared, TResult>
 ) {
-  const owner = new SessionStateOwner(options.home, beginGeneration(options.state, options.nodes));
+  const owner = new SessionStateOwner(
+    options.home,
+    beginGeneration(options.state, options.nodes),
+    options.onCheckpoint
+  );
   const prepared = new Map<string, TPrepared>();
   const results = new Map<string, TResult>();
 
@@ -64,26 +69,33 @@ export async function runSessionMaterialization<TPrepared, TResult>(
         runPreparation(async () => {
           try {
             const completed = await node.prepare(owner.repo(node.sourceRoot), (state) => {
-              owner.replaceRepo(state);
+              owner.replaceRepo(state, "worktree-ready");
             });
             prepared.set(node.sourceRoot, completed.value);
-            owner.replaceRepo({
-              ...completed.state,
-              blockedBy: undefined,
-              failure: undefined,
-              materializationStatus: "pending",
-              preparationStatus: completed.warnings.length > 0 ? "warning" : "prepared",
-              preparationWarnings: completed.warnings.length > 0 ? completed.warnings : undefined
-            });
+            owner.replaceRepo(
+              {
+                ...completed.state,
+                blockedBy: undefined,
+                failure: undefined,
+                materializationStatus: "pending",
+                preparationStatus: completed.warnings.length > 0 ? "warning" : "prepared",
+                preparationWarnings: completed.warnings.length > 0 ? completed.warnings : undefined
+              },
+              "preparation"
+            );
             return true;
           } catch (error) {
-            owner.patchRepo(node.sourceRoot, {
-              blockedBy: undefined,
-              failure: { message: errorMessage(error), phase: "worktree-preparation" },
-              materializationStatus: "failed",
-              preparationStatus: "failed",
-              preparationWarnings: undefined
-            });
+            owner.patchRepo(
+              node.sourceRoot,
+              {
+                blockedBy: undefined,
+                failure: { message: errorMessage(error), phase: "worktree-preparation" },
+                materializationStatus: "failed",
+                preparationStatus: "failed",
+                preparationWarnings: undefined
+              },
+              "preparation"
+            );
             return false;
           }
         })
@@ -129,10 +141,13 @@ export async function runSessionMaterialization<TPrepared, TResult>(
 
   await Promise.all(materializationPromises.values());
   const complete = owner.state.repos.every((repo) => repo.materializationStatus === "materialized");
-  owner.replaceState({
-    ...owner.state,
-    generation: { ...owner.state.generation, status: complete ? "complete" : "incomplete" }
-  });
+  owner.replaceState(
+    {
+      ...owner.state,
+      generation: { ...owner.state.generation, status: complete ? "complete" : "incomplete" }
+    },
+    "generation-completion"
+  );
   if (!complete) {
     throw new MonkeError(formatFailureReceipt(owner.state, options));
   }
@@ -157,11 +172,15 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
   }
   const blockingIndex = dependencyStatuses.findIndex((status) => status !== "materialized");
   if (blockingIndex !== -1) {
-    options.owner.patchRepo(options.node.sourceRoot, {
-      blockedBy: options.node.dependencyRoots[blockingIndex],
-      failure: undefined,
-      materializationStatus: "blocked"
-    });
+    options.owner.patchRepo(
+      options.node.sourceRoot,
+      {
+        blockedBy: options.node.dependencyRoots[blockingIndex],
+        failure: undefined,
+        materializationStatus: "blocked"
+      },
+      "repo-result"
+    );
     return "blocked";
   }
 
@@ -172,27 +191,34 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
     }
     try {
       const completed = await options.node.materialize({
-        checkpoint: (state) => {
-          options.owner.replaceRepo(state);
+        checkpoint: (state, phase) => {
+          options.owner.replaceRepo(state, phase);
         },
         dependencyResults: options.results,
         existingState: options.owner.repo(options.node.sourceRoot),
         prepared: preparedValue
       });
       options.results.set(options.node.sourceRoot, completed.value);
-      options.owner.replaceRepo({
-        ...completed.state,
-        blockedBy: undefined,
-        failure: undefined,
-        materializationStatus: "materialized"
-      });
+      options.owner.replaceRepo(
+        {
+          ...completed.state,
+          blockedBy: undefined,
+          failure: undefined,
+          materializationStatus: "materialized"
+        },
+        "repo-result"
+      );
       return "materialized";
     } catch (error) {
-      options.owner.patchRepo(options.node.sourceRoot, {
-        blockedBy: undefined,
-        failure: { message: errorMessage(error), phase: "repo-materialization" },
-        materializationStatus: "failed"
-      });
+      options.owner.patchRepo(
+        options.node.sourceRoot,
+        {
+          blockedBy: undefined,
+          failure: { message: errorMessage(error), phase: "repo-materialization" },
+          materializationStatus: "failed"
+        },
+        "repo-result"
+      );
       return "failed";
     }
   });
@@ -313,10 +339,11 @@ class SessionStateOwner {
 
   constructor(
     private readonly home: string,
-    state: SessionState
+    state: SessionState,
+    private readonly onCheckpoint?: (checkpoint: SessionMaterializationCheckpoint) => void
   ) {
     this.#state = state;
-    this.persist();
+    this.persist("generation-start");
   }
 
   get state() {
@@ -331,11 +358,15 @@ class SessionStateOwner {
     return repo;
   }
 
-  patchRepo(sourceRoot: string, patch: Partial<SessionRepoState>) {
-    this.replaceRepo({ ...this.repo(sourceRoot), ...patch });
+  patchRepo(
+    sourceRoot: string,
+    patch: Partial<SessionRepoState>,
+    checkpoint: SessionMaterializationCheckpoint
+  ) {
+    this.replaceRepo({ ...this.repo(sourceRoot), ...patch }, checkpoint);
   }
 
-  replaceRepo(repo: SessionRepoState) {
+  replaceRepo(repo: SessionRepoState, checkpoint: SessionMaterializationCheckpoint) {
     const index = this.#state.repos.findIndex(
       (candidate) => candidate.sourceRoot === repo.sourceRoot
     );
@@ -344,15 +375,16 @@ class SessionStateOwner {
     }
     const repos = [...this.#state.repos];
     repos[index] = repo;
-    this.replaceState({ ...this.#state, repos });
+    this.replaceState({ ...this.#state, repos }, checkpoint);
   }
 
-  replaceState(state: SessionState) {
+  replaceState(state: SessionState, checkpoint: SessionMaterializationCheckpoint) {
     this.#state = state;
-    this.persist();
+    this.persist(checkpoint);
   }
 
-  private persist() {
+  private persist(checkpoint: SessionMaterializationCheckpoint) {
     saveSessionState(this.home, this.#state);
+    this.onCheckpoint?.(checkpoint);
   }
 }

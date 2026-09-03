@@ -219,6 +219,7 @@ export async function spawnSessionFromSourceRootLocked(
   await runSessionMaterialization({
     home: execution.home,
     nodes: createSpawnMaterializationNodes(execution),
+    onCheckpoint: execution.runtime.sessionMaterializationBoundary,
     retryCommand: formatSpawnRetryCommand(execution.session, execution.sourcePlan.spawnOptions),
     rootSourceRoot: execution.rootSourceRoot,
     state: execution.sessionState
@@ -992,6 +993,7 @@ export async function runMaterialize(runtime: Runtime) {
     await runSessionMaterialization({
       home: execution.home,
       nodes: createMaterializeNodes(execution),
+      onCheckpoint: runtime.sessionMaterializationBoundary,
       retryCommand: "mt materialize",
       rootSourceRoot: execution.context.sourceRoot,
       state: execution.sessionState
@@ -1340,7 +1342,10 @@ interface MaterializeRepoOptions {
   diffBaseRef?: string;
   existingState: SessionRepoState | undefined;
   home: string;
-  persistRepoState: (repoState: SessionRepoState) => void;
+  persistRepoState: (
+    repoState: SessionRepoState,
+    checkpoint: "cleanup-eligibility" | "repo-progress" | "resource-command-output"
+  ) => void;
   repoConfig: RepoConfig;
   retryCommand: string;
   rootSourceRoot: string;
@@ -1406,11 +1411,15 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
       session: options.session
     })
   };
-  persistRepoMaterializationState(context, {
-    assignedPorts: options.existingState?.assignedPorts ?? [],
-    cleanupEligible: options.existingState?.cleanupEligible ?? false,
-    resourceCommandOutputs: options.existingState?.resourceCommandOutputs ?? []
-  });
+  persistRepoMaterializationState(
+    context,
+    {
+      assignedPorts: options.existingState?.assignedPorts ?? [],
+      cleanupEligible: options.existingState?.cleanupEligible ?? false,
+      resourceCommandOutputs: options.existingState?.resourceCommandOutputs ?? []
+    },
+    "repo-progress"
+  );
   return context;
 }
 
@@ -1419,11 +1428,15 @@ async function resolveCommandsBeforeAssignments(context: RepoMaterializationCont
     return;
   }
   if (context.repoConfig.resourceCommandsInOrder.length > 0) {
-    persistRepoMaterializationState(context, {
-      assignedPorts: context.existingState?.assignedPorts ?? [],
-      cleanupEligible: true,
-      resourceCommandOutputs: context.existingState?.resourceCommandOutputs ?? []
-    });
+    persistRepoMaterializationState(
+      context,
+      {
+        assignedPorts: context.existingState?.assignedPorts ?? [],
+        cleanupEligible: true,
+        resourceCommandOutputs: context.existingState?.resourceCommandOutputs ?? []
+      },
+      "cleanup-eligibility"
+    );
   }
   return await resolveRepoResourceCommands(context, context.existingState?.assignedPorts ?? []);
 }
@@ -1486,11 +1499,15 @@ async function runRepoMaterializationCommands(
       ...resolvedResourceValues.removedEnvNames,
       ...existingResourceCommandEnvNames
     ]);
-    persistRepoMaterializationState(context, {
-      assignedPorts: assignments.localAssignedPorts,
-      cleanupEligible: true,
-      resourceCommandOutputs: existingState?.resourceCommandOutputs ?? []
-    });
+    persistRepoMaterializationState(
+      context,
+      {
+        assignedPorts: assignments.localAssignedPorts,
+        cleanupEligible: true,
+        resourceCommandOutputs: existingState?.resourceCommandOutputs ?? []
+      },
+      "cleanup-eligibility"
+    );
     await runBootstrapCommand(
       context.runtime,
       repoConfig,
@@ -1531,11 +1548,15 @@ function resolveRepoResourceCommands(
     existingRepoState: context.existingState,
     home: context.home,
     onResolvedCommandOutputs(resourceCommandOutputs) {
-      persistRepoMaterializationState(context, {
-        assignedPorts,
-        cleanupEligible: true,
-        resourceCommandOutputs
-      });
+      persistRepoMaterializationState(
+        context,
+        {
+          assignedPorts,
+          cleanupEligible: true,
+          resourceCommandOutputs
+        },
+        "resource-command-output"
+      );
     },
     repoConfig: context.repoConfig,
     resourceValues: context.resolvedResourceValues.values,
@@ -1547,13 +1568,15 @@ function resolveRepoResourceCommands(
 
 function persistRepoMaterializationState(
   context: RepoMaterializationContext,
-  state: RepoMaterializationCheckpoint
+  state: RepoMaterializationCheckpoint,
+  checkpoint: "cleanup-eligibility" | "repo-progress" | "resource-command-output"
 ) {
   context.persistRepoState(
     createRepoMaterializationState(context, {
       ...state,
       materializationStatus: "pending"
-    })
+    }),
+    checkpoint
   );
 }
 

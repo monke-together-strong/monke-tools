@@ -10,7 +10,17 @@ const [{ runCliAsync }, { createRuntime }] = await Promise.all([
 ]);
 
 try {
-  await runCliAsync(Bun.argv.slice(2), createRuntime({ platform }));
+  await runCliAsync(
+    Bun.argv.slice(2),
+    createRuntime({
+      platform,
+      sessionMaterializationBoundary(checkpoint) {
+        if (checkpoint === process.env.MONKE_TEST_INTERRUPT_CHECKPOINT) {
+          process.kill(process.pid, "SIGKILL");
+        }
+      }
+    })
+  );
 } catch (error) {
   process.stderr.write(error instanceof Error ? error.message : "Monke command failed");
   process.exitCode = 1;

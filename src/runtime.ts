@@ -31,6 +31,7 @@ import type {
   MultiSelectPrompt,
   ReleaseDistribution,
   Runtime,
+  SessionMaterializationCheckpoint,
   SelectPrompt
 } from "./types.ts";
 
@@ -81,6 +82,8 @@ export interface RuntimeOptions {
   releaseDistribution?: ReleaseDistribution;
   /** Scripted selected values used by tests for Clack-style select prompts. */
   selectValues?: string[];
+  /** Optional injected Session checkpoint boundary used by interruption tests. */
+  sessionMaterializationBoundary?: (checkpoint: SessionMaterializationCheckpoint) => void;
   /** Status-output TTY override used by presentation behavior tests. */
   stderrIsTTY?: boolean;
   /** Scripted stdin lines used by tests for interactive prompts. */
@@ -173,6 +176,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
+    sessionMaterializationBoundary: options?.sessionMaterializationBoundary,
     stderrIsTTY: resolveStderrIsTTY(options),
     toolBuildIdentity: options?.toolBuildIdentity ?? DEFAULT_TOOL_BUILD_IDENTITY,
     toolInstallRoot: options?.toolInstallRoot ?? resolveRunningToolInstallRoot(),
