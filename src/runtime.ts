@@ -40,6 +40,11 @@ const LOCK_RETRY_INTERVAL_MS = 50;
 const RELEASE_CATALOG_PAGE_SIZE = 100;
 const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
+type AsyncChildProcess = ReturnType<typeof spawn>;
+const activeAsyncChildren = new Set<AsyncChildProcess>();
+let forwardedTerminationSignal: NodeJS.Signals | undefined;
+let forcedParentTermination: ReturnType<typeof setTimeout> | undefined;
+let parentExitScheduled = false;
 const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
   pid: z.unknown().optional()
@@ -318,6 +323,7 @@ function executeCommandAsync(
       env: childEnv,
       stdio: "pipe"
     });
+    registerAsyncChild(child);
     let stderr = "";
     let stdout = "";
     let settled = false;
@@ -378,23 +384,83 @@ function executeCommandAsync(
     });
     child.once("error", (error) => {
       rejectOnce(new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`));
+      unregisterAsyncChild(child);
     });
     child.once("close", (code, signal) => {
-      const exitCode = timedOut ? -1 : (code ?? -1);
-      if (timedOut) {
-        settleTimeout();
-        return;
+      try {
+        const exitCode = timedOut ? -1 : (code ?? -1);
+        if (timedOut) {
+          settleTimeout();
+          return;
+        }
+        if (code !== 0 && options?.allowFailure !== true) {
+          const reason =
+            stderr.trim() || stdout.trim() || `terminated by signal ${signal ?? "unknown"}`;
+          rejectOnce(new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`));
+          return;
+        }
+        resolveOnce({ exitCode, stderr, stdout });
+      } finally {
+        unregisterAsyncChild(child);
       }
-      if (code !== 0 && options?.allowFailure !== true) {
-        const reason =
-          stderr.trim() || stdout.trim() || `terminated by signal ${signal ?? "unknown"}`;
-        rejectOnce(new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`));
-        return;
-      }
-      resolveOnce({ exitCode, stderr, stdout });
     });
     child.stdin.end(options?.stdin);
   });
+}
+
+function registerAsyncChild(child: AsyncChildProcess) {
+  if (activeAsyncChildren.size === 0) {
+    process.on("SIGINT", handleParentSigint);
+    process.on("SIGTERM", handleParentSigterm);
+  }
+  activeAsyncChildren.add(child);
+}
+
+function unregisterAsyncChild(child: AsyncChildProcess) {
+  if (!activeAsyncChildren.delete(child) || activeAsyncChildren.size > 0) {
+    return;
+  }
+  process.off("SIGINT", handleParentSigint);
+  process.off("SIGTERM", handleParentSigterm);
+  if (forcedParentTermination !== undefined) {
+    clearTimeout(forcedParentTermination);
+    forcedParentTermination = undefined;
+  }
+  if (forwardedTerminationSignal !== undefined && !parentExitScheduled) {
+    parentExitScheduled = true;
+    setImmediate(() => {
+      const signal = forwardedTerminationSignal;
+      forwardedTerminationSignal = undefined;
+      parentExitScheduled = false;
+      if (signal !== undefined) {
+        process.kill(process.pid, signal);
+      }
+    });
+  }
+}
+
+function handleParentSigint() {
+  forwardParentTermination("SIGINT");
+}
+
+function handleParentSigterm() {
+  forwardParentTermination("SIGTERM");
+}
+
+function forwardParentTermination(signal: NodeJS.Signals) {
+  forwardedTerminationSignal ??= signal;
+  for (const child of activeAsyncChildren) {
+    terminateChildProcessTree(child.pid, signal, () => {
+      child.kill(signal);
+    });
+  }
+  forcedParentTermination ??= setTimeout(() => {
+    for (const child of activeAsyncChildren) {
+      terminateChildProcessTree(child.pid, "SIGKILL", () => {
+        child.kill("SIGKILL");
+      });
+    }
+  }, ASYNC_TERMINATION_GRACE_MS);
 }
 
 function terminateChildProcessTree(

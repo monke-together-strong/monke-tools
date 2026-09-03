@@ -199,7 +199,7 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
 }
 
 function createLimiter(maxConcurrent: number) {
-  const queue: (() => void)[] = [];
+  const queue: (() => Promise<void>)[] = [];
   let active = 0;
   const startNext = () => {
     while (active < maxConcurrent) {
@@ -208,18 +208,20 @@ function createLimiter(maxConcurrent: number) {
         return;
       }
       active += 1;
-      start();
+      void start();
     }
   };
   return <T>(run: () => Promise<T>) =>
     new Promise<T>((resolve, reject) => {
-      queue.push(() => {
-        run()
-          .then(resolve, reject)
-          .finally(() => {
-            active -= 1;
-            startNext();
-          });
+      queue.push(async () => {
+        try {
+          resolve(await run());
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        } finally {
+          active -= 1;
+          startNext();
+        }
       });
       startNext();
     });

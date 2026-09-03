@@ -306,7 +306,7 @@ export default function ({ previous }) {
           worktreePath: path.join(scenario.sandbox, "missing-a")
         }
       ],
-      rootSourceRoot: path.join(scenario.sandbox, "graph-a"),
+      rootSourceRoot: scenario.repoRoot,
       session: "retained-a",
       version: 2
     });
@@ -334,7 +334,7 @@ export default function ({ previous }) {
           worktreePath: path.join(scenario.sandbox, "missing-b")
         }
       ],
-      rootSourceRoot: path.join(scenario.sandbox, "graph-b"),
+      rootSourceRoot: scenario.repoRoot,
       session: "retained-b",
       version: 2
     });
@@ -359,7 +359,7 @@ export default function ({ previous }) {
           worktreePath: path.join(scenario.sandbox, "current-worktree-from-another-graph")
         }
       ],
-      rootSourceRoot: path.join(scenario.sandbox, "graph-c"),
+      rootSourceRoot: scenario.repoRoot,
       session: "current",
       version: 2
     });

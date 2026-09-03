@@ -224,6 +224,129 @@ typo: true
         spawnSource: "default-branch",
         version: 2
       }
+    },
+    {
+      name: "an empty complete generation",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "a repo set without the Root repo",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/dependency",
+            worktreePath: "/dependency-worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "duplicate Source checkout records",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          },
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/other-worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "duplicate Session worktree records",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          },
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/dependency",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "cleanup eligibility before a generation starts",
+      state: {
+        generation: { number: 0, status: "not-started" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupCommand: "cleanup",
+            cleanupEligible: true,
+            materializationStatus: "pending",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "a pending default-branch repo without pinned identity",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "pending",
+            preparationStatus: "pending",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "default-branch",
+        version: 2
+      }
     }
   ])("saveSessionState rejects $name", ({ state }) => {
     const sandbox = makeTempDir("session-state-store-lifecycle-invariant");

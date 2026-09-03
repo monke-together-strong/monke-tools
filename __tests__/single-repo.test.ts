@@ -24,6 +24,7 @@ import {
   createRepo,
   git,
   installCodexUrlOpenShim,
+  installGitShim,
   installShShim,
   installWindowsCmdShim,
   makeTempDir,
@@ -948,6 +949,44 @@ apps: {}
     });
   });
 
+  test("spawn -m retries an interruption before the Session branch exists at its pinned ref", () => {
+    const sandbox = makeTempDir("single-repo-main-early-checkpoint-retry");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
+      "version.txt": "pinned\n"
+    });
+    const pinnedRef = git(repoRoot, ["rev-parse", "refs/heads/main"]);
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted");
+    installGitShim(binDirectory, {
+      failCommand: {
+        args: `worktree add -b interrupted ${worktreeRoot} ${pinnedRef}`,
+        message: "injected early worktree failure"
+      }
+    });
+
+    expect(() =>
+      runMonke({
+        args: ["spawn", "interrupted", "-m"],
+        binDirectory,
+        cwd: repoRoot,
+        monkeHome: home
+      })
+    ).toThrow(/injected early worktree failure/u);
+    expect(git(repoRoot, ["branch", "--list", "interrupted"])).toBe("");
+    expect(loadSessionState(home, repoRoot, "interrupted").repos[0]?.pinnedRef).toBe(pinnedRef);
+
+    write(repoRoot, "version.txt", "newer\n");
+    git(repoRoot, ["add", "version.txt"]);
+    git(repoRoot, ["commit", "-m", "advance main"]);
+
+    runMonke({ args: ["spawn", "interrupted", "-m"], cwd: repoRoot, monkeHome: home });
+
+    expect(read(worktreeRoot, "version.txt")).toBe("pinned\n");
+    expect(loadSessionState(home, repoRoot, "interrupted").generation.status).toBe("complete");
+  });
+
   test("spawn -m fails when session state already exists", () => {
     const sandbox = makeTempDir("single-repo-main-existing-state");
     const binDirectory = path.join(sandbox, "bin");
@@ -965,7 +1004,16 @@ apps: {}
     });
     saveSessionState(home, {
       generation: { number: 1, status: "complete" },
-      repos: [],
+      repos: [
+        {
+          assignedPorts: [],
+          cleanupEligible: false,
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
+          sourceRoot: repoRoot,
+          worktreePath: getExpectedWorktreePath(home, repoRoot, "fresh")
+        }
+      ],
       rootSourceRoot: repoRoot,
       session: "fresh",
       version: 2

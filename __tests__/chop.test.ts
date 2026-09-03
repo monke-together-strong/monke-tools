@@ -160,10 +160,12 @@ function createFailingCleanupSessionFixture(prefix: string) {
   const state = loadSessionState(home, root, "retry");
   saveSessionState(home, {
     ...state,
+    generation: { number: 1, status: "complete" },
     repos: state.repos.map((repo) => ({
       ...repo,
       cleanupCommand: "exit 23",
-      cleanupEligible: true
+      cleanupEligible: true,
+      materializationStatus: "materialized"
     }))
   });
   return {
@@ -369,22 +371,33 @@ apps: {}
     const fixture = createOrdinaryFixture("chop-session-name-precedence");
     saveSessionState(fixture.home, {
       generation: { number: 1, status: "complete" },
-      repos: [],
+      repos: [
+        {
+          assignedPorts: [],
+          cleanupEligible: false,
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
+          sourceRoot: fixture.sourceRoot,
+          worktreePath: getExpectedWorktreePath(fixture.home, fixture.sourceRoot, "feature")
+        }
+      ],
       rootSourceRoot: fixture.sourceRoot,
       session: "feature",
       version: 2
     });
 
-    runMonke({
-      args: ["chop", "feature"],
-      cwd: fixture.sourceRoot,
-      monkeHome: fixture.home
-    });
+    expect(() =>
+      runMonke({
+        args: ["chop", "feature"],
+        cwd: fixture.sourceRoot,
+        monkeHome: fixture.home
+      })
+    ).toThrow(/Cannot Chop Session feature.*registered at unexpected path/su);
 
     expect(existsSync(fixture.worktreePath)).toBeTruthy();
     expect(
       existsSync(getSessionStateFilePath(fixture.home, fixture.sourceRoot, "feature"))
-    ).toBeFalsy();
+    ).toBeTruthy();
   });
 
   test("dependency-invoked Session Chop removes the invoker last and finalizes Root first", () => {
@@ -840,7 +853,7 @@ external:
     git(depRoot, ["branch", "partial"]);
     git(depRoot, ["worktree", "add", worktree, "partial"]);
     saveSessionState(home, {
-      generation: { number: 1, status: "complete" },
+      generation: { number: 1, status: "incomplete" },
       repos: [
         {
           assignedPorts: [],
@@ -852,6 +865,18 @@ external:
           preparationStatus: "prepared",
           sourceRoot: depRoot,
           worktreePath: worktree
+        },
+        {
+          assignedPorts: [],
+          cleanupEligible: false,
+          failure: {
+            message: "Root Worktree preparation was interrupted",
+            phase: "worktree-preparation"
+          },
+          materializationStatus: "failed",
+          preparationStatus: "failed",
+          sourceRoot: root,
+          worktreePath: getExpectedWorktreePath(home, root, "partial")
         }
       ],
       rootSourceRoot: root,
@@ -1236,36 +1261,6 @@ repos:
     expect(existsSync(fixture.depWorktree)).toBeTruthy();
     expect(existsSync(fixture.rootWorktree)).toBeTruthy();
     expect(existsSync(fixture.statePath)).toBeTruthy();
-  });
-
-  test("Session preflight aggregates invalid Root order with duplicate records", () => {
-    const fixture = createMultiRepoSessionFixture("chop-invalid-session-order");
-    const state = loadSessionState(fixture.home, fixture.root, fixture.session);
-    saveSessionState(fixture.home, {
-      ...state,
-      repos: [state.repos[1], state.repos[0], state.repos[0]]
-    });
-
-    let thrown: unknown;
-    try {
-      runMonke({
-        args: ["chop", fixture.session, "--force"],
-        cwd: fixture.root,
-        monkeHome: fixture.home
-      });
-    } catch (error) {
-      thrown = error;
-    }
-
-    expect(thrown).toBeInstanceOf(Error);
-    if (!(thrown instanceof Error)) {
-      throw new Error("expected invalid Session state to fail");
-    }
-    expect(thrown.message).toContain("more than once");
-    expect(thrown.message).toContain("before its dependencies");
-    expect(existsSync(fixture.depWorktree)).toBeTruthy();
-    expect(existsSync(fixture.rootWorktree)).toBeTruthy();
-    expect(existsSync(fixture.cleanupLog)).toBeFalsy();
   });
 
   test("broad Cleanup reuses saved-state-only Root-first Session finalization", () => {

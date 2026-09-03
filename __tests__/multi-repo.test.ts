@@ -678,6 +678,14 @@ external:
           ],
           sourceRoot: depRoot,
           worktreePath: path.join(sandbox, "missing-alpha-dep")
+        },
+        {
+          assignedPorts: [],
+          cleanupEligible: false,
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
+          sourceRoot: rootA,
+          worktreePath: path.join(sandbox, "missing-alpha-root")
         }
       ],
       rootSourceRoot: rootA,

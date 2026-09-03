@@ -115,73 +115,102 @@ function validatePreparationLifecycle(repo: ParsedSessionRepoState, issue: Lifec
   }
 }
 
-export const SessionStateSchema = z
-  .strictObject({
-    generation: z.strictObject({
-      number: z.number().int().nonnegative(),
-      status: z.enum(["not-started", "incomplete", "complete"])
-    }),
-    graphSource: z.literal("session-branch").optional(),
-    repos: z.array(SessionRepoStateSchema),
-    rootSourceRoot: NonEmptyStringSchema,
-    session: NonEmptyStringSchema,
-    spawnSource: z.enum(["default-branch", "session-branch"]).optional(),
-    version: z.literal(2)
-  })
-  .check((context) => {
-    const state = context.value;
-    if (state.generation.status === "not-started") {
-      if (state.generation.number !== 0) {
-        context.issues.push({
-          code: "custom",
-          input: state.generation,
-          message: "not-started generation must have number 0",
-          path: ["generation", "number"]
-        });
-      }
-      if (state.repos.some((repo) => repo.materializationStatus !== "pending")) {
-        context.issues.push({
-          code: "custom",
-          input: state.repos,
-          message: "not-started generation requires pending repo materialization",
-          path: ["generation", "status"]
-        });
-      }
-    } else if (state.generation.number === 0) {
-      context.issues.push({
-        code: "custom",
-        input: state.generation,
-        message: "active or complete generation must have a positive number",
-        path: ["generation", "number"]
-      });
+const SessionStateFieldsSchema = z.strictObject({
+  generation: z.strictObject({
+    number: z.number().int().nonnegative(),
+    status: z.enum(["not-started", "incomplete", "complete"])
+  }),
+  graphSource: z.literal("session-branch").optional(),
+  repos: z.array(SessionRepoStateSchema),
+  rootSourceRoot: NonEmptyStringSchema,
+  session: NonEmptyStringSchema,
+  spawnSource: z.enum(["default-branch", "session-branch"]).optional(),
+  version: z.literal(2)
+});
+
+type ParsedSessionState = z.output<typeof SessionStateFieldsSchema>;
+
+export const SessionStateSchema = SessionStateFieldsSchema.check((context) => {
+  const issue: LifecycleIssue = (message, path) => {
+    context.issues.push({ code: "custom", input: context.value, message, path });
+  };
+  validateGeneration(context.value, issue);
+  validateRepoSet(context.value, issue);
+  validateDefaultBranchIdentity(context.value, issue);
+});
+
+function validateGeneration(state: ParsedSessionState, issue: LifecycleIssue) {
+  if (state.generation.status === "not-started") {
+    if (state.generation.number !== 0) {
+      issue("not-started generation must have number 0", ["generation", "number"]);
     }
-    if (
-      state.generation.status === "complete" &&
-      state.repos.some((repo) => repo.materializationStatus !== "materialized")
-    ) {
-      context.issues.push({
-        code: "custom",
-        input: state.repos,
-        message: "complete generation requires every repo to be materialized",
-        path: ["generation", "status"]
-      });
+    if (state.repos.some((repo) => repo.materializationStatus !== "pending")) {
+      issue("not-started generation requires pending repo materialization", [
+        "generation",
+        "status"
+      ]);
     }
-    if (state.spawnSource === "default-branch") {
-      for (const [index, repo] of state.repos.entries()) {
-        if (
-          (repo.preparationStatus === "prepared" || repo.preparationStatus === "warning") &&
-          repo.pinnedRef === undefined
-        ) {
-          context.issues.push({
-            code: "custom",
-            input: repo,
-            message: "prepared default-branch repo requires pinnedRef",
-            path: ["repos", index, "pinnedRef"]
-          });
-        }
-      }
+    if (state.repos.some((repo) => repo.cleanupEligible)) {
+      issue("not-started generation cannot be cleanup-eligible", ["generation", "status"]);
     }
+  } else if (state.generation.number === 0) {
+    issue("active or complete generation must have a positive number", ["generation", "number"]);
+  }
+  if (
+    state.generation.status === "complete" &&
+    state.repos.some((repo) => repo.materializationStatus !== "materialized")
+  ) {
+    issue("complete generation requires every repo to be materialized", ["generation", "status"]);
+  }
+}
+
+function validateRepoSet(state: ParsedSessionState, issue: LifecycleIssue) {
+  if (state.repos.length === 0) {
+    issue("Session state requires at least the Root repo", ["repos"]);
+    return;
+  }
+  if (!state.repos.some((repo) => repo.sourceRoot === state.rootSourceRoot)) {
+    issue("Session state must include its Root repo", ["rootSourceRoot"]);
+  }
+  const duplicateSourceRoot = findDuplicateIndex(state.repos.map((repo) => repo.sourceRoot));
+  if (duplicateSourceRoot !== -1) {
+    issue("Session state cannot contain duplicate Source checkouts", [
+      "repos",
+      duplicateSourceRoot,
+      "sourceRoot"
+    ]);
+  }
+  const duplicateWorktree = findDuplicateIndex(state.repos.map((repo) => repo.worktreePath));
+  if (duplicateWorktree !== -1) {
+    issue("Session state cannot contain duplicate Session worktrees", [
+      "repos",
+      duplicateWorktree,
+      "worktreePath"
+    ]);
+  }
+}
+
+function validateDefaultBranchIdentity(state: ParsedSessionState, issue: LifecycleIssue) {
+  if (state.spawnSource !== "default-branch") {
+    return;
+  }
+  for (const [index, repo] of state.repos.entries()) {
+    if (repo.pinnedRef === undefined) {
+      issue("default-branch repo requires pinnedRef", ["repos", index, "pinnedRef"]);
+    }
+  }
+}
+
+function findDuplicateIndex(values: string[]) {
+  const seen = new Set<string>();
+  return values.findIndex((value) => {
+    if (seen.has(value)) {
+      return true;
+    }
+    seen.add(value);
+    return false;
   });
+}
 
 export const RepoReservationSchema = z
   .strictObject({

@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { describe, expect, test, vi } from "vite-plus/test";
 
 import { createRuntime, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
-import { makeTempDir } from "./helpers.ts";
+import { makeTempDir, write } from "./helpers.ts";
 
 describe("runtime", () => {
   test.each([
@@ -28,6 +29,46 @@ describe("runtime", () => {
     expect(() => runtime.exec("sh", ["-c", "kill -TERM $$"])).toThrow(
       /terminated by signal SIGTERM/u
     );
+  });
+
+  test("createRuntime terminates detached async command groups when its parent is terminated", async () => {
+    const sandbox = makeTempDir("runtime-parent-termination");
+    const workerPath = path.join(sandbox, "worker.ts");
+    const childPidPath = path.join(sandbox, "child.pid");
+    const runtimeUrl = pathToFileURL(path.resolve("src/runtime.ts")).href;
+    write(
+      sandbox,
+      "worker.ts",
+      `import { createRuntime } from ${JSON.stringify(runtimeUrl)};
+
+const runtime = createRuntime();
+await runtime.execAsync("sh", ["-c", ${JSON.stringify(`trap '' TERM INT; printf '%s' "$$" > "${childPidPath}"; while :; do sleep 1; done`)}]);
+`
+    );
+    const worker = Bun.spawn({
+      cmd: [process.execPath, workerPath],
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+    let childPid: number | undefined;
+
+    try {
+      await waitFor(() => existsSync(childPidPath));
+      childPid = Number(readFileSync(childPidPath, "utf-8"));
+      worker.kill("SIGTERM");
+      await worker.exited;
+      await waitFor(() => childPid !== undefined && !isProcessRunning(childPid));
+      expect(childPid === undefined ? true : isProcessRunning(childPid)).toBeFalsy();
+    } finally {
+      worker.kill("SIGKILL");
+      if (childPid !== undefined && isProcessRunning(childPid)) {
+        try {
+          process.kill(-childPid, "SIGKILL");
+        } catch {
+          process.kill(childPid, "SIGKILL");
+        }
+      }
+    }
   });
 
   test("createRuntime reports exhausted scripted select values clearly", async () => {
@@ -153,3 +194,15 @@ describe("runtime", () => {
     expect(existsSync(lockPath)).toBeTruthy();
   }, 7000);
 });
+
+async function waitFor(predicate: () => boolean) {
+  const deadline = Date.now() + 3000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for subprocess state");
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 10);
+    });
+  }
+}
