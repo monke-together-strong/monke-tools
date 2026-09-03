@@ -40,6 +40,7 @@ const SessionRepoStateSchema = z.strictObject({
 export const SessionStateSchema = z.strictObject({
   graphSource: z.literal("session-branch").optional(),
   repos: z.array(SessionRepoStateSchema),
+  retryableDefaultBranchSpawn: z.literal(true).optional(),
   rootSourceRoot: NonEmptyStringSchema,
   session: NonEmptyStringSchema,
   spawnSource: z.enum(["default-branch", "session-branch"]).optional(),

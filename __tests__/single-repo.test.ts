@@ -661,11 +661,22 @@ describe("single-repo sessions", () => {
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(sessionState.graphSource).toBe("session-branch");
+    expect(sessionState.retryableDefaultBranchSpawn).toBeUndefined();
+    expect(sessionState.spawnSource).toBe("default-branch");
     expect(sessionState.repos[0]).toMatchObject({
       materializationComplete: false,
       sourceRoot: repoRoot,
       worktreePath: worktreeRoot
     });
+
+    expect(() =>
+      runMonke({
+        args: ["spawn", "fresh", "-m"],
+        binDirectory,
+        cwd: repoRoot,
+        monkeHome: home
+      })
+    ).toThrow(/default branch spawn mode requires a fresh Session/u);
   });
 
   test("spawn -m seeds configured paths from resolved default branch refs", () => {

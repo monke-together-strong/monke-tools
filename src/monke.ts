@@ -355,7 +355,7 @@ function createSpawnPreparationBatch(execution: ConfiguredSpawn) {
       };
       return {
         prepare: () => prepareSpawnRepoWorktree(request),
-        prepareAsync: () => prepareSpawnRepoWorktreeAsync(request),
+        prepareAsync: () => scheduleSpawnRepoWorktreePreparation(request),
         sourceRoot: repoConfig.sourceRoot
       };
     }
@@ -420,6 +420,10 @@ function materializeConfiguredSpawn(
       saveSessionState(execution.home, sessionState);
     }
   } catch (error) {
+    if (execution.sourcePlan.kind === "default-branch" && error instanceof BootstrapCommandError) {
+      sessionState.retryableDefaultBranchSpawn = true;
+      saveSessionState(execution.home, sessionState);
+    }
     if (
       execution.sourcePlan.kind === "default-branch" &&
       execution.sourcePlan.attempt === "fresh" &&
@@ -436,6 +440,8 @@ function materializeConfiguredSpawn(
     throw error;
   }
 
+  sessionState.retryableDefaultBranchSpawn = undefined;
+  saveSessionState(execution.home, sessionState);
   return execution.rootWorktreePath;
 }
 
@@ -514,7 +520,7 @@ function prepareSpawnRepoWorktree(request: SpawnRepoPreparationRequest) {
   };
 }
 
-async function prepareSpawnRepoWorktreeAsync(request: SpawnRepoPreparationRequest) {
+async function scheduleSpawnRepoWorktreePreparation(request: SpawnRepoPreparationRequest) {
   const { existingState, graphSource, repoConfig, runtime, shouldSkip } = request;
   if (shouldSkip && existingState) {
     warnSkippedDirtySnapshot(request);
@@ -525,7 +531,7 @@ async function prepareSpawnRepoWorktreeAsync(request: SpawnRepoPreparationReques
       existingState.worktreePath,
       request.session
     );
-    await prepareRepoWorktreeAsync(runtime, repoConfig, existingState.worktreePath);
+    await scheduleRepoWorktreePreparation(runtime, repoConfig, existingState.worktreePath);
     return {
       baselinePortsRoot:
         graphSource === "session-branch" ? existingState.worktreePath : repoConfig.sourceRoot,
@@ -539,7 +545,7 @@ async function prepareSpawnRepoWorktreeAsync(request: SpawnRepoPreparationReques
   if (createdFromDefault) {
     request.onCreatedFromDefault(worktree.path);
   }
-  await prepareRepoWorktreeAsync(runtime, repoConfig, worktree.path);
+  await scheduleRepoWorktreePreparation(runtime, repoConfig, worktree.path);
   return {
     baselinePortsRoot: useWorktreeBaseline ? worktree.path : repoConfig.sourceRoot,
     diffBaseRef: existingState?.diffBaseRef ?? createdDiffBaseRef,
@@ -683,6 +689,7 @@ function resolveSpawnSourcePlan(
   const state = loadSessionState(home, rootSourceRoot, session);
   if (
     state.spawnSource === "default-branch" &&
+    state.retryableDefaultBranchSpawn === true &&
     state.repos.some((repo) => repo.materializationComplete === false)
   ) {
     return { attempt: "resume", kind: "default-branch", spawnOptions };
@@ -863,6 +870,9 @@ function prepareSpawnMaterialization(
   const sessionState = loadSessionState(home, rootSourceRoot, session);
   sessionState.graphSource = sourcePlan.kind === "current-head" ? undefined : "session-branch";
   sessionState.spawnSource = sourcePlan.kind === "current-head" ? undefined : sourcePlan.kind;
+  if (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "fresh") {
+    sessionState.retryableDefaultBranchSpawn = undefined;
+  }
   ensureSessionPrefix(
     sessionState,
     reposInOrder.map((repo) => repo.sourceRoot)
@@ -1173,7 +1183,7 @@ function initializeMaterialization(
 function createMaterializePreparations(execution: ReturnType<typeof initializeMaterialization>) {
   return execution.reposInOrder.map((repoConfig) => ({
     prepare: () => prepareMaterializeRepoWorktree(execution, repoConfig),
-    prepareAsync: () => prepareMaterializeRepoWorktreeAsync(execution, repoConfig),
+    prepareAsync: () => scheduleMaterializeRepoWorktreePreparation(execution, repoConfig),
     sourceRoot: repoConfig.sourceRoot
   }));
 }
@@ -1205,7 +1215,7 @@ function prepareMaterializeRepoWorktree(
   return toPreparedMaterializeWorktree(execution, repoConfig, worktreePath);
 }
 
-async function prepareMaterializeRepoWorktreeAsync(
+async function scheduleMaterializeRepoWorktreePreparation(
   execution: ReturnType<typeof initializeMaterialization>,
   repoConfig: RepoConfig
 ) {
@@ -1228,7 +1238,7 @@ async function prepareMaterializeRepoWorktreeAsync(
       execution.session
     );
   }
-  await prepareRepoWorktreeAsync(execution.runtime, repoConfig, worktreePath);
+  await scheduleRepoWorktreePreparation(execution.runtime, repoConfig, worktreePath);
   return toPreparedMaterializeWorktree(execution, repoConfig, worktreePath);
 }
 
@@ -1697,7 +1707,8 @@ function prepareRepoWorktree(runtime: Runtime, repoConfig: RepoConfig, worktreeP
   }
 }
 
-async function prepareRepoWorktreeAsync(
+/** Yield to the bounded worker pool before running one repo's ordered Seed copy. */
+async function scheduleRepoWorktreePreparation(
   runtime: Runtime,
   repoConfig: RepoConfig,
   worktreePath: string

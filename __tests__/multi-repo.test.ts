@@ -1073,7 +1073,7 @@ external:
     expect(read(rootWorktree, "root-saw-dep")).toBe(path.relative(rootWorktree, depWorktree));
   });
 
-  test("current-head Dependency repo bootstrap failure leaves the Root worktree prepared", () => {
+  test("current-head Dependency repo bootstrap failure leaves the Root repo Session worktree prepared", () => {
     const sandbox = makeTempDir("multi-repo-failed-dependency-preparation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1185,6 +1185,10 @@ external:
     expect(read(rootWorktree, "apps/api/.env.local")).toBe("API=1\n");
     expect(read(rootWorktree, "seed-data/profile")).toBe("authenticated\n");
     expect(existsSync(depWorktree)).toBeTruthy();
+    expect(
+      readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)
+        .retryableDefaultBranchSpawn
+    ).toBeTruthy();
 
     git(root, ["switch", "-c", "feature"]);
     write(root, "monke.yml", "apps: {}\n");
@@ -1201,9 +1205,13 @@ external:
 
     expect(read(depWorktree, ".bootstrap-complete")).toBe("");
     expect(read(rootWorktree, ".env")).toContain("DEP_DIR=");
+    expect(
+      readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)
+        .retryableDefaultBranchSpawn
+    ).toBeUndefined();
   });
 
-  test("a Dependency repo Worktree preparation failure does not stop Root preparation", () => {
+  test("a Dependency repo Worktree preparation failure does not stop Root repo Worktree preparation", () => {
     const sandbox = makeTempDir("multi-repo-preparation-failure-settlement");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
