@@ -43,6 +43,14 @@ const INTERRUPTIONS: InterruptionCase[] = [
     expectedResourceOutputs: false
   },
   {
+    checkpoint: "repo-progress",
+    expectedCleanupEligible: false,
+    expectedGeneration: "incomplete",
+    expectedMaterialization: "pending",
+    expectedPreparation: "prepared",
+    expectedResourceOutputs: false
+  },
+  {
     checkpoint: "cleanup-eligibility",
     expectedCleanupEligible: true,
     expectedGeneration: "incomplete",
