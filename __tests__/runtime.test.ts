@@ -171,12 +171,19 @@ await runtime.execAsync(
       ],
       { allowFailure: true, timeoutSeconds: 0.5 }
     );
+    let timedResultSettled = false;
+    const observedTimedResult = (async () => {
+      const result = await timedResult;
+      timedResultSettled = true;
+      return result;
+    })();
 
     await waitFor(() => existsSync(childPidPath) && existsSync(timeoutStartedMarker));
     const childPid = Number(readFileSync(childPidPath, "utf-8"));
     await waitFor(() => !isProcessRunning(childPid));
+    expect(timedResultSettled).toBeFalsy();
     await runtime.execAsync("sh", ["-c", ":"]);
-    await timedResult;
+    await observedTimedResult;
 
     for (const signal of signals) {
       expect(process.listenerCount(signal)).toBe(baselineListeners.get(signal));
