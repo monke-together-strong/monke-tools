@@ -64,6 +64,8 @@ self-contained post-merge contract, and stop after the PR exists.
      repository template exists, use the
      [default PR template](references/default-pr-template.md). Fill matching
      fields and add only required content the template does not cover.
+   - When relationships, control flow, or structure are hard to explain in one
+     sentence, use `$show-me` and make sure it's GitHub-renderable.
    - Combine the selected instructions, the PRD/issue, and the diff into
      concise checks for the merged code in a non-production or production-like
      environment.
