@@ -1,13 +1,17 @@
 import {
   copyFileSync,
-  cpSync,
   existsSync,
+  linkSync,
   lstatSync,
+  mkdtempSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   readlinkSync,
+  rmSync,
   symlinkSync
 } from "node:fs";
+import type { Stats } from "node:fs";
 import path from "node:path";
 
 import {
@@ -35,7 +39,6 @@ import {
   ensureSessionWorktreeAsync,
   ensureFreshSessionWorktreeFromRefAsync,
   getExpectedWorktreePath,
-  removeIncompleteSessionWorktree,
   resolveDefaultBranchRef,
   resolveRepoContext,
   validateWorktreeForSession
@@ -113,8 +116,7 @@ export interface SpawnRunOptions {
 }
 
 interface DirtySnapshot {
-  stagedPatch: string;
-  unstagedPatch: string;
+  trackedPatch: string;
   untrackedPaths: string[];
 }
 
@@ -491,18 +493,9 @@ async function prepareSpawnRepoWorktree(request: SpawnRepoPreparationRequest) {
 async function ensureSpawnWorktree(request: SpawnRepoPreparationRequest) {
   const { existingState, home, repoConfig, rootSourceRoot, runtime, session, sourcePlan } = request;
   const expectedWorktreePath = getExpectedWorktreePath(home, repoConfig.sourceRoot, session);
-  if (
-    request.dirtySnapshot !== undefined &&
-    existingState?.dirtyCarryStatus === "pending" &&
-    existsSync(expectedWorktreePath)
-  ) {
-    removeIncompleteSessionWorktree(
-      runtime,
-      home,
-      repoConfig.sourceRoot,
-      expectedWorktreePath,
-      session
-    );
+  const resumesDirtyCarry = existingState?.dirtyCarryStatus === "pending";
+  if (resumesDirtyCarry && existsSync(expectedWorktreePath)) {
+    validateWorktreeForSession(runtime, home, repoConfig.sourceRoot, expectedWorktreePath, session);
   }
   const useWorktreeBaseline =
     (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume") ||
@@ -530,8 +523,14 @@ async function ensureSpawnWorktree(request: SpawnRepoPreparationRequest) {
   const worktree = await ensureSessionWorktreeAsync(runtime, home, repoConfig.sourceRoot, session, {
     skipCleanCheck: shouldCopyDirty(sourcePlan.spawnOptions)
   });
-  if (request.dirtySnapshot && worktree.created) {
-    await applyDirtySnapshot(runtime, repoConfig.sourceRoot, worktree.path, request.dirtySnapshot);
+  if (request.dirtySnapshot && (worktree.created || resumesDirtyCarry)) {
+    await applyDirtySnapshot(
+      runtime,
+      home,
+      repoConfig.sourceRoot,
+      worktree.path,
+      request.dirtySnapshot
+    );
   } else if (request.dirtySnapshot && dirtySnapshotHasContent(request.dirtySnapshot)) {
     warnDirtyStateNotCarried(runtime, repoConfig.sourceRoot, session);
   }
@@ -783,11 +782,9 @@ async function prepareConfiglessWorktree(options: {
     options.rootSourceRoot,
     options.session
   );
-  if (
-    options.existingRepoState?.dirtyCarryStatus === "pending" &&
-    existsSync(expectedWorktreePath)
-  ) {
-    removeIncompleteSessionWorktree(
+  const resumesDirtyCarry = options.existingRepoState?.dirtyCarryStatus === "pending";
+  if (resumesDirtyCarry && existsSync(expectedWorktreePath)) {
+    validateWorktreeForSession(
       options.runtime,
       options.home,
       options.rootSourceRoot,
@@ -796,7 +793,7 @@ async function prepareConfiglessWorktree(options: {
     );
   }
   const worktree = await ensureConfiglessWorktree(options);
-  await carryConfiglessDirtySnapshot(options, worktree, options.dirtySnapshot);
+  await carryConfiglessDirtySnapshot(options, worktree, options.dirtySnapshot, resumesDirtyCarry);
   return { worktreePath: worktree.path };
 }
 
@@ -904,15 +901,22 @@ function resolveFreshCurrentHeadDiffBase(options: {
 }
 
 async function carryConfiglessDirtySnapshot(
-  options: { rootSourceRoot: string; runtime: Runtime; session: string },
+  options: { home: string; rootSourceRoot: string; runtime: Runtime; session: string },
   worktree: { created: boolean; path: string },
-  dirtySnapshot: DirtySnapshot | null
+  dirtySnapshot: DirtySnapshot | null,
+  resumesDirtyCarry: boolean
 ) {
   if (dirtySnapshot === null) {
     return;
   }
-  if (worktree.created) {
-    await applyDirtySnapshot(options.runtime, options.rootSourceRoot, worktree.path, dirtySnapshot);
+  if (worktree.created || resumesDirtyCarry) {
+    await applyDirtySnapshot(
+      options.runtime,
+      options.home,
+      options.rootSourceRoot,
+      worktree.path,
+      dirtySnapshot
+    );
     return;
   }
   if (dirtySnapshotHasContent(dirtySnapshot)) {
@@ -1132,18 +1136,13 @@ function captureDirtySnapshot(runtime: Runtime, sourceRoot: string) {
   ]);
 
   return {
-    stagedPatch: runGit(runtime, sourceRoot, ["diff", "--cached", "--binary", "--no-ext-diff"]),
-    unstagedPatch: runGit(runtime, sourceRoot, ["diff", "--binary", "--no-ext-diff"]),
+    trackedPatch: runGit(runtime, sourceRoot, ["diff", "HEAD", "--binary", "--no-ext-diff"]),
     untrackedPaths: untrackedOutput.split("\0").filter((entry) => entry.length > 0)
   };
 }
 
 function dirtySnapshotHasContent(snapshot: DirtySnapshot) {
-  return (
-    snapshot.stagedPatch.length > 0 ||
-    snapshot.unstagedPatch.length > 0 ||
-    snapshot.untrackedPaths.length > 0
-  );
+  return snapshot.trackedPatch.length > 0 || snapshot.untrackedPaths.length > 0;
 }
 
 /** Refuse dirty carry when it would apply HEAD-relative patches onto a diverged Session branch. */
@@ -1179,50 +1178,122 @@ function warnDirtyStateNotCarried(runtime: Runtime, sourceRoot: string, session:
 
 async function applyDirtySnapshot(
   runtime: Runtime,
+  home: string,
   sourceRoot: string,
   worktreePath: string,
   snapshot: DirtySnapshot
 ) {
-  await applyPatchAsync(runtime, worktreePath, snapshot.stagedPatch);
-  await applyPatchAsync(runtime, worktreePath, snapshot.unstagedPatch);
-  copyUntrackedPaths(sourceRoot, worktreePath, snapshot.untrackedPaths);
+  await applyPatchAsync(runtime, worktreePath, snapshot.trackedPatch);
+  copyUntrackedPaths(home, sourceRoot, worktreePath, snapshot.untrackedPaths);
 }
 
 async function applyPatchAsync(runtime: Runtime, worktreePath: string, patch: string) {
   if (!patch) {
     return;
   }
-  await runtime.execAsync("git", ["apply", "--3way"], { cwd: worktreePath, stdin: patch });
+  const forward = await runtime.execAsync("git", ["apply", "--3way", "--check"], {
+    allowFailure: true,
+    cwd: worktreePath,
+    stdin: patch
+  });
+  if (forward.exitCode === 0) {
+    await runtime.execAsync("git", ["apply", "--3way"], { cwd: worktreePath, stdin: patch });
+    return;
+  }
+  const reverse = await runtime.execAsync("git", ["apply", "--reverse", "--check"], {
+    allowFailure: true,
+    cwd: worktreePath,
+    stdin: patch
+  });
+  if (reverse.exitCode !== 0) {
+    throw new MonkeError(
+      `Cannot resume dirty carry without overwriting Session-local tracked changes at ${worktreePath}`
+    );
+  }
 }
 
-function copyUntrackedPaths(sourceRoot: string, worktreePath: string, untrackedPaths: string[]) {
-  for (const relativePath of untrackedPaths) {
-    const sourcePath = path.join(sourceRoot, relativePath);
-    const sourceStat = lstatSync(sourcePath, { throwIfNoEntry: false });
-    if (!sourceStat) {
-      throw new MonkeError(`Untracked source path disappeared before copy: ${sourcePath}`);
-    }
-
-    const targetPath = path.join(worktreePath, relativePath);
-    mkdirSync(path.dirname(targetPath), { recursive: true });
-    if (lstatSync(targetPath, { throwIfNoEntry: false })) {
-      throw new MonkeError(
-        `Refusing to overwrite existing path in new Session worktree: ${targetPath} (source untracked file ${relativePath}). The Session branch already contains this path.`
+function copyUntrackedPaths(
+  home: string,
+  sourceRoot: string,
+  worktreePath: string,
+  untrackedPaths: string[]
+) {
+  const temporaryParent = path.join(home, "tmp");
+  mkdirSync(temporaryParent, { recursive: true });
+  const temporaryRoot = mkdtempSync(path.join(temporaryParent, "dirty-carry-"));
+  try {
+    for (const [index, relativePath] of untrackedPaths.entries()) {
+      copyUntrackedPath(
+        path.join(sourceRoot, relativePath),
+        path.join(worktreePath, relativePath),
+        path.join(temporaryRoot, String(index))
       );
     }
-
-    if (sourceStat.isSymbolicLink()) {
-      symlinkSync(readlinkSync(sourcePath), targetPath);
-      continue;
-    }
-
-    if (sourceStat.isDirectory()) {
-      cpSync(sourcePath, targetPath, { dereference: false, recursive: true });
-      continue;
-    }
-
-    copyFileSync(sourcePath, targetPath);
+  } finally {
+    rmSync(temporaryRoot, { force: true, recursive: true });
   }
+}
+
+function copyUntrackedPath(sourcePath: string, targetPath: string, temporaryPath: string) {
+  const sourceStat = lstatSync(sourcePath, { throwIfNoEntry: false });
+  if (!sourceStat) {
+    throw new MonkeError(`Untracked source path disappeared before copy: ${sourcePath}`);
+  }
+  const targetStat = lstatSync(targetPath, { throwIfNoEntry: false });
+  if (targetStat) {
+    if (sourceStat.isDirectory() && targetStat.isDirectory()) {
+      for (const entry of readdirSync(sourcePath)) {
+        copyUntrackedPath(
+          path.join(sourcePath, entry),
+          path.join(targetPath, entry),
+          path.join(temporaryPath, entry)
+        );
+      }
+      return;
+    }
+    if (untrackedPathsMatch(sourcePath, sourceStat, targetPath, targetStat)) {
+      return;
+    }
+    throw new MonkeError(
+      `Refusing to overwrite Session-local path during dirty carry: ${targetPath}`
+    );
+  }
+
+  mkdirSync(path.dirname(targetPath), { recursive: true });
+  if (sourceStat.isDirectory()) {
+    mkdirSync(targetPath);
+    for (const entry of readdirSync(sourcePath)) {
+      copyUntrackedPath(
+        path.join(sourcePath, entry),
+        path.join(targetPath, entry),
+        path.join(temporaryPath, entry)
+      );
+    }
+    return;
+  }
+  if (sourceStat.isSymbolicLink()) {
+    symlinkSync(readlinkSync(sourcePath), targetPath);
+    return;
+  }
+  mkdirSync(path.dirname(temporaryPath), { recursive: true });
+  copyFileSync(sourcePath, temporaryPath);
+  linkSync(temporaryPath, targetPath);
+}
+
+function untrackedPathsMatch(
+  sourcePath: string,
+  sourceStat: Stats,
+  targetPath: string,
+  targetStat: Stats
+) {
+  if (sourceStat.isSymbolicLink() && targetStat.isSymbolicLink()) {
+    return readlinkSync(sourcePath) === readlinkSync(targetPath);
+  }
+  return (
+    sourceStat.isFile() &&
+    targetStat.isFile() &&
+    readFileSync(sourcePath).equals(readFileSync(targetPath))
+  );
 }
 
 function assertNoGlobalWorktreePathStateCollisions(

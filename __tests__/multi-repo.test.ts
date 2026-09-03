@@ -1319,9 +1319,11 @@ external:
   test("Materialize does not reuse a materialized Dependency repo on the wrong branch", () => {
     const sandbox = makeTempDir("multi-repo-invalid-materialized-dependency");
     const home = path.join(sandbox, "home");
+    const depRuns = path.join(sandbox, "dep-runs");
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       "app/.env": "PORT=4100\n",
-      "monke.yml": `apps:
+      "monke.yml": `bootstrapCommand: printf x >> "${depRuns}"
+apps:
   dep:
     path: app
     envFile: .env
@@ -1372,13 +1374,19 @@ external:
     const failed = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(failed.repos.find((repo) => repo.sourceRoot === depRoot)).toMatchObject({
       failure: { phase: "worktree-preparation" },
-      materializationStatus: "failed",
+      materializationStatus: "materialized",
       preparationStatus: "failed"
     });
     expect(failed.repos.find((repo) => repo.sourceRoot === root)).toMatchObject({
       materializationStatus: "materialized"
     });
     expect(failed.repos.find((repo) => repo.sourceRoot === root)?.blockedBy).toBeUndefined();
+
+    git(depWorktree, ["switch", "retained"]);
+    runMonke({ args: ["materialize"], cwd: rootWorktree, monkeHome: home });
+
+    expect(read(sandbox, "dep-runs")).toBe("x");
+    expect(read(rootWorktree, "root-runs")).toBe("x");
   });
 
   test("a ready repo materializes without waiting for unrelated Worktree preparation", () => {

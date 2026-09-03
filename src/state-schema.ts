@@ -66,6 +66,8 @@ const SessionRepoStateSchema = SessionRepoStateFieldsSchema.check((context) => {
 });
 
 function validateMaterializationLifecycle(repo: ParsedSessionRepoState, issue: LifecycleIssue) {
+  const preparationComplete = isPreparationComplete(repo);
+  const retainedPreparationFailure = isRetainedPreparationFailure(repo);
   if (repo.materializationStatus === "blocked" && repo.blockedBy === undefined) {
     issue("blocked materialization must identify blockedBy", ["blockedBy"]);
   }
@@ -75,36 +77,49 @@ function validateMaterializationLifecycle(repo: ParsedSessionRepoState, issue: L
   if (repo.materializationStatus === "failed" && repo.failure === undefined) {
     issue("failed materialization must include failure", ["failure"]);
   }
-  if (repo.materializationStatus !== "failed" && repo.failure !== undefined) {
+  if (
+    repo.failure !== undefined &&
+    repo.materializationStatus !== "failed" &&
+    !retainedPreparationFailure
+  ) {
     issue("failure requires failed materialization", ["failure"]);
   }
   if (
     repo.materializationStatus === "failed" &&
     repo.failure?.phase === "repo-materialization" &&
-    repo.preparationStatus !== "prepared" &&
-    repo.preparationStatus !== "warning"
+    !preparationComplete
   ) {
     issue("repo materialization failure requires completed preparation", ["materializationStatus"]);
   }
-  if (
-    repo.materializationStatus === "blocked" &&
-    repo.preparationStatus !== "prepared" &&
-    repo.preparationStatus !== "warning"
-  ) {
+  if (repo.materializationStatus === "blocked" && !preparationComplete) {
     issue("blocked materialization requires completed preparation", ["materializationStatus"]);
   }
   if (
     repo.materializationStatus === "materialized" &&
-    repo.preparationStatus !== "prepared" &&
-    repo.preparationStatus !== "warning"
+    !preparationComplete &&
+    !retainedPreparationFailure
   ) {
-    issue("materialized repo requires prepared or warning preparation", ["materializationStatus"]);
+    issue("materialized repo requires completed or explicitly failed preparation", [
+      "materializationStatus"
+    ]);
   }
+}
+
+function isPreparationComplete(repo: ParsedSessionRepoState) {
+  return repo.preparationStatus === "prepared" || repo.preparationStatus === "warning";
+}
+
+function isRetainedPreparationFailure(repo: ParsedSessionRepoState) {
+  return (
+    repo.materializationStatus === "materialized" &&
+    repo.preparationStatus === "failed" &&
+    repo.failure?.phase === "worktree-preparation"
+  );
 }
 
 function validatePreparationLifecycle(repo: ParsedSessionRepoState, issue: LifecycleIssue) {
   if (repo.preparationStatus === "failed") {
-    if (repo.materializationStatus !== "failed" || repo.failure?.phase !== "worktree-preparation") {
+    if (repo.failure?.phase !== "worktree-preparation") {
       issue("failed preparation requires a Worktree-preparation failure", ["preparationStatus"]);
     }
   } else if (repo.failure?.phase === "worktree-preparation") {

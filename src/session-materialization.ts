@@ -90,7 +90,7 @@ export async function runSessionMaterialization<TPrepared, TResult>(
             {
               blockedBy: undefined,
               failure: { message: errorMessage(error), phase: "worktree-preparation" },
-              materializationStatus: "failed",
+              materializationStatus: reusableRoots.has(node.sourceRoot) ? "materialized" : "failed",
               preparationStatus: "failed",
               preparationWarnings: undefined
             },
@@ -134,7 +134,11 @@ export async function runSessionMaterialization<TPrepared, TResult>(
   }
 
   await Promise.all(materializationPromises.values());
-  const complete = owner.state.repos.every((repo) => repo.materializationStatus === "materialized");
+  const complete = owner.state.repos.every(
+    (repo) =>
+      repo.materializationStatus === "materialized" &&
+      (repo.preparationStatus === "prepared" || repo.preparationStatus === "warning")
+  );
   owner.replaceState(
     {
       ...owner.state,
@@ -312,6 +316,9 @@ function formatFailureReceipt<TPrepared, TResult>(
 }
 
 function formatRepoOutcome(repo: SessionRepoState) {
+  if (repo.preparationStatus === "failed" && repo.failure?.phase === "worktree-preparation") {
+    return `failed (worktree preparation)\n    ${repo.failure.message}`;
+  }
   if (repo.materializationStatus === "materialized") {
     return `materialized (${formatPreparationOutcome(repo)})`;
   }
