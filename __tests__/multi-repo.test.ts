@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,17 +8,26 @@ import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/session-state-store.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
 import {
+  completeSessionState,
   createRepo,
   git,
+  installCodexUrlOpenShim,
+  installGitShim,
   installShShim,
   makeTempDir,
+  materializedRepoState,
   read,
   readSingleYamlFile,
   runMonke,
+  runMonkeAsync,
+  runMonkeCapturingFailure,
   write
 } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
+const INDEPENDENT_SIBLING_SETTLE_DELAY_SECONDS = 0.1;
+const SIBLING_START_BARRIER_ATTEMPTS = 2000;
+const SIBLING_START_BARRIER_DELAY_SECONDS = 0.01;
 
 function makeRepoTempDir(prefix: string) {
   const testTempRoot = path.join(projectRoot, "tmp", "tests");
@@ -84,6 +93,62 @@ external:
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(sessionState.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
+  });
+
+  test("missing Root config cannot discard retained dependency Cleanup obligations", () => {
+    const sandbox = makeTempDir("multi-repo-missing-root-config");
+    const home = path.join(sandbox, "home");
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      "app/.env": "PORT=4100\n",
+      "monke.yml": `bootstrapCommand: "true"
+cleanupCommand: "true"
+apps:
+  dep:
+    path: app
+    envFile: .env
+    mappings:
+      - port: DEP_PORT
+        env: PORT
+`
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "app/.env": "DEP_PORT=4100\n",
+      "monke.yml": `bootstrapCommand: "true"
+cleanupCommand: "true"
+apps:
+  root:
+    path: app
+    envFile: .env
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: root
+        env: DEP_PORT
+`
+    });
+
+    runMonke({ args: ["spawn", "retained"], cwd: root, monkeHome: home });
+    const before = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    expect(before.repos).toHaveLength(2);
+    expect(before.repos.every((repo) => repo.cleanupEligible)).toBeTruthy();
+    rmSync(path.join(root, "monke.yml"));
+
+    const result = runMonkeCapturingFailure({
+      args: ["spawn", "retained"],
+      cwd: root,
+      monkeHome: home
+    });
+
+    expect(result.error?.message).toContain("monke.yml is missing");
+    expect(result.error?.message).toContain("retained Session state and Cleanup obligations");
+    expect(readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toStrictEqual(
+      before
+    );
+    expect(before.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
+    expect(before.repos.map((repo) => repo.cleanupCommand)).toStrictEqual(["true", "true"]);
   });
 
   test("spawn warns when skipped dependency source dirt is not carried", () => {
@@ -658,24 +723,30 @@ external:
 `
     });
 
-    saveSessionState(home, {
-      repos: [
-        {
-          assignedPorts: [],
-          resourceCommandOutputs: [
-            {
-              name: "e2e-symbols",
-              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
-            }
-          ],
-          sourceRoot: depRoot,
-          worktreePath: path.join(sandbox, "missing-alpha-dep")
-        }
-      ],
-      rootSourceRoot: rootA,
-      session: "alpha",
-      version: 1
-    });
+    saveSessionState(
+      home,
+      completeSessionState({
+        repos: [
+          materializedRepoState({
+            cleanupEligible: true,
+            resourceCommandOutputs: [
+              {
+                name: "e2e-symbols",
+                outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
+              }
+            ],
+            sourceRoot: depRoot,
+            worktreePath: path.join(sandbox, "missing-alpha-dep")
+          }),
+          materializedRepoState({
+            sourceRoot: rootA,
+            worktreePath: path.join(sandbox, "missing-alpha-root")
+          })
+        ],
+        rootSourceRoot: rootA,
+        session: "alpha"
+      })
+    );
     runMonke({
       args: ["spawn", "beta"],
       binDirectory,
@@ -754,7 +825,7 @@ external:
     const partialState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(partialState.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
     expect(partialState.repos[1]).toMatchObject({
-      materializationComplete: false,
+      materializationStatus: "failed",
       sourceRoot: root,
       worktreePath: rootWorktree
     });
@@ -1069,6 +1140,613 @@ external:
 
     expect(read(depWorktree, ".dep-ready")).toBe("");
     expect(read(rootWorktree, "root-saw-dep")).toBe(path.relative(rootWorktree, depWorktree));
+  });
+
+  test("current-head Dependency repo bootstrap failure leaves the Root repo Session worktree prepared", () => {
+    const sandbox = makeTempDir("multi-repo-failed-dependency-preparation");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      "monke.yml": `bootstrapCommand: exit 9
+apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+      "services/db/.env.local": "PORT=5432\n"
+    });
+
+    const root = createRepo(path.join(sandbox, "root"), {
+      ".gitignore": ".env.local\nseed-data/\n",
+      "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `bootstrapCommand: ': > .root-materialized'
+seedPaths:
+  - seed-data
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+      "seed-data/browser-profile": "authenticated\n"
+    });
+
+    expect(() =>
+      runMonke({
+        args: ["spawn", "failed-dependency"],
+        binDirectory,
+        cwd: root,
+        monkeHome: home
+      })
+    ).toThrow(/Bootstrap command failed/u);
+
+    const rootWorktree = getExpectedWorktreePath(home, root, "failed-dependency");
+    expect(read(rootWorktree, "apps/api/.env.local")).toBe(
+      "DATABASE_URL=postgres://localhost:5432/app\n"
+    );
+    expect(read(rootWorktree, "seed-data/browser-profile")).toBe("authenticated\n");
+    expect(existsSync(path.join(rootWorktree, ".root-materialized"))).toBeFalsy();
+    expect(existsSync(getExpectedWorktreePath(home, depRoot, "failed-dependency"))).toBeTruthy();
+  });
+
+  test("a failed sibling does not stop independent materialization and retry reuses its checkpoint", () => {
+    const sandbox = makeTempDir("multi-repo-quiescent-retry");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const codexOpenLog = installCodexUrlOpenShim(binDirectory);
+    const settledMarker = path.join(sandbox, "settled");
+    const successfulRuns = path.join(sandbox, "successful-runs");
+
+    const failingRoot = createRepo(path.join(sandbox, "failing"), {
+      "app/.env": "PORT=4100\n",
+      "monke.yml": `bootstrapCommand: sh scripts/bootstrap.sh
+apps:
+  failing:
+    path: app
+    envFile: .env
+    mappings:
+      - port: FAILING_PORT
+        env: PORT
+`,
+      "scripts/bootstrap.sh": "exit 9\n"
+    });
+    const successfulRoot = createRepo(path.join(sandbox, "successful"), {
+      "app/.env": "PORT=4200\n",
+      "monke.yml": `bootstrapCommand: sleep ${INDEPENDENT_SIBLING_SETTLE_DELAY_SECONDS}; printf x >> "${successfulRuns}"; touch "${settledMarker}"
+seedPaths:
+  - optional-missing
+apps:
+  successful:
+    path: app
+    envFile: .env
+    mappings:
+      - port: SUCCESSFUL_PORT
+        env: PORT
+`
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "app/.env": "FAILING_PORT=4100\nSUCCESSFUL_PORT=4200\n",
+      "monke.yml": `bootstrapCommand: touch root-materialized
+apps:
+  root:
+    path: app
+    envFile: .env
+    mappings: []
+external:
+  failing:
+    path: ../failing
+    pathEnv: FAILING_DIR
+    mappings:
+      - port: FAILING_PORT
+        app: root
+        env: FAILING_PORT
+  successful:
+    path: ../successful
+    pathEnv: SUCCESSFUL_DIR
+    mappings:
+      - port: SUCCESSFUL_PORT
+        app: root
+        env: SUCCESSFUL_PORT
+`
+    });
+
+    const failed = runMonkeCapturingFailure({
+      args: ["spawn", "quiescent", "--codex"],
+      binDirectory,
+      cwd: root,
+      monkeHome: home
+    });
+
+    expect(failed.error).not.toBeNull();
+    expect(existsSync(settledMarker)).toBeTruthy();
+    expect(failed.stderr).toContain(`${failingRoot}: failed (repo materialization; prepared)`);
+    expect(failed.stderr).toContain(`${successfulRoot}: materialized`);
+    expect(failed.stderr).toContain("warning: Warning: seedPath optional-missing is missing");
+    expect(failed.stderr).toContain(`${root}: blocked by ${failingRoot}`);
+    expect(failed.stderr).toContain(
+      `Prepared Root worktree: ${getExpectedWorktreePath(home, root, "quiescent")}`
+    );
+    expect(failed.stderr).toContain("Retry: mt spawn quiescent");
+    expect(failed.stdout).toBe("");
+    expect(existsSync(codexOpenLog)).toBeFalsy();
+
+    const failedState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    expect(failedState.version).toBe(2);
+    expect(failedState.generation).toStrictEqual({ number: 1, status: "incomplete" });
+    expect(
+      Object.fromEntries(
+        failedState.repos.map((repo) => [repo.sourceRoot, repo.materializationStatus])
+      )
+    ).toStrictEqual({
+      [failingRoot]: "failed",
+      [root]: "blocked",
+      [successfulRoot]: "materialized"
+    });
+
+    write(
+      getExpectedWorktreePath(home, failingRoot, "quiescent"),
+      "scripts/bootstrap.sh",
+      ": > .repaired\n"
+    );
+    runMonke({
+      args: ["spawn", "quiescent"],
+      binDirectory,
+      cwd: root,
+      monkeHome: home
+    });
+
+    expect(read(sandbox, "successful-runs")).toBe("x");
+    expect(
+      existsSync(path.join(getExpectedWorktreePath(home, root, "quiescent"), "root-materialized"))
+    ).toBeTruthy();
+    const completeState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    expect(completeState.generation).toStrictEqual({ number: 1, status: "complete" });
+  });
+
+  test("Materialize does not reuse a materialized Dependency repo on the wrong branch", () => {
+    const sandbox = makeTempDir("multi-repo-invalid-materialized-dependency");
+    const home = path.join(sandbox, "home");
+    const depRuns = path.join(sandbox, "dep-runs");
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      "app/.env": "PORT=4100\n",
+      "monke.yml": `bootstrapCommand: printf x >> "${depRuns}"
+apps:
+  dep:
+    path: app
+    envFile: .env
+    mappings:
+      - port: DEP_PORT
+        env: PORT
+`
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "app/.env": "DEP_PORT=4100\n",
+      "monke.yml": `bootstrapCommand: printf x >> root-runs
+apps:
+  root:
+    path: app
+    envFile: .env
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: root
+        env: DEP_PORT
+`
+    });
+
+    runMonke({ args: ["spawn", "retained"], cwd: root, monkeHome: home });
+    const rootWorktree = getExpectedWorktreePath(home, root, "retained");
+    const depWorktree = getExpectedWorktreePath(home, depRoot, "retained");
+    const complete = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    saveSessionState(home, {
+      ...complete,
+      generation: { ...complete.generation, status: "incomplete" }
+    });
+    git(depWorktree, ["switch", "-c", "session-local"]);
+
+    const retried = runMonkeCapturingFailure({
+      args: ["materialize"],
+      cwd: rootWorktree,
+      monkeHome: home
+    });
+
+    expect(retried.error?.message).toContain(
+      `Expected worktree ${depWorktree} to be on branch retained, found session-local`
+    );
+    expect(read(rootWorktree, "root-runs")).toBe("x");
+    const failed = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    expect(failed.repos.find((repo) => repo.sourceRoot === depRoot)).toMatchObject({
+      failure: { phase: "worktree-preparation" },
+      materializationStatus: "materialized",
+      preparationStatus: "failed"
+    });
+    expect(failed.repos.find((repo) => repo.sourceRoot === root)).toMatchObject({
+      materializationStatus: "materialized"
+    });
+    expect(failed.repos.find((repo) => repo.sourceRoot === root)?.blockedBy).toBeUndefined();
+
+    git(depWorktree, ["switch", "retained"]);
+    runMonke({ args: ["materialize"], cwd: rootWorktree, monkeHome: home });
+
+    expect(read(sandbox, "dep-runs")).toBe("x");
+    expect(read(rootWorktree, "root-runs")).toBe("x");
+  });
+
+  test("a ready repo materializes without waiting for unrelated Worktree preparation", () => {
+    const sandbox = makeTempDir("multi-repo-preparation-overlap");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const materializedEarly = path.join(sandbox, "materialized-early");
+    const slowPreparationDone = path.join(sandbox, "slow-preparation-done");
+
+    const readyRoot = createRepo(path.join(sandbox, "ready"), {
+      "app/.env": "PORT=4100\n",
+      "monke.yml": `bootstrapCommand: test ! -f "${slowPreparationDone}" && touch "${materializedEarly}"
+apps:
+  ready:
+    path: app
+    envFile: .env
+    mappings:
+      - port: READY_PORT
+        env: PORT
+`
+    });
+    const slowRoot = createRepo(path.join(sandbox, "slow"), {
+      "app/.env": "PORT=4200\n",
+      "monke.yml": `bootstrapCommand: test -f "${slowPreparationDone}"
+apps:
+  slow:
+    path: app
+    envFile: .env
+    mappings:
+      - port: SLOW_PORT
+        env: PORT
+`
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "app/.env": "READY_PORT=4100\nSLOW_PORT=4200\n",
+      "monke.yml": `apps:
+  root:
+    path: app
+    envFile: .env
+    mappings: []
+external:
+  ready:
+    path: ../ready
+    pathEnv: READY_DIR
+    mappings:
+      - port: READY_PORT
+        app: root
+        env: READY_PORT
+  slow:
+    path: ../slow
+    pathEnv: SLOW_DIR
+    mappings:
+      - port: SLOW_PORT
+        app: root
+        env: SLOW_PORT
+`
+    });
+    const slowWorktree = getExpectedWorktreePath(home, slowRoot, "overlap");
+    installGitShim(binDirectory, {
+      afterCommand: {
+        args: `worktree add ${slowWorktree} overlap`,
+        cwd: slowRoot,
+        // Hold slow preparation open until the ready repo's bootstrap has run, so the overlap
+        // is proven by ordering rather than by wall-clock timing on a loaded machine.
+        script: `attempts=0; while [ ! -f "${materializedEarly}" ]; do attempts=$((attempts + 1)); [ "$attempts" -lt ${SIBLING_START_BARRIER_ATTEMPTS} ] || exit 91; sleep ${SIBLING_START_BARRIER_DELAY_SECONDS}; done; touch "${slowPreparationDone}"`
+      }
+    });
+
+    runMonke({
+      args: ["spawn", "overlap"],
+      binDirectory,
+      cwd: root,
+      monkeHome: home
+    });
+
+    expect(existsSync(materializedEarly)).toBeTruthy();
+    expect(existsSync(slowPreparationDone)).toBeTruthy();
+    expect(existsSync(getExpectedWorktreePath(home, readyRoot, "overlap"))).toBeTruthy();
+  });
+
+  test("ready siblings materialize concurrently without losing either checkpoint", () => {
+    const sandbox = makeTempDir("multi-repo-sibling-materialization-concurrency");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const firstStarted = path.join(sandbox, "first-started");
+    const secondStarted = path.join(sandbox, "second-started");
+    const waitForSibling = (ownMarker: string, siblingMarker: string) =>
+      `touch "${ownMarker}"; attempts=0; while [ ! -f "${siblingMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -lt ${SIBLING_START_BARRIER_ATTEMPTS} ] || exit 91; sleep ${SIBLING_START_BARRIER_DELAY_SECONDS}; done`;
+
+    const firstRoot = createRepo(path.join(sandbox, "first"), {
+      "app/.env": "PORT=4100\n",
+      "monke.yml": `bootstrapCommand: ${waitForSibling(firstStarted, secondStarted)}
+apps:
+  first:
+    path: app
+    envFile: .env
+    mappings:
+      - port: FIRST_PORT
+        env: PORT
+`
+    });
+    const secondRoot = createRepo(path.join(sandbox, "second"), {
+      "app/.env": "PORT=4200\n",
+      "monke.yml": `bootstrapCommand: ${waitForSibling(secondStarted, firstStarted)}
+apps:
+  second:
+    path: app
+    envFile: .env
+    mappings:
+      - port: SECOND_PORT
+        env: PORT
+`
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "app/.env": "FIRST_PORT=4100\nSECOND_PORT=4200\n",
+      "monke.yml": `apps:
+  root:
+    path: app
+    envFile: .env
+    mappings: []
+external:
+  first:
+    path: ../first
+    pathEnv: FIRST_DIR
+    mappings:
+      - port: FIRST_PORT
+        app: root
+        env: FIRST_PORT
+  second:
+    path: ../second
+    pathEnv: SECOND_DIR
+    mappings:
+      - port: SECOND_PORT
+        app: root
+        env: SECOND_PORT
+`
+    });
+
+    runMonke({
+      args: ["spawn", "concurrent"],
+      binDirectory,
+      cwd: root,
+      monkeHome: home
+    });
+
+    const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    expect(
+      Object.fromEntries(
+        state.repos.map((repo) => [
+          repo.sourceRoot,
+          { assignedPorts: repo.assignedPorts, status: repo.materializationStatus }
+        ])
+      )
+    ).toStrictEqual({
+      [firstRoot]: {
+        assignedPorts: [{ key: "FIRST_PORT", value: 10_000 }],
+        status: "materialized"
+      },
+      [root]: {
+        assignedPorts: [],
+        status: "materialized"
+      },
+      [secondRoot]: {
+        assignedPorts: [{ key: "SECOND_PORT", value: 11_000 }],
+        status: "materialized"
+      }
+    });
+  });
+
+  test("default-branch dependency bootstrap failure retains every prepared worktree", () => {
+    const sandbox = makeTempDir("multi-repo-default-failed-dependency-preparation");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      "monke.yml": `bootstrapCommand: sh scripts/bootstrap.sh
+apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_PORT
+        env: DEP
+`,
+      "scripts/bootstrap.sh": "exit 9\n",
+      "services/db/.env.local": "DEP=1\n"
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      ".gitignore": "seed-data/\n",
+      "apps/api/.env.local": "API=1\n",
+      "monke.yml": `seedPaths:
+      - seed-data
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: api
+        env: API
+`,
+      "seed-data/profile": "authenticated\n"
+    });
+
+    expect(() =>
+      runMonke({
+        args: ["spawn", "default-failure", "-m"],
+        binDirectory,
+        cwd: root,
+        monkeHome: home
+      })
+    ).toThrow(/re-run mt spawn default-failure -m/u);
+
+    const depWorktree = getExpectedWorktreePath(home, depRoot, "default-failure");
+    const rootWorktree = getExpectedWorktreePath(home, root, "default-failure");
+    expect(read(rootWorktree, "apps/api/.env.local")).toBe("API=1\n");
+    expect(read(rootWorktree, "seed-data/profile")).toBe("authenticated\n");
+    expect(existsSync(depWorktree)).toBeTruthy();
+    const failedState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    expect(failedState.generation.status).toBe("incomplete");
+    expect(failedState.repos.every((repo) => repo.pinnedRef !== undefined)).toBeTruthy();
+
+    git(root, ["switch", "-c", "feature"]);
+    write(root, "monke.yml", "apps: {}\n");
+    git(root, ["add", "monke.yml"]);
+    git(root, ["commit", "-m", "diverge feature config"]);
+    write(depWorktree, "scripts/bootstrap.sh", ": > .bootstrap-complete\n");
+
+    runMonke({
+      args: ["spawn", "default-failure", "-m"],
+      binDirectory,
+      cwd: root,
+      monkeHome: home
+    });
+
+    expect(read(depWorktree, ".bootstrap-complete")).toBe("");
+    expect(read(rootWorktree, ".env")).toContain("DEP_DIR=");
+    expect(
+      readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema).generation.status
+    ).toBe("complete");
+  });
+
+  test("a Dependency repo Worktree preparation failure does not stop Root repo Worktree preparation", () => {
+    const sandbox = makeTempDir("multi-repo-preparation-failure-settlement");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      ".gitignore": "seed-data/\n",
+      "monke.yml": `seedPaths:
+  - seed-data
+apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_PORT
+        env: DEP
+`,
+      "seed-data/fixture": "dependency fixture\n",
+      "services/db/.env.local": "DEP=1\n"
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      ".gitignore": "seed-data/\n",
+      "apps/api/.env.local": "API=1\n",
+      "monke.yml": `bootstrapCommand: printf x >> bootstrap-runs
+seedPaths:
+  - seed-data
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: api
+        env: API
+`,
+      "seed-data/original": "original\n"
+    });
+
+    runMonke({
+      args: ["spawn", "preparation-failure"],
+      binDirectory,
+      cwd: root,
+      monkeHome: home
+    });
+
+    const rootWorktree = getExpectedWorktreePath(home, root, "preparation-failure");
+    const protectedSourcePath = path.join(depRoot, "seed-data/protected");
+    write(depRoot, "seed-data/protected/fixture", "protected fixture\n");
+    chmodSync(protectedSourcePath, 0o000);
+    write(root, "seed-data/new", "new Root material\n");
+
+    try {
+      expect(() =>
+        runMonke({
+          args: ["materialize"],
+          binDirectory,
+          cwd: rootWorktree,
+          monkeHome: home
+        })
+      ).toThrow(/Worktree preparation failed/u);
+    } finally {
+      // Restore the mode even when the assertion fails, so temp-directory cleanup cannot
+      // fail on an unreadable directory and mask the original failure.
+      chmodSync(protectedSourcePath, 0o700);
+    }
+    expect(read(rootWorktree, "seed-data/new")).toBe("new Root material\n");
+    expect(read(rootWorktree, "bootstrap-runs")).toBe("x");
+  });
+
+  test("public async Spawn starts worktree preparations concurrently", async () => {
+    const sandbox = makeTempDir("multi-repo-bounded-preparation");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    installGitShim(binDirectory, { worktreeAddBarrier: 2 });
+    createRepo(path.join(sandbox, "dep"), {
+      "monke.yml": `apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_PORT
+        env: DEP
+`,
+      "services/db/.env.local": "DEP=9000\n"
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "apps/api/.env.local": "API=http://localhost:9000\n",
+      "monke.yml": `apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: api
+        env: API
+`
+    });
+
+    await runMonkeAsync({
+      args: ["spawn", "bounded-preparation"],
+      binDirectory,
+      cwd: root,
+      monkeHome: home
+    });
+
+    expect(existsSync(getExpectedWorktreePath(home, root, "bounded-preparation"))).toBeTruthy();
   });
 
   test("spawn -m seeds untracked dependency env files from the dependency source checkout", () => {

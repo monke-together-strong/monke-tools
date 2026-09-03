@@ -9,12 +9,14 @@ import { loadSessionState, saveSessionState } from "../src/session-state-store.t
 import { SessionStateSchema } from "../src/state-schema.ts";
 import type { SelectPrompt } from "../src/types.ts";
 import {
-  createRepo,
+  completeSessionState,
+  createRepo as createTestRepo,
   git,
   installBrewShim,
   installFakeCodiff,
   installGitShim,
   makeTempDir,
+  materializedRepoState,
   readSingleYamlFile,
   runMonke,
   runMonkeAsync
@@ -300,12 +302,19 @@ touch "${discoveryReached}"`
     git(repoRoot, ["worktree", "add", sessionWorktree, "main"]);
     git(repoRoot, ["commit", "--allow-empty", "-m", "remote-main"]);
     git(repoRoot, ["update-ref", "refs/remotes/origin/main", "HEAD"]);
-    saveSessionState(home, {
-      repos: [{ assignedPorts: [], sourceRoot: repoRoot, worktreePath: sessionWorktree }],
-      rootSourceRoot: repoRoot,
-      session: "main",
-      version: 1
-    });
+    saveSessionState(
+      home,
+      completeSessionState({
+        repos: [
+          materializedRepoState({
+            sourceRoot: repoRoot,
+            worktreePath: sessionWorktree
+          })
+        ],
+        rootSourceRoot: repoRoot,
+        session: "main"
+      })
+    );
     const codiffLog = installFakeCodiff(binDirectory);
     let prompt: SelectPrompt | undefined;
 
@@ -1201,25 +1210,25 @@ mv "${replacementRepo}" "${racyWorktree}"`
     const dependencyWorktree = getExpectedWorktreePath(home, dependency, "session");
     git(root, ["worktree", "add", "-b", "session", rootWorktree]);
     git(dependency, ["worktree", "add", "-b", "session", dependencyWorktree]);
-    saveSessionState(home, {
-      repos: [
-        {
-          assignedPorts: [],
-          diffBaseRef: "refs/heads/main",
-          sourceRoot: dependency,
-          worktreePath: dependencyWorktree
-        },
-        {
-          assignedPorts: [],
-          diffBaseRef: "refs/heads/main",
-          sourceRoot: root,
-          worktreePath: rootWorktree
-        }
-      ],
-      rootSourceRoot: root,
-      session: "session",
-      version: 1
-    });
+    saveSessionState(
+      home,
+      completeSessionState({
+        repos: [
+          materializedRepoState({
+            diffBaseRef: "refs/heads/main",
+            sourceRoot: dependency,
+            worktreePath: dependencyWorktree
+          }),
+          materializedRepoState({
+            diffBaseRef: "refs/heads/main",
+            sourceRoot: root,
+            worktreePath: rootWorktree
+          })
+        ],
+        rootSourceRoot: root,
+        session: "session"
+      })
+    );
     const codiffLog = installFakeCodiff(binDirectory);
 
     await runMonkeAsync({
@@ -1234,6 +1243,10 @@ mv "${replacementRepo}" "${racyWorktree}"`
     );
   });
 });
+
+function createRepo(root: string, files: Record<string, string>) {
+  return createTestRepo(root, { "monke.yml": "apps: {}\n", ...files });
+}
 
 async function runDiffChild(options: {
   baseWorktree: string;

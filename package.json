@@ -31,6 +31,7 @@
     "@sindresorhus/is": "^8.1.0",
     "commander": "~15.0.0",
     "mdast-util-to-string": "4.0.0",
+    "p-limit": "^7.3.2",
     "picocolors": "1.1.1",
     "yaml": "^2.8.3",
     "zod": "^4.5.4"

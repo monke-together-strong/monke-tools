@@ -64,6 +64,8 @@ self-contained post-merge contract, and stop after the PR exists.
      repository template exists, use the
      [default PR template](references/default-pr-template.md). Fill matching
      fields and add only required content the template does not cover.
+   - When relationships, control flow, or structure are hard to explain in one
+     sentence, use `$show-me` and make sure it's GitHub-renderable.
    - Combine the selected instructions, the PRD/issue, and the diff into
      concise checks for the merged code in a non-production or production-like
      environment.
@@ -79,6 +81,8 @@ self-contained post-merge contract, and stop after the PR exists.
      ...`; use draft only when the user asks.
    - If a PR already exists for the branch, update it instead of creating a
      duplicate.
+   - If the user asks CodeRabbit to ignore the PR, add a PR comment containing
+     exactly `@coderabbitai ignore`.
 
 6. Verify and report.
    - Run `gh pr view --json url,title,body` and confirm the PR contains the

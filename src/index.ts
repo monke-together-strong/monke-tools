@@ -5,7 +5,7 @@ import { Argument, Command, Option } from "@commander-js/extra-typings";
 
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
-import { runDiff, runDiffInteractive } from "./diff.ts";
+import { runDiffInteractive } from "./diff.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
 import {
   expectedReleaseIdentityFromEnvironment,
@@ -16,31 +16,16 @@ import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup 
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
-import { runSwing, runSwingInteractive } from "./swing.ts";
+import { runSwing } from "./swing.ts";
 import type { Runtime } from "./types.ts";
 import { runUpdate } from "./update.ts";
 
 /** Run the Monke Tools CLI. */
-export function runCli(argv: string[], runtime = createRuntime()) {
-  const program = createProgram(runtime, runSwing, runDiff);
-  program.parse(argv, { from: "user" });
-}
-
-/** Run the Monke Tools CLI with async interactive prompts enabled. */
 export async function runCliAsync(argv: string[], runtime = createRuntime()) {
-  const program = createProgram(runtime, runSwingInteractive, runDiffInteractive);
-  await program.parseAsync(argv, { from: "user" });
+  await createProgram(runtime).parseAsync(argv, { from: "user" });
 }
 
-function createProgram(
-  runtime: Runtime,
-  swingAction: (
-    runtime: Runtime,
-    target: string | undefined,
-    options: { codex?: boolean }
-  ) => void | Promise<void>,
-  diffAction: (runtime: Runtime, options: { pick?: boolean }) => void | Promise<void>
-) {
+function createProgram(runtime: Runtime) {
   // Subcommands copy these at .command() time, so every subcommand below must be declared after.
   const program = new Command()
     .name("mt")
@@ -63,7 +48,7 @@ function createProgram(
     .option("-m, --main")
     .option("--master")
     .option("--codex")
-    .action((session, options) => {
+    .action((session, options) =>
       runSpawn(
         runtime,
         session,
@@ -71,23 +56,21 @@ function createProgram(
           ? { mode: "default-branch" }
           : { copyDirty: options.dirty, mode: "current-head" },
         { codex: options.codex }
-      );
-    });
+      )
+    );
 
   program
     .command("swing")
     .argument("[target]")
     .option("--codex")
-    .action((target, options) => swingAction(runtime, target, options));
+    .action((target, options) => runSwing(runtime, target, options));
 
   program
     .command("diff")
     .option("-p, --pick")
-    .action((options) => diffAction(runtime, options));
+    .action((options) => runDiffInteractive(runtime, options));
 
-  program.command("materialize").action(() => {
-    runMaterialize(runtime);
-  });
+  program.command("materialize").action(() => runMaterialize(runtime));
 
   program
     .command("chop")

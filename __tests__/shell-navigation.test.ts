@@ -74,6 +74,7 @@ describe("shell navigation", () => {
     const directivePath = path.join(sandbox, "directive");
     writeFileSync(directivePath, "", "utf-8");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
 
@@ -99,6 +100,7 @@ describe("shell navigation", () => {
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
 
@@ -136,6 +138,7 @@ describe("shell navigation", () => {
     const shellHome = path.join(sandbox, "shell-home");
     const startupFile = path.join(shellHome, ".zshrc");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
     mkdirSync(shellHome, { recursive: true });
@@ -303,7 +306,10 @@ apps:
     const sandbox = makeTempDir("shell-install-zdotdir");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
-    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
+      "README.md": "hello\n"
+    });
     const startupFile = path.join(repoRoot, "config", "zsh", ".zshrc");
     const shellEnvironment = {
       HOME: shellHome,

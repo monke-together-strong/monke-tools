@@ -11,16 +11,39 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterEach } from "vite-plus/test";
 import { parse } from "yaml";
 import type * as z from "zod";
 
-import { runCli, runCliAsync } from "../src/index.ts";
+import { runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
-import type { SelectPrompt } from "../src/types.ts";
+import type { SelectPrompt, SessionRepoState, SessionState } from "../src/types.ts";
 
 const tempDirectories: string[] = [];
+const runMonkeWorkerPath = fileURLToPath(new URL("run-monke-worker.ts", import.meta.url));
+const NEUTRALIZED_WORKER_ENV = {
+  EDITOR: undefined,
+  GIT_AUTHOR_EMAIL: undefined,
+  GIT_AUTHOR_NAME: undefined,
+  GIT_COMMITTER_EMAIL: undefined,
+  GIT_COMMITTER_NAME: undefined,
+  GIT_CONFIG_GLOBAL: undefined,
+  GIT_CONFIG_SYSTEM: undefined,
+  GIT_DIR: undefined,
+  GIT_EDITOR: undefined,
+  GIT_INDEX_FILE: undefined,
+  GIT_PAGER: undefined,
+  GIT_WORK_TREE: undefined,
+  PAGER: undefined,
+  VISUAL: undefined
+};
+// Budget generously: a loaded CI runner can take seconds to start the second worker, and the
+// delay stays at 0.01s so the shim never needs non-POSIX fractional sleep beyond what it uses.
+const WORKTREE_ADD_BARRIER_ATTEMPTS = 2000;
+const WORKTREE_ADD_BARRIER_DELAY_SECONDS = 0.01;
+const WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE = 92;
 
 afterEach(() => {
   while (tempDirectories.length > 0) {
@@ -31,10 +54,53 @@ afterEach(() => {
   }
 });
 
+/** Start `mt` in a detached worker process so a test can interrupt it mid-command. */
+export function spawnMonkeWorker(options: {
+  args: string[];
+  cwd: string;
+  extraEnv?: Record<string, string>;
+  monkeHome: string;
+}) {
+  return Bun.spawn([process.execPath, runMonkeWorkerPath, ...options.args], {
+    cwd: options.cwd,
+    env: {
+      ...process.env,
+      ...NEUTRALIZED_WORKER_ENV,
+      ...options.extraEnv,
+      MONKE_HOME: options.monkeHome
+    },
+    stderr: "ignore",
+    stdout: "ignore"
+  });
+}
+
 export function makeTempDir(prefix: string) {
   const directory = realpathSync.native(mkdtempSync(path.join(tmpdir(), `${prefix}-`)));
   tempDirectories.push(directory);
   return directory;
+}
+
+export function materializedRepoState(
+  options: Pick<SessionRepoState, "sourceRoot" | "worktreePath"> &
+    Partial<Omit<SessionRepoState, "sourceRoot" | "worktreePath">>
+): SessionRepoState {
+  return {
+    assignedPorts: [],
+    cleanupEligible: false,
+    materializationStatus: "materialized",
+    preparationStatus: "prepared",
+    ...options
+  };
+}
+
+export function completeSessionState(
+  options: Omit<SessionState, "generation" | "version">
+): SessionState {
+  return {
+    generation: { number: 1, status: "complete" },
+    version: 2,
+    ...options
+  };
 }
 
 export function createRepo(root: string, files: Record<string, string>) {
@@ -91,6 +157,7 @@ export function installGitShim(
       args: string;
       message?: string;
     };
+    worktreeAddBarrier?: number;
   }
 ) {
   const logPath = path.join(binDirectory, "git.log");
@@ -124,6 +191,26 @@ fi
   exit "$status"
 fi
 `;
+  const worktreeAddBarrier =
+    options?.worktreeAddBarrier === undefined
+      ? ""
+      : `if [ "\${1:-}" = worktree ] && [ "\${2:-}" = add ]; then
+  barrier_dir=${shellQuote(path.join(binDirectory, "worktree-add-barrier"))}
+  mkdir -p "$barrier_dir"
+  touch "$barrier_dir/started-$$"
+  attempts=0
+  while [ "$attempts" -lt ${String(WORKTREE_ADD_BARRIER_ATTEMPTS)} ]; do
+    count=0
+    for marker in "$barrier_dir"/started-*; do
+      [ -e "$marker" ] && count=$((count + 1))
+    done
+    [ "$count" -ge ${String(options.worktreeAddBarrier)} ] && break
+    attempts=$((attempts + 1))
+    /bin/sleep ${String(WORKTREE_ADD_BARRIER_DELAY_SECONDS)}
+  done
+  [ "$attempts" -lt ${String(WORKTREE_ADD_BARRIER_ATTEMPTS)} ] || exit ${String(WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE)}
+fi
+`;
   writeExecutable(
     path.join(binDirectory, "git"),
     `#!/bin/sh
@@ -139,6 +226,7 @@ done
 printf '\\n' >> ${shellQuote(logPath)}
 ${failCommand}
 ${afterCommand}
+${worktreeAddBarrier}
 exec "${findExecutableOnPath("git")}" "$@"
 `
   );
@@ -365,47 +453,40 @@ interface RunMonkeOptions {
   monkeHome: string;
 }
 
-function captureMonkeRun(options: RunMonkeOptions) {
-  let stdout = "";
-  let stderr = "";
-  const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
-
-  const runtime = createRuntime({
-    cwd: options.cwd,
-    env: {
-      MONKE_HOME: options.monkeHome,
-      PATH: pathSegments.join(path.delimiter),
-      ...options.extraEnv
-    },
-    onStderr(text) {
-      stderr += text;
-    },
-    onStdout(text) {
-      stdout += text;
-    }
-  });
-  return {
-    output: () => ({ stderr, stdout }),
-    runtime
-  };
-}
-
 export function runMonke(options: RunMonkeOptions) {
-  const captured = captureMonkeRun(options);
-
-  runCli(options.args, captured.runtime);
-  return captured.output();
+  const result = runMonkeProcess(options);
+  if (result.error) {
+    throw result.error;
+  }
+  return { stderr: result.stderr, stdout: result.stdout };
 }
 
 export function runMonkeCapturingFailure(options: RunMonkeOptions) {
-  const captured = captureMonkeRun(options);
+  return runMonkeProcess(options);
+}
 
-  try {
-    runCli(options.args, captured.runtime);
-    return { error: null, ...captured.output() };
-  } catch (error) {
-    return { error, ...captured.output() };
-  }
+function runMonkeProcess(options: RunMonkeOptions) {
+  const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
+  const result = spawnSync(process.execPath, [runMonkeWorkerPath, ...options.args], {
+    cwd: options.cwd,
+    encoding: "utf-8",
+    env: {
+      // The worker is a real subprocess, so it needs a working base environment (HOME, TMPDIR).
+      // Clear only the variables that would otherwise make a test outcome depend on whatever the
+      // developer or CI happens to export.
+      ...process.env,
+      ...NEUTRALIZED_WORKER_ENV,
+      ...options.extraEnv,
+      MONKE_HOME: options.monkeHome,
+      MONKE_TEST_PLATFORM: process.platform,
+      PATH: pathSegments.join(path.delimiter)
+    }
+  });
+  const error =
+    result.status === 0
+      ? null
+      : new Error(result.stderr || result.stdout || `mt ${options.args.join(" ")} failed`);
+  return { error, stderr: result.stderr, stdout: result.stdout };
 }
 
 export async function runMonkeAsync(options: {

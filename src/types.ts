@@ -24,6 +24,8 @@ export interface Runtime {
   readonly releaseDistribution: ReleaseDistribution;
   /** Select one value from an interactive terminal picker. */
   select: (prompt: SelectPrompt) => Promise<string>;
+  /** Optional injected boundary invoked immediately after a Session checkpoint is persisted. */
+  readonly sessionMaterializationBoundary?: (checkpoint: SessionMaterializationCheckpoint) => void;
   /** Whether status output is connected to an interactive terminal. */
   readonly stderrIsTTY: boolean;
   /** Identity compiled into this mt executable. */
@@ -37,6 +39,16 @@ export interface Runtime {
 }
 
 export type InstallationActivationPhase = "final-rename" | "pointer-replacement";
+
+export type SessionMaterializationCheckpoint =
+  | "cleanup-eligibility"
+  | "generation-completion"
+  | "generation-start"
+  | "preparation"
+  | "repo-progress"
+  | "repo-result"
+  | "resource-command-output"
+  | "worktree-ready";
 
 export interface ReleaseDistribution {
   /** Download one asset selected from an official GitHub Release. */

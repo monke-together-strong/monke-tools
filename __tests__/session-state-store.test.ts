@@ -15,21 +15,27 @@ import type { RepoConfig, RepoReservation } from "../src/types.ts";
 import { makeTempDir, write } from "./helpers.ts";
 
 describe("Session state store", () => {
-  test("loadSessionState keeps legacy repo entries without an optional Diff base compatible", () => {
-    const sandbox = makeTempDir("session-state-store-legacy-diff-base");
+  test("loadSessionState accepts strict v2 repo lifecycle state without an optional Diff base", () => {
+    const sandbox = makeTempDir("session-state-store-v2-diff-base");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${sourceRoot}
 session: banana
+generation:
+  number: 1
+  status: complete
 repos:
   - sourceRoot: ${sourceRoot}
     worktreePath: /worktree
     assignedPorts: []
+    cleanupEligible: false
+    preparationStatus: prepared
+    materializationStatus: materialized
 `
     );
 
@@ -44,13 +50,19 @@ repos:
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${sourceRoot}
 session: banana
+generation:
+  number: 1
+  status: complete
 repos:
   - sourceRoot: ${sourceRoot}
     worktreePath: /worktree
     assignedPorts: []
+    cleanupEligible: false
+    preparationStatus: prepared
+    materializationStatus: materialized
     diffBaseRef: ""
 `
     );
@@ -66,9 +78,12 @@ repos:
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${sourceRoot}
 session: banana
+generation:
+  number: 1
+  status: incomplete
 repos: wrong
 `
     );
@@ -86,19 +101,52 @@ repos: wrong
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${sourceRoot}
 session: invalid-port-key
+generation:
+  number: 1
+  status: complete
 repos:
   - sourceRoot: ${sourceRoot}
     worktreePath: /worktree
     assignedPorts:
       - key: api-port
         value: 10000
+    cleanupEligible: false
+    preparationStatus: prepared
+    materializationStatus: materialized
 `
     );
 
     expect(() => loadSessionState(home, sourceRoot, "invalid-port-key")).toThrow(/assignedPorts/u);
+  });
+
+  test("loadSessionState rejects payload identity that differs from its storage key", () => {
+    const sandbox = makeTempDir("session-state-store-identity-mismatch");
+    const home = path.join(sandbox, "home");
+    const sourceRoot = path.join(sandbox, "root");
+    const statePath = getSessionStateFilePath(home, sourceRoot, "expected");
+    write(
+      home,
+      path.relative(home, statePath),
+      `version: 2
+rootSourceRoot: ${sourceRoot}
+session: different
+generation:
+  number: 1
+  status: complete
+repos:
+  - sourceRoot: ${sourceRoot}
+    worktreePath: /worktree
+    assignedPorts: []
+    cleanupEligible: false
+    preparationStatus: prepared
+    materializationStatus: materialized
+`
+    );
+
+    expect(() => loadSessionState(home, sourceRoot, "expected")).toThrow(/identity.*storage/u);
   });
 
   test("loadSessionState rejects unknown keys in application-owned state", () => {
@@ -109,9 +157,12 @@ repos:
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${sourceRoot}
 session: banana
+generation:
+  number: 1
+  status: complete
 repos: []
 typo: true
 `
@@ -122,7 +173,532 @@ typo: true
     );
   });
 
-  test("loadSessionState rejects unknown future versions", () => {
+  test.each([
+    {
+      expected: /complete generation requires every repo to be prepared and materialized/u,
+      name: "a complete generation with pending materialization",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "pending",
+            preparationStatus: "pending",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /complete generation requires every repo to be prepared and materialized/u,
+      name: "a complete generation with failed preparation and retained materialization",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            failure: { message: "missing worktree", phase: "worktree-preparation" },
+            materializationStatus: "materialized",
+            preparationStatus: "failed",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /failed preparation requires a Worktree-preparation failure/u,
+      name: "failed preparation with pending materialization",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "pending",
+            preparationStatus: "failed",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /blocked materialization requires completed preparation/u,
+      name: "blocked materialization before preparation",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            blockedBy: "/dependency",
+            cleanupEligible: false,
+            materializationStatus: "blocked",
+            preparationStatus: "pending",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /default-branch repo requires pinnedRef/u,
+      name: "prepared default-branch repo without pinned identity",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "default-branch",
+        version: 2
+      }
+    },
+    {
+      expected: /Session state requires at least the Root repo/u,
+      name: "an empty complete generation",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /Session state must include its Root repo/u,
+      name: "a repo set without the Root repo",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/dependency",
+            worktreePath: "/dependency-worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /cannot contain duplicate Source checkouts/u,
+      name: "duplicate Source checkout records",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          },
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/other-worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /cannot contain duplicate Session worktrees/u,
+      name: "duplicate Session worktree records",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          },
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/dependency",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /not-started generation cannot be cleanup-eligible/u,
+      name: "cleanup eligibility before a generation starts",
+      state: {
+        generation: { number: 0, status: "not-started" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupCommand: "cleanup",
+            cleanupEligible: true,
+            materializationStatus: "pending",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /Resource command outputs require Cleanup eligibility/u,
+      name: "Resource command outputs without Cleanup eligibility",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            resourceCommandOutputs: [
+              {
+                name: "identity",
+                outputs: [{ env: "AUTH_OUTPUT", value: "retained" }]
+              }
+            ],
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /retained Spawn source policy requires Session-branch graph source/u,
+      name: "default-branch Spawn policy without Session-branch graph source",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            pinnedRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "default-branch",
+        version: 2
+      }
+    },
+    {
+      expected: /retained Spawn source policy requires Session-branch graph source/u,
+      name: "session-branch Spawn policy without Session-branch graph source",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "session-branch",
+        version: 2
+      }
+    },
+    {
+      expected: /pending dirty carry requires current-HEAD Spawn with copyDirty enabled/u,
+      name: "pending dirty carry for default-branch Spawn",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        graphSource: "session-branch",
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            dirtyCarryStatus: "pending",
+            materializationStatus: "pending",
+            pinnedRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            preparationStatus: "pending",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "default-branch",
+        version: 2
+      }
+    },
+    {
+      expected: /pending dirty carry requires current-HEAD Spawn with copyDirty enabled/u,
+      name: "pending dirty carry when current-head Spawn disables dirty carry",
+      state: {
+        copyDirty: false,
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            dirtyCarryStatus: "pending",
+            materializationStatus: "pending",
+            preparationStatus: "pending",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /blockedBy must identify another recorded repo/u,
+      name: "a repo blocked by itself",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            blockedBy: "/repo",
+            cleanupEligible: false,
+            materializationStatus: "blocked",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /blockedBy must identify another recorded repo/u,
+      name: "a repo blocked by an absent dependency",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            blockedBy: "/missing",
+            cleanupEligible: false,
+            materializationStatus: "blocked",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /default-branch repo requires pinnedRef/u,
+      name: "a pending default-branch repo without pinned identity",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "pending",
+            preparationStatus: "pending",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "default-branch",
+        version: 2
+      }
+    },
+    {
+      expected: /cannot contain duplicate Source checkouts/u,
+      name: "normalized duplicate Source checkout records",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          },
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo/.",
+            worktreePath: "/other-worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /cannot contain duplicate Session worktrees/u,
+      name: "normalized duplicate Session worktree records",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/dependency",
+            worktreePath: "/worktree"
+          },
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree/."
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /Root repo must follow its dependencies in materialization order/u,
+      name: "the Root repo before its dependencies",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/root-worktree"
+          },
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/dependency",
+            worktreePath: "/dependency-worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      expected: /must be an immutable Git object ID/u,
+      name: "a symbolic default-branch pin",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            pinnedRef: "refs/heads/main",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "default-branch",
+        version: 2
+      }
+    },
+    {
+      expected: /Session state must include its Root repo/u,
+      name: "an aliased Root identity",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo/.",
+        session: "invalid",
+        version: 2
+      }
+    }
+  ])("saveSessionState rejects $name", ({ expected, state }) => {
+    const sandbox = makeTempDir("session-state-store-lifecycle-invariant");
+    // Pin the named invariant: several of these states also trip a second, incidental rule,
+    // so matching only /Invalid/ would not prove the intended one fired.
+    expect(() => {
+      saveSessionState(path.join(sandbox, "home"), state);
+    }).toThrow(expected);
+  });
+
+  test.each([1, 3])("loadSessionState rejects unsupported version %i", (version) => {
     const sandbox = makeTempDir("session-state-store-future-session-version");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -130,7 +706,7 @@ typo: true
     write(
       home,
       path.relative(home, statePath),
-      `version: 2
+      `version: ${version}
 rootSourceRoot: ${sourceRoot}
 session: banana
 repos: []
@@ -138,7 +714,7 @@ repos: []
     );
 
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-      new RegExp(`Invalid ${RegExp.escape(statePath)}:[\\s\\S]*version`, "u")
+      new RegExp(`Unsupported Session state version ${version}.*${RegExp.escape(statePath)}`, "u")
     );
   });
 
@@ -149,7 +725,7 @@ repos: []
     write(
       home,
       "sessions/corrupt.yml",
-      `version: 1
+      `version: 2
 rootSourceRoot: root
 session: banana
 repos:
@@ -171,10 +747,11 @@ repos:
 
     expect(() => {
       saveSessionState(home, {
+        generation: { number: 1, status: "incomplete" },
         repos: "wrong",
         rootSourceRoot: sourceRoot,
         session: "banana",
-        version: 1
+        version: 2
       });
     }).toThrow(/Invalid .*sessions.*repos/su);
   });
@@ -324,16 +901,20 @@ size: 1000
       session: "one"
     });
     saveSessionState(home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [{ key: "API_PORT", value: firstSession.get("API_PORT") ?? -1 }],
+          cleanupEligible: false,
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
           sourceRoot,
           worktreePath: path.join(sandbox, "one")
         }
       ],
       rootSourceRoot: sourceRoot,
       session: "one",
-      version: 1
+      version: 2
     });
     const secondSession = allocateLocalPorts({
       baselinePorts: new Set(),

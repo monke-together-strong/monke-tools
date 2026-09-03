@@ -112,6 +112,8 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Global monke config**: Machine-local monke-tools preferences that apply across **Consumer repos** and are stored outside any repo checkout as versioned YAML at `config.yml` under the monke home directory. _Avoid_: Repo config, session state, monke.yml
 
+**Spec**: A durable work target that records agreed behavior, implementation decisions, testing decisions, and scope for an agent to execute. A PRD can serve as a Spec when it carries that implementation contract. _Avoid_: PRD when referring generically to an implementation target
+
 **Distributed skill**: Agent guidance distributed through the **Local tool install** so agents in a **Consumer repo** can use shared team workflows. _Avoid_: Package skill, copied prompt, generated instruction file
 
 **Shared distributed skill**: A **Distributed skill** available to every selected compatible **Agent harness**. _Avoid_: Default skill, universal folder, unscoped skill
@@ -216,9 +218,23 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Spawn**: The operation that creates or updates all required session worktrees from a source checkout, using current `HEAD` unless **Default branch spawn mode** is requested. _Avoid_: Initialize, provision
 
-**Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates fresh session branches from each participating repo's default branch content, prefers fetched `origin/main` then `origin/master`, falls back to local `main` then `master`, and rejects existing Session state or Session branches. _Avoid_: Arbitrary base branch, from branch
+**Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates a new Session from each participating repo's resolved default branch content, or resumes an incomplete Session from retained worktrees and pinned Session refs. _Avoid_: Arbitrary base branch, from branch
 
-**Materialize**: The operation that refreshes the current session by reapplying seeding, path syncing, env rewrites, and bootstrap behavior. _Avoid_: Refresh, rebuild
+**Worktree preparation**: The dependency-independent phase that creates or validates one participating **Session worktree**, carries permitted source changes, and non-clobberingly projects **Seed material**. Preparation is initiated for every participating repo without waiting for dependency materialization. _Avoid_: Partial materialization, recursive setup
+
+**Prepared worktree**: A **Session worktree** whose **Worktree preparation** completed but whose dependency-ordered repo materialization may still be pending. _Avoid_: Complete worktree, failed worktree
+
+**Preparation warning**: A non-fatal **Worktree preparation** result that identifies missing optional **Seed material** while leaving the worktree prepared. Copy failures are preparation failures, not warnings. _Avoid_: Preparation failure, materialization warning
+
+**Repo materialization**: The phase that resolves session values, rewrites env, runs repo commands, and produces the results consumed by dependent repos. It begins only after the repo's own **Worktree preparation** and every dependency's **Repo materialization** complete. _Avoid_: Worktree preparation, recursive setup
+
+**Blocked repo materialization**: A repo materialization that cannot begin because a dependency's materialization failed. It is a consequence of another repo's failure, not a failure of the blocked repo. _Avoid_: Failed materialization, cancelled materialization
+
+**Cleanup eligibility**: The persisted indication that **Repo materialization** reached an externally relevant side effect and the repo's **Cleanup command** must run before its Session state can be removed. A **Prepared worktree** alone is not cleanup-eligible. _Avoid_: Prepared state, worktree existence
+
+**Materialization generation**: One retained attempt to materialize every repo in a Session dependency graph. An incomplete generation resumes by reusing completed repo materializations; a new generation begins only after the previous generation completes. _Avoid_: Command invocation, retry run
+
+**Materialize**: The operation that schedules **Worktree preparation** and **Repo materialization** across the Session dependency graph. _Avoid_: Refresh, rebuild
 
 **Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target removes every recorded Session worktree and performs **Session finalization**; an Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
 
@@ -242,7 +258,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Setup**: The operation that updates the source checkout root `.env` with dependency path env values. _Avoid_: Materialize, bootstrap
 
-**Shell directory request**: A CLI-side request for an active shell adapter to move the user's current shell into a resolved **Source checkout** or **Session worktree** after a session operation determines that navigation is required. Once issued, the request is honored independently of the operation's final success or failure. _Avoid_: cd output, directory switch, shell cd
+**Shell directory request**: A CLI-side request for an active shell adapter to move the user's current shell into a resolved **Source checkout** or **Session worktree** after the operation establishes that the target is navigation-ready. A prepared-only Session worktree is not navigation-ready and a failed operation does not issue a request. _Avoid_: cd output, directory switch, shell cd
 
 **Shell adapter**: The human-shell function installed by monke-tools that can honor **Shell directory requests** after an `mt` command exits. _Avoid_: Alias, subprocess, terminal state
 
@@ -325,11 +341,16 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - A **Resource cleanup** belongs to one repo and may use any **Session resources** and **Resource command outputs** resolved for that repo.
 - **Session resources** for different **Session worktrees** must resolve to distinct values when they use the same resource name.
 - **Default branch spawn mode** prefers fetched remote `main` or `master` and may fall back to local `main` or `master`.
-- **Default branch spawn mode** requires fresh session branches.
+- A new **Default branch spawn mode** Session requires fresh session branches; an incomplete one resumes its retained prepared worktrees and pinned refs.
 - **Default branch spawn mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
+- **Worktree preparation** is scheduled independently for every participating repo, while each **Repo materialization** waits for its own preparation and every dependency's materialization.
+- A failed repo materialization blocks only its dependents; independent preparation and repo materialization continue until the **Materialization generation** has no runnable work.
+- Retrying an incomplete **Materialization generation** reuses completed repo materializations. Running **Materialize** after a generation completes starts a new generation. A new generation is a new persisted attempt over the recorded **Session worktrees**, not a new set of worktrees.
+- **Worktree preparation** fills missing Seed material without overwriting Session-local content. A missing configured Seed path produces a **Preparation warning**; a copy error fails preparation.
+- A repo becomes cleanup-eligible immediately before repo materialization may create an external side effect. A prepared-only repo is removed without running its Cleanup command.
 - A **Diff** for a Session repo without a remembered **Diff base** may infer an unambiguous, distinct local or remote-tracking `main` or `master` ref with one merge-base only when the current branch is not itself `main` or `master` and no non-default branch has nearer or incomparable shared history, and remember it only after Codiff launches successfully.
 - A **Diff** warns when its **Session worktree** does not carry the Session branch and that branch is attached to another checkout; the current checkout remains the reviewed side.
-- **Spawn** always emits a **Shell directory request** for the root repo's **Session worktree** after the operation succeeds.
+- **Spawn** emits a **Shell directory request** only after the Root repo's **Repo materialization** succeeds; a config-less prepared Root fails with a retry receipt and does not navigate.
 - **Chop** without a target selects the current **Session** when run inside one of its managed worktrees.
 - An explicit **Chop** target selects that named **Session** within the current **Root repo** scope, even when invoked from a different Session.
 - **Chop** requires an explicit **Chop target** when run from a **Source checkout**.
@@ -363,8 +384,8 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - Retrying **Session finalization** reruns Cleanup commands from the beginning because individual command successes are not checkpointed.
 - An explicit Session **Chop target** remains valid while its **Session state** is retained, even when every recorded worktree is already gone; rerunning `mt chop <session>` retries **Session finalization**.
 - **Cleanup** remains the broad operation for discovering and finalizing already-dead Sessions, while **Chop** targets one selected Session. After successful **Session state** removal, a later `mt chop <session>` reports that the target does not exist.
-- **Swing** always emits a **Shell directory request** for a resolved root repo **Source checkout**, **Session worktree**, or **Ordinary worktree**.
-- A **Codex workspace launch** preserves normal **Spawn** or **Swing** behavior and additionally opens `codex://threads/new` with the resolved absolute checkout path.
+- **Swing** emits a **Shell directory request** after resolving a navigation-ready root repo **Source checkout**, **Session worktree**, or **Ordinary worktree**. A pull request target whose embedded **Spawn** does not materialize its Root repo fails without navigating.
+- A **Codex workspace launch** preserves normal successful **Spawn** or **Swing** behavior and additionally opens `codex://threads/new` with the resolved absolute checkout path; it does not launch for a prepared-only failure.
 - **Swing** does not create worktrees for ordinary **Session** or **Ordinary worktree** targets, or change which branch an existing worktree has checked out.
 - A **Swing target** may be a **Session** name, an existing **Ordinary worktree** branch, the `^` source-checkout shortcut, the `-` previous-target shortcut, a `pr:<number>` pull request shortcut, or a pull request URL.
 - The `^` **Swing target** resolves to the current **Root repo** **Source checkout** without materializing, setting up, creating, or changing branches.

@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { describe, expect, test, vi } from "vite-plus/test";
 
 import { createRuntime, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
-import { makeTempDir } from "./helpers.ts";
+import { makeTempDir, write } from "./helpers.ts";
 
 describe("runtime", () => {
   test.each([
@@ -28,6 +29,165 @@ describe("runtime", () => {
     expect(() => runtime.exec("sh", ["-c", "kill -TERM $$"])).toThrow(
       /terminated by signal SIGTERM/u
     );
+  });
+
+  test.each(["SIGHUP", "SIGQUIT", "SIGTERM"] as const)(
+    "createRuntime forwards %s to detached async command groups",
+    async (signal) => {
+      const sandbox = makeTempDir("runtime-parent-termination");
+      const workerPath = path.join(sandbox, "worker.ts");
+      const childPidPath = path.join(sandbox, "child.pid");
+      const descendantPidPath = path.join(sandbox, "descendant.pid");
+      const descendantSurvivedMarker = path.join(sandbox, "descendant-survived");
+      const unexpectedCommandMarker = path.join(sandbox, "unexpected-command");
+      const runtimeUrl = pathToFileURL(path.resolve("src/runtime.ts")).href;
+      write(
+        sandbox,
+        "worker.ts",
+        `import { createRuntime } from ${JSON.stringify(runtimeUrl)};
+
+const runtime = createRuntime();
+try {
+  await runtime.execAsync("sh", ["-c", ${JSON.stringify(`trap 'exit 0' HUP INT QUIT TERM; sh -c 'trap "" HUP INT QUIT TERM; sleep 1.5; touch "${descendantSurvivedMarker}"; while :; do sleep 1; done' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; printf '%s' "$!" > "${descendantPidPath}"; wait`)}]);
+} catch {}
+await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedCommandMarker}"`)}]);
+`
+      );
+      const worker = Bun.spawn({
+        cmd: [process.execPath, workerPath],
+        stderr: "pipe",
+        stdout: "pipe"
+      });
+      let childPid: number | undefined;
+      let descendantPid: number | undefined;
+
+      try {
+        await waitFor(() => existsSync(childPidPath) && existsSync(descendantPidPath));
+        childPid = Number(readFileSync(childPidPath, "utf-8"));
+        descendantPid = Number(readFileSync(descendantPidPath, "utf-8"));
+        worker.kill(signal);
+        await worker.exited;
+        await wait(1700);
+        expect(childPid === undefined ? true : isProcessRunning(childPid)).toBeFalsy();
+        expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
+        expect(existsSync(unexpectedCommandMarker)).toBeFalsy();
+      } finally {
+        worker.kill("SIGKILL");
+        killRetainedDescendant(childPid, descendantPid);
+      }
+    }
+  );
+
+  test("createRuntime kills command descendants before a timeout settles", async () => {
+    const sandbox = makeTempDir("runtime-timeout-descendant");
+    const childPidPath = path.join(sandbox, "child.pid");
+    const descendantPidPath = path.join(sandbox, "descendant.pid");
+    const descendantSurvivedMarker = path.join(sandbox, "descendant-survived");
+    const runtime = createRuntime();
+    const resultPromise = runtime.execAsync(
+      "sh",
+      [
+        "-c",
+        `trap 'exit 0' TERM; sh -c 'trap "" TERM; sleep 1.5; touch "${descendantSurvivedMarker}"; while :; do sleep 1; done' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; printf '%s' "$!" > "${descendantPidPath}"; wait`
+      ],
+      { allowFailure: true, timeoutSeconds: 0.5 }
+    );
+    await waitFor(() => existsSync(childPidPath) && existsSync(descendantPidPath));
+    const childPid = Number(readFileSync(childPidPath, "utf-8"));
+    const descendantPid = Number(readFileSync(descendantPidPath, "utf-8"));
+
+    try {
+      await expect(resultPromise).resolves.toMatchObject({ timedOut: true });
+      await wait(1100);
+      expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
+    } finally {
+      killRetainedDescendant(childPid, descendantPid);
+    }
+  });
+
+  test("parent termination during timeout grace still kills command descendants", async () => {
+    const sandbox = makeTempDir("runtime-timeout-timeout-parent-termination");
+    const workerPath = path.join(sandbox, "worker.ts");
+    const childPidPath = path.join(sandbox, "child.pid");
+    const descendantPidPath = path.join(sandbox, "descendant.pid");
+    const timeoutStartedMarker = path.join(sandbox, "timeout-started");
+    const descendantSurvivedMarker = path.join(sandbox, "descendant-survived");
+    const runtimeUrl = pathToFileURL(path.resolve("src/runtime.ts")).href;
+    write(
+      sandbox,
+      "worker.ts",
+      `import { createRuntime } from ${JSON.stringify(runtimeUrl)};
+
+const runtime = createRuntime();
+await runtime.execAsync(
+  "sh",
+  ["-c", ${JSON.stringify(`trap 'touch "${timeoutStartedMarker}"; exit 0' TERM; sh -c 'trap "" TERM; sleep 1.5; touch "${descendantSurvivedMarker}"; while :; do sleep 1; done' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; printf '%s' "$!" > "${descendantPidPath}"; wait`)}],
+  { allowFailure: true, timeoutSeconds: 0.5 }
+);
+`
+    );
+    const worker = Bun.spawn({
+      cmd: [process.execPath, workerPath],
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+    let childPid: number | undefined;
+    let descendantPid: number | undefined;
+
+    try {
+      await waitFor(
+        () =>
+          existsSync(childPidPath) &&
+          existsSync(descendantPidPath) &&
+          existsSync(timeoutStartedMarker)
+      );
+      childPid = Number(readFileSync(childPidPath, "utf-8"));
+      descendantPid = Number(readFileSync(descendantPidPath, "utf-8"));
+      await waitFor(() => childPid !== undefined && !isProcessRunning(childPid));
+      worker.kill("SIGTERM");
+      await worker.exited;
+      await wait(1700);
+      expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
+    } finally {
+      worker.kill("SIGKILL");
+      killRetainedDescendant(childPid, descendantPid);
+    }
+  });
+
+  test("commands started during timeout grace do not duplicate termination listeners", async () => {
+    const sandbox = makeTempDir("runtime-timeout-listener-overlap");
+    const childPidPath = path.join(sandbox, "child.pid");
+    const timeoutStartedMarker = path.join(sandbox, "timeout-started");
+    const signals = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
+    const baselineListeners = new Map(
+      signals.map((signal) => [signal, process.listenerCount(signal)])
+    );
+    const runtime = createRuntime();
+    const timedResult = runtime.execAsync(
+      "sh",
+      [
+        "-c",
+        `trap 'touch "${timeoutStartedMarker}"; exit 0' TERM; printf '%s' "$$" > "${childPidPath}"; while :; do sleep 1; done`
+      ],
+      { allowFailure: true, timeoutSeconds: 0.5 }
+    );
+    let timedResultSettled = false;
+    const observedTimedResult = (async () => {
+      const result = await timedResult;
+      timedResultSettled = true;
+      return result;
+    })();
+
+    await waitFor(() => existsSync(childPidPath) && existsSync(timeoutStartedMarker));
+    const childPid = Number(readFileSync(childPidPath, "utf-8"));
+    await waitFor(() => !isProcessRunning(childPid));
+    expect(timedResultSettled).toBeFalsy();
+    await runtime.execAsync("sh", ["-c", ":"]);
+    await observedTimedResult;
+
+    for (const signal of signals) {
+      expect(process.listenerCount(signal)).toBe(baselineListeners.get(signal));
+    }
   });
 
   test("createRuntime reports exhausted scripted select values clearly", async () => {
@@ -153,3 +313,42 @@ describe("runtime", () => {
     expect(existsSync(lockPath)).toBeTruthy();
   }, 7000);
 });
+
+async function waitFor(predicate: () => boolean) {
+  const deadline = Date.now() + 3000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for subprocess state");
+    }
+    await wait(10);
+  }
+}
+
+function killRetainedDescendant(
+  groupLeaderPid: number | undefined,
+  descendantPid: number | undefined
+) {
+  if (descendantPid === undefined || !isProcessRunning(descendantPid)) {
+    return;
+  }
+  if (groupLeaderPid !== undefined) {
+    try {
+      process.kill(-groupLeaderPid, "SIGKILL");
+    } catch {
+      // Fall through to exact-PID cleanup.
+    }
+  }
+  if (isProcessRunning(descendantPid)) {
+    try {
+      process.kill(descendantPid, "SIGKILL");
+    } catch {
+      // The descendant exited between the liveness check and cleanup.
+    }
+  }
+}
+
+async function wait(milliseconds: number) {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}

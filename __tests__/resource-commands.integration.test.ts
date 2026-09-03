@@ -1,24 +1,29 @@
-import { chmodSync } from "node:fs";
+import { chmodSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 import * as z from "zod";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
+import { hashKey } from "../src/runtime.ts";
 import { loadSessionState, saveSessionState } from "../src/session-state-store.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
 import type { SessionState } from "../src/types.ts";
 import {
+  completeSessionState,
   createRepo,
   installShShim,
   makeTempDir,
+  materializedRepoState,
   read,
   readSingleYamlFile,
   runMonke,
+  runMonkeAsync,
   write
 } from "./helpers.ts";
 
 interface ResourceCommandScenario {
+  binDirectory: string;
   cleanup: () => { stderr: string; stdout: string };
   home: string;
   materialize: (session: string) => { stderr: string; stdout: string };
@@ -38,6 +43,49 @@ interface ResourceCommandScenario {
 const ResourceCommandInputSchema = z.record(z.string(), z.array(z.string()));
 
 describe("resource commands", () => {
+  test("Spawn honors an existing Resource command lock through the async production seam", async () => {
+    const releaseMarker = "resource-lock-released";
+    const scenario = createResourceCommandScenario({
+      module: `import { existsSync } from "node:fs";
+
+export default function () {
+  if (!existsSync(${JSON.stringify(path.join("..", "..", "..", "..", releaseMarker))})) {
+    throw new Error("Resource command ran before its lock was released");
+  }
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
+      name: "single-repo-resource-command-async-lock"
+    });
+    const lockPath = path.join(
+      scenario.home,
+      "locks",
+      `${hashKey(`resource-command\u0000${scenario.repoRoot}\u0000e2e-symbols`)}.lock`
+    );
+    write(
+      scenario.home,
+      path.relative(scenario.home, lockPath),
+      JSON.stringify({ acquiredAt: Date.now(), pid: process.pid })
+    );
+    const release = setTimeout(() => {
+      write(scenario.sandbox, releaseMarker, "released\n");
+      rmSync(lockPath, { force: true });
+    }, 200);
+
+    try {
+      await runMonkeAsync({
+        args: ["spawn", "locked"],
+        binDirectory: scenario.binDirectory,
+        cwd: scenario.repoRoot,
+        monkeHome: scenario.home
+      });
+    } finally {
+      clearTimeout(release);
+    }
+
+    expect(scenario.readWorktree("locked", ".env")).toContain("E2E_FLOW1_SYMBOL=SOL/USDT:USDT");
+  });
+
   test("spawn runs Resource commands from the Session worktree and writes outputs to the session root .env and Session state", () => {
     const scenario = createResourceCommandScenario({
       module: `import { writeFileSync } from "node:fs";
@@ -176,28 +224,30 @@ export default function ({ previous }) {
       // oxlint-disable-next-line no-template-curly-in-string
       resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}"
     });
-    saveSessionState(scenario.home, {
-      repos: [
-        {
-          assignedPorts: [],
-          resourceCommandOutputs: [
-            {
-              name: "e2e-symbols",
-              outputs: [
-                { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
-                { env: "E2E_FLOW2_SYMBOL", value: "ATOM/USDT:USDT" }
-              ]
-            }
-          ],
-          resourceValues: [{ env: "DISCORD_CHANNEL", value: "discord-first" }],
-          sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "missing-first")
-        }
-      ],
-      rootSourceRoot: scenario.repoRoot,
-      session: "first",
-      version: 1
-    });
+    saveSessionState(
+      scenario.home,
+      completeSessionState({
+        repos: [
+          materializedRepoState({
+            cleanupEligible: true,
+            resourceCommandOutputs: [
+              {
+                name: "e2e-symbols",
+                outputs: [
+                  { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
+                  { env: "E2E_FLOW2_SYMBOL", value: "ATOM/USDT:USDT" }
+                ]
+              }
+            ],
+            resourceValues: [{ env: "DISCORD_CHANNEL", value: "discord-first" }],
+            sourceRoot: scenario.repoRoot,
+            worktreePath: path.join(scenario.sandbox, "missing-first")
+          })
+        ],
+        rootSourceRoot: scenario.repoRoot,
+        session: "first"
+      })
+    );
 
     scenario.spawn("second");
 
@@ -228,9 +278,16 @@ export default function ({ previous }) {
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -246,14 +303,21 @@ export default function ({ previous }) {
           worktreePath: path.join(scenario.sandbox, "missing-a")
         }
       ],
-      rootSourceRoot: path.join(scenario.sandbox, "graph-a"),
+      rootSourceRoot: scenario.repoRoot,
       session: "retained-a",
-      version: 1
+      version: 2
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -267,14 +331,21 @@ export default function ({ previous }) {
           worktreePath: path.join(scenario.sandbox, "missing-b")
         }
       ],
-      rootSourceRoot: path.join(scenario.sandbox, "graph-b"),
+      rootSourceRoot: scenario.repoRoot,
       session: "retained-b",
-      version: 1
+      version: 2
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -285,9 +356,9 @@ export default function ({ previous }) {
           worktreePath: path.join(scenario.sandbox, "current-worktree-from-another-graph")
         }
       ],
-      rootSourceRoot: path.join(scenario.sandbox, "graph-c"),
+      rootSourceRoot: scenario.repoRoot,
       session: "current",
-      version: 1
+      version: 2
     });
 
     scenario.spawn("current");
@@ -382,9 +453,16 @@ export default function ({ previous }) {
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -400,7 +478,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "first",
-      version: 1
+      version: 2
     });
 
     scenario.spawn("second");
@@ -501,9 +579,16 @@ export default function ({ previous }) {
       name: "single-repo-resource-command-cleanup-boundary"
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -516,7 +601,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "first",
-      version: 1
+      version: 2
     });
 
     scenario.spawn("second");
@@ -641,7 +726,7 @@ export default function () {
         outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
       }
     ]);
-    expect(partialState.repos[0]?.materializationComplete).toBeFalsy();
+    expect(partialState.repos[0]?.materializationStatus).toBe("failed");
 
     scenario.writeRoot("apps/api/.env.local", "PORT=3000\nOTHER=keep\n");
     scenario.writeWorktree("banana", "apps/api/.env.local", "PORT=3000\nOTHER=keep\n");
@@ -895,7 +980,9 @@ function isDirectExecution(importMetaUrl) {
 
   test("spawn reports resource command timeouts", () => {
     const scenario = createResourceCommandScenario({
-      module: `export default async function () {
+      module: `process.on("SIGTERM", () => {});
+
+export default async function () {
   await new Promise((resolve) => setTimeout(resolve, 5000));
   return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 }
@@ -904,9 +991,11 @@ function isDirectExecution(importMetaUrl) {
       timeoutSeconds: 1
     });
 
+    const startedAt = Date.now();
     expect(() => scenario.spawn("banana")).toThrow(
       /Resource command e2e-symbols failed[\s\S]*kind: timeout[\s\S]*stderr:[\s\S]*<empty>/u
     );
+    expect(Date.now() - startedAt).toBeLessThan(3000);
   });
 });
 
@@ -937,6 +1026,7 @@ function createResourceCommandScenario(options: {
   const worktree = (session: string) => getExpectedWorktreePath(home, repoRoot, session);
 
   return {
+    binDirectory,
     cleanup() {
       return runMonke({
         args: ["cleanup"],

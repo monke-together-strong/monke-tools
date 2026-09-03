@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import {
-  ensureSessionWorktree,
+  ensureSessionWorktreeAsync,
   getExpectedWorktreePath,
   inferSessionName,
   listWorktrees,
@@ -106,7 +106,7 @@ prunable gitdir file points to non-existent location
     ]);
   });
 
-  test("ensureSessionWorktree recreates missing cached worktrees", () => {
+  test("ensureSessionWorktreeAsync recreates missing cached worktrees", async () => {
     const sandbox = makeTempDir("git-recreate-worktree");
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
@@ -128,13 +128,13 @@ prunable gitdir file points to non-existent location
     git(sourceRoot, ["worktree", "add", expectedPath, session]);
     rmSync(expectedPath, { force: true, recursive: true });
 
-    const result = ensureSessionWorktree(runtime, home, sourceRoot, session);
+    const result = await ensureSessionWorktreeAsync(runtime, home, sourceRoot, session);
 
     expect(result).toStrictEqual({ created: true, path: expectedPath });
     expect(git(expectedPath, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(session);
   });
 
-  test("ensureSessionWorktree rejects invalid session names before worktree operations", () => {
+  test("ensureSessionWorktreeAsync rejects invalid session names before worktree operations", async () => {
     const sandbox = makeTempDir("git-invalid-session");
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
@@ -148,13 +148,13 @@ prunable gitdir file points to non-existent location
 `
     });
 
-    expect(() =>
-      ensureSessionWorktree(
+    await expect(
+      ensureSessionWorktreeAsync(
         createRuntime({ cwd: sourceRoot }),
         path.join(sandbox, "home"),
         sourceRoot,
         "--help"
       )
-    ).toThrow(/Invalid session name "--help"/u);
+    ).rejects.toThrow(/Invalid session name "--help"/u);
   });
 });

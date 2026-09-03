@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import type { SpawnSyncReturns } from "node:child_process";
+import type { ChildProcessWithoutNullStreams, SpawnSyncReturns } from "node:child_process";
 import { hash } from "node:crypto";
 import {
   accessSync,
@@ -31,14 +31,32 @@ import type {
   MultiSelectPrompt,
   ReleaseDistribution,
   Runtime,
+  SessionMaterializationCheckpoint,
   SelectPrompt
 } from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
+const ASYNC_TERMINATION_GRACE_MS = 250;
 const LOCK_RETRY_INTERVAL_MS = 50;
 const RELEASE_CATALOG_PAGE_SIZE = 100;
 const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
+type AsyncChildProcess = ChildProcessWithoutNullStreams;
+const activeAsyncChildren = new Set<AsyncChildProcess>();
+const timedOutProcessGroups = new Map<number, AsyncChildProcess>();
+const PARENT_TERMINATION_SIGNALS = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
+// Stable handler identities, so detaching removes exactly what attaching added.
+const PARENT_TERMINATION_HANDLERS = new Map<NodeJS.Signals, () => void>(
+  PARENT_TERMINATION_SIGNALS.map((signal) => [
+    signal,
+    () => {
+      forwardParentTermination(signal);
+    }
+  ])
+);
+let forwardedTerminationSignal: NodeJS.Signals | undefined;
+let parentExitScheduled = false;
+let terminationEscalated = false;
 const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
   pid: z.unknown().optional()
@@ -74,6 +92,8 @@ export interface RuntimeOptions {
   releaseDistribution?: ReleaseDistribution;
   /** Scripted selected values used by tests for Clack-style select prompts. */
   selectValues?: string[];
+  /** Optional injected Session checkpoint boundary used by interruption tests. */
+  sessionMaterializationBoundary?: (checkpoint: SessionMaterializationCheckpoint) => void;
   /** Status-output TTY override used by presentation behavior tests. */
   stderrIsTTY?: boolean;
   /** Scripted stdin lines used by tests for interactive prompts. */
@@ -166,6 +186,7 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
       }
       return selected;
     },
+    sessionMaterializationBoundary: options?.sessionMaterializationBoundary,
     stderrIsTTY: resolveStderrIsTTY(options),
     toolBuildIdentity: options?.toolBuildIdentity ?? DEFAULT_TOOL_BUILD_IDENTITY,
     toolInstallRoot: options?.toolInstallRoot ?? resolveRunningToolInstallRoot(),
@@ -277,8 +298,11 @@ function executeCommand(
   args: string[],
   options: ExecOptions | undefined
 ) {
-  const childEnv = { ...runtimeEnv, ...options?.env };
-  delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
+  const childEnv = {
+    ...runtimeEnv,
+    ...options?.env,
+    MONKE_SHELL_DIR_DIRECTIVE: undefined
+  };
 
   const result = spawnSync(command, args, {
     cwd: options?.cwd ?? runtimeCwd,
@@ -301,59 +325,289 @@ function executeCommandAsync(
   args: string[],
   options: ExecOptions | undefined
 ): Promise<ExecResult> {
-  const childEnv = { ...runtimeEnv, ...options?.env };
-  delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
+  if (forwardedTerminationSignal !== undefined) {
+    return Promise.reject(
+      new MonkeError("Cannot start a command while the process is terminating")
+    );
+  }
+  const childEnv = {
+    ...runtimeEnv,
+    ...options?.env,
+    MONKE_SHELL_DIR_DIRECTIVE: undefined
+  };
 
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options?.cwd ?? runtimeCwd,
+      detached: process.platform !== "win32",
       env: childEnv,
       stdio: "pipe"
     });
-    let stderr = "";
-    let stdout = "";
-    let timedOut = false;
-    const timeout =
-      options?.timeoutSeconds === undefined
-        ? undefined
-        : setTimeout(() => {
-            timedOut = true;
-            child.kill("SIGTERM");
-          }, options.timeoutSeconds * 1000);
-
-    child.stdout.setEncoding("utf-8");
-    child.stderr.setEncoding("utf-8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.once("error", (error) => {
-      if (timeout !== undefined) {
-        clearTimeout(timeout);
-      }
-      reject(new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`));
-    });
-    child.once("close", (code, signal) => {
-      if (timeout !== undefined) {
-        clearTimeout(timeout);
-      }
-      const exitCode = timedOut ? -1 : (code ?? -1);
-      if (timedOut && options?.allowFailure === true) {
-        resolve({ exitCode, stderr, stdout, timedOut: true });
-        return;
-      }
-      if (code !== 0 && options?.allowFailure !== true) {
-        const reason =
-          stderr.trim() || stdout.trim() || `terminated by signal ${signal ?? "unknown"}`;
-        reject(new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`));
-        return;
-      }
-      resolve({ exitCode, stderr, stdout });
-    });
-    child.stdin.end(options?.stdin);
+    new AsyncCommandExecution(child, command, args, options, resolve, reject).start();
   });
+}
+
+class AsyncCommandExecution {
+  #forceKill: ReturnType<typeof setTimeout> | undefined;
+  #settled = false;
+  #stderr = "";
+  #stdinError: Error | undefined;
+  #stdout = "";
+  #timedOut = false;
+  #timeout: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(
+    private readonly child: AsyncChildProcess,
+    private readonly command: string,
+    private readonly args: string[],
+    private readonly options: ExecOptions | undefined,
+    private readonly resolve: (result: ExecResult) => void,
+    private readonly reject: (error: Error) => void
+  ) {}
+
+  start() {
+    registerAsyncChild(this.child);
+    this.captureOutput();
+    this.listenForCompletion();
+    this.startTimeout();
+    this.child.stdin.end(this.options?.stdin);
+  }
+
+  private captureOutput() {
+    this.child.stdout.setEncoding("utf-8");
+    this.child.stderr.setEncoding("utf-8");
+    this.child.stdout.on("data", (chunk: string) => {
+      this.#stdout += chunk;
+    });
+    this.child.stderr.on("data", (chunk: string) => {
+      this.#stderr += chunk;
+    });
+  }
+
+  private clearTimers() {
+    if (this.#timeout !== undefined) {
+      clearTimeout(this.#timeout);
+    }
+    if (this.#forceKill !== undefined) {
+      clearTimeout(this.#forceKill);
+    }
+  }
+
+  private forceTimeoutCompletion() {
+    terminateChildProcessTree(this.child.pid, "SIGKILL", () => {
+      this.child.kill("SIGKILL");
+    });
+    if (this.child.pid !== undefined) {
+      timedOutProcessGroups.delete(this.child.pid);
+    }
+    unregisterAsyncChild(this.child);
+    this.settleTimeout();
+    finishParentTerminationAfterEscalation();
+    detachParentTerminationHandlersIfIdle();
+  }
+
+  private handleClose(code: number | null, signal: NodeJS.Signals | null) {
+    try {
+      if (this.#timedOut) {
+        return;
+      }
+      const exitCode = code ?? -1;
+      if (code !== 0 && this.options?.allowFailure !== true) {
+        const reason =
+          this.#stderr.trim() ||
+          this.#stdout.trim() ||
+          `terminated by signal ${signal ?? "unknown"}`;
+        this.rejectOnce(
+          new MonkeError(`Command failed: ${formatCommand(this.command, this.args)}\n${reason}`)
+        );
+        return;
+      }
+      if (this.#stdinError !== undefined && code === 0) {
+        // A successful exit cannot be trusted when the input was never fully delivered.
+        this.rejectOnce(
+          new MonkeError(
+            `Command input was not fully written: ${formatCommand(this.command, this.args)}\n${this.#stdinError.message}`,
+            { cause: this.#stdinError }
+          )
+        );
+        return;
+      }
+      this.resolveOnce({ exitCode, stderr: this.#stderr, stdout: this.#stdout });
+    } finally {
+      unregisterAsyncChild(this.child);
+    }
+  }
+
+  private listenForCompletion() {
+    // Writing to a child that already stopped reading raises EPIPE here. Record it instead of
+    // letting the unhandled stream error escape, and settle it in handleClose.
+    this.child.stdin.on("error", (error: Error) => {
+      this.#stdinError ??= error;
+    });
+    this.child.once("error", (error) => {
+      if (this.#timedOut) {
+        return;
+      }
+      this.rejectOnce(
+        new MonkeError(`Failed to run ${formatCommand(this.command, this.args)}: ${error.message}`)
+      );
+      unregisterAsyncChild(this.child);
+    });
+    this.child.once("close", (code, signal) => {
+      this.handleClose(code, signal);
+    });
+  }
+
+  private rejectOnce(error: Error) {
+    if (this.#settled) {
+      return;
+    }
+    this.#settled = true;
+    this.clearTimers();
+    this.reject(error);
+  }
+
+  private resolveOnce(result: ExecResult) {
+    if (this.#settled) {
+      return;
+    }
+    this.#settled = true;
+    this.clearTimers();
+    this.resolve(result);
+  }
+
+  private settleTimeout() {
+    if (this.options?.allowFailure === true) {
+      this.resolveOnce({
+        exitCode: -1,
+        stderr: this.#stderr,
+        stdout: this.#stdout,
+        timedOut: true
+      });
+      return;
+    }
+    this.rejectOnce(new MonkeError(`Command timed out: ${formatCommand(this.command, this.args)}`));
+  }
+
+  private startTimeout() {
+    if (this.options?.timeoutSeconds === undefined) {
+      return;
+    }
+    this.#timeout = setTimeout(() => {
+      this.#timedOut = true;
+      if (this.child.pid !== undefined) {
+        timedOutProcessGroups.set(this.child.pid, this.child);
+      }
+      terminateChildProcessTree(this.child.pid, "SIGTERM", () => {
+        this.child.kill("SIGTERM");
+      });
+      this.#forceKill = setTimeout(() => {
+        this.forceTimeoutCompletion();
+      }, ASYNC_TERMINATION_GRACE_MS);
+    }, this.options.timeoutSeconds * 1000);
+  }
+}
+
+function registerAsyncChild(child: AsyncChildProcess) {
+  if (activeAsyncChildren.size === 0 && timedOutProcessGroups.size === 0) {
+    attachParentTerminationHandlers();
+  }
+  activeAsyncChildren.add(child);
+}
+
+function unregisterAsyncChild(child: AsyncChildProcess) {
+  if (!activeAsyncChildren.delete(child)) {
+    return;
+  }
+  if (forwardedTerminationSignal !== undefined) {
+    finishParentTerminationAfterEscalation();
+    return;
+  }
+  detachParentTerminationHandlersIfIdle();
+}
+
+function detachParentTerminationHandlersIfIdle() {
+  if (
+    activeAsyncChildren.size === 0 &&
+    timedOutProcessGroups.size === 0 &&
+    forwardedTerminationSignal === undefined
+  ) {
+    detachParentTerminationHandlers();
+  }
+}
+
+function attachParentTerminationHandlers() {
+  for (const [signal, handler] of PARENT_TERMINATION_HANDLERS) {
+    process.on(signal, handler);
+  }
+}
+
+function detachParentTerminationHandlers() {
+  for (const [signal, handler] of PARENT_TERMINATION_HANDLERS) {
+    process.off(signal, handler);
+  }
+}
+
+function finishParentTerminationAfterEscalation() {
+  if (
+    terminationEscalated &&
+    activeAsyncChildren.size === 0 &&
+    timedOutProcessGroups.size === 0 &&
+    !parentExitScheduled
+  ) {
+    detachParentTerminationHandlers();
+    parentExitScheduled = true;
+    setImmediate(() => {
+      const signal = forwardedTerminationSignal;
+      forwardedTerminationSignal = undefined;
+      parentExitScheduled = false;
+      terminationEscalated = false;
+      if (signal !== undefined) {
+        process.kill(process.pid, signal);
+      }
+    });
+  }
+}
+
+function forwardParentTermination(signal: NodeJS.Signals) {
+  forwardedTerminationSignal ??= signal;
+  terminationEscalated = true;
+  for (const child of activeAsyncChildren) {
+    terminateActiveChild(child.pid, child, signal);
+  }
+  for (const [pid, child] of timedOutProcessGroups) {
+    terminateActiveChild(pid, child, signal);
+  }
+  finishParentTerminationAfterEscalation();
+}
+
+function terminateActiveChild(
+  pid: number | undefined,
+  child: AsyncChildProcess,
+  signal: NodeJS.Signals
+) {
+  terminateChildProcessTree(pid, signal, () => {
+    child.kill(signal);
+  });
+  terminateChildProcessTree(pid, "SIGKILL", () => {
+    child.kill("SIGKILL");
+  });
+}
+
+function terminateChildProcessTree(
+  pid: number | undefined,
+  signal: NodeJS.Signals,
+  fallback: () => void
+) {
+  if (pid === undefined || process.platform === "win32") {
+    fallback();
+    return;
+  }
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    fallback();
+  }
 }
 
 function handleSpawnError(
@@ -454,14 +708,14 @@ export function withGlobalLock<T>(home: string, callback: () => T) {
   return withLockPath(path.join(home, "lock"), callback);
 }
 
+/** Run asynchronous Session work while holding the machine-wide Monke lock. */
+export async function withGlobalLockAsync<T>(home: string, callback: () => Promise<T>) {
+  return await withLockPathAsync(path.join(home, "lock"), callback);
+}
+
 /** Run an asynchronous installation mutation under the machine-wide installation lock. */
 export async function withInstallationLockAsync<T>(home: string, callback: () => Promise<T>) {
-  const release = await acquireLockPathAsync(path.join(home, "locks", "installation.lock"));
-  try {
-    return await callback();
-  } finally {
-    release();
-  }
+  return await withLockPathAsync(path.join(home, "locks", "installation.lock"), callback);
 }
 
 function acquireLockPathAsync(lockPath: string) {
@@ -486,6 +740,24 @@ function acquireLockPathAsync(lockPath: string) {
 /** Run a synchronous callback while holding a lock scoped inside the monke home directory. */
 export function withScopedLock<T>(home: string, namespace: string, callback: () => T) {
   return withLockPath(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
+}
+
+/** Run asynchronous work while holding a lock scoped inside the monke home directory. */
+export async function withScopedLockAsync<T>(
+  home: string,
+  namespace: string,
+  callback: () => Promise<T>
+) {
+  return await withLockPathAsync(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
+}
+
+async function withLockPathAsync<T>(lockPath: string, callback: () => Promise<T>) {
+  const release = await acquireLockPathAsync(lockPath);
+  try {
+    return await callback();
+  } finally {
+    release();
+  }
 }
 
 function withLockPath<T>(lockPath: string, callback: () => T) {

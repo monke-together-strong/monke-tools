@@ -16,13 +16,14 @@ import { hashKey } from "../src/runtime.ts";
 import { getSessionStateFilePath, loadSessionState } from "../src/session-state-store.ts";
 import type { SelectPrompt } from "../src/types.ts";
 import {
-  createRepo,
+  createRepo as createTestRepo,
   git,
   installCodexUrlOpenShim,
   installWindowsCmdShim,
   makeTempDir,
   runMonke,
   runMonkeAsync,
+  runMonkeCapturingFailure,
   withPlatform
 } from "./helpers.ts";
 
@@ -511,7 +512,7 @@ previous:
     ).toThrow(/Invalid GitHub PR #404:[\s\S]*headRefName/u);
   });
 
-  test("swing creates a missing same-repo GitHub PR Session", () => {
+  test("swing creates a missing same-repo GitHub PR Session and retains its source identity", () => {
     const sandbox = makeTempDir("swing-pr-create");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -571,6 +572,98 @@ apps:
     expect(result.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
     expect(loadSessionState(home, repoRoot, prBranch).repos[0]?.diffBaseRef).toBeUndefined();
+
+    const completed = loadSessionState(home, repoRoot, prBranch);
+    expect(() => runMonke({ args: ["spawn", prBranch], cwd: repoRoot, monkeHome: home })).toThrow(
+      /completed Session.*retained Session branch.*use a new Session/u
+    );
+    expect(loadSessionState(home, repoRoot, prBranch)).toStrictEqual(completed);
+  });
+
+  test("swing refuses to navigate to a newly prepared config-less PR Session", () => {
+    const sandbox = makeTempDir("swing-pr-config-less");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const prBranch = "feature/config-less";
+    const repoRoot = createTestRepo(path.join(sandbox, "root"), {
+      "README.md": "main\n"
+    });
+    installBareOrigin(sandbox, repoRoot);
+    pushReadmePullRequestHead(repoRoot, {
+      branch: prBranch,
+      contents: "pr head\n",
+      message: "config-less pr head",
+      number: 87
+    });
+    installSwingGhShim(binDirectory, {
+      "87": {
+        headRefName: prBranch,
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "owner" }
+      }
+    });
+    const openLogPath = installCodexUrlOpenShim(binDirectory);
+
+    const result = runMonkeCapturingFailure({
+      args: ["swing", "pr:87", "--codex"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
+    expect(result.error?.message).toContain(
+      "Session materialization failed after all runnable work settled."
+    );
+    expect(result.error?.message).toContain(`Prepared Root worktree: ${worktreeRoot}`);
+    expect(result.error?.message).toContain(`Retry: mt spawn ${prBranch}`);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).not.toContain(`Moved Swing target to ${worktreeRoot}`);
+    expect(result.stderr).not.toContain(`Opened Codex workspace: ${worktreeRoot}`);
+    expect(existsSync(openLogPath)).toBeFalsy();
+    expect(loadSessionState(home, repoRoot, prBranch).repos[0]).toMatchObject({
+      materializationStatus: "pending",
+      preparationStatus: "prepared"
+    });
+  });
+
+  test("swing validates completed pinned-default identity before recreating its PR branch", () => {
+    const sandbox = makeTempDir("swing-pr-pinned-default-recovery");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const prBranch = "feature/pinned-default";
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "main\n"
+    });
+    installBareOrigin(sandbox, repoRoot);
+    runMonke({ args: ["spawn", prBranch, "-m"], cwd: repoRoot, monkeHome: home });
+    git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/88/head`]);
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
+    git(repoRoot, ["worktree", "remove", "--force", worktreeRoot]);
+    git(repoRoot, ["branch", "-D", prBranch]);
+    installSwingGhShim(binDirectory, {
+      "88": {
+        headRefName: prBranch,
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "owner" }
+      }
+    });
+    const before = loadSessionState(home, repoRoot, prBranch);
+
+    const result = runMonkeCapturingFailure({
+      args: ["swing", "pr:88"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(result.error?.message).toMatch(
+      /completed Session.*pinned default branch.*use a new Session/u
+    );
+    expect(result.stdout).toBe("");
+    expect(existsSync(worktreeRoot)).toBeFalsy();
+    expect(localBranchExists(repoRoot, prBranch)).toBeFalsy();
+    expect(loadSessionState(home, repoRoot, prBranch)).toStrictEqual(before);
   });
 
   test("swing rejects an invalid existing PR Session path without creating the PR branch", () => {
@@ -797,6 +890,10 @@ apps:
     );
   });
 });
+
+function createRepo(root: string, files: Record<string, string>) {
+  return createTestRepo(root, { "monke.yml": "apps: {}\n", ...files });
+}
 
 function installBareOrigin(sandbox: string, repoRoot: string) {
   const originRoot = path.join(sandbox, "origin.git");
