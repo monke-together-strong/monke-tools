@@ -125,6 +125,19 @@ interface PreparedRepoWorktree {
   worktreePath: string;
 }
 
+interface RepoLifecycleNodeContext {
+  home: string;
+  retryCommand: string;
+  rootSourceRoot: string;
+  runtime: Runtime;
+  session: string;
+}
+
+type PrepareRepoLifecycleNode = SessionMaterializationNode<
+  PreparedRepoWorktree,
+  RepoMaterializationResult
+>["prepare"];
+
 interface ConfiguredSpawn {
   dirtySnapshots: Map<string, DirtySnapshot>;
   getDefaultRef: (sourceRoot: string) => PinnedDefaultBranchRef;
@@ -140,10 +153,6 @@ interface ConfiguredSpawn {
 
 interface PinnedDefaultBranchRef extends DefaultBranchRef {
   pinnedRef: string;
-}
-
-class BootstrapCommandError extends MonkeError {
-  override name = "BootstrapCommandError";
 }
 
 /** Options controlling `mt cleanup` lifecycle behavior. */
@@ -317,30 +326,16 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
       initialState.diffBaseRef = defaultRef.ref;
       initialState.pinnedRef = defaultRef.pinnedRef;
     }
-    return {
-      dependencyRoots: repoConfig.externalInOrder.map((dependency) => dependency.absoluteRepoRoot),
-      initialState,
-      async materialize({ checkpoint, dependencyResults, existingState, prepared }) {
-        const result = await materializeRepo({
-          baselinePortsRoot: prepared.baselinePortsRoot,
-          dependencyResults,
-          diffBaseRef: prepared.diffBaseRef,
-          existingState,
-          home: execution.home,
-          persistRepoState: checkpoint,
-          repoConfig,
-          retryCommand: formatSpawnRetryCommand(
-            execution.session,
-            execution.sourcePlan.spawnOptions
-          ),
-          rootSourceRoot: execution.rootSourceRoot,
-          runtime: execution.runtime,
-          session: execution.session,
-          worktreePath: prepared.worktreePath
-        });
-        return { state: result.state, value: result };
+    return createRepoLifecycleNode({
+      context: {
+        home: execution.home,
+        retryCommand: formatSpawnRetryCommand(execution.session, execution.sourcePlan.spawnOptions),
+        rootSourceRoot: execution.rootSourceRoot,
+        runtime: execution.runtime,
+        session: execution.session
       },
-      async prepare(lifecycleState, checkpoint) {
+      initialState,
+      prepare: async (lifecycleState, checkpoint) => {
         const prepared = await prepareSpawnRepoWorktree({
           dirtySnapshot: execution.dirtySnapshots.get(repoConfig.sourceRoot),
           existingState: lifecycleState,
@@ -372,10 +367,42 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
           warnings: prepared.preparationWarnings
         };
       },
-      reuse: toRepoMaterializationResult,
-      sourceRoot: repoConfig.sourceRoot
-    } satisfies SessionMaterializationNode<PreparedRepoWorktree, RepoMaterializationResult>;
+      repoConfig
+    });
   });
+}
+
+function createRepoLifecycleNode(options: {
+  context: RepoLifecycleNodeContext;
+  initialState: SessionRepoState;
+  prepare: PrepareRepoLifecycleNode;
+  repoConfig: RepoConfig;
+}) {
+  const { context, repoConfig } = options;
+  return {
+    dependencyRoots: repoConfig.externalInOrder.map((dependency) => dependency.absoluteRepoRoot),
+    initialState: options.initialState,
+    async materialize({ checkpoint, dependencyResults, existingState, prepared }) {
+      const result = await materializeRepo({
+        baselinePortsRoot: prepared.baselinePortsRoot,
+        dependencyResults,
+        diffBaseRef: prepared.diffBaseRef,
+        existingState,
+        home: context.home,
+        persistRepoState: checkpoint,
+        repoConfig,
+        retryCommand: context.retryCommand,
+        rootSourceRoot: context.rootSourceRoot,
+        runtime: context.runtime,
+        session: context.session,
+        worktreePath: prepared.worktreePath
+      });
+      return { state: result.state, value: result };
+    },
+    prepare: options.prepare,
+    reuse: toRepoMaterializationResult,
+    sourceRoot: repoConfig.sourceRoot
+  } satisfies SessionMaterializationNode<PreparedRepoWorktree, RepoMaterializationResult>;
 }
 
 interface SpawnRepoPreparationRequest {
@@ -1035,31 +1062,20 @@ function createMaterializeNodes(execution: ReturnType<typeof initializeMateriali
     const recordedWorktreePath =
       recordedState?.worktreePath ??
       getExpectedWorktreePath(execution.home, repoConfig.sourceRoot, execution.session);
-    return {
-      dependencyRoots: repoConfig.externalInOrder.map((dependency) => dependency.absoluteRepoRoot),
+    return createRepoLifecycleNode({
+      context: {
+        home: execution.home,
+        retryCommand: "mt materialize",
+        rootSourceRoot: execution.context.sourceRoot,
+        runtime: execution.runtime,
+        session: execution.session
+      },
       initialState: createInitialRepoLifecycleState(
         repoConfig,
         recordedWorktreePath,
         recordedState
       ),
-      async materialize({ checkpoint, dependencyResults, existingState, prepared }) {
-        const result = await materializeRepo({
-          baselinePortsRoot: prepared.baselinePortsRoot,
-          dependencyResults,
-          diffBaseRef: prepared.diffBaseRef,
-          existingState,
-          home: execution.home,
-          persistRepoState: checkpoint,
-          repoConfig,
-          retryCommand: "mt materialize",
-          rootSourceRoot: execution.context.sourceRoot,
-          runtime: execution.runtime,
-          session: execution.session,
-          worktreePath: prepared.worktreePath
-        });
-        return { state: result.state, value: result };
-      },
-      async prepare(lifecycleState, checkpoint) {
+      prepare: async (lifecycleState, checkpoint) => {
         const prepared = await prepareMaterializeRepoWorktree(
           execution,
           repoConfig,
@@ -1078,9 +1094,8 @@ function createMaterializeNodes(execution: ReturnType<typeof initializeMateriali
           warnings: prepared.preparationWarnings
         };
       },
-      reuse: toRepoMaterializationResult,
-      sourceRoot: repoConfig.sourceRoot
-    } satisfies SessionMaterializationNode<PreparedRepoWorktree, RepoMaterializationResult>;
+      repoConfig
+    });
   });
 }
 
@@ -1811,7 +1826,7 @@ async function runBootstrapCommand(
     });
   } catch (error) {
     const detail = errorMessage(error);
-    throw new BootstrapCommandError(
+    throw new MonkeError(
       `Bootstrap command failed for ${repoConfig.sourceRoot}: ${repoConfig.bootstrapCommand}\n${detail}\nPartial Session state was kept; fix the command and re-run ${retryCommand} to resume from this repo.`
     );
   }

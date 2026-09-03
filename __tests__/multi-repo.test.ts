@@ -25,6 +25,10 @@ import {
 } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
+const INDEPENDENT_SIBLING_SETTLE_DELAY_SECONDS = 0.1;
+const SIBLING_START_BARRIER_ATTEMPTS = 200;
+const SIBLING_START_BARRIER_DELAY_SECONDS = 0.01;
+const SLOW_PREPARATION_DELAY_SECONDS = 0.3;
 
 function makeRepoTempDir(prefix: string) {
   const testTempRoot = path.join(projectRoot, "tmp", "tests");
@@ -1165,7 +1169,7 @@ apps:
     });
     const successfulRoot = createRepo(path.join(sandbox, "successful"), {
       "app/.env": "PORT=4200\n",
-      "monke.yml": `bootstrapCommand: sleep 0.1; printf x >> "${successfulRuns}"; touch "${settledMarker}"
+      "monke.yml": `bootstrapCommand: sleep ${INDEPENDENT_SIBLING_SETTLE_DELAY_SECONDS}; printf x >> "${successfulRuns}"; touch "${settledMarker}"
 seedPaths:
   - optional-missing
 apps:
@@ -1316,7 +1320,7 @@ external:
       afterCommand: {
         args: `worktree add ${slowWorktree} overlap`,
         cwd: slowRoot,
-        script: `sleep 0.3; touch "${slowPreparationDone}"`
+        script: `sleep ${SLOW_PREPARATION_DELAY_SECONDS}; touch "${slowPreparationDone}"`
       }
     });
 
@@ -1339,7 +1343,7 @@ external:
     const firstStarted = path.join(sandbox, "first-started");
     const secondStarted = path.join(sandbox, "second-started");
     const waitForSibling = (ownMarker: string, siblingMarker: string) =>
-      `touch "${ownMarker}"; attempts=0; while [ ! -f "${siblingMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -lt 200 ] || exit 91; sleep 0.01; done`;
+      `touch "${ownMarker}"; attempts=0; while [ ! -f "${siblingMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -lt ${SIBLING_START_BARRIER_ATTEMPTS} ] || exit 91; sleep ${SIBLING_START_BARRIER_DELAY_SECONDS}; done`;
 
     const firstRoot = createRepo(path.join(sandbox, "first"), {
       "app/.env": "PORT=4100\n",
