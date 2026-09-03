@@ -4,9 +4,16 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
-import { loadSessionState } from "../src/session-state-store.ts";
+import { getSessionStateFilePath, loadSessionState } from "../src/session-state-store.ts";
 import type { SessionMaterializationCheckpoint } from "../src/types.ts";
-import { createRepo, makeTempDir, runMonke, runMonkeCapturingFailure } from "./helpers.ts";
+import {
+  createRepo,
+  git,
+  makeTempDir,
+  runMonke,
+  runMonkeCapturingFailure,
+  write
+} from "./helpers.ts";
 
 interface InterruptionCase {
   checkpoint: SessionMaterializationCheckpoint;
@@ -151,6 +158,43 @@ export default function () {
         ? "bb"
         : "b"
     );
+  });
+
+  test("repo-progress interruption retains an established Cleanup obligation", () => {
+    const sandbox = makeTempDir("session-interruption-retained-cleanup");
+    const home = path.join(sandbox, "home");
+    const cleanupMarker = path.join(sandbox, "cleanup-ran");
+    const effectMarker = path.join(sandbox, "effect-created");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": `bootstrapCommand: touch "${effectMarker}"
+cleanupCommand: touch "${cleanupMarker}"
+apps: {}
+`
+    });
+
+    runMonke({ args: ["spawn", "retained"], cwd: repoRoot, monkeHome: home });
+    write(repoRoot, "monke.yml", "apps: {}\n");
+    git(repoRoot, ["add", "monke.yml"]);
+    git(repoRoot, ["commit", "-m", "remove lifecycle commands"]);
+
+    const interrupted = runMonkeCapturingFailure({
+      args: ["spawn", "retained"],
+      cwd: repoRoot,
+      extraEnv: { MONKE_TEST_INTERRUPT_CHECKPOINT: "repo-progress" },
+      monkeHome: home
+    });
+
+    expect(interrupted.error).not.toBeNull();
+    expect(loadSessionState(home, repoRoot, "retained").repos[0]).toMatchObject({
+      cleanupCommand: `touch "${cleanupMarker}"`,
+      cleanupEligible: true,
+      materializationStatus: "pending"
+    });
+
+    runMonke({ args: ["chop", "retained", "--force"], cwd: repoRoot, monkeHome: home });
+
+    expect(existsSync(cleanupMarker)).toBeTruthy();
+    expect(existsSync(getSessionStateFilePath(home, repoRoot, "retained"))).toBeFalsy();
   });
 });
 

@@ -220,7 +220,7 @@ export async function spawnSessionFromSourceRootLocked(
   session: string,
   spawnOptions: SpawnOptions
 ) {
-  const initialized = await initializeSpawn(runtime, home, rootSourceRoot, session, spawnOptions);
+  const initialized = await prepareSpawn(runtime, home, rootSourceRoot, session, spawnOptions);
   const { execution } = initialized;
   await runSessionMaterialization({
     home: execution.home,
@@ -233,7 +233,7 @@ export async function spawnSessionFromSourceRootLocked(
   return execution.rootWorktreePath;
 }
 
-async function initializeSpawn(
+async function prepareSpawn(
   runtime: Runtime,
   home: string,
   rootSourceRoot: string,
@@ -534,11 +534,9 @@ function resolveSpawnSourcePlan(
   const state = loadSessionState(home, rootSourceRoot, session);
   if (state.repos.length > 0 && state.generation.status === "complete") {
     const retainedOptions = retainedSpawnOptions(state);
-    const resumesPinnedSessionBranch =
-      retainedOptions.mode === "default-branch" && spawnOptions.mode === "session-branch";
     if (
       spawnOptions.mode === "default-branch" ||
-      (!sameSpawnOptions(spawnOptions, retainedOptions) && !resumesPinnedSessionBranch)
+      !sameSpawnOptions(spawnOptions, retainedOptions)
     ) {
       throw new MonkeError(
         `Session ${session} is a completed Session using ${formatSpawnPolicy(retainedOptions)}; use a new Session name to change or refresh its source identity`
@@ -647,7 +645,6 @@ function spawnRootConfigExists(
   return existsSync(path.join(rootSourceRoot, "monke.yml"));
 }
 
-// eslint-disable-next-line complexity -- Config-less Spawn keeps its complete compatibility path localized here.
 async function spawnWithoutConfig(
   runtime: Runtime,
   home: string,
@@ -661,74 +658,184 @@ async function spawnWithoutConfig(
   const existingRepoState = priorSessionState.repos.find(
     (repo) => repo.sourceRoot === rootSourceRoot
   );
-  const sessionBranchExisted = branchExists(runtime, rootSourceRoot, session);
-  if (options.mode === "current-head" && !options.copyDirty) {
-    ensureCleanCheckout(runtime, rootSourceRoot);
-  }
-  const dirtySnapshot = shouldCopyDirty(options)
-    ? captureDirtySnapshot(runtime, rootSourceRoot)
-    : null;
-  if (dirtySnapshot !== null) {
-    assertDirtyCarryBoundary(runtime, home, rootSourceRoot, session, dirtySnapshot);
-  }
-  const worktree =
-    rootDefaultRef === null
-      ? await ensureSessionWorktreeAsync(runtime, home, rootSourceRoot, session, {
-          skipCleanCheck: shouldCopyDirty(options)
-        })
-      : await ensureFreshSessionWorktreeFromRefAsync(
-          runtime,
-          home,
-          rootSourceRoot,
-          session,
-          rootDefaultRef.pinnedRef
-        );
-  const sourceHeadRef = resolveAttachedHeadRef(runtime, rootSourceRoot);
+  const prepared = await prepareConfiglessWorktree({
+    existingRepoState,
+    home,
+    options,
+    rootDefaultRef,
+    rootSourceRoot,
+    runtime,
+    session
+  });
+  saveSessionState(
+    home,
+    createConfiglessSessionState({
+      existingRepoState,
+      options,
+      prepared,
+      priorSessionState,
+      rootSourceRoot
+    })
+  );
+  failConfiglessSpawn(runtime, rootSourceRoot, session, options, prepared.worktreePath);
+}
+
+async function prepareConfiglessWorktree(options: {
+  existingRepoState?: SessionRepoState;
+  home: string;
+  options: SpawnOptions;
+  rootDefaultRef: PinnedDefaultBranchRef | null;
+  rootSourceRoot: string;
+  runtime: Runtime;
+  session: string;
+}) {
+  const dirtySnapshot = captureConfiglessDirtySnapshot(options);
+  const sessionBranchExisted = branchExists(
+    options.runtime,
+    options.rootSourceRoot,
+    options.session
+  );
+  const worktree = await ensureConfiglessWorktree(options);
+  const sourceHeadRef = resolveAttachedHeadRef(options.runtime, options.rootSourceRoot);
   const diffBaseRef =
-    existingRepoState?.diffBaseRef ??
-    rootDefaultRef?.ref ??
-    (worktree.created &&
-    !sessionBranchExisted &&
-    sourceHeadRef !== undefined &&
-    options.mode === "current-head"
-      ? sourceHeadRef
-      : undefined);
-  if (dirtySnapshot !== null && worktree.created) {
-    await applyDirtySnapshot(runtime, rootSourceRoot, worktree.path, dirtySnapshot);
-  } else if (dirtySnapshot !== null && dirtySnapshotHasContent(dirtySnapshot)) {
-    warnDirtyStateNotCarried(runtime, rootSourceRoot, session);
+    options.existingRepoState?.diffBaseRef ??
+    options.rootDefaultRef?.ref ??
+    resolveFreshCurrentHeadDiffBase({
+      options: options.options,
+      sessionBranchExisted,
+      sourceHeadRef,
+      worktreeCreated: worktree.created
+    });
+  await carryConfiglessDirtySnapshot(options, worktree, dirtySnapshot);
+  return {
+    diffBaseRef,
+    pinnedRef: options.rootDefaultRef?.pinnedRef ?? options.existingRepoState?.pinnedRef,
+    worktreePath: worktree.path
+  };
+}
+
+function captureConfiglessDirtySnapshot(options: {
+  home: string;
+  options: SpawnOptions;
+  rootSourceRoot: string;
+  runtime: Runtime;
+  session: string;
+}) {
+  if (options.options.mode === "current-head" && !options.options.copyDirty) {
+    ensureCleanCheckout(options.runtime, options.rootSourceRoot);
   }
-  const sessionState = {
-    ...priorSessionState,
-    copyDirty: options.mode === "current-head" ? options.copyDirty : undefined,
-    generation: { number: 0, status: "not-started" as const },
-    graphSource: options.mode === "current-head" ? undefined : ("session-branch" as const),
+  if (!shouldCopyDirty(options.options)) {
+    return null;
+  }
+  const snapshot = captureDirtySnapshot(options.runtime, options.rootSourceRoot);
+  assertDirtyCarryBoundary(
+    options.runtime,
+    options.home,
+    options.rootSourceRoot,
+    options.session,
+    snapshot
+  );
+  return snapshot;
+}
+
+function ensureConfiglessWorktree(options: {
+  home: string;
+  options: SpawnOptions;
+  rootDefaultRef: PinnedDefaultBranchRef | null;
+  rootSourceRoot: string;
+  runtime: Runtime;
+  session: string;
+}) {
+  if (options.rootDefaultRef !== null) {
+    return ensureFreshSessionWorktreeFromRefAsync(
+      options.runtime,
+      options.home,
+      options.rootSourceRoot,
+      options.session,
+      options.rootDefaultRef.pinnedRef
+    );
+  }
+  return ensureSessionWorktreeAsync(
+    options.runtime,
+    options.home,
+    options.rootSourceRoot,
+    options.session,
+    { skipCleanCheck: shouldCopyDirty(options.options) }
+  );
+}
+
+function resolveFreshCurrentHeadDiffBase(options: {
+  options: SpawnOptions;
+  sessionBranchExisted: boolean;
+  sourceHeadRef?: string;
+  worktreeCreated: boolean;
+}) {
+  return options.worktreeCreated &&
+    !options.sessionBranchExisted &&
+    options.sourceHeadRef !== undefined &&
+    options.options.mode === "current-head"
+    ? options.sourceHeadRef
+    : undefined;
+}
+
+async function carryConfiglessDirtySnapshot(
+  options: { rootSourceRoot: string; runtime: Runtime; session: string },
+  worktree: { created: boolean; path: string },
+  dirtySnapshot: DirtySnapshot | null
+) {
+  if (dirtySnapshot === null) {
+    return;
+  }
+  if (worktree.created) {
+    await applyDirtySnapshot(options.runtime, options.rootSourceRoot, worktree.path, dirtySnapshot);
+    return;
+  }
+  if (dirtySnapshotHasContent(dirtySnapshot)) {
+    warnDirtyStateNotCarried(options.runtime, options.rootSourceRoot, options.session);
+  }
+}
+
+function createConfiglessSessionState(options: {
+  existingRepoState?: SessionRepoState;
+  options: SpawnOptions;
+  prepared: { diffBaseRef?: string; pinnedRef?: string; worktreePath: string };
+  priorSessionState: SessionState;
+  rootSourceRoot: string;
+}): SessionState {
+  const { existingRepoState, prepared, rootSourceRoot } = options;
+  return {
+    ...options.priorSessionState,
+    copyDirty: options.options.mode === "current-head" ? options.options.copyDirty : undefined,
+    generation: { number: 0, status: "not-started" },
+    graphSource: options.options.mode === "current-head" ? undefined : "session-branch",
     repos: [
       createInitialRepoLifecycleState(
-        {
-          cleanupCommand: undefined,
-          sourceRoot: rootSourceRoot
-        },
-        worktree.path,
+        { cleanupCommand: undefined, sourceRoot: rootSourceRoot },
+        prepared.worktreePath,
         {
           ...existingRepoState,
           assignedPorts: [],
           cleanupEligible: false,
-          diffBaseRef,
+          diffBaseRef: prepared.diffBaseRef,
           materializationStatus: "pending",
-          pinnedRef:
-            options.mode === "default-branch"
-              ? (rootDefaultRef?.pinnedRef ?? existingRepoState?.pinnedRef)
-              : undefined,
+          pinnedRef: options.options.mode === "default-branch" ? prepared.pinnedRef : undefined,
           preparationStatus: "prepared",
           sourceRoot: rootSourceRoot,
-          worktreePath: worktree.path
+          worktreePath: prepared.worktreePath
         }
       )
     ],
-    spawnSource: options.mode === "current-head" ? undefined : options.mode
+    spawnSource: options.options.mode === "current-head" ? undefined : options.options.mode
   };
-  saveSessionState(home, sessionState);
+}
+
+function failConfiglessSpawn(
+  runtime: Runtime,
+  rootSourceRoot: string,
+  session: string,
+  options: SpawnOptions,
+  worktreePath: string
+): never {
   runtime.writeStderr(
     `Warning: no monke.yml found for ${rootSourceRoot}; prepared session worktree without materializing it.\n`
   );
@@ -737,7 +844,7 @@ async function spawnWithoutConfig(
       "Session materialization failed after all runnable work settled.",
       "Receipt:",
       `  ${rootSourceRoot}: pending (prepared)`,
-      `Prepared Root worktree: ${worktree.path}`,
+      `Prepared Root worktree: ${worktreePath}`,
       `Retry: ${formatSpawnRetryCommand(session, options)}`
     ].join("\n")
   );
@@ -1645,7 +1752,9 @@ function createRepoMaterializationState(
 ) {
   return buildSessionRepoState({
     ...state,
-    cleanupCommand: context.repoConfig.cleanupCommand,
+    cleanupCommand:
+      context.repoConfig.cleanupCommand ??
+      (context.existingState?.cleanupEligible ? context.existingState.cleanupCommand : undefined),
     diffBaseRef: context.diffBaseRef,
     existingState: context.existingState,
     resourceValues:

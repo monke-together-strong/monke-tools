@@ -1,3 +1,5 @@
+import { ok } from "node:assert/strict";
+
 import { errorMessage, MonkeError } from "./errors.ts";
 import { saveSessionState } from "./session-state-store.ts";
 import type { SessionMaterializationCheckpoint, SessionRepoState, SessionState } from "./types.ts";
@@ -114,17 +116,14 @@ export async function runSessionMaterialization<TPrepared, TResult>(
     }
     const dependencyPromises = node.dependencyRoots.map((dependencyRoot) => {
       const dependency = materializationPromises.get(dependencyRoot);
-      if (!dependency) {
-        throw new MonkeError(
-          `Dependency ${dependencyRoot} must precede ${node.sourceRoot} in materialization order`
-        );
-      }
+      ok(
+        dependency,
+        `Dependency ${dependencyRoot} must precede ${node.sourceRoot} in materialization order`
+      );
       return dependency;
     });
     const preparation = preparationPromises.get(node.sourceRoot);
-    if (!preparation) {
-      throw new MonkeError(`Missing Worktree preparation task for ${node.sourceRoot}`);
-    }
+    ok(preparation, `Missing Worktree preparation task for ${node.sourceRoot}`);
     materializationPromises.set(
       node.sourceRoot,
       materializeAfterPrerequisites({
@@ -186,9 +185,10 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
 
   return await options.runRepoMaterialization(async () => {
     const preparedValue = options.prepared.get(options.node.sourceRoot);
-    if (preparedValue === undefined) {
-      throw new MonkeError(`Missing Worktree preparation result for ${options.node.sourceRoot}`);
-    }
+    ok(
+      preparedValue !== undefined,
+      `Missing Worktree preparation result for ${options.node.sourceRoot}`
+    );
     try {
       const completed = await options.node.materialize({
         checkpoint: (state, phase) => {
@@ -352,9 +352,7 @@ class SessionStateOwner {
 
   repo(sourceRoot: string) {
     const repo = this.#state.repos.find((candidate) => candidate.sourceRoot === sourceRoot);
-    if (!repo) {
-      throw new MonkeError(`Missing Session lifecycle state for ${sourceRoot}`);
-    }
+    ok(repo, `Missing Session lifecycle state for ${sourceRoot}`);
     return repo;
   }
 
@@ -370,9 +368,7 @@ class SessionStateOwner {
     const index = this.#state.repos.findIndex(
       (candidate) => candidate.sourceRoot === repo.sourceRoot
     );
-    if (index === -1) {
-      throw new MonkeError(`Missing Session lifecycle state for ${repo.sourceRoot}`);
-    }
+    ok(index !== -1, `Missing Session lifecycle state for ${repo.sourceRoot}`);
     const repos = [...this.#state.repos];
     repos[index] = repo;
     this.replaceState({ ...this.#state, repos }, checkpoint);

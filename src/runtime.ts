@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import type { SpawnSyncReturns } from "node:child_process";
+import type { ChildProcessWithoutNullStreams, SpawnSyncReturns } from "node:child_process";
 import { hash } from "node:crypto";
 import {
   accessSync,
@@ -41,7 +41,7 @@ const LOCK_RETRY_INTERVAL_MS = 50;
 const RELEASE_CATALOG_PAGE_SIZE = 100;
 const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
-type AsyncChildProcess = ReturnType<typeof spawn>;
+type AsyncChildProcess = ChildProcessWithoutNullStreams;
 const activeAsyncChildren = new Set<AsyncChildProcess>();
 const timedOutProcessGroups = new Map<number, AsyncChildProcess>();
 let forwardedTerminationSignal: NodeJS.Signals | undefined;
@@ -333,100 +333,153 @@ function executeCommandAsync(
       env: childEnv,
       stdio: "pipe"
     });
-    registerAsyncChild(child);
-    let stderr = "";
-    let stdout = "";
-    let settled = false;
-    let timedOut = false;
-    let forceKill: ReturnType<typeof setTimeout> | undefined;
-    const clearTimers = () => {
-      if (timeout !== undefined) {
-        clearTimeout(timeout);
-      }
-      if (forceKill !== undefined) {
-        clearTimeout(forceKill);
-      }
-    };
-    const resolveOnce = (result: ExecResult) => {
-      if (!settled) {
-        settled = true;
-        clearTimers();
-        resolve(result);
-      }
-    };
-    const rejectOnce = (error: Error) => {
-      if (!settled) {
-        settled = true;
-        clearTimers();
-        reject(error);
-      }
-    };
-    const settleTimeout = () => {
-      if (options?.allowFailure === true) {
-        resolveOnce({ exitCode: -1, stderr, stdout, timedOut: true });
-      } else {
-        rejectOnce(new MonkeError(`Command timed out: ${formatCommand(command, args)}`));
-      }
-    };
-    const timeout =
-      options?.timeoutSeconds === undefined
-        ? undefined
-        : setTimeout(() => {
-            timedOut = true;
-            if (child.pid !== undefined) {
-              timedOutProcessGroups.set(child.pid, child);
-            }
-            terminateChildProcessTree(child.pid, "SIGTERM", () => {
-              child.kill("SIGTERM");
-            });
-            forceKill = setTimeout(() => {
-              terminateChildProcessTree(child.pid, "SIGKILL", () => {
-                child.kill("SIGKILL");
-              });
-              if (child.pid !== undefined) {
-                timedOutProcessGroups.delete(child.pid);
-              }
-              unregisterAsyncChild(child);
-              settleTimeout();
-              finishParentTerminationAfterEscalation();
-              detachParentTerminationHandlersIfIdle();
-            }, ASYNC_TERMINATION_GRACE_MS);
-          }, options.timeoutSeconds * 1000);
+    new AsyncCommandExecution(child, command, args, options, resolve, reject).start();
+  });
+}
 
-    child.stdout.setEncoding("utf-8");
-    child.stderr.setEncoding("utf-8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
+class AsyncCommandExecution {
+  #forceKill: ReturnType<typeof setTimeout> | undefined;
+  #settled = false;
+  #stderr = "";
+  #stdout = "";
+  #timedOut = false;
+  #timeout: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(
+    private readonly child: AsyncChildProcess,
+    private readonly command: string,
+    private readonly args: string[],
+    private readonly options: ExecOptions | undefined,
+    private readonly resolve: (result: ExecResult) => void,
+    private readonly reject: (error: Error) => void
+  ) {}
+
+  start() {
+    registerAsyncChild(this.child);
+    this.captureOutput();
+    this.listenForCompletion();
+    this.startTimeout();
+    this.child.stdin.end(this.options?.stdin);
+  }
+
+  private captureOutput() {
+    this.child.stdout.setEncoding("utf-8");
+    this.child.stderr.setEncoding("utf-8");
+    this.child.stdout.on("data", (chunk: string) => {
+      this.#stdout += chunk;
     });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
+    this.child.stderr.on("data", (chunk: string) => {
+      this.#stderr += chunk;
     });
-    child.once("error", (error) => {
-      if (timedOut) {
+  }
+
+  private clearTimers() {
+    if (this.#timeout !== undefined) {
+      clearTimeout(this.#timeout);
+    }
+    if (this.#forceKill !== undefined) {
+      clearTimeout(this.#forceKill);
+    }
+  }
+
+  private forceTimeoutCompletion() {
+    terminateChildProcessTree(this.child.pid, "SIGKILL", () => {
+      this.child.kill("SIGKILL");
+    });
+    if (this.child.pid !== undefined) {
+      timedOutProcessGroups.delete(this.child.pid);
+    }
+    unregisterAsyncChild(this.child);
+    this.settleTimeout();
+    finishParentTerminationAfterEscalation();
+    detachParentTerminationHandlersIfIdle();
+  }
+
+  private handleClose(code: number | null, signal: NodeJS.Signals | null) {
+    try {
+      if (this.#timedOut) {
         return;
       }
-      rejectOnce(new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`));
-      unregisterAsyncChild(child);
-    });
-    child.once("close", (code, signal) => {
-      try {
-        const exitCode = timedOut ? -1 : (code ?? -1);
-        if (timedOut) {
-          return;
-        }
-        if (code !== 0 && options?.allowFailure !== true) {
-          const reason =
-            stderr.trim() || stdout.trim() || `terminated by signal ${signal ?? "unknown"}`;
-          rejectOnce(new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`));
-          return;
-        }
-        resolveOnce({ exitCode, stderr, stdout });
-      } finally {
-        unregisterAsyncChild(child);
+      const exitCode = code ?? -1;
+      if (code !== 0 && this.options?.allowFailure !== true) {
+        const reason =
+          this.#stderr.trim() ||
+          this.#stdout.trim() ||
+          `terminated by signal ${signal ?? "unknown"}`;
+        this.rejectOnce(
+          new MonkeError(`Command failed: ${formatCommand(this.command, this.args)}\n${reason}`)
+        );
+        return;
       }
+      this.resolveOnce({ exitCode, stderr: this.#stderr, stdout: this.#stdout });
+    } finally {
+      unregisterAsyncChild(this.child);
+    }
+  }
+
+  private listenForCompletion() {
+    this.child.once("error", (error) => {
+      if (this.#timedOut) {
+        return;
+      }
+      this.rejectOnce(
+        new MonkeError(`Failed to run ${formatCommand(this.command, this.args)}: ${error.message}`)
+      );
+      unregisterAsyncChild(this.child);
     });
-    child.stdin.end(options?.stdin);
-  });
+    this.child.once("close", (code, signal) => {
+      this.handleClose(code, signal);
+    });
+  }
+
+  private rejectOnce(error: Error) {
+    if (this.#settled) {
+      return;
+    }
+    this.#settled = true;
+    this.clearTimers();
+    this.reject(error);
+  }
+
+  private resolveOnce(result: ExecResult) {
+    if (this.#settled) {
+      return;
+    }
+    this.#settled = true;
+    this.clearTimers();
+    this.resolve(result);
+  }
+
+  private settleTimeout() {
+    if (this.options?.allowFailure === true) {
+      this.resolveOnce({
+        exitCode: -1,
+        stderr: this.#stderr,
+        stdout: this.#stdout,
+        timedOut: true
+      });
+      return;
+    }
+    this.rejectOnce(new MonkeError(`Command timed out: ${formatCommand(this.command, this.args)}`));
+  }
+
+  private startTimeout() {
+    if (this.options?.timeoutSeconds === undefined) {
+      return;
+    }
+    this.#timeout = setTimeout(() => {
+      this.#timedOut = true;
+      if (this.child.pid !== undefined) {
+        timedOutProcessGroups.set(this.child.pid, this.child);
+      }
+      terminateChildProcessTree(this.child.pid, "SIGTERM", () => {
+        this.child.kill("SIGTERM");
+      });
+      this.#forceKill = setTimeout(() => {
+        this.forceTimeoutCompletion();
+      }, ASYNC_TERMINATION_GRACE_MS);
+    }, this.options.timeoutSeconds * 1000);
+  }
 }
 
 function registerAsyncChild(child: AsyncChildProcess) {

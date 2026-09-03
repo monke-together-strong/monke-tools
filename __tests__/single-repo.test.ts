@@ -2023,7 +2023,6 @@ apps:
 
   test("session-branch respawn seeds untracked env files from the source checkout", async () => {
     const sandbox = makeTempDir("single-repo-session-branch-seeds");
-    const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       ".gitignore": ".env\n.env.local\nseed-data/\n",
@@ -2042,22 +2041,20 @@ apps:
       "seed-data/fixture.txt": "fixture\n"
     });
 
-    runMonke({
-      args: ["spawn", "respawned", "-m"],
-      binDirectory,
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "respawned");
-    git(repoRoot, ["worktree", "remove", "--force", worktreeRoot]);
-
+    git(repoRoot, ["branch", "respawned"]);
     const runtime = createRuntime({
       cwd: repoRoot,
       env: { MONKE_HOME: home, PATH: process.env.PATH ?? "" },
       onStderr() {},
       onStdout() {}
     });
+    await spawnSessionFromSourceRootLocked(runtime, home, repoRoot, "respawned", {
+      mode: "session-branch"
+    });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "respawned");
+    git(repoRoot, ["worktree", "remove", "--force", worktreeRoot]);
+
     await spawnSessionFromSourceRootLocked(runtime, home, repoRoot, "respawned", {
       mode: "session-branch"
     });

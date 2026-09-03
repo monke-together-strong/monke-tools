@@ -627,6 +627,43 @@ apps:
     });
   });
 
+  test("swing cannot convert a completed pinned-default Session while recreating a PR worktree", () => {
+    const sandbox = makeTempDir("swing-pr-pinned-default-recovery");
+    const home = path.join(sandbox, "home");
+    const binDirectory = path.join(sandbox, "bin");
+    const prBranch = "feature/pinned-default";
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "main\n"
+    });
+    installBareOrigin(sandbox, repoRoot);
+    runMonke({ args: ["spawn", prBranch, "-m"], cwd: repoRoot, monkeHome: home });
+    git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/88/head`]);
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
+    git(repoRoot, ["worktree", "remove", "--force", worktreeRoot]);
+    installSwingGhShim(binDirectory, {
+      "88": {
+        headRefName: prBranch,
+        headRepository: { name: "root" },
+        headRepositoryOwner: { login: "owner" }
+      }
+    });
+    const before = loadSessionState(home, repoRoot, prBranch);
+
+    const result = runMonkeCapturingFailure({
+      args: ["swing", "pr:88"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    expect(result.error?.message).toMatch(
+      /completed Session.*pinned default branch.*use a new Session/u
+    );
+    expect(result.stdout).toBe("");
+    expect(existsSync(worktreeRoot)).toBeFalsy();
+    expect(loadSessionState(home, repoRoot, prBranch)).toStrictEqual(before);
+  });
+
   test("swing rejects an invalid existing PR Session path without creating the PR branch", () => {
     const sandbox = makeTempDir("swing-pr-invalid-path");
     const home = path.join(sandbox, "home");
