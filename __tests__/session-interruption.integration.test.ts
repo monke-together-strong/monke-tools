@@ -160,22 +160,31 @@ export default function () {
     );
   });
 
-  test("repo-progress interruption retains an established Cleanup obligation", () => {
+  test("repo-progress interruption retains Cleanup command A before replacement command B is eligible", () => {
     const sandbox = makeTempDir("session-interruption-retained-cleanup");
     const home = path.join(sandbox, "home");
-    const cleanupMarker = path.join(sandbox, "cleanup-ran");
-    const effectMarker = path.join(sandbox, "effect-created");
+    const oldCleanupMarker = path.join(sandbox, "old-cleanup-ran");
+    const oldEffectMarker = path.join(sandbox, "old-effect-created");
+    const newCleanupMarker = path.join(sandbox, "new-cleanup-ran");
+    const newEffectMarker = path.join(sandbox, "new-effect-created");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "monke.yml": `bootstrapCommand: touch "${effectMarker}"
-cleanupCommand: touch "${cleanupMarker}"
+      "monke.yml": `bootstrapCommand: touch "${oldEffectMarker}"
+cleanupCommand: touch "${oldCleanupMarker}"
 apps: {}
 `
     });
 
     runMonke({ args: ["spawn", "retained"], cwd: repoRoot, monkeHome: home });
-    write(repoRoot, "monke.yml", "apps: {}\n");
+    write(
+      repoRoot,
+      "monke.yml",
+      `bootstrapCommand: touch "${newEffectMarker}"
+cleanupCommand: touch "${newCleanupMarker}"
+apps: {}
+`
+    );
     git(repoRoot, ["add", "monke.yml"]);
-    git(repoRoot, ["commit", "-m", "remove lifecycle commands"]);
+    git(repoRoot, ["commit", "-m", "replace lifecycle commands"]);
 
     const interrupted = runMonkeCapturingFailure({
       args: ["spawn", "retained"],
@@ -186,14 +195,16 @@ apps: {}
 
     expect(interrupted.error).not.toBeNull();
     expect(loadSessionState(home, repoRoot, "retained").repos[0]).toMatchObject({
-      cleanupCommand: `touch "${cleanupMarker}"`,
+      cleanupCommand: `touch "${oldCleanupMarker}"`,
       cleanupEligible: true,
       materializationStatus: "pending"
     });
 
     runMonke({ args: ["chop", "retained", "--force"], cwd: repoRoot, monkeHome: home });
 
-    expect(existsSync(cleanupMarker)).toBeTruthy();
+    expect(existsSync(oldCleanupMarker)).toBeTruthy();
+    expect(existsSync(newCleanupMarker)).toBeFalsy();
+    expect(existsSync(newEffectMarker)).toBeFalsy();
     expect(existsSync(getSessionStateFilePath(home, repoRoot, "retained"))).toBeFalsy();
   });
 });

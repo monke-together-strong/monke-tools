@@ -15,7 +15,7 @@ import {
   validateWorktreeForSession
 } from "./git.ts";
 import { createLogger } from "./logger.ts";
-import { spawnSessionFromSourceRootLocked } from "./monke.ts";
+import { assertSpawnSourcePolicy, spawnSessionFromSourceRootLocked } from "./monke.ts";
 import { samePath } from "./path-identity.ts";
 import { getMonkeHome, hashKey, withGlobalLockAsync } from "./runtime.ts";
 import { requestShellDirectory } from "./shell.ts";
@@ -254,6 +254,9 @@ function resolveSwingTarget(
       {
         createIfMissing: true,
         prepareCreate() {
+          assertSpawnSourcePolicy(home, rootSourceRoot, pullRequestSession.session, {
+            mode: "session-branch"
+          });
           ensurePullRequestSessionBranch(
             runtime,
             rootSourceRoot,

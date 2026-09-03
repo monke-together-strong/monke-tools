@@ -573,6 +573,16 @@ function resolveSpawnSourcePlan(
   );
 }
 
+/** Validate that a retained Session permits the requested Spawn source policy. */
+export function assertSpawnSourcePolicy(
+  home: string,
+  rootSourceRoot: string,
+  session: string,
+  spawnOptions: SpawnOptions
+) {
+  resolveSpawnSourcePlan(home, rootSourceRoot, session, spawnOptions);
+}
+
 function retainedSpawnOptions(state: SessionState): SpawnOptions {
   if (state.spawnSource === "default-branch") {
     return { mode: "default-branch" };
@@ -1537,6 +1547,12 @@ interface RepoMaterializationCheckpoint {
   resourceCommandOutputs: ResourceCommandState[];
 }
 
+type RepoMaterializationCheckpointName =
+  | "cleanup-eligibility"
+  | "repo-progress"
+  | "repo-result"
+  | "resource-command-output";
+
 async function materializeRepo(options: MaterializeRepoOptions) {
   const context = beginRepoMaterialization(options);
   const commandsBeforeAssignments = await resolveCommandsBeforeAssignments(context);
@@ -1546,18 +1562,21 @@ async function materializeRepo(options: MaterializeRepoOptions) {
     assignments,
     commandsBeforeAssignments
   );
-  const crossedExternalEffectCheckpoint =
-    context.hasBootstrapCommand || context.repoConfig.resourceCommandsInOrder.length > 0;
+  const crossedExternalEffectCheckpoint = repoHasMaterializationExternalEffect(context);
 
   return {
     localAssignments: assignments.localAssignments,
-    state: createRepoMaterializationState(context, {
-      assignedPorts: assignments.localAssignedPorts,
-      cleanupEligible:
-        context.existingState?.cleanupEligible === true || crossedExternalEffectCheckpoint,
-      materializationStatus: "materialized",
-      resourceCommandOutputs: commands.commands
-    })
+    state: createRepoMaterializationState(
+      context,
+      {
+        assignedPorts: assignments.localAssignedPorts,
+        cleanupEligible:
+          context.existingState?.cleanupEligible === true || crossedExternalEffectCheckpoint,
+        materializationStatus: "materialized",
+        resourceCommandOutputs: commands.commands
+      },
+      "repo-result"
+    )
   };
 }
 
@@ -1733,13 +1752,17 @@ function resolveRepoResourceCommands(
 function persistRepoMaterializationState(
   context: RepoMaterializationContext,
   state: RepoMaterializationCheckpoint,
-  checkpoint: "cleanup-eligibility" | "repo-progress" | "resource-command-output"
+  checkpoint: Exclude<RepoMaterializationCheckpointName, "repo-result">
 ) {
   context.persistRepoState(
-    createRepoMaterializationState(context, {
-      ...state,
-      materializationStatus: "pending"
-    }),
+    createRepoMaterializationState(
+      context,
+      {
+        ...state,
+        materializationStatus: "pending"
+      },
+      checkpoint
+    ),
     checkpoint
   );
 }
@@ -1748,13 +1771,12 @@ function createRepoMaterializationState(
   context: RepoMaterializationContext,
   state: RepoMaterializationCheckpoint & {
     materializationStatus: SessionRepoState["materializationStatus"];
-  }
+  },
+  checkpoint: RepoMaterializationCheckpointName
 ) {
   return buildSessionRepoState({
     ...state,
-    cleanupCommand:
-      context.repoConfig.cleanupCommand ??
-      (context.existingState?.cleanupEligible ? context.existingState.cleanupCommand : undefined),
+    cleanupCommand: resolveCheckpointCleanupCommand(context, checkpoint),
     diffBaseRef: context.diffBaseRef,
     existingState: context.existingState,
     resourceValues:
@@ -1767,6 +1789,26 @@ function createRepoMaterializationState(
     sourceRoot: context.repoConfig.sourceRoot,
     worktreePath: context.worktreePath
   });
+}
+
+function resolveCheckpointCleanupCommand(
+  context: RepoMaterializationContext,
+  checkpoint: RepoMaterializationCheckpointName
+) {
+  const retainedCommand = context.existingState?.cleanupEligible
+    ? context.existingState.cleanupCommand
+    : undefined;
+  const replacementIsNotEligible =
+    checkpoint === "repo-progress" ||
+    (checkpoint === "repo-result" && !repoHasMaterializationExternalEffect(context));
+  if (context.existingState?.cleanupEligible && replacementIsNotEligible) {
+    return retainedCommand;
+  }
+  return context.repoConfig.cleanupCommand ?? retainedCommand;
+}
+
+function repoHasMaterializationExternalEffect(context: RepoMaterializationContext) {
+  return context.hasBootstrapCommand || context.repoConfig.resourceCommandsInOrder.length > 0;
 }
 
 function prepareRepoWorktree(runtime: Runtime, repoConfig: RepoConfig, worktreePath: string) {

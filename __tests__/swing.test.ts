@@ -627,7 +627,7 @@ apps:
     });
   });
 
-  test("swing cannot convert a completed pinned-default Session while recreating a PR worktree", () => {
+  test("swing validates completed pinned-default identity before recreating its PR branch", () => {
     const sandbox = makeTempDir("swing-pr-pinned-default-recovery");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -640,6 +640,7 @@ apps:
     git(repoRoot, ["push", "origin", `${prBranch}:refs/pull/88/head`]);
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, prBranch);
     git(repoRoot, ["worktree", "remove", "--force", worktreeRoot]);
+    git(repoRoot, ["branch", "-D", prBranch]);
     installSwingGhShim(binDirectory, {
       "88": {
         headRefName: prBranch,
@@ -661,6 +662,7 @@ apps:
     );
     expect(result.stdout).toBe("");
     expect(existsSync(worktreeRoot)).toBeFalsy();
+    expect(localBranchExists(repoRoot, prBranch)).toBeFalsy();
     expect(loadSessionState(home, repoRoot, prBranch)).toStrictEqual(before);
   });
 
