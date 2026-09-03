@@ -21,6 +21,9 @@ import { createRuntime } from "../src/runtime.ts";
 import type { SelectPrompt } from "../src/types.ts";
 
 const tempDirectories: string[] = [];
+const WORKTREE_ADD_BARRIER_ATTEMPTS = 400;
+const WORKTREE_ADD_BARRIER_DELAY_SECONDS = 0.01;
+const WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE = 92;
 
 afterEach(() => {
   while (tempDirectories.length > 0) {
@@ -133,16 +136,16 @@ fi
   mkdir -p "$barrier_dir"
   touch "$barrier_dir/started-$$"
   attempts=0
-  while [ "$attempts" -lt 400 ]; do
+  while [ "$attempts" -lt ${String(WORKTREE_ADD_BARRIER_ATTEMPTS)} ]; do
     count=0
     for marker in "$barrier_dir"/started-*; do
       [ -e "$marker" ] && count=$((count + 1))
     done
     [ "$count" -ge ${String(options.worktreeAddBarrier)} ] && break
     attempts=$((attempts + 1))
-    /bin/sleep 0.01
+    /bin/sleep ${String(WORKTREE_ADD_BARRIER_DELAY_SECONDS)}
   done
-  [ "$attempts" -lt 400 ] || exit 92
+  [ "$attempts" -lt ${String(WORKTREE_ADD_BARRIER_ATTEMPTS)} ] || exit ${String(WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE)}
 fi
 `;
   writeExecutable(

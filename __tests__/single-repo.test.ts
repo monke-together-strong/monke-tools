@@ -1,7 +1,7 @@
 import {
+  chmodSync,
   existsSync,
   lstatSync,
-  mkdirSync,
   readFileSync,
   readlinkSync,
   rmSync,
@@ -1440,8 +1440,9 @@ apps:
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(read(worktreeRoot, "bootstrap-runs")).toBe("x");
-    rmSync(path.join(worktreeRoot, "seed-data"), { recursive: true });
-    write(worktreeRoot, "seed-data", "copy conflict\n");
+    const protectedSourcePath = path.join(repoRoot, "seed-data/protected");
+    write(repoRoot, "seed-data/protected/fixture.txt", "protected fixture\n");
+    chmodSync(protectedSourcePath, 0o000);
 
     expect(() =>
       runMonke({
@@ -1453,8 +1454,7 @@ apps:
     ).toThrow(/Worktree preparation failed/u);
     expect(read(worktreeRoot, "bootstrap-runs")).toBe("x");
 
-    rmSync(path.join(worktreeRoot, "seed-data"));
-    mkdirSync(path.join(worktreeRoot, "seed-data"));
+    chmodSync(protectedSourcePath, 0o700);
     runMonke({
       args: ["materialize"],
       binDirectory,
@@ -1462,8 +1462,53 @@ apps:
       monkeHome: home
     });
 
-    expect(read(worktreeRoot, "seed-data/fixture.txt")).toBe("fixture\n");
+    expect(read(worktreeRoot, "seed-data/protected/fixture.txt")).toBe("protected fixture\n");
     expect(read(worktreeRoot, "bootstrap-runs")).toBe("xx");
+  });
+
+  test("materialize preserves a dangling Session-local Seed symlink", () => {
+    const sandbox = makeTempDir("single-seedpaths-dangling-symlink");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      ".gitignore": "seed-data/\n",
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `seedPaths:
+  - seed-data/profile
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+      "seed-data/profile": "source profile\n"
+    });
+
+    runMonke({
+      args: ["spawn", "banana"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+    const outsidePath = path.join(sandbox, "outside-profile");
+    const targetPath = path.join(worktreeRoot, "seed-data/profile");
+    rmSync(targetPath);
+    symlinkSync(outsidePath, targetPath);
+
+    runMonke({
+      args: ["materialize"],
+      binDirectory,
+      cwd: worktreeRoot,
+      monkeHome: home
+    });
+
+    expect(lstatSync(targetPath).isSymbolicLink()).toBeTruthy();
+    expect(readlinkSync(targetPath)).toBe(outsidePath);
+    expect(existsSync(outsidePath)).toBeFalsy();
   });
 
   test("missing configured seedPaths warn and do not fail session creation", () => {

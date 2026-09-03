@@ -285,7 +285,7 @@ export function getExpectedWorktreePath(home: string, sourceRoot: string, sessio
   return path.join(home, "worktrees", path.basename(sourceRoot), session);
 }
 
-/** Ensure the ordinary reusable Session worktree exists under Monke home. */
+/** Ensure the reusable Session worktree exists under Monke home. */
 export function ensureSessionWorktree(
   runtime: Runtime,
   home: string,
@@ -300,7 +300,7 @@ export function ensureSessionWorktree(
   return { created: prepared.addArguments !== null, path: prepared.path };
 }
 
-/** Ensure the ordinary reusable Session worktree without blocking other repo preparation. */
+/** Ensure the reusable Session worktree without blocking other repo preparation. */
 export async function ensureSessionWorktreeAsync(
   runtime: Runtime,
   home: string,

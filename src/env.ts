@@ -2,6 +2,7 @@ import {
   cpSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -318,8 +319,9 @@ function seedRelativePath(
     return;
   }
 
-  if (existsSync(targetPath)) {
-    if (sourceIsDirectory) {
+  const targetStat = lstatSync(targetPath, { throwIfNoEntry: false });
+  if (targetStat) {
+    if (sourceIsDirectory && targetStat.isDirectory()) {
       cpSync(sourcePath, targetPath, {
         errorOnExist: false,
         force: false,
@@ -373,8 +375,9 @@ async function seedRelativePathAsync(
     return;
   }
 
-  if (existsSync(targetPath)) {
-    if (sourceIsDirectory) {
+  const targetStat = lstatSync(targetPath, { throwIfNoEntry: false });
+  if (targetStat) {
+    if (sourceIsDirectory && targetStat.isDirectory()) {
       await copyAsync(sourcePath, targetPath, {
         errorOnExist: false,
         force: false,

@@ -120,6 +120,7 @@ interface ConfiguredSpawn {
   getDefaultRef: (sourceRoot: string) => DefaultBranchRef;
   home: string;
   reposInOrder: RepoConfig[];
+  resumeDefaultBranch: boolean;
   rootSourceRoot: string;
   rootWorktreePath: string;
   runtime: Runtime;
@@ -261,18 +262,25 @@ function initializeSpawn(
   session: string,
   spawnOptions: SpawnOptions
 ) {
-  assertSpawnRequest(runtime, home, rootSourceRoot, session, spawnOptions);
+  const resumeDefaultBranch = resolveDefaultBranchResume(
+    home,
+    rootSourceRoot,
+    session,
+    spawnOptions
+  );
+  assertSpawnRequest(runtime, rootSourceRoot, session, spawnOptions);
   const rootWorktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
   const spawnFromDefaultBranch = spawnOptions.mode === "default-branch";
   const spawnFromSessionBranch = spawnOptions.mode === "session-branch";
   const getDefaultRef = createDefaultRefResolver(runtime);
-  const rootDefaultRef = spawnFromDefaultBranch ? getDefaultRef(rootSourceRoot) : null;
+  const rootDefaultRef =
+    spawnFromDefaultBranch && !resumeDefaultBranch ? getDefaultRef(rootSourceRoot) : null;
   const rootConfigExists = spawnRootConfigExists(
     runtime,
     rootSourceRoot,
     session,
     rootDefaultRef,
-    spawnFromSessionBranch
+    spawnFromSessionBranch || resumeDefaultBranch
   );
   if (!rootConfigExists) {
     return {
@@ -288,14 +296,22 @@ function initializeSpawn(
     };
   }
 
-  const graph = loadSpawnGraph(runtime, rootSourceRoot, session, spawnOptions, getDefaultRef);
+  const graph = loadSpawnGraph(
+    runtime,
+    rootSourceRoot,
+    session,
+    spawnOptions,
+    getDefaultRef,
+    resumeDefaultBranch
+  );
   const prepared = prepareSpawnMaterialization(
     runtime,
     home,
     rootSourceRoot,
     session,
     spawnOptions,
-    graph.reposInMaterializationOrder
+    graph.reposInMaterializationOrder,
+    resumeDefaultBranch
   );
   return {
     execution: {
@@ -303,6 +319,7 @@ function initializeSpawn(
       getDefaultRef,
       home,
       reposInOrder: graph.reposInMaterializationOrder,
+      resumeDefaultBranch,
       rootSourceRoot,
       rootWorktreePath,
       runtime,
@@ -331,6 +348,7 @@ function createSpawnPreparationBatch(execution: ConfiguredSpawn) {
           createdDefaultWorktrees.push({ sourceRoot: repoConfig.sourceRoot, worktreePath });
         },
         repoConfig,
+        resumeDefaultBranch: execution.resumeDefaultBranch,
         rootSourceRoot: execution.rootSourceRoot,
         runtime: execution.runtime,
         session: execution.session,
@@ -390,6 +408,10 @@ function materializeConfiguredSpawn(
         home: execution.home,
         persistRepoState,
         repoConfig,
+        retryCommand:
+          execution.spawnOptions.mode === "default-branch"
+            ? `mt spawn ${execution.session} -m`
+            : `mt spawn ${execution.session}`,
         rootSourceRoot: execution.rootSourceRoot,
         runtime: execution.runtime,
         session: execution.session,
@@ -401,7 +423,11 @@ function materializeConfiguredSpawn(
       saveSessionState(execution.home, sessionState);
     }
   } catch (error) {
-    if (execution.spawnFromDefaultBranch && !(error instanceof BootstrapCommandError)) {
+    if (
+      execution.spawnFromDefaultBranch &&
+      !execution.resumeDefaultBranch &&
+      !(error instanceof BootstrapCommandError)
+    ) {
       rollbackDefaultBranchSpawn({
         createdWorktrees: createdDefaultWorktrees,
         home: execution.home,
@@ -420,7 +446,7 @@ function rollbackFailedDefaultPreparation(
   execution: ConfiguredSpawn,
   createdDefaultWorktrees: { sourceRoot: string; worktreePath: string }[]
 ) {
-  if (!execution.spawnFromDefaultBranch) {
+  if (!execution.spawnFromDefaultBranch || execution.resumeDefaultBranch) {
     return;
   }
   rollbackDefaultBranchSpawn({
@@ -440,6 +466,7 @@ interface SpawnRepoPreparationRequest {
   home: string;
   onCreatedFromDefault: (worktreePath: string) => void;
   repoConfig: RepoConfig;
+  resumeDefaultBranch: boolean;
   rootSourceRoot: string;
   runtime: Runtime;
   session: string;
@@ -478,14 +505,14 @@ function prepareSpawnRepoWorktree(request: SpawnRepoPreparationRequest) {
     };
   }
 
-  const { createdDiffBaseRef, createdFromDefault, isSessionBranchRoot, worktree } =
+  const { createdDiffBaseRef, createdFromDefault, useWorktreeBaseline, worktree } =
     ensureSpawnWorktree(request);
   if (createdFromDefault) {
     request.onCreatedFromDefault(worktree.path);
   }
   prepareRepoWorktree(runtime, repoConfig, worktree.path);
   return {
-    baselinePortsRoot: isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
+    baselinePortsRoot: useWorktreeBaseline ? worktree.path : repoConfig.sourceRoot,
     diffBaseRef: existingState?.diffBaseRef ?? createdDiffBaseRef,
     worktreePath: worktree.path
   };
@@ -511,14 +538,14 @@ async function prepareSpawnRepoWorktreeAsync(request: SpawnRepoPreparationReques
     };
   }
 
-  const { createdDiffBaseRef, createdFromDefault, isSessionBranchRoot, worktree } =
+  const { createdDiffBaseRef, createdFromDefault, useWorktreeBaseline, worktree } =
     await ensureSpawnWorktreeAsync(request);
   if (createdFromDefault) {
     request.onCreatedFromDefault(worktree.path);
   }
   await prepareRepoWorktreeAsync(runtime, repoConfig, worktree.path);
   return {
-    baselinePortsRoot: isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
+    baselinePortsRoot: useWorktreeBaseline ? worktree.path : repoConfig.sourceRoot,
     diffBaseRef: existingState?.diffBaseRef ?? createdDiffBaseRef,
     worktreePath: worktree.path
   };
@@ -532,14 +559,15 @@ function warnSkippedDirtySnapshot(request: SpawnRepoPreparationRequest) {
 
 function ensureSpawnWorktree(request: SpawnRepoPreparationRequest) {
   const { home, repoConfig, rootSourceRoot, runtime, session, spawnOptions } = request;
-  const isSessionBranchRoot =
-    spawnOptions.mode === "session-branch" && repoConfig.sourceRoot === rootSourceRoot;
-  if (spawnOptions.mode === "default-branch") {
+  const useWorktreeBaseline =
+    request.resumeDefaultBranch ||
+    (spawnOptions.mode === "session-branch" && repoConfig.sourceRoot === rootSourceRoot);
+  if (spawnOptions.mode === "default-branch" && !request.resumeDefaultBranch) {
     const defaultRef = request.getDefaultRef(repoConfig.sourceRoot).ref;
     return {
       createdDiffBaseRef: defaultRef,
       createdFromDefault: true,
-      isSessionBranchRoot,
+      useWorktreeBaseline,
       worktree: ensureFreshSessionWorktreeFromRef(
         runtime,
         home,
@@ -569,21 +597,22 @@ function ensureSpawnWorktree(request: SpawnRepoPreparationRequest) {
         ? sourceHeadRef
         : undefined,
     createdFromDefault: false,
-    isSessionBranchRoot,
+    useWorktreeBaseline,
     worktree
   };
 }
 
 async function ensureSpawnWorktreeAsync(request: SpawnRepoPreparationRequest) {
   const { home, repoConfig, rootSourceRoot, runtime, session, spawnOptions } = request;
-  const isSessionBranchRoot =
-    spawnOptions.mode === "session-branch" && repoConfig.sourceRoot === rootSourceRoot;
-  if (spawnOptions.mode === "default-branch") {
+  const useWorktreeBaseline =
+    request.resumeDefaultBranch ||
+    (spawnOptions.mode === "session-branch" && repoConfig.sourceRoot === rootSourceRoot);
+  if (spawnOptions.mode === "default-branch" && !request.resumeDefaultBranch) {
     const defaultRef = request.getDefaultRef(repoConfig.sourceRoot).ref;
     return {
       createdDiffBaseRef: defaultRef,
       createdFromDefault: true,
-      isSessionBranchRoot,
+      useWorktreeBaseline,
       worktree: await ensureFreshSessionWorktreeFromRefAsync(
         runtime,
         home,
@@ -618,14 +647,13 @@ async function ensureSpawnWorktreeAsync(request: SpawnRepoPreparationRequest) {
         ? sourceHeadRef
         : undefined,
     createdFromDefault: false,
-    isSessionBranchRoot,
+    useWorktreeBaseline,
     worktree
   };
 }
 
 function assertSpawnRequest(
   runtime: Runtime,
-  home: string,
   rootSourceRoot: string,
   session: string,
   options: SpawnOptions
@@ -633,19 +661,33 @@ function assertSpawnRequest(
   if (session === "") {
     throw new MonkeError("mt spawn requires a session name");
   }
-  if (
-    options.mode === "default-branch" &&
-    existsSync(getSessionStateFilePath(home, rootSourceRoot, session))
-  ) {
-    throw new MonkeError(
-      `Session state already exists for "${session}"; default branch spawn mode requires a fresh Session`
-    );
-  }
   if (options.mode === "session-branch" && !branchExists(runtime, rootSourceRoot, session)) {
     throw new MonkeError(
       `Session branch "${session}" does not exist for ${rootSourceRoot}; cannot spawn from it`
     );
   }
+}
+
+function resolveDefaultBranchResume(
+  home: string,
+  rootSourceRoot: string,
+  session: string,
+  options: SpawnOptions
+) {
+  if (
+    options.mode !== "default-branch" ||
+    !existsSync(getSessionStateFilePath(home, rootSourceRoot, session))
+  ) {
+    return false;
+  }
+
+  const state = loadSessionState(home, rootSourceRoot, session);
+  if (state.repos.some((repo) => repo.materializationComplete === false)) {
+    return true;
+  }
+  throw new MonkeError(
+    `Session state already exists for "${session}"; default branch spawn mode requires a fresh Session`
+  );
 }
 
 function createDefaultRefResolver(runtime: Runtime): (sourceRoot: string) => DefaultBranchRef {
@@ -757,8 +799,19 @@ function loadSpawnGraph(
   rootSourceRoot: string,
   session: string,
   options: SpawnOptions,
-  getDefaultRef: (sourceRoot: string) => DefaultBranchRef
+  getDefaultRef: (sourceRoot: string) => DefaultBranchRef,
+  resumeDefaultBranch: boolean
 ) {
+  if (resumeDefaultBranch) {
+    return loadResolvedGraph(runtime, rootSourceRoot, {
+      pathExists(sourceRoot, relativePath) {
+        return gitPathExistsAtRef(runtime, sourceRoot, session, relativePath);
+      },
+      readRepoConfig(sourceRoot) {
+        return readGitPathAtRef(runtime, sourceRoot, session, "monke.yml");
+      }
+    });
+  }
   if (options.mode === "default-branch") {
     return loadResolvedGraph(runtime, rootSourceRoot, {
       pathExists(sourceRoot, relativePath) {
@@ -792,7 +845,8 @@ function prepareSpawnMaterialization(
   rootSourceRoot: string,
   session: string,
   options: SpawnOptions,
-  reposInOrder: RepoConfig[]
+  reposInOrder: RepoConfig[],
+  resumeDefaultBranch: boolean
 ) {
   if (options.mode === "current-head" && !options.copyDirty) {
     assertCleanCheckoutsForCurrentHeadSpawn(runtime, reposInOrder, session);
@@ -812,7 +866,7 @@ function prepareSpawnMaterialization(
   );
   assertUniqueExpectedWorktreePaths(home, session, reposInOrder);
   assertNoGlobalWorktreePathStateCollisions(home, session, reposInOrder);
-  if (options.mode === "default-branch") {
+  if (options.mode === "default-branch" && !resumeDefaultBranch) {
     for (const repoConfig of reposInOrder) {
       assertFreshSessionWorktreeAvailable(runtime, home, repoConfig.sourceRoot, session);
     }
@@ -820,7 +874,7 @@ function prepareSpawnMaterialization(
 
   const currentIndex = reposInOrder.findIndex((repo) => repo.sourceRoot === rootSourceRoot);
   const firstWorkIndex =
-    options.mode === "default-branch"
+    options.mode === "default-branch" && !resumeDefaultBranch
       ? 0
       : findFirstIndexNeedingWork(runtime, home, reposInOrder, sessionState, session, currentIndex);
   return { dirtySnapshots, firstWorkIndex, sessionState };
@@ -1216,6 +1270,7 @@ function materializePreparedSession(
       home: execution.home,
       persistRepoState,
       repoConfig,
+      retryCommand: "mt materialize",
       rootSourceRoot: execution.context.sourceRoot,
       runtime: execution.runtime,
       session: execution.session,
@@ -1437,6 +1492,7 @@ function materializeRepo(options: {
   home: string;
   persistRepoState: (repoState: SessionRepoState) => void;
   repoConfig: RepoConfig;
+  retryCommand: string;
   rootSourceRoot: string;
   runtime: Runtime;
   session: string;
@@ -1573,7 +1629,7 @@ function materializeRepo(options: {
       repoConfig,
       worktreePath,
       externalPathAssignments,
-      session
+      options.retryCommand
     );
     resolvedResourceCommands = resolveResourceCommands({
       existingRepoState: existingState,
@@ -1607,7 +1663,7 @@ function materializeRepo(options: {
       repoConfig,
       worktreePath,
       externalPathAssignments,
-      session
+      options.retryCommand
     );
   }
 
@@ -1795,7 +1851,7 @@ function runBootstrapCommand(
   repoConfig: RepoConfig,
   worktreePath: string,
   externalPathAssignments: { env: string; value: string }[],
-  session: string
+  retryCommand: string
 ) {
   if (!repoConfig.bootstrapCommand) {
     return;
@@ -1812,7 +1868,7 @@ function runBootstrapCommand(
   } catch (error) {
     const detail = errorMessage(error);
     throw new BootstrapCommandError(
-      `Bootstrap command failed for ${repoConfig.sourceRoot}: ${repoConfig.bootstrapCommand}\n${detail}\nPartial Session state was kept; fix the command and re-run mt spawn ${session} to resume from this repo.`
+      `Bootstrap command failed for ${repoConfig.sourceRoot}: ${repoConfig.bootstrapCommand}\n${detail}\nPartial Session state was kept; fix the command and re-run ${retryCommand} to resume from this repo.`
     );
   }
 }

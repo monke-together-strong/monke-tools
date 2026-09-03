@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -1073,7 +1073,7 @@ external:
     expect(read(rootWorktree, "root-saw-dep")).toBe(path.relative(rootWorktree, depWorktree));
   });
 
-  test("dependency bootstrap failure still leaves the Root worktree prepared", () => {
+  test("current-head Dependency repo bootstrap failure leaves the Root worktree prepared", () => {
     const sandbox = makeTempDir("multi-repo-failed-dependency-preparation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1137,7 +1137,7 @@ external:
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const depRoot = createRepo(path.join(sandbox, "dep"), {
-      "monke.yml": `bootstrapCommand: exit 9
+      "monke.yml": `bootstrapCommand: sh scripts/bootstrap.sh
 apps:
   db:
     path: services/db
@@ -1146,6 +1146,7 @@ apps:
       - port: DEP_PORT
         env: DEP
 `,
+      "scripts/bootstrap.sh": "exit 9\n",
       "services/db/.env.local": "DEP=1\n"
     });
     const root = createRepo(path.join(sandbox, "root"), {
@@ -1177,15 +1178,32 @@ external:
         cwd: root,
         monkeHome: home
       })
-    ).toThrow(/Bootstrap command failed/u);
+    ).toThrow(/re-run mt spawn default-failure -m/u);
 
+    const depWorktree = getExpectedWorktreePath(home, depRoot, "default-failure");
     const rootWorktree = getExpectedWorktreePath(home, root, "default-failure");
     expect(read(rootWorktree, "apps/api/.env.local")).toBe("API=1\n");
     expect(read(rootWorktree, "seed-data/profile")).toBe("authenticated\n");
-    expect(existsSync(getExpectedWorktreePath(home, depRoot, "default-failure"))).toBeTruthy();
+    expect(existsSync(depWorktree)).toBeTruthy();
+
+    git(root, ["switch", "-c", "feature"]);
+    write(root, "monke.yml", "apps: {}\n");
+    git(root, ["add", "monke.yml"]);
+    git(root, ["commit", "-m", "diverge feature config"]);
+    write(depWorktree, "scripts/bootstrap.sh", ": > .bootstrap-complete\n");
+
+    runMonke({
+      args: ["spawn", "default-failure", "-m"],
+      binDirectory,
+      cwd: root,
+      monkeHome: home
+    });
+
+    expect(read(depWorktree, ".bootstrap-complete")).toBe("");
+    expect(read(rootWorktree, ".env")).toContain("DEP_DIR=");
   });
 
-  test("a Dependency preparation failure does not stop Root preparation", () => {
+  test("a Dependency repo Worktree preparation failure does not stop Root preparation", () => {
     const sandbox = makeTempDir("multi-repo-preparation-failure-settlement");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1234,10 +1252,10 @@ external:
       monkeHome: home
     });
 
-    const depWorktree = getExpectedWorktreePath(home, depRoot, "preparation-failure");
     const rootWorktree = getExpectedWorktreePath(home, root, "preparation-failure");
-    rmSync(path.join(depWorktree, "seed-data"), { recursive: true });
-    write(depWorktree, "seed-data", "copy conflict\n");
+    const protectedSourcePath = path.join(depRoot, "seed-data/protected");
+    write(depRoot, "seed-data/protected/fixture", "protected fixture\n");
+    chmodSync(protectedSourcePath, 0o000);
     write(root, "seed-data/new", "new Root material\n");
 
     expect(() =>
@@ -1249,6 +1267,7 @@ external:
       })
     ).toThrow(/Worktree preparation failed/u);
 
+    chmodSync(protectedSourcePath, 0o700);
     expect(read(rootWorktree, "seed-data/new")).toBe("new Root material\n");
     expect(read(rootWorktree, "bootstrap-runs")).toBe("x");
   });

@@ -218,7 +218,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Spawn**: The operation that creates or updates all required session worktrees from a source checkout, using current `HEAD` unless **Default branch spawn mode** is requested. _Avoid_: Initialize, provision
 
-**Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates fresh session branches from each participating repo's default branch content, prefers fetched `origin/main` then `origin/master`, falls back to local `main` then `master`, and rejects existing Session state or Session branches. _Avoid_: Arbitrary base branch, from branch
+**Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates a new Session from each participating repo's resolved default branch content, or resumes an incomplete Session from retained worktrees and pinned Session refs. _Avoid_: Arbitrary base branch, from branch
 
 **Worktree preparation**: The dependency-independent phase that creates or validates one participating **Session worktree**, carries permitted source changes, and non-clobberingly projects **Seed material**. Preparation is initiated for every participating repo without waiting for dependency materialization. _Avoid_: Partial materialization, recursive setup
 
@@ -341,7 +341,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - A **Resource cleanup** belongs to one repo and may use any **Session resources** and **Resource command outputs** resolved for that repo.
 - **Session resources** for different **Session worktrees** must resolve to distinct values when they use the same resource name.
 - **Default branch spawn mode** prefers fetched remote `main` or `master` and may fall back to local `main` or `master`.
-- **Default branch spawn mode** requires fresh session branches.
+- A new **Default branch spawn mode** Session requires fresh session branches; an incomplete one resumes its retained worktrees and pinned refs.
 - **Default branch spawn mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
 - **Worktree preparation** is scheduled independently for every participating repo, while each **Repo materialization** waits for its own preparation and every dependency's materialization.
 - **Worktree preparation** fills missing Seed material without overwriting Session-local content. A missing configured Seed path produces a **Preparation warning**; a copy error fails preparation.
