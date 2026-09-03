@@ -424,7 +424,8 @@ apps:
     const root = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "ignored-cache\nignored-dir/\n",
       "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `cleanupCommand: 'printf "%s\\n%s\\n" "$MONKE_SESSION" "$MONKE_WORKTREE_PATH" > cleanup-merged.log'
+      "monke.yml": `bootstrapCommand: ':'
+cleanupCommand: 'printf "%s\\n%s\\n" "$MONKE_SESSION" "$MONKE_WORKTREE_PATH" > cleanup-merged.log'
 apps:
   api:
     path: apps/api
@@ -661,7 +662,8 @@ apps:
 
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `cleanupCommand: 'printf "%s\\n" "$MONKE_SESSION" > cleanup-merged-failure.log; echo cleanup failed >&2; exit 9'
+      "monke.yml": `bootstrapCommand: ':'
+cleanupCommand: 'printf "%s\\n" "$MONKE_SESSION" > cleanup-merged-failure.log; echo cleanup failed >&2; exit 9'
 apps:
   api:
     path: apps/api
@@ -714,7 +716,8 @@ apps:
 
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `cleanupCommand: 'printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$PWD" "$DISCORD_CHANNEL" "$MONKE_SESSION" "$MONKE_SOURCE_ROOT" "$MONKE_WORKTREE_PATH" > cleanup.log'
+      "monke.yml": `bootstrapCommand: ':'
+cleanupCommand: 'printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$PWD" "$DISCORD_CHANNEL" "$MONKE_SESSION" "$MONKE_SOURCE_ROOT" "$MONKE_WORKTREE_PATH" > cleanup.log'
 resources:
   values:
     DISCORD_CHANNEL: mt-\${user}-\${session}
@@ -744,6 +747,7 @@ apps:
     });
     expect(liveCleanup.stderr).toContain("Removed 0 dead sessions");
     expect(existsSync(path.join(root, "cleanup.log"))).toBeFalsy();
+    const shellLogBeforeDeadCleanup = readFileSync(shLogPath, "utf-8");
 
     const worktree = getExpectedWorktreePath(home, root, "clean-command");
     git(root, ["worktree", "remove", worktree, "--force"]);
@@ -758,7 +762,10 @@ apps:
     expect(read(root, "cleanup.log")).toBe(
       `${root}\nmt-ada-clean-command\nclean-command\n${root}\n${worktree}\n`
     );
-    const shellArgs = readFileSync(shLogPath, "utf-8").trim().split("\n");
+    const shellArgs = readFileSync(shLogPath, "utf-8")
+      .slice(shellLogBeforeDeadCleanup.length)
+      .trim()
+      .split("\n");
     expect(shellArgs.filter((arg) => arg === "-c")).toHaveLength(1);
     expect(shellArgs).not.toContain("-lc");
     expect(() => readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toThrow(
@@ -824,7 +831,8 @@ apps:
 
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `cleanupCommand: 'printf "%s\\n%s\\n" "$MONKE_SESSION" "$MONKE_SOURCE_ROOT" > cleanup-drift.log'
+      "monke.yml": `bootstrapCommand: ':'
+cleanupCommand: 'printf "%s\\n%s\\n" "$MONKE_SESSION" "$MONKE_SOURCE_ROOT" > cleanup-drift.log'
 apps:
   api:
     path: apps/api
@@ -881,7 +889,8 @@ apps:
 
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `cleanupCommand: 'printf "%s\\n" "$MONKE_SESSION" >> cleanup-attempts.log; echo cleanup failed >&2; exit 1'
+      "monke.yml": `bootstrapCommand: ':'
+cleanupCommand: 'printf "%s\\n" "$MONKE_SESSION" >> cleanup-attempts.log; echo cleanup failed >&2; exit 1'
 apps:
   api:
     path: apps/api
@@ -940,7 +949,8 @@ apps:
 
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
-      "monke.yml": `cleanupCommand: 'printf "%s\\n" "$DISCORD_CHANNEL" > cleanup-failure.log; echo cleanup failed >&2; exit 9'
+      "monke.yml": `bootstrapCommand: ':'
+cleanupCommand: 'printf "%s\\n" "$DISCORD_CHANNEL" > cleanup-failure.log; echo cleanup failed >&2; exit 9'
 resources:
   values:
     DISCORD_CHANNEL: mt-\${session}

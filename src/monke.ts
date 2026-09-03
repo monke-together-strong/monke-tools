@@ -47,7 +47,7 @@ import {
 } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
-import { resolveResourceCommandsAsync, resolveResourceValues } from "./resources.ts";
+import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
 import { getMonkeHome, withGlobalLock, withGlobalLockAsync } from "./runtime.ts";
 import { finalizeSession } from "./session-finalization.ts";
 import { runSessionMaterialization } from "./session-materialization.ts";
@@ -475,11 +475,7 @@ function resolveSpawnSourcePlan(
 }
 
 function isRetryableDefaultBranchSpawn(state: SessionState) {
-  return (
-    state.spawnSource === "default-branch" &&
-    state.generation.status === "incomplete" &&
-    state.repos.some((repo) => repo.materializationStatus !== "materialized")
-  );
+  return state.spawnSource === "default-branch" && state.generation.status === "incomplete";
 }
 
 function createDefaultRefResolver(runtime: Runtime): (sourceRoot: string) => DefaultBranchRef {
@@ -564,7 +560,7 @@ async function spawnWithoutConfig(
   }
   const sessionState = {
     ...priorSessionState,
-    generation: { ...priorSessionState.generation, status: "complete" as const },
+    generation: { number: 0, status: "not-started" as const },
     graphSource: options.mode === "current-head" ? undefined : ("session-branch" as const),
     repos: [
       createInitialRepoLifecycleState(
@@ -1245,16 +1241,14 @@ async function materializeRepo(options: {
   } = options;
   const hasBootstrapCommand = repoHasBootstrapCommand(repoConfig);
   const crossesExternalEffectCheckpoint =
-    hasBootstrapCommand ||
-    repoConfig.resourceCommandsInOrder.length > 0 ||
-    repoConfig.cleanupCommand !== undefined;
+    hasBootstrapCommand || repoConfig.resourceCommandsInOrder.length > 0;
   const diffBaseRef = options.diffBaseRef || existingState?.diffBaseRef;
 
   options.persistRepoState(
     buildSessionRepoState({
       assignedPorts: existingState?.assignedPorts ?? [],
       cleanupCommand: repoConfig.cleanupCommand,
-      cleanupEligible: existingState?.cleanupEligible === true || crossesExternalEffectCheckpoint,
+      cleanupEligible: existingState?.cleanupEligible ?? false,
       diffBaseRef,
       existingState,
       materializationStatus: "pending",
@@ -1295,9 +1289,7 @@ async function materializeRepo(options: {
       })
     );
   };
-  let resolvedResourceCommands:
-    | Awaited<ReturnType<typeof resolveResourceCommandsAsync>>
-    | undefined;
+  let resolvedResourceCommands: Awaited<ReturnType<typeof resolveResourceCommands>> | undefined;
   if (!hasBootstrapCommand) {
     if (repoConfig.resourceCommandsInOrder.length > 0) {
       options.persistRepoState(
@@ -1318,7 +1310,7 @@ async function materializeRepo(options: {
         })
       );
     }
-    resolvedResourceCommands = await resolveResourceCommandsAsync({
+    resolvedResourceCommands = await resolveResourceCommands({
       existingRepoState: existingState,
       home,
       onResolvedCommandOutputs(resourceCommandOutputs) {
@@ -1398,7 +1390,7 @@ async function materializeRepo(options: {
       options.retryCommand,
       existingResourceCommandEnvNames
     );
-    resolvedResourceCommands = await resolveResourceCommandsAsync({
+    resolvedResourceCommands = await resolveResourceCommands({
       existingRepoState: existingState,
       home,
       onResolvedCommandOutputs(resourceCommandOutputs) {

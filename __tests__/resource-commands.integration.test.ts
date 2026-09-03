@@ -1,10 +1,11 @@
-import { chmodSync } from "node:fs";
+import { chmodSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 import * as z from "zod";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
+import { hashKey } from "../src/runtime.ts";
 import { loadSessionState, saveSessionState } from "../src/session-state-store.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
 import type { SessionState } from "../src/types.ts";
@@ -15,10 +16,12 @@ import {
   read,
   readSingleYamlFile,
   runMonke,
+  runMonkeAsync,
   write
 } from "./helpers.ts";
 
 interface ResourceCommandScenario {
+  binDirectory: string;
   cleanup: () => { stderr: string; stdout: string };
   home: string;
   materialize: (session: string) => { stderr: string; stdout: string };
@@ -38,6 +41,49 @@ interface ResourceCommandScenario {
 const ResourceCommandInputSchema = z.record(z.string(), z.array(z.string()));
 
 describe("resource commands", () => {
+  test("Spawn honors an existing Resource command lock through the async production seam", async () => {
+    const releaseMarker = "resource-lock-released";
+    const scenario = createResourceCommandScenario({
+      module: `import { existsSync } from "node:fs";
+
+export default function () {
+  if (!existsSync(${JSON.stringify(path.join("..", "..", "..", "..", releaseMarker))})) {
+    throw new Error("Resource command ran before its lock was released");
+  }
+  return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
+}
+`,
+      name: "single-repo-resource-command-async-lock"
+    });
+    const lockPath = path.join(
+      scenario.home,
+      "locks",
+      `${hashKey(`resource-command\u0000${scenario.repoRoot}\u0000e2e-symbols`)}.lock`
+    );
+    write(
+      scenario.home,
+      path.relative(scenario.home, lockPath),
+      JSON.stringify({ acquiredAt: Date.now(), pid: process.pid })
+    );
+    const release = setTimeout(() => {
+      write(scenario.sandbox, releaseMarker, "released\n");
+      rmSync(lockPath, { force: true });
+    }, 200);
+
+    try {
+      await runMonkeAsync({
+        args: ["spawn", "locked"],
+        binDirectory: scenario.binDirectory,
+        cwd: scenario.repoRoot,
+        monkeHome: scenario.home
+      });
+    } finally {
+      clearTimeout(release);
+    }
+
+    expect(scenario.readWorktree("locked", ".env")).toContain("E2E_FLOW1_SYMBOL=SOL/USDT:USDT");
+  });
+
   test("spawn runs Resource commands from the Session worktree and writes outputs to the session root .env and Session state", () => {
     const scenario = createResourceCommandScenario({
       module: `import { writeFileSync } from "node:fs";
@@ -937,7 +983,9 @@ function isDirectExecution(importMetaUrl) {
 
   test("spawn reports resource command timeouts", () => {
     const scenario = createResourceCommandScenario({
-      module: `export default async function () {
+      module: `process.on("SIGTERM", () => {});
+
+export default async function () {
   await new Promise((resolve) => setTimeout(resolve, 5000));
   return { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 }
@@ -946,9 +994,11 @@ function isDirectExecution(importMetaUrl) {
       timeoutSeconds: 1
     });
 
+    const startedAt = Date.now();
     expect(() => scenario.spawn("banana")).toThrow(
       /Resource command e2e-symbols failed[\s\S]*kind: timeout[\s\S]*stderr:[\s\S]*<empty>/u
     );
+    expect(Date.now() - startedAt).toBeLessThan(3000);
   });
 });
 
@@ -979,6 +1029,7 @@ function createResourceCommandScenario(options: {
   const worktree = (session: string) => getExpectedWorktreePath(home, repoRoot, session);
 
   return {
+    binDirectory,
     cleanup() {
       return runMonke({
         args: ["cleanup"],

@@ -14,7 +14,11 @@ import { describe, expect, test } from "vite-plus/test";
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
 import { spawnSessionFromSourceRootLocked } from "../src/monke.ts";
 import { createRuntime } from "../src/runtime.ts";
-import { getSessionStateFilePath, saveSessionState } from "../src/session-state-store.ts";
+import {
+  getSessionStateFilePath,
+  loadSessionState,
+  saveSessionState
+} from "../src/session-state-store.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
 import {
   createRepo,
@@ -663,7 +667,7 @@ describe("single-repo sessions", () => {
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(sessionState.graphSource).toBe("session-branch");
-    expect(sessionState.generation.status).toBe("complete");
+    expect(sessionState.generation).toStrictEqual({ number: 0, status: "not-started" });
     expect(sessionState.spawnSource).toBe("default-branch");
     expect(sessionState.repos[0]).toMatchObject({
       materializationStatus: "pending",
@@ -916,6 +920,32 @@ apps:
     });
 
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\n");
+  });
+
+  test("spawn -m finalizes an interrupted generation whose repo checkpoints all completed", () => {
+    const sandbox = makeTempDir("single-repo-main-final-checkpoint-retry");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": `bootstrapCommand: printf x >> bootstrap-runs
+apps: {}
+`
+    });
+
+    runMonke({ args: ["spawn", "interrupted", "-m"], cwd: repoRoot, monkeHome: home });
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "interrupted");
+    const complete = loadSessionState(home, repoRoot, "interrupted");
+    saveSessionState(home, {
+      ...complete,
+      generation: { ...complete.generation, status: "incomplete" }
+    });
+
+    runMonke({ args: ["spawn", "interrupted", "-m"], cwd: repoRoot, monkeHome: home });
+
+    expect(read(worktreeRoot, "bootstrap-runs")).toBe("x");
+    expect(loadSessionState(home, repoRoot, "interrupted").generation).toStrictEqual({
+      number: 1,
+      status: "complete"
+    });
   });
 
   test("spawn -m fails when session state already exists", () => {

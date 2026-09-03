@@ -5,7 +5,7 @@ import path from "node:path";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
-import { withScopedLock, withScopedLockAsync } from "./runtime.ts";
+import { withScopedLockAsync } from "./runtime.ts";
 import { listSessionStates } from "./session-state-store.ts";
 import type {
   RepoConfig,
@@ -121,78 +121,7 @@ export function resolveResourceValues(options: {
 }
 
 /** Resolve, reuse, prune, execute, and validate Resource command outputs. */
-export function resolveResourceCommands(options: {
-  existingRepoState: SessionRepoState | undefined;
-  home: string;
-  onResolvedCommandOutputs: (commands: ResourceCommandState[]) => void;
-  repoConfig: RepoConfig;
-  resourceValues: ResourceValueState[];
-  runtime: Runtime;
-  session: string;
-  worktreePath: string;
-}) {
-  const existingCommands = options.existingRepoState?.resourceCommandOutputs ?? [];
-  const existingByName = new Map(existingCommands.map((command) => [command.name, command]));
-  const currentByName = new Map<string, ResourceCommandState>();
-
-  for (const command of options.repoConfig.resourceCommandsInOrder) {
-    const reusable = getReusableResourceCommand(command, existingByName.get(command.name));
-    if (reusable) {
-      currentByName.set(command.name, reusable);
-    }
-  }
-
-  for (const command of options.repoConfig.resourceCommandsInOrder) {
-    if (currentByName.has(command.name)) {
-      continue;
-    }
-
-    withResourceCommandLock(options.home, options.repoConfig.sourceRoot, command.name, () => {
-      const stdin = buildResourceCommandInput({
-        command,
-        home: options.home,
-        session: options.session,
-        sourceRoot: options.repoConfig.sourceRoot
-      });
-
-      currentByName.set(
-        command.name,
-        runResourceCommand({
-          command,
-          resourceValues: options.resourceValues,
-          runtime: options.runtime,
-          stdin,
-          worktreePath: options.worktreePath
-        })
-      );
-      options.onResolvedCommandOutputs(
-        toImmediateResourceCommandStates(
-          options.repoConfig.resourceCommandsInOrder,
-          currentByName,
-          existingCommands
-        )
-      );
-    });
-  }
-
-  const commands = toResourceCommandStates(
-    options.repoConfig.resourceCommandsInOrder,
-    currentByName
-  );
-  const finalEnvNames = new Set(
-    commands.flatMap((command) => command.outputs.map((output) => output.env))
-  );
-  const removedEnvNames = dedupe(
-    existingCommands
-      .flatMap((command) => command.outputs.map((output) => output.env))
-      .filter((env) => !finalEnvNames.has(env))
-  );
-
-  return { commands, removedEnvNames };
-}
-
-/** Async Resource command resolution used by concurrent repo materialization. */
-export async function resolveResourceCommandsAsync(options: {
+export async function resolveResourceCommands(options: {
   existingRepoState: SessionRepoState | undefined;
   home: string;
   onResolvedCommandOutputs: (commands: ResourceCommandState[]) => void;
@@ -218,7 +147,7 @@ export async function resolveResourceCommandsAsync(options: {
       continue;
     }
     // oxlint-disable-next-line no-await-in-loop -- Commands in one repo are intentionally ordered; sibling repos remain concurrent.
-    await withResourceCommandLockAsync(
+    await withResourceCommandLock(
       options.home,
       options.repoConfig.sourceRoot,
       command.name,
@@ -231,7 +160,7 @@ export async function resolveResourceCommandsAsync(options: {
         });
         currentByName.set(
           command.name,
-          await runResourceCommandAsync({
+          await runResourceCommand({
             command,
             resourceValues: options.resourceValues,
             runtime: options.runtime,
@@ -289,69 +218,7 @@ function getReusableResourceCommand(
   };
 }
 
-function runResourceCommand(options: {
-  command: ResourceCommandConfig;
-  resourceValues: ResourceValueState[];
-  runtime: Runtime;
-  stdin: ResourceCommandInput;
-  worktreePath: string;
-}) {
-  const stdin = JSON.stringify(options.stdin);
-  const outputDirectory = mkdtempSync(path.join(tmpdir(), "monke-resource-command-"));
-  const outputPath = path.join(outputDirectory, "output.json");
-  const modulePath = resolveResourceCommandRunPath(options.worktreePath, options.command);
-
-  try {
-    const runner = resolveResourceCommandRunner(options.worktreePath);
-    const result = options.runtime.exec(runner.command, runner.args(modulePath, outputPath), {
-      allowFailure: true,
-      cwd: options.worktreePath,
-      env: Object.fromEntries(
-        options.resourceValues.map((resource) => [resource.env, resource.value])
-      ),
-      stdin,
-      timeoutSeconds: options.command.timeoutSeconds
-    });
-
-    if (result.timedOut === true) {
-      throw resourceCommandFailure({
-        command: options.command,
-        kind: "timeout",
-        stderr: result.stderr
-      });
-    }
-
-    if (result.exitCode !== 0) {
-      throw resourceCommandFailure({
-        command: options.command,
-        kind: `nonzero exit ${result.exitCode}`,
-        stderr: result.stderr
-      });
-    }
-
-    const returned = readResourceCommandRunnerOutput({
-      command: options.command,
-      outputPath,
-      stderr: result.stderr,
-      stdout: result.stdout
-    });
-    const outputs = validateResourceCommandReturn(
-      options.command,
-      returned,
-      result.stdout,
-      result.stderr,
-      options.stdin
-    );
-    return {
-      name: options.command.name,
-      outputs
-    };
-  } finally {
-    rmSync(outputDirectory, { force: true, recursive: true });
-  }
-}
-
-async function runResourceCommandAsync(options: {
+async function runResourceCommand(options: {
   command: ResourceCommandConfig;
   resourceValues: ResourceValueState[];
   runtime: Runtime;
@@ -443,15 +310,6 @@ function resolveResourceCommandRunner(worktreePath: string) {
 }
 
 function withResourceCommandLock<T>(
-  home: string,
-  sourceRoot: string,
-  commandName: string,
-  callback: () => T
-) {
-  return withScopedLock(home, `resource-command\u0000${sourceRoot}\u0000${commandName}`, callback);
-}
-
-function withResourceCommandLockAsync<T>(
   home: string,
   sourceRoot: string,
   commandName: string,

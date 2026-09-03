@@ -35,6 +35,7 @@ import type {
 } from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
+const ASYNC_TERMINATION_GRACE_MS = 100;
 const LOCK_RETRY_INTERVAL_MS = 50;
 const RELEASE_CATALOG_PAGE_SIZE = 100;
 const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
@@ -277,8 +278,11 @@ function executeCommand(
   args: string[],
   options: ExecOptions | undefined
 ) {
-  const childEnv = withoutUndefinedValues({ ...runtimeEnv, ...options?.env });
-  delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
+  const childEnv = {
+    ...runtimeEnv,
+    ...options?.env,
+    MONKE_SHELL_DIR_DIRECTIVE: undefined
+  };
 
   const result = spawnSync(command, args, {
     cwd: options?.cwd ?? runtimeCwd,
@@ -301,24 +305,67 @@ function executeCommandAsync(
   args: string[],
   options: ExecOptions | undefined
 ): Promise<ExecResult> {
-  const childEnv = withoutUndefinedValues({ ...runtimeEnv, ...options?.env });
-  delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
+  const childEnv = {
+    ...runtimeEnv,
+    ...options?.env,
+    MONKE_SHELL_DIR_DIRECTIVE: undefined
+  };
 
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options?.cwd ?? runtimeCwd,
+      detached: process.platform !== "win32",
       env: childEnv,
       stdio: "pipe"
     });
     let stderr = "";
     let stdout = "";
+    let settled = false;
     let timedOut = false;
+    let forceKill: ReturnType<typeof setTimeout> | undefined;
+    const clearTimers = () => {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+      if (forceKill !== undefined) {
+        clearTimeout(forceKill);
+      }
+    };
+    const resolveOnce = (result: ExecResult) => {
+      if (!settled) {
+        settled = true;
+        clearTimers();
+        resolve(result);
+      }
+    };
+    const rejectOnce = (error: Error) => {
+      if (!settled) {
+        settled = true;
+        clearTimers();
+        reject(error);
+      }
+    };
+    const settleTimeout = () => {
+      if (options?.allowFailure === true) {
+        resolveOnce({ exitCode: -1, stderr, stdout, timedOut: true });
+      } else {
+        rejectOnce(new MonkeError(`Command timed out: ${formatCommand(command, args)}`));
+      }
+    };
     const timeout =
       options?.timeoutSeconds === undefined
         ? undefined
         : setTimeout(() => {
             timedOut = true;
-            child.kill("SIGTERM");
+            terminateChildProcessTree(child.pid, "SIGTERM", () => {
+              child.kill("SIGTERM");
+            });
+            forceKill = setTimeout(() => {
+              terminateChildProcessTree(child.pid, "SIGKILL", () => {
+                child.kill("SIGKILL");
+              });
+              settleTimeout();
+            }, ASYNC_TERMINATION_GRACE_MS);
           }, options.timeoutSeconds * 1000);
 
     child.stdout.setEncoding("utf-8");
@@ -330,36 +377,40 @@ function executeCommandAsync(
       stderr += chunk;
     });
     child.once("error", (error) => {
-      if (timeout !== undefined) {
-        clearTimeout(timeout);
-      }
-      reject(new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`));
+      rejectOnce(new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`));
     });
     child.once("close", (code, signal) => {
-      if (timeout !== undefined) {
-        clearTimeout(timeout);
-      }
       const exitCode = timedOut ? -1 : (code ?? -1);
-      if (timedOut && options?.allowFailure === true) {
-        resolve({ exitCode, stderr, stdout, timedOut: true });
+      if (timedOut) {
+        settleTimeout();
         return;
       }
       if (code !== 0 && options?.allowFailure !== true) {
         const reason =
           stderr.trim() || stdout.trim() || `terminated by signal ${signal ?? "unknown"}`;
-        reject(new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`));
+        rejectOnce(new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`));
         return;
       }
-      resolve({ exitCode, stderr, stdout });
+      resolveOnce({ exitCode, stderr, stdout });
     });
     child.stdin.end(options?.stdin);
   });
 }
 
-function withoutUndefinedValues(env: Record<string, string | undefined>) {
-  return Object.fromEntries(
-    Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)
-  );
+function terminateChildProcessTree(
+  pid: number | undefined,
+  signal: NodeJS.Signals,
+  fallback: () => void
+) {
+  if (pid === undefined || process.platform === "win32") {
+    fallback();
+    return;
+  }
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    fallback();
+  }
 }
 
 function handleSpawnError(

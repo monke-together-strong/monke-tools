@@ -34,7 +34,7 @@ export function loadSessionState(
   const filePath = getSessionStateFilePath(home, rootSourceRoot, session);
   if (!existsSync(filePath)) {
     return {
-      generation: { number: 1, status: "incomplete" },
+      generation: { number: 0, status: "not-started" },
       repos: [],
       rootSourceRoot,
       session,
@@ -225,20 +225,6 @@ export function toAssignedPorts(repoConfig: RepoConfig, assignments: Map<string,
     key,
     value: requireAssignment(assignments, key, repoConfig.sourceRoot)
   }));
-}
-
-export function recordRepoSuccess(state: SessionState, repoState: SessionRepoState) {
-  const existingIndex = state.repos.findIndex((repo) => repo.sourceRoot === repoState.sourceRoot);
-  if (existingIndex !== -1) {
-    const nextRepos = [...state.repos];
-    nextRepos[existingIndex] = repoState;
-    return { ...state, repos: nextRepos };
-  }
-
-  return {
-    ...state,
-    repos: [...state.repos, repoState]
-  };
 }
 
 export function getSessionStateFilePath(home: string, rootSourceRoot: string, session: string) {

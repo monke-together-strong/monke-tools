@@ -1273,7 +1273,8 @@ apps:
     });
     const slowRoot = createRepo(path.join(sandbox, "slow"), {
       "app/.env": "PORT=4200\n",
-      "monke.yml": `apps:
+      "monke.yml": `bootstrapCommand: test -f "${slowPreparationDone}"
+apps:
   slow:
     path: app
     envFile: .env
@@ -1325,6 +1326,95 @@ external:
     expect(existsSync(materializedEarly)).toBeTruthy();
     expect(existsSync(slowPreparationDone)).toBeTruthy();
     expect(existsSync(getExpectedWorktreePath(home, readyRoot, "overlap"))).toBeTruthy();
+  });
+
+  test("ready siblings materialize concurrently without losing either checkpoint", () => {
+    const sandbox = makeTempDir("multi-repo-sibling-materialization-concurrency");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const firstStarted = path.join(sandbox, "first-started");
+    const secondStarted = path.join(sandbox, "second-started");
+    const waitForSibling = (ownMarker: string, siblingMarker: string) =>
+      `touch "${ownMarker}"; attempts=0; while [ ! -f "${siblingMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -lt 200 ] || exit 91; sleep 0.01; done`;
+
+    const firstRoot = createRepo(path.join(sandbox, "first"), {
+      "app/.env": "PORT=4100\n",
+      "monke.yml": `bootstrapCommand: ${waitForSibling(firstStarted, secondStarted)}
+apps:
+  first:
+    path: app
+    envFile: .env
+    mappings:
+      - port: FIRST_PORT
+        env: PORT
+`
+    });
+    const secondRoot = createRepo(path.join(sandbox, "second"), {
+      "app/.env": "PORT=4200\n",
+      "monke.yml": `bootstrapCommand: ${waitForSibling(secondStarted, firstStarted)}
+apps:
+  second:
+    path: app
+    envFile: .env
+    mappings:
+      - port: SECOND_PORT
+        env: PORT
+`
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "app/.env": "FIRST_PORT=4100\nSECOND_PORT=4200\n",
+      "monke.yml": `apps:
+  root:
+    path: app
+    envFile: .env
+    mappings: []
+external:
+  first:
+    path: ../first
+    pathEnv: FIRST_DIR
+    mappings:
+      - port: FIRST_PORT
+        app: root
+        env: FIRST_PORT
+  second:
+    path: ../second
+    pathEnv: SECOND_DIR
+    mappings:
+      - port: SECOND_PORT
+        app: root
+        env: SECOND_PORT
+`
+    });
+
+    runMonke({
+      args: ["spawn", "concurrent"],
+      binDirectory,
+      cwd: root,
+      monkeHome: home
+    });
+
+    const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    expect(
+      Object.fromEntries(
+        state.repos.map((repo) => [
+          repo.sourceRoot,
+          { assignedPorts: repo.assignedPorts, status: repo.materializationStatus }
+        ])
+      )
+    ).toStrictEqual({
+      [firstRoot]: {
+        assignedPorts: [{ key: "FIRST_PORT", value: 10_000 }],
+        status: "materialized"
+      },
+      [root]: {
+        assignedPorts: [],
+        status: "materialized"
+      },
+      [secondRoot]: {
+        assignedPorts: [{ key: "SECOND_PORT", value: 11_000 }],
+        status: "materialized"
+      }
+    });
   });
 
   test("default-branch dependency bootstrap failure retains every prepared worktree", () => {

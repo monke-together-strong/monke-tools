@@ -146,6 +146,92 @@ typo: true
     );
   });
 
+  test.each([
+    {
+      name: "a complete generation with pending materialization",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "pending",
+            preparationStatus: "pending",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "failed preparation with pending materialization",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "pending",
+            preparationStatus: "failed",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "blocked materialization before preparation",
+      state: {
+        generation: { number: 1, status: "incomplete" },
+        repos: [
+          {
+            assignedPorts: [],
+            blockedBy: "/dependency",
+            cleanupEligible: false,
+            materializationStatus: "blocked",
+            preparationStatus: "pending",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "prepared default-branch repo without pinned identity",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "default-branch",
+        version: 2
+      }
+    }
+  ])("saveSessionState rejects $name", ({ state }) => {
+    const sandbox = makeTempDir("session-state-store-lifecycle-invariant");
+    expect(() => {
+      saveSessionState(path.join(sandbox, "home"), state);
+    }).toThrow(/Invalid/u);
+  });
+
   test.each([1, 3])("loadSessionState rejects unsupported version %i", (version) => {
     const sandbox = makeTempDir("session-state-store-future-session-version");
     const home = path.join(sandbox, "home");

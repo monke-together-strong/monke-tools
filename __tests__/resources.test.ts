@@ -10,7 +10,7 @@ import type { RepoConfig, Runtime } from "../src/types.ts";
 import { makeTempDir } from "./helpers.ts";
 
 describe("resources", () => {
-  test("resource command lock covers command execution and immediate persistence", () => {
+  test("resource command lock covers command execution and immediate persistence", async () => {
     const sandbox = makeTempDir("resources-command-lock");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "repo");
@@ -47,7 +47,7 @@ describe("resources", () => {
       ...createRuntime({ cwd: sourceRoot }),
       cwd: sourceRoot,
       env: {},
-      exec(command, args, options) {
+      async execAsync(command, args, options) {
         expect(command).toBe("bun");
         expect(args?.[0]).toBe("--eval");
         expect(args?.[2]).toBe("--");
@@ -68,9 +68,6 @@ describe("resources", () => {
           stdout: "progress log\n"
         };
       },
-      execAsync() {
-        return Promise.reject(new Error("unexpected execAsync"));
-      },
       multiSelect() {
         return Promise.reject(new Error("unexpected multiSelect"));
       },
@@ -84,7 +81,7 @@ describe("resources", () => {
       writeStdout() {}
     };
 
-    const resolved = resolveResourceCommands({
+    const resolved = await resolveResourceCommands({
       existingRepoState: undefined,
       home,
       onResolvedCommandOutputs(commands) {
@@ -114,7 +111,7 @@ describe("resources", () => {
     ]);
   });
 
-  test("resource command input values are sorted for deterministic stdin", () => {
+  test("resource command input values are sorted for deterministic stdin", async () => {
     const sandbox = makeTempDir("resources-command-input-sort");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "repo");
@@ -197,7 +194,7 @@ describe("resources", () => {
       ...createRuntime({ cwd: sourceRoot }),
       cwd: sourceRoot,
       env: {},
-      exec(command, args, options) {
+      async execAsync(command, args, options) {
         expect(command).toBe("bun");
         stdin = JSON.parse(options?.stdin ?? "");
         commandEnv = options?.env;
@@ -212,9 +209,6 @@ describe("resources", () => {
           stdout: ""
         };
       },
-      execAsync() {
-        return Promise.reject(new Error("unexpected execAsync"));
-      },
       multiSelect() {
         return Promise.reject(new Error("unexpected multiSelect"));
       },
@@ -228,7 +222,7 @@ describe("resources", () => {
       writeStdout() {}
     };
 
-    resolveResourceCommands({
+    await resolveResourceCommands({
       existingRepoState: undefined,
       home,
       onResolvedCommandOutputs() {},
@@ -245,7 +239,7 @@ describe("resources", () => {
     expect(commandEnv).toStrictEqual({ E2E_CHANNEL_NAME: "current" });
   });
 
-  test("pnpm workspaces run resource modules through pnpm-mediated bun", () => {
+  test("pnpm workspaces run resource modules through pnpm-mediated bun", async () => {
     const sandbox = makeTempDir("resources-command-pnpm-runner");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "repo");
@@ -278,7 +272,7 @@ describe("resources", () => {
       ...createRuntime({ cwd: sourceRoot }),
       cwd: sourceRoot,
       env: {},
-      exec(command, args, _options) {
+      async execAsync(command, args, _options) {
         invocations.push({ args, command });
         writeFileSync(
           args?.[7] ?? "",
@@ -290,9 +284,6 @@ describe("resources", () => {
           stderr: "",
           stdout: "pnpm progress log\n"
         };
-      },
-      execAsync() {
-        return Promise.reject(new Error("unexpected execAsync"));
       },
       multiSelect() {
         return Promise.reject(new Error("unexpected multiSelect"));
@@ -307,7 +298,7 @@ describe("resources", () => {
       writeStdout() {}
     };
 
-    resolveResourceCommands({
+    await resolveResourceCommands({
       existingRepoState: undefined,
       home,
       onResolvedCommandOutputs() {},

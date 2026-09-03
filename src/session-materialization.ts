@@ -230,6 +230,7 @@ function beginGeneration<TPrepared, TResult>(
   nodes: SessionMaterializationNode<TPrepared, TResult>[]
 ) {
   const startFresh = state.generation.status === "complete";
+  const startFirst = state.generation.status === "not-started";
   const existingByRoot = new Map(state.repos.map((repo) => [repo.sourceRoot, repo]));
   const repos = nodes.map((node) => {
     const existing = existingByRoot.get(node.sourceRoot) ?? node.initialState;
@@ -248,7 +249,7 @@ function beginGeneration<TPrepared, TResult>(
   return {
     ...state,
     generation: {
-      number: startFresh ? state.generation.number + 1 : state.generation.number,
+      number: startFresh ? state.generation.number + 1 : startFirst ? 1 : state.generation.number,
       status: "incomplete" as const
     },
     repos

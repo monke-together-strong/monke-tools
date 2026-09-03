@@ -1,12 +1,4 @@
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -195,16 +187,17 @@ describe("chop", () => {
     const home = path.join(sandbox, "home");
     const cleanupMarker = path.join(sandbox, "cleanup-ran");
     const root = createRepo(path.join(sandbox, "root"), {
-      ".gitignore": "seed-data/\n",
+      "app/package.json": "{}\n",
       "monke.yml": `cleanupCommand: touch "${cleanupMarker}"
-seedPaths:
-  - seed-data
-apps: {}
-`,
-      "seed-data/protected/fixture": "fixture\n"
+apps:
+  api:
+    path: app
+    envFile: .env
+    mappings:
+      - port: API_PORT
+        env: PORT
+`
     });
-    const protectedSeed = path.join(root, "seed-data/protected");
-    chmodSync(protectedSeed, 0o000);
 
     const spawn = runMonkeCapturingFailure({
       args: ["spawn", "prepared-only"],
@@ -212,7 +205,7 @@ apps: {}
       monkeHome: home
     });
     expect(spawn.error).not.toBeNull();
-    chmodSync(protectedSeed, 0o700);
+    expect(loadSessionState(home, root, "prepared-only").repos[0]?.cleanupEligible).toBeFalsy();
 
     runMonke({
       args: ["chop", "prepared-only", "--force"],

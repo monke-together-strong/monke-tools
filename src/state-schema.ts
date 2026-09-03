@@ -73,6 +73,21 @@ function validateMaterializationLifecycle(repo: ParsedSessionRepoState, issue: L
     issue("failure requires failed materialization", ["failure"]);
   }
   if (
+    repo.materializationStatus === "failed" &&
+    repo.failure?.phase === "repo-materialization" &&
+    repo.preparationStatus !== "prepared" &&
+    repo.preparationStatus !== "warning"
+  ) {
+    issue("repo materialization failure requires completed preparation", ["materializationStatus"]);
+  }
+  if (
+    repo.materializationStatus === "blocked" &&
+    repo.preparationStatus !== "prepared" &&
+    repo.preparationStatus !== "warning"
+  ) {
+    issue("blocked materialization requires completed preparation", ["materializationStatus"]);
+  }
+  if (
     repo.materializationStatus === "materialized" &&
     repo.preparationStatus !== "prepared" &&
     repo.preparationStatus !== "warning"
@@ -82,8 +97,15 @@ function validateMaterializationLifecycle(repo: ParsedSessionRepoState, issue: L
 }
 
 function validatePreparationLifecycle(repo: ParsedSessionRepoState, issue: LifecycleIssue) {
-  if (repo.failure?.phase === "worktree-preparation" && repo.preparationStatus !== "failed") {
-    issue("preparation failure requires failed preparation", ["failure"]);
+  if (repo.preparationStatus === "failed") {
+    if (repo.materializationStatus !== "failed" || repo.failure?.phase !== "worktree-preparation") {
+      issue("failed preparation requires a Worktree-preparation failure", ["preparationStatus"]);
+    }
+  } else if (repo.failure?.phase === "worktree-preparation") {
+    issue("Worktree-preparation failure requires failed preparation", ["failure"]);
+  }
+  if (repo.preparationStatus === "pending" && repo.materializationStatus !== "pending") {
+    issue("pending preparation requires pending materialization", ["preparationStatus"]);
   }
   if (repo.preparationStatus === "warning" && (repo.preparationWarnings?.length ?? 0) === 0) {
     issue("warning preparation requires preparationWarnings", ["preparationWarnings"]);
@@ -93,18 +115,73 @@ function validatePreparationLifecycle(repo: ParsedSessionRepoState, issue: Lifec
   }
 }
 
-export const SessionStateSchema = z.strictObject({
-  generation: z.strictObject({
-    number: z.number().int().positive(),
-    status: z.enum(["incomplete", "complete"])
-  }),
-  graphSource: z.literal("session-branch").optional(),
-  repos: z.array(SessionRepoStateSchema),
-  rootSourceRoot: NonEmptyStringSchema,
-  session: NonEmptyStringSchema,
-  spawnSource: z.enum(["default-branch", "session-branch"]).optional(),
-  version: z.literal(2)
-});
+export const SessionStateSchema = z
+  .strictObject({
+    generation: z.strictObject({
+      number: z.number().int().nonnegative(),
+      status: z.enum(["not-started", "incomplete", "complete"])
+    }),
+    graphSource: z.literal("session-branch").optional(),
+    repos: z.array(SessionRepoStateSchema),
+    rootSourceRoot: NonEmptyStringSchema,
+    session: NonEmptyStringSchema,
+    spawnSource: z.enum(["default-branch", "session-branch"]).optional(),
+    version: z.literal(2)
+  })
+  .check((context) => {
+    const state = context.value;
+    if (state.generation.status === "not-started") {
+      if (state.generation.number !== 0) {
+        context.issues.push({
+          code: "custom",
+          input: state.generation,
+          message: "not-started generation must have number 0",
+          path: ["generation", "number"]
+        });
+      }
+      if (state.repos.some((repo) => repo.materializationStatus !== "pending")) {
+        context.issues.push({
+          code: "custom",
+          input: state.repos,
+          message: "not-started generation requires pending repo materialization",
+          path: ["generation", "status"]
+        });
+      }
+    } else if (state.generation.number === 0) {
+      context.issues.push({
+        code: "custom",
+        input: state.generation,
+        message: "active or complete generation must have a positive number",
+        path: ["generation", "number"]
+      });
+    }
+    if (
+      state.generation.status === "complete" &&
+      state.repos.some((repo) => repo.materializationStatus !== "materialized")
+    ) {
+      context.issues.push({
+        code: "custom",
+        input: state.repos,
+        message: "complete generation requires every repo to be materialized",
+        path: ["generation", "status"]
+      });
+    }
+    if (state.spawnSource === "default-branch") {
+      for (const [index, repo] of state.repos.entries()) {
+        if (
+          (repo.preparationStatus === "prepared" || repo.preparationStatus === "warning") &&
+          repo.pinnedRef === undefined
+        ) {
+          context.issues.push({
+            code: "custom",
+            input: repo,
+            message: "prepared default-branch repo requires pinnedRef",
+            path: ["repos", index, "pinnedRef"]
+          });
+        }
+      }
+    }
+  });
 
 export const RepoReservationSchema = z
   .strictObject({
