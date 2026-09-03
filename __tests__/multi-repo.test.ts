@@ -1071,6 +1071,65 @@ external:
     expect(read(rootWorktree, "root-saw-dep")).toBe(path.relative(rootWorktree, depWorktree));
   });
 
+  test("dependency bootstrap failure still leaves the Root worktree prepared", () => {
+    const sandbox = makeTempDir("multi-repo-failed-dependency-preparation");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      "monke.yml": `bootstrapCommand: exit 9
+apps:
+  db:
+    path: services/db
+    envFile: .env.local
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        env: PORT
+`,
+      "services/db/.env.local": "PORT=5432\n"
+    });
+
+    const root = createRepo(path.join(sandbox, "root"), {
+      ".gitignore": ".env.local\nseed-data/\n",
+      "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+      "monke.yml": `bootstrapCommand: ': > .root-materialized'
+seedPaths:
+  - seed-data
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings: []
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_POSTGRES_PORT
+        app: api
+        env: DATABASE_URL
+`,
+      "seed-data/browser-profile": "authenticated\n"
+    });
+
+    expect(() =>
+      runMonke({
+        args: ["spawn", "failed-dependency"],
+        binDirectory,
+        cwd: root,
+        monkeHome: home
+      })
+    ).toThrow(/Bootstrap command failed/u);
+
+    const rootWorktree = getExpectedWorktreePath(home, root, "failed-dependency");
+    expect(read(rootWorktree, "apps/api/.env.local")).toBe(
+      "DATABASE_URL=postgres://localhost:5432/app\n"
+    );
+    expect(read(rootWorktree, "seed-data/browser-profile")).toBe("authenticated\n");
+    expect(existsSync(path.join(rootWorktree, ".root-materialized"))).toBeFalsy();
+    expect(existsSync(getExpectedWorktreePath(home, depRoot, "failed-dependency"))).toBeTruthy();
+  });
+
   test("spawn -m seeds untracked dependency env files from the dependency source checkout", () => {
     const sandbox = makeTempDir("multi-repo-main-untracked-seeds");
     const binDirectory = path.join(sandbox, "bin");

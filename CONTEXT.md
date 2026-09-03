@@ -218,9 +218,23 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Spawn**: The operation that creates or updates all required session worktrees from a source checkout, using current `HEAD` unless **Default branch spawn mode** is requested. _Avoid_: Initialize, provision
 
-**Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates fresh session branches from each participating repo's default branch content, prefers fetched `origin/main` then `origin/master`, falls back to local `main` then `master`, and rejects existing Session state or Session branches. _Avoid_: Arbitrary base branch, from branch
+**Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates a new Session from each participating repo's resolved default branch content, or resumes that Session's retained prepared worktrees and pinned refs after an incomplete attempt. _Avoid_: Arbitrary base branch, from branch
 
-**Materialize**: The operation that refreshes the current session by reapplying seeding, path syncing, env rewrites, and bootstrap behavior. _Avoid_: Refresh, rebuild
+**Worktree preparation**: The dependency-independent phase that creates or validates one participating **Session worktree**, carries permitted source changes, and non-clobberingly projects **Seed material**. Preparation is initiated for every participating repo without waiting for dependency materialization. _Avoid_: Partial materialization, recursive setup
+
+**Prepared worktree**: A **Session worktree** whose **Worktree preparation** completed but whose dependency-ordered repo materialization may still be pending. _Avoid_: Complete worktree, failed worktree
+
+**Preparation warning**: A non-fatal **Worktree preparation** result that identifies missing optional **Seed material** while leaving the worktree prepared. Copy failures are preparation failures, not warnings. _Avoid_: Preparation failure, materialization warning
+
+**Repo materialization**: The phase that resolves session values, rewrites env, runs repo commands, and produces the results consumed by dependent repos. It begins only after the repo's own **Worktree preparation** and every dependency's **Repo materialization** complete. _Avoid_: Worktree preparation, recursive setup
+
+**Blocked repo materialization**: A repo materialization that cannot begin because a dependency's materialization failed. It is a consequence of another repo's failure, not a failure of the blocked repo. _Avoid_: Failed materialization, cancelled materialization
+
+**Cleanup eligibility**: The persisted indication that **Repo materialization** reached an externally relevant side effect and the repo's **Cleanup command** must run before its Session state can be removed. A **Prepared worktree** alone is not cleanup-eligible. _Avoid_: Prepared state, worktree existence
+
+**Materialization generation**: One retained attempt to materialize every repo in a Session dependency graph. An incomplete generation resumes by reusing completed repo materializations; a new generation begins only after the previous generation completes. _Avoid_: Command invocation, retry run
+
+**Materialize**: The operation that schedules **Worktree preparation** and **Repo materialization** across the Session dependency graph. _Avoid_: Refresh, rebuild
 
 **Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target removes every recorded Session worktree and performs **Session finalization**; an Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
 
@@ -327,8 +341,13 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - A **Resource cleanup** belongs to one repo and may use any **Session resources** and **Resource command outputs** resolved for that repo.
 - **Session resources** for different **Session worktrees** must resolve to distinct values when they use the same resource name.
 - **Default branch spawn mode** prefers fetched remote `main` or `master` and may fall back to local `main` or `master`.
-- **Default branch spawn mode** requires fresh session branches.
+- A new **Default branch spawn mode** Session requires fresh session branches; an incomplete one resumes its retained prepared worktrees and pinned refs.
 - **Default branch spawn mode** materializes tracked repo content and repo configuration from default-branch content, while copying Seed material from the Source checkout.
+- **Worktree preparation** is scheduled independently for every participating repo, while each **Repo materialization** waits for its own preparation and every dependency's materialization.
+- A failed repo materialization blocks only its dependents; independent preparation and repo materialization continue until the **Materialization generation** has no runnable work.
+- Retrying an incomplete **Materialization generation** reuses completed repo materializations. Running **Materialize** after a generation completes starts a new generation.
+- **Worktree preparation** fills missing Seed material without overwriting Session-local content. A missing configured Seed path produces a **Preparation warning**; a copy error fails preparation.
+- A repo becomes cleanup-eligible immediately before repo materialization may create an external side effect. A prepared-only repo is removed without running its Cleanup command.
 - A **Diff** for a Session repo without a remembered **Diff base** may infer an unambiguous, distinct local or remote-tracking `main` or `master` ref with one merge-base only when the current branch is not itself `main` or `master` and no non-default branch has nearer or incomparable shared history, and remember it only after Codiff launches successfully.
 - A **Diff** warns when its **Session worktree** does not carry the Session branch and that branch is attached to another checkout; the current checkout remains the reviewed side.
 - **Spawn** always emits a **Shell directory request** for the root repo's **Session worktree** after the operation succeeds.

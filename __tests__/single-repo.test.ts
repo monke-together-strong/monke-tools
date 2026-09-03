@@ -1,4 +1,12 @@
-import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync
+} from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -1357,6 +1365,105 @@ apps:
     expect(read(worktreeRoot, "apps/frostbite-crawler/data/sessions/hoangbn/Preferences")).toBe(
       '{ "theme": "light" }\n'
     );
+  });
+
+  test("materialize fills newly missing Seed material without mirroring source deletions", () => {
+    const sandbox = makeTempDir("single-seedpaths-fill-missing");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      ".gitignore": "seed-data/\n",
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `seedPaths:
+  - seed-data
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+      "seed-data/original.txt": "source original\n"
+    });
+
+    runMonke({
+      args: ["spawn", "banana"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+    write(worktreeRoot, "seed-data/original.txt", "Session-local original\n");
+    rmSync(path.join(repoRoot, "seed-data/original.txt"));
+    write(repoRoot, "seed-data/new.txt", "new source material\n");
+
+    runMonke({
+      args: ["materialize"],
+      binDirectory,
+      cwd: worktreeRoot,
+      monkeHome: home
+    });
+
+    expect(read(worktreeRoot, "seed-data/original.txt")).toBe("Session-local original\n");
+    expect(read(worktreeRoot, "seed-data/new.txt")).toBe("new source material\n");
+  });
+
+  test("materialize retries preparation after a Seed copy error is repaired", () => {
+    const sandbox = makeTempDir("single-seedpaths-copy-retry");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      ".gitignore": "seed-data/\n",
+      "apps/api/.env.local": "PORT=3000\n",
+      "monke.yml": `bootstrapCommand: printf x >> bootstrap-runs
+seedPaths:
+  - seed-data
+apps:
+  api:
+    path: apps/api
+    envFile: .env.local
+    mappings:
+      - port: API_PORT
+        env: PORT
+`,
+      "seed-data/fixture.txt": "fixture\n"
+    });
+
+    runMonke({
+      args: ["spawn", "banana"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+    expect(read(worktreeRoot, "bootstrap-runs")).toBe("x");
+    rmSync(path.join(worktreeRoot, "seed-data"), { recursive: true });
+    write(worktreeRoot, "seed-data", "copy conflict\n");
+
+    expect(() =>
+      runMonke({
+        args: ["materialize"],
+        binDirectory,
+        cwd: worktreeRoot,
+        monkeHome: home
+      })
+    ).toThrow(/Worktree preparation failed/u);
+    expect(read(worktreeRoot, "bootstrap-runs")).toBe("x");
+
+    rmSync(path.join(worktreeRoot, "seed-data"));
+    mkdirSync(path.join(worktreeRoot, "seed-data"));
+    runMonke({
+      args: ["materialize"],
+      binDirectory,
+      cwd: worktreeRoot,
+      monkeHome: home
+    });
+
+    expect(read(worktreeRoot, "seed-data/fixture.txt")).toBe("fixture\n");
+    expect(read(worktreeRoot, "bootstrap-runs")).toBe("xx");
   });
 
   test("missing configured seedPaths warn and do not fail session creation", () => {

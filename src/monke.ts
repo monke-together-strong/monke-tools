@@ -103,6 +103,17 @@ interface DirtySnapshot {
   untrackedPaths: string[];
 }
 
+interface PreparedRepoWorktree {
+  baselinePortsRoot: string;
+  diffBaseRef?: string;
+  worktreePath: string;
+}
+
+interface SpawnRepoPreparation {
+  createdFromDefault: boolean;
+  worktree: PreparedRepoWorktree;
+}
+
 /** Options controlling `mt cleanup` lifecycle behavior. */
 export type CleanupOptions =
   | {
@@ -189,6 +200,35 @@ export function spawnSessionFromSourceRootLocked(
     saveSessionState(home, sessionState);
   };
   try {
+    const preparedWorktrees = new Map<string, PreparedRepoWorktree>();
+    for (const [index, repoConfig] of graph.reposInMaterializationOrder.entries()) {
+      const existingState = sessionState.repos.find(
+        (repo) => repo.sourceRoot === repoConfig.sourceRoot
+      );
+      const shouldSkip = index < firstWorkIndex && repoConfig.sourceRoot !== currentRepoRoot;
+
+      const repoPreparation = prepareSpawnRepoWorktree({
+        dirtySnapshot: dirtySnapshots.get(repoConfig.sourceRoot),
+        existingState,
+        getDefaultRef,
+        graphSource: sessionState.graphSource,
+        home,
+        options,
+        repoConfig,
+        rootSourceRoot,
+        runtime,
+        session,
+        shouldSkip
+      });
+      if (repoPreparation.createdFromDefault) {
+        createdDefaultWorktrees.push({
+          sourceRoot: repoConfig.sourceRoot,
+          worktreePath: repoPreparation.worktree.worktreePath
+        });
+      }
+      preparedWorktrees.set(repoConfig.sourceRoot, repoPreparation.worktree);
+    }
+
     for (const [index, repoConfig] of graph.reposInMaterializationOrder.entries()) {
       const existingState = sessionState.repos.find(
         (repo) => repo.sourceRoot === repoConfig.sourceRoot
@@ -196,17 +236,6 @@ export function spawnSessionFromSourceRootLocked(
       const shouldSkip = index < firstWorkIndex && repoConfig.sourceRoot !== currentRepoRoot;
 
       if (shouldSkip && existingState) {
-        const dirtySnapshot = dirtySnapshots.get(repoConfig.sourceRoot);
-        if (dirtySnapshot && dirtySnapshotHasContent(dirtySnapshot)) {
-          warnDirtyStateNotCarried(runtime, repoConfig.sourceRoot, session);
-        }
-        validateWorktreeForSession(
-          runtime,
-          home,
-          repoConfig.sourceRoot,
-          existingState.worktreePath,
-          session
-        );
         results.set(repoConfig.sourceRoot, {
           localAssignments: new Map(
             existingState.assignedPorts.map((entry) => [entry.key, entry.value])
@@ -216,28 +245,15 @@ export function spawnSessionFromSourceRootLocked(
         continue;
       }
 
-      const { createdDiffBaseRef, createdFromDefault, isSessionBranchRoot, worktree } =
-        ensureSpawnWorktree({
-          dirtySnapshot: dirtySnapshots.get(repoConfig.sourceRoot),
-          getDefaultRef,
-          home,
-          options,
-          repoConfig,
-          rootSourceRoot,
-          runtime,
-          session
-        });
-      if (createdFromDefault) {
-        createdDefaultWorktrees.push({
-          sourceRoot: repoConfig.sourceRoot,
-          worktreePath: worktree.path
-        });
+      const preparedWorktree = preparedWorktrees.get(repoConfig.sourceRoot);
+      if (!preparedWorktree) {
+        throw new MonkeError(`Worktree preparation did not complete for ${repoConfig.sourceRoot}`);
       }
 
       const materialized = materializeRepo({
-        baselinePortsRoot: isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
+        baselinePortsRoot: preparedWorktree.baselinePortsRoot,
         dependencyResults: results,
-        diffBaseRef: existingState?.diffBaseRef ?? createdDiffBaseRef,
+        diffBaseRef: preparedWorktree.diffBaseRef,
         existingState,
         home,
         persistRepoState,
@@ -245,8 +261,7 @@ export function spawnSessionFromSourceRootLocked(
         rootSourceRoot,
         runtime,
         session,
-        worktreeCreated: worktree.created,
-        worktreePath: worktree.path
+        worktreePath: preparedWorktree.worktreePath
       });
 
       results.set(repoConfig.sourceRoot, materialized);
@@ -267,6 +282,65 @@ export function spawnSessionFromSourceRootLocked(
   }
 
   return rootWorktreePath;
+}
+
+function prepareSpawnRepoWorktree(options: {
+  dirtySnapshot?: DirtySnapshot;
+  existingState: SessionRepoState | undefined;
+  getDefaultRef: (sourceRoot: string) => DefaultBranchRef;
+  graphSource: SessionState["graphSource"];
+  home: string;
+  options: SpawnOptions;
+  repoConfig: RepoConfig;
+  rootSourceRoot: string;
+  runtime: Runtime;
+  session: string;
+  shouldSkip: boolean;
+}): SpawnRepoPreparation {
+  const {
+    dirtySnapshot,
+    existingState,
+    graphSource,
+    home,
+    repoConfig,
+    runtime,
+    session,
+    shouldSkip
+  } = options;
+  if (shouldSkip && existingState) {
+    if (dirtySnapshot && dirtySnapshotHasContent(dirtySnapshot)) {
+      warnDirtyStateNotCarried(runtime, repoConfig.sourceRoot, session);
+    }
+    validateWorktreeForSession(
+      runtime,
+      home,
+      repoConfig.sourceRoot,
+      existingState.worktreePath,
+      session
+    );
+    prepareRepoWorktree(runtime, repoConfig, existingState.worktreePath);
+    return {
+      createdFromDefault: false,
+      worktree: {
+        baselinePortsRoot:
+          graphSource === "session-branch" ? existingState.worktreePath : repoConfig.sourceRoot,
+        diffBaseRef: existingState.diffBaseRef,
+        worktreePath: existingState.worktreePath
+      }
+    };
+  }
+
+  const { createdDiffBaseRef, createdFromDefault, isSessionBranchRoot, worktree } =
+    ensureSpawnWorktree(options);
+  prepareRepoWorktree(runtime, repoConfig, worktree.path);
+  return {
+    createdFromDefault,
+    worktree: {
+      baselinePortsRoot: isSessionBranchRoot ? worktree.path : repoConfig.sourceRoot,
+      diffBaseRef: existingState?.diffBaseRef ?? createdDiffBaseRef,
+      worktreePath: worktree.path
+    }
+  };
 }
 
 function ensureSpawnWorktree(options: {
@@ -771,24 +845,38 @@ export function runMaterialize(runtime: Runtime) {
       sessionState = recordRepoSuccess(sessionState, repoState);
       saveSessionState(home, sessionState);
     };
+
+    const preparedWorktrees = new Map<string, PreparedRepoWorktree>();
     for (const repoConfig of graph.reposInMaterializationOrder) {
-      const existingState = sessionState.repos.find(
-        (repo) => repo.sourceRoot === repoConfig.sourceRoot
-      );
       const isCurrentRepo = repoConfig.sourceRoot === currentRepoRoot;
       const dependencyWorktree = isCurrentRepo
         ? null
         : ensureSessionWorktree(runtime, home, repoConfig.sourceRoot, session);
       const worktreePath = dependencyWorktree?.path ?? context.worktreeRoot;
-      const worktreeCreated = dependencyWorktree?.created ?? false;
 
       if (isCurrentRepo) {
         validateWorktreeForSession(runtime, home, repoConfig.sourceRoot, worktreePath, session);
       }
 
-      const materialized = materializeRepo({
+      prepareRepoWorktree(runtime, repoConfig, worktreePath);
+      preparedWorktrees.set(repoConfig.sourceRoot, {
         baselinePortsRoot:
           sessionState.graphSource === "session-branch" ? worktreePath : repoConfig.sourceRoot,
+        worktreePath
+      });
+    }
+
+    for (const repoConfig of graph.reposInMaterializationOrder) {
+      const existingState = sessionState.repos.find(
+        (repo) => repo.sourceRoot === repoConfig.sourceRoot
+      );
+      const preparedWorktree = preparedWorktrees.get(repoConfig.sourceRoot);
+      if (!preparedWorktree) {
+        throw new MonkeError(`Worktree preparation did not complete for ${repoConfig.sourceRoot}`);
+      }
+
+      const materialized = materializeRepo({
+        baselinePortsRoot: preparedWorktree.baselinePortsRoot,
         dependencyResults: results,
         existingState,
         home,
@@ -797,8 +885,7 @@ export function runMaterialize(runtime: Runtime) {
         rootSourceRoot: context.sourceRoot,
         runtime,
         session,
-        worktreeCreated,
-        worktreePath
+        worktreePath: preparedWorktree.worktreePath
       });
 
       results.set(repoConfig.sourceRoot, materialized);
@@ -1023,7 +1110,6 @@ function materializeRepo(options: {
   rootSourceRoot: string;
   runtime: Runtime;
   session: string;
-  worktreeCreated: boolean;
   worktreePath: string;
 }) {
   const {
@@ -1034,17 +1120,10 @@ function materializeRepo(options: {
     repoConfig,
     rootSourceRoot,
     session,
-    worktreeCreated,
     worktreePath
   } = options;
   const hasBootstrapCommand = repoHasBootstrapCommand(repoConfig);
   const diffBaseRef = options.diffBaseRef || existingState?.diffBaseRef;
-
-  if (worktreeCreated) {
-    seedWorktreeFiles(repoConfig, worktreePath, (message) => {
-      options.runtime.writeStderr(`${message}\n`);
-    });
-  }
 
   options.persistRepoState(
     buildSessionRepoState({
@@ -1215,6 +1294,18 @@ function materializeRepo(options: {
       worktreePath
     })
   };
+}
+
+function prepareRepoWorktree(runtime: Runtime, repoConfig: RepoConfig, worktreePath: string) {
+  try {
+    seedWorktreeFiles(repoConfig, worktreePath, (message) => {
+      runtime.writeStderr(`${message}\n`);
+    });
+  } catch (error) {
+    throw new MonkeError(
+      `Worktree preparation failed for ${repoConfig.sourceRoot} in ${worktreePath}\n${errorMessage(error)}`
+    );
+  }
 }
 
 function repoHasBootstrapCommand(repoConfig: RepoConfig) {
