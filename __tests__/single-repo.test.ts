@@ -33,6 +33,7 @@ import {
   read,
   readSingleYamlFile,
   runMonke,
+  runMonkeCapturingFailure,
   withPlatform,
   write
 } from "./helpers.ts";
@@ -178,7 +179,7 @@ describe("single-repo sessions", () => {
       "README.md": "hello\n"
     });
 
-    const result = runMonke({
+    const result = runMonkeCapturingFailure({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: repoRoot,
@@ -189,8 +190,13 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "README.md")).toBe("hello\n");
     expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("banana");
     expect(result.stderr).toContain(
-      `Warning: no monke.yml found for ${repoRoot}; spawned session worktree without materializing it.`
+      `Warning: no monke.yml found for ${repoRoot}; prepared session worktree without materializing it.`
     );
+    expect(result.error?.message).toContain(
+      "Session materialization failed after all runnable work settled."
+    );
+    expect(result.error?.message).toContain(`Prepared Root worktree: ${worktreeRoot}`);
+    expect(result.error?.message).toContain("Retry: mt spawn banana");
     expect(result.stderr).not.toContain("Spawned or updated session banana");
     expect(result.stderr).not.toContain(`Switch to ${worktreeRoot}`);
     expect(result.stdout).toBe("");
@@ -219,7 +225,7 @@ describe("single-repo sessions", () => {
     });
     const openLogPath = installCodexUrlOpenShim(binDirectory);
 
-    const result = runMonke({
+    const result = runMonkeCapturingFailure({
       args: ["spawn", "banana", "--codex"],
       binDirectory,
       cwd: repoRoot,
@@ -247,7 +253,7 @@ describe("single-repo sessions", () => {
     write(repoRoot, "README.md", "dirty\n");
     write(repoRoot, "notes.txt", "untracked\n");
 
-    runMonke({
+    runMonkeCapturingFailure({
       args: ["spawn", "dirty-no-config"],
       binDirectory,
       cwd: repoRoot,
@@ -267,7 +273,7 @@ describe("single-repo sessions", () => {
       "README.md": "clean\n"
     });
 
-    runMonke({
+    runMonkeCapturingFailure({
       args: ["spawn", "existing-no-config"],
       binDirectory,
       cwd: repoRoot,
@@ -684,7 +690,7 @@ describe("single-repo sessions", () => {
     git(repoRoot, ["switch", "-c", "feature"]);
     write(repoRoot, "README.md", "feature\n");
 
-    const result = runMonke({
+    const result = runMonkeCapturingFailure({
       args: ["spawn", "fresh", "-m"],
       binDirectory,
       cwd: repoRoot,
@@ -695,7 +701,7 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "README.md")).toBe("main\n");
     expect(git(worktreeRoot, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe("fresh");
     expect(result.stderr).toContain(
-      `Warning: no monke.yml found for ${repoRoot}; spawned session worktree without materializing it.`
+      `Warning: no monke.yml found for ${repoRoot}; prepared session worktree without materializing it.`
     );
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
@@ -708,12 +714,13 @@ describe("single-repo sessions", () => {
       worktreePath: worktreeRoot
     });
 
-    runMonke({
+    const retry = runMonkeCapturingFailure({
       args: ["spawn", "fresh", "-m"],
       binDirectory,
       cwd: repoRoot,
       monkeHome: home
     });
+    expect(retry.error?.message).toContain("Retry: mt spawn fresh -m");
     expect(loadSessionState(home, repoRoot, "fresh").spawnSource).toBe("default-branch");
   });
 
@@ -1046,6 +1053,26 @@ apps: {}
     expect(state.generation.status).toBe("complete");
   });
 
+  test("plain spawn cannot replace a completed default-branch Session identity", () => {
+    const sandbox = makeTempDir("single-repo-complete-main-policy");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
+      "version.txt": "main\n"
+    });
+
+    runMonke({ args: ["spawn", "retained-main", "-m"], cwd: repoRoot, monkeHome: home });
+    const before = loadSessionState(home, repoRoot, "retained-main");
+
+    expect(() =>
+      runMonke({ args: ["spawn", "retained-main"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/completed Session.*pinned default branch.*use a new Session/u);
+    expect(() =>
+      runMonke({ args: ["spawn", "retained-main", "-m"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/completed Session.*pinned default branch.*use a new Session/u);
+    expect(loadSessionState(home, repoRoot, "retained-main")).toStrictEqual(before);
+  });
+
   test("plain spawn retry preserves --no-dirty and reports the exact retry command", () => {
     const sandbox = makeTempDir("single-repo-no-dirty-policy-retry");
     const home = path.join(sandbox, "home");
@@ -1143,7 +1170,7 @@ apps: {}
         cwd: repoRoot,
         monkeHome: home
       })
-    ).toThrow(/Session state already exists for "fresh"/u);
+    ).toThrow(/completed Session.*current HEAD.*use a new Session/u);
   });
 
   test("Spawn rejects v1 Session state through the production loader", () => {

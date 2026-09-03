@@ -221,9 +221,6 @@ export async function spawnSessionFromSourceRootLocked(
   spawnOptions: SpawnOptions
 ) {
   const initialized = await initializeSpawn(runtime, home, rootSourceRoot, session, spawnOptions);
-  if (initialized.kind === "complete") {
-    return initialized.rootWorktreePath;
-  }
   const { execution } = initialized;
   await runSessionMaterialization({
     home: execution.home,
@@ -263,17 +260,24 @@ async function initializeSpawn(
   }
   const rootConfigExists = spawnRootConfigExists(runtime, rootSourceRoot, rootConfigRef);
   if (!rootConfigExists) {
-    return {
-      kind: "complete" as const,
-      rootWorktreePath: await spawnWithoutConfig(
-        runtime,
-        home,
-        rootSourceRoot,
-        session,
-        sourcePlan.spawnOptions,
-        rootDefaultRef
-      )
-    };
+    const retainedState = loadSessionState(home, rootSourceRoot, session);
+    if (retainedState.repos.length > 0 && !isConfiglessPreparedState(retainedState)) {
+      throw new MonkeError(
+        [
+          `monke.yml is missing for retained configured Session ${session} at ${rootSourceRoot}.`,
+          "The retained Session state and Cleanup obligations were preserved.",
+          `Retry: ${formatSpawnRetryCommand(session, sourcePlan.spawnOptions)}`
+        ].join("\n")
+      );
+    }
+    return await spawnWithoutConfig(
+      runtime,
+      home,
+      rootSourceRoot,
+      session,
+      sourcePlan.spawnOptions,
+      rootDefaultRef
+    );
   }
 
   const graph = loadSpawnGraph(
@@ -306,6 +310,23 @@ async function initializeSpawn(
     } satisfies ConfiguredSpawn,
     kind: "configured" as const
   };
+}
+
+function isConfiglessPreparedState(state: SessionState) {
+  const [repo] = state.repos;
+  return (
+    state.generation.number === 0 &&
+    state.generation.status === "not-started" &&
+    state.repos.length === 1 &&
+    repo?.sourceRoot === state.rootSourceRoot &&
+    repo.materializationStatus === "pending" &&
+    (repo.preparationStatus === "prepared" || repo.preparationStatus === "warning") &&
+    !repo.cleanupEligible &&
+    repo.cleanupCommand === undefined &&
+    repo.assignedPorts.length === 0 &&
+    repo.resourceCommandOutputs === undefined &&
+    repo.resourceValues === undefined
+  );
 }
 
 function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
@@ -511,6 +532,19 @@ function resolveSpawnSourcePlan(
   spawnOptions: SpawnOptions
 ): SpawnSourcePlan {
   const state = loadSessionState(home, rootSourceRoot, session);
+  if (state.repos.length > 0 && state.generation.status === "complete") {
+    const retainedOptions = retainedSpawnOptions(state);
+    const resumesPinnedSessionBranch =
+      retainedOptions.mode === "default-branch" && spawnOptions.mode === "session-branch";
+    if (
+      spawnOptions.mode === "default-branch" ||
+      (!sameSpawnOptions(spawnOptions, retainedOptions) && !resumesPinnedSessionBranch)
+    ) {
+      throw new MonkeError(
+        `Session ${session} is a completed Session using ${formatSpawnPolicy(retainedOptions)}; use a new Session name to change or refresh its source identity`
+      );
+    }
+  }
   if (state.repos.length > 0 && state.generation.status !== "complete") {
     const retainedOptions = retainedSpawnOptions(state);
     if (!isImplicitSpawnRequest(spawnOptions) && !sameSpawnOptions(spawnOptions, retainedOptions)) {
@@ -621,7 +655,7 @@ async function spawnWithoutConfig(
   session: string,
   options: SpawnOptions,
   rootDefaultRef: PinnedDefaultBranchRef | null
-) {
+): Promise<never> {
   assertNoGlobalWorktreePathStateCollisions(home, session, [{ sourceRoot: rootSourceRoot }]);
   const priorSessionState = loadSessionState(home, rootSourceRoot, session);
   const existingRepoState = priorSessionState.repos.find(
@@ -696,9 +730,17 @@ async function spawnWithoutConfig(
   };
   saveSessionState(home, sessionState);
   runtime.writeStderr(
-    `Warning: no monke.yml found for ${rootSourceRoot}; spawned session worktree without materializing it.\n`
+    `Warning: no monke.yml found for ${rootSourceRoot}; prepared session worktree without materializing it.\n`
   );
-  return getExpectedWorktreePath(home, rootSourceRoot, session);
+  throw new MonkeError(
+    [
+      "Session materialization failed after all runnable work settled.",
+      "Receipt:",
+      `  ${rootSourceRoot}: pending (prepared)`,
+      `Prepared Root worktree: ${worktree.path}`,
+      `Retry: ${formatSpawnRetryCommand(session, options)}`
+    ].join("\n")
+  );
 }
 
 function loadSpawnGraph(

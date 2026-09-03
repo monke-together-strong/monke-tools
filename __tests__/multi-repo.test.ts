@@ -96,6 +96,62 @@ external:
     expect(sessionState.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
   });
 
+  test("missing Root config cannot discard retained dependency Cleanup obligations", () => {
+    const sandbox = makeTempDir("multi-repo-missing-root-config");
+    const home = path.join(sandbox, "home");
+    const depRoot = createRepo(path.join(sandbox, "dep"), {
+      "app/.env": "PORT=4100\n",
+      "monke.yml": `bootstrapCommand: "true"
+cleanupCommand: "true"
+apps:
+  dep:
+    path: app
+    envFile: .env
+    mappings:
+      - port: DEP_PORT
+        env: PORT
+`
+    });
+    const root = createRepo(path.join(sandbox, "root"), {
+      "app/.env": "DEP_PORT=4100\n",
+      "monke.yml": `bootstrapCommand: "true"
+cleanupCommand: "true"
+apps:
+  root:
+    path: app
+    envFile: .env
+external:
+  dep:
+    path: ../dep
+    pathEnv: DEP_DIR
+    mappings:
+      - port: DEP_PORT
+        app: root
+        env: DEP_PORT
+`
+    });
+
+    runMonke({ args: ["spawn", "retained"], cwd: root, monkeHome: home });
+    const before = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    expect(before.repos).toHaveLength(2);
+    expect(before.repos.every((repo) => repo.cleanupEligible)).toBeTruthy();
+    rmSync(path.join(root, "monke.yml"));
+
+    const result = runMonkeCapturingFailure({
+      args: ["spawn", "retained"],
+      cwd: root,
+      monkeHome: home
+    });
+
+    expect(result.error?.message).toContain("monke.yml is missing");
+    expect(result.error?.message).toContain("retained Session state and Cleanup obligations");
+    expect(readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toStrictEqual(
+      before
+    );
+    expect(before.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
+    expect(before.repos.map((repo) => repo.cleanupCommand)).toStrictEqual(["true", "true"]);
+  });
+
   test("spawn warns when skipped dependency source dirt is not carried", () => {
     const sandbox = makeTempDir("multi-repo-skipped-dep-dirty");
     const binDirectory = path.join(sandbox, "bin");

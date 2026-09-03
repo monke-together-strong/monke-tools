@@ -16,6 +16,7 @@ import {
   read,
   readSingleYamlFile,
   runMonke,
+  runMonkeCapturingFailure,
   write
 } from "./helpers.ts";
 
@@ -309,7 +310,7 @@ apps:
       "README.md": "# root\n"
     });
 
-    const spawn = runMonke({
+    const spawn = runMonkeCapturingFailure({
       args: ["spawn", "banana"],
       binDirectory,
       cwd: root,

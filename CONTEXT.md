@@ -258,7 +258,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Setup**: The operation that updates the source checkout root `.env` with dependency path env values. _Avoid_: Materialize, bootstrap
 
-**Shell directory request**: A CLI-side request for an active shell adapter to move the user's current shell into a resolved **Source checkout** or **Session worktree** after a session operation determines that navigation is required. Once issued, the request is honored independently of the operation's final success or failure. _Avoid_: cd output, directory switch, shell cd
+**Shell directory request**: A CLI-side request for an active shell adapter to move the user's current shell into a resolved **Source checkout** or **Session worktree** after the operation establishes that the target is navigation-ready. A prepared-only Session worktree is not navigation-ready and a failed operation does not issue a request. _Avoid_: cd output, directory switch, shell cd
 
 **Shell adapter**: The human-shell function installed by monke-tools that can honor **Shell directory requests** after an `mt` command exits. _Avoid_: Alias, subprocess, terminal state
 
@@ -347,7 +347,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - **Worktree preparation** fills missing Seed material without overwriting Session-local content. A missing configured Seed path produces a **Preparation warning**; a copy error fails preparation.
 - A **Diff** for a Session repo without a remembered **Diff base** may infer an unambiguous, distinct local or remote-tracking `main` or `master` ref with one merge-base only when the current branch is not itself `main` or `master` and no non-default branch has nearer or incomparable shared history, and remember it only after Codiff launches successfully.
 - A **Diff** warns when its **Session worktree** does not carry the Session branch and that branch is attached to another checkout; the current checkout remains the reviewed side.
-- **Spawn** always emits a **Shell directory request** for the root repo's **Session worktree** after the operation succeeds.
+- **Spawn** emits a **Shell directory request** only after the Root repo's **Repo materialization** succeeds; a config-less prepared Root fails with a retry receipt and does not navigate.
 - **Chop** without a target selects the current **Session** when run inside one of its managed worktrees.
 - An explicit **Chop** target selects that named **Session** within the current **Root repo** scope, even when invoked from a different Session.
 - **Chop** requires an explicit **Chop target** when run from a **Source checkout**.
@@ -381,8 +381,8 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - Retrying **Session finalization** reruns Cleanup commands from the beginning because individual command successes are not checkpointed.
 - An explicit Session **Chop target** remains valid while its **Session state** is retained, even when every recorded worktree is already gone; rerunning `mt chop <session>` retries **Session finalization**.
 - **Cleanup** remains the broad operation for discovering and finalizing already-dead Sessions, while **Chop** targets one selected Session. After successful **Session state** removal, a later `mt chop <session>` reports that the target does not exist.
-- **Swing** always emits a **Shell directory request** for a resolved root repo **Source checkout**, **Session worktree**, or **Ordinary worktree**.
-- A **Codex workspace launch** preserves normal **Spawn** or **Swing** behavior and additionally opens `codex://threads/new` with the resolved absolute checkout path.
+- **Swing** emits a **Shell directory request** after resolving a navigation-ready root repo **Source checkout**, **Session worktree**, or **Ordinary worktree**. A pull request target whose embedded **Spawn** does not materialize its Root repo fails without navigating.
+- A **Codex workspace launch** preserves normal successful **Spawn** or **Swing** behavior and additionally opens `codex://threads/new` with the resolved absolute checkout path; it does not launch for a prepared-only failure.
 - **Swing** does not create worktrees for ordinary **Session** or **Ordinary worktree** targets, or change which branch an existing worktree has checked out.
 - A **Swing target** may be a **Session** name, an existing **Ordinary worktree** branch, the `^` source-checkout shortcut, the `-` previous-target shortcut, a `pr:<number>` pull request shortcut, or a pull request URL.
 - The `^` **Swing target** resolves to the current **Root repo** **Source checkout** without materializing, setting up, creating, or changing branches.

@@ -10,7 +10,7 @@ import { SessionStateSchema } from "../src/state-schema.ts";
 import type { SelectPrompt } from "../src/types.ts";
 import {
   completeSessionState,
-  createRepo,
+  createRepo as createTestRepo,
   git,
   installBrewShim,
   installFakeCodiff,
@@ -1243,6 +1243,10 @@ mv "${replacementRepo}" "${racyWorktree}"`
     );
   });
 });
+
+function createRepo(root: string, files: Record<string, string>) {
+  return createTestRepo(root, { "monke.yml": "apps: {}\n", ...files });
+}
 
 async function runDiffChild(options: {
   baseWorktree: string;
