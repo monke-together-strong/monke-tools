@@ -154,6 +154,35 @@ await runtime.execAsync(
     }
   });
 
+  test("commands started during timeout grace do not duplicate termination listeners", async () => {
+    const sandbox = makeTempDir("runtime-timeout-listener-overlap");
+    const childPidPath = path.join(sandbox, "child.pid");
+    const timeoutStartedMarker = path.join(sandbox, "timeout-started");
+    const signals = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
+    const baselineListeners = new Map(
+      signals.map((signal) => [signal, process.listenerCount(signal)])
+    );
+    const runtime = createRuntime();
+    const timedResult = runtime.execAsync(
+      "sh",
+      [
+        "-c",
+        `trap 'touch "${timeoutStartedMarker}"; exit 0' TERM; printf '%s' "$$" > "${childPidPath}"; while :; do sleep 1; done`
+      ],
+      { allowFailure: true, timeoutSeconds: 0.5 }
+    );
+
+    await waitFor(() => existsSync(childPidPath) && existsSync(timeoutStartedMarker));
+    const childPid = Number(readFileSync(childPidPath, "utf-8"));
+    await waitFor(() => !isProcessRunning(childPid));
+    await runtime.execAsync("sh", ["-c", ":"]);
+    await timedResult;
+
+    for (const signal of signals) {
+      expect(process.listenerCount(signal)).toBe(baselineListeners.get(signal));
+    }
+  });
+
   test("createRuntime reports exhausted scripted select values clearly", async () => {
     const runtime = createRuntime({ selectValues: [] });
 

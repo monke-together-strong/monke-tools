@@ -426,7 +426,7 @@ function executeCommandAsync(
 }
 
 function registerAsyncChild(child: AsyncChildProcess) {
-  if (activeAsyncChildren.size === 0) {
+  if (activeAsyncChildren.size === 0 && timedOutProcessGroups.size === 0) {
     attachParentTerminationHandlers();
   }
   activeAsyncChildren.add(child);
