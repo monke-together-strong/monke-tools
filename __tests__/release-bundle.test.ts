@@ -21,6 +21,8 @@ import {
 } from "../src/release-contract.ts";
 import { makeTempDir } from "./helpers.ts";
 
+const RELEASE_BUNDLE_BUILD_TIMEOUT_MS = 120_000;
+
 const RELEASE_VERSION = "1.2.3";
 const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 interface ManifestOverrides {
@@ -330,28 +332,34 @@ describe("Release bundle verifier", () => {
     );
   });
 
-  test("builds an official bundle whose executable reports the selected version", () => {
-    const platform = process.platform === "darwin" ? "macos-arm64" : "linux-x64";
-    const outputDirectory = makeTempDir("release-build");
-    const archivePath = buildReleaseBundle({
-      outputDirectory,
-      platform,
-      sourceCommit: SOURCE_COMMIT,
-      version: RELEASE_VERSION
-    });
+  test(
+    "builds an official bundle whose executable reports the selected version",
+    () => {
+      const platform = process.platform === "darwin" ? "macos-arm64" : "linux-x64";
+      const outputDirectory = makeTempDir("release-build");
+      const archivePath = buildReleaseBundle({
+        outputDirectory,
+        platform,
+        sourceCommit: SOURCE_COMMIT,
+        version: RELEASE_VERSION
+      });
 
-    const manifest = verifyReleaseArchive({
-      archivePath,
-      expectedGuidanceRoot: path.join(import.meta.dirname, ".."),
-      expectedPlatform: platform,
-      expectedSourceCommit: SOURCE_COMMIT,
-      expectedVersion: RELEASE_VERSION
-    });
+      const manifest = verifyReleaseArchive({
+        archivePath,
+        expectedGuidanceRoot: path.join(import.meta.dirname, ".."),
+        expectedPlatform: platform,
+        expectedSourceCommit: SOURCE_COMMIT,
+        expectedVersion: RELEASE_VERSION
+      });
 
-    expect(manifest.toolBuildIdentity).toBe(RELEASE_VERSION);
-    expect(manifest.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
-    expect(Date.parse(manifest.createdAt)).not.toBeNaN();
-  });
+      expect(manifest.toolBuildIdentity).toBe(RELEASE_VERSION);
+      expect(manifest.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
+      expect(Date.parse(manifest.createdAt)).not.toBeNaN();
+      // This test compiles the CLI into a native executable. The default 5s budget leaves almost
+      // no headroom over the local compile time, so a slower CI runner times out.
+    },
+    RELEASE_BUNDLE_BUILD_TIMEOUT_MS
+  );
 });
 
 describe("Mainline Release selection", () => {

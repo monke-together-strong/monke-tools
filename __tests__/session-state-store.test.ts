@@ -175,6 +175,7 @@ typo: true
 
   test.each([
     {
+      expected: /complete generation requires every repo to be prepared and materialized/u,
       name: "a complete generation with pending materialization",
       state: {
         generation: { number: 1, status: "complete" },
@@ -194,6 +195,7 @@ typo: true
       }
     },
     {
+      expected: /complete generation requires every repo to be prepared and materialized/u,
       name: "a complete generation with failed preparation and retained materialization",
       state: {
         generation: { number: 1, status: "complete" },
@@ -214,6 +216,7 @@ typo: true
       }
     },
     {
+      expected: /failed preparation requires a Worktree-preparation failure/u,
       name: "failed preparation with pending materialization",
       state: {
         generation: { number: 1, status: "incomplete" },
@@ -233,6 +236,7 @@ typo: true
       }
     },
     {
+      expected: /blocked materialization requires completed preparation/u,
       name: "blocked materialization before preparation",
       state: {
         generation: { number: 1, status: "incomplete" },
@@ -253,6 +257,7 @@ typo: true
       }
     },
     {
+      expected: /default-branch repo requires pinnedRef/u,
       name: "prepared default-branch repo without pinned identity",
       state: {
         generation: { number: 1, status: "complete" },
@@ -273,6 +278,7 @@ typo: true
       }
     },
     {
+      expected: /Session state requires at least the Root repo/u,
       name: "an empty complete generation",
       state: {
         generation: { number: 1, status: "complete" },
@@ -283,6 +289,7 @@ typo: true
       }
     },
     {
+      expected: /Session state must include its Root repo/u,
       name: "a repo set without the Root repo",
       state: {
         generation: { number: 1, status: "complete" },
@@ -302,6 +309,7 @@ typo: true
       }
     },
     {
+      expected: /cannot contain duplicate Source checkouts/u,
       name: "duplicate Source checkout records",
       state: {
         generation: { number: 1, status: "complete" },
@@ -329,6 +337,7 @@ typo: true
       }
     },
     {
+      expected: /cannot contain duplicate Session worktrees/u,
       name: "duplicate Session worktree records",
       state: {
         generation: { number: 1, status: "complete" },
@@ -356,6 +365,7 @@ typo: true
       }
     },
     {
+      expected: /not-started generation cannot be cleanup-eligible/u,
       name: "cleanup eligibility before a generation starts",
       state: {
         generation: { number: 0, status: "not-started" },
@@ -376,6 +386,7 @@ typo: true
       }
     },
     {
+      expected: /Resource command outputs require Cleanup eligibility/u,
       name: "Resource command outputs without Cleanup eligibility",
       state: {
         generation: { number: 1, status: "complete" },
@@ -401,6 +412,7 @@ typo: true
       }
     },
     {
+      expected: /retained Spawn source policy requires Session-branch graph source/u,
       name: "default-branch Spawn policy without Session-branch graph source",
       state: {
         generation: { number: 1, status: "complete" },
@@ -422,6 +434,7 @@ typo: true
       }
     },
     {
+      expected: /retained Spawn source policy requires Session-branch graph source/u,
       name: "session-branch Spawn policy without Session-branch graph source",
       state: {
         generation: { number: 1, status: "complete" },
@@ -442,6 +455,7 @@ typo: true
       }
     },
     {
+      expected: /pending dirty carry requires current-HEAD Spawn with copyDirty enabled/u,
       name: "pending dirty carry for default-branch Spawn",
       state: {
         generation: { number: 1, status: "incomplete" },
@@ -465,6 +479,7 @@ typo: true
       }
     },
     {
+      expected: /pending dirty carry requires current-HEAD Spawn with copyDirty enabled/u,
       name: "pending dirty carry when current-head Spawn disables dirty carry",
       state: {
         copyDirty: false,
@@ -486,6 +501,7 @@ typo: true
       }
     },
     {
+      expected: /blockedBy must identify another recorded repo/u,
       name: "a repo blocked by itself",
       state: {
         generation: { number: 1, status: "incomplete" },
@@ -506,6 +522,7 @@ typo: true
       }
     },
     {
+      expected: /blockedBy must identify another recorded repo/u,
       name: "a repo blocked by an absent dependency",
       state: {
         generation: { number: 1, status: "incomplete" },
@@ -526,6 +543,7 @@ typo: true
       }
     },
     {
+      expected: /default-branch repo requires pinnedRef/u,
       name: "a pending default-branch repo without pinned identity",
       state: {
         generation: { number: 1, status: "incomplete" },
@@ -546,6 +564,7 @@ typo: true
       }
     },
     {
+      expected: /cannot contain duplicate Source checkouts/u,
       name: "normalized duplicate Source checkout records",
       state: {
         generation: { number: 1, status: "complete" },
@@ -573,6 +592,7 @@ typo: true
       }
     },
     {
+      expected: /cannot contain duplicate Session worktrees/u,
       name: "normalized duplicate Session worktree records",
       state: {
         generation: { number: 1, status: "complete" },
@@ -600,6 +620,7 @@ typo: true
       }
     },
     {
+      expected: /Root repo must follow its dependencies in materialization order/u,
       name: "the Root repo before its dependencies",
       state: {
         generation: { number: 1, status: "complete" },
@@ -627,6 +648,7 @@ typo: true
       }
     },
     {
+      expected: /must be an immutable Git object ID/u,
       name: "a symbolic default-branch pin",
       state: {
         generation: { number: 1, status: "complete" },
@@ -648,6 +670,7 @@ typo: true
       }
     },
     {
+      expected: /Session state must include its Root repo/u,
       name: "an aliased Root identity",
       state: {
         generation: { number: 1, status: "complete" },
@@ -666,11 +689,13 @@ typo: true
         version: 2
       }
     }
-  ])("saveSessionState rejects $name", ({ state }) => {
+  ])("saveSessionState rejects $name", ({ expected, state }) => {
     const sandbox = makeTempDir("session-state-store-lifecycle-invariant");
+    // Pin the named invariant: several of these states also trip a second, incidental rule,
+    // so matching only /Invalid/ would not prove the intended one fired.
     expect(() => {
       saveSessionState(path.join(sandbox, "home"), state);
-    }).toThrow(/Invalid/u);
+    }).toThrow(expected);
   });
 
   test.each([1, 3])("loadSessionState rejects unsupported version %i", (version) => {

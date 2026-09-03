@@ -351,6 +351,7 @@ class AsyncCommandExecution {
   #forceKill: ReturnType<typeof setTimeout> | undefined;
   #settled = false;
   #stderr = "";
+  #stdinError: Error | undefined;
   #stdout = "";
   #timedOut = false;
   #timeout: ReturnType<typeof setTimeout> | undefined;
@@ -421,6 +422,16 @@ class AsyncCommandExecution {
         );
         return;
       }
+      if (this.#stdinError !== undefined && code === 0) {
+        // A successful exit cannot be trusted when the input was never fully delivered.
+        this.rejectOnce(
+          new MonkeError(
+            `Command input was not fully written: ${formatCommand(this.command, this.args)}\n${this.#stdinError.message}`,
+            { cause: this.#stdinError }
+          )
+        );
+        return;
+      }
       this.resolveOnce({ exitCode, stderr: this.#stderr, stdout: this.#stdout });
     } finally {
       unregisterAsyncChild(this.child);
@@ -428,6 +439,11 @@ class AsyncCommandExecution {
   }
 
   private listenForCompletion() {
+    // Writing to a child that already stopped reading raises EPIPE here. Record it instead of
+    // letting the unhandled stream error escape, and settle it in handleClose.
+    this.child.stdin.on("error", (error: Error) => {
+      this.#stdinError ??= error;
+    });
     this.child.once("error", (error) => {
       if (this.#timedOut) {
         return;

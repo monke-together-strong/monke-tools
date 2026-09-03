@@ -26,7 +26,7 @@ import {
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const INDEPENDENT_SIBLING_SETTLE_DELAY_SECONDS = 0.1;
-const SIBLING_START_BARRIER_ATTEMPTS = 200;
+const SIBLING_START_BARRIER_ATTEMPTS = 2000;
 const SIBLING_START_BARRIER_DELAY_SECONDS = 0.01;
 
 function makeRepoTempDir(prefix: string) {

@@ -39,7 +39,9 @@ const NEUTRALIZED_WORKER_ENV = {
   PAGER: undefined,
   VISUAL: undefined
 };
-const WORKTREE_ADD_BARRIER_ATTEMPTS = 400;
+// Budget generously: a loaded CI runner can take seconds to start the second worker, and the
+// delay stays at 0.01s so the shim never needs non-POSIX fractional sleep beyond what it uses.
+const WORKTREE_ADD_BARRIER_ATTEMPTS = 2000;
 const WORKTREE_ADD_BARRIER_DELAY_SECONDS = 0.01;
 const WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE = 92;
 
