@@ -5,8 +5,7 @@ import { Argument, Command, Option } from "@commander-js/extra-typings";
 
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
-import { runDiff, runDiffInteractive } from "./diff.ts";
-import { MonkeError } from "./errors.ts";
+import { runDiffInteractive } from "./diff.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
 import {
   expectedReleaseIdentityFromEnvironment,
@@ -22,43 +21,11 @@ import type { Runtime } from "./types.ts";
 import { runUpdate } from "./update.ts";
 
 /** Run the Monke Tools CLI. */
-export function runCli(argv: string[], runtime = createRuntime()) {
-  const program = createProgram(
-    runtime,
-    () => requireAsyncCli("swing"),
-    runDiff,
-    () => requireAsyncCli("spawn"),
-    () => requireAsyncCli("materialize")
-  );
-  program.parse(argv, { from: "user" });
-}
-
-/** Run the Monke Tools CLI with async interactive prompts enabled. */
 export async function runCliAsync(argv: string[], runtime = createRuntime()) {
-  const program = createProgram(runtime, runSwing, runDiffInteractive, runSpawn, runMaterialize);
-  await program.parseAsync(argv, { from: "user" });
+  await createProgram(runtime).parseAsync(argv, { from: "user" });
 }
 
-function requireAsyncCli(command: string): never {
-  throw new MonkeError(`mt ${command} requires the async CLI runner`);
-}
-
-function createProgram(
-  runtime: Runtime,
-  swingAction: (
-    runtime: Runtime,
-    target: string | undefined,
-    options: { codex?: boolean }
-  ) => void | Promise<void>,
-  diffAction: (runtime: Runtime, options: { pick?: boolean }) => void | Promise<void>,
-  spawnAction: (
-    runtime: Runtime,
-    session: string,
-    options: Parameters<typeof runSpawn>[2],
-    runOptions: Parameters<typeof runSpawn>[3]
-  ) => void | Promise<void>,
-  materializeAction: (runtime: Runtime) => void | Promise<void>
-) {
+function createProgram(runtime: Runtime) {
   // Subcommands copy these at .command() time, so every subcommand below must be declared after.
   const program = new Command()
     .name("mt")
@@ -82,7 +49,7 @@ function createProgram(
     .option("--master")
     .option("--codex")
     .action((session, options) =>
-      spawnAction(
+      runSpawn(
         runtime,
         session,
         options.main || options.master
@@ -96,14 +63,14 @@ function createProgram(
     .command("swing")
     .argument("[target]")
     .option("--codex")
-    .action((target, options) => swingAction(runtime, target, options));
+    .action((target, options) => runSwing(runtime, target, options));
 
   program
     .command("diff")
     .option("-p, --pick")
-    .action((options) => diffAction(runtime, options));
+    .action((options) => runDiffInteractive(runtime, options));
 
-  program.command("materialize").action(() => materializeAction(runtime));
+  program.command("materialize").action(() => runMaterialize(runtime));
 
   program
     .command("chop")

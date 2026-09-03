@@ -1,17 +1,8 @@
-import {
-  copyFileSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readlinkSync,
-  readdirSync,
-  readFileSync,
-  symlinkSync,
-  writeFileSync
-} from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
+import { copyMissingEntries } from "./non-clobbering-copy.ts";
 import { samePath } from "./path-identity.ts";
 import type { AssignedPort, RepoConfig } from "./types.ts";
 
@@ -261,32 +252,17 @@ function seedRelativePath(
 }
 
 function copySeedEntry(sourcePath: string, targetPath: string) {
-  const sourceStat = lstatSync(sourcePath);
-  const targetStat = lstatSync(targetPath, { throwIfNoEntry: false });
-  if (targetStat) {
-    if (sourceStat.isDirectory() && targetStat.isDirectory()) {
-      copyMissingDirectoryEntries(sourcePath, targetPath);
+  copyMissingEntries(sourcePath, targetPath, {
+    onConflict() {
+      // Session-local Seed material stays authoritative, so an existing target is left alone.
+    },
+    onMissingSource(missingPath) {
+      throw new MonkeError(`Seed source path disappeared before copy: ${missingPath}`);
+    },
+    writeFile(entry) {
+      copyFileSync(entry.sourcePath, entry.targetPath);
     }
-    return;
-  }
-
-  mkdirSync(path.dirname(targetPath), { recursive: true });
-  if (sourceStat.isDirectory()) {
-    mkdirSync(targetPath);
-    copyMissingDirectoryEntries(sourcePath, targetPath);
-    return;
-  }
-  if (sourceStat.isSymbolicLink()) {
-    symlinkSync(readlinkSync(sourcePath), targetPath);
-    return;
-  }
-  copyFileSync(sourcePath, targetPath);
-}
-
-function copyMissingDirectoryEntries(sourcePath: string, targetPath: string) {
-  for (const entry of readdirSync(sourcePath)) {
-    copySeedEntry(path.join(sourcePath, entry), path.join(targetPath, entry));
-  }
+  });
 }
 
 function readActiveAssignments(filePath: string) {

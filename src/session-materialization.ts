@@ -1,9 +1,15 @@
 import { ok } from "node:assert/strict";
 
+import pLimit from "p-limit";
+import type { LimitFunction } from "p-limit";
+
 import { errorMessage, MonkeError } from "./errors.ts";
 import { saveSessionState } from "./session-state-store.ts";
 import type { SessionMaterializationCheckpoint, SessionRepoState, SessionState } from "./types.ts";
 
+// One bounded-concurrency policy, applied per lifecycle phase so that Worktree preparation and
+// Repo materialization each stay within the same cap rather than sharing one queue.
+const MAX_CONCURRENT_WORKTREE_PREPARATIONS = 4;
 const MAX_CONCURRENT_REPO_MATERIALIZATIONS = 4;
 
 export interface PreparedRepo<T> {
@@ -60,7 +66,7 @@ export async function runSessionMaterialization<TPrepared, TResult>(
       .map((node) => node.sourceRoot)
   );
 
-  const runPreparation = createLimiter(MAX_CONCURRENT_REPO_MATERIALIZATIONS);
+  const runPreparation = pLimit(MAX_CONCURRENT_WORKTREE_PREPARATIONS);
   const preparationPromises = new Map(
     options.nodes.map((node) => [
       node.sourceRoot,
@@ -102,7 +108,7 @@ export async function runSessionMaterialization<TPrepared, TResult>(
     ])
   );
 
-  const runRepoMaterialization = createLimiter(MAX_CONCURRENT_REPO_MATERIALIZATIONS);
+  const runRepoMaterialization = pLimit(MAX_CONCURRENT_REPO_MATERIALIZATIONS);
   const materializationPromises = new Map<
     string,
     Promise<SessionRepoState["materializationStatus"]>
@@ -160,7 +166,7 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
   prepared: Map<string, TPrepared>;
   results: Map<string, TResult>;
   reuse: boolean;
-  runRepoMaterialization: <T>(run: () => Promise<T>) => Promise<T>;
+  runRepoMaterialization: LimitFunction;
 }): Promise<SessionRepoState["materializationStatus"]> {
   const [preparationComplete, dependencyStatuses] = await Promise.all([
     options.preparation,
@@ -233,35 +239,6 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
   });
 }
 
-function createLimiter(maxConcurrent: number) {
-  const queue: (() => Promise<void>)[] = [];
-  let active = 0;
-  const startNext = () => {
-    while (active < maxConcurrent) {
-      const start = queue.shift();
-      if (!start) {
-        return;
-      }
-      active += 1;
-      void start();
-    }
-  };
-  return <T>(run: () => Promise<T>) =>
-    new Promise<T>((resolve, reject) => {
-      queue.push(async () => {
-        try {
-          resolve(await run());
-        } catch (error) {
-          reject(error instanceof Error ? error : new Error(String(error)));
-        } finally {
-          active -= 1;
-          startNext();
-        }
-      });
-      startNext();
-    });
-}
-
 function beginGeneration<TPrepared, TResult>(
   state: SessionState,
   nodes: SessionMaterializationNode<TPrepared, TResult>[]
@@ -299,9 +276,10 @@ function beginGeneration<TPrepared, TResult>(
   };
 }
 
-function formatFailureReceipt<TPrepared, TResult>(
+/** Render the quiescent per-repo receipt for one failed Materialization generation. */
+export function formatFailureReceipt(
   state: SessionState,
-  options: RunSessionMaterializationOptions<TPrepared, TResult>
+  options: { retryCommand: string; rootSourceRoot: string }
 ) {
   const lines = ["Session materialization failed after all runnable work settled.", "Receipt:"];
   for (const repo of state.repos) {

@@ -42,7 +42,7 @@ export function loadSessionState(
     };
   }
 
-  return parseSessionStateFile(filePath);
+  return parseSessionStateFile(home, filePath);
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Persisted state is validated before its identity or contents are used.
@@ -62,7 +62,7 @@ export function removeSessionState(home: string, rootSourceRoot: string, session
 }
 
 export function listSessionStates(home: string) {
-  return listSessionStateFiles(home).map(parseSessionStateFile);
+  return listSessionStateFiles(home).map((filePath) => parseSessionStateFile(home, filePath));
 }
 
 /**
@@ -75,7 +75,7 @@ export function listSessionStatesRelevantToWorktrees(home: string, worktreePaths
   const states: SessionState[] = [];
   for (const filePath of listSessionStateFiles(home)) {
     try {
-      states.push(parseSessionStateFile(filePath));
+      states.push(parseSessionStateFile(home, filePath));
     } catch (error) {
       if (invalidSessionStateReferencesWorktree(filePath, worktreePaths)) {
         throw error;
@@ -85,20 +85,33 @@ export function listSessionStatesRelevantToWorktrees(home: string, worktreePaths
   return states;
 }
 
-function parseSessionStateFile(filePath: string) {
-  const { version } = parseOwnedYamlFile(filePath, SessionStateVersionSchema);
-  if (version !== 2) {
-    throw new MonkeError(
-      `Unsupported Session state version ${version} in ${filePath}; monke-tools requires strict v2 Session state`
-    );
-  }
-  const state = parseOwnedYamlFile(filePath, SessionStateSchema);
-  const home = path.dirname(path.dirname(filePath));
+function parseSessionStateFile(home: string, filePath: string) {
+  const state = parseSupportedSessionState(filePath);
   const expectedFilePath = getSessionStateFilePath(home, state.rootSourceRoot, state.session);
   if (path.normalize(expectedFilePath) !== path.normalize(filePath)) {
     throw new MonkeError(`Session state identity does not match its storage key: ${filePath}`);
   }
   return state;
+}
+
+/**
+ * Parse one Session state file, reporting an unsupported version rather than a shape mismatch.
+ *
+ * The strict v2 schema pins `version`, so a v1 record always fails it. Only that failure path pays
+ * for a second read; a healthy record is read and parsed once.
+ */
+function parseSupportedSessionState(filePath: string) {
+  try {
+    return parseOwnedYamlFile(filePath, SessionStateSchema);
+  } catch (error) {
+    const { version } = parseOwnedYamlFile(filePath, SessionStateVersionSchema);
+    if (version !== 2) {
+      throw new MonkeError(
+        `Unsupported Session state version ${version} in ${filePath}; monke-tools requires strict v2 Session state`
+      );
+    }
+    throw error;
+  }
 }
 
 export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]) {

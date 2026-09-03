@@ -44,6 +44,16 @@ const STALE_LOCK_AGE_MS = 60_000;
 type AsyncChildProcess = ChildProcessWithoutNullStreams;
 const activeAsyncChildren = new Set<AsyncChildProcess>();
 const timedOutProcessGroups = new Map<number, AsyncChildProcess>();
+const PARENT_TERMINATION_SIGNALS = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
+// Stable handler identities, so detaching removes exactly what attaching added.
+const PARENT_TERMINATION_HANDLERS = new Map<NodeJS.Signals, () => void>(
+  PARENT_TERMINATION_SIGNALS.map((signal) => [
+    signal,
+    () => {
+      forwardParentTermination(signal);
+    }
+  ])
+);
 let forwardedTerminationSignal: NodeJS.Signals | undefined;
 let parentExitScheduled = false;
 let terminationEscalated = false;
@@ -511,17 +521,15 @@ function detachParentTerminationHandlersIfIdle() {
 }
 
 function attachParentTerminationHandlers() {
-  process.on("SIGHUP", handleParentSighup);
-  process.on("SIGINT", handleParentSigint);
-  process.on("SIGQUIT", handleParentSigquit);
-  process.on("SIGTERM", handleParentSigterm);
+  for (const [signal, handler] of PARENT_TERMINATION_HANDLERS) {
+    process.on(signal, handler);
+  }
 }
 
 function detachParentTerminationHandlers() {
-  process.off("SIGHUP", handleParentSighup);
-  process.off("SIGINT", handleParentSigint);
-  process.off("SIGQUIT", handleParentSigquit);
-  process.off("SIGTERM", handleParentSigterm);
+  for (const [signal, handler] of PARENT_TERMINATION_HANDLERS) {
+    process.off(signal, handler);
+  }
 }
 
 function finishParentTerminationAfterEscalation() {
@@ -543,22 +551,6 @@ function finishParentTerminationAfterEscalation() {
       }
     });
   }
-}
-
-function handleParentSighup() {
-  forwardParentTermination("SIGHUP");
-}
-
-function handleParentSigint() {
-  forwardParentTermination("SIGINT");
-}
-
-function handleParentSigquit() {
-  forwardParentTermination("SIGQUIT");
-}
-
-function handleParentSigterm() {
-  forwardParentTermination("SIGTERM");
 }
 
 function forwardParentTermination(signal: NodeJS.Signals) {

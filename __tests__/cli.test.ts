@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { runCli } from "../src/index.ts";
+import { runCliAsync } from "../src/index.ts";
 import { makeTempDir } from "./helpers.ts";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -53,16 +53,14 @@ describe("CLI", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("runCli enforces cleanup option relationships", () => {
-    expect(() => {
-      runCli(["cleanup", "--dry-run"]);
-    }).toThrow("error: option '--dry-run' cannot be used without option '--merged'");
+  test("the CLI enforces cleanup option relationships", async () => {
+    await expect(runCliAsync(["cleanup", "--dry-run"])).rejects.toThrow(
+      "error: option '--dry-run' cannot be used without option '--merged'"
+    );
   });
 
-  test("Chop accepts at most one target", () => {
-    expect(() => {
-      runCli(["chop", "first", "second"]);
-    }).toThrow(/too many arguments/u);
+  test("Chop accepts at most one target", async () => {
+    await expect(runCliAsync(["chop", "first", "second"])).rejects.toThrow(/too many arguments/u);
   });
 
   test.each([

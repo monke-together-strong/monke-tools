@@ -23,6 +23,22 @@ import type { SelectPrompt, SessionRepoState, SessionState } from "../src/types.
 
 const tempDirectories: string[] = [];
 const runMonkeWorkerPath = fileURLToPath(new URL("run-monke-worker.ts", import.meta.url));
+const NEUTRALIZED_WORKER_ENV = {
+  EDITOR: undefined,
+  GIT_AUTHOR_EMAIL: undefined,
+  GIT_AUTHOR_NAME: undefined,
+  GIT_COMMITTER_EMAIL: undefined,
+  GIT_COMMITTER_NAME: undefined,
+  GIT_CONFIG_GLOBAL: undefined,
+  GIT_CONFIG_SYSTEM: undefined,
+  GIT_DIR: undefined,
+  GIT_EDITOR: undefined,
+  GIT_INDEX_FILE: undefined,
+  GIT_PAGER: undefined,
+  GIT_WORK_TREE: undefined,
+  PAGER: undefined,
+  VISUAL: undefined
+};
 const WORKTREE_ADD_BARRIER_ATTEMPTS = 400;
 const WORKTREE_ADD_BARRIER_DELAY_SECONDS = 0.01;
 const WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE = 92;
@@ -35,6 +51,21 @@ afterEach(() => {
     }
   }
 });
+
+/** Start `mt` in a detached worker process so a test can interrupt it mid-command. */
+export function spawnMonkeWorker(options: {
+  args: string[];
+  cwd: string;
+  extraEnv?: Record<string, string>;
+  monkeHome: string;
+}) {
+  return Bun.spawn([process.execPath, runMonkeWorkerPath, ...options.args], {
+    cwd: options.cwd,
+    env: { ...process.env, ...options.extraEnv, MONKE_HOME: options.monkeHome },
+    stderr: "ignore",
+    stdout: "ignore"
+  });
+}
 
 export function makeTempDir(prefix: string) {
   const directory = realpathSync.native(mkdtempSync(path.join(tmpdir(), `${prefix}-`)));
@@ -433,7 +464,11 @@ function runMonkeProcess(options: RunMonkeOptions) {
     cwd: options.cwd,
     encoding: "utf-8",
     env: {
+      // The worker is a real subprocess, so it needs a working base environment (HOME, TMPDIR).
+      // Clear only the variables that would otherwise make a test outcome depend on whatever the
+      // developer or CI happens to export.
       ...process.env,
+      ...NEUTRALIZED_WORKER_ENV,
       ...options.extraEnv,
       MONKE_HOME: options.monkeHome,
       MONKE_TEST_PLATFORM: process.platform,

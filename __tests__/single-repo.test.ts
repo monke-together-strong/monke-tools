@@ -1524,6 +1524,22 @@ apps: {}
     expect(loadSessionState(home, repoRoot, "retained-main")).toStrictEqual(before);
   });
 
+  test("changing only dirty carry re-spawns a completed current-HEAD Session", () => {
+    const sandbox = makeTempDir("single-repo-complete-dirty-policy");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
+      "README.md": "clean\n"
+    });
+
+    runMonke({ args: ["spawn", "same-session"], cwd: repoRoot, monkeHome: home });
+    runMonke({ args: ["spawn", "same-session", "--no-dirty"], cwd: repoRoot, monkeHome: home });
+
+    const state = loadSessionState(home, repoRoot, "same-session");
+    expect(state.copyDirty).toBeFalsy();
+    expect(state.generation.status).toBe("complete");
+  });
+
   test("plain spawn retry preserves --no-dirty and reports the exact retry command", () => {
     const sandbox = makeTempDir("single-repo-no-dirty-policy-retry");
     const home = path.join(sandbox, "home");

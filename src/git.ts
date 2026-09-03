@@ -505,7 +505,8 @@ export function validateWorktreeForSession(
   return context;
 }
 
-function runGit(runtime: Runtime, cwd: string, args: string[]) {
+/** Run one Git command and return its stdout. */
+export function runGit(runtime: Runtime, cwd: string, args: string[]) {
   return runtime.exec("git", args, { cwd }).stdout;
 }
 

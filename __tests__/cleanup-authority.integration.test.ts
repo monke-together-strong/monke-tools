@@ -1,15 +1,13 @@
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { hashKey } from "../src/runtime.ts";
 import { loadSessionState } from "../src/session-state-store.ts";
-import { createRepo, git, makeTempDir, runMonke, write } from "./helpers.ts";
+import { createRepo, git, makeTempDir, runMonke, spawnMonkeWorker, write } from "./helpers.ts";
 
-const runMonkeWorkerPath = fileURLToPath(new URL("run-monke-worker.ts", import.meta.url));
 const STATE_POLL_ATTEMPTS = 200;
 const STATE_POLL_DELAY_MS = 10;
 
@@ -92,11 +90,10 @@ describe("Cleanup authority", () => {
       path.relative(fixture.home, lockPath),
       JSON.stringify({ acquiredAt: Date.now(), pid: process.pid })
     );
-    const child = Bun.spawn([process.execPath, runMonkeWorkerPath, "spawn", "retained"], {
+    const child = spawnMonkeWorker({
+      args: ["spawn", "retained"],
       cwd: fixture.repoRoot,
-      env: { ...process.env, MONKE_HOME: fixture.home },
-      stderr: "ignore",
-      stdout: "ignore"
+      monkeHome: fixture.home
     });
 
     try {

@@ -1,17 +1,4 @@
-import {
-  copyFileSync,
-  existsSync,
-  linkSync,
-  lstatSync,
-  mkdtempSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  readlinkSync,
-  rmSync,
-  symlinkSync
-} from "node:fs";
-import type { Stats } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -41,6 +28,7 @@ import {
   getExpectedWorktreePath,
   resolveDefaultBranchRef,
   resolveRepoContext,
+  runGit,
   validateWorktreeForSession
 } from "./git.ts";
 import type { DefaultBranchRef } from "./git.ts";
@@ -53,8 +41,17 @@ import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
 import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
 import { getMonkeHome, withGlobalLock, withGlobalLockAsync } from "./runtime.ts";
+import {
+  applyDirtySnapshot,
+  assertDirtyCarryBoundary,
+  captureDirtySnapshot,
+  captureDirtySnapshots,
+  dirtySnapshotHasContent,
+  warnDirtyStateNotCarried
+} from "./session-dirty-carry.ts";
+import type { DirtySnapshot } from "./session-dirty-carry.ts";
 import { finalizeSession } from "./session-finalization.ts";
-import { runSessionMaterialization } from "./session-materialization.ts";
+import { formatFailureReceipt, runSessionMaterialization } from "./session-materialization.ts";
 import type { SessionMaterializationNode } from "./session-materialization.ts";
 import {
   allocateLocalPorts,
@@ -74,6 +71,7 @@ import type {
   ResourceCommandState,
   ResourceValueState,
   Runtime,
+  SessionMaterializationCheckpoint,
   SessionRepoState,
   SessionState
 } from "./types.ts";
@@ -113,11 +111,6 @@ type SpawnSourcePlan =
 export interface SpawnRunOptions {
   /** Open the Root repo's Session worktree in Codex after it is ready. */
   codex?: boolean;
-}
-
-interface DirtySnapshot {
-  trackedPatch: string;
-  untrackedPaths: string[];
 }
 
 interface PreparedRepoWorktree {
@@ -179,15 +172,11 @@ export async function runSpawn(
   runOptions: SpawnRunOptions = {}
 ) {
   const { context, home } = resolveSpawnContext(runtime, session);
+  // The locked spawn throws unless every repo materialized, so reaching here means success.
   const rootWorktreePath = await withGlobalLockAsync(home, () =>
     spawnSessionFromSourceRootLocked(runtime, home, context.sourceRoot, session, spawnOptions)
   );
-  const rootState = loadSessionState(home, context.sourceRoot, session).repos.find(
-    (repo) => repo.sourceRoot === context.sourceRoot
-  );
-  if (rootState?.materializationStatus === "materialized") {
-    finishSpawn(runtime, session, rootWorktreePath, runOptions);
-  }
+  finishSpawn(runtime, session, rootWorktreePath, runOptions);
 }
 
 function resolveSpawnContext(runtime: Runtime, session: string) {
@@ -223,8 +212,7 @@ export async function spawnSessionFromSourceRootLocked(
   session: string,
   spawnOptions: SpawnOptions
 ) {
-  const initialized = await prepareSpawn(runtime, home, rootSourceRoot, session, spawnOptions);
-  const { execution } = initialized;
+  const execution = await prepareSpawn(runtime, home, rootSourceRoot, session, spawnOptions);
   await runSessionMaterialization({
     home: execution.home,
     nodes: createSpawnMaterializationNodes(execution),
@@ -300,19 +288,16 @@ async function prepareSpawn(
     graph.reposInMaterializationOrder
   );
   return {
-    execution: {
-      ...prepared,
-      getDefaultRef,
-      home,
-      reposInOrder: graph.reposInMaterializationOrder,
-      rootSourceRoot,
-      rootWorktreePath,
-      runtime,
-      session,
-      sourcePlan
-    } satisfies ConfiguredSpawn,
-    kind: "configured" as const
-  };
+    ...prepared,
+    getDefaultRef,
+    home,
+    reposInOrder: graph.reposInMaterializationOrder,
+    rootSourceRoot,
+    rootWorktreePath,
+    runtime,
+    session,
+    sourcePlan
+  } satisfies ConfiguredSpawn;
 }
 
 function isConfiglessPreparedState(state: SessionState) {
@@ -374,8 +359,6 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
         const prepared = await prepareSpawnRepoWorktree({
           dirtySnapshot,
           existingState: lifecycleState,
-          getDefaultRef: execution.getDefaultRef,
-          graphSource: execution.sessionState.graphSource,
           home: execution.home,
           onWorktreeReady(worktree) {
             checkpoint({
@@ -456,8 +439,6 @@ function createRepoLifecycleNode(options: {
 interface SpawnRepoPreparationRequest {
   dirtySnapshot?: DirtySnapshot;
   existingState: SessionRepoState | undefined;
-  getDefaultRef: (sourceRoot: string) => PinnedDefaultBranchRef;
-  graphSource: SessionState["graphSource"];
   home: string;
   onWorktreeReady: (worktree: {
     diffBaseRef?: string;
@@ -572,9 +553,11 @@ function resolveSpawnSourcePlan(
   const state = loadSessionState(home, rootSourceRoot, session);
   if (state.repos.length > 0 && state.generation.status === "complete") {
     const retainedOptions = retainedSpawnOptions(state);
+    // A completed Session pins its source identity only. Dirty-carry policy is not part of that
+    // identity, so changing it alone re-spawns the same Session rather than failing.
     if (
       spawnOptions.mode === "default-branch" ||
-      !sameSpawnOptions(spawnOptions, retainedOptions)
+      !sameSpawnSourceIdentity(spawnOptions, retainedOptions)
     ) {
       throw new MonkeError(
         `Session ${session} is a completed Session using ${formatSpawnPolicy(retainedOptions)}; use a new Session name to change or refresh its source identity`
@@ -635,6 +618,11 @@ function isImplicitSpawnRequest(options: SpawnOptions) {
   return options.mode === "current-head" && options.copyDirty;
 }
 
+/** Whether two Spawn requests resolve their worktrees from the same source. */
+function sameSpawnSourceIdentity(left: SpawnOptions, right: SpawnOptions) {
+  return left.mode === right.mode;
+}
+
 function sameSpawnOptions(left: SpawnOptions, right: SpawnOptions) {
   return (
     left.mode === right.mode &&
@@ -693,215 +681,169 @@ function spawnRootConfigExists(
   return existsSync(path.join(rootSourceRoot, "monke.yml"));
 }
 
+/** Everything one config-less Spawn needs to prepare and record its single Root worktree. */
+interface ConfiglessSpawn {
+  existingRepoState?: SessionRepoState;
+  home: string;
+  rootDefaultRef: PinnedDefaultBranchRef | null;
+  rootSourceRoot: string;
+  runtime: Runtime;
+  session: string;
+  spawnOptions: SpawnOptions;
+}
+
 async function spawnWithoutConfig(
   runtime: Runtime,
   home: string,
   rootSourceRoot: string,
   session: string,
-  options: SpawnOptions,
+  spawnOptions: SpawnOptions,
   rootDefaultRef: PinnedDefaultBranchRef | null
 ): Promise<never> {
   assertNoGlobalWorktreePathStateCollisions(home, session, [{ sourceRoot: rootSourceRoot }]);
   const priorSessionState = loadSessionState(home, rootSourceRoot, session);
-  const existingRepoState = priorSessionState.repos.find(
-    (repo) => repo.sourceRoot === rootSourceRoot
-  );
-  const dirtySnapshot = captureConfiglessDirtySnapshot({
+  const spawn: ConfiglessSpawn = {
+    existingRepoState: priorSessionState.repos.find((repo) => repo.sourceRoot === rootSourceRoot),
     home,
-    options,
-    rootSourceRoot,
-    runtime,
-    session
-  });
-  const pendingWorktree = prepareConfiglessWorktreeCheckpoint({
-    existingRepoState,
-    home,
-    options,
     rootDefaultRef,
     rootSourceRoot,
     runtime,
-    session
-  });
+    session,
+    spawnOptions
+  };
+  const dirtySnapshot = captureConfiglessDirtySnapshot(spawn);
+  const pendingWorktree = prepareConfiglessWorktreeCheckpoint(spawn);
   const tracksDirtyCarry =
-    existingRepoState?.dirtyCarryStatus === "pending" ||
+    spawn.existingRepoState?.dirtyCarryStatus === "pending" ||
     (dirtySnapshot !== null &&
       dirtySnapshotHasContent(dirtySnapshot) &&
       !existsSync(pendingWorktree.worktreePath));
   saveSessionState(
     home,
-    createConfiglessSessionState({
-      dirtyCarryStatus: tracksDirtyCarry ? "pending" : existingRepoState?.dirtyCarryStatus,
-      existingRepoState,
-      options,
+    createConfiglessSessionState(spawn, {
+      dirtyCarryStatus: tracksDirtyCarry ? "pending" : spawn.existingRepoState?.dirtyCarryStatus,
       preparationStatus: "pending",
       prepared: pendingWorktree,
-      priorSessionState,
-      rootSourceRoot
+      priorSessionState
     })
   );
   const prepared = {
     ...pendingWorktree,
-    ...(await prepareConfiglessWorktree({
-      dirtySnapshot,
-      existingRepoState,
-      home,
-      options,
-      rootDefaultRef,
-      rootSourceRoot,
-      runtime,
-      session
-    }))
+    ...(await prepareConfiglessWorktree(spawn, dirtySnapshot))
   };
-  saveSessionState(
-    home,
-    createConfiglessSessionState({
-      dirtyCarryStatus: tracksDirtyCarry ? "complete" : existingRepoState?.dirtyCarryStatus,
-      existingRepoState,
-      options,
-      preparationStatus: "prepared",
-      prepared,
-      priorSessionState,
-      rootSourceRoot
-    })
-  );
-  failConfiglessSpawn(runtime, rootSourceRoot, session, options, prepared.worktreePath);
+  const preparedSessionState = createConfiglessSessionState(spawn, {
+    dirtyCarryStatus: tracksDirtyCarry ? "complete" : spawn.existingRepoState?.dirtyCarryStatus,
+    preparationStatus: "prepared",
+    prepared,
+    priorSessionState
+  });
+  saveSessionState(home, preparedSessionState);
+  failConfiglessSpawn(spawn, preparedSessionState);
 }
 
-async function prepareConfiglessWorktree(options: {
-  dirtySnapshot: DirtySnapshot | null;
-  existingRepoState?: SessionRepoState;
-  home: string;
-  options: SpawnOptions;
-  rootDefaultRef: PinnedDefaultBranchRef | null;
-  rootSourceRoot: string;
-  runtime: Runtime;
-  session: string;
-}) {
+async function prepareConfiglessWorktree(
+  spawn: ConfiglessSpawn,
+  dirtySnapshot: DirtySnapshot | null
+) {
   const expectedWorktreePath = getExpectedWorktreePath(
-    options.home,
-    options.rootSourceRoot,
-    options.session
+    spawn.home,
+    spawn.rootSourceRoot,
+    spawn.session
   );
-  const resumesDirtyCarry = options.existingRepoState?.dirtyCarryStatus === "pending";
+  const resumesDirtyCarry = spawn.existingRepoState?.dirtyCarryStatus === "pending";
   if (resumesDirtyCarry && existsSync(expectedWorktreePath)) {
     validateWorktreeForSession(
-      options.runtime,
-      options.home,
-      options.rootSourceRoot,
+      spawn.runtime,
+      spawn.home,
+      spawn.rootSourceRoot,
       expectedWorktreePath,
-      options.session
+      spawn.session
     );
   }
-  const worktree = await ensureConfiglessWorktree(options);
-  await carryConfiglessDirtySnapshot(options, worktree, options.dirtySnapshot, resumesDirtyCarry);
+  const worktree = await ensureConfiglessWorktree(spawn);
+  await carryConfiglessDirtySnapshot(spawn, worktree, dirtySnapshot, resumesDirtyCarry);
   return { worktreePath: worktree.path };
 }
 
-function prepareConfiglessWorktreeCheckpoint(options: {
-  existingRepoState?: SessionRepoState;
-  home: string;
-  options: SpawnOptions;
-  rootDefaultRef: PinnedDefaultBranchRef | null;
-  rootSourceRoot: string;
-  runtime: Runtime;
-  session: string;
-}) {
-  const sessionBranchExisted = branchExists(
-    options.runtime,
-    options.rootSourceRoot,
-    options.session
-  );
+function prepareConfiglessWorktreeCheckpoint(spawn: ConfiglessSpawn) {
+  const sessionBranchExisted = branchExists(spawn.runtime, spawn.rootSourceRoot, spawn.session);
   return {
     diffBaseRef:
-      options.existingRepoState?.diffBaseRef ??
-      options.rootDefaultRef?.ref ??
+      spawn.existingRepoState?.diffBaseRef ??
+      spawn.rootDefaultRef?.ref ??
       resolveFreshCurrentHeadDiffBase({
-        options: options.options,
         sessionBranchExisted,
-        sourceHeadRef: resolveAttachedHeadRef(options.runtime, options.rootSourceRoot),
+        sourceHeadRef: resolveAttachedHeadRef(spawn.runtime, spawn.rootSourceRoot),
+        spawnOptions: spawn.spawnOptions,
         worktreeCreated: true
       }),
-    pinnedRef: options.rootDefaultRef?.pinnedRef ?? options.existingRepoState?.pinnedRef,
-    worktreePath: getExpectedWorktreePath(options.home, options.rootSourceRoot, options.session)
+    pinnedRef: spawn.rootDefaultRef?.pinnedRef ?? spawn.existingRepoState?.pinnedRef,
+    worktreePath: getExpectedWorktreePath(spawn.home, spawn.rootSourceRoot, spawn.session)
   };
 }
 
-function captureConfiglessDirtySnapshot(options: {
-  home: string;
-  options: SpawnOptions;
-  rootSourceRoot: string;
-  runtime: Runtime;
-  session: string;
-}) {
-  if (options.options.mode === "current-head" && !options.options.copyDirty) {
-    ensureCleanCheckout(options.runtime, options.rootSourceRoot);
+function captureConfiglessDirtySnapshot(spawn: ConfiglessSpawn) {
+  if (spawn.spawnOptions.mode === "current-head" && !spawn.spawnOptions.copyDirty) {
+    ensureCleanCheckout(spawn.runtime, spawn.rootSourceRoot);
   }
-  if (!shouldCopyDirty(options.options)) {
+  if (!shouldCopyDirty(spawn.spawnOptions)) {
     return null;
   }
-  const snapshot = captureDirtySnapshot(options.runtime, options.rootSourceRoot);
+  const snapshot = captureDirtySnapshot(spawn.runtime, spawn.rootSourceRoot);
   assertDirtyCarryBoundary(
-    options.runtime,
-    options.home,
-    options.rootSourceRoot,
-    options.session,
+    spawn.runtime,
+    spawn.home,
+    spawn.rootSourceRoot,
+    spawn.session,
     snapshot
   );
   return snapshot;
 }
 
-function ensureConfiglessWorktree(options: {
-  existingRepoState?: SessionRepoState;
-  home: string;
-  options: SpawnOptions;
-  rootDefaultRef: PinnedDefaultBranchRef | null;
-  rootSourceRoot: string;
-  runtime: Runtime;
-  session: string;
-}) {
-  const retainedPinnedRef = options.existingRepoState?.pinnedRef;
+function ensureConfiglessWorktree(spawn: ConfiglessSpawn) {
+  const retainedPinnedRef = spawn.existingRepoState?.pinnedRef;
   const mustRecreateRetainedDefaultBranch =
-    options.options.mode === "default-branch" &&
+    spawn.spawnOptions.mode === "default-branch" &&
     retainedPinnedRef !== undefined &&
-    !branchExists(options.runtime, options.rootSourceRoot, options.session);
-  if (options.rootDefaultRef !== null || mustRecreateRetainedDefaultBranch) {
-    const pinnedRef = options.rootDefaultRef?.pinnedRef ?? retainedPinnedRef;
+    !branchExists(spawn.runtime, spawn.rootSourceRoot, spawn.session);
+  if (spawn.rootDefaultRef !== null || mustRecreateRetainedDefaultBranch) {
+    const pinnedRef = spawn.rootDefaultRef?.pinnedRef ?? retainedPinnedRef;
     if (pinnedRef === undefined) {
-      throw new MonkeError(`Missing pinned default-branch ref for ${options.rootSourceRoot}`);
+      throw new MonkeError(`Missing pinned default-branch ref for ${spawn.rootSourceRoot}`);
     }
     return ensureFreshSessionWorktreeFromRefAsync(
-      options.runtime,
-      options.home,
-      options.rootSourceRoot,
-      options.session,
+      spawn.runtime,
+      spawn.home,
+      spawn.rootSourceRoot,
+      spawn.session,
       pinnedRef
     );
   }
   return ensureSessionWorktreeAsync(
-    options.runtime,
-    options.home,
-    options.rootSourceRoot,
-    options.session,
-    { skipCleanCheck: shouldCopyDirty(options.options) }
+    spawn.runtime,
+    spawn.home,
+    spawn.rootSourceRoot,
+    spawn.session,
+    { skipCleanCheck: shouldCopyDirty(spawn.spawnOptions) }
   );
 }
 
 function resolveFreshCurrentHeadDiffBase(options: {
-  options: SpawnOptions;
   sessionBranchExisted: boolean;
   sourceHeadRef?: string;
+  spawnOptions: SpawnOptions;
   worktreeCreated: boolean;
 }) {
   return options.worktreeCreated &&
     !options.sessionBranchExisted &&
     options.sourceHeadRef !== undefined &&
-    options.options.mode === "current-head"
+    options.spawnOptions.mode === "current-head"
     ? options.sourceHeadRef
     : undefined;
 }
 
 async function carryConfiglessDirtySnapshot(
-  options: { home: string; rootSourceRoot: string; runtime: Runtime; session: string },
+  spawn: ConfiglessSpawn,
   worktree: { created: boolean; path: string },
   dirtySnapshot: DirtySnapshot | null,
   resumesDirtyCarry: boolean
@@ -911,74 +853,66 @@ async function carryConfiglessDirtySnapshot(
   }
   if (worktree.created || resumesDirtyCarry) {
     await applyDirtySnapshot(
-      options.runtime,
-      options.home,
-      options.rootSourceRoot,
+      spawn.runtime,
+      spawn.home,
+      spawn.rootSourceRoot,
       worktree.path,
       dirtySnapshot
     );
     return;
   }
   if (dirtySnapshotHasContent(dirtySnapshot)) {
-    warnDirtyStateNotCarried(options.runtime, options.rootSourceRoot, options.session);
+    warnDirtyStateNotCarried(spawn.runtime, spawn.rootSourceRoot, spawn.session);
   }
 }
 
-function createConfiglessSessionState(options: {
-  dirtyCarryStatus?: "complete" | "pending";
-  existingRepoState?: SessionRepoState;
-  options: SpawnOptions;
-  preparationStatus: "pending" | "prepared";
-  prepared: { diffBaseRef?: string; pinnedRef?: string; worktreePath: string };
-  priorSessionState: SessionState;
-  rootSourceRoot: string;
-}): SessionState {
-  const { existingRepoState, prepared, rootSourceRoot } = options;
+function createConfiglessSessionState(
+  spawn: ConfiglessSpawn,
+  options: {
+    dirtyCarryStatus?: "complete" | "pending";
+    preparationStatus: "pending" | "prepared";
+    prepared: { diffBaseRef?: string; pinnedRef?: string; worktreePath: string };
+    priorSessionState: SessionState;
+  }
+): SessionState {
+  const { prepared } = options;
+  const { rootSourceRoot, spawnOptions } = spawn;
   return {
     ...options.priorSessionState,
-    copyDirty: options.options.mode === "current-head" ? options.options.copyDirty : undefined,
+    copyDirty: spawnOptions.mode === "current-head" ? spawnOptions.copyDirty : undefined,
     generation: { number: 0, status: "not-started" },
-    graphSource: options.options.mode === "current-head" ? undefined : "session-branch",
+    graphSource: spawnOptions.mode === "current-head" ? undefined : "session-branch",
     repos: [
       createInitialRepoLifecycleState(
         { cleanupCommand: undefined, sourceRoot: rootSourceRoot },
         prepared.worktreePath,
         {
-          ...existingRepoState,
+          ...spawn.existingRepoState,
           assignedPorts: [],
           cleanupEligible: false,
           diffBaseRef: prepared.diffBaseRef,
           dirtyCarryStatus: options.dirtyCarryStatus,
           materializationStatus: "pending",
-          pinnedRef: options.options.mode === "default-branch" ? prepared.pinnedRef : undefined,
+          pinnedRef: spawnOptions.mode === "default-branch" ? prepared.pinnedRef : undefined,
           preparationStatus: options.preparationStatus,
           sourceRoot: rootSourceRoot,
           worktreePath: prepared.worktreePath
         }
       )
     ],
-    spawnSource: options.options.mode === "current-head" ? undefined : options.options.mode
+    spawnSource: spawnOptions.mode === "current-head" ? undefined : spawnOptions.mode
   };
 }
 
-function failConfiglessSpawn(
-  runtime: Runtime,
-  rootSourceRoot: string,
-  session: string,
-  options: SpawnOptions,
-  worktreePath: string
-): never {
-  runtime.writeStderr(
-    `Warning: no monke.yml found for ${rootSourceRoot}; prepared session worktree without materializing it.\n`
+function failConfiglessSpawn(spawn: ConfiglessSpawn, state: SessionState): never {
+  spawn.runtime.writeStderr(
+    `Warning: no monke.yml found for ${spawn.rootSourceRoot}; prepared session worktree without materializing it.\n`
   );
   throw new MonkeError(
-    [
-      "Session materialization failed after all runnable work settled.",
-      "Receipt:",
-      `  ${rootSourceRoot}: pending (prepared)`,
-      `Prepared Root worktree: ${worktreePath}`,
-      `Retry: ${formatSpawnRetryCommand(session, options)}`
-    ].join("\n")
+    formatFailureReceipt(state, {
+      retryCommand: formatSpawnRetryCommand(spawn.session, spawn.spawnOptions),
+      rootSourceRoot: spawn.rootSourceRoot
+    })
   );
 }
 
@@ -1116,184 +1050,6 @@ function assertCleanCheckoutsForCurrentHeadSpawn(
     assertCleanCheckoutForSessionBranchCreation(runtime, repoConfig.sourceRoot, session);
     ensureCleanCheckout(runtime, repoConfig.sourceRoot);
   }
-}
-
-function captureDirtySnapshots(runtime: Runtime, reposInOrder: RepoConfig[]) {
-  return new Map(
-    reposInOrder.map((repoConfig) => [
-      repoConfig.sourceRoot,
-      captureDirtySnapshot(runtime, repoConfig.sourceRoot)
-    ])
-  );
-}
-
-function captureDirtySnapshot(runtime: Runtime, sourceRoot: string) {
-  const untrackedOutput = runGit(runtime, sourceRoot, [
-    "ls-files",
-    "--others",
-    "--exclude-standard",
-    "-z"
-  ]);
-
-  return {
-    trackedPatch: runGit(runtime, sourceRoot, ["diff", "HEAD", "--binary", "--no-ext-diff"]),
-    untrackedPaths: untrackedOutput.split("\0").filter((entry) => entry.length > 0)
-  };
-}
-
-function dirtySnapshotHasContent(snapshot: DirtySnapshot) {
-  return snapshot.trackedPatch.length > 0 || snapshot.untrackedPaths.length > 0;
-}
-
-/** Refuse dirty carry when it would apply HEAD-relative patches onto a diverged Session branch. */
-function assertDirtyCarryBoundary(
-  runtime: Runtime,
-  home: string,
-  sourceRoot: string,
-  session: string,
-  snapshot: DirtySnapshot
-) {
-  if (!dirtySnapshotHasContent(snapshot) || !branchExists(runtime, sourceRoot, session)) {
-    return;
-  }
-
-  if (existsSync(getExpectedWorktreePath(home, sourceRoot, session))) {
-    return;
-  }
-
-  const branchTip = runGit(runtime, sourceRoot, ["rev-parse", `refs/heads/${session}`]).trim();
-  const headTip = runGit(runtime, sourceRoot, ["rev-parse", "HEAD"]).trim();
-  if (branchTip !== headTip) {
-    throw new MonkeError(
-      `Session branch "${session}" already exists at ${branchTip.slice(0, 8)} but the Source checkout HEAD is ${headTip.slice(0, 8)}; carrying dirty changes onto a diverged branch is unsafe. Re-run with --no-dirty, or align the branch with HEAD first.`
-    );
-  }
-}
-
-function warnDirtyStateNotCarried(runtime: Runtime, sourceRoot: string, session: string) {
-  runtime.writeStderr(
-    `Warning: Session worktree for ${session} at ${sourceRoot} already exists; dirty Source checkout changes were not carried into it.\n`
-  );
-}
-
-async function applyDirtySnapshot(
-  runtime: Runtime,
-  home: string,
-  sourceRoot: string,
-  worktreePath: string,
-  snapshot: DirtySnapshot
-) {
-  await applyPatchAsync(runtime, worktreePath, snapshot.trackedPatch);
-  copyUntrackedPaths(home, sourceRoot, worktreePath, snapshot.untrackedPaths);
-}
-
-async function applyPatchAsync(runtime: Runtime, worktreePath: string, patch: string) {
-  if (!patch) {
-    return;
-  }
-  const forward = await runtime.execAsync("git", ["apply", "--3way", "--check"], {
-    allowFailure: true,
-    cwd: worktreePath,
-    stdin: patch
-  });
-  if (forward.exitCode === 0) {
-    await runtime.execAsync("git", ["apply", "--3way"], { cwd: worktreePath, stdin: patch });
-    return;
-  }
-  const reverse = await runtime.execAsync("git", ["apply", "--reverse", "--check"], {
-    allowFailure: true,
-    cwd: worktreePath,
-    stdin: patch
-  });
-  if (reverse.exitCode !== 0) {
-    throw new MonkeError(
-      `Cannot resume dirty carry without overwriting Session-local tracked changes at ${worktreePath}`
-    );
-  }
-}
-
-function copyUntrackedPaths(
-  home: string,
-  sourceRoot: string,
-  worktreePath: string,
-  untrackedPaths: string[]
-) {
-  const temporaryParent = path.join(home, "tmp");
-  mkdirSync(temporaryParent, { recursive: true });
-  const temporaryRoot = mkdtempSync(path.join(temporaryParent, "dirty-carry-"));
-  try {
-    for (const [index, relativePath] of untrackedPaths.entries()) {
-      copyUntrackedPath(
-        path.join(sourceRoot, relativePath),
-        path.join(worktreePath, relativePath),
-        path.join(temporaryRoot, String(index))
-      );
-    }
-  } finally {
-    rmSync(temporaryRoot, { force: true, recursive: true });
-  }
-}
-
-function copyUntrackedPath(sourcePath: string, targetPath: string, temporaryPath: string) {
-  const sourceStat = lstatSync(sourcePath, { throwIfNoEntry: false });
-  if (!sourceStat) {
-    throw new MonkeError(`Untracked source path disappeared before copy: ${sourcePath}`);
-  }
-  const targetStat = lstatSync(targetPath, { throwIfNoEntry: false });
-  if (targetStat) {
-    if (sourceStat.isDirectory() && targetStat.isDirectory()) {
-      for (const entry of readdirSync(sourcePath)) {
-        copyUntrackedPath(
-          path.join(sourcePath, entry),
-          path.join(targetPath, entry),
-          path.join(temporaryPath, entry)
-        );
-      }
-      return;
-    }
-    if (untrackedPathsMatch(sourcePath, sourceStat, targetPath, targetStat)) {
-      return;
-    }
-    throw new MonkeError(
-      `Refusing to overwrite Session-local path during dirty carry: ${targetPath}`
-    );
-  }
-
-  mkdirSync(path.dirname(targetPath), { recursive: true });
-  if (sourceStat.isDirectory()) {
-    mkdirSync(targetPath);
-    for (const entry of readdirSync(sourcePath)) {
-      copyUntrackedPath(
-        path.join(sourcePath, entry),
-        path.join(targetPath, entry),
-        path.join(temporaryPath, entry)
-      );
-    }
-    return;
-  }
-  if (sourceStat.isSymbolicLink()) {
-    symlinkSync(readlinkSync(sourcePath), targetPath);
-    return;
-  }
-  mkdirSync(path.dirname(temporaryPath), { recursive: true });
-  copyFileSync(sourcePath, temporaryPath);
-  linkSync(temporaryPath, targetPath);
-}
-
-function untrackedPathsMatch(
-  sourcePath: string,
-  sourceStat: Stats,
-  targetPath: string,
-  targetStat: Stats
-) {
-  if (sourceStat.isSymbolicLink() && targetStat.isSymbolicLink()) {
-    return readlinkSync(sourcePath) === readlinkSync(targetPath);
-  }
-  return (
-    sourceStat.isFile() &&
-    targetStat.isFile() &&
-    readFileSync(sourcePath).equals(readFileSync(targetPath))
-  );
 }
 
 function assertNoGlobalWorktreePathStateCollisions(
@@ -1707,7 +1463,7 @@ interface MaterializeRepoOptions {
   home: string;
   persistRepoState: (
     repoState: SessionRepoState,
-    checkpoint: "cleanup-eligibility" | "repo-progress" | "resource-command-output"
+    checkpoint: RepoMaterializationProgressCheckpoint
   ) => void;
   repoConfig: RepoConfig;
   retryCommand: string;
@@ -1718,7 +1474,6 @@ interface MaterializeRepoOptions {
 }
 
 interface RepoMaterializationContext extends MaterializeRepoOptions {
-  diffBaseRef?: string;
   hasBootstrapCommand: boolean;
   replacementCleanupAuthorityEstablished: boolean;
   resolvedResourceValues: ReturnType<typeof resolveResourceValues>;
@@ -1737,11 +1492,17 @@ interface RepoMaterializationCheckpoint {
   resourceCommandOutputs: ResourceCommandState[];
 }
 
-type RepoMaterializationCheckpointName =
-  | "cleanup-eligibility"
-  | "repo-progress"
-  | "repo-result"
-  | "resource-command-output";
+/** The Session checkpoints one Repo materialization may persist, including its terminal result. */
+type RepoMaterializationCheckpointName = Extract<
+  SessionMaterializationCheckpoint,
+  "cleanup-eligibility" | "repo-progress" | "repo-result" | "resource-command-output"
+>;
+
+/** The subset a repo persists while still materializing. */
+type RepoMaterializationProgressCheckpoint = Exclude<
+  RepoMaterializationCheckpointName,
+  "repo-result"
+>;
 
 async function materializeRepo(options: MaterializeRepoOptions) {
   const context = beginRepoMaterialization(options);
@@ -2035,7 +1796,8 @@ function prepareRepoWorktree(runtime: Runtime, repoConfig: RepoConfig, worktreeP
     });
   } catch (error) {
     throw new MonkeError(
-      `Worktree preparation failed for ${repoConfig.sourceRoot} in ${worktreePath}\n${errorMessage(error)}`
+      `Worktree preparation failed for ${repoConfig.sourceRoot} in ${worktreePath}\n${errorMessage(error)}`,
+      { cause: error }
     );
   }
   return warnings;
@@ -2261,10 +2023,6 @@ function assertUniqueExpectedWorktreePaths(
 
 function readGitPathAtRef(runtime: Runtime, sourceRoot: string, ref: string, relativePath: string) {
   return runtime.exec("git", ["show", `${ref}:${relativePath}`], { cwd: sourceRoot }).stdout;
-}
-
-function runGit(runtime: Runtime, cwd: string, args: string[]) {
-  return runtime.exec("git", args, { cwd }).stdout;
 }
 
 function resolveAttachedHeadRef(runtime: Runtime, sourceRoot: string) {
