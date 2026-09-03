@@ -19,7 +19,7 @@ import type * as z from "zod";
 
 import { runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
-import type { SelectPrompt } from "../src/types.ts";
+import type { SelectPrompt, SessionRepoState, SessionState } from "../src/types.ts";
 
 const tempDirectories: string[] = [];
 const runMonkeWorkerPath = fileURLToPath(new URL("run-monke-worker.ts", import.meta.url));
@@ -40,6 +40,29 @@ export function makeTempDir(prefix: string) {
   const directory = realpathSync.native(mkdtempSync(path.join(tmpdir(), `${prefix}-`)));
   tempDirectories.push(directory);
   return directory;
+}
+
+export function materializedRepoState(
+  options: Pick<SessionRepoState, "sourceRoot" | "worktreePath"> &
+    Partial<Omit<SessionRepoState, "sourceRoot" | "worktreePath">>
+): SessionRepoState {
+  return {
+    assignedPorts: [],
+    cleanupEligible: false,
+    materializationStatus: "materialized",
+    preparationStatus: "prepared",
+    ...options
+  };
+}
+
+export function completeSessionState(
+  options: Omit<SessionState, "generation" | "version">
+): SessionState {
+  return {
+    generation: { number: 1, status: "complete" },
+    version: 2,
+    ...options
+  };
 }
 
 export function createRepo(root: string, files: Record<string, string>) {

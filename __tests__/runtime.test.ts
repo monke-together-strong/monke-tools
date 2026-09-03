@@ -31,45 +31,48 @@ describe("runtime", () => {
     );
   });
 
-  test("createRuntime terminates detached async command groups when its parent is terminated", async () => {
-    const sandbox = makeTempDir("runtime-parent-termination");
-    const workerPath = path.join(sandbox, "worker.ts");
-    const childPidPath = path.join(sandbox, "child.pid");
-    const runtimeUrl = pathToFileURL(path.resolve("src/runtime.ts")).href;
-    write(
-      sandbox,
-      "worker.ts",
-      `import { createRuntime } from ${JSON.stringify(runtimeUrl)};
+  test.each(["SIGHUP", "SIGQUIT", "SIGTERM"] as const)(
+    "createRuntime forwards %s to detached async command groups",
+    async (signal) => {
+      const sandbox = makeTempDir("runtime-parent-termination");
+      const workerPath = path.join(sandbox, "worker.ts");
+      const childPidPath = path.join(sandbox, "child.pid");
+      const runtimeUrl = pathToFileURL(path.resolve("src/runtime.ts")).href;
+      write(
+        sandbox,
+        "worker.ts",
+        `import { createRuntime } from ${JSON.stringify(runtimeUrl)};
 
 const runtime = createRuntime();
 await runtime.execAsync("sh", ["-c", ${JSON.stringify(`trap '' TERM INT; printf '%s' "$$" > "${childPidPath}"; while :; do sleep 1; done`)}]);
 `
-    );
-    const worker = Bun.spawn({
-      cmd: [process.execPath, workerPath],
-      stderr: "pipe",
-      stdout: "pipe"
-    });
-    let childPid: number | undefined;
+      );
+      const worker = Bun.spawn({
+        cmd: [process.execPath, workerPath],
+        stderr: "pipe",
+        stdout: "pipe"
+      });
+      let childPid: number | undefined;
 
-    try {
-      await waitFor(() => existsSync(childPidPath));
-      childPid = Number(readFileSync(childPidPath, "utf-8"));
-      worker.kill("SIGTERM");
-      await worker.exited;
-      await waitFor(() => childPid !== undefined && !isProcessRunning(childPid));
-      expect(childPid === undefined ? true : isProcessRunning(childPid)).toBeFalsy();
-    } finally {
-      worker.kill("SIGKILL");
-      if (childPid !== undefined && isProcessRunning(childPid)) {
-        try {
-          process.kill(-childPid, "SIGKILL");
-        } catch {
-          process.kill(childPid, "SIGKILL");
+      try {
+        await waitFor(() => existsSync(childPidPath));
+        childPid = Number(readFileSync(childPidPath, "utf-8"));
+        worker.kill(signal);
+        await worker.exited;
+        await waitFor(() => childPid !== undefined && !isProcessRunning(childPid));
+        expect(childPid === undefined ? true : isProcessRunning(childPid)).toBeFalsy();
+      } finally {
+        worker.kill("SIGKILL");
+        if (childPid !== undefined && isProcessRunning(childPid)) {
+          try {
+            process.kill(-childPid, "SIGKILL");
+          } catch {
+            process.kill(childPid, "SIGKILL");
+          }
         }
       }
     }
-  });
+  );
 
   test("createRuntime reports exhausted scripted select values clearly", async () => {
     const runtime = createRuntime({ selectValues: [] });

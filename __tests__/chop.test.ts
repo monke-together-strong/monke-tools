@@ -11,10 +11,12 @@ import {
 } from "../src/session-state-store.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "../src/shell.ts";
 import {
+  completeSessionState,
   createRepo,
   git,
   installGitShim,
   makeTempDir,
+  materializedRepoState,
   runMonke,
   runMonkeCapturingFailure,
   write
@@ -94,46 +96,35 @@ function createMultiRepoSessionFixture(prefix: string, session = "banana") {
   git(depRoot, ["worktree", "add", depWorktree, session]);
   git(root, ["branch", session]);
   git(root, ["worktree", "add", rootWorktree, session]);
-  saveSessionState(home, {
-    generation: { number: 1, status: "complete" },
-    repos: [
-      {
-        assignedPorts: [],
-
-        cleanupCommand: `printf "dep|%s|%s|%s\\n" "$PWD" "$DEP_RESOURCE" "$MONKE_SESSION" >> "${cleanupLog}"`,
-
-        cleanupEligible: true,
-
-        materializationStatus: "materialized",
-        preparationStatus: "prepared",
-        resourceValues: [{ env: "DEP_RESOURCE", value: `dep-${session}` }],
-        sourceRoot: depRoot,
-        worktreePath: depWorktree
-      },
-      {
-        assignedPorts: [],
-
-        cleanupCommand: `printf "root|%s|%s|%s|%s\\n" "$PWD" "$ROOT_RESOURCE" "$ROOT_DYNAMIC" "$MONKE_SESSION" >> "${cleanupLog}"`,
-
-        cleanupEligible: true,
-
-        materializationStatus: "materialized",
-        preparationStatus: "prepared",
-        resourceCommandOutputs: [
-          {
-            name: "root-dynamic",
-            outputs: [{ env: "ROOT_DYNAMIC", value: `dynamic-${session}` }]
-          }
-        ],
-        resourceValues: [{ env: "ROOT_RESOURCE", value: `root-${session}` }],
-        sourceRoot: root,
-        worktreePath: rootWorktree
-      }
-    ],
-    rootSourceRoot: root,
-    session,
-    version: 2
-  });
+  saveSessionState(
+    home,
+    completeSessionState({
+      repos: [
+        materializedRepoState({
+          cleanupCommand: `printf "dep|%s|%s|%s\\n" "$PWD" "$DEP_RESOURCE" "$MONKE_SESSION" >> "${cleanupLog}"`,
+          cleanupEligible: true,
+          resourceValues: [{ env: "DEP_RESOURCE", value: `dep-${session}` }],
+          sourceRoot: depRoot,
+          worktreePath: depWorktree
+        }),
+        materializedRepoState({
+          cleanupCommand: `printf "root|%s|%s|%s|%s\\n" "$PWD" "$ROOT_RESOURCE" "$ROOT_DYNAMIC" "$MONKE_SESSION" >> "${cleanupLog}"`,
+          cleanupEligible: true,
+          resourceCommandOutputs: [
+            {
+              name: "root-dynamic",
+              outputs: [{ env: "ROOT_DYNAMIC", value: `dynamic-${session}` }]
+            }
+          ],
+          resourceValues: [{ env: "ROOT_RESOURCE", value: `root-${session}` }],
+          sourceRoot: root,
+          worktreePath: rootWorktree
+        })
+      ],
+      rootSourceRoot: root,
+      session
+    })
+  );
 
   return {
     binDirectory,

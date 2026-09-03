@@ -7,7 +7,7 @@ import { resolveResourceCommands } from "../src/resources.ts";
 import { createRuntime, hashKey } from "../src/runtime.ts";
 import { saveSessionState } from "../src/session-state-store.ts";
 import type { RepoConfig, Runtime } from "../src/types.ts";
-import { makeTempDir } from "./helpers.ts";
+import { completeSessionState, makeTempDir, materializedRepoState } from "./helpers.ts";
 
 describe("resources", () => {
   test("resource command lock covers command execution and immediate persistence", async () => {
@@ -139,56 +139,46 @@ describe("resources", () => {
     let stdin: unknown;
     let commandEnv: Record<string, string | undefined> | undefined;
 
-    saveSessionState(home, {
-      generation: { number: 1, status: "complete" },
-      repos: [
-        {
-          assignedPorts: [],
-
-          cleanupEligible: true,
-
-          materializationStatus: "materialized",
-
-          preparationStatus: "prepared",
-          resourceCommandOutputs: [
-            {
-              name: "e2e-symbols",
-              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "ZEC/USDT:USDT" }]
-            }
-          ],
-          sourceRoot,
-          worktreePath: path.join(sourceRoot, "later")
-        }
-      ],
-      rootSourceRoot: sourceRoot,
-      session: "later",
-      version: 2
-    });
-    saveSessionState(home, {
-      generation: { number: 1, status: "complete" },
-      repos: [
-        {
-          assignedPorts: [],
-
-          cleanupEligible: true,
-
-          materializationStatus: "materialized",
-
-          preparationStatus: "prepared",
-          resourceCommandOutputs: [
-            {
-              name: "e2e-symbols",
-              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "ADA/USDT:USDT" }]
-            }
-          ],
-          sourceRoot,
-          worktreePath: path.join(sourceRoot, "earlier")
-        }
-      ],
-      rootSourceRoot: sourceRoot,
-      session: "earlier",
-      version: 2
-    });
+    saveSessionState(
+      home,
+      completeSessionState({
+        repos: [
+          materializedRepoState({
+            cleanupEligible: true,
+            resourceCommandOutputs: [
+              {
+                name: "e2e-symbols",
+                outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "ZEC/USDT:USDT" }]
+              }
+            ],
+            sourceRoot,
+            worktreePath: path.join(sourceRoot, "later")
+          })
+        ],
+        rootSourceRoot: sourceRoot,
+        session: "later"
+      })
+    );
+    saveSessionState(
+      home,
+      completeSessionState({
+        repos: [
+          materializedRepoState({
+            cleanupEligible: true,
+            resourceCommandOutputs: [
+              {
+                name: "e2e-symbols",
+                outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "ADA/USDT:USDT" }]
+              }
+            ],
+            sourceRoot,
+            worktreePath: path.join(sourceRoot, "earlier")
+          })
+        ],
+        rootSourceRoot: sourceRoot,
+        session: "earlier"
+      })
+    );
 
     const runtime: Runtime = {
       ...createRuntime({ cwd: sourceRoot }),

@@ -1,5 +1,7 @@
 import * as z from "zod";
 
+import { samePath } from "./path-identity.ts";
+
 const NonEmptyStringSchema = z.string().min(1);
 const PortSchema = z.number().int().min(1).max(65_535);
 const PortKeySchema = z
@@ -169,10 +171,10 @@ function validateRepoSet(state: ParsedSessionState, issue: LifecycleIssue) {
     issue("Session state requires at least the Root repo", ["repos"]);
     return;
   }
-  if (!state.repos.some((repo) => repo.sourceRoot === state.rootSourceRoot)) {
+  if (!state.repos.some((repo) => samePath(repo.sourceRoot, state.rootSourceRoot))) {
     issue("Session state must include its Root repo", ["rootSourceRoot"]);
   }
-  const duplicateSourceRoot = findDuplicateIndex(state.repos.map((repo) => repo.sourceRoot));
+  const duplicateSourceRoot = findDuplicatePathIndex(state.repos.map((repo) => repo.sourceRoot));
   if (duplicateSourceRoot !== -1) {
     issue("Session state cannot contain duplicate Source checkouts", [
       "repos",
@@ -180,13 +182,16 @@ function validateRepoSet(state: ParsedSessionState, issue: LifecycleIssue) {
       "sourceRoot"
     ]);
   }
-  const duplicateWorktree = findDuplicateIndex(state.repos.map((repo) => repo.worktreePath));
+  const duplicateWorktree = findDuplicatePathIndex(state.repos.map((repo) => repo.worktreePath));
   if (duplicateWorktree !== -1) {
     issue("Session state cannot contain duplicate Session worktrees", [
       "repos",
       duplicateWorktree,
       "worktreePath"
     ]);
+  }
+  if (!samePath(state.repos.at(-1)?.sourceRoot ?? "", state.rootSourceRoot)) {
+    issue("Root repo must follow its dependencies in materialization order", ["repos"]);
   }
 }
 
@@ -201,15 +206,10 @@ function validateDefaultBranchIdentity(state: ParsedSessionState, issue: Lifecyc
   }
 }
 
-function findDuplicateIndex(values: string[]) {
-  const seen = new Set<string>();
-  return values.findIndex((value) => {
-    if (seen.has(value)) {
-      return true;
-    }
-    seen.add(value);
-    return false;
-  });
+function findDuplicatePathIndex(values: string[]) {
+  return values.findIndex((value, index) =>
+    values.slice(0, index).some((earlier) => samePath(earlier, value))
+  );
 }
 
 export const RepoReservationSchema = z

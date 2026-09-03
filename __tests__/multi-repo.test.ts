@@ -8,12 +8,14 @@ import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/session-state-store.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
 import {
+  completeSessionState,
   createRepo,
   git,
   installCodexUrlOpenShim,
   installGitShim,
   installShShim,
   makeTempDir,
+  materializedRepoState,
   read,
   readSingleYamlFile,
   runMonke,
@@ -662,36 +664,30 @@ external:
 `
     });
 
-    saveSessionState(home, {
-      generation: { number: 1, status: "complete" },
-      repos: [
-        {
-          assignedPorts: [],
-          cleanupEligible: true,
-          materializationStatus: "materialized",
-          preparationStatus: "prepared",
-          resourceCommandOutputs: [
-            {
-              name: "e2e-symbols",
-              outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
-            }
-          ],
-          sourceRoot: depRoot,
-          worktreePath: path.join(sandbox, "missing-alpha-dep")
-        },
-        {
-          assignedPorts: [],
-          cleanupEligible: false,
-          materializationStatus: "materialized",
-          preparationStatus: "prepared",
-          sourceRoot: rootA,
-          worktreePath: path.join(sandbox, "missing-alpha-root")
-        }
-      ],
-      rootSourceRoot: rootA,
-      session: "alpha",
-      version: 2
-    });
+    saveSessionState(
+      home,
+      completeSessionState({
+        repos: [
+          materializedRepoState({
+            cleanupEligible: true,
+            resourceCommandOutputs: [
+              {
+                name: "e2e-symbols",
+                outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
+              }
+            ],
+            sourceRoot: depRoot,
+            worktreePath: path.join(sandbox, "missing-alpha-dep")
+          }),
+          materializedRepoState({
+            sourceRoot: rootA,
+            worktreePath: path.join(sandbox, "missing-alpha-root")
+          })
+        ],
+        rootSourceRoot: rootA,
+        session: "alpha"
+      })
+    );
     runMonke({
       args: ["spawn", "beta"],
       binDirectory,

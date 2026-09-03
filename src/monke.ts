@@ -239,13 +239,12 @@ async function initializeSpawn(
     sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume"
       ? loadSessionState(home, rootSourceRoot, session)
       : undefined;
-  const rootConfigRef =
-    rootDefaultRef?.ref ??
-    (resumedState
-      ? requirePinnedRef(resumedState, rootSourceRoot)
-      : sourcePlan.kind === "session-branch"
-        ? session
-        : undefined);
+  let rootConfigRef = rootDefaultRef?.ref;
+  if (rootConfigRef === undefined && resumedState) {
+    rootConfigRef = requirePinnedRef(resumedState, rootSourceRoot);
+  } else if (rootConfigRef === undefined && sourcePlan.kind === "session-branch") {
+    rootConfigRef = session;
+  }
   const rootConfigExists = spawnRootConfigExists(runtime, rootSourceRoot, rootConfigRef);
   if (!rootConfigExists) {
     return {
@@ -1290,6 +1289,12 @@ interface RepoMaterializationAssignments {
   localAssignments: Map<string, number>;
 }
 
+interface RepoMaterializationCheckpoint {
+  assignedPorts: AssignedPort[];
+  cleanupEligible: boolean;
+  resourceCommandOutputs: ResourceCommandState[];
+}
+
 async function materializeRepo(options: MaterializeRepoOptions) {
   const context = beginRepoMaterialization(options);
   const commandsBeforeAssignments = await resolveCommandsBeforeAssignments(context);
@@ -1469,11 +1474,7 @@ function resolveRepoResourceCommands(
 
 function persistRepoMaterializationState(
   context: RepoMaterializationContext,
-  state: {
-    assignedPorts: AssignedPort[];
-    cleanupEligible: boolean;
-    resourceCommandOutputs: ResourceCommandState[];
-  }
+  state: RepoMaterializationCheckpoint
 ) {
   context.persistRepoState(
     createRepoMaterializationState(context, {
@@ -1485,11 +1486,8 @@ function persistRepoMaterializationState(
 
 function createRepoMaterializationState(
   context: RepoMaterializationContext,
-  state: {
-    assignedPorts: AssignedPort[];
-    cleanupEligible: boolean;
+  state: RepoMaterializationCheckpoint & {
     materializationStatus: SessionRepoState["materializationStatus"];
-    resourceCommandOutputs: ResourceCommandState[];
   }
 ) {
   return buildSessionRepoState({

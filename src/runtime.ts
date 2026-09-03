@@ -410,7 +410,9 @@ function executeCommandAsync(
 
 function registerAsyncChild(child: AsyncChildProcess) {
   if (activeAsyncChildren.size === 0) {
+    process.on("SIGHUP", handleParentSighup);
     process.on("SIGINT", handleParentSigint);
+    process.on("SIGQUIT", handleParentSigquit);
     process.on("SIGTERM", handleParentSigterm);
   }
   activeAsyncChildren.add(child);
@@ -420,7 +422,9 @@ function unregisterAsyncChild(child: AsyncChildProcess) {
   if (!activeAsyncChildren.delete(child) || activeAsyncChildren.size > 0) {
     return;
   }
+  process.off("SIGHUP", handleParentSighup);
   process.off("SIGINT", handleParentSigint);
+  process.off("SIGQUIT", handleParentSigquit);
   process.off("SIGTERM", handleParentSigterm);
   if (forcedParentTermination !== undefined) {
     clearTimeout(forcedParentTermination);
@@ -439,8 +443,16 @@ function unregisterAsyncChild(child: AsyncChildProcess) {
   }
 }
 
+function handleParentSighup() {
+  forwardParentTermination("SIGHUP");
+}
+
 function handleParentSigint() {
   forwardParentTermination("SIGINT");
+}
+
+function handleParentSigquit() {
+  forwardParentTermination("SIGQUIT");
 }
 
 function handleParentSigterm() {

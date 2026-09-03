@@ -21,6 +21,7 @@ import {
 } from "../src/session-state-store.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
 import {
+  completeSessionState,
   createRepo,
   git,
   installCodexUrlOpenShim,
@@ -28,6 +29,7 @@ import {
   installShShim,
   installWindowsCmdShim,
   makeTempDir,
+  materializedRepoState,
   read,
   readSingleYamlFile,
   runMonke,
@@ -1002,22 +1004,19 @@ apps: {}
         env: PORT
 `
     });
-    saveSessionState(home, {
-      generation: { number: 1, status: "complete" },
-      repos: [
-        {
-          assignedPorts: [],
-          cleanupEligible: false,
-          materializationStatus: "materialized",
-          preparationStatus: "prepared",
-          sourceRoot: repoRoot,
-          worktreePath: getExpectedWorktreePath(home, repoRoot, "fresh")
-        }
-      ],
-      rootSourceRoot: repoRoot,
-      session: "fresh",
-      version: 2
-    });
+    saveSessionState(
+      home,
+      completeSessionState({
+        repos: [
+          materializedRepoState({
+            sourceRoot: repoRoot,
+            worktreePath: getExpectedWorktreePath(home, repoRoot, "fresh")
+          })
+        ],
+        rootSourceRoot: repoRoot,
+        session: "fresh"
+      })
+    );
 
     expect(() =>
       runMonke({

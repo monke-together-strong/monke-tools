@@ -10,9 +10,11 @@ import { loadSessionState, saveSessionState } from "../src/session-state-store.t
 import { SessionStateSchema } from "../src/state-schema.ts";
 import type { SessionState } from "../src/types.ts";
 import {
+  completeSessionState,
   createRepo,
   installShShim,
   makeTempDir,
+  materializedRepoState,
   read,
   readSingleYamlFile,
   runMonke,
@@ -222,35 +224,30 @@ export default function ({ previous }) {
       // oxlint-disable-next-line no-template-curly-in-string
       resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}"
     });
-    saveSessionState(scenario.home, {
-      generation: { number: 1, status: "complete" },
-      repos: [
-        {
-          assignedPorts: [],
-
-          cleanupEligible: true,
-
-          materializationStatus: "materialized",
-
-          preparationStatus: "prepared",
-          resourceCommandOutputs: [
-            {
-              name: "e2e-symbols",
-              outputs: [
-                { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
-                { env: "E2E_FLOW2_SYMBOL", value: "ATOM/USDT:USDT" }
-              ]
-            }
-          ],
-          resourceValues: [{ env: "DISCORD_CHANNEL", value: "discord-first" }],
-          sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "missing-first")
-        }
-      ],
-      rootSourceRoot: scenario.repoRoot,
-      session: "first",
-      version: 2
-    });
+    saveSessionState(
+      scenario.home,
+      completeSessionState({
+        repos: [
+          materializedRepoState({
+            cleanupEligible: true,
+            resourceCommandOutputs: [
+              {
+                name: "e2e-symbols",
+                outputs: [
+                  { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
+                  { env: "E2E_FLOW2_SYMBOL", value: "ATOM/USDT:USDT" }
+                ]
+              }
+            ],
+            resourceValues: [{ env: "DISCORD_CHANNEL", value: "discord-first" }],
+            sourceRoot: scenario.repoRoot,
+            worktreePath: path.join(scenario.sandbox, "missing-first")
+          })
+        ],
+        rootSourceRoot: scenario.repoRoot,
+        session: "first"
+      })
+    );
 
     scenario.spawn("second");
 

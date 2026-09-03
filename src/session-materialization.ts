@@ -233,6 +233,12 @@ function beginGeneration<TPrepared, TResult>(
 ) {
   const startFresh = state.generation.status === "complete";
   const startFirst = state.generation.status === "not-started";
+  let generationNumber = state.generation.number;
+  if (startFresh) {
+    generationNumber += 1;
+  } else if (startFirst) {
+    generationNumber = 1;
+  }
   const existingByRoot = new Map(state.repos.map((repo) => [repo.sourceRoot, repo]));
   const repos = nodes.map((node) => {
     const existing = existingByRoot.get(node.sourceRoot) ?? node.initialState;
@@ -251,7 +257,7 @@ function beginGeneration<TPrepared, TResult>(
   return {
     ...state,
     generation: {
-      number: startFresh ? state.generation.number + 1 : startFirst ? 1 : state.generation.number,
+      number: generationNumber,
       status: "incomplete" as const
     },
     repos
