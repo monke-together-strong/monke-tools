@@ -277,7 +277,7 @@ function executeCommand(
   args: string[],
   options: ExecOptions | undefined
 ) {
-  const childEnv = { ...runtimeEnv, ...options?.env };
+  const childEnv = withoutUndefinedValues({ ...runtimeEnv, ...options?.env });
   delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
 
   const result = spawnSync(command, args, {
@@ -301,7 +301,7 @@ function executeCommandAsync(
   args: string[],
   options: ExecOptions | undefined
 ): Promise<ExecResult> {
-  const childEnv = { ...runtimeEnv, ...options?.env };
+  const childEnv = withoutUndefinedValues({ ...runtimeEnv, ...options?.env });
   delete childEnv.MONKE_SHELL_DIR_DIRECTIVE;
 
   return new Promise((resolve, reject) => {
@@ -354,6 +354,12 @@ function executeCommandAsync(
     });
     child.stdin.end(options?.stdin);
   });
+}
+
+function withoutUndefinedValues(env: Record<string, string | undefined>) {
+  return Object.fromEntries(
+    Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)
+  );
 }
 
 function handleSpawnError(
@@ -496,6 +502,22 @@ function acquireLockPathAsync(lockPath: string) {
 /** Run a synchronous callback while holding a lock scoped inside the monke home directory. */
 export function withScopedLock<T>(home: string, namespace: string, callback: () => T) {
   return withLockPath(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
+}
+
+/** Run asynchronous work while holding a lock scoped inside the monke home directory. */
+export async function withScopedLockAsync<T>(
+  home: string,
+  namespace: string,
+  callback: () => Promise<T>
+) {
+  const release = await acquireLockPathAsync(
+    path.join(home, "locks", `${hashKey(namespace)}.lock`)
+  );
+  try {
+    return await callback();
+  } finally {
+    release();
+  }
 }
 
 function withLockPath<T>(lockPath: string, callback: () => T) {

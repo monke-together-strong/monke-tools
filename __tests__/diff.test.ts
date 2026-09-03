@@ -301,10 +301,20 @@ touch "${discoveryReached}"`
     git(repoRoot, ["commit", "--allow-empty", "-m", "remote-main"]);
     git(repoRoot, ["update-ref", "refs/remotes/origin/main", "HEAD"]);
     saveSessionState(home, {
-      repos: [{ assignedPorts: [], sourceRoot: repoRoot, worktreePath: sessionWorktree }],
+      generation: { number: 1, status: "complete" },
+      repos: [
+        {
+          assignedPorts: [],
+          cleanupEligible: false,
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
+          sourceRoot: repoRoot,
+          worktreePath: sessionWorktree
+        }
+      ],
       rootSourceRoot: repoRoot,
       session: "main",
-      version: 1
+      version: 2
     });
     const codiffLog = installFakeCodiff(binDirectory);
     let prompt: SelectPrompt | undefined;
@@ -1202,23 +1212,30 @@ mv "${replacementRepo}" "${racyWorktree}"`
     git(root, ["worktree", "add", "-b", "session", rootWorktree]);
     git(dependency, ["worktree", "add", "-b", "session", dependencyWorktree]);
     saveSessionState(home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+          cleanupEligible: false,
           diffBaseRef: "refs/heads/main",
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
           sourceRoot: dependency,
           worktreePath: dependencyWorktree
         },
         {
           assignedPorts: [],
+          cleanupEligible: false,
           diffBaseRef: "refs/heads/main",
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
           sourceRoot: root,
           worktreePath: rootWorktree
         }
       ],
       rootSourceRoot: root,
       session: "session",
-      version: 1
+      version: 2
     });
     const codiffLog = installFakeCodiff(binDirectory);
 

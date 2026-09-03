@@ -15,21 +15,27 @@ import type { RepoConfig, RepoReservation } from "../src/types.ts";
 import { makeTempDir, write } from "./helpers.ts";
 
 describe("Session state store", () => {
-  test("loadSessionState keeps legacy repo entries without an optional Diff base compatible", () => {
-    const sandbox = makeTempDir("session-state-store-legacy-diff-base");
+  test("loadSessionState accepts strict v2 repo lifecycle state without an optional Diff base", () => {
+    const sandbox = makeTempDir("session-state-store-v2-diff-base");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     const statePath = getSessionStateFilePath(home, sourceRoot, "banana");
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${sourceRoot}
 session: banana
+generation:
+  number: 1
+  status: complete
 repos:
   - sourceRoot: ${sourceRoot}
     worktreePath: /worktree
     assignedPorts: []
+    cleanupEligible: false
+    preparationStatus: prepared
+    materializationStatus: materialized
 `
     );
 
@@ -44,13 +50,19 @@ repos:
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${sourceRoot}
 session: banana
+generation:
+  number: 1
+  status: complete
 repos:
   - sourceRoot: ${sourceRoot}
     worktreePath: /worktree
     assignedPorts: []
+    cleanupEligible: false
+    preparationStatus: prepared
+    materializationStatus: materialized
     diffBaseRef: ""
 `
     );
@@ -66,9 +78,12 @@ repos:
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${sourceRoot}
 session: banana
+generation:
+  number: 1
+  status: incomplete
 repos: wrong
 `
     );
@@ -86,15 +101,21 @@ repos: wrong
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${sourceRoot}
 session: invalid-port-key
+generation:
+  number: 1
+  status: complete
 repos:
   - sourceRoot: ${sourceRoot}
     worktreePath: /worktree
     assignedPorts:
       - key: api-port
         value: 10000
+    cleanupEligible: false
+    preparationStatus: prepared
+    materializationStatus: materialized
 `
     );
 
@@ -109,9 +130,12 @@ repos:
     write(
       home,
       path.relative(home, statePath),
-      `version: 1
+      `version: 2
 rootSourceRoot: ${sourceRoot}
 session: banana
+generation:
+  number: 1
+  status: complete
 repos: []
 typo: true
 `
@@ -122,7 +146,7 @@ typo: true
     );
   });
 
-  test("loadSessionState rejects unknown future versions", () => {
+  test.each([1, 3])("loadSessionState rejects unsupported version %i", (version) => {
     const sandbox = makeTempDir("session-state-store-future-session-version");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -130,7 +154,7 @@ typo: true
     write(
       home,
       path.relative(home, statePath),
-      `version: 2
+      `version: ${version}
 rootSourceRoot: ${sourceRoot}
 session: banana
 repos: []
@@ -138,7 +162,7 @@ repos: []
     );
 
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-      new RegExp(`Invalid ${RegExp.escape(statePath)}:[\\s\\S]*version`, "u")
+      new RegExp(`Unsupported Session state version ${version}.*${RegExp.escape(statePath)}`, "u")
     );
   });
 
@@ -149,7 +173,7 @@ repos: []
     write(
       home,
       "sessions/corrupt.yml",
-      `version: 1
+      `version: 2
 rootSourceRoot: root
 session: banana
 repos:
@@ -171,10 +195,11 @@ repos:
 
     expect(() => {
       saveSessionState(home, {
+        generation: { number: 1, status: "incomplete" },
         repos: "wrong",
         rootSourceRoot: sourceRoot,
         session: "banana",
-        version: 1
+        version: 2
       });
     }).toThrow(/Invalid .*sessions.*repos/su);
   });
@@ -324,16 +349,20 @@ size: 1000
       session: "one"
     });
     saveSessionState(home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [{ key: "API_PORT", value: firstSession.get("API_PORT") ?? -1 }],
+          cleanupEligible: false,
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
           sourceRoot,
           worktreePath: path.join(sandbox, "one")
         }
       ],
       rootSourceRoot: sourceRoot,
       session: "one",
-      version: 1
+      version: 2
     });
     const secondSession = allocateLocalPorts({
       baselinePorts: new Set(),

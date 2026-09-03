@@ -190,8 +190,10 @@ describe("single-repo sessions", () => {
     expect(sessionState.repos).toStrictEqual([
       {
         assignedPorts: [],
+        cleanupEligible: false,
         diffBaseRef: "refs/heads/main",
-        materializationComplete: false,
+        materializationStatus: "pending",
+        preparationStatus: "prepared",
         sourceRoot: repoRoot,
         worktreePath: worktreeRoot
       }
@@ -661,10 +663,10 @@ describe("single-repo sessions", () => {
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(sessionState.graphSource).toBe("session-branch");
-    expect(sessionState.retryableDefaultBranchSpawn).toBeUndefined();
+    expect(sessionState.generation.status).toBe("complete");
     expect(sessionState.spawnSource).toBe("default-branch");
     expect(sessionState.repos[0]).toMatchObject({
-      materializationComplete: false,
+      materializationStatus: "pending",
       sourceRoot: repoRoot,
       worktreePath: worktreeRoot
     });
@@ -868,7 +870,7 @@ apps:
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\nLOCAL_MAIN=1\n");
   });
 
-  test("spawn -m rolls back failed fresh attempts so they can be retried", () => {
+  test("spawn -m retains a failed fresh preparation at its pinned ref for retry", () => {
     const sandbox = makeTempDir("single-repo-main-rollback");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -894,15 +896,17 @@ apps:
     ).toThrow(/Expected managed env file to exist/u);
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retryable");
-    expect(existsSync(worktreeRoot)).toBeFalsy();
-    expect(existsSync(getSessionStateFilePath(home, repoRoot, "retryable"))).toBeFalsy();
-    expect(() =>
-      git(repoRoot, ["show-ref", "--verify", "--quiet", "refs/heads/retryable"])
-    ).toThrow(/show-ref/u);
+    expect(existsSync(worktreeRoot)).toBeTruthy();
+    expect(existsSync(getSessionStateFilePath(home, repoRoot, "retryable"))).toBeTruthy();
+    expect(git(repoRoot, ["show-ref", "--verify", "refs/heads/retryable"])).not.toBe("");
+    const failedState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    expect(failedState.generation.status).toBe("incomplete");
+    expect(failedState.repos[0]?.pinnedRef).toBe(git(worktreeRoot, ["rev-parse", "HEAD"]));
 
     write(repoRoot, "apps/api/.env.local", "PORT=3000\n");
     git(repoRoot, ["add", "apps/api/.env.local"]);
     git(repoRoot, ["commit", "-m", "add api env"]);
+    write(worktreeRoot, "apps/api/.env.local", "PORT=3000\n");
 
     runMonke({
       args: ["spawn", "retryable", "-m"],
@@ -930,10 +934,11 @@ apps:
 `
     });
     saveSessionState(home, {
+      generation: { number: 1, status: "complete" },
       repos: [],
       rootSourceRoot: repoRoot,
       session: "fresh",
-      version: 1
+      version: 2
     });
 
     expect(() =>
@@ -944,6 +949,28 @@ apps:
         monkeHome: home
       })
     ).toThrow(/Session state already exists for "fresh"/u);
+  });
+
+  test("Spawn rejects v1 Session state through the production loader", () => {
+    const sandbox = makeTempDir("single-repo-v1-session-state");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n"
+    });
+    const statePath = getSessionStateFilePath(home, repoRoot, "legacy");
+    write(
+      home,
+      path.relative(home, statePath),
+      `version: 1
+rootSourceRoot: ${repoRoot}
+session: legacy
+repos: []
+`
+    );
+
+    expect(() => runMonke({ args: ["spawn", "legacy"], cwd: repoRoot, monkeHome: home })).toThrow(
+      /Unsupported Session state version 1.*requires strict v2 Session state/su
+    );
   });
 
   test("spawn -m does not resume an incomplete current-head Session", () => {
@@ -1270,6 +1297,12 @@ apps:
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
     expect(read(worktreeRoot, "bootstrap-runs")).toBe(`${worktreeRoot}\n`);
+    expect(
+      readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema).generation
+    ).toStrictEqual({
+      number: 1,
+      status: "complete"
+    });
 
     runMonke({
       args: ["materialize"],
@@ -1279,6 +1312,12 @@ apps:
     });
 
     expect(read(worktreeRoot, "bootstrap-runs")).toBe(`${worktreeRoot}\n${worktreeRoot}\n`);
+    expect(
+      readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema).generation
+    ).toStrictEqual({
+      number: 2,
+      status: "complete"
+    });
     const shellArgs = readFileSync(shLogPath, "utf-8").trim().split("\n");
     expect(shellArgs.filter((arg) => arg === "-c")).toHaveLength(2);
     expect(shellArgs).not.toContain("-lc");

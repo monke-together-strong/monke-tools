@@ -177,9 +177,16 @@ export default function ({ previous }) {
       resourceValuesYaml: "DISCORD_CHANNEL: discord-${session}"
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -196,7 +203,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "first",
-      version: 1
+      version: 2
     });
 
     scenario.spawn("second");
@@ -228,9 +235,16 @@ export default function ({ previous }) {
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -248,12 +262,19 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: path.join(scenario.sandbox, "graph-a"),
       session: "retained-a",
-      version: 1
+      version: 2
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -269,12 +290,19 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: path.join(scenario.sandbox, "graph-b"),
       session: "retained-b",
-      version: 1
+      version: 2
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -287,7 +315,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: path.join(scenario.sandbox, "graph-c"),
       session: "current",
-      version: 1
+      version: 2
     });
 
     scenario.spawn("current");
@@ -382,9 +410,16 @@ export default function ({ previous }) {
       outputs: ["E2E_FLOW1_SYMBOL", "E2E_FLOW2_SYMBOL"]
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -400,7 +435,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "first",
-      version: 1
+      version: 2
     });
 
     scenario.spawn("second");
@@ -501,9 +536,16 @@ export default function ({ previous }) {
       name: "single-repo-resource-command-cleanup-boundary"
     });
     saveSessionState(scenario.home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -516,7 +558,7 @@ export default function ({ previous }) {
       ],
       rootSourceRoot: scenario.repoRoot,
       session: "first",
-      version: 1
+      version: 2
     });
 
     scenario.spawn("second");
@@ -641,7 +683,7 @@ export default function () {
         outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
       }
     ]);
-    expect(partialState.repos[0]?.materializationComplete).toBeFalsy();
+    expect(partialState.repos[0]?.materializationStatus).toBe("failed");
 
     scenario.writeRoot("apps/api/.env.local", "PORT=3000\nOTHER=keep\n");
     scenario.writeWorktree("banana", "apps/api/.env.local", "PORT=3000\nOTHER=keep\n");

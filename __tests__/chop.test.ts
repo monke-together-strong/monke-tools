@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -95,17 +103,30 @@ function createMultiRepoSessionFixture(prefix: string, session = "banana") {
   git(root, ["branch", session]);
   git(root, ["worktree", "add", rootWorktree, session]);
   saveSessionState(home, {
+    generation: { number: 1, status: "complete" },
     repos: [
       {
         assignedPorts: [],
+
         cleanupCommand: `printf "dep|%s|%s|%s\\n" "$PWD" "$DEP_RESOURCE" "$MONKE_SESSION" >> "${cleanupLog}"`,
+
+        cleanupEligible: true,
+
+        materializationStatus: "materialized",
+        preparationStatus: "prepared",
         resourceValues: [{ env: "DEP_RESOURCE", value: `dep-${session}` }],
         sourceRoot: depRoot,
         worktreePath: depWorktree
       },
       {
         assignedPorts: [],
+
         cleanupCommand: `printf "root|%s|%s|%s|%s\\n" "$PWD" "$ROOT_RESOURCE" "$ROOT_DYNAMIC" "$MONKE_SESSION" >> "${cleanupLog}"`,
+
+        cleanupEligible: true,
+
+        materializationStatus: "materialized",
+        preparationStatus: "prepared",
         resourceCommandOutputs: [
           {
             name: "root-dynamic",
@@ -119,7 +140,7 @@ function createMultiRepoSessionFixture(prefix: string, session = "banana") {
     ],
     rootSourceRoot: root,
     session,
-    version: 1
+    version: 2
   });
 
   return {
@@ -149,7 +170,8 @@ function createFailingCleanupSessionFixture(prefix: string) {
     ...state,
     repos: state.repos.map((repo) => ({
       ...repo,
-      cleanupCommand: "exit 23"
+      cleanupCommand: "exit 23",
+      cleanupEligible: true
     }))
   });
   return {
@@ -168,6 +190,70 @@ function readWorktreeRemovals(gitLog: string) {
 }
 
 describe("chop", () => {
+  test("a prepared-only repo is removed without running its Cleanup command", () => {
+    const sandbox = makeTempDir("chop-prepared-only");
+    const home = path.join(sandbox, "home");
+    const cleanupMarker = path.join(sandbox, "cleanup-ran");
+    const root = createRepo(path.join(sandbox, "root"), {
+      ".gitignore": "seed-data/\n",
+      "monke.yml": `cleanupCommand: touch "${cleanupMarker}"
+seedPaths:
+  - seed-data
+apps: {}
+`,
+      "seed-data/protected/fixture": "fixture\n"
+    });
+    const protectedSeed = path.join(root, "seed-data/protected");
+    chmodSync(protectedSeed, 0o000);
+
+    const spawn = runMonkeCapturingFailure({
+      args: ["spawn", "prepared-only"],
+      cwd: root,
+      monkeHome: home
+    });
+    expect(spawn.error).not.toBeNull();
+    chmodSync(protectedSeed, 0o700);
+
+    runMonke({
+      args: ["chop", "prepared-only", "--force"],
+      cwd: root,
+      monkeHome: home
+    });
+
+    expect(existsSync(cleanupMarker)).toBeFalsy();
+    expect(existsSync(getExpectedWorktreePath(home, root, "prepared-only"))).toBeFalsy();
+  });
+
+  test("a repo that fails after its external-effect checkpoint runs its Cleanup command", () => {
+    const sandbox = makeTempDir("chop-failed-materialization-cleanup");
+    const home = path.join(sandbox, "home");
+    const cleanupMarker = path.join(sandbox, "cleanup-ran");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": `bootstrapCommand: exit 9
+cleanupCommand: touch "${cleanupMarker}"
+apps: {}
+`
+    });
+
+    const spawn = runMonkeCapturingFailure({
+      args: ["spawn", "failed-materialization"],
+      cwd: root,
+      monkeHome: home
+    });
+    expect(spawn.error).not.toBeNull();
+    expect(
+      loadSessionState(home, root, "failed-materialization").repos[0]?.cleanupEligible
+    ).toBeTruthy();
+
+    runMonke({
+      args: ["chop", "failed-materialization", "--force"],
+      cwd: root,
+      monkeHome: home
+    });
+
+    expect(existsSync(cleanupMarker)).toBeTruthy();
+  });
+
   test("removes the current single-repo Session and preserves its branch", () => {
     const sandbox = makeTempDir("chop-current-session");
     const home = path.join(sandbox, "home");
@@ -289,10 +375,11 @@ describe("chop", () => {
   test("a Session name takes precedence over an Ordinary branch with the same name", () => {
     const fixture = createOrdinaryFixture("chop-session-name-precedence");
     saveSessionState(fixture.home, {
+      generation: { number: 1, status: "complete" },
       repos: [],
       rootSourceRoot: fixture.sourceRoot,
       session: "feature",
-      version: 1
+      version: 2
     });
 
     runMonke({
@@ -760,16 +847,23 @@ external:
     git(depRoot, ["branch", "partial"]);
     git(depRoot, ["worktree", "add", worktree, "partial"]);
     saveSessionState(home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           sourceRoot: depRoot,
           worktreePath: worktree
         }
       ],
       rootSourceRoot: root,
       session: "partial",
-      version: 1
+      version: 2
     });
 
     runMonke({
@@ -796,32 +890,46 @@ external:
     git(root, ["branch", "retry"]);
     git(root, ["worktree", "add", worktree, "retry"]);
     saveSessionState(home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
           cleanupCommand: `printf "retry\\n" >> "${attempts}"; test -f "${allow}"`,
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
           sourceRoot: root,
           worktreePath: worktree
         }
       ],
       rootSourceRoot: root,
       session: "retry",
-      version: 1
+      version: 2
     });
     const otherStatePath = getSessionStateFilePath(home, root, "other");
     const otherCleanup = path.join(sandbox, "other-cleanup");
     saveSessionState(home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
           cleanupCommand: `touch "${otherCleanup}"`,
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
           sourceRoot: root,
           worktreePath: getExpectedWorktreePath(home, root, "other")
         }
       ],
       rootSourceRoot: root,
       session: "other",
-      version: 1
+      version: 2
     });
 
     expect(() => {
@@ -984,16 +1092,36 @@ external:
     git(root, ["branch", "selected"]);
     git(root, ["worktree", "add", worktree, "selected"]);
     saveSessionState(home, {
-      repos: [{ assignedPorts: [], sourceRoot: root, worktreePath: worktree }],
+      generation: { number: 1, status: "complete" },
+      repos: [
+        {
+          assignedPorts: [],
+          cleanupEligible: false,
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
+          sourceRoot: root,
+          worktreePath: worktree
+        }
+      ],
       rootSourceRoot: root,
       session: "selected",
-      version: 1
+      version: 2
     });
     saveSessionState(home, {
-      repos: [{ assignedPorts: [], sourceRoot: root, worktreePath: worktree }],
+      generation: { number: 1, status: "complete" },
+      repos: [
+        {
+          assignedPorts: [],
+          cleanupEligible: false,
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
+          sourceRoot: root,
+          worktreePath: worktree
+        }
+      ],
       rootSourceRoot: root,
       session: "conflicting",
-      version: 1
+      version: 2
     });
 
     expect(() => {
@@ -1162,23 +1290,36 @@ apps: {}
 `
     });
     saveSessionState(home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
           cleanupCommand: `printf "saved-dep\\n" >> "${cleanupLog}"`,
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
           sourceRoot: depRoot,
           worktreePath: getExpectedWorktreePath(home, depRoot, "dead")
         },
         {
           assignedPorts: [],
+
           cleanupCommand: `printf "saved-root\\n" >> "${cleanupLog}"`,
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+          preparationStatus: "prepared",
           sourceRoot: root,
           worktreePath: getExpectedWorktreePath(home, root, "dead")
         }
       ],
       rootSourceRoot: root,
       session: "dead",
-      version: 1
+      version: 2
     });
 
     runMonke({

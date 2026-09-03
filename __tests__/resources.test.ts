@@ -143,9 +143,16 @@ describe("resources", () => {
     let commandEnv: Record<string, string | undefined> | undefined;
 
     saveSessionState(home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -158,12 +165,19 @@ describe("resources", () => {
       ],
       rootSourceRoot: sourceRoot,
       session: "later",
-      version: 1
+      version: 2
     });
     saveSessionState(home, {
+      generation: { number: 1, status: "complete" },
       repos: [
         {
           assignedPorts: [],
+
+          cleanupEligible: true,
+
+          materializationStatus: "materialized",
+
+          preparationStatus: "prepared",
           resourceCommandOutputs: [
             {
               name: "e2e-symbols",
@@ -176,7 +190,7 @@ describe("resources", () => {
       ],
       rootSourceRoot: sourceRoot,
       session: "earlier",
-      version: 1
+      version: 2
     });
 
     const runtime: Runtime = {

@@ -85,7 +85,7 @@ external:
 
     const partialState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(partialState.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
-    expect(partialState.repos[1]?.materializationComplete).toBeFalsy();
+    expect(partialState.repos[1]?.materializationStatus).toBe("failed");
 
     write(root, "apps/api/.env.local", "PORT=3000\nDATABASE_URL=postgres://localhost:5432/app\n");
     write(
