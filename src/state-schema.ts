@@ -121,6 +121,7 @@ function validatePreparationLifecycle(repo: ParsedSessionRepoState, issue: Lifec
 }
 
 const SessionStateFieldsSchema = z.strictObject({
+  copyDirty: z.boolean().optional(),
   generation: z.strictObject({
     number: z.number().int().nonnegative(),
     status: z.enum(["not-started", "incomplete", "complete"])
@@ -142,7 +143,14 @@ export const SessionStateSchema = SessionStateFieldsSchema.check((context) => {
   validateGeneration(context.value, issue);
   validateRepoSet(context.value, issue);
   validateDefaultBranchIdentity(context.value, issue);
+  validateDirtyPolicy(context.value, issue);
 });
+
+function validateDirtyPolicy(state: ParsedSessionState, issue: LifecycleIssue) {
+  if (state.spawnSource !== undefined && state.copyDirty !== undefined) {
+    issue("copyDirty is only valid for current-HEAD Spawn", ["copyDirty"]);
+  }
+}
 
 function validateGeneration(state: ParsedSessionState, issue: LifecycleIssue) {
   if (state.generation.status === "not-started") {

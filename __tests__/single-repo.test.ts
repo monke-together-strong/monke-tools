@@ -91,6 +91,7 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
     const openLogPath = installCodexUrlOpenShim(binDirectory);
@@ -116,6 +117,7 @@ describe("single-repo sessions", () => {
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
     const cmdLogPath = installWindowsCmdShim(binDirectory);
@@ -189,8 +191,9 @@ describe("single-repo sessions", () => {
     expect(result.stderr).toContain(
       `Warning: no monke.yml found for ${repoRoot}; spawned session worktree without materializing it.`
     );
-    expect(result.stderr).toContain(`Spawned or updated session banana\nSwitch to ${worktreeRoot}`);
-    expect(result.stdout).toBe(`${worktreeRoot}\n`);
+    expect(result.stderr).not.toContain("Spawned or updated session banana");
+    expect(result.stderr).not.toContain(`Switch to ${worktreeRoot}`);
+    expect(result.stdout).toBe("");
 
     const sessionState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(sessionState.graphSource).toBeUndefined();
@@ -205,6 +208,33 @@ describe("single-repo sessions", () => {
         worktreePath: worktreeRoot
       }
     ]);
+  });
+
+  test("spawn --codex without monke.yml does not navigate or launch Codex", () => {
+    const sandbox = makeTempDir("single-repo-no-config-codex");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "README.md": "hello\n"
+    });
+    const openLogPath = installCodexUrlOpenShim(binDirectory);
+
+    const result = runMonke({
+      args: ["spawn", "banana", "--codex"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
+    expect(result.stdout).toBe("");
+    expect(result.stderr).not.toContain(`Switch to ${worktreeRoot}`);
+    expect(result.stderr).not.toContain(`Opened Codex workspace: ${worktreeRoot}`);
+    expect(existsSync(openLogPath)).toBeFalsy();
+    expect(loadSessionState(home, repoRoot, "banana").repos[0]).toMatchObject({
+      materializationStatus: "pending",
+      preparationStatus: "prepared"
+    });
   });
 
   test("spawn without monke.yml carries dirty state by default", () => {
@@ -229,7 +259,7 @@ describe("single-repo sessions", () => {
     expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
   });
 
-  test("spawn --no-dirty without monke.yml rejects dirty source when worktree exists", () => {
+  test("spawn without monke.yml rejects changing retained dirty policy", () => {
     const sandbox = makeTempDir("single-repo-no-config-existing-no-dirty");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -252,7 +282,7 @@ describe("single-repo sessions", () => {
         cwd: repoRoot,
         monkeHome: home
       })
-    ).toThrow(`Source checkout is dirty: ${repoRoot}`);
+    ).toThrow(/incomplete Spawn using current HEAD with dirty carry/u);
   });
 
   test("spawn carries tracked modifications by default", () => {
@@ -678,14 +708,13 @@ describe("single-repo sessions", () => {
       worktreePath: worktreeRoot
     });
 
-    expect(() =>
-      runMonke({
-        args: ["spawn", "fresh", "-m"],
-        binDirectory,
-        cwd: repoRoot,
-        monkeHome: home
-      })
-    ).toThrow(/default branch spawn mode requires a fresh Session/u);
+    runMonke({
+      args: ["spawn", "fresh", "-m"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+    expect(loadSessionState(home, repoRoot, "fresh").spawnSource).toBe("default-branch");
   });
 
   test("spawn -m seeds configured paths from resolved default branch refs", () => {
@@ -989,6 +1018,59 @@ apps: {}
     expect(loadSessionState(home, repoRoot, "interrupted").generation.status).toBe("complete");
   });
 
+  test("plain spawn retry preserves a retained default-branch source policy", () => {
+    const sandbox = makeTempDir("single-repo-main-plain-retry");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "bootstrapCommand: test -f allow-bootstrap\napps: {}\n",
+      "version.txt": "pinned\n"
+    });
+    const pinnedRef = git(repoRoot, ["rev-parse", "refs/heads/main"]);
+
+    expect(() =>
+      runMonke({ args: ["spawn", "retained-main", "-m"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(/Retry: mt spawn retained-main -m/u);
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "retained-main");
+    write(worktreeRoot, "allow-bootstrap", "yes\n");
+    write(repoRoot, "version.txt", "advanced\n");
+    git(repoRoot, ["add", "version.txt"]);
+    git(repoRoot, ["commit", "-m", "advance main"]);
+
+    runMonke({ args: ["spawn", "retained-main"], cwd: repoRoot, monkeHome: home });
+
+    const state = loadSessionState(home, repoRoot, "retained-main");
+    expect(state.spawnSource).toBe("default-branch");
+    expect(state.repos[0]?.pinnedRef).toBe(pinnedRef);
+    expect(read(worktreeRoot, "version.txt")).toBe("pinned\n");
+    expect(state.generation.status).toBe("complete");
+  });
+
+  test("plain spawn retry preserves --no-dirty and reports the exact retry command", () => {
+    const sandbox = makeTempDir("single-repo-no-dirty-policy-retry");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "bootstrapCommand: test -f allow-bootstrap\napps: {}\n",
+      "README.md": "clean\n"
+    });
+
+    expect(() =>
+      runMonke({
+        args: ["spawn", "retained-clean", "--no-dirty"],
+        cwd: repoRoot,
+        monkeHome: home
+      })
+    ).toThrow(/Retry: mt spawn retained-clean --no-dirty/u);
+
+    write(repoRoot, "README.md", "dirty\n");
+    write(getExpectedWorktreePath(home, repoRoot, "retained-clean"), "allow-bootstrap", "yes\n");
+
+    expect(() =>
+      runMonke({ args: ["spawn", "retained-clean"], cwd: repoRoot, monkeHome: home })
+    ).toThrow(`Source checkout is dirty: ${repoRoot}`);
+    expect(loadSessionState(home, repoRoot, "retained-clean").generation.status).toBe("incomplete");
+  });
+
   test("spawn -m pins graph discovery before a movable default ref advances", () => {
     const sandbox = makeTempDir("single-repo-main-graph-pin");
     const binDirectory = path.join(sandbox, "bin");
@@ -1119,7 +1201,7 @@ apps:
         cwd: repoRoot,
         monkeHome: home
       })
-    ).toThrow(/default branch spawn mode requires a fresh Session/u);
+    ).toThrow(/incomplete Spawn using current HEAD with dirty carry/u);
   });
 
   test("spawn -m fails when the session branch already exists", () => {
