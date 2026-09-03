@@ -376,6 +376,31 @@ typo: true
       }
     },
     {
+      name: "Resource command outputs without Cleanup eligibility",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            resourceCommandOutputs: [
+              {
+                name: "identity",
+                outputs: [{ env: "AUTH_OUTPUT", value: "retained" }]
+              }
+            ],
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
       name: "a pending default-branch repo without pinned identity",
       state: {
         generation: { number: 1, status: "incomplete" },

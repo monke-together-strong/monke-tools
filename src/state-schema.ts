@@ -63,7 +63,14 @@ const SessionRepoStateSchema = SessionRepoStateFieldsSchema.check((context) => {
   };
   validateMaterializationLifecycle(context.value, issue);
   validatePreparationLifecycle(context.value, issue);
+  validateCleanupLifecycle(context.value, issue);
 });
+
+function validateCleanupLifecycle(repo: ParsedSessionRepoState, issue: LifecycleIssue) {
+  if ((repo.resourceCommandOutputs?.length ?? 0) > 0 && !repo.cleanupEligible) {
+    issue("Resource command outputs require Cleanup eligibility", ["cleanupEligible"]);
+  }
+}
 
 function validateMaterializationLifecycle(repo: ParsedSessionRepoState, issue: LifecycleIssue) {
   const preparationComplete = isPreparationComplete(repo);
