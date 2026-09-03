@@ -382,6 +382,7 @@ function executeCommandAsync(
               if (child.pid !== undefined) {
                 timedOutProcessGroups.delete(child.pid);
               }
+              unregisterAsyncChild(child);
               settleTimeout();
               finishParentTerminationAfterEscalation();
               detachParentTerminationHandlersIfIdle();
@@ -397,6 +398,9 @@ function executeCommandAsync(
       stderr += chunk;
     });
     child.once("error", (error) => {
+      if (timedOut) {
+        return;
+      }
       rejectOnce(new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`));
       unregisterAsyncChild(child);
     });

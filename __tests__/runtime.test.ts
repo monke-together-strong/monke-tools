@@ -73,20 +73,7 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
         expect(existsSync(unexpectedCommandMarker)).toBeFalsy();
       } finally {
         worker.kill("SIGKILL");
-        if (childPid !== undefined) {
-          try {
-            process.kill(-childPid, "SIGKILL");
-          } catch {
-            // The process group already exited.
-          }
-        }
-        if (descendantPid !== undefined && isProcessRunning(descendantPid)) {
-          try {
-            process.kill(descendantPid, "SIGKILL");
-          } catch {
-            // The process exited between the liveness check and cleanup.
-          }
-        }
+        killRetainedDescendant(childPid, descendantPid);
       }
     }
   );
@@ -114,13 +101,7 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
       await wait(1100);
       expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
     } finally {
-      if (isProcessRunning(descendantPid)) {
-        try {
-          process.kill(-childPid, "SIGKILL");
-        } catch {
-          process.kill(descendantPid, "SIGKILL");
-        }
-      }
+      killRetainedDescendant(childPid, descendantPid);
     }
   });
 
@@ -169,20 +150,7 @@ await runtime.execAsync(
       expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
     } finally {
       worker.kill("SIGKILL");
-      if (childPid !== undefined) {
-        try {
-          process.kill(-childPid, "SIGKILL");
-        } catch {
-          // The process group already exited.
-        }
-      }
-      if (descendantPid !== undefined && isProcessRunning(descendantPid)) {
-        try {
-          process.kill(descendantPid, "SIGKILL");
-        } catch {
-          // The process exited between the liveness check and cleanup.
-        }
-      }
+      killRetainedDescendant(childPid, descendantPid);
     }
   });
 
@@ -317,6 +285,29 @@ async function waitFor(predicate: () => boolean) {
       throw new Error("Timed out waiting for subprocess state");
     }
     await wait(10);
+  }
+}
+
+function killRetainedDescendant(
+  groupLeaderPid: number | undefined,
+  descendantPid: number | undefined
+) {
+  if (descendantPid === undefined || !isProcessRunning(descendantPid)) {
+    return;
+  }
+  if (groupLeaderPid !== undefined) {
+    try {
+      process.kill(-groupLeaderPid, "SIGKILL");
+    } catch {
+      // Fall through to exact-PID cleanup.
+    }
+  }
+  if (isProcessRunning(descendantPid)) {
+    try {
+      process.kill(descendantPid, "SIGKILL");
+    } catch {
+      // The descendant exited between the liveness check and cleanup.
+    }
   }
 }
 
