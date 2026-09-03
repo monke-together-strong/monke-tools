@@ -293,6 +293,35 @@ export function ensureSessionWorktree(
   session: string,
   options: { skipCleanCheck?: boolean } = {}
 ) {
+  const prepared = prepareSessionWorktree(runtime, home, sourceRoot, session, options);
+  if (prepared.addArguments) {
+    runGit(runtime, sourceRoot, prepared.addArguments);
+  }
+  return { created: prepared.addArguments !== null, path: prepared.path };
+}
+
+/** Ensure the ordinary reusable Session worktree without blocking other repo preparation. */
+export async function ensureSessionWorktreeAsync(
+  runtime: Runtime,
+  home: string,
+  sourceRoot: string,
+  session: string,
+  options: { skipCleanCheck?: boolean } = {}
+) {
+  const prepared = prepareSessionWorktree(runtime, home, sourceRoot, session, options);
+  if (prepared.addArguments) {
+    await runGitAsync(runtime, sourceRoot, prepared.addArguments);
+  }
+  return { created: prepared.addArguments !== null, path: prepared.path };
+}
+
+function prepareSessionWorktree(
+  runtime: Runtime,
+  home: string,
+  sourceRoot: string,
+  session: string,
+  options: { skipCleanCheck?: boolean }
+) {
   validateSessionBranchName(runtime, sourceRoot, session);
 
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
@@ -321,7 +350,7 @@ export function ensureSessionWorktree(
   }
 
   if (branchMatch && pathMatch) {
-    return { created: false, path: expectedPath };
+    return { addArguments: null, path: expectedPath };
   }
 
   if (existsSync(expectedPath) && !pathMatch) {
@@ -345,8 +374,7 @@ export function ensureSessionWorktree(
   }
 
   mkdirSync(path.dirname(expectedPath), { recursive: true });
-  runGit(runtime, sourceRoot, ["worktree", "add", expectedPath, session]);
-  return { created: true, path: expectedPath };
+  return { addArguments: ["worktree", "add", expectedPath, session], path: expectedPath };
 }
 
 /** Spawn a fresh Session worktree branch from a resolved git ref. */
@@ -357,12 +385,39 @@ export function ensureFreshSessionWorktreeFromRef(
   session: string,
   startRef: string
 ) {
+  const prepared = prepareFreshSessionWorktree(runtime, home, sourceRoot, session, startRef);
+  runGit(runtime, sourceRoot, prepared.addArguments);
+  return { created: true, path: prepared.path };
+}
+
+/** Spawn a fresh Session worktree branch without blocking other repo preparation. */
+export async function ensureFreshSessionWorktreeFromRefAsync(
+  runtime: Runtime,
+  home: string,
+  sourceRoot: string,
+  session: string,
+  startRef: string
+) {
+  const prepared = prepareFreshSessionWorktree(runtime, home, sourceRoot, session, startRef);
+  await runGitAsync(runtime, sourceRoot, prepared.addArguments);
+  return { created: true, path: prepared.path };
+}
+
+function prepareFreshSessionWorktree(
+  runtime: Runtime,
+  home: string,
+  sourceRoot: string,
+  session: string,
+  startRef: string
+) {
   assertFreshSessionWorktreeAvailable(runtime, home, sourceRoot, session);
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
 
   mkdirSync(path.dirname(expectedPath), { recursive: true });
-  runGit(runtime, sourceRoot, ["worktree", "add", "-b", session, expectedPath, startRef]);
-  return { created: true, path: expectedPath };
+  return {
+    addArguments: ["worktree", "add", "-b", session, expectedPath, startRef],
+    path: expectedPath
+  };
 }
 
 /** Best-effort removal for a fresh Session worktree and branch created by this process. */
@@ -480,6 +535,11 @@ export function validateWorktreeForSession(
 
 function runGit(runtime: Runtime, cwd: string, args: string[]) {
   return runtime.exec("git", args, { cwd }).stdout;
+}
+
+async function runGitAsync(runtime: Runtime, cwd: string, args: string[]) {
+  const result = await runtime.execAsync("git", args, { cwd });
+  return result.stdout;
 }
 
 function validateSessionBranchName(runtime: Runtime, sourceRoot: string, session: string) {

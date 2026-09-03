@@ -91,6 +91,7 @@ export function installGitShim(
       args: string;
       message?: string;
     };
+    worktreeAddBarrier?: number;
   }
 ) {
   const logPath = path.join(binDirectory, "git.log");
@@ -124,6 +125,26 @@ fi
   exit "$status"
 fi
 `;
+  const worktreeAddBarrier =
+    options?.worktreeAddBarrier === undefined
+      ? ""
+      : `if [ "\${1:-}" = worktree ] && [ "\${2:-}" = add ]; then
+  barrier_dir=${shellQuote(path.join(binDirectory, "worktree-add-barrier"))}
+  mkdir -p "$barrier_dir"
+  touch "$barrier_dir/started-$$"
+  attempts=0
+  while [ "$attempts" -lt 400 ]; do
+    count=0
+    for marker in "$barrier_dir"/started-*; do
+      [ -e "$marker" ] && count=$((count + 1))
+    done
+    [ "$count" -ge ${String(options.worktreeAddBarrier)} ] && break
+    attempts=$((attempts + 1))
+    /bin/sleep 0.01
+  done
+  [ "$attempts" -lt 400 ] || exit 92
+fi
+`;
   writeExecutable(
     path.join(binDirectory, "git"),
     `#!/bin/sh
@@ -139,6 +160,7 @@ done
 printf '\\n' >> ${shellQuote(logPath)}
 ${failCommand}
 ${afterCommand}
+${worktreeAddBarrier}
 exec "${findExecutableOnPath("git")}" "$@"
 `
   );

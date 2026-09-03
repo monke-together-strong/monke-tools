@@ -454,6 +454,16 @@ export function withGlobalLock<T>(home: string, callback: () => T) {
   return withLockPath(path.join(home, "lock"), callback);
 }
 
+/** Run asynchronous Session work while holding the machine-wide Monke lock. */
+export async function withGlobalLockAsync<T>(home: string, callback: () => Promise<T>) {
+  const release = await acquireLockPathAsync(path.join(home, "lock"));
+  try {
+    return await callback();
+  } finally {
+    release();
+  }
+}
+
 /** Run an asynchronous installation mutation under the machine-wide installation lock. */
 export async function withInstallationLockAsync<T>(home: string, callback: () => Promise<T>) {
   const release = await acquireLockPathAsync(path.join(home, "locks", "installation.lock"));
