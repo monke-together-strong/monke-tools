@@ -1006,7 +1006,7 @@ apps: {}
     git(repoRoot, ["switch", "main"]);
     installGitShim(binDirectory, {
       afterCommand: {
-        args: "show refs/heads/main:monke.yml",
+        args: `show ${pinnedRef}:monke.yml`,
         cwd: repoRoot,
         script: `"$MONKE_TEST_REAL_GIT" update-ref refs/heads/main ${newerRef}`
       }
@@ -1020,6 +1020,7 @@ apps: {}
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "pinned-graph");
+    expect(git(repoRoot, ["rev-parse", "refs/heads/main"])).toBe(newerRef);
     expect(read(worktreeRoot, "version.txt")).toBe("pinned\n");
     expect(loadSessionState(home, repoRoot, "pinned-graph").repos[0]?.pinnedRef).toBe(pinnedRef);
   });

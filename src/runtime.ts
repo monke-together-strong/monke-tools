@@ -42,9 +42,7 @@ const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
 type AsyncChildProcess = ReturnType<typeof spawn>;
 const activeAsyncChildren = new Set<AsyncChildProcess>();
-const terminatingProcessGroups = new Map<number, AsyncChildProcess>();
 let forwardedTerminationSignal: NodeJS.Signals | undefined;
-let forcedParentTermination: ReturnType<typeof setTimeout> | undefined;
 let parentExitScheduled = false;
 let terminationEscalated = false;
 const LockMetadataSchema = z.object({
@@ -397,7 +395,6 @@ function executeCommandAsync(
       try {
         const exitCode = timedOut ? -1 : (code ?? -1);
         if (timedOut) {
-          settleTimeout();
           return;
         }
         if (code !== 0 && options?.allowFailure !== true) {
@@ -483,25 +480,16 @@ function handleParentSigterm() {
 
 function forwardParentTermination(signal: NodeJS.Signals) {
   forwardedTerminationSignal ??= signal;
+  terminationEscalated = true;
   for (const child of activeAsyncChildren) {
-    if (child.pid !== undefined) {
-      terminatingProcessGroups.set(child.pid, child);
-    }
     terminateChildProcessTree(child.pid, signal, () => {
       child.kill(signal);
     });
+    terminateChildProcessTree(child.pid, "SIGKILL", () => {
+      child.kill("SIGKILL");
+    });
   }
-  forcedParentTermination ??= setTimeout(() => {
-    forcedParentTermination = undefined;
-    terminationEscalated = true;
-    for (const [pid, child] of terminatingProcessGroups) {
-      terminateChildProcessTree(pid, "SIGKILL", () => {
-        child.kill("SIGKILL");
-      });
-    }
-    terminatingProcessGroups.clear();
-    finishParentTerminationAfterEscalation();
-  }, ASYNC_TERMINATION_GRACE_MS);
+  finishParentTerminationAfterEscalation();
 }
 
 function terminateChildProcessTree(

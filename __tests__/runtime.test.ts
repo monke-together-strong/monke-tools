@@ -38,6 +38,7 @@ describe("runtime", () => {
       const workerPath = path.join(sandbox, "worker.ts");
       const childPidPath = path.join(sandbox, "child.pid");
       const descendantPidPath = path.join(sandbox, "descendant.pid");
+      const descendantSurvivedMarker = path.join(sandbox, "descendant-survived");
       const unexpectedCommandMarker = path.join(sandbox, "unexpected-command");
       const runtimeUrl = pathToFileURL(path.resolve("src/runtime.ts")).href;
       write(
@@ -47,7 +48,7 @@ describe("runtime", () => {
 
 const runtime = createRuntime();
 try {
-  await runtime.execAsync("sh", ["-c", ${JSON.stringify(`trap 'exit 0' HUP INT QUIT TERM; sh -c 'trap "" HUP INT QUIT TERM; while :; do sleep 1; done' & printf '%s' "$$" > "${childPidPath}"; printf '%s' "$!" > "${descendantPidPath}"; wait`)}]);
+  await runtime.execAsync("sh", ["-c", ${JSON.stringify(`trap 'exit 0' HUP INT QUIT TERM; sh -c 'trap "" HUP INT QUIT TERM; sleep 1.5; touch "${descendantSurvivedMarker}"; while :; do sleep 1; done' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; printf '%s' "$!" > "${descendantPidPath}"; wait`)}]);
 } catch {}
 await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedCommandMarker}"`)}]);
 `
@@ -60,19 +61,13 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
       let childPid: number | undefined;
 
       try {
-        await waitFor(() => existsSync(childPidPath));
+        await waitFor(() => existsSync(childPidPath) && existsSync(descendantPidPath));
         childPid = Number(readFileSync(childPidPath, "utf-8"));
-        const descendantPid = Number(readFileSync(descendantPidPath, "utf-8"));
         worker.kill(signal);
         await worker.exited;
-        await waitFor(
-          () =>
-            childPid !== undefined &&
-            !isProcessRunning(childPid) &&
-            !isProcessRunning(descendantPid)
-        );
+        await wait(1700);
         expect(childPid === undefined ? true : isProcessRunning(childPid)).toBeFalsy();
-        expect(isProcessRunning(descendantPid)).toBeFalsy();
+        expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
         expect(existsSync(unexpectedCommandMarker)).toBeFalsy();
       } finally {
         worker.kill("SIGKILL");
@@ -86,6 +81,39 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
       }
     }
   );
+
+  test("createRuntime kills command descendants before a timeout settles", async () => {
+    const sandbox = makeTempDir("runtime-timeout-descendant");
+    const childPidPath = path.join(sandbox, "child.pid");
+    const descendantPidPath = path.join(sandbox, "descendant.pid");
+    const descendantSurvivedMarker = path.join(sandbox, "descendant-survived");
+    const runtime = createRuntime();
+    const resultPromise = runtime.execAsync(
+      "sh",
+      [
+        "-c",
+        `trap 'exit 0' TERM; sh -c 'trap "" TERM; sleep 1.5; touch "${descendantSurvivedMarker}"; while :; do sleep 1; done' </dev/null >/dev/null 2>&1 & printf '%s' "$$" > "${childPidPath}"; printf '%s' "$!" > "${descendantPidPath}"; wait`
+      ],
+      { allowFailure: true, timeoutSeconds: 0.5 }
+    );
+    await waitFor(() => existsSync(childPidPath) && existsSync(descendantPidPath));
+    const childPid = Number(readFileSync(childPidPath, "utf-8"));
+    const descendantPid = Number(readFileSync(descendantPidPath, "utf-8"));
+
+    try {
+      await expect(resultPromise).resolves.toMatchObject({ timedOut: true });
+      await wait(1100);
+      expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
+    } finally {
+      if (isProcessRunning(descendantPid)) {
+        try {
+          process.kill(-childPid, "SIGKILL");
+        } catch {
+          process.kill(descendantPid, "SIGKILL");
+        }
+      }
+    }
+  });
 
   test("createRuntime reports exhausted scripted select values clearly", async () => {
     const runtime = createRuntime({ selectValues: [] });
@@ -217,8 +245,12 @@ async function waitFor(predicate: () => boolean) {
     if (Date.now() >= deadline) {
       throw new Error("Timed out waiting for subprocess state");
     }
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 10);
-    });
+    await wait(10);
   }
+}
+
+async function wait(milliseconds: number) {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
