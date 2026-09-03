@@ -122,6 +122,33 @@ repos:
     expect(() => loadSessionState(home, sourceRoot, "invalid-port-key")).toThrow(/assignedPorts/u);
   });
 
+  test("loadSessionState rejects payload identity that differs from its storage key", () => {
+    const sandbox = makeTempDir("session-state-store-identity-mismatch");
+    const home = path.join(sandbox, "home");
+    const sourceRoot = path.join(sandbox, "root");
+    const statePath = getSessionStateFilePath(home, sourceRoot, "expected");
+    write(
+      home,
+      path.relative(home, statePath),
+      `version: 2
+rootSourceRoot: ${sourceRoot}
+session: different
+generation:
+  number: 1
+  status: complete
+repos:
+  - sourceRoot: ${sourceRoot}
+    worktreePath: /worktree
+    assignedPorts: []
+    cleanupEligible: false
+    preparationStatus: prepared
+    materializationStatus: materialized
+`
+    );
+
+    expect(() => loadSessionState(home, sourceRoot, "expected")).toThrow(/identity.*storage/u);
+  });
+
   test("loadSessionState rejects unknown keys in application-owned state", () => {
     const sandbox = makeTempDir("session-state-store-unknown-session-key");
     const home = path.join(sandbox, "home");
@@ -425,6 +452,46 @@ typo: true
           }
         ],
         rootSourceRoot: "/repo",
+        session: "invalid",
+        version: 2
+      }
+    },
+    {
+      name: "a symbolic default-branch pin",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            pinnedRef: "refs/heads/main",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo",
+        session: "invalid",
+        spawnSource: "default-branch",
+        version: 2
+      }
+    },
+    {
+      name: "an aliased Root identity",
+      state: {
+        generation: { number: 1, status: "complete" },
+        repos: [
+          {
+            assignedPorts: [],
+            cleanupEligible: false,
+            materializationStatus: "materialized",
+            preparationStatus: "prepared",
+            sourceRoot: "/repo",
+            worktreePath: "/worktree"
+          }
+        ],
+        rootSourceRoot: "/repo/.",
         session: "invalid",
         version: 2
       }

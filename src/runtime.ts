@@ -42,9 +42,11 @@ const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
 type AsyncChildProcess = ReturnType<typeof spawn>;
 const activeAsyncChildren = new Set<AsyncChildProcess>();
+const terminatingProcessGroups = new Map<number, AsyncChildProcess>();
 let forwardedTerminationSignal: NodeJS.Signals | undefined;
 let forcedParentTermination: ReturnType<typeof setTimeout> | undefined;
 let parentExitScheduled = false;
+let terminationEscalated = false;
 const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
   pid: z.unknown().optional()
@@ -310,6 +312,11 @@ function executeCommandAsync(
   args: string[],
   options: ExecOptions | undefined
 ): Promise<ExecResult> {
+  if (forwardedTerminationSignal !== undefined) {
+    return Promise.reject(
+      new MonkeError("Cannot start a command while the process is terminating")
+    );
+  }
   const childEnv = {
     ...runtimeEnv,
     ...options?.env,
@@ -410,32 +417,47 @@ function executeCommandAsync(
 
 function registerAsyncChild(child: AsyncChildProcess) {
   if (activeAsyncChildren.size === 0) {
-    process.on("SIGHUP", handleParentSighup);
-    process.on("SIGINT", handleParentSigint);
-    process.on("SIGQUIT", handleParentSigquit);
-    process.on("SIGTERM", handleParentSigterm);
+    attachParentTerminationHandlers();
   }
   activeAsyncChildren.add(child);
 }
 
 function unregisterAsyncChild(child: AsyncChildProcess) {
-  if (!activeAsyncChildren.delete(child) || activeAsyncChildren.size > 0) {
+  if (!activeAsyncChildren.delete(child)) {
     return;
   }
+  if (forwardedTerminationSignal !== undefined) {
+    finishParentTerminationAfterEscalation();
+    return;
+  }
+  if (activeAsyncChildren.size === 0) {
+    detachParentTerminationHandlers();
+  }
+}
+
+function attachParentTerminationHandlers() {
+  process.on("SIGHUP", handleParentSighup);
+  process.on("SIGINT", handleParentSigint);
+  process.on("SIGQUIT", handleParentSigquit);
+  process.on("SIGTERM", handleParentSigterm);
+}
+
+function detachParentTerminationHandlers() {
   process.off("SIGHUP", handleParentSighup);
   process.off("SIGINT", handleParentSigint);
   process.off("SIGQUIT", handleParentSigquit);
   process.off("SIGTERM", handleParentSigterm);
-  if (forcedParentTermination !== undefined) {
-    clearTimeout(forcedParentTermination);
-    forcedParentTermination = undefined;
-  }
-  if (forwardedTerminationSignal !== undefined && !parentExitScheduled) {
+}
+
+function finishParentTerminationAfterEscalation() {
+  if (terminationEscalated && activeAsyncChildren.size === 0 && !parentExitScheduled) {
+    detachParentTerminationHandlers();
     parentExitScheduled = true;
     setImmediate(() => {
       const signal = forwardedTerminationSignal;
       forwardedTerminationSignal = undefined;
       parentExitScheduled = false;
+      terminationEscalated = false;
       if (signal !== undefined) {
         process.kill(process.pid, signal);
       }
@@ -462,16 +484,23 @@ function handleParentSigterm() {
 function forwardParentTermination(signal: NodeJS.Signals) {
   forwardedTerminationSignal ??= signal;
   for (const child of activeAsyncChildren) {
+    if (child.pid !== undefined) {
+      terminatingProcessGroups.set(child.pid, child);
+    }
     terminateChildProcessTree(child.pid, signal, () => {
       child.kill(signal);
     });
   }
   forcedParentTermination ??= setTimeout(() => {
-    for (const child of activeAsyncChildren) {
-      terminateChildProcessTree(child.pid, "SIGKILL", () => {
+    forcedParentTermination = undefined;
+    terminationEscalated = true;
+    for (const [pid, child] of terminatingProcessGroups) {
+      terminateChildProcessTree(pid, "SIGKILL", () => {
         child.kill("SIGKILL");
       });
     }
+    terminatingProcessGroups.clear();
+    finishParentTerminationAfterEscalation();
   }, ASYNC_TERMINATION_GRACE_MS);
 }
 

@@ -92,7 +92,13 @@ function parseSessionStateFile(filePath: string) {
       `Unsupported Session state version ${version} in ${filePath}; monke-tools requires strict v2 Session state`
     );
   }
-  return parseOwnedYamlFile(filePath, SessionStateSchema);
+  const state = parseOwnedYamlFile(filePath, SessionStateSchema);
+  const home = path.dirname(path.dirname(filePath));
+  const expectedFilePath = getSessionStateFilePath(home, state.rootSourceRoot, state.session);
+  if (path.normalize(expectedFilePath) !== path.normalize(filePath)) {
+    throw new MonkeError(`Session state identity does not match its storage key: ${filePath}`);
+  }
+  return state;
 }
 
 export function ensureSessionPrefix(state: SessionState, expectedOrder: string[]) {

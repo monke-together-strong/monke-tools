@@ -127,7 +127,7 @@ interface PreparedRepoWorktree {
 
 interface ConfiguredSpawn {
   dirtySnapshots: Map<string, DirtySnapshot>;
-  getDefaultRef: (sourceRoot: string) => DefaultBranchRef;
+  getDefaultRef: (sourceRoot: string) => PinnedDefaultBranchRef;
   home: string;
   reposInOrder: RepoConfig[];
   rootSourceRoot: string;
@@ -136,6 +136,10 @@ interface ConfiguredSpawn {
   session: string;
   sessionState: SessionState;
   sourcePlan: SpawnSourcePlan;
+}
+
+interface PinnedDefaultBranchRef extends DefaultBranchRef {
+  pinnedRef: string;
 }
 
 class BootstrapCommandError extends MonkeError {
@@ -239,7 +243,7 @@ async function initializeSpawn(
     sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume"
       ? loadSessionState(home, rootSourceRoot, session)
       : undefined;
-  let rootConfigRef = rootDefaultRef?.ref;
+  let rootConfigRef = rootDefaultRef?.pinnedRef;
   if (rootConfigRef === undefined && resumedState) {
     rootConfigRef = requirePinnedRef(resumedState, rootSourceRoot);
   } else if (rootConfigRef === undefined && sourcePlan.kind === "session-branch") {
@@ -306,12 +310,9 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
       execution.sourcePlan.kind === "default-branch" &&
       execution.sourcePlan.attempt === "fresh"
     ) {
-      const defaultRef = execution.getDefaultRef(repoConfig.sourceRoot).ref;
-      initialState.diffBaseRef = defaultRef;
-      initialState.pinnedRef = runGit(execution.runtime, repoConfig.sourceRoot, [
-        "rev-parse",
-        defaultRef
-      ]).trim();
+      const defaultRef = execution.getDefaultRef(repoConfig.sourceRoot);
+      initialState.diffBaseRef = defaultRef.ref;
+      initialState.pinnedRef = defaultRef.pinnedRef;
     }
     return {
       dependencyRoots: repoConfig.externalInOrder.map((dependency) => dependency.absoluteRepoRoot),
@@ -377,7 +378,7 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
 interface SpawnRepoPreparationRequest {
   dirtySnapshot?: DirtySnapshot;
   existingState: SessionRepoState | undefined;
-  getDefaultRef: (sourceRoot: string) => DefaultBranchRef;
+  getDefaultRef: (sourceRoot: string) => PinnedDefaultBranchRef;
   graphSource: SessionState["graphSource"];
   home: string;
   onWorktreeReady: (worktree: {
@@ -502,14 +503,20 @@ function isRetryableDefaultBranchSpawn(state: SessionState) {
   return state.spawnSource === "default-branch" && state.generation.status === "incomplete";
 }
 
-function createDefaultRefResolver(runtime: Runtime): (sourceRoot: string) => DefaultBranchRef {
-  const defaultRefs = new Map<string, DefaultBranchRef>();
+function createDefaultRefResolver(
+  runtime: Runtime
+): (sourceRoot: string) => PinnedDefaultBranchRef {
+  const defaultRefs = new Map<string, PinnedDefaultBranchRef>();
   return (sourceRoot) => {
     const cached = defaultRefs.get(sourceRoot);
     if (cached !== undefined) {
       return cached;
     }
-    const resolved = resolveDefaultBranchRef(runtime, sourceRoot);
+    const defaultRef = resolveDefaultBranchRef(runtime, sourceRoot);
+    const resolved = {
+      ...defaultRef,
+      pinnedRef: runGit(runtime, sourceRoot, ["rev-parse", `${defaultRef.ref}^{commit}`]).trim()
+    };
     defaultRefs.set(sourceRoot, resolved);
     return resolved;
   };
@@ -533,7 +540,7 @@ async function spawnWithoutConfig(
   rootSourceRoot: string,
   session: string,
   options: SpawnOptions,
-  rootDefaultRef: DefaultBranchRef | null
+  rootDefaultRef: PinnedDefaultBranchRef | null
 ) {
   assertNoGlobalWorktreePathStateCollisions(home, session, [{ sourceRoot: rootSourceRoot }]);
   const priorSessionState = loadSessionState(home, rootSourceRoot, session);
@@ -560,7 +567,7 @@ async function spawnWithoutConfig(
           home,
           rootSourceRoot,
           session,
-          rootDefaultRef.ref
+          rootDefaultRef.pinnedRef
         );
   const sourceHeadRef = resolveAttachedHeadRef(runtime, rootSourceRoot);
   const diffBaseRef =
@@ -594,10 +601,7 @@ async function spawnWithoutConfig(
           cleanupEligible: false,
           diffBaseRef,
           materializationStatus: "pending",
-          pinnedRef:
-            options.mode === "default-branch"
-              ? runGit(runtime, worktree.path, ["rev-parse", "HEAD"]).trim()
-              : undefined,
+          pinnedRef: options.mode === "default-branch" ? rootDefaultRef?.pinnedRef : undefined,
           preparationStatus: "prepared",
           sourceRoot: rootSourceRoot,
           worktreePath: worktree.path
@@ -618,7 +622,7 @@ function loadSpawnGraph(
   rootSourceRoot: string,
   session: string,
   sourcePlan: SpawnSourcePlan,
-  getDefaultRef: (sourceRoot: string) => DefaultBranchRef,
+  getDefaultRef: (sourceRoot: string) => PinnedDefaultBranchRef,
   resumedState: SessionState | undefined
 ) {
   if (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume") {
@@ -647,10 +651,20 @@ function loadSpawnGraph(
   if (sourcePlan.kind === "default-branch") {
     return loadResolvedGraph(runtime, rootSourceRoot, {
       pathExists(sourceRoot, relativePath) {
-        return gitPathExistsAtRef(runtime, sourceRoot, getDefaultRef(sourceRoot).ref, relativePath);
+        return gitPathExistsAtRef(
+          runtime,
+          sourceRoot,
+          getDefaultRef(sourceRoot).pinnedRef,
+          relativePath
+        );
       },
       readRepoConfig(sourceRoot) {
-        return readGitPathAtRef(runtime, sourceRoot, getDefaultRef(sourceRoot).ref, "monke.yml");
+        return readGitPathAtRef(
+          runtime,
+          sourceRoot,
+          getDefaultRef(sourceRoot).pinnedRef,
+          "monke.yml"
+        );
       }
     });
   }

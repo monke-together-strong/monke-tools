@@ -3,6 +3,9 @@ import * as z from "zod";
 import { samePath } from "./path-identity.ts";
 
 const NonEmptyStringSchema = z.string().min(1);
+const GitObjectIdSchema = z.string().regex(/^(?:[\da-f]{40}|[\da-f]{64})$/iu, {
+  error: "must be an immutable Git object ID"
+});
 const PortSchema = z.number().int().min(1).max(65_535);
 const PortKeySchema = z
   .string()
@@ -41,7 +44,7 @@ const SessionRepoStateFieldsSchema = z.strictObject({
   diffBaseRef: NonEmptyStringSchema.optional(),
   failure: MaterializationFailureSchema.optional(),
   materializationStatus: z.enum(["pending", "materialized", "failed", "blocked"]),
-  pinnedRef: NonEmptyStringSchema.optional(),
+  pinnedRef: GitObjectIdSchema.optional(),
   preparationStatus: z.enum(["pending", "prepared", "warning", "failed"]),
   preparationWarnings: z.array(NonEmptyStringSchema).optional(),
   resourceCommandOutputs: z.array(ResourceCommandStateSchema).optional(),
@@ -171,7 +174,7 @@ function validateRepoSet(state: ParsedSessionState, issue: LifecycleIssue) {
     issue("Session state requires at least the Root repo", ["repos"]);
     return;
   }
-  if (!state.repos.some((repo) => samePath(repo.sourceRoot, state.rootSourceRoot))) {
+  if (!state.repos.some((repo) => repo.sourceRoot === state.rootSourceRoot)) {
     issue("Session state must include its Root repo", ["rootSourceRoot"]);
   }
   const duplicateSourceRoot = findDuplicatePathIndex(state.repos.map((repo) => repo.sourceRoot));
@@ -190,7 +193,7 @@ function validateRepoSet(state: ParsedSessionState, issue: LifecycleIssue) {
       "worktreePath"
     ]);
   }
-  if (!samePath(state.repos.at(-1)?.sourceRoot ?? "", state.rootSourceRoot)) {
+  if (state.repos.at(-1)?.sourceRoot !== state.rootSourceRoot) {
     issue("Root repo must follow its dependencies in materialization order", ["repos"]);
   }
 }

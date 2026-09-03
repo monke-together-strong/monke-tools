@@ -989,6 +989,41 @@ apps: {}
     expect(loadSessionState(home, repoRoot, "interrupted").generation.status).toBe("complete");
   });
 
+  test("spawn -m pins graph discovery before a movable default ref advances", () => {
+    const sandbox = makeTempDir("single-repo-main-graph-pin");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": "apps: {}\n",
+      "version.txt": "pinned\n"
+    });
+    const pinnedRef = git(repoRoot, ["rev-parse", "refs/heads/main"]);
+    git(repoRoot, ["switch", "-c", "newer"]);
+    write(repoRoot, "version.txt", "newer\n");
+    git(repoRoot, ["add", "version.txt"]);
+    git(repoRoot, ["commit", "-m", "newer default content"]);
+    const newerRef = git(repoRoot, ["rev-parse", "HEAD"]);
+    git(repoRoot, ["switch", "main"]);
+    installGitShim(binDirectory, {
+      afterCommand: {
+        args: "show refs/heads/main:monke.yml",
+        cwd: repoRoot,
+        script: `"$MONKE_TEST_REAL_GIT" update-ref refs/heads/main ${newerRef}`
+      }
+    });
+
+    runMonke({
+      args: ["spawn", "pinned-graph", "-m"],
+      binDirectory,
+      cwd: repoRoot,
+      monkeHome: home
+    });
+
+    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "pinned-graph");
+    expect(read(worktreeRoot, "version.txt")).toBe("pinned\n");
+    expect(loadSessionState(home, repoRoot, "pinned-graph").repos[0]?.pinnedRef).toBe(pinnedRef);
+  });
+
   test("spawn -m fails when session state already exists", () => {
     const sandbox = makeTempDir("single-repo-main-existing-state");
     const binDirectory = path.join(sandbox, "bin");

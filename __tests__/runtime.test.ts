@@ -37,6 +37,8 @@ describe("runtime", () => {
       const sandbox = makeTempDir("runtime-parent-termination");
       const workerPath = path.join(sandbox, "worker.ts");
       const childPidPath = path.join(sandbox, "child.pid");
+      const descendantPidPath = path.join(sandbox, "descendant.pid");
+      const unexpectedCommandMarker = path.join(sandbox, "unexpected-command");
       const runtimeUrl = pathToFileURL(path.resolve("src/runtime.ts")).href;
       write(
         sandbox,
@@ -44,7 +46,10 @@ describe("runtime", () => {
         `import { createRuntime } from ${JSON.stringify(runtimeUrl)};
 
 const runtime = createRuntime();
-await runtime.execAsync("sh", ["-c", ${JSON.stringify(`trap '' TERM INT; printf '%s' "$$" > "${childPidPath}"; while :; do sleep 1; done`)}]);
+try {
+  await runtime.execAsync("sh", ["-c", ${JSON.stringify(`trap 'exit 0' HUP INT QUIT TERM; sh -c 'trap "" HUP INT QUIT TERM; while :; do sleep 1; done' & printf '%s' "$$" > "${childPidPath}"; printf '%s' "$!" > "${descendantPidPath}"; wait`)}]);
+} catch {}
+await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedCommandMarker}"`)}]);
 `
       );
       const worker = Bun.spawn({
@@ -57,10 +62,18 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`trap '' TERM INT; printf 
       try {
         await waitFor(() => existsSync(childPidPath));
         childPid = Number(readFileSync(childPidPath, "utf-8"));
+        const descendantPid = Number(readFileSync(descendantPidPath, "utf-8"));
         worker.kill(signal);
         await worker.exited;
-        await waitFor(() => childPid !== undefined && !isProcessRunning(childPid));
+        await waitFor(
+          () =>
+            childPid !== undefined &&
+            !isProcessRunning(childPid) &&
+            !isProcessRunning(descendantPid)
+        );
         expect(childPid === undefined ? true : isProcessRunning(childPid)).toBeFalsy();
+        expect(isProcessRunning(descendantPid)).toBeFalsy();
+        expect(existsSync(unexpectedCommandMarker)).toBeFalsy();
       } finally {
         worker.kill("SIGKILL");
         if (childPid !== undefined && isProcessRunning(childPid)) {
