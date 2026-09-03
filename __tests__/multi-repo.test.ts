@@ -28,7 +28,6 @@ const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const INDEPENDENT_SIBLING_SETTLE_DELAY_SECONDS = 0.1;
 const SIBLING_START_BARRIER_ATTEMPTS = 200;
 const SIBLING_START_BARRIER_DELAY_SECONDS = 0.01;
-const SLOW_PREPARATION_DELAY_SECONDS = 0.3;
 
 function makeRepoTempDir(prefix: string) {
   const testTempRoot = path.join(projectRoot, "tmp", "tests");
@@ -1449,7 +1448,9 @@ external:
       afterCommand: {
         args: `worktree add ${slowWorktree} overlap`,
         cwd: slowRoot,
-        script: `sleep ${SLOW_PREPARATION_DELAY_SECONDS}; touch "${slowPreparationDone}"`
+        // Hold slow preparation open until the ready repo's bootstrap has run, so the overlap
+        // is proven by ordering rather than by wall-clock timing on a loaded machine.
+        script: `attempts=0; while [ ! -f "${materializedEarly}" ]; do attempts=$((attempts + 1)); [ "$attempts" -lt ${SIBLING_START_BARRIER_ATTEMPTS} ] || exit 91; sleep ${SIBLING_START_BARRIER_DELAY_SECONDS}; done; touch "${slowPreparationDone}"`
       }
     });
 
@@ -1686,16 +1687,20 @@ external:
     chmodSync(protectedSourcePath, 0o000);
     write(root, "seed-data/new", "new Root material\n");
 
-    expect(() =>
-      runMonke({
-        args: ["materialize"],
-        binDirectory,
-        cwd: rootWorktree,
-        monkeHome: home
-      })
-    ).toThrow(/Worktree preparation failed/u);
-
-    chmodSync(protectedSourcePath, 0o700);
+    try {
+      expect(() =>
+        runMonke({
+          args: ["materialize"],
+          binDirectory,
+          cwd: rootWorktree,
+          monkeHome: home
+        })
+      ).toThrow(/Worktree preparation failed/u);
+    } finally {
+      // Restore the mode even when the assertion fails, so temp-directory cleanup cannot
+      // fail on an unreadable directory and mask the original failure.
+      chmodSync(protectedSourcePath, 0o700);
+    }
     expect(read(rootWorktree, "seed-data/new")).toBe("new Root material\n");
     expect(read(rootWorktree, "bootstrap-runs")).toBe("x");
   });

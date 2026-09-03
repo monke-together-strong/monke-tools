@@ -61,7 +61,12 @@ export function spawnMonkeWorker(options: {
 }) {
   return Bun.spawn([process.execPath, runMonkeWorkerPath, ...options.args], {
     cwd: options.cwd,
-    env: { ...process.env, ...options.extraEnv, MONKE_HOME: options.monkeHome },
+    env: {
+      ...process.env,
+      ...NEUTRALIZED_WORKER_ENV,
+      ...options.extraEnv,
+      MONKE_HOME: options.monkeHome
+    },
     stderr: "ignore",
     stdout: "ignore"
   });

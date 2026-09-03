@@ -2224,17 +2224,22 @@ apps:
     write(repoRoot, "seed-data/protected/fixture.txt", "protected fixture\n");
     chmodSync(protectedSourcePath, 0o000);
 
-    expect(() =>
-      runMonke({
-        args: ["materialize"],
-        binDirectory,
-        cwd: worktreeRoot,
-        monkeHome: home
-      })
-    ).toThrow(/Worktree preparation failed/u);
+    try {
+      expect(() =>
+        runMonke({
+          args: ["materialize"],
+          binDirectory,
+          cwd: worktreeRoot,
+          monkeHome: home
+        })
+      ).toThrow(/Worktree preparation failed/u);
+    } finally {
+      // Restore the mode even when the assertion fails, so temp-directory cleanup cannot
+      // fail on an unreadable directory and mask the original failure.
+      chmodSync(protectedSourcePath, 0o700);
+    }
     expect(read(worktreeRoot, "bootstrap-runs")).toBe("x");
     const failedState = loadSessionState(home, repoRoot, "banana");
-    chmodSync(protectedSourcePath, 0o700);
     expect(failedState.repos[0]).toMatchObject({
       failure: { phase: "worktree-preparation" },
       materializationStatus: "materialized",

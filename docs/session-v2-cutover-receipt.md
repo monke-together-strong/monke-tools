@@ -9,8 +9,8 @@
 
 - The live store contained 119 v1 Session-state records, not the issue snapshot's 116. The cutover inspected all 119 across 11 Root repo paths.
 - Those records contained 160 repo records: 145 Session worktrees existed and 15 were already missing.
-- The complete original state directory was copied byte-for-byte before cleanup or conversion to `/Users/hoangbn/.monke/session-state-backups/issue-153-original-20260903T064327Z`.
-- The 94 retained v1 Session-state records were copied byte-for-byte immediately before conversion to `/Users/hoangbn/.monke/session-state-backups/issue-153-retained-v1-20260903T064327Z`.
+- The complete original state directory was copied byte-for-byte before cleanup or conversion to `$MONKE_HOME/session-state-backups/issue-153-original-20260903T064327Z`.
+- The 94 retained v1 Session-state records were copied byte-for-byte immediately before conversion to `$MONKE_HOME/session-state-backups/issue-153-retained-v1-20260903T064327Z`.
 
 ## Inspection and cleanup
 
@@ -35,6 +35,6 @@
 
 - Strict pre-activation v2 load: 94/94 records passed; final validation failures: 0.
 - Deliberate v1 fixture: rejected with `Unsupported Session state version 1 ... monke-tools requires strict v2 Session state` before and after activation.
-- The Active tool install is the Local tool install at `/Users/hoangbn/.monke/installs/local-1a540d9-Hb4vTc`, built cleanly from commit `1a540d982694fba8f8b3f2611c180ae074128067`.
+- The Active tool install is the Local tool install at `$MONKE_HOME/installs/local-1a540d9-Hb4vTc`, built cleanly from commit `1a540d982694fba8f8b3f2611c180ae074128067`.
 - Post-activation live-store load: `mt cleanup` loaded the entire retained store and reported `Removed 0 dead sessions`.
 - Representative v2 lifecycle proof: configured Spawn, retry of a retained prepared worktree, Swing, explicit Materialize, clean Chop, and Cleanup all succeeded. Swing also resolved the retained `prep-materialization` Session.

@@ -104,9 +104,11 @@ describe("Cleanup authority", () => {
         );
       });
       expect(child.exitCode).toBeNull();
+    } finally {
+      // Kill in cleanup so a waitForState timeout cannot leave the worker running against
+      // the temp sandbox after the lock is removed.
       child.kill("SIGKILL");
       await child.exited;
-    } finally {
       rmSync(lockPath, { force: true });
     }
 

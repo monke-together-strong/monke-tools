@@ -23,6 +23,11 @@ At entry and immediately before and after the Review gate, require
 `git rev-parse HEAD^{commit}` to equal the Review candidate. A mismatch is
 `FAIL`: the recorded candidate did not pass review.
 
+At the same points, require `git status --porcelain` to be empty. The review
+diff is taken against `HEAD`, so uncommitted working-tree changes would escape
+review entirely. A dirty worktree is `FAIL`: the candidate is not what review
+would inspect.
+
 The Work target is the single closeout target. Background context is read-only
 intent and constraint material; it never changes the review or comment target.
 A parent Spec remains background for a subissue unless this is an orchestrated
