@@ -35,13 +35,14 @@ import type {
 } from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
-const ASYNC_TERMINATION_GRACE_MS = 100;
+const ASYNC_TERMINATION_GRACE_MS = 250;
 const LOCK_RETRY_INTERVAL_MS = 50;
 const RELEASE_CATALOG_PAGE_SIZE = 100;
 const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
 type AsyncChildProcess = ReturnType<typeof spawn>;
 const activeAsyncChildren = new Set<AsyncChildProcess>();
+const timedOutProcessGroups = new Map<number, AsyncChildProcess>();
 let forwardedTerminationSignal: NodeJS.Signals | undefined;
 let parentExitScheduled = false;
 let terminationEscalated = false;
@@ -368,6 +369,9 @@ function executeCommandAsync(
         ? undefined
         : setTimeout(() => {
             timedOut = true;
+            if (child.pid !== undefined) {
+              timedOutProcessGroups.set(child.pid, child);
+            }
             terminateChildProcessTree(child.pid, "SIGTERM", () => {
               child.kill("SIGTERM");
             });
@@ -375,7 +379,12 @@ function executeCommandAsync(
               terminateChildProcessTree(child.pid, "SIGKILL", () => {
                 child.kill("SIGKILL");
               });
+              if (child.pid !== undefined) {
+                timedOutProcessGroups.delete(child.pid);
+              }
               settleTimeout();
+              finishParentTerminationAfterEscalation();
+              detachParentTerminationHandlersIfIdle();
             }, ASYNC_TERMINATION_GRACE_MS);
           }, options.timeoutSeconds * 1000);
 
@@ -427,7 +436,15 @@ function unregisterAsyncChild(child: AsyncChildProcess) {
     finishParentTerminationAfterEscalation();
     return;
   }
-  if (activeAsyncChildren.size === 0) {
+  detachParentTerminationHandlersIfIdle();
+}
+
+function detachParentTerminationHandlersIfIdle() {
+  if (
+    activeAsyncChildren.size === 0 &&
+    timedOutProcessGroups.size === 0 &&
+    forwardedTerminationSignal === undefined
+  ) {
     detachParentTerminationHandlers();
   }
 }
@@ -447,7 +464,12 @@ function detachParentTerminationHandlers() {
 }
 
 function finishParentTerminationAfterEscalation() {
-  if (terminationEscalated && activeAsyncChildren.size === 0 && !parentExitScheduled) {
+  if (
+    terminationEscalated &&
+    activeAsyncChildren.size === 0 &&
+    timedOutProcessGroups.size === 0 &&
+    !parentExitScheduled
+  ) {
     detachParentTerminationHandlers();
     parentExitScheduled = true;
     setImmediate(() => {
@@ -486,6 +508,14 @@ function forwardParentTermination(signal: NodeJS.Signals) {
       child.kill(signal);
     });
     terminateChildProcessTree(child.pid, "SIGKILL", () => {
+      child.kill("SIGKILL");
+    });
+  }
+  for (const [pid, child] of timedOutProcessGroups) {
+    terminateChildProcessTree(pid, signal, () => {
+      child.kill(signal);
+    });
+    terminateChildProcessTree(pid, "SIGKILL", () => {
       child.kill("SIGKILL");
     });
   }
