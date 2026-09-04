@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { hash } from "node:crypto";
 import { lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,6 +17,7 @@ import {
 } from "./install-manifest.ts";
 import type { ReleaseInstallManifest } from "./install-manifest.ts";
 import { executableFileProblem, resolveManagedDirectory } from "./path-boundary.ts";
+import { runReleaseCommand } from "./release-command.ts";
 import {
   assertReleaseGuidanceHashes,
   BUNDLED_GUIDANCE_FOLDERS,
@@ -268,7 +269,7 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions) {
   assertArchiveContract(listArchiveEntries(archivePath));
   const extractedRoot = mkdtempSync(path.join(tmpdir(), "monke-tools-release-verify-"));
   try {
-    run("tar", ["-xzf", archivePath, "-C", extractedRoot]);
+    runReleaseCommand("tar", ["-xzf", archivePath, "-C", extractedRoot]);
     const manifest = validateVerifiedReleaseBundleRoot({
       bundleRoot: extractedRoot,
       expectedGuidanceRoot: options.expectedGuidanceRoot,
@@ -346,7 +347,7 @@ function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
 }
 
 function listArchiveEntries(archivePath: string) {
-  return run("tar", ["-tzf", archivePath])
+  return runReleaseCommand("tar", ["-tzf", archivePath])
     .trim()
     .split("\n")
     .filter(Boolean)
@@ -421,8 +422,4 @@ function commandFailureDetail(result: {
   return (
     result.stderr?.trim() || result.stdout?.trim() || result.error?.message || "unknown failure"
   );
-}
-
-function run(command: string, arguments_: string[]) {
-  return execFileSync(command, arguments_, { encoding: "utf-8" });
 }
