@@ -4,10 +4,139 @@ import { pathToFileURL } from "node:url";
 
 import { describe, expect, test, vi } from "vite-plus/test";
 
-import { createRuntime, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
-import { makeTempDir, write } from "./helpers.ts";
+import { createRuntime, findExecutable, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
+import { makeTempDir, write, writeExecutable } from "./helpers.ts";
+
+describe(findExecutable, () => {
+  test("uses the supplied PATH in order", () => {
+    const sandbox = makeTempDir("runtime-which-order");
+    const firstBin = path.join(sandbox, "first");
+    const secondBin = path.join(sandbox, "second");
+    const firstExecutable = path.join(firstBin, "example");
+    writeExecutable(firstExecutable, "#!/bin/sh\n");
+    writeExecutable(path.join(secondBin, "example"), "#!/bin/sh\n");
+
+    expect(findExecutable("example", { PATH: [firstBin, secondBin].join(path.delimiter) })).toBe(
+      firstExecutable
+    );
+  });
+
+  test.each([undefined, ""])("treats PATH %j as unavailable", (pathValue) => {
+    expect(findExecutable("sh", { PATH: pathValue })).toBeNull();
+  });
+
+  test("returns null for a missing executable", () => {
+    expect(findExecutable("missing", { PATH: makeTempDir("runtime-which-missing") })).toBeNull();
+  });
+
+  test.skipIf(process.platform === "win32")("rejects a non-executable file", () => {
+    const sandbox = makeTempDir("runtime-which-permission");
+    write(sandbox, "example", "#!/bin/sh\n");
+
+    expect(findExecutable("example", { PATH: sandbox })).toBeNull();
+  });
+});
 
 describe("runtime", () => {
+  test("createRuntime executes with its cwd, environment, and stdin", () => {
+    const sandbox = makeTempDir("runtime-sync-input");
+    const runtime = createRuntime({ cwd: sandbox, env: { MONKE_VALUE: "value" } });
+
+    expect(
+      runtime.exec(
+        "sh",
+        [
+          "-c",
+          `printf "%s|%s|" "$PWD" "$MONKE_VALUE"; if [ "\${MONKE_SHELL_DIR_DIRECTIVE+x}" = x ]; then printf set; else printf unset; fi; printf "|"; cat`
+        ],
+        { stdin: "input" }
+      )
+    ).toStrictEqual({
+      exitCode: 0,
+      stderr: "",
+      stdout: `${sandbox}|value|unset|input`
+    });
+  });
+
+  test("createRuntime preserves output from allowed command failures", () => {
+    const runtime = createRuntime();
+
+    expect(
+      runtime.exec("sh", ["-c", "printf output; printf error >&2; exit 7"], {
+        allowFailure: true
+      })
+    ).toStrictEqual({ exitCode: 7, stderr: "error", stdout: "output" });
+    expect(() => runtime.exec("sh", ["-c", "printf output; printf error >&2; exit 7"])).toThrow(
+      /Command failed:.*error/u
+    );
+  });
+
+  test("createRuntime reports commands that cannot be started", () => {
+    expect(() => createRuntime().exec("definitely-missing-monke-command")).toThrow(
+      /Failed to run definitely-missing-monke-command/u
+    );
+  });
+
+  test("createRuntime normalizes allowed synchronous timeouts", () => {
+    expect(
+      createRuntime().exec("sh", ["-c", "printf started; sleep 1"], {
+        allowFailure: true,
+        timeoutSeconds: 0.05
+      })
+    ).toStrictEqual({ exitCode: -1, stderr: "", stdout: "started", timedOut: true });
+  });
+
+  test("createRuntime executes asynchronously with its cwd, environment, and stdin", async () => {
+    const sandbox = makeTempDir("runtime-async-input");
+    const runtime = createRuntime({ cwd: sandbox, env: { MONKE_VALUE: "value" } });
+
+    await expect(
+      runtime.execAsync("sh", ["-c", 'printf "%s|%s|" "$PWD" "$MONKE_VALUE"; cat'], {
+        stdin: "input"
+      })
+    ).resolves.toStrictEqual({
+      exitCode: 0,
+      stderr: "",
+      stdout: `${sandbox}|value|input`
+    });
+  });
+
+  test("createRuntime preserves output from allowed asynchronous failures", async () => {
+    const runtime = createRuntime();
+
+    await expect(
+      runtime.execAsync("sh", ["-c", "printf output; printf error >&2; exit 7"], {
+        allowFailure: true
+      })
+    ).resolves.toStrictEqual({ exitCode: 7, stderr: "error", stdout: "output" });
+    await expect(
+      runtime.execAsync("sh", ["-c", "printf output; printf error >&2; exit 7"])
+    ).rejects.toThrow(/Command failed:.*error/u);
+  });
+
+  test("createRuntime reports asynchronous commands that cannot be started", async () => {
+    await expect(createRuntime().execAsync("definitely-missing-monke-command")).rejects.toThrow(
+      /Failed to run definitely-missing-monke-command/u
+    );
+  });
+
+  test("createRuntime preserves output from allowed asynchronous timeouts", async () => {
+    await expect(
+      createRuntime().execAsync("sh", ["-c", "printf started; trap '' TERM; sleep 10"], {
+        allowFailure: true,
+        timeoutSeconds: 0.05
+      })
+    ).resolves.toStrictEqual({ exitCode: -1, stderr: "", stdout: "started", timedOut: true });
+  });
+
+  test("createRuntime rejects successful commands that did not consume stdin", async () => {
+    await expect(
+      createRuntime().execAsync("sh", ["-c", "exec 0<&-; sleep 0.1"], {
+        stdin: "input".repeat(1_000_000)
+      })
+    ).rejects.toThrow(/Command input was not fully written/u);
+  });
+
   test.each([
     ["EPERM", true],
     ["ESRCH", false],

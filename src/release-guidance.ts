@@ -1,8 +1,8 @@
-import { hash } from "node:crypto";
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
+import { sha256 } from "./sha256.ts";
 
 export const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
 
@@ -13,15 +13,13 @@ export function hashReleaseGuidance(bundleRoot: string) {
   if (!globalStat?.isFile() || globalStat.isSymbolicLink()) {
     throw new MonkeError(`Release guidance file is missing: ${globalInstructions}`);
   }
-  const hashes = new Map([
-    ["instructions/GLOBAL.md", hash("sha256", readFileSync(globalInstructions), "hex")]
-  ]);
+  const hashes = new Map([["instructions/GLOBAL.md", sha256(readFileSync(globalInstructions))]]);
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     const root = path.join(bundleRoot, "skills", folder);
     assertGuidanceDirectory(root);
     for (const filePath of listRegularFiles(root)) {
       const relativePath = path.relative(bundleRoot, filePath).replaceAll(path.sep, "/");
-      hashes.set(relativePath, hash("sha256", readFileSync(filePath), "hex"));
+      hashes.set(relativePath, sha256(readFileSync(filePath)));
     }
   }
   return Object.fromEntries([...hashes].toSorted(([left], [right]) => left.localeCompare(right)));
@@ -53,7 +51,7 @@ export function findChangedReleaseGuidancePaths(
   actual.set(
     "instructions/GLOBAL.md",
     globalStat?.isFile() && !globalStat.isSymbolicLink()
-      ? hash("sha256", readFileSync(globalInstructions), "hex")
+      ? sha256(readFileSync(globalInstructions))
       : null
   );
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
@@ -79,7 +77,7 @@ function collectGuidanceEntries(
     if (entry.isDirectory() && !entry.isSymbolicLink()) {
       collectGuidanceEntries(entryPath, bundleRoot, entries);
     } else if (entry.isFile()) {
-      entries.set(relativePath, hash("sha256", readFileSync(entryPath), "hex"));
+      entries.set(relativePath, sha256(readFileSync(entryPath)));
     } else {
       entries.set(relativePath, null);
     }

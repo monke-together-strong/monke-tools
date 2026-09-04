@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { hash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -40,6 +39,7 @@ import {
   verifyReleaseArchive
 } from "./release-contract.ts";
 import { BUNDLED_GUIDANCE_FOLDERS, hashReleaseGuidance } from "./release-guidance.ts";
+import { sha256 } from "./sha256.ts";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const ZERO_COMMIT_PATTERN = /^0{40}$/u;
@@ -112,7 +112,7 @@ export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
     copyBundleInputs(bundleRoot);
 
     const manifest: ReleaseInstallManifest = ReleaseInstallManifestSchema.parse({
-      artifactDigest: hash("sha256", readFileSync(path.join(bundleRoot, "mt")), "hex"),
+      artifactDigest: sha256(readFileSync(path.join(bundleRoot, "mt"))),
       artifactName: archiveName,
       createdAt: options.createdAt ?? new Date().toISOString(),
       guidanceHashes: hashReleaseGuidance(bundleRoot),
@@ -158,7 +158,7 @@ export function writeReleaseChecksums(directory: string, version: string) {
   const contents = archiveNames
     .map(
       (archiveName) =>
-        `${hash("sha256", readFileSync(path.join(outputDirectory, archiveName)), "hex")}  ${archiveName}`
+        `${sha256(readFileSync(path.join(outputDirectory, archiveName)))}  ${archiveName}`
     )
     .join("\n");
   writeFileSync(checksumPath, `${contents}\n`, "utf-8");
@@ -281,7 +281,7 @@ function releaseAssetDigest(directory: string, assetName: string) {
   if (!existsSync(assetPath)) {
     throw new Error(`Release asset is missing: ${assetName}`);
   }
-  return `sha256:${hash("sha256", readFileSync(assetPath), "hex")}`;
+  return `sha256:${sha256(readFileSync(assetPath))}`;
 }
 
 function changedPaths(before: string, after: string) {

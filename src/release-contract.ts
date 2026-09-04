@@ -1,5 +1,3 @@
-import { spawnSync } from "node:child_process";
-import { hash } from "node:crypto";
 import { lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -23,6 +21,7 @@ import {
   BUNDLED_GUIDANCE_FOLDERS,
   hashReleaseGuidance
 } from "./release-guidance.ts";
+import { sha256 } from "./sha256.ts";
 
 const CHECKSUM_PATTERN = /^(?<hash>[0-9a-f]{64}) {2}(?<name>[^/\s]+)$/u;
 const LEADING_ARCHIVE_PATH_PATTERN = /^\.\/?/u;
@@ -219,8 +218,7 @@ function assertReleaseManifestContents(options: {
     );
   }
   if (
-    options.manifest.artifactDigest !==
-    hash("sha256", readFileSync(path.join(options.bundleRoot, "mt")), "hex")
+    options.manifest.artifactDigest !== sha256(readFileSync(path.join(options.bundleRoot, "mt")))
   ) {
     throw new MonkeError(options.digestMismatchMessage);
   }
@@ -284,18 +282,16 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions) {
     });
 
     if (options.verifyExecutable !== false) {
-      const version = spawnSync(path.join(extractedRoot, "mt"), ["--version"], {
-        encoding: "utf-8"
-      });
-      if (version.status !== 0 || version.stdout?.trim() !== expectedVersion) {
+      const version = runVerificationCommand(path.join(extractedRoot, "mt"), ["--version"]);
+      if (version.exitCode !== 0 || version.stdout.trim() !== expectedVersion) {
         throw new MonkeError(
           `Release executable Tool build identity does not match ${expectedVersion}: ${commandFailureDetail(version)}`
         );
       }
-      const installer = spawnSync(path.join(extractedRoot, "install.sh"), ["--verify"], {
-        encoding: "utf-8"
-      });
-      if (installer.status !== 0) {
+      const installer = runVerificationCommand(path.join(extractedRoot, "install.sh"), [
+        "--verify"
+      ]);
+      if (installer.exitCode !== 0) {
         throw new MonkeError(
           `Release installer verification failed: ${commandFailureDetail(installer)}`
         );
@@ -341,7 +337,7 @@ function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
   if (expected === undefined) {
     throw new MonkeError(`Release checksum is missing for ${archiveName}`);
   }
-  if (expected !== hash("sha256", readFileSync(archivePath), "hex")) {
+  if (expected !== sha256(readFileSync(archivePath))) {
     throw new MonkeError(`Release checksum mismatch for ${archiveName}`);
   }
 }
@@ -414,12 +410,30 @@ function assertExecutable(filePath: string, label: string) {
   }
 }
 
-function commandFailureDetail(result: {
-  error?: Error;
-  stderr: string | null;
-  stdout?: string | null;
-}) {
+function commandFailureDetail(result: { error?: Error; stderr: string; stdout: string }) {
   return (
     result.stderr?.trim() || result.stdout?.trim() || result.error?.message || "unknown failure"
   );
+}
+
+function runVerificationCommand(command: string, args: string[]) {
+  try {
+    const result = Bun.spawnSync({
+      cmd: [command, ...args],
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+    return {
+      exitCode: result.exitCode ?? -1,
+      stderr: result.stderr.toString(),
+      stdout: result.stdout.toString()
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error : new Error(String(error)),
+      exitCode: -1,
+      stderr: "",
+      stdout: ""
+    };
+  }
 }

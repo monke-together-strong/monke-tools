@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 
@@ -28,6 +27,7 @@ import {
 } from "./release-contract.ts";
 import { findChangedReleaseGuidancePaths } from "./release-guidance.ts";
 import { getMonkeHome } from "./runtime.ts";
+import { sha256File } from "./sha256.ts";
 import type { Runtime } from "./types.ts";
 import { parseBoundaryValue } from "./validation.ts";
 
@@ -200,7 +200,7 @@ async function downloadAndActivate(
       throw new MonkeError(`Release archive verification failed: ${errorMessage(error)}`);
     }
 
-    const bundleRoot = path.join(updateRoot, `bundle-${randomUUID()}`);
+    const bundleRoot = path.join(updateRoot, `bundle-${crypto.randomUUID()}`);
     mkdirSync(bundleRoot);
     runtime.exec("tar", ["-xzf", archivePath, "-C", bundleRoot]);
     const activeBeforeActivation = loadActiveToolInstall(monkeHome);
@@ -236,11 +236,7 @@ function reportLocalTransition(runtime: Runtime, sourceCheckout: string) {
 
 async function assertAssetDigest(filePath: string, asset: ReleaseCatalogAsset) {
   const expected = asset.digest?.slice("sha256:".length);
-  const hasher = new Bun.CryptoHasher("sha256");
-  for await (const chunk of Bun.file(filePath).stream()) {
-    hasher.update(chunk);
-  }
-  const actual = hasher.digest("hex");
+  const actual = await sha256File(filePath);
   if (actual !== expected) {
     throw new MonkeError(
       `Downloaded Release asset digest does not match GitHub metadata: ${asset.name}`
