@@ -30,8 +30,8 @@ program
   .requiredOption("--platform <platform>")
   .requiredOption("--source-commit <sha>")
   .requiredOption("--version <version>")
-  .action((options) => {
-    const archivePath = buildReleaseBundle({
+  .action(async (options) => {
+    const archivePath = await buildReleaseBundle({
       outputDirectory: options.output,
       platform: ReleasePlatformSchema.parse(options.platform),
       sourceCommit: options.sourceCommit,
@@ -113,7 +113,7 @@ program
   });
 
 try {
-  program.parse(Bun.argv.slice(2), { from: "user" });
+  await program.parseAsync(Bun.argv.slice(2), { from: "user" });
 } catch (error) {
   reportCliFailure(error);
 }

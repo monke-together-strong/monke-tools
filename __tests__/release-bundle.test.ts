@@ -334,10 +334,10 @@ describe("Release bundle verifier", () => {
 
   test(
     "builds an official bundle whose executable reports the selected version",
-    () => {
+    async () => {
       const platform = process.platform === "darwin" ? "macos-arm64" : "linux-x64";
       const outputDirectory = makeTempDir("release-build");
-      const archivePath = buildReleaseBundle({
+      const archivePath = await buildReleaseBundle({
         outputDirectory,
         platform,
         sourceCommit: SOURCE_COMMIT,
@@ -375,6 +375,15 @@ describe("Mainline Release selection", () => {
         "other-package-v99.0.0"
       ])
     ).toBe("2.0.1");
+  });
+
+  test("orders version components larger than unsigned 64-bit integers", () => {
+    expect(
+      deriveNextReleaseVersion([
+        "monke-tools-v18446744073709551615.999.999",
+        "monke-tools-v18446744073709551616.0.0"
+      ])
+    ).toBe("18446744073709551616.0.1");
   });
 
   test("rejects leading-zero versions", () => {

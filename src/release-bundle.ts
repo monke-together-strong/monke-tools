@@ -69,6 +69,9 @@ interface BuildReleaseBundleOptions {
   version: string;
 }
 
+// Bun 1.4.1 supports this option, but @types/bun 1.4.0 does not declare it yet.
+type BunBuildConfig = Bun.BuildConfig & { bytecodeDepth?: number };
+
 export function isReleaseOwnedPath(filePath: string) {
   const normalized = filePath.replaceAll("\\", "/");
   return RELEASE_INPUTS.some((input) =>
@@ -95,7 +98,7 @@ export function deriveNextReleaseVersion(tags: string[]) {
   return `${String(current[0])}.${String(current[1])}.${String(current[2] + 1n)}`;
 }
 
-export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
+export async function buildReleaseBundle(options: BuildReleaseBundleOptions) {
   const version = StableSemanticVersionSchema.parse(options.version);
   const platform = ReleasePlatformSchema.parse(options.platform);
   const sourceCommit = FullCommitSchema.parse(options.sourceCommit);
@@ -108,7 +111,7 @@ export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
   try {
     mkdirSync(bundleRoot, { recursive: true });
     mkdirSync(outputDirectory, { recursive: true });
-    compileExecutable(path.join(bundleRoot, "mt"), platform, version);
+    await compileExecutable(path.join(bundleRoot, "mt"), platform, version);
     copyBundleInputs(bundleRoot);
 
     const manifest: ReleaseInstallManifest = ReleaseInstallManifestSchema.parse({
@@ -230,31 +233,32 @@ export function verifyReleaseAssets(options: {
   );
 }
 
-function compileExecutable(
+async function compileExecutable(
   outputPath: string,
   platform: output<typeof ReleasePlatformSchema>,
   version: string
 ) {
   const target = platform === "macos-arm64" ? "bun-darwin-arm64" : "bun-linux-x64";
-  runReleaseCommand(
-    "bun",
-    [
-      "build",
-      "--compile",
-      "--bytecode",
-      "--bytecode-depth=1",
-      "--no-compile-autoload-dotenv",
-      "--no-compile-autoload-bunfig",
-      "--target",
-      target,
-      "--define",
-      `process.env.MONKE_TOOLS_BUILD_IDENTITY=${JSON.stringify(version)}`,
-      "--outfile",
-      outputPath,
-      path.join(repositoryRoot, "src", "index.ts")
-    ],
-    { cwd: repositoryRoot }
-  );
+  const buildConfig: BunBuildConfig = {
+    bytecode: true,
+    bytecodeDepth: 1,
+    compile: {
+      autoloadBunfig: false,
+      autoloadDotenv: false,
+      outfile: outputPath,
+      target
+    },
+    define: {
+      "process.env.MONKE_TOOLS_BUILD_IDENTITY": JSON.stringify(version)
+    },
+    entrypoints: [path.join(repositoryRoot, "src", "index.ts")],
+    root: repositoryRoot
+  };
+  const result = await Bun.build(buildConfig);
+  if (!result.success) {
+    const detail = result.logs.map((log) => log.message).join("\n") || "unknown failure";
+    throw new Error(`bun build failed: ${detail}`);
+  }
   chmodSync(outputPath, 0o755);
 }
 
