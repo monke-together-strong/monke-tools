@@ -615,7 +615,7 @@ apps:
     expect(result.error?.message).toContain(
       "Session materialization failed after all runnable work settled."
     );
-    expect(result.error?.message).toContain(`Prepared Root worktree: ${worktreeRoot}`);
+    expect(result.error?.message).toContain(`Prepared Root repo Session worktree: ${worktreeRoot}`);
     expect(result.error?.message).toContain(`Retry: mt spawn ${prBranch}`);
     expect(result.stdout).toBe("");
     expect(result.stderr).not.toContain(`Moved Swing target to ${worktreeRoot}`);

@@ -861,7 +861,7 @@ external:
           assignedPorts: [],
           cleanupEligible: false,
           failure: {
-            message: "Root Worktree preparation was interrupted",
+            message: "Root repo Worktree preparation was interrupted",
             phase: "worktree-preparation"
           },
           materializationStatus: "failed",

@@ -1276,7 +1276,7 @@ external:
     expect(failed.stderr).toContain("warning: Warning: seedPath optional-missing is missing");
     expect(failed.stderr).toContain(`${root}: blocked by ${failingRoot}`);
     expect(failed.stderr).toContain(
-      `Prepared Root worktree: ${getExpectedWorktreePath(home, root, "quiescent")}`
+      `Prepared Root repo Session worktree: ${getExpectedWorktreePath(home, root, "quiescent")}`
     );
     expect(failed.stderr).toContain("Retry: mt spawn quiescent");
     expect(failed.stdout).toBe("");

@@ -164,7 +164,7 @@ export type CleanupOptions =
       mode: "merged";
     };
 
-/** Spawn or refresh a Session through bounded Worktree preparation. */
+/** Create or update a Session through bounded Worktree preparation. */
 export async function runSpawn(
   runtime: Runtime,
   session: string,
@@ -204,7 +204,7 @@ function finishSpawn(
   }
 }
 
-/** Create or refresh a Session while the caller holds the Monke global lock. */
+/** Create or update a Session while the caller holds the Monke global lock. */
 export async function spawnSessionFromSourceRootLocked(
   runtime: Runtime,
   home: string,
@@ -681,7 +681,7 @@ function spawnRootConfigExists(
   return existsSync(path.join(rootSourceRoot, "monke.yml"));
 }
 
-/** Everything one config-less Spawn needs to prepare and record its single Root worktree. */
+/** Everything one config-less Spawn needs to prepare and record its Root repo Session worktree. */
 interface ConfiglessSpawn {
   existingRepoState?: SessionRepoState;
   home: string;
@@ -1102,7 +1102,7 @@ function loadResolvedGraphForSession(
   });
 }
 
-/** Load the session graph for cleanup, tolerating missing repo config. */
+/** Install or verify runtime dependencies used by mt. */
 export function runInstallDependencies(runtime: Runtime) {
   reconcileCodiff(runtime, minimumCodiffVersionForRuntime(runtime));
   createLogger(runtime).success("Verified monke-tools runtime dependencies");
