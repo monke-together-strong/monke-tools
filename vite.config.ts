@@ -17,8 +17,7 @@ const mtsLint = createOxlintConfig({
       name: "vite-plus",
       specifier: "vite-plus/oxlint-plugin"
     }
-  ],
-  vitestExcludeFiles: ["**/__tests__/helpers.ts"]
+  ]
 });
 
 export default defineConfig({
@@ -49,7 +48,7 @@ export default defineConfig({
   },
   test: {
     fileParallelism: true,
-    include: ["__tests__/**/*.test.ts"],
+    include: ["tests/**/*.test.ts"],
     maxConcurrency: 1,
     maxWorkers: 2
   }

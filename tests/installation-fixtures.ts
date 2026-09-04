@@ -118,7 +118,9 @@ export async function activateLocal(options: {
       onStderr() {
         options.onMutationOutput?.();
       },
-      onStdout() {},
+      onStdout() {
+        // Intentionally ignore command output.
+      },
       platform: "linux",
       toolBuildIdentity: options.dirty ? "local+0123456-dirty" : "local+0123456"
     })
@@ -138,8 +140,12 @@ export function activateRelease(options: {
     ["activate-release-install", options.bundleRoot, ...(options.args ?? [])],
     createRuntime({
       architecture: "x64",
-      onStderr() {},
-      onStdout() {},
+      onStderr() {
+        // Intentionally ignore command output.
+      },
+      onStdout() {
+        // Intentionally ignore command output.
+      },
       platform: "linux",
       toolBuildIdentity: "1.2.3",
       ...runtimeOptions,
