@@ -1,0 +1,44 @@
+name: Vitest Parallelism Benchmark
+
+on:
+  pull_request:
+    branches:
+      - refactor/use-exec-file-sync
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: ${{ matrix.workers }} workers, run ${{ matrix.repeat }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        workers: [1, 2, 4]
+        repeat: [1, 2]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb
+        with:
+          cache: true
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile -- --prefer-offline
+
+      - name: Measure tests
+        run: |
+          echo "BENCHMARK runner=$(nproc)vcpu workers=${{ matrix.workers }} repeat=${{ matrix.repeat }}"
+          /usr/bin/time -f "BENCHMARK workers=${{ matrix.workers }} repeat=${{ matrix.repeat }} elapsed=%e user=%U sys=%S max_rss_kb=%M" \
+            vp run test --fileParallelism --maxWorkers=${{ matrix.workers }}
