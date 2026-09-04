@@ -1,11 +1,48 @@
+import { existsSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import { rewriteEnvFile } from "../src/env.ts";
+import { rewriteEnvFile, seedWorktreeFiles } from "../src/env.ts";
+import type { RepoConfig } from "../src/types.ts";
 import { makeTempDir, read, write } from "./helpers.ts";
 
 describe("environment rewriting", () => {
+  test("seedWorktreeFiles discovers env files while pruning managed and dependency trees", () => {
+    const sandbox = makeTempDir("env-seed-discovery");
+    const sourceRoot = path.join(sandbox, "source");
+    const worktreeRoot = path.join(sandbox, "worktree");
+    write(sourceRoot, ".env", "ROOT=1\n");
+    write(sourceRoot, "apps/api/.env.local", "APP=1\n");
+    write(sourceRoot, ".git/.env", "GIT=1\n");
+    write(sourceRoot, ".monke/.env.generated", "MONKE=1\n");
+    write(sourceRoot, "node_modules/example/.env", "DEPENDENCY=1\n");
+    symlinkSync(path.join(sourceRoot, "apps"), path.join(sourceRoot, "linked-apps"));
+    const config: RepoConfig = {
+      appsByLabel: new Map(),
+      appsInOrder: [],
+      configPath: path.join(sourceRoot, "monke.yml"),
+      externalInOrder: [],
+      externalMappingsInOrder: [],
+      externalTargetApps: new Set(),
+      localMappingsByPort: new Map(),
+      localPortOrder: [],
+      resourceCommandsInOrder: [],
+      resourceValuesInOrder: [],
+      seedPaths: [],
+      sourceRoot
+    };
+
+    seedWorktreeFiles(config, worktreeRoot);
+
+    expect(read(worktreeRoot, ".env")).toBe("ROOT=1\n");
+    expect(read(worktreeRoot, "apps/api/.env.local")).toBe("APP=1\n");
+    expect(existsSync(path.join(worktreeRoot, ".git/.env"))).toBeFalsy();
+    expect(existsSync(path.join(worktreeRoot, ".monke/.env.generated"))).toBeFalsy();
+    expect(existsSync(path.join(worktreeRoot, "node_modules/example/.env"))).toBeFalsy();
+    expect(existsSync(path.join(worktreeRoot, "linked-apps/api/.env.local"))).toBeFalsy();
+  });
+
   test("rewriteEnvFile updates numeric values, urls, dsns, and duplicate active assignments", () => {
     const sandbox = makeTempDir("env-rewrite");
     write(

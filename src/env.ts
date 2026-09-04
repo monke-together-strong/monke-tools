@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, globSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
@@ -193,31 +193,12 @@ export function rewriteEnvFile(filePath: string, requests: Map<string, number>) 
   writeFileSync(filePath, rewritten.join("\n"), "utf-8");
 }
 
-function listEnvFiles(root: string, relativeRoot = "") {
-  const absoluteRoot = path.join(root, relativeRoot);
-  const results: string[] = [];
-
-  for (const entry of readdirSync(absoluteRoot, { withFileTypes: true })) {
-    if (entry.name === ".git" || entry.name === "node_modules" || entry.name === ".monke") {
-      continue;
-    }
-
-    const nextRelativePath = path.join(relativeRoot, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...listEnvFiles(root, nextRelativePath));
-      continue;
-    }
-
-    if (entry.isFile() && isEnvSeedFile(entry.name)) {
-      results.push(nextRelativePath);
-    }
-  }
-
-  return results;
-}
-
-function isEnvSeedFile(fileName: string) {
-  return fileName === ".env" || fileName.startsWith(".env.");
+function listEnvFiles(root: string) {
+  // Bun implements node:fs glob natively and exposes exclusions that Bun.Glob itself lacks.
+  return globSync("**/.env{,.*}", {
+    cwd: root,
+    exclude: ["**/.git/**", "**/.monke/**", "**/node_modules/**"]
+  }).toSorted();
 }
 
 function seedRelativePath(
