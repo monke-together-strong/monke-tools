@@ -28,7 +28,7 @@ jobs:
           cache: true
 
       - name: Install deps
-        run: vp install --frozen-lockfile
+        run: vp install --frozen-lockfile -- --prefer-offline
 
       - name: Check
         run: vp check

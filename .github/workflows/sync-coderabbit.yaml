@@ -37,7 +37,7 @@ jobs:
           bun-version-file: package.json
 
       - name: Install dependencies
-        run: vp install --frozen-lockfile
+        run: vp install --frozen-lockfile -- --prefer-offline
 
       - name: Detect relevant changes
         id: relevance

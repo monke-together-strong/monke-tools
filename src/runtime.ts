@@ -266,9 +266,7 @@ function createGitHubReleaseDistribution(
       ) {
         throw new MonkeError("GitHub Release asset URL is not an approved repository download");
       }
-      const response = await request(url);
-      const body = await response.arrayBuffer();
-      return new Uint8Array(body);
+      return await request(url);
     },
     async listReleases(page) {
       try {

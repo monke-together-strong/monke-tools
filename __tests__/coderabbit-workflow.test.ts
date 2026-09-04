@@ -86,6 +86,9 @@ describe("CodeRabbit synchronization workflow", () => {
     expect(setupBunStep.uses).toBe("oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6");
     expect(setupBunStep.with).toStrictEqual({ "bun-version-file": "package.json" });
     expect(setupBunIndex).toBeLessThan(installDependenciesIndex);
+    expect(parsed.jobs.prepare.steps[installDependenciesIndex]?.run).toBe(
+      "vp install --frozen-lockfile -- --prefer-offline"
+    );
 
     const installCliStep = WorkflowStepSchema.parse(
       parsed.jobs.prepare.steps.find((step) => step.name === "Install pinned CodeRabbit CLI")

@@ -101,11 +101,12 @@ describe("Mainline publication workflow", () => {
     const verifySource = readFileSync(verifyWorkflowPath, "utf-8");
     expect(source).toContain("./.github/workflows/verify-mainline.yml");
     expect(verifySource).toContain("./.github/actions/setup-mainline");
-    expect(setupAction).toContain("vp install --frozen-lockfile");
+    expect(setupAction).toContain("vp install --frozen-lockfile -- --prefer-offline");
     expect(verifySource).toContain("vp check");
     expect(source).not.toContain("vp run test");
     expect(verifySource).not.toContain("vp run test");
     expect(pullRequestSource).toContain("vp run test");
+    expect(pullRequestSource).toContain("vp install --frozen-lockfile -- --prefer-offline");
   });
 
   test("builds and verifies both supported platform archives", () => {

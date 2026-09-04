@@ -1,5 +1,5 @@
-import { hash, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { validate } from "zod";
@@ -175,14 +175,18 @@ async function downloadAndActivate(
     const checksumsPath = path.join(updateRoot, contract.checksumsName);
     const logger = createLogger(runtime);
     logger.progress(`Downloading monke-tools ${version} for ${contract.platform}...`);
-    const [archive, checksums] = await Promise.all([
+    const [archiveResponse, checksumsResponse] = await Promise.all([
       runtime.releaseDistribution.downloadReleaseAsset(contract.archive.browser_download_url),
       runtime.releaseDistribution.downloadReleaseAsset(contract.checksums.browser_download_url)
     ]);
-    assertAssetDigest(archive, contract.archive);
-    assertAssetDigest(checksums, contract.checksums);
-    writeFileSync(archivePath, archive);
-    writeFileSync(checksumsPath, checksums);
+    await Promise.all([
+      Bun.write(archivePath, archiveResponse),
+      Bun.write(checksumsPath, checksumsResponse)
+    ]);
+    await Promise.all([
+      assertAssetDigest(archivePath, contract.archive),
+      assertAssetDigest(checksumsPath, contract.checksums)
+    ]);
     logger.progress(`Verifying monke-tools ${version}...`);
     try {
       verifyReleaseArchive({
@@ -230,9 +234,13 @@ function reportLocalTransition(runtime: Runtime, sourceCheckout: string) {
   logger.hint("To return to Skill authoring mode, run `vp run install:local` from that checkout.");
 }
 
-function assertAssetDigest(contents: Uint8Array, asset: ReleaseCatalogAsset) {
+async function assertAssetDigest(filePath: string, asset: ReleaseCatalogAsset) {
   const expected = asset.digest?.slice("sha256:".length);
-  const actual = hash("sha256", contents, "hex");
+  const hasher = new Bun.CryptoHasher("sha256");
+  for await (const chunk of Bun.file(filePath).stream()) {
+    hasher.update(chunk);
+  }
+  const actual = hasher.digest("hex");
   if (actual !== expected) {
     throw new MonkeError(
       `Downloaded Release asset digest does not match GitHub metadata: ${asset.name}`

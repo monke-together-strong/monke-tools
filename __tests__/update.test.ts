@@ -32,6 +32,10 @@ import {
   SOURCE_COMMIT
 } from "./update-fixtures.ts";
 
+function releaseAssetResponse(contents: Uint8Array) {
+  return new Response(contents);
+}
+
 describe("Release update", () => {
   test("install recovery ignores stray backups and absent retained roots", () => {
     const sandbox = makeTempDir("release-update-recovery-strays");
@@ -161,10 +165,10 @@ describe("Release update", () => {
         releaseDistribution: {
           async downloadReleaseAsset(url) {
             if (url.endsWith(candidate.archiveName)) {
-              return candidate.archive;
+              return releaseAssetResponse(candidate.archive);
             }
             if (url.endsWith(candidate.checksumsName)) {
-              return candidate.checksums;
+              return releaseAssetResponse(candidate.checksums);
             }
             throw new Error(`Unexpected Release asset URL: ${url}`);
           },
@@ -313,10 +317,10 @@ describe("Release update", () => {
         releaseDistribution: {
           async downloadReleaseAsset(url) {
             if (url.endsWith(candidate.archiveName)) {
-              return candidate.archive;
+              return releaseAssetResponse(candidate.archive);
             }
             if (url.endsWith(candidate.checksumsName)) {
-              return candidate.checksums;
+              return releaseAssetResponse(candidate.checksums);
             }
             throw new Error(`Unexpected Release asset URL: ${url}`);
           },
@@ -403,7 +407,9 @@ describe("Release update", () => {
         releaseDistribution: {
           async downloadReleaseAsset(url) {
             write(installRoot, "skills/internal/example/SKILL.md", "edited during download\n");
-            return url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums;
+            return releaseAssetResponse(
+              url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
+            );
           },
           async listReleases(page) {
             return page === 1 ? [candidate.metadata] : [];
@@ -458,7 +464,9 @@ describe("Release update", () => {
           platform: "linux",
           releaseDistribution: {
             async downloadReleaseAsset(url) {
-              return url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums;
+              return releaseAssetResponse(
+                url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
+              );
             },
             async listReleases(page) {
               return page === 1 ? [candidate.metadata] : [];
@@ -511,7 +519,9 @@ describe("Release update", () => {
         platform: "linux",
         releaseDistribution: {
           async downloadReleaseAsset(url) {
-            return url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums;
+            return releaseAssetResponse(
+              url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
+            );
           },
           async listReleases(page) {
             return page === 1 ? [candidate.metadata] : [];
@@ -639,7 +649,9 @@ describe("Release update", () => {
     const distribution = {
       async downloadReleaseAsset(url: string) {
         downloads += 1;
-        return url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums;
+        return releaseAssetResponse(
+          url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
+        );
       },
       async listReleases(page: number) {
         if (page !== 1) {
@@ -766,7 +778,9 @@ describe("Release update", () => {
         platform: "linux",
         releaseDistribution: {
           async downloadReleaseAsset(url) {
-            return url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums;
+            return releaseAssetResponse(
+              url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
+            );
           },
           async listReleases(page) {
             if (failure === "catalog lookup") {
@@ -830,7 +844,9 @@ describe("Release update", () => {
           platform: "linux",
           releaseDistribution: {
             async downloadReleaseAsset(url) {
-              return url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums;
+              return releaseAssetResponse(
+                url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
+              );
             },
             async listReleases(page) {
               return page === 1 ? [candidate.metadata] : [];

@@ -241,6 +241,8 @@ function compileExecutable(
     [
       "build",
       "--compile",
+      "--bytecode",
+      "--bytecode-depth=1",
       "--no-compile-autoload-dotenv",
       "--no-compile-autoload-bunfig",
       "--target",

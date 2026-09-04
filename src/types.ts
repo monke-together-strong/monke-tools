@@ -51,8 +51,8 @@ export type SessionMaterializationCheckpoint =
   | "worktree-ready";
 
 export interface ReleaseDistribution {
-  /** Download one asset selected from an official GitHub Release. */
-  downloadReleaseAsset: (url: string) => Promise<Uint8Array>;
+  /** Open a streaming response for one asset selected from an official GitHub Release. */
+  downloadReleaseAsset: (url: string) => Promise<Response>;
   /** List one 100-item page from the official GitHub Releases catalog. */
   listReleases: (page: number) => Promise<ReleaseCatalogEntry[]>;
 }

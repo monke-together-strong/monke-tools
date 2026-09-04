@@ -234,6 +234,23 @@ await runtime.execAsync(
     }
   });
 
+  test("Release asset downloads expose the response body without buffering it", async () => {
+    const response = new Response("streamed asset");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+    try {
+      const runtime = createRuntime();
+      const downloaded = await runtime.releaseDistribution.downloadReleaseAsset(
+        "https://github.com/monke-together-strong/monke-tools/releases/download/monke-tools-v1.2.3/monke-tools-v1.2.3-linux-x64.tar.gz"
+      );
+
+      expect(downloaded).toBe(response);
+      expect(downloaded.bodyUsed).toBeFalsy();
+      await expect(downloaded.text()).resolves.toBe("streamed asset");
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   test("withGlobalLock evicts stale locks left by dead processes", () => {
     const sandbox = makeTempDir("runtime-stale-lock");
     const home = path.join(sandbox, "home");
