@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { hash } from "node:crypto";
 import {
   chmodSync,
@@ -275,28 +275,13 @@ function releaseAssetDigest(directory: string, assetName: string) {
   return `sha256:${hash("sha256", readFileSync(assetPath), "hex")}`;
 }
 
-function commandFailureDetail(result: { error?: Error; stderr: string | null }) {
-  return result.stderr?.trim() || result.error?.message || "unknown failure";
-}
-
 function run(
   command: string,
   arguments_: string[],
   cwd = repositoryRoot,
   environment?: NodeJS.ProcessEnv
 ) {
-  const result = spawnSync(command, arguments_, { cwd, encoding: "utf-8", env: environment });
-  const commandText = `${command} ${arguments_.join(" ")}`;
-  if (result.error) {
-    throw new Error(`${commandText} could not be started`, { cause: result.error });
-  }
-  if (result.status === null) {
-    throw new Error(`${commandText} was terminated by signal ${result.signal ?? "unknown"}`);
-  }
-  if (result.status !== 0) {
-    throw new Error(`${commandText} failed: ${commandFailureDetail(result)}`);
-  }
-  return result.stdout ?? "";
+  return execFileSync(command, arguments_, { cwd, encoding: "utf-8", env: environment });
 }
 
 function changedPaths(before: string, after: string) {

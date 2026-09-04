@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { hash } from "node:crypto";
 import { lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -424,16 +424,5 @@ function commandFailureDetail(result: {
 }
 
 function run(command: string, arguments_: string[]) {
-  const result = spawnSync(command, arguments_, { encoding: "utf-8" });
-  const commandText = `${command} ${arguments_.join(" ")}`;
-  if (result.error) {
-    throw new Error(`${commandText} could not be started`, { cause: result.error });
-  }
-  if (result.status === null) {
-    throw new Error(`${commandText} was terminated by signal ${result.signal ?? "unknown"}`);
-  }
-  if (result.status !== 0) {
-    throw new Error(`${commandText} failed: ${commandFailureDetail(result)}`);
-  }
-  return result.stdout ?? "";
+  return execFileSync(command, arguments_, { encoding: "utf-8" });
 }
