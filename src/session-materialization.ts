@@ -287,7 +287,7 @@ export function formatFailureReceipt(
   }
   const root = state.repos.find((repo) => repo.sourceRoot === options.rootSourceRoot);
   if (root && (root.preparationStatus === "prepared" || root.preparationStatus === "warning")) {
-    lines.push(`Prepared Root worktree: ${root.worktreePath}`);
+    lines.push(`Prepared Root repo Session worktree: ${root.worktreePath}`);
   }
   lines.push(`Retry: ${options.retryCommand}`);
   return lines.join("\n");

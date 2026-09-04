@@ -82,6 +82,10 @@ export interface SessionMembership {
 }
 
 const PRIOR_DIGEST_LIMIT = 20;
+const SESSION_ID_PREFIX_LENGTH = 8;
+const DIGEST_LINE_MAX_LENGTH = 140;
+const DEFAULT_IDLE_MINUTES = 45;
+const MILLISECONDS_PER_MINUTE = 60_000;
 
 /** Group eligible sessions into one bundle per repo (primary + secondary). */
 export function buildBundles(
@@ -194,7 +198,9 @@ function digestFor(repoKey: string, frozen: FrozenSessionRecord[]) {
       continue;
     }
     for (const friction of record.friction) {
-      lines.push(`${record.sessionId.slice(0, 8)}: ${firstLine(friction.body)}`);
+      lines.push(
+        `${record.sessionId.slice(0, SESSION_ID_PREFIX_LENGTH)}: ${firstLine(friction.body)}`,
+      );
     }
   }
   return lines.slice(-PRIOR_DIGEST_LIMIT);
@@ -202,7 +208,9 @@ function digestFor(repoKey: string, frozen: FrozenSessionRecord[]) {
 
 function firstLine(text: string) {
   const line = text.split("\n").find((entry) => entry.trim()) ?? "";
-  return line.length > 140 ? `${line.slice(0, 140)}…` : line;
+  return line.length > DIGEST_LINE_MAX_LENGTH
+    ? `${line.slice(0, DIGEST_LINE_MAX_LENGTH)}…`
+    : line;
 }
 
 export interface RunCollectOptions extends DiscoverOptions {
@@ -317,7 +325,8 @@ function parseRunTimestampMs(value: string) {
 export function runCollect(options: RunCollectOptions) {
   const root = options.retroRoot ?? retroHome(options.home);
   const nowMs = options.nowMs ?? Date.now();
-  const idleMs = (options.idleMinutes ?? 45) * 60_000;
+  const idleMs =
+    (options.idleMinutes ?? DEFAULT_IDLE_MINUTES) * MILLISECONDS_PER_MINUTE;
   const resolvedWindow = resolveRetrospectiveWindow(root, {
     nowMs,
     sinceMs: options.sinceMs,
