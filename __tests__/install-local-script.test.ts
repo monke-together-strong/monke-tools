@@ -11,7 +11,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 import { object, string } from "zod";
 
 import { makeTempDir, writeExecutable } from "./helpers.ts";

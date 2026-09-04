@@ -1,7 +1,7 @@
 import { chmodSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 import * as z from "zod";
 
 import { getExpectedWorktreePath } from "../src/git.ts";

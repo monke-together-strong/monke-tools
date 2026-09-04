@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "../src/shell.ts";

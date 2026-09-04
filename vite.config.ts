@@ -18,9 +18,6 @@ const mtsLint = createOxlintConfig({
       specifier: "vite-plus/oxlint-plugin"
     }
   ],
-  rules: {
-    "vite-plus/prefer-vite-plus-imports": "error"
-  },
   vitestExcludeFiles: ["**/__tests__/helpers.ts"]
 });
 

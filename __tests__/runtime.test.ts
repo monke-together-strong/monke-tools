@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { describe, expect, test, vi } from "vite-plus/test";
+import { describe, expect, test, vi } from "vitest";
 
 import { createRuntime, findExecutable, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";

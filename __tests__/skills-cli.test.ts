@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 
 import { saveGlobalMonkeConfig, loadGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";

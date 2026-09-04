@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 
 import { loadResolvedGraph } from "../src/config.ts";
 import { createRuntime } from "../src/runtime.ts";

@@ -10,7 +10,7 @@ import {
 import path from "node:path";
 
 import pc from "picocolors";
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 import { parse } from "yaml";
 
 import {

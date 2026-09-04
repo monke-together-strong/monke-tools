@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 
 import { resolveResourceCommands } from "../src/resources.ts";
 import { createRuntime, hashKey } from "../src/runtime.ts";

@@ -2,7 +2,7 @@ import { hash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 

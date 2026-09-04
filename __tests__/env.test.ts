@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 
 import { rewriteEnvFile } from "../src/env.ts";
 import { makeTempDir, read, write } from "./helpers.ts";

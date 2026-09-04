@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 
 import { createOxlintConfig } from "../packages/oxc-config/src/oxlint.ts";
 

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath } from "../src/session-state-store.ts";

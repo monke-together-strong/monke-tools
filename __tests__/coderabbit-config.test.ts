@@ -1,7 +1,7 @@
 import { symlinkSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vitest";
 import { parse } from "yaml";
 import { array as arraySchema, looseObject, string as stringSchema } from "zod";
 
