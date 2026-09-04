@@ -202,6 +202,7 @@ export function listReportPaths(root: string) {
 // --- lock (one run at a time) ------------------------------------------------
 
 const STALE_LOCK_AGE_MS = 60_000;
+const LOCK_RETRY_INTERVAL_MS = 50;
 
 export function withRetroLock<T>(root: string, callback: () => T) {
   const lockPath = path.join(root, "run.lock");
@@ -223,7 +224,12 @@ export function withRetroLock<T>(root: string, callback: () => T) {
       if (Date.now() >= deadline) {
         throw new Error(`Timed out waiting for retrospective lock at ${lockPath}`, { cause: error });
       }
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+      Atomics.wait(
+        new Int32Array(new SharedArrayBuffer(4)),
+        0,
+        0,
+        LOCK_RETRY_INTERVAL_MS,
+      );
     }
   }
   try {

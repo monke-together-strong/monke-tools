@@ -64,6 +64,7 @@ const EXIT_CODE_PATTERNS = [
   /exit status:? (?<exitCode>\d+)/iu,
   /process exited with status (?<exitCode>\d+)/iu,
 ];
+const INJECTED_TEXT_PREFIX_LENGTH = 40;
 
 function parseExitCode(output: string) {
   const exitCode = EXIT_CODE_PATTERNS.map(
@@ -286,7 +287,7 @@ function collectToolPathCandidates(input: JsonValue) {
 }
 
 function isInjectedUserText(text: string) {
-  const head = text.trimStart().slice(0, 40);
+  const head = text.trimStart().slice(0, INJECTED_TEXT_PREFIX_LENGTH);
   return (
     head.startsWith("# AGENTS.md") ||
     head.startsWith("<INSTRUCTIONS>") ||
