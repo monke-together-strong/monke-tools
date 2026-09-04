@@ -224,9 +224,5 @@ function explicitSkillTargets(
 }
 
 if (import.meta.main) {
-  try {
-    await runCliAsync(Bun.argv.slice(2));
-  } catch (error) {
-    reportCliFailure(error);
-  }
+  runCliAsync(Bun.argv.slice(2)).catch(reportCliFailure);
 }

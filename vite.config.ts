@@ -17,11 +17,7 @@ const mtsLint = createOxlintConfig({
       name: "vite-plus",
       specifier: "vite-plus/oxlint-plugin"
     }
-  ],
-  rules: {
-    "vite-plus/prefer-vite-plus-imports": "error"
-  },
-  vitestExcludeFiles: ["**/__tests__/helpers.ts"]
+  ]
 });
 
 export default defineConfig({
@@ -51,8 +47,9 @@ export default defineConfig({
     "*": `sh -c 'vp check --fix "$@" || true' --`
   },
   test: {
-    fileParallelism: false,
-    include: ["__tests__/**/*.test.ts"],
-    maxConcurrency: 1
+    fileParallelism: true,
+    include: ["tests/**/*.test.ts"],
+    maxConcurrency: 1,
+    maxWorkers: 2
   }
 });

@@ -16,4 +16,4 @@ runs:
 
     - name: Install deps
       shell: bash
-      run: vp install --frozen-lockfile
+      run: vp install --frozen-lockfile -- --prefer-offline

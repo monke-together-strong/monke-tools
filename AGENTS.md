@@ -11,6 +11,12 @@ Check [./CONTEXT.md](./CONTEXT.md) for terminology questions.
 - Follow git flow, don't create `codex/` branches
 - Put clean source clones created for testing under `tmp/`.
 
+## Runtime consistency
+
+- Prefer Bun runtime primitives in production and Bun-run scripts: `Bun.which`, `Bun.spawnSync`, `Bun.spawn`, `Bun.CryptoHasher`, `Bun.file`, `Bun.write`, and Bun's native glob implementations where their semantics fit.
+- Route application command execution through `Runtime.exec` and `Runtime.execAsync`; use direct Bun subprocess APIs only at release and developer-script boundaries.
+- Retain `node:fs` and `node:path` for synchronous metadata, permissions, symlinks, and atomic filesystem operations.
+
 ## Task Tracking
 
 - [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues)

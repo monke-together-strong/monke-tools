@@ -1,7 +1,5 @@
 #!/usr/bin/env bun
 
-import { spawnSync } from "node:child_process";
-import { hash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -31,6 +29,7 @@ import {
   StableSemanticVersionSchema
 } from "./install-manifest.ts";
 import type { ReleaseInstallManifest } from "./install-manifest.ts";
+import { runReleaseCommand } from "./release-command.ts";
 import {
   compareStableSemanticVersions,
   parseStableSemanticVersion,
@@ -40,6 +39,7 @@ import {
   verifyReleaseArchive
 } from "./release-contract.ts";
 import { BUNDLED_GUIDANCE_FOLDERS, hashReleaseGuidance } from "./release-guidance.ts";
+import { sha256 } from "./sha256.ts";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const ZERO_COMMIT_PATTERN = /^0{40}$/u;
@@ -69,6 +69,9 @@ interface BuildReleaseBundleOptions {
   version: string;
 }
 
+// Bun 1.4.1 supports this option, but @types/bun 1.4.0 does not declare it yet.
+type BunBuildConfig = Bun.BuildConfig & { bytecodeDepth?: number };
+
 export function isReleaseOwnedPath(filePath: string) {
   const normalized = filePath.replaceAll("\\", "/");
   return RELEASE_INPUTS.some((input) =>
@@ -95,7 +98,7 @@ export function deriveNextReleaseVersion(tags: string[]) {
   return `${String(current[0])}.${String(current[1])}.${String(current[2] + 1n)}`;
 }
 
-export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
+export async function buildReleaseBundle(options: BuildReleaseBundleOptions) {
   const version = StableSemanticVersionSchema.parse(options.version);
   const platform = ReleasePlatformSchema.parse(options.platform);
   const sourceCommit = FullCommitSchema.parse(options.sourceCommit);
@@ -108,11 +111,11 @@ export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
   try {
     mkdirSync(bundleRoot, { recursive: true });
     mkdirSync(outputDirectory, { recursive: true });
-    compileExecutable(path.join(bundleRoot, "mt"), platform, version);
+    await compileExecutable(path.join(bundleRoot, "mt"), platform, version);
     copyBundleInputs(bundleRoot);
 
     const manifest: ReleaseInstallManifest = ReleaseInstallManifestSchema.parse({
-      artifactDigest: hash("sha256", readFileSync(path.join(bundleRoot, "mt")), "hex"),
+      artifactDigest: sha256(readFileSync(path.join(bundleRoot, "mt"))),
       artifactName: archiveName,
       createdAt: options.createdAt ?? new Date().toISOString(),
       guidanceHashes: hashReleaseGuidance(bundleRoot),
@@ -130,10 +133,13 @@ export function buildReleaseBundle(options: BuildReleaseBundleOptions) {
       `${JSON.stringify(manifest, null, 2)}\n`,
       "utf-8"
     );
-    run("tar", ["-czf", archivePath, "-C", bundleRoot, "."], repositoryRoot, {
-      // oxlint-disable-next-line node/no-process-env -- Preserve the build environment while disabling macOS archive metadata.
-      ...process.env,
-      COPYFILE_DISABLE: "1"
+    runReleaseCommand("tar", ["-czf", archivePath, "-C", bundleRoot, "."], {
+      cwd: repositoryRoot,
+      env: {
+        // oxlint-disable-next-line node/no-process-env -- Preserve the build environment while disabling macOS archive metadata.
+        ...process.env,
+        COPYFILE_DISABLE: "1"
+      }
     });
     return archivePath;
   } finally {
@@ -155,7 +161,7 @@ export function writeReleaseChecksums(directory: string, version: string) {
   const contents = archiveNames
     .map(
       (archiveName) =>
-        `${hash("sha256", readFileSync(path.join(outputDirectory, archiveName)), "hex")}  ${archiveName}`
+        `${sha256(readFileSync(path.join(outputDirectory, archiveName)))}  ${archiveName}`
     )
     .join("\n");
   writeFileSync(checksumPath, `${contents}\n`, "utf-8");
@@ -227,25 +233,32 @@ export function verifyReleaseAssets(options: {
   );
 }
 
-function compileExecutable(
+async function compileExecutable(
   outputPath: string,
   platform: output<typeof ReleasePlatformSchema>,
   version: string
 ) {
   const target = platform === "macos-arm64" ? "bun-darwin-arm64" : "bun-linux-x64";
-  run("bun", [
-    "build",
-    "--compile",
-    "--no-compile-autoload-dotenv",
-    "--no-compile-autoload-bunfig",
-    "--target",
-    target,
-    "--define",
-    `process.env.MONKE_TOOLS_BUILD_IDENTITY=${JSON.stringify(version)}`,
-    "--outfile",
-    outputPath,
-    path.join(repositoryRoot, "src", "index.ts")
-  ]);
+  const buildConfig: BunBuildConfig = {
+    bytecode: true,
+    bytecodeDepth: 1,
+    compile: {
+      autoloadBunfig: false,
+      autoloadDotenv: false,
+      outfile: outputPath,
+      target
+    },
+    define: {
+      "process.env.MONKE_TOOLS_BUILD_IDENTITY": JSON.stringify(version)
+    },
+    entrypoints: [path.join(repositoryRoot, "src", "index.ts")],
+    root: repositoryRoot
+  };
+  const result = await Bun.build(buildConfig);
+  if (!result.success) {
+    const detail = result.logs.map((log) => log.message).join("\n") || "unknown failure";
+    throw new Error(`bun build failed: ${detail}`);
+  }
   chmodSync(outputPath, 0o755);
 }
 
@@ -272,43 +285,25 @@ function releaseAssetDigest(directory: string, assetName: string) {
   if (!existsSync(assetPath)) {
     throw new Error(`Release asset is missing: ${assetName}`);
   }
-  return `sha256:${hash("sha256", readFileSync(assetPath), "hex")}`;
-}
-
-function commandFailureDetail(result: { error?: Error; stderr: string | null }) {
-  return result.stderr?.trim() || result.error?.message || "unknown failure";
-}
-
-function run(
-  command: string,
-  arguments_: string[],
-  cwd = repositoryRoot,
-  environment?: NodeJS.ProcessEnv
-) {
-  const result = spawnSync(command, arguments_, { cwd, encoding: "utf-8", env: environment });
-  const commandText = `${command} ${arguments_.join(" ")}`;
-  if (result.error) {
-    throw new Error(`${commandText} could not be started`, { cause: result.error });
-  }
-  if (result.status === null) {
-    throw new Error(`${commandText} was terminated by signal ${result.signal ?? "unknown"}`);
-  }
-  if (result.status !== 0) {
-    throw new Error(`${commandText} failed: ${commandFailureDetail(result)}`);
-  }
-  return result.stdout ?? "";
+  return `sha256:${sha256(readFileSync(assetPath))}`;
 }
 
 function changedPaths(before: string, after: string) {
   FullCommitSchema.parse(after);
   if (ZERO_COMMIT_PATTERN.test(before)) {
-    return run("git", ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", after])
+    return runReleaseCommand(
+      "git",
+      ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", after],
+      { cwd: repositoryRoot }
+    )
       .trim()
       .split("\n")
       .filter(Boolean);
   }
   FullCommitSchema.parse(before);
-  return run("git", ["diff", "--name-only", "--no-renames", before, after])
+  return runReleaseCommand("git", ["diff", "--name-only", "--no-renames", before, after], {
+    cwd: repositoryRoot
+  })
     .trim()
     .split("\n")
     .filter(Boolean);
@@ -319,7 +314,9 @@ export function hasReleaseOwnedChangesBetween(before: string, after: string) {
 }
 
 export function listReleaseTags() {
-  return run("git", ["tag", "--list", `${RELEASE_TAG_PREFIX}*`])
+  return runReleaseCommand("git", ["tag", "--list", `${RELEASE_TAG_PREFIX}*`], {
+    cwd: repositoryRoot
+  })
     .trim()
     .split("\n")
     .filter(Boolean);

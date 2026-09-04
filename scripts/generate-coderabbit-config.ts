@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -19,7 +18,7 @@ import {
 } from "zod";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
-import { MonkeError } from "../src/errors.ts";
+import { errorMessage, MonkeError } from "../src/errors.ts";
 
 const SOURCE_ROOT = path.join("skills", "references");
 const ROOT_DOCUMENT = path.join(SOURCE_ROOT, "internal", "CODING_STANDARDS.md");
@@ -77,27 +76,42 @@ export function isCodeRabbitSyncRelevant(rawOptions: unknown) {
 }
 
 export function listChangedPaths(repoRoot: string, before: string, after: string) {
-  const beforeCommit = spawnSync("git", ["cat-file", "-e", `${before}^{commit}`], {
-    cwd: repoRoot,
-    stdio: "ignore"
-  });
-  const hasBeforeCommit = !/^0+$/u.test(before) && !beforeCommit.error && beforeCommit.status === 0;
+  let hasBeforeCommit = false;
+  if (!/^0+$/u.test(before)) {
+    try {
+      hasBeforeCommit =
+        Bun.spawnSync({
+          cmd: ["git", "cat-file", "-e", `${before}^{commit}`],
+          cwd: repoRoot,
+          stderr: "ignore",
+          stdout: "ignore"
+        }).exitCode === 0;
+    } catch {
+      hasBeforeCommit = false;
+    }
+  }
   const args = hasBeforeCommit
     ? ["diff", "--name-only", "--no-renames", "-z", before, after, "--"]
     : ["ls-tree", "-r", "-z", "--name-only", after];
-  const result = spawnSync("git", args, {
-    cwd: repoRoot,
-    encoding: "utf-8"
-  });
-  if (result.error) {
-    throw new MonkeError(`Could not inspect changed paths: ${result.error.message}`);
+  let result: Bun.ReadableSyncSubprocess;
+  try {
+    result = Bun.spawnSync({
+      cmd: ["git", ...args],
+      cwd: repoRoot,
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+  } catch (error) {
+    throw new MonkeError(`Could not inspect changed paths: ${errorMessage(error)}`, {
+      cause: error
+    });
   }
-  if (result.status !== 0) {
-    throw new MonkeError(
-      `Could not inspect changed paths: ${(result.stderr || result.stdout).trim()}`
-    );
+  const stdout = result.stdout.toString();
+  const stderr = result.stderr.toString();
+  if (result.exitCode !== 0) {
+    throw new MonkeError(`Could not inspect changed paths: ${(stderr || stdout).trim()}`);
   }
-  return result.stdout.split("\0").filter(Boolean);
+  return stdout.split("\0").filter(Boolean);
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- CLI and test inputs are parsed into the render contract immediately below.

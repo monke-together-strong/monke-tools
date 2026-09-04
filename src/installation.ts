@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   cpSync,
   existsSync,
@@ -123,7 +122,7 @@ export async function runActivateReleaseInstall(
   const activate = async () => {
     preflightInstallGuidance(runtime, sourceBundle, options.explicitTargets);
     const stagingRoot = path.join(monkeHome, "install-staging");
-    const stagedInstall = path.join(stagingRoot, `release-${randomUUID()}`);
+    const stagedInstall = path.join(stagingRoot, `release-${crypto.randomUUID()}`);
     const stagingRootExisted = existsSync(stagingRoot);
     mkdirSync(stagingRoot, { recursive: true });
     assertDirectChildPath(stagedInstall, stagingRoot, "staged Release tool install");
@@ -408,7 +407,7 @@ function activateStagedInstall(options: {
   }
 
   const currentPointer = path.join(options.monkeHome, "current");
-  const temporaryPointer = `${currentPointer}.${randomUUID()}.tmp`;
+  const temporaryPointer = `${currentPointer}.${crypto.randomUUID()}.tmp`;
   try {
     installStableCommand(stableMt, path.join(currentPointer, "mt"));
     installStableCommand(stableMonke, stableMt);
@@ -446,7 +445,7 @@ function installStableCommand(commandPath: string, targetPath: string) {
   if (stat) {
     rmSync(commandPath);
   }
-  const temporaryLink = `${commandPath}.${randomUUID()}.tmp`;
+  const temporaryLink = `${commandPath}.${crypto.randomUUID()}.tmp`;
   symlinkSync(targetPath, temporaryLink, "file");
   renameSync(temporaryLink, commandPath);
 }

@@ -21,7 +21,7 @@
     "skills:import": "bun run scripts/import-skills.ts",
     "skills:update": "bun run scripts/update-skills.ts",
     "tegami": "bun run scripts/tegami.mts",
-    "test": "bunx --bun vp test run",
+    "test": "bunx --bun vitest run",
     "prepare": "vp config"
   },
   "dependencies": {
@@ -44,10 +44,11 @@
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "unist-util-visit": "5.1.0",
     "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9",
-    "vite-plus": "0.2.9"
+    "vite-plus": "0.2.9",
+    "vitest": "5.0.0"
   },
   "overrides": {
     "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9"
   },
-  "packageManager": "bun@1.4.0"
+  "packageManager": "bun@1.4.1"
 }

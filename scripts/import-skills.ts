@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
@@ -28,7 +27,7 @@ import { parseDocument } from "yaml";
 import * as z from "zod";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
-import { MonkeError } from "../src/errors.ts";
+import { errorMessage, MonkeError } from "../src/errors.ts";
 import { parseBoundaryValue } from "../src/validation.ts";
 
 interface ImportCommandOptions {
@@ -888,51 +887,65 @@ function buildOpenClawRiskArgs(acceptOpenClawRisks: boolean) {
 
 /** Runs the local skill install command against a monke-tools source checkout. */
 export function runInstallCommand(repoRoot: string) {
-  const result = spawnSync(
-    process.execPath,
-    ["run", path.join(repoRoot, "src", "index.ts"), "skills", "local-install", repoRoot],
-    {
+  let result: Bun.SyncSubprocess<"inherit", "inherit">;
+  try {
+    result = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "run",
+        path.join(repoRoot, "src", "index.ts"),
+        "skills",
+        "local-install",
+        repoRoot
+      ],
       cwd: repoRoot,
-      // oxlint-disable-next-line node/no-process-env -- The child process must inherit the invoking environment.
+      // oxlint-disable-next-line node/no-process-env -- Preserve environment changes made by embedding callers.
       env: process.env,
-      stdio: "inherit"
-    }
-  );
-
-  if (result.error) {
-    throw new MonkeError(`Failed to run skill install command: ${result.error.message}`);
+      stderr: "inherit",
+      stdin: "inherit",
+      stdout: "inherit"
+    });
+  } catch (error) {
+    throw new MonkeError(`Failed to run skill install command: ${errorMessage(error)}`, {
+      cause: error
+    });
   }
 
-  if (result.status !== 0) {
+  if (result.exitCode !== 0) {
     throw new MonkeError(
-      `Skill install command failed with ${result.signal ? `signal ${result.signal}` : `exit code ${result.status ?? "unknown"}`}`
+      `Skill install command failed with ${result.signalCode ? `signal ${result.signalCode}` : `exit code ${result.exitCode ?? "unknown"}`}`
     );
   }
 }
 
 /** Runs upstream `skills` CLI arguments and returns captured output or throws on failure. */
 export function runSkillsCaptured(args: string[], cwd: string) {
-  const result = spawnSync(NPX_COMMAND, args, {
-    cwd,
-    encoding: "utf-8",
-    // oxlint-disable-next-line node/no-process-env -- The upstream CLI must inherit the invoking environment.
-    env: process.env
-  });
-
-  if (result.error) {
-    throw new MonkeError(`Failed to run skills CLI: ${result.error.message}`);
+  let result: Bun.ReadableSyncSubprocess;
+  try {
+    result = Bun.spawnSync({
+      cmd: [NPX_COMMAND, ...args],
+      cwd,
+      // oxlint-disable-next-line node/no-process-env -- Preserve environment changes made by embedding callers.
+      env: process.env,
+      stderr: "pipe",
+      stdout: "pipe"
+    });
+  } catch (error) {
+    throw new MonkeError(`Failed to run skills CLI: ${errorMessage(error)}`, { cause: error });
   }
 
-  if (result.status !== 0) {
-    const details = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  const stdout = result.stdout.toString();
+  const stderr = result.stderr.toString();
+  if (result.exitCode !== 0) {
+    const details = [stdout, stderr].filter(Boolean).join("\n").trim();
     throw new MonkeError(
       `Command failed: ${formatCommand(NPX_COMMAND, args)}${details ? `\n${details}` : ""}`
     );
   }
 
   return {
-    stderr: result.stderr ?? "",
-    stdout: result.stdout ?? ""
+    stderr,
+    stdout
   };
 }
 

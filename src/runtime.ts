@@ -1,8 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
-import type { ChildProcessWithoutNullStreams, SpawnSyncReturns } from "node:child_process";
-import { hash } from "node:crypto";
 import {
-  accessSync,
   closeSync,
   existsSync,
   mkdirSync,
@@ -24,6 +20,7 @@ import * as z from "zod";
 import { DEFAULT_TOOL_BUILD_IDENTITY } from "./build-identity.ts";
 import { errorMessage, MonkeError } from "./errors.ts";
 import { ReleaseCatalogPageSchema } from "./release-catalog-schema.ts";
+import { sha256 } from "./sha256.ts";
 import type {
   ExecOptions,
   ExecResult,
@@ -41,7 +38,7 @@ const LOCK_RETRY_INTERVAL_MS = 50;
 const RELEASE_CATALOG_PAGE_SIZE = 100;
 const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
-type AsyncChildProcess = ChildProcessWithoutNullStreams;
+type AsyncChildProcess = Bun.PipedSubprocess;
 const activeAsyncChildren = new Set<AsyncChildProcess>();
 const timedOutProcessGroups = new Map<number, AsyncChildProcess>();
 const PARENT_TERMINATION_SIGNALS = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
@@ -266,9 +263,7 @@ function createGitHubReleaseDistribution(
       ) {
         throw new MonkeError("GitHub Release asset URL is not an approved repository download");
       }
-      const response = await request(url);
-      const body = await response.arrayBuffer();
-      return new Uint8Array(body);
+      return await request(url);
     },
     async listReleases(page) {
       try {
@@ -304,16 +299,21 @@ function executeCommand(
     MONKE_SHELL_DIR_DIRECTIVE: undefined
   };
 
-  const result = spawnSync(command, args, {
-    cwd: options?.cwd ?? runtimeCwd,
-    encoding: "utf-8",
-    env: childEnv,
-    input: options?.stdin,
-    timeout: options?.timeoutSeconds === undefined ? undefined : options.timeoutSeconds * 1000
-  });
-
-  if (result.error) {
-    return handleSpawnError(result, command, args, options?.allowFailure === true);
+  let result: Bun.ReadableSyncSubprocess;
+  try {
+    result = Bun.spawnSync({
+      cmd: [command, ...args],
+      cwd: options?.cwd ?? runtimeCwd,
+      env: childEnv,
+      stderr: "pipe",
+      stdin: options?.stdin === undefined ? "ignore" : Buffer.from(options.stdin),
+      stdout: "pipe",
+      timeout: options?.timeoutSeconds === undefined ? undefined : options.timeoutSeconds * 1000
+    });
+  } catch (error) {
+    throw new MonkeError(`Failed to run ${formatCommand(command, args)}: ${errorMessage(error)}`, {
+      cause: error
+    });
   }
   return handleCompletedCommand(result, command, args, options?.allowFailure === true);
 }
@@ -337,18 +337,33 @@ function executeCommandAsync(
   };
 
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options?.cwd ?? runtimeCwd,
-      detached: process.platform !== "win32",
-      env: childEnv,
-      stdio: "pipe"
-    });
+    let child: AsyncChildProcess;
+    try {
+      child = Bun.spawn({
+        cmd: [command, ...args],
+        cwd: options?.cwd ?? runtimeCwd,
+        detached: process.platform !== "win32",
+        env: childEnv,
+        stderr: "pipe",
+        stdin: "pipe",
+        stdout: "pipe"
+      });
+    } catch (error) {
+      reject(
+        new MonkeError(`Failed to run ${formatCommand(command, args)}: ${errorMessage(error)}`, {
+          cause: error
+        })
+      );
+      return;
+    }
     new AsyncCommandExecution(child, command, args, options, resolve, reject).start();
   });
 }
 
 class AsyncCommandExecution {
   #forceKill: ReturnType<typeof setTimeout> | undefined;
+  #input: Promise<void> | undefined;
+  #output: Promise<void> | undefined;
   #settled = false;
   #stderr = "";
   #stdinError: Error | undefined;
@@ -367,21 +382,36 @@ class AsyncCommandExecution {
 
   start() {
     registerAsyncChild(this.child);
-    this.captureOutput();
-    this.listenForCompletion();
+    this.#output = this.captureOutput();
+    this.#input = this.writeInput();
     this.startTimeout();
-    this.child.stdin.end(this.options?.stdin);
+    void this.complete();
   }
 
-  private captureOutput() {
-    this.child.stdout.setEncoding("utf-8");
-    this.child.stderr.setEncoding("utf-8");
-    this.child.stdout.on("data", (chunk: string) => {
-      this.#stdout += chunk;
-    });
-    this.child.stderr.on("data", (chunk: string) => {
-      this.#stderr += chunk;
-    });
+  private async complete() {
+    try {
+      const exitCode = await this.child.exited;
+      await Promise.all([this.#output, this.#input]);
+      this.handleExit(exitCode, this.child.signalCode);
+    } catch (error) {
+      if (this.#timedOut) {
+        return;
+      }
+      this.rejectOnce(
+        new MonkeError(
+          `Failed to run ${formatCommand(this.command, this.args)}: ${errorMessage(error)}`,
+          { cause: error }
+        )
+      );
+      unregisterAsyncChild(this.child);
+    }
+  }
+
+  private async captureOutput() {
+    [this.#stdout, this.#stderr] = await Promise.all([
+      new Response(this.child.stdout).text(),
+      new Response(this.child.stderr).text()
+    ]);
   }
 
   private clearTimers() {
@@ -393,10 +423,11 @@ class AsyncCommandExecution {
     }
   }
 
-  private forceTimeoutCompletion() {
+  private async forceTimeoutCompletion() {
     terminateChildProcessTree(this.child.pid, "SIGKILL", () => {
       this.child.kill("SIGKILL");
     });
+    await Promise.allSettled([this.child.exited, this.#output, this.#input]);
     if (this.child.pid !== undefined) {
       timedOutProcessGroups.delete(this.child.pid);
     }
@@ -406,7 +437,7 @@ class AsyncCommandExecution {
     detachParentTerminationHandlersIfIdle();
   }
 
-  private handleClose(code: number | null, signal: NodeJS.Signals | null) {
+  private handleExit(code: number | null, signal: NodeJS.Signals | null) {
     try {
       if (this.#timedOut) {
         return;
@@ -436,26 +467,6 @@ class AsyncCommandExecution {
     } finally {
       unregisterAsyncChild(this.child);
     }
-  }
-
-  private listenForCompletion() {
-    // Writing to a child that already stopped reading raises EPIPE here. Record it instead of
-    // letting the unhandled stream error escape, and settle it in handleClose.
-    this.child.stdin.on("error", (error: Error) => {
-      this.#stdinError ??= error;
-    });
-    this.child.once("error", (error) => {
-      if (this.#timedOut) {
-        return;
-      }
-      this.rejectOnce(
-        new MonkeError(`Failed to run ${formatCommand(this.command, this.args)}: ${error.message}`)
-      );
-      unregisterAsyncChild(this.child);
-    });
-    this.child.once("close", (code, signal) => {
-      this.handleClose(code, signal);
-    });
   }
 
   private rejectOnce(error: Error) {
@@ -502,9 +513,20 @@ class AsyncCommandExecution {
         this.child.kill("SIGTERM");
       });
       this.#forceKill = setTimeout(() => {
-        this.forceTimeoutCompletion();
+        void this.forceTimeoutCompletion();
       }, ASYNC_TERMINATION_GRACE_MS);
     }, this.options.timeoutSeconds * 1000);
+  }
+
+  private async writeInput() {
+    try {
+      if (this.options?.stdin !== undefined) {
+        await this.child.stdin.write(this.options.stdin);
+      }
+      await this.child.stdin.end();
+    } catch (error) {
+      this.#stdinError = error instanceof Error ? error : new Error(String(error));
+    }
   }
 }
 
@@ -610,39 +632,27 @@ function terminateChildProcessTree(
   }
 }
 
-function handleSpawnError(
-  result: SpawnSyncReturns<string>,
-  command: string,
-  args: string[],
-  allowFailure: boolean
-) {
-  const { error } = result;
-  if (error === undefined) {
-    throw new MonkeError(`Expected ${formatCommand(command, args)} to have a spawn error`);
-  }
-  if (allowFailure && isTimeoutError(error)) {
-    return {
-      exitCode: -1,
-      stderr: result.stderr ?? "",
-      stdout: result.stdout ?? "",
-      timedOut: true
-    };
-  }
-  throw new MonkeError(`Failed to run ${formatCommand(command, args)}: ${error.message}`);
-}
-
 function handleCompletedCommand(
-  result: SpawnSyncReturns<string>,
+  result: Bun.ReadableSyncSubprocess,
   command: string,
   args: string[],
   allowFailure: boolean
 ) {
-  const stdout = result.stdout ?? "";
-  const stderr = result.stderr ?? "";
-  const exitCode = result.status ?? -1;
+  const stdout = result.stdout.toString();
+  const stderr = result.stderr.toString();
+  // Bun 1.4.1 returns null at runtime after a timeout or signal, despite the numeric type.
+  const exitCode = result.exitCode ?? -1;
 
-  if (!allowFailure && result.status === null) {
-    const reason = result.signal ? `terminated by signal ${result.signal}` : "terminated by signal";
+  if (result.exitedDueToTimeout === true) {
+    if (allowFailure) {
+      return { exitCode: -1, stderr, stdout, timedOut: true };
+    }
+    throw new MonkeError(
+      `Failed to run ${formatCommand(command, args)}: spawnSync ${command} ETIMEDOUT`
+    );
+  }
+  if (!allowFailure && result.signalCode !== undefined) {
+    const reason = `terminated by signal ${result.signalCode}`;
     throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
   }
   if (!allowFailure && exitCode !== 0) {
@@ -650,10 +660,6 @@ function handleCompletedCommand(
     throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
   }
   return { exitCode, stderr, stdout };
-}
-
-function isTimeoutError(error: Error) {
-  return "code" in error && error.code === "ETIMEDOUT";
 }
 
 export function formatCommand(command: string, args: string[]) {
@@ -674,7 +680,7 @@ export function getHomeDirectory(runtime: Runtime) {
 }
 
 export function hashKey(value: string) {
-  return hash("sha256", value, "hex");
+  return sha256(value);
 }
 
 export function findExecutable(command: string, env: Record<string, string | undefined>) {
@@ -682,26 +688,7 @@ export function findExecutable(command: string, env: Record<string, string | und
   if (!pathValue) {
     return null;
   }
-
-  for (const segment of pathValue.split(path.delimiter)) {
-    if (!segment) {
-      continue;
-    }
-
-    const candidate = path.join(segment, command);
-    if (!existsSync(candidate)) {
-      continue;
-    }
-
-    try {
-      accessSync(candidate);
-      return candidate;
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
+  return Bun.which(command, { PATH: pathValue });
 }
 
 export function withGlobalLock<T>(home: string, callback: () => T) {
