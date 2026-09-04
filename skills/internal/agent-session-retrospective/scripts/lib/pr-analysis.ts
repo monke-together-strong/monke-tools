@@ -160,7 +160,13 @@ type GhRepo = output<typeof GhRepoSchema>;
 
 const DEFAULT_ORG = "monke-together-strong";
 const PR_LIST_LIMIT = 100;
+const REPOSITORY_LIST_LIMIT = 1000;
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
+const CORRECTIVE_PATTERN_LIMIT = 8;
+const WORK_ITEM_ID_HASH_LENGTH = 12;
+const ISO_DATE_LENGTH = 10;
+const MAX_DELTA_LENGTH = 100_000;
+const DELTA_ELISION_OVERHEAD = 80;
 const PR_LIST_FIELDS = ["number", "url", "title", "createdAt", "mergedAt"].join(",");
 const PR_DETAIL_FIELDS = [
   "number",
@@ -197,7 +203,7 @@ export function runPrCollect(options: RunPrCollectOptions) {
         "list",
         org,
         "--limit",
-        "1000",
+        String(REPOSITORY_LIST_LIMIT),
         "--json",
         "nameWithOwner,isArchived,isPrivate",
       ]),
@@ -682,7 +688,7 @@ function extractCorrectivePatternLines(body: string) {
     .map((line) => line.trim().replace(/^[-*]\s+/u, ""))
     .filter(Boolean)
     .filter((line) => !line.startsWith("##"))
-    .slice(0, 8);
+    .slice(0, CORRECTIVE_PATTERN_LIMIT);
 }
 
 function groupCorrectivePatterns(
@@ -750,11 +756,11 @@ function sentence(value: string) {
 
 function workItemId(repo: string, number: number) {
   const readable = repo.replaceAll("/", "__").replaceAll(/[^a-zA-Z0-9_.-]/gu, "-");
-  return `${readable}__${number}__${hashKey(`${repo}#${number}`).slice(0, 12)}`;
+  return `${readable}__${number}__${hashKey(`${repo}#${number}`).slice(0, WORK_ITEM_ID_HASH_LENGTH)}`;
 }
 
 function dateOnly(value: string) {
-  return value.slice(0, 10);
+  return value.slice(0, ISO_DATE_LENGTH);
 }
 
 function eachDateOnly(since: string, until: string) {
@@ -762,18 +768,17 @@ function eachDateOnly(since: string, until: string) {
   const cursor = new Date(`${dateOnly(since)}T00:00:00.000Z`);
   const end = new Date(`${dateOnly(until)}T00:00:00.000Z`);
   while (cursor.getTime() <= end.getTime()) {
-    days.push(cursor.toISOString().slice(0, 10));
+    days.push(cursor.toISOString().slice(0, ISO_DATE_LENGTH));
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return days;
 }
 
 function clipDelta(value: string) {
-  const limit = 100_000;
-  if (value.length <= limit) {
+  if (value.length <= MAX_DELTA_LENGTH) {
     return value;
   }
-  const keep = Math.floor((limit - 80) / 2);
+  const keep = Math.floor((MAX_DELTA_LENGTH - DELTA_ELISION_OVERHEAD) / 2);
   return `${value.slice(0, keep)}\n\n[${value.length - keep * 2} chars elided]\n\n${value.slice(-keep)}`;
 }
 

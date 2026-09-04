@@ -102,6 +102,12 @@ interface RepoSlice {
   validated: ValidatedFindings;
 }
 
+const SESSION_ID_PREFIX_LENGTH = 8;
+const SYNTHESIS_HEADING_LEVEL = 3;
+const FULL_GIT_SHA_LENGTH = 40;
+const MINIMUM_GIT_SHA_PREFIX_LENGTH = 7;
+const REPORT_LINE_MAX_LENGTH = 200;
+
 export interface RunCommitOptions {
   home?: string;
   nowIso: string;
@@ -338,7 +344,7 @@ function buildSessionSources(
       }
       seenEpisodes.add(dedupeKey);
       out.push(
-        `- \`${slice.validated.repoKey}\` · ${episode.sessionId.slice(0, 8)} · refs ${episode.citedTurnRefs.join(", ")}`,
+        `- \`${slice.validated.repoKey}\` · ${episode.sessionId.slice(0, SESSION_ID_PREFIX_LENGTH)} · refs ${episode.citedTurnRefs.join(", ")}`,
        `  ${firstLine(episode.body)}`);
     }
   }
@@ -410,7 +416,7 @@ export function validateSynthesis(content: string | null | undefined) {
     return ["Synthesis is empty."];
   }
   const warnings = REQUIRED_SYNTHESIS_HEADINGS.flatMap((heading) => {
-    const count = countHeading(text, heading, 3);
+    const count = countHeading(text, heading, SYNTHESIS_HEADING_LEVEL);
     return count === 1 ? [] : [`Heading \`### ${heading}\` appears ${count} time(s), expected 1.`];
   });
   if (warnings.length > 0) {
@@ -420,7 +426,11 @@ export function validateSynthesis(content: string | null | undefined) {
   if (!positions.every((position, index) => index === 0 || position > (positions[index - 1] ?? -1))) {
     warnings.push("Required synthesis headings are out of order.");
   }
-  const activeActions = extractMarkdownSection(text, "Active Actions", 3);
+  const activeActions = extractMarkdownSection(
+    text,
+    "Active Actions",
+    SYNTHESIS_HEADING_LEVEL,
+  );
   if (isNonEmptyString(activeActions)) {
     warnings.push(...validateActiveActions(activeActions));
   }
@@ -563,7 +573,11 @@ function containsRef(text: string, ref: string) {
   if (text.includes(ref)) {
     return true;
   }
-  for (let length = Math.min(ref.length, 40); length >= 7; length -= 1) {
+  for (
+    let length = Math.min(ref.length, FULL_GIT_SHA_LENGTH);
+    length >= MINIMUM_GIT_SHA_PREFIX_LENGTH;
+    length -= 1
+  ) {
     if (text.includes(ref.slice(0, length))) {
       return true;
     }
@@ -659,5 +673,7 @@ function indentBody(body: string) {
 
 function firstLine(text: string) {
   const line = text.split("\n").find((entry) => entry.trim()) ?? "";
-  return line.length > 200 ? `${line.slice(0, 200)}…` : line;
+  return line.length > REPORT_LINE_MAX_LENGTH
+    ? `${line.slice(0, REPORT_LINE_MAX_LENGTH)}…`
+    : line;
 }
