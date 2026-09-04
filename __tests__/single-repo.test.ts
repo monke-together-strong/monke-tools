@@ -195,7 +195,7 @@ describe("single-repo sessions", () => {
     expect(result.error?.message).toContain(
       "Session materialization failed after all runnable work settled."
     );
-    expect(result.error?.message).toContain(`Prepared Root worktree: ${worktreeRoot}`);
+    expect(result.error?.message).toContain(`Prepared Root repo Session worktree: ${worktreeRoot}`);
     expect(result.error?.message).toContain("Retry: mt spawn banana");
     expect(result.stderr).not.toContain("Spawned or updated session banana");
     expect(result.stderr).not.toContain(`Switch to ${worktreeRoot}`);
@@ -437,7 +437,9 @@ describe("single-repo sessions", () => {
       monkeHome: home
     });
 
-    expect(retried.error?.message).toContain(`Prepared Root worktree: ${worktreeRoot}`);
+    expect(retried.error?.message).toContain(
+      `Prepared Root repo Session worktree: ${worktreeRoot}`
+    );
     expect(read(worktreeRoot, "README.md")).toBe("dirty\n");
     expect(read(worktreeRoot, "notes.txt")).toBe("untracked\n");
     expect(loadSessionState(home, repoRoot, "interrupted-carry").repos[0]).toMatchObject({
@@ -1055,7 +1057,9 @@ describe("single-repo sessions", () => {
       monkeHome: home
     });
 
-    expect(retried.error?.message).toContain(`Prepared Root worktree: ${worktreeRoot}`);
+    expect(retried.error?.message).toContain(
+      `Prepared Root repo Session worktree: ${worktreeRoot}`
+    );
     expect(read(worktreeRoot, "version.txt")).toBe("pinned\n");
     expect(git(worktreeRoot, ["rev-parse", "HEAD"])).toBe(pinnedRef);
     expect(loadSessionState(home, repoRoot, "retained").repos[0]?.pinnedRef).toBe(pinnedRef);
