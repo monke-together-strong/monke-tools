@@ -48,8 +48,9 @@ export default defineConfig({
     "*": `sh -c 'vp check --fix "$@" || true' --`
   },
   test: {
-    fileParallelism: false,
+    fileParallelism: true,
     include: ["__tests__/**/*.test.ts"],
-    maxConcurrency: 1
+    maxConcurrency: 1,
+    maxWorkers: 2
   }
 });
