@@ -10,14 +10,16 @@ import { Command } from "@commander-js/extra-typings";
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
 import { MonkeError } from "../src/errors.ts";
 import {
+  copyStagedGuidanceToManagedRoots,
+  IMPORTED_REFERENCES_ROOT,
+  IMPORTED_SKILLS_ROOT
+} from "./import-guidance.ts";
+import {
   assertSkillSelectorSlugMappingsMatchStagedSlugs,
   buildSkillsInstallArgs,
-  copyStagedGuidanceToManagedRoots,
   listStagedSkillSlugs,
   normalizeImportRecipeStore,
   normalizeSourceForStaging,
-  IMPORTED_REFERENCES_ROOT,
-  IMPORTED_SKILLS_ROOT,
   readImportRecipeStore,
   reportSecurityRiskAssessment,
   resolveSkillSelectorSlugMappings,
