@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import path from "node:path";
 
 import { parseDocument, stringify, visit } from "yaml";
@@ -8,7 +16,14 @@ import { MonkeError } from "./errors.ts";
 import { samePath } from "./path-identity.ts";
 import { hashKey, isPortAvailable } from "./runtime.ts";
 import { RepoReservationSchema, SessionStateSchema } from "./state-schema.ts";
-import type { RepoConfig, RepoReservation, SessionRepoState, SessionState } from "./types.ts";
+import type {
+  RepoConfig,
+  RepoReservation,
+  ResourceCommandConfig,
+  ResourceValueState,
+  SessionRepoState,
+  SessionState
+} from "./types.ts";
 import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
 
 const GLOBAL_PORT_FLOOR = 10_000;
@@ -33,13 +48,7 @@ export function loadSessionState(
 ): SessionState {
   const filePath = getSessionStateFilePath(home, rootSourceRoot, session);
   if (!existsSync(filePath)) {
-    return {
-      generation: { number: 0, status: "not-started" },
-      repos: [],
-      rootSourceRoot,
-      session,
-      version: 2
-    };
+    throw new MonkeError(`Missing retained Session state for ${session} at ${rootSourceRoot}`);
   }
 
   return parseSessionStateFile(home, filePath);
@@ -54,7 +63,14 @@ export function saveSessionState(home: string, state: unknown) {
   const parsed = parseBoundaryValue(SessionStateSchema, state, label);
   const filePath = getSessionStateFilePath(home, parsed.rootSourceRoot, parsed.session);
   mkdirSync(path.dirname(filePath), { recursive: true });
-  writeFileSync(filePath, stringify(parsed), "utf-8");
+  const temporaryPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporaryPath, stringify(parsed), { encoding: "utf-8", flag: "wx", mode: 0o600 });
+    renameSync(temporaryPath, filePath);
+  } finally {
+    rmSync(temporaryPath, { force: true });
+  }
+  return parsed;
 }
 
 export function removeSessionState(home: string, rootSourceRoot: string, session: string) {
@@ -63,6 +79,127 @@ export function removeSessionState(home: string, rootSourceRoot: string, session
 
 export function listSessionStates(home: string) {
   return listSessionStateFiles(home).map((filePath) => parseSessionStateFile(home, filePath));
+}
+
+/** Open under the global lock; owns the retained-state view for that operation. */
+export class SessionStateStore {
+  readonly #states: Map<string, SessionState>;
+
+  constructor(
+    readonly home: string,
+    retainedStates = listSessionStates(home)
+  ) {
+    this.#states = new Map(
+      retainedStates.map((state) => [this.key(state), structuredClone(state)])
+    );
+  }
+
+  get(rootSourceRoot: string, session: string): SessionState | undefined {
+    return structuredClone(this.#states.get(this.key({ rootSourceRoot, session })));
+  }
+
+  list(): SessionState[] {
+    return structuredClone([...this.#states.values()]);
+  }
+
+  checkpoint(state: SessionState) {
+    const committed = saveSessionState(this.home, state);
+    this.#states.set(this.key(committed), committed);
+  }
+
+  remove(state: SessionState) {
+    removeSessionState(this.home, state.rootSourceRoot, state.session);
+    this.#states.delete(this.key(state));
+  }
+
+  assignedPortsOutsideRepo(current: {
+    rootSourceRoot: string;
+    session: string;
+    sourceRoot: string;
+  }) {
+    const ports = new Set<number>();
+    for (const state of this.#states.values()) {
+      for (const repo of state.repos) {
+        if (this.key(state) === this.key(current) && repo.sourceRoot === current.sourceRoot) {
+          continue;
+        }
+        for (const assignment of repo.assignedPorts) {
+          ports.add(assignment.value);
+        }
+      }
+    }
+    return ports;
+  }
+
+  resourceCommandInput(options: {
+    command: ResourceCommandConfig;
+    session: string;
+    sourceRoot: string;
+  }) {
+    const valuesByEnv = new Map(options.command.outputs.map((env) => [env, new Set<string>()]));
+
+    for (const state of this.#states.values()) {
+      if (state.session === options.session) {
+        continue;
+      }
+
+      for (const repoState of state.repos) {
+        if (repoState.sourceRoot !== options.sourceRoot) {
+          continue;
+        }
+
+        const rememberedCommand = (repoState.resourceCommandOutputs ?? []).find(
+          (command) => command.name === options.command.name
+        );
+        if (!rememberedCommand) {
+          continue;
+        }
+
+        const rememberedByEnv = new Map(
+          rememberedCommand.outputs.map((output) => [output.env, output.value])
+        );
+        for (const env of options.command.outputs) {
+          const remembered = rememberedByEnv.get(env);
+          if (remembered !== undefined && remembered.trim() !== "") {
+            valuesByEnv.get(env)?.add(remembered);
+          }
+        }
+      }
+    }
+
+    return Object.fromEntries(
+      options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])].toSorted()])
+    );
+  }
+
+  resourceValueCollision(options: {
+    rootSourceRoot: string;
+    session: string;
+    sourceRoot: string;
+    values: ResourceValueState[];
+  }) {
+    if (options.values.length === 0) {
+      return null;
+    }
+    for (const state of this.#states.values()) {
+      if (this.key(state) === this.key(options)) {
+        continue;
+      }
+      const repo = state.repos.find((candidate) => candidate.sourceRoot === options.sourceRoot);
+      const remembered = new Map(
+        (repo?.resourceValues ?? []).map((value) => [value.env, value.value])
+      );
+      const collision = options.values.find((value) => remembered.get(value.env) === value.value);
+      if (collision) {
+        return { ...collision, session: state.session };
+      }
+    }
+    return null;
+  }
+
+  private key(state: { rootSourceRoot: string; session: string }) {
+    return `${state.rootSourceRoot}\u0000${state.session}`;
+  }
 }
 
 /**
@@ -162,11 +299,11 @@ export function getOrCreateReservation(home: string, sourceRoot: string, size: n
 export function allocateLocalPorts(options: {
   baselinePorts: Set<number>;
   existingRepoState: SessionRepoState | undefined;
-  home: string;
   repoConfig: RepoConfig;
   reservation: RepoReservation | null;
   rootSourceRoot: string;
   session: string;
+  store: SessionStateStore;
 }) {
   const assignments = new Map<string, number>(
     (options.existingRepoState?.assignedPorts ?? []).map((entry) => [entry.key, entry.value])
@@ -179,21 +316,11 @@ export function allocateLocalPorts(options: {
     throw new MonkeError(`Missing reservation for ${options.repoConfig.sourceRoot}`);
   }
 
-  const globallyManagedPorts = new Set<number>();
-  for (const state of listSessionStates(options.home)) {
-    for (const repo of state.repos) {
-      if (
-        state.rootSourceRoot === options.rootSourceRoot &&
-        state.session === options.session &&
-        repo.sourceRoot === options.repoConfig.sourceRoot
-      ) {
-        continue;
-      }
-      for (const assignment of repo.assignedPorts) {
-        globallyManagedPorts.add(assignment.value);
-      }
-    }
-  }
+  const globallyManagedPorts = options.store.assignedPortsOutsideRepo({
+    rootSourceRoot: options.rootSourceRoot,
+    session: options.session,
+    sourceRoot: options.repoConfig.sourceRoot
+  });
 
   const blockEnd = options.reservation.blockStart + options.reservation.size - 1;
   const usedInRepo = new Set<number>(assignments.values());

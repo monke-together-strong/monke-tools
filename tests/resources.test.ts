@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 
 import { resolveResourceCommands } from "../src/resources.ts";
 import { hashKey } from "../src/runtime.ts";
+import { SessionStateStore } from "../src/session-state-store.ts";
 import type { RepoConfig, Runtime } from "../src/types.ts";
 import { makeTempDir } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
@@ -67,7 +68,6 @@ describe("resources", () => {
 
     const resolved = await resolveResourceCommands({
       existingRepoState: undefined,
-      home,
       onResolvedCommandOutputs(commands) {
         persistenceSawLock = existsSync(lockPath);
         expect(commands).toStrictEqual([
@@ -81,6 +81,7 @@ describe("resources", () => {
       resourceValues: [{ env: "E2E_CHANNEL_NAME", value: "banana" }],
       runtime,
       session: "banana",
+      store: new SessionStateStore(home),
       worktreePath: sourceRoot
     });
 
@@ -140,12 +141,12 @@ describe("resources", () => {
 
     await resolveResourceCommands({
       existingRepoState: undefined,
-      home,
       onResolvedCommandOutputs() {},
       repoConfig,
       resourceValues: [],
       runtime,
       session: "current",
+      store: new SessionStateStore(home),
       worktreePath: sourceRoot
     });
 

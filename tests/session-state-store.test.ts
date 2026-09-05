@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { closeSync, openSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vitest";
@@ -9,12 +9,117 @@ import {
   getSessionStateFilePath,
   listSessionStatesRelevantToWorktrees,
   loadSessionState,
-  saveSessionState
+  saveSessionState,
+  SessionStateStore
 } from "../src/session-state-store.ts";
 import type { RepoConfig, RepoReservation } from "../src/types.ts";
-import { makeTempDir, write } from "./helpers.ts";
+import { completeSessionState, makeTempDir, materializedRepoState, write } from "./helpers.ts";
 
 describe("Session state store", () => {
+  test("missing retained state stays explicit", () => {
+    const home = makeTempDir("session-state-store-missing");
+    const store = new SessionStateStore(home);
+
+    expect(store.get("/repo", "missing")).toBeUndefined();
+    expect(() => loadSessionState(home, "/repo", "missing")).toThrow(
+      /Missing retained Session state/u
+    );
+    expect(store.list()).toStrictEqual([]);
+  });
+
+  test("checkpoints atomically replace disk state and expose only committed snapshots", () => {
+    const home = makeTempDir("session-state-store-atomic");
+    const store = new SessionStateStore(home);
+    const original = completeSessionState({
+      repos: [materializedRepoState({ sourceRoot: "/repo", worktreePath: "/worktree" })],
+      rootSourceRoot: "/repo",
+      session: "atomic"
+    });
+    store.checkpoint(original);
+    const filePath = getSessionStateFilePath(home, "/repo", "atomic");
+    const originalText = readFileSync(filePath, "utf-8");
+    const openReader = openSync(filePath, "r");
+    const updated = { ...original, copyDirty: false };
+    try {
+      store.checkpoint(updated);
+      // A reader of the previous inode sees the complete old checkpoint, never an overwritten file.
+      expect(readFileSync(openReader, "utf-8")).toBe(originalText);
+    } finally {
+      closeSync(openReader);
+    }
+    expect(loadSessionState(home, "/repo", "atomic")).toStrictEqual(updated);
+    expect(store.get("/repo", "atomic")).toStrictEqual(updated);
+    expect(readdirSync(path.dirname(filePath))).toStrictEqual([path.basename(filePath)]);
+
+    const committedText = readFileSync(filePath, "utf-8");
+    expect(() => {
+      store.checkpoint({ ...updated, repos: [] });
+    }).toThrow(/Root repo/u);
+    expect(readFileSync(filePath, "utf-8")).toBe(committedText);
+    expect(store.get("/repo", "atomic")).toStrictEqual(updated);
+
+    updated.copyDirty = true;
+    const borrowed = store.get("/repo", "atomic");
+    if (!borrowed) {
+      throw new Error("expected retained checkpoint");
+    }
+    borrowed.copyDirty = true;
+    expect(store.get("/repo", "atomic")?.copyDirty).toBeFalsy();
+  });
+
+  test("cross-session resource queries observe checkpoints and removals in the opened store", () => {
+    const home = makeTempDir("session-state-store-resource-view");
+    const store = new SessionStateStore(home);
+    const retained = completeSessionState({
+      repos: [
+        materializedRepoState({
+          cleanupEligible: true,
+          resourceCommandOutputs: [
+            { name: "identity", outputs: [{ env: "OUTPUT", value: "first" }] }
+          ],
+          resourceValues: [{ env: "VALUE", value: "owned" }],
+          sourceRoot: "/repo",
+          worktreePath: "/worktree"
+        })
+      ],
+      rootSourceRoot: "/repo",
+      session: "first"
+    });
+    const command = {
+      name: "identity",
+      outputs: ["OUTPUT"],
+      run: "identity.ts",
+      timeoutSeconds: 60
+    };
+    const current = { session: "second", sourceRoot: "/repo" };
+    const values = {
+      ...current,
+      rootSourceRoot: "/repo",
+      values: [{ env: "VALUE", value: "owned" }]
+    };
+    expect(store.resourceCommandInput({ ...current, command })).toStrictEqual({ OUTPUT: [] });
+    expect(store.resourceValueCollision(values)).toBeNull();
+
+    store.checkpoint(retained);
+    expect(store.resourceCommandInput({ ...current, command })).toStrictEqual({
+      OUTPUT: ["first"]
+    });
+    expect(store.resourceCommandInput({ ...current, command, session: "first" })).toStrictEqual({
+      OUTPUT: []
+    });
+    expect(store.resourceValueCollision(values)).toStrictEqual({
+      env: "VALUE",
+      session: "first",
+      value: "owned"
+    });
+    expect(store.resourceValueCollision({ ...values, session: "first" })).toBeNull();
+
+    store.remove(retained);
+    expect(store.resourceCommandInput({ ...current, command })).toStrictEqual({ OUTPUT: [] });
+    expect(store.resourceValueCollision(values)).toBeNull();
+    expect(store.get("/repo", "first")).toBeUndefined();
+  });
+
   test("loadSessionState accepts strict v2 repo lifecycle state without an optional Diff base", () => {
     const sandbox = makeTempDir("session-state-store-v2-diff-base");
     const home = path.join(sandbox, "home");
@@ -845,11 +950,11 @@ size: 1000
       const assignments = allocateLocalPorts({
         baselinePorts: new Set(),
         existingRepoState: undefined,
-        home: path.join(sandbox, "home"),
         repoConfig,
         reservation,
         rootSourceRoot: repoConfig.sourceRoot,
-        session: "swing"
+        session: "swing",
+        store: new SessionStateStore(path.join(sandbox, "home"))
       });
 
       expect(assignments.get("API_PORT")).toBe(occupiedPort + 1);
@@ -866,11 +971,11 @@ size: 1000
     const assignments = allocateLocalPorts({
       baselinePorts: new Set([10_000]),
       existingRepoState: undefined,
-      home: path.join(sandbox, "home"),
       repoConfig,
       reservation,
       rootSourceRoot: repoConfig.sourceRoot,
-      session: "swing"
+      session: "swing",
+      store: new SessionStateStore(path.join(sandbox, "home"))
     });
 
     expect(assignments.get("API_PORT")).toBe(10_001);
@@ -897,16 +1002,17 @@ size: 1000
     const repoConfig = makeRepoConfig(sourceRoot, ["API_PORT"]);
     const reservation = getOrCreateReservation(home, sourceRoot, repoConfig.localPortOrder.length);
 
+    const store = new SessionStateStore(home);
     const firstSession = allocateLocalPorts({
       baselinePorts: new Set(),
       existingRepoState: undefined,
-      home,
       repoConfig,
       reservation,
       rootSourceRoot: sourceRoot,
-      session: "one"
+      session: "one",
+      store
     });
-    saveSessionState(home, {
+    store.checkpoint({
       generation: { number: 1, status: "complete" },
       repos: [
         {
@@ -925,11 +1031,11 @@ size: 1000
     const secondSession = allocateLocalPorts({
       baselinePorts: new Set(),
       existingRepoState: undefined,
-      home,
       repoConfig,
       reservation,
       rootSourceRoot: sourceRoot,
-      session: "two"
+      session: "two",
+      store
     });
 
     expect(firstSession.get("API_PORT")).toBe(10_000);

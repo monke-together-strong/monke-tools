@@ -6,8 +6,10 @@ import * as z from "zod";
 
 import { describeRedactedValue } from "./env.ts";
 import { MonkeError } from "./errors.ts";
+// oxlint-disable-next-line import/default -- The text loader exports source text, not the module's exports.
+import RESOURCE_COMMAND_MODULE_RUNNER from "./resource-command-runner.ts?raw" with { type: "text" };
 import { withScopedLockAsync } from "./runtime.ts";
-import { listSessionStates } from "./session-state-store.ts";
+import type { SessionStateStore } from "./session-state-store.ts";
 import type {
   RepoConfig,
   ResourceCommandConfig,
@@ -26,51 +28,14 @@ const ResourceCommandReturnSchema = z.record(
   z.string().refine((value) => value.trim().length > 0)
 );
 
-const RESOURCE_COMMAND_MODULE_RUNNER = [
-  'import { pathToFileURL } from "node:url";',
-  "",
-  "const runnerArgv = process.argv[1];",
-  "const modulePath = process.argv[2];",
-  "const outputPath = process.argv[3];",
-  "",
-  "function fail(message) {",
-  "  console.error(message);",
-  "  process.exit(1);",
-  "}",
-  "",
-  "try {",
-  `  if (runnerArgv !== ${JSON.stringify(RESOURCE_COMMAND_RUNNER_ARGV)} || !modulePath || !outputPath) {`,
-  '    fail("Missing resource command runner arguments");',
-  "  }",
-  "  const previousText = await Bun.stdin.text();",
-  "  const previous = previousText.trim() ? JSON.parse(previousText) : {};",
-  "  const resourceModule = await import(pathToFileURL(modulePath).href);",
-  '  if (!Object.prototype.hasOwnProperty.call(resourceModule, "default")) {',
-  // This is a template literal in the generated runner, not in this source module.
-  // oxlint-disable-next-line no-template-curly-in-string
-  "    fail(`Resource command module ${modulePath} must export a default function`);",
-  "  }",
-  '  if (typeof resourceModule.default !== "function") {',
-  // This is a template literal in the generated runner, not in this source module.
-  // oxlint-disable-next-line no-template-curly-in-string
-  "    fail(`Resource command module ${modulePath} default export must be a function`);",
-  "  }",
-  "  const value = await resourceModule.default({ previous });",
-  "  await Bun.write(outputPath, JSON.stringify({ value }));",
-  "} catch (error) {",
-  "  console.error(error instanceof Error && error.stack ? error.stack : String(error));",
-  "  process.exit(1);",
-  "}"
-].join("\n");
-
 /** Resolve, reuse, prune, and collision-check deterministic Resource values. */
 export function resolveResourceValues(options: {
   env: Record<string, string | undefined>;
   existingRepoState: SessionRepoState | undefined;
-  home: string;
   repoConfig: RepoConfig;
   rootSourceRoot: string;
   session: string;
+  store: SessionStateStore;
 }) {
   const declaredEnvNames = new Set(
     options.repoConfig.resourceValuesInOrder.map((resource) => resource.env)
@@ -106,10 +71,10 @@ export function resolveResourceValues(options: {
   });
 
   rejectResourceValueCollisions({
-    home: options.home,
     rootSourceRoot: options.rootSourceRoot,
     session: options.session,
     sourceRoot: options.repoConfig.sourceRoot,
+    store: options.store,
     values
   });
 
@@ -124,13 +89,13 @@ export function resolveResourceValues(options: {
 /** Resolve, reuse, prune, execute, and validate Resource command outputs. */
 export async function resolveResourceCommands(options: {
   existingRepoState: SessionRepoState | undefined;
-  home: string;
   onCommandExecutionStarting?: (commands: ResourceCommandState[]) => void;
   onResolvedCommandOutputs: (commands: ResourceCommandState[]) => void;
   repoConfig: RepoConfig;
   resourceValues: ResourceValueState[];
   runtime: Runtime;
   session: string;
+  store: SessionStateStore;
   worktreePath: string;
 }) {
   const existingCommands = options.existingRepoState?.resourceCommandOutputs ?? [];
@@ -150,13 +115,12 @@ export async function resolveResourceCommands(options: {
     }
     // oxlint-disable-next-line no-await-in-loop -- Commands in one repo are intentionally ordered; sibling repos remain concurrent.
     await withResourceCommandLock(
-      options.home,
+      options.store.home,
       options.repoConfig.sourceRoot,
       command.name,
       async () => {
-        const stdin = buildResourceCommandInput({
+        const stdin = options.store.resourceCommandInput({
           command,
-          home: options.home,
           session: options.session,
           sourceRoot: options.repoConfig.sourceRoot
         });
@@ -328,48 +292,6 @@ function withResourceCommandLock<T>(
     home,
     `resource-command\u0000${sourceRoot}\u0000${commandName}`,
     callback
-  );
-}
-
-function buildResourceCommandInput(options: {
-  command: ResourceCommandConfig;
-  home: string;
-  session: string;
-  sourceRoot: string;
-}) {
-  const valuesByEnv = new Map(options.command.outputs.map((env) => [env, new Set<string>()]));
-
-  for (const state of listSessionStates(options.home)) {
-    if (state.session === options.session) {
-      continue;
-    }
-
-    for (const repoState of state.repos) {
-      if (repoState.sourceRoot !== options.sourceRoot) {
-        continue;
-      }
-
-      const rememberedCommand = (repoState.resourceCommandOutputs ?? []).find(
-        (command) => command.name === options.command.name
-      );
-      if (!rememberedCommand) {
-        continue;
-      }
-
-      const rememberedByEnv = new Map(
-        rememberedCommand.outputs.map((output) => [output.env, output.value])
-      );
-      for (const env of options.command.outputs) {
-        const remembered = rememberedByEnv.get(env);
-        if (remembered !== undefined && remembered.trim() !== "") {
-          valuesByEnv.get(env)?.add(remembered);
-        }
-      }
-    }
-  }
-
-  return Object.fromEntries(
-    options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])].toSorted()])
   );
 }
 
@@ -576,35 +498,17 @@ function resolveResourceUser(env: Record<string, string | undefined>) {
 }
 
 function rejectResourceValueCollisions(options: {
-  home: string;
   rootSourceRoot: string;
   session: string;
   sourceRoot: string;
+  store: SessionStateStore;
   values: ResourceValueState[];
 }) {
-  for (const state of listSessionStates(options.home)) {
-    if (state.rootSourceRoot === options.rootSourceRoot && state.session === options.session) {
-      continue;
-    }
-
-    for (const repoState of state.repos) {
-      if (repoState.sourceRoot !== options.sourceRoot) {
-        continue;
-      }
-
-      const rememberedValues = new Map(
-        (repoState.resourceValues ?? []).map((resource) => [resource.env, resource.value])
-      );
-      for (const value of options.values) {
-        if (rememberedValues.get(value.env) !== value.value) {
-          continue;
-        }
-
-        throw new MonkeError(
-          `Resource value collision for ${value.env}=${describeRedactedValue(value.value)} in ${options.sourceRoot}; retained session ${state.session} already owns that value`
-        );
-      }
-    }
+  const collision = options.store.resourceValueCollision(options);
+  if (collision) {
+    throw new MonkeError(
+      `Resource value collision for ${collision.env}=${describeRedactedValue(collision.value)} in ${options.sourceRoot}; retained session ${collision.session} already owns that value`
+    );
   }
 }
 
