@@ -24,6 +24,20 @@ function guidanceFixture() {
 }
 
 describe("guidance transaction recovery", () => {
+  test("rejects traversal that re-enters the managed destination from a different backup depth", () => {
+    const fixture = guidanceFixture();
+    const slug = `../../../${path.basename(fixture.repoRoot)}/skills/imported/alpha`;
+    expect(path.resolve(fixture.repoRoot, "skills/imported", slug)).toBe(fixture.target("alpha"));
+    expect(() => {
+      copyStagedGuidanceToManagedRoots({
+        ...fixture,
+        guidance: [],
+        obsoleteGuidance: [{ kind: "skill", selector: "alpha", slug }]
+      });
+    }).toThrow(/slug .* escapes/u);
+    expect(read(fixture.target("alpha"), "SKILL.md")).toBe("original alpha");
+  });
+
   test.each([
     ["guidance", "../unrelated"],
     ["obsoleteGuidance", "../unrelated"],

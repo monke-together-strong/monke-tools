@@ -334,7 +334,13 @@ function importedGuidancePath(
   const root = guidance.kind === "reference" ? IMPORTED_REFERENCES_ROOT : IMPORTED_SKILLS_ROOT;
   const managedRoot = path.resolve(repoRoot, root);
   const guidancePath = path.resolve(managedRoot, guidance.slug);
-  if (guidancePath === managedRoot || !isPathWithin(managedRoot, guidancePath)) {
+  if (
+    guidance.slug.trim().length === 0 ||
+    /[/\\\0]/u.test(guidance.slug) ||
+    path.basename(guidance.slug) !== guidance.slug ||
+    guidancePath === managedRoot ||
+    !isPathWithin(managedRoot, guidancePath)
+  ) {
     throw new MonkeError(`Imported ${guidance.kind} slug ${guidance.slug} escapes ${root}`);
   }
   return guidancePath;
