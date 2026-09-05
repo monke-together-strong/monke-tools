@@ -6,7 +6,7 @@ import { isNonEmptyString } from "@sindresorhus/is";
 import { resolveGitRoot, resolveRepoKey } from "./identity.ts";
 import { clipProse, summarizeOutput } from "./normalize.ts";
 import type { JsonValue } from "./transcript-schemas.ts";
-import type { AgentKind, CanonicalTurn } from "./types.ts";
+import type { AgentKind, CanonicalSession, CanonicalTurn } from "./types.ts";
 
 // Cap distinct directory resolutions per session: a session that reads thousands
 // of paths must not trigger thousands of `git` calls. Secondary membership is
@@ -83,7 +83,9 @@ class TurnBuilder {
 }
 
 /** Build one canonical session from agent-independent transcript events. */
-export function buildCanonicalSession(options: BuildCanonicalSessionOptions) {
+export function buildCanonicalSession(
+  options: BuildCanonicalSessionOptions
+): CanonicalSession | null {
   if (!isNonEmptyString(options.sessionId)) {
     return null;
   }

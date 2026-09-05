@@ -1,18 +1,23 @@
 import {
   closeSync,
   existsSync,
+  fstatSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readdirSync,
   readFileSync,
   rmSync,
+  rmdirSync,
+  unlinkSync,
   writeFileSync
 } from "node:fs";
+import type { Stats } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
 import { parse, stringify } from "yaml";
-import type * as z from "zod";
+import * as z from "zod";
 
 import { hashKey, sessionHashKey } from "./identity.ts";
 import {
@@ -203,66 +208,104 @@ export function withRetroLock<T>(root: string, callback: () => T) {
   const lockPath = path.join(root, "run.lock");
   mkdirSync(path.dirname(lockPath), { recursive: true });
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  let fd: number | null = null;
-  while (fd === null) {
-    try {
-      fd = openSync(lockPath, "wx");
-      writeFileSync(
-        lockPath,
-        JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
-        "utf-8"
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("EEXIST")) {
-        throw error;
-      }
-      if (evictIfStale(lockPath)) {
-        continue;
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(`Timed out waiting for retrospective lock at ${lockPath}`, {
-          cause: error
-        });
-      }
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LOCK_RETRY_INTERVAL_MS);
+  let release = tryAcquireRetroLock(lockPath);
+  while (!release) {
+    if (Date.now() >= deadline) {
+      throw new Error(`Timed out waiting for retrospective lock at ${lockPath}`);
     }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LOCK_RETRY_INTERVAL_MS);
+    release = tryAcquireRetroLock(lockPath);
   }
   try {
     return callback();
   } finally {
-    closeSync(fd);
-    rmSync(lockPath, { force: true });
+    release();
   }
 }
 
-/** Evict a lock whose owning process is gone or whose age exceeds the cutoff. */
-function evictIfStale(lockPath: string) {
-  let stale = false;
+function tryAcquireRetroLock(lockPath: string) {
+  if (existsSync(`${lockPath}.reclaim`)) {
+    return;
+  }
+  let fd: number;
   try {
-    const meta = parseJsonFile(lockPath, RetroLockMetadataSchema);
-    if (meta.pid !== undefined && meta.pid > 0) {
-      // Liveness wins over age: a long run (>60s) past the cutoff must keep its lock.
-      try {
-        process.kill(meta.pid, 0);
-        stale = false;
-      } catch (error) {
-        stale = error instanceof Error && "code" in error && error.code === "ESRCH";
-      }
-    } else if (meta.acquiredAt !== undefined) {
-      stale = Date.now() - meta.acquiredAt > STALE_LOCK_AGE_MS;
+    fd = openSync(lockPath, "wx", 0o600);
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) {
+      throw error;
     }
-  } catch {
-    stale = true;
+    evictIfStale(lockPath);
+    return;
   }
-  if (!stale) {
-    return false;
+  const identity = fstatSync(fd);
+  try {
+    writeFileSync(fd, JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }), "utf-8");
+  } catch (error) {
+    closeSync(fd);
+    removeOwnedLock(lockPath, identity);
+    throw error;
+  }
+  return () => {
+    try {
+      removeOwnedLock(lockPath, identity);
+    } finally {
+      closeSync(fd);
+    }
+  };
+}
+
+/** Only one contender may inspect and reclaim a stale lock at a time. */
+function evictIfStale(lockPath: string) {
+  const reclaimPath = `${lockPath}.reclaim`;
+  try {
+    mkdirSync(reclaimPath);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+      return;
+    }
+    throw error;
   }
   try {
-    rmSync(lockPath, { force: true });
-    return true;
-  } catch {
-    return false;
+    const identity = lstatSync(lockPath);
+    let stale = Date.now() - identity.mtimeMs > STALE_LOCK_AGE_MS;
+    try {
+      const meta = parseJsonFile(lockPath, RetroLockMetadataSchema);
+      if (meta.pid !== undefined) {
+        try {
+          process.kill(meta.pid, 0);
+          stale = false;
+        } catch (error) {
+          stale = error instanceof Error && "code" in error && error.code === "ESRCH";
+        }
+      }
+    } catch (error) {
+      if (!(error instanceof SyntaxError || error instanceof z.ZodError)) {
+        throw error;
+      }
+      // Incomplete metadata may belong to a process initializing a fresh lock.
+    }
+    if (stale) {
+      removeOwnedLock(lockPath, identity);
+    }
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+      throw error;
+    }
+  } finally {
+    rmdirSync(reclaimPath);
+  }
+}
+
+function removeOwnedLock(lockPath: string, identity: Pick<Stats, "dev" | "ino">) {
+  try {
+    const current = lstatSync(lockPath);
+    if (current.dev === identity.dev && current.ino === identity.ino) {
+      unlinkSync(lockPath);
+    }
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+      throw error;
+    }
   }
 }
 

@@ -1,157 +1,118 @@
 #!/usr/bin/env bun
-/**
- * Agent-session-retrospective — deterministic collect/commit brackets.
- *
- * Bun run-retrospective.ts collect [--since DATE] [--until DATE] [--idle-minutes N] [--run-ts TS]
- * bun run-retrospective.ts pr-collect --run-ts TS [--repo-cache DIR] bun run-retrospective.ts
- * pr-aggregate --run-ts TS bun run-retrospective.ts commit --run-ts TS --synthesis FILE
- *
- * The middle (per-repo and per-PR subagent fan-out) is fuzzy and host-native; everything here is
- * deterministic and bun-testable. The script owns disk I/O.
- */
-
 import path from "node:path";
+
+import { Command, CommanderError, InvalidArgumentError } from "@commander-js/extra-typings";
 
 import { runCollect } from "./lib/collect.ts";
 import { runCommit } from "./lib/commit.ts";
 import { runPrAggregate, runPrCollect } from "./lib/pr-analysis.ts";
 import { retroHome, withRetroLock } from "./lib/store.ts";
 
-class RetrospectiveCliError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "RetrospectiveCliError";
-  }
-}
+type OperationResult = ReturnType<
+  typeof runCollect | typeof runPrCollect | typeof runPrAggregate | typeof runCommit
+>;
 
-function parseFlags(argv: string[]) {
-  const flags = new Map<string, string>();
-  for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i];
-    if (token?.startsWith("--") === true) {
-      const key = token.slice(2);
-      const next = argv[i + 1];
-      if (next !== undefined && next !== "" && !next.startsWith("--")) {
-        flags.set(key, next);
-        i += 1;
-      } else {
-        flags.set(key, "true");
-      }
-    }
-  }
-  return flags;
-}
-
-function defaultRunTs() {
-  return new Date().toISOString().replaceAll(/[:.]/gu, "-");
-}
-
-function parseDateMs(value: string | undefined) {
-  if (value === undefined || value === "") {
-    return;
-  }
+function parseDateMs(value: string) {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) {
-    throw new RetrospectiveCliError(`Invalid date: ${value}`);
+    throw new InvalidArgumentError(`Invalid date: ${value}`);
   }
   return parsed;
 }
 
-function parseIdleMinutes(value: string | undefined) {
-  if (value === undefined) {
-    return;
-  }
+function parseIdleMinutes(value: string) {
   const minutes = Number(value);
-  if (!Number.isFinite(minutes) || minutes < 0) {
-    throw new RetrospectiveCliError(`Invalid --idle-minutes: ${value}`);
+  if (value.trim() === "" || !Number.isFinite(minutes) || minutes < 0) {
+    throw new InvalidArgumentError("must be a nonnegative number of minutes");
   }
   return minutes;
 }
 
 function main() {
-  const [command, ...rest] = process.argv.slice(2);
-  const flags = parseFlags(rest);
-  const root = retroHome(flags.get("home"));
+  const program = new Command()
+    .name("run-retrospective")
+    .description("Collect and commit agent transcript and PR analysis")
+    .option("--home <directory>", "Monke home directory")
+    .allowExcessArguments(false)
+    .exitOverride()
+    .showHelpAfterError();
 
-  if (command === "collect") {
-    const runTs = flags.get("run-ts") ?? defaultRunTs();
-    const result = withRetroLock(root, () =>
-      runCollect({
-        idleMinutes: parseIdleMinutes(flags.get("idle-minutes")),
-        retroRoot: root,
-        runTs,
-        sinceMs: parseDateMs(flags.get("since")),
-        untilMs: parseDateMs(flags.get("until"))
-      })
-    );
+  function runOperation(operation: (root: string) => OperationResult) {
+    const root = retroHome(program.opts().home);
+    const result = withRetroLock(root, () => operation(root));
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    return;
   }
 
-  if (command === "commit") {
-    const runTs = flags.get("run-ts");
-    if (runTs === undefined || runTs === "") {
-      throw new RetrospectiveCliError("commit requires --run-ts");
-    }
-    const result = withRetroLock(root, () =>
-      runCommit({
-        nowIso: new Date().toISOString(),
-        retroRoot: root,
-        runTs,
-        synthesisPath: flags.get("synthesis")
-      })
-    );
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    return;
-  }
+  program
+    .command("collect")
+    .description("Collect eligible transcripts into repo bundles")
+    .option("--since <date>", "Beginning of the retrospective window", parseDateMs)
+    .option("--until <date>", "End of the retrospective window", parseDateMs)
+    .option("--idle-minutes <minutes>", "Minimum transcript idle time", parseIdleMinutes)
+    .option("--run-ts <timestamp>", "Run identifier")
+    .action((options) => {
+      runOperation((root) =>
+        runCollect({
+          idleMinutes: options.idleMinutes,
+          retroRoot: root,
+          runTs: options.runTs ?? new Date().toISOString().replaceAll(/[:.]/gu, "-"),
+          sinceMs: options.since,
+          untilMs: options.until
+        })
+      );
+    });
 
-  if (command === "pr-collect") {
-    const runTs = flags.get("run-ts");
-    if (runTs === undefined || runTs === "") {
-      throw new RetrospectiveCliError("pr-collect requires --run-ts");
-    }
-    const result = withRetroLock(root, () =>
-      runPrCollect({
-        repoCacheRoot:
-          flags.get("repo-cache") ?? path.join(root, "tmp", "agent-retrospective-pr-analysis"),
-        retroRoot: root,
-        runTs
-      })
-    );
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    return;
-  }
+  program
+    .command("pr-collect")
+    .description("Collect PR evidence for a transcript run")
+    .requiredOption("--run-ts <timestamp>", "Run identifier")
+    .option("--repo-cache <directory>", "Directory for source clones")
+    .action((options) => {
+      runOperation((root) =>
+        runPrCollect({
+          repoCacheRoot:
+            options.repoCache ?? path.join(root, "tmp", "agent-retrospective-pr-analysis"),
+          retroRoot: root,
+          runTs: options.runTs
+        })
+      );
+    });
 
-  if (command === "pr-aggregate") {
-    const runTs = flags.get("run-ts");
-    if (runTs === undefined || runTs === "") {
-      throw new RetrospectiveCliError("pr-aggregate requires --run-ts");
-    }
-    const result = withRetroLock(root, () =>
-      runPrAggregate({
-        retroRoot: root,
-        runTs
-      })
-    );
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    return;
-  }
+  program
+    .command("pr-aggregate")
+    .description("Aggregate completed PR analyses")
+    .requiredOption("--run-ts <timestamp>", "Run identifier")
+    .action((options) => {
+      runOperation((root) => runPrAggregate({ retroRoot: root, runTs: options.runTs }));
+    });
 
-  process.stderr.write(
-    "Usage: run-retrospective.ts <collect|pr-collect|pr-aggregate|commit> [flags]\n"
-  );
-  process.exit(1);
+  program
+    .command("commit")
+    .description("Validate completed analysis and freeze its report")
+    .requiredOption("--run-ts <timestamp>", "Run identifier")
+    .requiredOption("--synthesis <file>", "Completed synthesis Markdown")
+    .action((options) => {
+      runOperation((root) =>
+        runCommit({
+          nowIso: new Date().toISOString(),
+          retroRoot: root,
+          runTs: options.runTs,
+          synthesisPath: options.synthesis
+        })
+      );
+    });
+
+  program.parse();
 }
 
 try {
   main();
 } catch (error) {
-  const message =
-    error instanceof RetrospectiveCliError
-      ? error.message
-      : error instanceof Error
-        ? (error.stack ?? `${error.name}: ${error.message}`)
-        : String(error);
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
+  if (error instanceof CommanderError) {
+    process.exitCode = error.exitCode;
+  } else {
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  }
 }

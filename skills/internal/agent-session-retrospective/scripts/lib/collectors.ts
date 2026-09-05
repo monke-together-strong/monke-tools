@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { hashKey } from "./identity.ts";
 import { summarizeInput } from "./normalize.ts";
 import { buildCanonicalSession } from "./session-events.ts";
 import type { DecodedSession, SessionAdapter, SessionEvent } from "./session-events.ts";
@@ -36,7 +36,7 @@ type CodexTurnContextPayload = Extract<CodexTranscriptRecord, { type: "turn_cont
 
 function readJsonlLines(filePath: string) {
   const raw = readFileSync(filePath, "utf-8");
-  const hash = createHash("sha256").update(raw).digest("hex");
+  const hash = hashKey(raw);
   const lines = raw.split("\n");
   const records: JsonValue[] = [];
   let lineCount = 0;

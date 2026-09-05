@@ -59,10 +59,11 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
   const seenIds = new Set<string>();
   const episodes: FrictionEpisode[] = [];
   let droppedEpisodes = 0;
-  for (const episode of findings.frictionEpisodes ?? []) {
+  for (const episode of findings.frictionEpisodes) {
     const refs = refsByPrimarySession.get(episode.sessionId);
-    const citedTurnRefs = episode.citedTurnRefs ?? [];
-    const refsValid = refs !== undefined && citedTurnRefs.every((ref) => refs.has(ref));
+    const { citedTurnRefs } = episode;
+    const refsValid =
+      refs !== undefined && citedTurnRefs.length > 0 && citedTurnRefs.every((ref) => refs.has(ref));
     if (!isNonEmptyString(episode.id) || seenIds.has(episode.id) || !refsValid) {
       droppedEpisodes += 1;
       continue;
@@ -73,8 +74,8 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
 
   const fixes: DurableFixProposal[] = [];
   let droppedFixes = 0;
-  for (const fix of findings.durableFixProposals ?? []) {
-    const citedEpisodeRefs = fix.citedEpisodeRefs ?? [];
+  for (const fix of findings.durableFixProposals) {
+    const { citedEpisodeRefs } = fix;
     if (citedEpisodeRefs.length > 0 && citedEpisodeRefs.every((ref) => seenIds.has(ref))) {
       fixes.push(fix);
     } else {
@@ -83,9 +84,9 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
   }
 
   const bundleSessionIds = new Set(bundle.sessions.map((session) => session.sessionId));
-  const repeatedAsks = (findings.repeatedAsks ?? []).map((cluster) => ({
+  const repeatedAsks = findings.repeatedAsks.map((cluster) => ({
     ...cluster,
-    exampleSessionIds: (cluster.exampleSessionIds ?? []).filter((id) => bundleSessionIds.has(id))
+    exampleSessionIds: cluster.exampleSessionIds.filter((id) => bundleSessionIds.has(id))
   }));
 
   return {
@@ -116,17 +117,29 @@ export interface RunCommitOptions {
   synthesisPath?: string;
 }
 
-export function runCommit(options: RunCommitOptions) {
-  const root = options.retroRoot ?? retroHome(options.home);
+function readCompletedFindings(root: string, runTs: string) {
   const slices: RepoSlice[] = [];
-  for (const repoHash of listBundleHashes(root, options.runTs)) {
-    const bundle = readBundle(root, options.runTs, repoHash);
-    const findings = readFindings(root, options.runTs, repoHash);
+  const missingFindings: string[] = [];
+  for (const repoHash of listBundleHashes(root, runTs)) {
+    const bundle = readBundle(root, runTs, repoHash);
+    const findings = readFindings(root, runTs, repoHash);
     if (!findings) {
+      missingFindings.push(repoHash);
       continue;
     }
     slices.push({ bundle, validated: validateFindings(findings, bundle) });
   }
+  if (missingFindings.length > 0) {
+    throw new Error(
+      `commit requires findings for every bundle; missing: ${missingFindings.join(", ")}`
+    );
+  }
+  return slices;
+}
+
+export function runCommit(options: RunCommitOptions) {
+  const root = options.retroRoot ?? retroHome(options.home);
+  const slices = readCompletedFindings(root, options.runTs);
 
   const dropped = { episodes: 0, fixes: 0 };
   for (const slice of slices) {
@@ -140,7 +153,11 @@ export function runCommit(options: RunCommitOptions) {
       `commit requires runs/${options.runTs}/pr-analysis.md from the required PR analysis lane`
     );
   }
-  const prAnalysisValidation = validatePrAnalysis(prAnalysis, readPrManifest(root, options.runTs));
+  const manifest = readPrManifest(root, options.runTs);
+  if (!manifest || manifest.runTs !== options.runTs) {
+    throw new Error(`commit requires a PR manifest for run ${options.runTs}`);
+  }
+  const prAnalysisValidation = validatePrAnalysis(prAnalysis, manifest);
 
   if (!isNonEmptyString(options.synthesisPath) || !existsSync(options.synthesisPath)) {
     throw new Error("commit requires a synthesis file matching references/synthesis-contract.md");
@@ -246,15 +263,6 @@ interface ReportContext {
   prAnalysis?: string | null;
   prAnalysisWarnings?: string[];
   window?: RetrospectiveWindow | null;
-}
-
-export function buildReport(
-  runTs: string,
-  synthesis: string,
-  slices: RepoSlice[],
-  context: ReportContext = {}
-) {
-  return buildReportArtifacts(runTs, synthesis, slices, context).report;
 }
 
 export function buildReportArtifacts(
@@ -485,39 +493,8 @@ function validateActiveActions(section: string) {
   return warnings;
 }
 
-export function validatePrAnalysis(
-  content: string | null | undefined,
-  manifest?: PrAnalysisManifest | null
-) {
-  const text = content?.trim();
-  if (!isNonEmptyString(text)) {
-    return { warnings: [] };
-  }
-
-  if (manifest) {
-    return validateManifestBackedPrAnalysis(text, manifest);
-  }
-
-  const counts = REQUIRED_PR_HEADINGS.map((heading) => ({
-    count: countHeading(text, heading),
-    heading
-  }));
-  const perPrHeadingSeen = counts.some((entry) => entry.count > 0);
-  if (!perPrHeadingSeen) {
-    return { warnings: [] };
-  }
-
-  const expectedCount = Math.max(...counts.map((entry) => entry.count));
-  const warnings = counts
-    .filter((entry) => entry.count !== expectedCount)
-    .map(
-      (entry) =>
-        `PR analysis heading \`## ${entry.heading}\` appears ${entry.count} time(s), expected ${expectedCount}.`
-    );
-  return { warnings };
-}
-
-function validateManifestBackedPrAnalysis(text: string, manifest: PrAnalysisManifest) {
+export function validatePrAnalysis(content: string, manifest: PrAnalysisManifest) {
+  const text = content.trim();
   const warnings: string[] = [];
   for (const item of manifest.workItems) {
     const section = findPrAnalysisSection(text, item);

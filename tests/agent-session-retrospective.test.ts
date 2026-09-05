@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  utimesSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -40,7 +49,8 @@ import {
   loadFrozenSession,
   readBundle,
   readFindings,
-  saveFrozenSession
+  saveFrozenSession,
+  withRetroLock
 } from "../skills/internal/agent-session-retrospective/scripts/lib/store.ts";
 import type {
   CanonicalSession,
@@ -111,6 +121,28 @@ function writeWindow(root: string, runTs = "ts") {
     ),
     "utf-8"
   );
+}
+
+function writeEmptyPrManifest(root: string, runTs: string) {
+  const manifest: PrAnalysisManifest = {
+    author: "reviewer",
+    gaps: [],
+    generatedAt: "2026-06-01T00:00:00.000Z",
+    org: "monke-together-strong",
+    runTs,
+    version: 1,
+    window: {
+      since: "2026-05-18T00:00:00.000Z",
+      sinceSource: "first-run-default",
+      until: "2026-06-01T00:00:00.000Z",
+      untilSource: "now"
+    },
+    workItems: []
+  };
+  const filePath = prManifestPath(root, runTs);
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, JSON.stringify(manifest));
+  return manifest;
 }
 
 describe("agent session retrospective", () => {
@@ -672,6 +704,7 @@ describe("agent session retrospective", () => {
         frictionEpisodes: [
           { body: "good", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" },
           { body: "bad ref", citedTurnRefs: ["t9"], id: "e2", sessionId: "s1" },
+          { body: "no evidence", citedTurnRefs: [], id: "e4", sessionId: "s1" },
           { body: "bad session", citedTurnRefs: ["t0"], id: "e3", sessionId: "ghost" }
         ],
         repeatedAsks: [],
@@ -681,7 +714,7 @@ describe("agent session retrospective", () => {
       const result = validateFindings(findings, bundle);
       expect(result.episodes.map((episode) => episode.id)).toStrictEqual(["e1"]);
       expect(result.fixes.map((fix) => fix.body)).toStrictEqual(["keeps"]);
-      expect(result.dropped).toStrictEqual({ episodes: 2, fixes: 2 });
+      expect(result.dropped).toStrictEqual({ episodes: 3, fixes: 2 });
     });
 
     test("drops episodes authored for a secondary session (friction is primary-only)", () => {
@@ -813,7 +846,7 @@ describe("agent session retrospective", () => {
     });
   });
 
-  describe("buildReport", () => {
+  describe(buildReportArtifacts, () => {
     test("keeps the main report problem-focused and moves evidence to session sources", () => {
       const bundle = bundleWith(["t0"]);
       const synthesis = [
@@ -870,8 +903,6 @@ describe("agent session retrospective", () => {
       expect(report).not.toContain("Per-repo proposals");
       expect(report).not.toContain("Audit appendix");
       expect(report).not.toContain("evidence");
-      expect(report).not.toContain("PR validation recorded");
-      expect(report).not.toContain("PR analysis recorded");
       expect(report).not.toContain("missing diff");
       expect(report).not.toContain("omits known final head");
       expect(artifacts.sessionSources).toContain("## Per-repo proposals");
@@ -887,6 +918,7 @@ describe("agent session retrospective", () => {
       const runTs = "2026-06-01T00-00-00-000Z";
       const runDir = path.join(root, "runs", runTs);
       writeWindow(root, runTs);
+      writeEmptyPrManifest(root, runTs);
       writeFileSync(
         path.join(runDir, "pr-analysis.md"),
         [
@@ -1040,6 +1072,7 @@ describe("agent session retrospective", () => {
       const root = path.join(dir, "store");
       const runTs = "2026-06-01T00-00-00-000Z";
       const runDir = path.join(root, "runs", runTs);
+      writeEmptyPrManifest(root, runTs);
       mkdirSync(runDir, { recursive: true });
       writeFileSync(
         path.join(runDir, "pr-analysis.md"),
@@ -1500,6 +1533,201 @@ describe("agent session retrospective", () => {
     });
   });
 
+  describe("commit preflight", () => {
+    test("retains every bundle when one repo has no completed findings", () => {
+      const runTs = "ts";
+      writeWindow(dir, runTs);
+      const complete = bundleWith(["t0"]);
+      const missing = { ...complete, repoHash: "missing", repoKey: "/missing" };
+      const runDirectory = path.join(dir, "runs", runTs);
+      for (const bundle of [complete, missing]) {
+        writeFileSync(path.join(runDirectory, `${bundle.repoHash}.json`), JSON.stringify(bundle));
+      }
+      writeFileSync(
+        findingsPath(dir, runTs, complete.repoHash),
+        JSON.stringify({ repoKey: complete.repoKey })
+      );
+
+      expect(() =>
+        runCommit({ nowIso: "2026-06-01T00:00:00.000Z", retroRoot: dir, runTs })
+      ).toThrow(/missing: missing/u);
+      expect(readBundle(dir, runTs, complete.repoHash)).toStrictEqual(complete);
+      expect(readBundle(dir, runTs, missing.repoHash)).toStrictEqual(missing);
+      expect(listFrozenSessions(dir)).toStrictEqual([]);
+      expect(existsSync(path.join(dir, "reports"))).toBeFalsy();
+    });
+
+    test.each(["missing", "malformed", "different-run"] as const)(
+      "preserves run state when the PR manifest is %s",
+      (condition) => {
+        const runTs = "ts";
+        writeWindow(dir, runTs);
+        const manifest = writeEmptyPrManifest(dir, runTs);
+        const manifestPath = prManifestPath(dir, runTs);
+        const analysisPath = path.join(dir, "runs", runTs, "pr-analysis.md");
+        writeFileSync(analysisPath, "# Completed PR analysis");
+        if (condition === "missing") {
+          rmSync(manifestPath);
+        } else {
+          writeFileSync(
+            manifestPath,
+            condition === "malformed" ? "{" : JSON.stringify({ ...manifest, runTs: "another-run" })
+          );
+        }
+
+        expect(() =>
+          runCommit({ nowIso: "2026-06-01T00:00:00.000Z", retroRoot: dir, runTs })
+        ).toThrow(condition === "malformed" ? /JSON|Expected|Unexpected/u : /PR manifest/u);
+        expect(readFileSync(analysisPath, "utf-8")).toBe("# Completed PR analysis");
+        expect(listFrozenSessions(dir)).toStrictEqual([]);
+        expect(existsSync(path.join(dir, "reports"))).toBeFalsy();
+      }
+    );
+  });
+
+  describe("retrospective lock", () => {
+    const storeScript = path.resolve(
+      import.meta.dirname,
+      "../skills/internal/agent-session-retrospective/scripts/lib/store.ts"
+    );
+
+    test("releases failed operations and leaves a replacement lock owned by someone else", () => {
+      const lockPath = path.join(dir, "run.lock");
+      expect(() =>
+        withRetroLock(dir, () => {
+          throw new Error("operation failed");
+        })
+      ).toThrow("operation failed");
+      withRetroLock(dir, () => {
+        renameSync(lockPath, path.join(dir, "old.lock"));
+        writeFileSync(lockPath, "replacement owner");
+      });
+      expect(readFileSync(lockPath, "utf-8")).toBe("replacement owner");
+    });
+
+    test("reclaims abandoned incomplete metadata only after it is stale", () => {
+      const lockPath = path.join(dir, "run.lock");
+      writeFileSync(lockPath, "{");
+      const staleAt = new Date(Date.now() - 120_000);
+      utimesSync(lockPath, staleAt, staleAt);
+      expect(withRetroLock(dir, () => "recovered")).toBe("recovered");
+      expect(existsSync(lockPath)).toBeFalsy();
+    });
+
+    test.each(["initializing", "live"] as const)(
+      "waits for a %s owner instead of reclaiming its lock",
+      async (owner) => {
+        const lockPath = path.join(dir, "run.lock");
+        const enteredPath = path.join(dir, "entered");
+        writeFileSync(
+          lockPath,
+          owner === "initializing" ? "" : JSON.stringify({ acquiredAt: 0, pid: process.pid })
+        );
+        if (owner === "live") {
+          const staleAt = new Date(Date.now() - 120_000);
+          utimesSync(lockPath, staleAt, staleAt);
+        }
+        const worker = Bun.spawn(
+          [
+            process.execPath,
+            "--eval",
+            `
+        import { writeFileSync } from "node:fs";
+        import { withRetroLock } from ${JSON.stringify(storeScript)};
+        process.stdout.write("attempting\\n");
+        withRetroLock(${JSON.stringify(dir)}, () => writeFileSync(${JSON.stringify(enteredPath)}, "entered"));
+      `
+          ],
+          { stderr: "pipe", stdout: "pipe" }
+        );
+        try {
+          const reader = worker.stdout.getReader();
+          await reader.read();
+          reader.releaseLock();
+          await Bun.sleep(150);
+          expect(existsSync(enteredPath)).toBeFalsy();
+          rmSync(lockPath);
+          await expect(worker.exited).resolves.toBe(0);
+          expect(readFileSync(enteredPath, "utf-8")).toBe("entered");
+        } finally {
+          worker.kill();
+          await worker.exited;
+        }
+      }
+    );
+
+    test("serializes updates from competing processes", async () => {
+      const counterPath = path.join(dir, "counter");
+      writeFileSync(counterPath, "0");
+      const workers = Array.from({ length: 4 }, () =>
+        Bun.spawn(
+          [
+            process.execPath,
+            "--eval",
+            `
+        import { readFileSync, writeFileSync } from "node:fs";
+        import { withRetroLock } from ${JSON.stringify(storeScript)};
+        withRetroLock(${JSON.stringify(dir)}, () => {
+          const value = Number(readFileSync(${JSON.stringify(counterPath)}, "utf-8"));
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+          writeFileSync(${JSON.stringify(counterPath)}, String(value + 1));
+        });
+      `
+          ],
+          { stderr: "pipe", stdout: "pipe" }
+        )
+      );
+      try {
+        await expect(Promise.all(workers.map((worker) => worker.exited))).resolves.toStrictEqual([
+          0, 0, 0, 0
+        ]);
+        expect(readFileSync(counterPath, "utf-8")).toBe("4");
+      } finally {
+        for (const worker of workers) {
+          worker.kill();
+        }
+        await Promise.all(workers.map((worker) => worker.exited));
+      }
+    });
+  });
+
+  describe("retrospective CLI parsing", () => {
+    const cliScript = path.resolve(
+      import.meta.dirname,
+      "../skills/internal/agent-session-retrospective/scripts/run-retrospective.ts"
+    );
+
+    test.each([
+      { args: ["collect", "--since=not-a-date"], error: /Invalid date/u },
+      { args: ["collect", "--unknown"], error: /unknown option/u },
+      { args: ["commit", "--run-ts"], error: /argument missing/u },
+      { args: ["commit", "--run-ts", "ts"], error: /required option.*synthesis/u },
+      { args: ["pr-aggregate", "--run-ts", "ts", "extra"], error: /too many arguments/u }
+    ])("rejects $args before creating state", ({ args, error }) => {
+      const home = path.join(dir, "home");
+      const result = Bun.spawnSync([process.execPath, cliScript, "--home", home, ...args]);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr.toString()).toMatch(error);
+      expect(existsSync(home)).toBeFalsy();
+    });
+
+    test("passes equals-form date options to the window validator", () => {
+      const result = Bun.spawnSync([
+        process.execPath,
+        cliScript,
+        "--home",
+        path.join(dir, "home"),
+        "collect",
+        "--since=2030-01-01",
+        "--until=2020-01-01"
+      ]);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr.toString()).toContain(
+        "since 2030-01-01T00:00:00.000Z is after until 2020-01-01T00:00:00.000Z"
+      );
+    });
+  });
+
   describe("runCollect dedupe", () => {
     test("two files for one session_id collapse to the most-complete copy", () => {
       const codexRoot = path.join(dir, "codex");
@@ -1608,12 +1836,13 @@ describe("agent session retrospective", () => {
       });
     });
 
-    test("invalid PR manifests degrade to missing state", () => {
+    test("rejects corrupt PR evidence without altering the manifest", () => {
       const filePath = prManifestPath(dir, "ts");
       mkdirSync(path.dirname(filePath), { recursive: true });
       writeFileSync(filePath, '{"version":2}', "utf-8");
 
-      expect(readPrManifest(dir, "ts")).toBeNull();
+      expect(() => readPrManifest(dir, "ts")).toThrow(/Invalid input/u);
+      expect(readFileSync(filePath, "utf-8")).toBe('{"version":2}');
     });
   });
 });

@@ -12,18 +12,13 @@ export type {
   AgentKind,
   BundleSession,
   CanonicalTurn,
-  CanonicalProse,
-  CanonicalToolCall,
   DurableFixProposal,
   FrictionEpisode,
-  FrozenFriction,
   FrozenSessionRecord,
   RepeatedAskCluster,
   RepoBundle,
   RepoFindings,
   RepoMeta,
-  RetrospectiveSinceSource,
-  RetrospectiveUntilSource,
   RetrospectiveWindow
 } from "./schemas.ts";
 
