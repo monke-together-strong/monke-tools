@@ -85,7 +85,16 @@ export function loadRepoMeta(root: string, repoKey: string) {
 // --- run dir (bundles + findings, transient) --------------------------------
 
 export function runDir(root: string, runTs: string) {
+  assertRunIdentifier(runTs);
   return path.join(root, "runs", runTs);
+}
+
+function assertRunIdentifier(runTs: string) {
+  if (runTs.trim().length === 0 || runTs === "." || runTs === ".." || /[/\\\0]/u.test(runTs)) {
+    throw new Error(
+      `Invalid retrospective run identifier ${JSON.stringify(runTs)}: expected a nonblank directory name without path separators`
+    );
+  }
 }
 
 export function writeBundle(root: string, bundle: RepoBundle) {
@@ -159,6 +168,7 @@ export function cleanRunDir(root: string, runTs: string) {
 // --- reports -----------------------------------------------------------------
 
 export function writeReport(root: string, runTs: string, content: string) {
+  assertRunIdentifier(runTs);
   const dir = path.join(root, "reports");
   mkdirSync(dir, { recursive: true });
   const filePath = path.join(dir, `${runTs}-retrospective.md`);
@@ -167,6 +177,7 @@ export function writeReport(root: string, runTs: string, content: string) {
 }
 
 export function writeReportArtifact(root: string, runTs: string, suffix: string, content: string) {
+  assertRunIdentifier(runTs);
   const dir = path.join(root, "reports");
   mkdirSync(dir, { recursive: true });
   const filePath = path.join(dir, `${runTs}-${suffix}.md`);
