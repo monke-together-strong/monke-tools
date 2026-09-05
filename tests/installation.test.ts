@@ -781,7 +781,7 @@ skillInstallPreference:
     expect(existsSync(path.join(monkeHome, "installs", "local-collision"))).toBeFalsy();
   });
 
-  test("Codiff failure after activation leaves the new Local tool install active", async () => {
+  test("Local activation completes guidance and reports both shell and Codiff failures", async () => {
     const sandbox = makeTempDir("local-install-codiff-failure");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -789,6 +789,7 @@ skillInstallPreference:
     const installId = "local-codiff-failure";
     const stagedInstall = prepareStagedInstall(monkeHome, installId);
     prepareSource(sourceCheckout);
+    mkdirSync(path.join(home, ".zshrc"), { recursive: true });
 
     await expect(
       runCliAsync(
@@ -822,10 +823,25 @@ skillInstallPreference:
           toolBuildIdentity: "local+0123456"
         })
       )
-    ).rejects.toThrow(/Local tool install is active.*Retry with: mt install-dependencies/u);
+    ).rejects.toThrow(
+      /Local tool install is active[\s\S]*Retry with: mt shell install[\s\S]*Retry with: mt install-dependencies/u
+    );
 
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(path.join("installs", installId));
     expect(existsSync(path.join(monkeHome, "installs", installId, "mt"))).toBeTruthy();
+    expect(
+      existsSync(
+        path.join(
+          home,
+          ".codex",
+          "skills",
+          "monke-tools",
+          "internal",
+          "monke-tools-core",
+          "SKILL.md"
+        )
+      )
+    ).toBeTruthy();
     expect(realpathSync(path.join(home, ".local", "bin", "mt"))).toBe(
       path.join(monkeHome, "installs", installId, "mt")
     );
