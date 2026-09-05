@@ -191,13 +191,18 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
       let descendantPid: number | undefined;
 
       try {
-        await waitFor(() => existsSync(childPidPath) && existsSync(descendantPidPath));
-        childPid = Number(readFileSync(childPidPath, "utf-8"));
-        descendantPid = Number(readFileSync(descendantPidPath, "utf-8"));
+        await waitFor(() => {
+          childPid = readPublishedPid(childPidPath);
+          descendantPid = readPublishedPid(descendantPidPath);
+          return childPid !== undefined && descendantPid !== undefined;
+        });
         worker.kill(signal);
         await worker.exited;
         await wait(1700);
-        expect(childPid === undefined ? true : isProcessRunning(childPid)).toBeFalsy();
+        // kill(pid, 0) also sees an exited child awaiting its parent's reap on Linux.
+        const childStatus = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(childPid)]);
+        expect(childStatus.stderr.toString()).toBe("");
+        expect(childStatus.stdout.toString().trim()).toMatch(/^(?:Z.*)?$/u);
         expect(existsSync(descendantSurvivedMarker)).toBeFalsy();
         expect(existsSync(unexpectedCommandMarker)).toBeFalsy();
       } finally {
@@ -460,6 +465,11 @@ await runtime.execAsync(
   }, 7000);
 });
 
+function readPublishedPid(filePath: string) {
+  const value = existsSync(filePath) ? readFileSync(filePath, "utf-8").trim() : "";
+  return /^[1-9]\d*$/u.test(value) ? Number(value) : undefined;
+}
+
 async function waitFor(predicate: () => boolean) {
   const deadline = Date.now() + 3000;
   while (!predicate()) {
@@ -474,10 +484,10 @@ function killRetainedDescendant(
   groupLeaderPid: number | undefined,
   descendantPid: number | undefined
 ) {
-  if (descendantPid === undefined || !isProcessRunning(descendantPid)) {
+  if (descendantPid === undefined || descendantPid <= 0 || !isProcessRunning(descendantPid)) {
     return;
   }
-  if (groupLeaderPid !== undefined) {
+  if (groupLeaderPid !== undefined && groupLeaderPid > 0) {
     try {
       process.kill(-groupLeaderPid, "SIGKILL");
     } catch {
