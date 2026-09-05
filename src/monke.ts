@@ -54,6 +54,7 @@ import type { SessionMaterializationNode } from "./session-materialization.ts";
 import {
   ensureSessionPrefix,
   getSessionStateFilePath,
+  loadSessionState,
   SessionStateStore
 } from "./session-state-store.ts";
 import { requestShellDirectory } from "./shell.ts";
@@ -83,19 +84,8 @@ export type SpawnOptions =
     };
 
 type SpawnSourcePlan =
-  | {
-      kind: "current-head";
-      spawnOptions: Extract<SpawnOptions, { mode: "current-head" }>;
-    }
-  | {
-      kind: "session-branch";
-      spawnOptions: Extract<SpawnOptions, { mode: "session-branch" }>;
-    }
-  | {
-      attempt: "fresh" | "resume";
-      kind: "default-branch";
-      spawnOptions: Extract<SpawnOptions, { mode: "default-branch" }>;
-    };
+  | Extract<SpawnOptions, { mode: "current-head" | "session-branch" }>
+  | { attempt: "fresh" | "resume"; mode: "default-branch" };
 
 export interface SpawnRunOptions {
   /** Open the Root repo's Session worktree in Codex after it is ready. */
@@ -208,7 +198,7 @@ export async function spawnSessionFromSourceRootLocked(
   await runSessionMaterialization({
     nodes: createSpawnMaterializationNodes(execution),
     onCheckpoint: execution.runtime.sessionMaterializationBoundary,
-    retryCommand: formatSpawnRetryCommand(execution.session, execution.sourcePlan.spawnOptions),
+    retryCommand: formatSpawnRetryCommand(execution.session, execution.sourcePlan),
     rootSourceRoot: execution.rootSourceRoot,
     state: execution.sessionState,
     store
@@ -226,21 +216,21 @@ async function prepareSpawn(
   const { home } = store;
   const retainedState = store.get(rootSourceRoot, session);
   const sourcePlan = resolveSpawnSourcePlan(retainedState, session, spawnOptions);
-  assertSpawnRequest(runtime, rootSourceRoot, session, sourcePlan.spawnOptions);
+  assertSpawnRequest(runtime, rootSourceRoot, session, sourcePlan);
   const rootWorktreePath = getExpectedWorktreePath(home, rootSourceRoot, session);
   const getDefaultRef = createDefaultRefResolver(runtime);
   const rootDefaultRef =
-    sourcePlan.kind === "default-branch" && sourcePlan.attempt === "fresh"
+    sourcePlan.mode === "default-branch" && sourcePlan.attempt === "fresh"
       ? getDefaultRef(rootSourceRoot)
       : null;
   const resumedState =
-    sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume"
+    sourcePlan.mode === "default-branch" && sourcePlan.attempt === "resume"
       ? retainedState
       : undefined;
   let rootConfigRef = rootDefaultRef?.pinnedRef;
   if (rootConfigRef === undefined && resumedState) {
     rootConfigRef = requirePinnedRef(resumedState, rootSourceRoot);
-  } else if (rootConfigRef === undefined && sourcePlan.kind === "session-branch") {
+  } else if (rootConfigRef === undefined && sourcePlan.mode === "session-branch") {
     rootConfigRef = session;
   }
   const rootConfigExists = spawnRootConfigExists(runtime, rootSourceRoot, rootConfigRef);
@@ -250,7 +240,7 @@ async function prepareSpawn(
         [
           `monke.yml is missing for retained configured Session ${session} at ${rootSourceRoot}.`,
           "The retained Session state and Cleanup obligations were preserved.",
-          `Retry: ${formatSpawnRetryCommand(session, sourcePlan.spawnOptions)}`
+          `Retry: ${formatSpawnRetryCommand(session, sourcePlan)}`
         ].join("\n")
       );
     }
@@ -333,7 +323,7 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
       initialState.dirtyCarryStatus = "pending";
     }
     if (
-      execution.sourcePlan.kind === "default-branch" &&
+      execution.sourcePlan.mode === "default-branch" &&
       execution.sourcePlan.attempt === "fresh"
     ) {
       const defaultRef = execution.getDefaultRef(repoConfig.sourceRoot);
@@ -343,7 +333,7 @@ function createSpawnMaterializationNodes(execution: ConfiguredSpawn) {
     return createRepoLifecycleNode({
       context: {
         home: execution.home,
-        retryCommand: formatSpawnRetryCommand(execution.session, execution.sourcePlan.spawnOptions),
+        retryCommand: formatSpawnRetryCommand(execution.session, execution.sourcePlan),
         rootSourceRoot: execution.rootSourceRoot,
         runtime: execution.runtime,
         session: execution.session,
@@ -455,7 +445,7 @@ async function prepareSpawnRepoWorktree(request: SpawnRepoPreparationRequest) {
   });
   const diffBaseRef = existingState?.diffBaseRef ?? createdDiffBaseRef;
   const pinnedRef =
-    request.sourcePlan.kind === "default-branch"
+    request.sourcePlan.mode === "default-branch"
       ? (existingState?.pinnedRef ?? runGit(runtime, worktree.path, ["rev-parse", "HEAD"]).trim())
       : undefined;
   request.onWorktreeReady({ diffBaseRef, pinnedRef, worktreePath: worktree.path });
@@ -488,10 +478,10 @@ async function ensureSpawnWorktree(request: SpawnWorktreeRequest) {
     validateWorktreeForSession(runtime, home, sourceRoot, expectedWorktreePath, session);
   }
   const useWorktreeBaseline =
-    (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "resume") ||
-    (sourcePlan.kind === "session-branch" && sourceRoot === rootSourceRoot);
+    (sourcePlan.mode === "default-branch" && sourcePlan.attempt === "resume") ||
+    (sourcePlan.mode === "session-branch" && sourceRoot === rootSourceRoot);
   if (
-    sourcePlan.kind === "default-branch" &&
+    sourcePlan.mode === "default-branch" &&
     (sourcePlan.attempt === "fresh" || !branchExists(runtime, sourceRoot, session))
   ) {
     const pinnedRef = requireRepoPinnedRef(existingState, sourceRoot);
@@ -511,7 +501,7 @@ async function ensureSpawnWorktree(request: SpawnWorktreeRequest) {
   const sessionBranchExisted = branchExists(runtime, sourceRoot, session);
   const sourceHeadRef = resolveAttachedHeadRef(runtime, sourceRoot);
   const worktree = await ensureSessionWorktreeAsync(runtime, home, sourceRoot, session, {
-    skipCleanCheck: shouldCopyDirty(sourcePlan.spawnOptions)
+    skipCleanCheck: shouldCopyDirty(sourcePlan)
   });
   if (request.dirtySnapshot && (worktree.created || resumesDirtyCarry)) {
     await applyDirtySnapshot(runtime, home, sourceRoot, worktree.path, request.dirtySnapshot);
@@ -520,7 +510,7 @@ async function ensureSpawnWorktree(request: SpawnWorktreeRequest) {
   }
   return {
     createdDiffBaseRef:
-      sourcePlan.kind === "current-head" &&
+      sourcePlan.mode === "current-head" &&
       worktree.created &&
       !sessionBranchExisted &&
       sourceHeadRef !== undefined
@@ -556,10 +546,7 @@ function resolveSpawnSourcePlan(
     const retainedOptions = retainedSpawnOptions(state);
     // A completed Session pins its source identity only. Dirty-carry policy is not part of that
     // identity, so changing it alone re-spawns the same Session rather than failing.
-    if (
-      spawnOptions.mode === "default-branch" ||
-      !sameSpawnSourceIdentity(spawnOptions, retainedOptions)
-    ) {
+    if (spawnOptions.mode === "default-branch" || spawnOptions.mode !== retainedOptions.mode) {
       throw new MonkeError(
         `Session ${session} is a completed Session using ${formatSpawnPolicy(retainedOptions)}; use a new Session name to change or refresh its source identity`
       );
@@ -573,21 +560,15 @@ function resolveSpawnSourcePlan(
       );
     }
     if (retainedOptions.mode === "default-branch") {
-      return { attempt: "resume", kind: "default-branch", spawnOptions: retainedOptions };
+      return { attempt: "resume", mode: "default-branch" };
     }
-    if (retainedOptions.mode === "session-branch") {
-      return { kind: "session-branch", spawnOptions: retainedOptions };
-    }
-    return { kind: "current-head", spawnOptions: retainedOptions };
+    return retainedOptions;
   }
-  if (spawnOptions.mode === "current-head") {
-    return { kind: "current-head", spawnOptions };
-  }
-  if (spawnOptions.mode === "session-branch") {
-    return { kind: "session-branch", spawnOptions };
+  if (spawnOptions.mode !== "default-branch") {
+    return spawnOptions;
   }
   if (!state) {
-    return { attempt: "fresh", kind: "default-branch", spawnOptions };
+    return { attempt: "fresh", mode: "default-branch" };
   }
 
   throw new MonkeError(
@@ -602,7 +583,9 @@ export function assertSpawnSourcePolicy(
   session: string,
   spawnOptions: SpawnOptions
 ) {
-  const state = new SessionStateStore(home).get(rootSourceRoot, session);
+  const state = existsSync(getSessionStateFilePath(home, rootSourceRoot, session))
+    ? loadSessionState(home, rootSourceRoot, session)
+    : undefined;
   resolveSpawnSourcePlan(state, session, spawnOptions);
 }
 
@@ -618,11 +601,6 @@ function retainedSpawnOptions(state: SessionState): SpawnOptions {
 
 function isImplicitSpawnRequest(options: SpawnOptions) {
   return options.mode === "current-head" && options.copyDirty;
-}
-
-/** Whether two Spawn requests resolve their worktrees from the same source. */
-function sameSpawnSourceIdentity(left: SpawnOptions, right: SpawnOptions) {
-  return left.mode === right.mode;
 }
 
 function sameSpawnOptions(left: SpawnOptions, right: SpawnOptions) {
@@ -769,7 +747,7 @@ function prepareConfiglessWorktreeCheckpoint(spawn: ConfiglessSpawn) {
       resolveFreshCurrentHeadDiffBase({
         sessionBranchExisted,
         sourceHeadRef: resolveAttachedHeadRef(spawn.runtime, spawn.rootSourceRoot),
-        spawnOptions: spawn.sourcePlan.spawnOptions
+        spawnOptions: spawn.sourcePlan
       }),
     pinnedRef: spawn.rootDefaultRef?.pinnedRef ?? spawn.existingRepoState?.pinnedRef,
     worktreePath: getExpectedWorktreePath(spawn.home, spawn.rootSourceRoot, spawn.session)
@@ -777,13 +755,10 @@ function prepareConfiglessWorktreeCheckpoint(spawn: ConfiglessSpawn) {
 }
 
 function captureConfiglessDirtySnapshot(spawn: ConfiglessSpawn) {
-  if (
-    spawn.sourcePlan.spawnOptions.mode === "current-head" &&
-    !spawn.sourcePlan.spawnOptions.copyDirty
-  ) {
+  if (spawn.sourcePlan.mode === "current-head" && !spawn.sourcePlan.copyDirty) {
     ensureCleanCheckout(spawn.runtime, spawn.rootSourceRoot);
   }
-  if (!shouldCopyDirty(spawn.sourcePlan.spawnOptions)) {
+  if (!shouldCopyDirty(spawn.sourcePlan)) {
     return null;
   }
   const snapshot = captureDirtySnapshot(spawn.runtime, spawn.rootSourceRoot);
@@ -819,10 +794,7 @@ function createConfiglessSessionState(
   }
 ): SessionState {
   const { prepared } = options;
-  const {
-    rootSourceRoot,
-    sourcePlan: { spawnOptions }
-  } = spawn;
+  const { rootSourceRoot, sourcePlan: spawnOptions } = spawn;
   return {
     ...options.priorSessionState,
     copyDirty: spawnOptions.mode === "current-head" ? spawnOptions.copyDirty : undefined,
@@ -859,7 +831,7 @@ function failConfiglessSpawn(spawn: ConfiglessSpawn, state: SessionState): never
   );
   throw new MonkeError(
     formatFailureReceipt(state, {
-      retryCommand: formatSpawnRetryCommand(spawn.session, spawn.sourcePlan.spawnOptions),
+      retryCommand: formatSpawnRetryCommand(spawn.session, spawn.sourcePlan),
       rootSourceRoot: spawn.rootSourceRoot
     })
   );
@@ -873,7 +845,7 @@ function loadSpawnGraph(
   getDefaultRef: (sourceRoot: string) => PinnedDefaultBranchRef,
   resumedState: SessionState | undefined
 ) {
-  if (sourcePlan.kind === "default-branch") {
+  if (sourcePlan.mode === "default-branch") {
     if (sourcePlan.attempt === "resume") {
       if (!resumedState) {
         throw new MonkeError(`Missing retained Session state for ${session}`);
@@ -888,7 +860,7 @@ function loadSpawnGraph(
       (sourceRoot) => getDefaultRef(sourceRoot).pinnedRef
     );
   }
-  if (sourcePlan.kind === "session-branch") {
+  if (sourcePlan.mode === "session-branch") {
     return loadGraphAtRefs(runtime, rootSourceRoot, (sourceRoot) =>
       sourceRoot === rootSourceRoot ? session : undefined
     );
@@ -941,7 +913,7 @@ function prepareSpawnMaterialization(
   reposInOrder: RepoConfig[]
 ) {
   const { home } = store;
-  const { spawnOptions } = sourcePlan;
+  const spawnOptions = sourcePlan;
   if (spawnOptions.mode === "current-head" && !spawnOptions.copyDirty) {
     assertCleanCheckoutsForCurrentHeadSpawn(runtime, reposInOrder, session);
   }
@@ -955,17 +927,16 @@ function prepareSpawnMaterialization(
   const sessionState =
     store.get(rootSourceRoot, session) ??
     createNewSessionState(home, rootSourceRoot, session, reposInOrder);
-  sessionState.copyDirty =
-    sourcePlan.kind === "current-head" ? sourcePlan.spawnOptions.copyDirty : undefined;
-  sessionState.graphSource = sourcePlan.kind === "current-head" ? undefined : "session-branch";
-  sessionState.spawnSource = sourcePlan.kind === "current-head" ? undefined : sourcePlan.kind;
+  sessionState.copyDirty = sourcePlan.mode === "current-head" ? sourcePlan.copyDirty : undefined;
+  sessionState.graphSource = sourcePlan.mode === "current-head" ? undefined : "session-branch";
+  sessionState.spawnSource = sourcePlan.mode === "current-head" ? undefined : sourcePlan.mode;
   ensureSessionPrefix(
     sessionState,
     reposInOrder.map((repo) => repo.sourceRoot)
   );
   assertUniqueExpectedWorktreePaths(home, session, reposInOrder);
   assertNoGlobalWorktreePathStateCollisions(store, session, reposInOrder);
-  if (sourcePlan.kind === "default-branch" && sourcePlan.attempt === "fresh") {
+  if (sourcePlan.mode === "default-branch" && sourcePlan.attempt === "fresh") {
     for (const repoConfig of reposInOrder) {
       assertFreshSessionWorktreeAvailable(runtime, home, repoConfig.sourceRoot, session);
     }
@@ -1036,7 +1007,7 @@ function loadResolvedGraphForSession(
   rootSourceRoot: string,
   sessionState: SessionState | undefined
 ) {
-  if (sessionState?.graphSource !== "session-branch" || sessionState.repos.length === 0) {
+  if (sessionState?.graphSource !== "session-branch") {
     return loadResolvedGraph(runtime, rootSourceRoot);
   }
 
