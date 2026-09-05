@@ -17,7 +17,8 @@ import {
   getSessionStateFilePath,
   listSessionStates,
   listSessionStatesRelevantToWorktrees,
-  loadSessionState
+  loadSessionState,
+  SessionStateStore
 } from "./session-state-store.ts";
 import { requestShellDirectoryAfterRemoval } from "./shell.ts";
 import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
@@ -276,7 +277,8 @@ function chopSession(
     }
   }
 
-  finalizeSession(runtime, home, target.state);
+  // Reuse the targeted ownership scan; unrelated invalid state must not block this removal.
+  finalizeSession(runtime, new SessionStateStore(home, target.allStates), target.state);
   return {
     kind: "session",
     session: target.state.session

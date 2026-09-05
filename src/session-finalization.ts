@@ -1,14 +1,14 @@
 import { existsSync } from "node:fs";
 
 import { errorMessage, MonkeError } from "./errors.ts";
-import { removeSessionState } from "./session-state-store.ts";
+import type { SessionStateStore } from "./session-state-store.ts";
 import type { Runtime, SessionState } from "./types.ts";
 import { assertCanonicalSourceCheckout } from "./worktree-safety.ts";
 
 const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
 
 /** Finalize one already-dead Session using only lifecycle data saved in its state. */
-export function finalizeSession(runtime: Runtime, home: string, state: SessionState) {
+export function finalizeSession(runtime: Runtime, store: SessionStateStore, state: SessionState) {
   const liveRepo = state.repos.find((repo) => existsSync(repo.worktreePath));
   if (liveRepo !== undefined) {
     throw new MonkeError(
@@ -54,5 +54,5 @@ export function finalizeSession(runtime: Runtime, home: string, state: SessionSt
     }
   }
 
-  removeSessionState(home, state.rootSourceRoot, state.session);
+  store.remove(state);
 }
