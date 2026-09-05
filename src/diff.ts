@@ -142,6 +142,8 @@ async function selectAndLaunchDiff(
     if (refreshedTarget) {
       warnDirtyBase(runtime, refreshedTarget);
     } else {
+      // A remembered ref can survive its attached worktree being removed while the picker waits.
+      remembered.getTargets(true);
       warnDirtyRememberedBase(runtime, remembered, plan.baseRef);
     }
     launchCodiff(runtime, executable, plan);

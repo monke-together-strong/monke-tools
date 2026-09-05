@@ -872,6 +872,41 @@ touch "${discoveryReached}"`
     );
   });
 
+  test("remembered Diff still launches when its base worktree is removed while picking", async () => {
+    const sandbox = makeTempDir("diff-remembered-worktree-race");
+    const binDirectory = path.join(sandbox, "bin");
+    const home = path.join(sandbox, "home");
+    const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
+    runMonke({ args: ["spawn", "session"], cwd: repoRoot, monkeHome: home });
+    const sessionWorktree = getExpectedWorktreePath(home, repoRoot, "session");
+    const baseWorktree = path.join(sandbox, "ordinary-worktrees", "base");
+    git(repoRoot, ["worktree", "add", "-b", "base", baseWorktree]);
+    const state = loadSessionState(home, repoRoot, "session");
+    saveSessionState(home, {
+      ...state,
+      repos: state.repos.map((repo) => ({ ...repo, diffBaseRef: "refs/heads/base" }))
+    });
+    const codiffLog = installFakeCodiff(binDirectory);
+
+    await runMonkeAsync({
+      args: ["diff", "--pick"],
+      binDirectory,
+      cwd: sessionWorktree,
+      monkeHome: home,
+      onSelect() {
+        git(repoRoot, ["worktree", "remove", baseWorktree]);
+      },
+      selectValues: ["remembered:refs/heads/base"]
+    });
+
+    expect(readFileSync(codiffLog, "utf-8")).toBe(
+      `--branch\nrefs/heads/base\n${sessionWorktree}\n`
+    );
+    expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBe(
+      "refs/heads/base"
+    );
+  });
+
   test("local-only Diff skips a meaningless picker and avoids an empty Codiff window", async () => {
     const sandbox = makeTempDir("diff-local-only");
     const binDirectory = path.join(sandbox, "bin");

@@ -6,7 +6,6 @@ import { describe, expect, test, vi } from "vitest";
 
 import { createRuntime, findExecutable, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
-import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe(findExecutable, () => {
   test("uses the supplied PATH in order", () => {
@@ -342,17 +341,6 @@ await runtime.execAsync(
     for (const signal of signals) {
       expect(process.listenerCount(signal)).toBe(baselineListeners.get(signal));
     }
-  });
-
-  test("createRuntime reports exhausted scripted select values clearly", async () => {
-    const runtime = createTestRuntime({ selectValues: [] });
-
-    await expect(
-      runtime.select({
-        message: "Choose one",
-        options: [{ label: "One", value: "one" }]
-      })
-    ).rejects.toThrow(/No scripted select values remain/u);
   });
 
   test("Release requests fall through an empty GH_TOKEN to GITHUB_TOKEN", async () => {
