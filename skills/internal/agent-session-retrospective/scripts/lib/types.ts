@@ -1,9 +1,9 @@
 /**
  * Canonical model + on-disk record shapes for the agent-session-retrospective skill.
  *
- * The script owns everything deterministic: identity, the canonical normalized
- * session, the per-repo bundle, citation validation, and the frozen record. The
- * LLM only writes free-form finding bodies and picks citations the script verifies.
+ * The script owns everything deterministic: identity, the canonical normalized session, the
+ * per-repo bundle, citation validation, and the frozen record. The LLM only writes free-form
+ * finding bodies and picks citations the script verifies.
  */
 
 import type * as Schemas from "./schemas.ts";
@@ -24,7 +24,7 @@ export type {
   RepoMeta,
   RetrospectiveSinceSource,
   RetrospectiveUntilSource,
-  RetrospectiveWindow,
+  RetrospectiveWindow
 } from "./schemas.ts";
 
 /** A single agent transcript normalized into ordered, citable turns. */
@@ -46,7 +46,7 @@ export interface CanonicalSession {
   startedAt: string | null;
   /** Native origin category, such as user, subagent, or automation. */
   threadSource: string | null;
-  /** sourceRoots the session's tool calls touched, excluding the primary. */
+  /** SourceRoots the session's tool calls touched, excluding the primary. */
   touchedRoots: string[];
   turns: Schemas.CanonicalTurn[];
 }

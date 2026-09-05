@@ -6,10 +6,11 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
-  writeFileSync,
+  writeFileSync
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+
 import { parse, stringify } from "yaml";
 import type * as z from "zod";
 
@@ -20,14 +21,14 @@ import {
   RepoFindingsSchema,
   RepoMetaSchema,
   RetrospectiveWindowSchema,
-  RetroLockMetadataSchema,
+  RetroLockMetadataSchema
 } from "./schemas.ts";
 import type {
   AgentKind,
   FrozenSessionRecord,
   RepoBundle,
   RepoMeta,
-  RetrospectiveWindow,
+  RetrospectiveWindow
 } from "./types.ts";
 
 const LOCK_TIMEOUT_MS = 5000;
@@ -44,11 +45,7 @@ function sessionPath(root: string, agent: AgentKind, sessionId: string) {
   return path.join(root, "sessions", `${sessionHashKey(agent, sessionId)}.yml`);
 }
 
-export function loadFrozenSession(
-  root: string,
-  agent: AgentKind,
-  sessionId: string,
-) {
+export function loadFrozenSession(root: string, agent: AgentKind, sessionId: string) {
   const filePath = sessionPath(root, agent, sessionId);
   if (!existsSync(filePath)) {
     return null;
@@ -109,10 +106,7 @@ export function writeBundle(root: string, bundle: RepoBundle) {
 }
 
 export function readBundle(root: string, runTs: string, repoHash: string) {
-  return parseJsonFile(
-    path.join(runDir(root, runTs), `${repoHash}.json`),
-    RepoBundleSchema,
-  );
+  return parseJsonFile(path.join(runDir(root, runTs), `${repoHash}.json`), RepoBundleSchema);
 }
 
 export function listBundleHashes(root: string, runTs: string) {
@@ -122,7 +116,8 @@ export function listBundleHashes(root: string, runTs: string) {
   }
   return readdirSync(dir)
     .filter(
-      (entry) => entry.endsWith(".json") && entry !== "window.json" && !entry.endsWith(".findings.json"),
+      (entry) =>
+        entry.endsWith(".json") && entry !== "window.json" && !entry.endsWith(".findings.json")
     )
     .map((entry) => entry.slice(0, -".json".length));
 }
@@ -212,7 +207,11 @@ export function withRetroLock<T>(root: string, callback: () => T) {
   while (fd === null) {
     try {
       fd = openSync(lockPath, "wx");
-      writeFileSync(lockPath, JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }), "utf-8");
+      writeFileSync(
+        lockPath,
+        JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
+        "utf-8"
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes("EEXIST")) {
@@ -222,14 +221,11 @@ export function withRetroLock<T>(root: string, callback: () => T) {
         continue;
       }
       if (Date.now() >= deadline) {
-        throw new Error(`Timed out waiting for retrospective lock at ${lockPath}`, { cause: error });
+        throw new Error(`Timed out waiting for retrospective lock at ${lockPath}`, {
+          cause: error
+        });
       }
-      Atomics.wait(
-        new Int32Array(new SharedArrayBuffer(4)),
-        0,
-        0,
-        LOCK_RETRY_INTERVAL_MS,
-      );
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LOCK_RETRY_INTERVAL_MS);
     }
   }
   try {

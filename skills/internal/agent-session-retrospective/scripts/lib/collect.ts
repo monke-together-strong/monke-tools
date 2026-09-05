@@ -3,8 +3,8 @@ import path from "node:path";
 
 import { isNonEmptyString } from "@sindresorhus/is";
 
-import { discoverSessionFiles, parseSessionFile } from './collectors.ts';
-import type { DiscoverOptions } from './collectors.ts';
+import { discoverSessionFiles, parseSessionFile } from "./collectors.ts";
+import type { DiscoverOptions } from "./collectors.ts";
 import { hashKey, resolveRepoKey, sessionHashKey } from "./identity.ts";
 import {
   listReportPaths,
@@ -12,14 +12,14 @@ import {
   loadFrozenSession,
   retroHome,
   writeBundle,
-  writeRunWindow,
+  writeRunWindow
 } from "./store.ts";
 import type {
   BundleSession,
   CanonicalSession,
   FrozenSessionRecord,
   RepoBundle,
-  RetrospectiveWindow,
+  RetrospectiveWindow
 } from "./types.ts";
 
 export interface EligibilityInput {
@@ -35,13 +35,13 @@ export type Eligibility =
   | { firstNewTurnIndex: number; include: true; priorFindingCount: number };
 
 /**
- * Decide whether a session is eligible for analysis this run: inside the window,
- * idle long enough, and either never analyzed or grown since it was frozen.
+ * Decide whether a session is eligible for analysis this run: inside the window, idle long enough,
+ * and either never analyzed or grown since it was frozen.
  */
 export function decideEligibility(
   session: CanonicalSession,
   prior: FrozenSessionRecord | null,
-  input: EligibilityInput,
+  input: EligibilityInput
 ): Eligibility {
   if (session.turns.length === 0) {
     return { include: false, reason: "empty" };
@@ -62,7 +62,7 @@ export function decideEligibility(
     return {
       firstNewTurnIndex: prior.lastTurnIndex,
       include: true,
-      priorFindingCount: prior.friction.length,
+      priorFindingCount: prior.friction.length
     };
   }
   return { firstNewTurnIndex: 0, include: true, priorFindingCount: 0 };
@@ -91,7 +91,7 @@ const MILLISECONDS_PER_MINUTE = 60_000;
 export function buildBundles(
   runTs: string,
   eligibles: EligibleSession[],
-  frozen: FrozenSessionRecord[],
+  frozen: FrozenSessionRecord[]
 ) {
   const byRepo = new Map<string, RepoBundle>();
 
@@ -103,7 +103,7 @@ export function buildBundles(
         repoHash: hashKey(repoKey),
         repoKey,
         runTs,
-        sessions: [],
+        sessions: []
       };
       byRepo.set(repoKey, bundle);
     }
@@ -122,7 +122,7 @@ export function buildBundles(
       sessionHash: sessionHashKey(session.agent, session.sessionId),
       sessionId: session.sessionId,
       threadSource: session.threadSource,
-      turns: session.turns,
+      turns: session.turns
     };
     bundleFor(eligible.primaryRepo).sessions.push({ ...base, role: "primary" });
     for (const secondary of eligible.secondaryRepos) {
@@ -136,9 +136,7 @@ export function buildBundles(
 }
 
 /** Resolve each transcript's repo membership, including inherited parent membership. */
-export function resolveSessionMembership(
-  sessions: CanonicalSession[],
-) {
+export function resolveSessionMembership(sessions: CanonicalSession[]) {
   const bySession = new Map(sessions.map((session) => [sessionKey(session), session]));
   const resolved = new Map<string, SessionMembership>();
   const resolving = new Set<string>();
@@ -158,10 +156,8 @@ export function resolveSessionMembership(
       const parent = bySession.get(`${session.agent}\u0000${session.parentSessionId}`);
       if (parent) {
         const parentMembership = resolve(parent);
-        const {
-          primaryRepo: parentPrimaryRepo,
-          secondaryRepos: parentSecondaryRepos,
-        } = parentMembership;
+        const { primaryRepo: parentPrimaryRepo, secondaryRepos: parentSecondaryRepos } =
+          parentMembership;
         if (primaryRepo === "unknown") {
           primaryRepo = parentPrimaryRepo;
         } else if (parentPrimaryRepo !== "unknown") {
@@ -199,7 +195,7 @@ function digestFor(repoKey: string, frozen: FrozenSessionRecord[]) {
     }
     for (const friction of record.friction) {
       lines.push(
-        `${record.sessionId.slice(0, SESSION_ID_PREFIX_LENGTH)}: ${firstLine(friction.body)}`,
+        `${record.sessionId.slice(0, SESSION_ID_PREFIX_LENGTH)}: ${firstLine(friction.body)}`
       );
     }
   }
@@ -208,9 +204,7 @@ function digestFor(repoKey: string, frozen: FrozenSessionRecord[]) {
 
 function firstLine(text: string) {
   const line = text.split("\n").find((entry) => entry.trim()) ?? "";
-  return line.length > DIGEST_LINE_MAX_LENGTH
-    ? `${line.slice(0, DIGEST_LINE_MAX_LENGTH)}…`
-    : line;
+  return line.length > DIGEST_LINE_MAX_LENGTH ? `${line.slice(0, DIGEST_LINE_MAX_LENGTH)}…` : line;
 }
 
 export interface RunCollectOptions extends DiscoverOptions {
@@ -232,7 +226,7 @@ const FIRST_RUN_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 export function resolveRetrospectiveWindow(
   root: string,
-  input: { nowMs: number; sinceMs?: number; untilMs?: number },
+  input: { nowMs: number; sinceMs?: number; untilMs?: number }
 ): ResolvedWindow {
   const { sinceMs: inputSinceMs } = input;
   const untilMs = input.untilMs ?? input.nowMs;
@@ -257,8 +251,8 @@ export function resolveRetrospectiveWindow(
   if (sinceMs > untilMs) {
     throw new Error(
       `Invalid retrospective window: since ${new Date(sinceMs).toISOString()} is after until ${new Date(
-        untilMs,
-      ).toISOString()}`,
+        untilMs
+      ).toISOString()}`
     );
   }
 
@@ -269,13 +263,15 @@ export function resolveRetrospectiveWindow(
       since: new Date(sinceMs).toISOString(),
       sinceSource,
       until: new Date(untilMs).toISOString(),
-      untilSource,
-    },
+      untilSource
+    }
   };
 }
 
 function newestReportCursorMs(root: string) {
-  const reports = listReportPaths(root).toSorted((a, b) => path.basename(b).localeCompare(path.basename(a)));
+  const reports = listReportPaths(root).toSorted((a, b) =>
+    path.basename(b).localeCompare(path.basename(a))
+  );
   return reports
     .map((reportPath) => {
       const fromWindow = parseReportWindowUntilMs(reportPath);
@@ -310,7 +306,7 @@ function parseRunTimestampMs(value: string) {
   }
   const match =
     /^(?<date>\d{4}-\d{2}-\d{2}T)(?<hour>\d{2})-(?<minute>\d{2})-(?<second>\d{2})(?:-(?<millisecond>\d{3}))?Z$/u.exec(
-      value,
+      value
     );
   if (!match?.groups) {
     return;
@@ -325,12 +321,11 @@ function parseRunTimestampMs(value: string) {
 export function runCollect(options: RunCollectOptions) {
   const root = options.retroRoot ?? retroHome(options.home);
   const nowMs = options.nowMs ?? Date.now();
-  const idleMs =
-    (options.idleMinutes ?? DEFAULT_IDLE_MINUTES) * MILLISECONDS_PER_MINUTE;
+  const idleMs = (options.idleMinutes ?? DEFAULT_IDLE_MINUTES) * MILLISECONDS_PER_MINUTE;
   const resolvedWindow = resolveRetrospectiveWindow(root, {
     nowMs,
     sinceMs: options.sinceMs,
-    untilMs: options.untilMs,
+    untilMs: options.untilMs
   });
   const skipped: Record<string, number> = {};
   const bump = (reason: string) => {
@@ -375,7 +370,7 @@ export function runCollect(options: RunCollectOptions) {
       idleMs,
       nowMs,
       sinceMs: resolvedWindow.sinceMs,
-      untilMs: resolvedWindow.untilMs,
+      untilMs: resolvedWindow.untilMs
     });
     if (!decision.include) {
       bump(decision.reason);
@@ -391,7 +386,7 @@ export function runCollect(options: RunCollectOptions) {
       primaryRepo: membership.primaryRepo,
       priorFindingCount: decision.priorFindingCount,
       secondaryRepos: membership.secondaryRepos,
-      session,
+      session
     });
   }
 
@@ -402,11 +397,11 @@ export function runCollect(options: RunCollectOptions) {
       path: writeBundle(root, bundle),
       repoHash: bundle.repoHash,
       repoKey: bundle.repoKey,
-      sessionCount: bundle.sessions.length,
+      sessionCount: bundle.sessions.length
     })),
     runTs: options.runTs,
     skipped,
-    window: resolvedWindow.window,
+    window: resolvedWindow.window
   };
 }
 

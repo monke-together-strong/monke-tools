@@ -15,6 +15,7 @@
   "include": [
     "src/**/*.ts",
     "scripts/**/*.ts",
+    "scripts/**/*.mts",
     "tests/**/*.ts",
     "packages/**/*.ts",
     "skills/internal/agent-session-retrospective/scripts/**/*.ts",

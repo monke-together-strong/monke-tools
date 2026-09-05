@@ -1,7 +1,7 @@
 /**
- * Arc-preserving noise-strip (design decision 15). Keep every human + assistant
- * turn in order; collapse each tool call to {name, input_summary, exit_code,
- * error?, output_head_tail}; elide big payloads. No triviality gate.
+ * Arc-preserving noise-strip (design decision 15). Keep every human + assistant turn in order;
+ * collapse each tool call to {name, input_summary, exit_code, error?, output_head_tail}; elide big
+ * payloads. No triviality gate.
  */
 
 import type { JsonValue } from "./transcript-schemas.ts";

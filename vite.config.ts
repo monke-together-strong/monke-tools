@@ -44,7 +44,7 @@ export default defineConfig({
     outDir: path.resolve(workspaceRoot, "packages/oxc-config/dist")
   },
   staged: {
-    "*": `sh -c 'vp check --fix "$@" || true' --`
+    "*": "vp check --fix"
   },
   test: {
     fileParallelism: true,

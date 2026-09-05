@@ -75,7 +75,7 @@ class TurnBuilder {
       inputSummary,
       kind: "tool_call" as const,
       name,
-      ref: `t${this.turns.length}`,
+      ref: `t${this.turns.length}`
     };
     this.turns.push(turn);
     return turn;
@@ -83,9 +83,7 @@ class TurnBuilder {
 }
 
 /** Build one canonical session from agent-independent transcript events. */
-export function buildCanonicalSession(
-  options: BuildCanonicalSessionOptions,
-) {
+export function buildCanonicalSession(options: BuildCanonicalSessionOptions) {
   if (!isNonEmptyString(options.sessionId)) {
     return null;
   }
@@ -137,7 +135,7 @@ export function buildCanonicalSession(
     startedAt: options.startedAt,
     threadSource: options.threadSource,
     touchedRoots: [...touched].filter((root) => root !== primary).toSorted(),
-    turns: builder.turns,
+    turns: builder.turns
   };
 }
 
@@ -147,7 +145,7 @@ function isHumanPromptSource(threadSource: string | null) {
 
 function applyToolResult(
   turn: CanonicalTurn & { kind: "tool_call" },
-  result: SessionEvent & { kind: "tool-result" },
+  result: SessionEvent & { kind: "tool-result" }
 ) {
   turn.outputHeadTail = summarizeOutput(result.output);
   if (result.error !== undefined) {
@@ -165,7 +163,7 @@ function collectTouchedRoot(
   value: string,
   primary: string,
   into: Set<string>,
-  visitedDirs: Set<string>,
+  visitedDirs: Set<string>
 ) {
   if (
     !value.startsWith("/") ||
