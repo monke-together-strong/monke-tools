@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import { parse, stringify } from "yaml";
-import type * as z from "zod";
+import * as z from "zod";
 
 import { hashKey, sessionHashKey } from "./identity.ts";
 import {
@@ -23,6 +23,11 @@ import type {
 } from "./types.ts";
 
 const LOCK_TIMEOUT_MS = 5000;
+const RunIdentifierSchema = z
+  .string()
+  .refine(
+    (runTs) => runTs.trim().length > 0 && runTs !== "." && runTs !== ".." && !/[/\\\0]/u.test(runTs)
+  );
 
 /** Root of all retrospective state, matching monke house style under MONKE_HOME. */
 export function retroHome(monkeHome?: string) {
@@ -90,7 +95,7 @@ export function runDir(root: string, runTs: string) {
 }
 
 function assertRunIdentifier(runTs: string) {
-  if (runTs.trim().length === 0 || runTs === "." || runTs === ".." || /[/\\\0]/u.test(runTs)) {
+  if (!RunIdentifierSchema.safeParse(runTs).success) {
     throw new Error(
       `Invalid retrospective run identifier ${JSON.stringify(runTs)}: expected a nonblank directory name without path separators`
     );
