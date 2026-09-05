@@ -12,6 +12,13 @@ type OperationResult = ReturnType<
   typeof runCollect | typeof runPrCollect | typeof runPrAggregate | typeof runCommit
 >;
 
+/**
+ * Parses a date string into milliseconds since the Unix epoch.
+ *
+ * @param value - The date string to parse
+ * @returns The parsed date as milliseconds since the Unix epoch
+ * @throws InvalidArgumentError If `value` is not a valid date
+ */
 function parseDateMs(value: string) {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) {
@@ -20,6 +27,12 @@ function parseDateMs(value: string) {
   return parsed;
 }
 
+/**
+ * Parses a command-line value as a nonnegative finite number of idle minutes.
+ *
+ * @param value - The minute value to parse
+ * @returns The parsed number of minutes
+ */
 function parseIdleMinutes(value: string) {
   const minutes = Number(value);
   if (value.trim() === "" || !Number.isFinite(minutes) || minutes < 0) {
@@ -28,6 +41,9 @@ function parseIdleMinutes(value: string) {
   return minutes;
 }
 
+/**
+ * Configures and runs the `run-retrospective` command-line interface.
+ */
 function main() {
   const program = new Command()
     .name("run-retrospective")

@@ -470,6 +470,13 @@ export function prManifestPath(root: string, runTs: string) {
   return path.join(runDir(root, runTs), "pr-analysis", "manifest.json");
 }
 
+/**
+ * Loads the pull-request analysis manifest for a retrospective run.
+ *
+ * @param root - The project root containing the manifest
+ * @param runTs - The retrospective run timestamp
+ * @returns The validated manifest, or `null` if the manifest does not exist
+ */
 export function readPrManifest(root: string, runTs: string) {
   const filePath = prManifestPath(root, runTs);
   if (!existsSync(filePath)) {
@@ -478,6 +485,13 @@ export function readPrManifest(root: string, runTs: string) {
   return parseJson(readFileSync(filePath, "utf-8"), PrAnalysisManifestSchema);
 }
 
+/**
+ * Writes a pull-request analysis manifest to its run-specific file.
+ *
+ * @param root - The root directory for retrospective data
+ * @param runTs - The run timestamp used to determine the manifest location
+ * @param manifest - The manifest to persist
+ */
 function writePrManifest(root: string, runTs: string, manifest: PrAnalysisManifest) {
   const filePath = prManifestPath(root, runTs);
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -554,6 +568,13 @@ function summaryOf(item: PrWorkItem) {
   };
 }
 
+/**
+ * Determines the opening snapshot for a pull request from its commit history.
+ *
+ * @param pr - The pull request whose creation time anchors snapshot inference
+ * @param commits - The pull request's commit references
+ * @returns The inferred pre-opening commit snapshot, or an unknown snapshot when it cannot be determined
+ */
 function inferOpeningSnapshot(
   pr: GhPr,
   commits: PrCommitReference[]
@@ -807,6 +828,12 @@ function eachDateOnly(since: string, until: string) {
   return days;
 }
 
+/**
+ * Limits a diff to the maximum permitted length while preserving its beginning and end.
+ *
+ * @param value - The diff text to limit
+ * @returns The original text or a shortened version with an elision marker
+ */
 function clipDelta(value: string) {
   if (value.length <= MAX_DELTA_LENGTH) {
     return value;
@@ -815,6 +842,14 @@ function clipDelta(value: string) {
   return `${value.slice(0, keep)}\n\n[${value.length - keep * 2} chars elided]\n\n${value.slice(-keep)}`;
 }
 
+/**
+ * Executes a command synchronously and captures its standard output and error output.
+ *
+ * @param command - The command to execute
+ * @param args - Arguments passed to the command
+ * @param options - Optional execution settings
+ * @returns The command's exit status, standard output, and standard error
+ */
 function defaultRunner(command: string, args: string[], options: { cwd?: string } = {}) {
   const result = Bun.spawnSync([command, ...args], {
     cwd: options.cwd,
@@ -829,6 +864,16 @@ function defaultRunner(command: string, args: string[], options: { cwd?: string 
   };
 }
 
+/**
+ * Executes a command and returns its standard output.
+ *
+ * @param exec - Command runner used to execute the command
+ * @param command - Command to execute
+ * @param args - Arguments passed to the command
+ * @param options - Optional execution settings
+ * @returns The command's standard output
+ * @throws An error when the command exits with a nonzero status
+ */
 function runText(exec: CommandRunner, command: string, args: string[], options?: { cwd?: string }) {
   const result = exec(command, args, options);
   if (result.status !== 0) {

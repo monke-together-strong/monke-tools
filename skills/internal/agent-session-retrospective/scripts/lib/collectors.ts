@@ -34,6 +34,12 @@ type CodexResponsePayload = Extract<CodexTranscriptRecord, { type: "response_ite
 type CodexSessionMetaPayload = Extract<CodexTranscriptRecord, { type: "session_meta" }>["payload"];
 type CodexTurnContextPayload = Extract<CodexTranscriptRecord, { type: "turn_context" }>["payload"];
 
+/**
+ * Reads a JSONL file and collects its valid JSON records.
+ *
+ * @param filePath - Path to the JSONL file
+ * @returns The file hash, count of nonblank lines, and parsed records
+ */
 function readJsonlLines(filePath: string) {
   const raw = readFileSync(filePath, "utf-8");
   const hash = hashKey(raw);

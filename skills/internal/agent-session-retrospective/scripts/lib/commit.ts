@@ -40,10 +40,14 @@ export interface ValidatedFindings {
 }
 
 /**
- * Validate the LLM's citations against the bundle the script handed it: every cited turn ref must
- * exist in its session; every cited episode ref must name a surviving episode. Offending items are
- * dropped and counted (commit stays the deterministic gate; a hallucinated ref never reaches the
- * frozen record).
+ * Validates findings against the sessions and turns available in a repository bundle.
+ *
+ * Invalid friction episodes and durable fix proposals are excluded and counted, while repeated-ask
+ * examples are limited to sessions present in the bundle.
+ *
+ * @param findings - Findings produced for the repository
+ * @param bundle - Repository sessions and turns used to validate the findings
+ * @returns Validated episodes, fixes, repeated asks, the repository key, and counts of excluded items
  */
 export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
   // A session's friction is authored once, by its PRIMARY repo's subagent. Refs
@@ -117,6 +121,13 @@ export interface RunCommitOptions {
   synthesisPath?: string;
 }
 
+/**
+ * Reads and validates findings for every repository bundle in a run.
+ *
+ * @param root - The root directory containing the run data
+ * @param runTs - The run timestamp used to locate repository bundles and findings
+ * @returns The repository bundles paired with their validated findings
+ */
 function readCompletedFindings(root: string, runTs: string) {
   const slices: RepoSlice[] = [];
   const missingFindings: string[] = [];
@@ -137,6 +148,13 @@ function readCompletedFindings(root: string, runTs: string) {
   return slices;
 }
 
+/**
+ * Commits validated retrospective findings and generates the report and source artifacts for a run.
+ *
+ * @param options - Run configuration, including the run identifier, synthesis file, and repository root.
+ * @returns Paths to generated artifacts, session counts, PR-analysis warnings, and validation drop counts.
+ * @throws If findings, PR analysis, its manifest, or synthesis content is missing or invalid.
+ */
 export function runCommit(options: RunCommitOptions) {
   const root = options.retroRoot ?? retroHome(options.home);
   const slices = readCompletedFindings(root, options.runTs);
@@ -265,6 +283,15 @@ interface ReportContext {
   window?: RetrospectiveWindow | null;
 }
 
+/**
+ * Builds the retrospective report and its session and PR source documents.
+ *
+ * @param runTs - The run timestamp used in report headings and source filenames
+ * @param synthesis - The cross-repository session synthesis
+ * @param slices - Repository session data used to generate session sources
+ * @param context - Optional reporting-window, PR-analysis, and validation details
+ * @returns The main report, PR sources, and session sources
+ */
 export function buildReportArtifacts(
   runTs: string,
   synthesis: string,
@@ -456,6 +483,12 @@ export function validateSynthesis(content: string | null | undefined) {
   return warnings;
 }
 
+/**
+ * Validates the structure and required fields of active-action entries.
+ *
+ * @param section - Markdown content containing active-action entries
+ * @returns Validation warnings for entries with missing, malformed, or incorrectly ordered fields
+ */
 function validateActiveActions(section: string) {
   const headings = [...section.matchAll(/^####\s+(?<title>.+)$/gmu)];
   const warnings: string[] = [];
@@ -493,6 +526,13 @@ function validateActiveActions(section: string) {
   return warnings;
 }
 
+/**
+ * Validates PR analysis content against the work items in a manifest.
+ *
+ * @param content - The PR analysis content to validate
+ * @param manifest - The manifest defining expected PR sections and commit references
+ * @returns Validation warnings for missing sections, headings, references, or unknown commit SHAs
+ */
 export function validatePrAnalysis(content: string, manifest: PrAnalysisManifest) {
   const text = content.trim();
   const warnings: string[] = [];

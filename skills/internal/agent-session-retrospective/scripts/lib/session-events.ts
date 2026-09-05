@@ -82,7 +82,12 @@ class TurnBuilder {
   }
 }
 
-/** Build one canonical session from agent-independent transcript events. */
+/**
+ * Builds a canonical session from agent-independent transcript events.
+ *
+ * @param options - Session metadata and decoded transcript events.
+ * @returns The canonical session, or `null` when the session ID is missing or empty.
+ */
 export function buildCanonicalSession(
   options: BuildCanonicalSessionOptions
 ): CanonicalSession | null {

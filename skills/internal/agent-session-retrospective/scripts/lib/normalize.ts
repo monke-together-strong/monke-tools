@@ -39,11 +39,22 @@ export function summarizeOutput(output: string | undefined) {
   return `${head}\n… [${elided} chars elided] …\n${tail}`;
 }
 
-/** Keep assistant/human prose, but cap pathological lengths. */
+/**
+ * Limits prose to the configured maximum length after trimming surrounding whitespace.
+ *
+ * @returns The trimmed prose, clipped with an ellipsis when it exceeds the maximum length.
+ */
 export function clipProse(text: string) {
   return clip(text.trim(), PROSE_MAX);
 }
 
+/**
+ * Limits text to a maximum length.
+ *
+ * @param text - The text to clip
+ * @param max - The maximum number of characters before the ellipsis
+ * @returns The original text if it fits within the limit; otherwise, the truncated text followed by an ellipsis
+ */
 function clip(text: string, max: number) {
   if (text.length <= max) {
     return text;

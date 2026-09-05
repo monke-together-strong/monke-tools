@@ -87,13 +87,25 @@ export function loadRepoMeta(root: string, repoKey: string) {
   return parseYamlFile(filePath, RepoMetaSchema);
 }
 
-// --- run dir (bundles + findings, transient) --------------------------------
+/**
+ * Builds the directory path for a retrospective run.
+ *
+ * @param root - The root directory containing run data
+ * @param runTs - The run identifier
+ * @returns The path to the run directory
+ */
 
 export function runDir(root: string, runTs: string) {
   assertRunIdentifier(runTs);
   return path.join(root, "runs", runTs);
 }
 
+/**
+ * Validates a retrospective run identifier.
+ *
+ * @param runTs - The identifier to validate
+ * @throws Error if the identifier is blank, contains path separators or null bytes, or is `"."` or `".."`.
+ */
 function assertRunIdentifier(runTs: string) {
   if (!RunIdentifierSchema.safeParse(runTs).success) {
     throw new Error(
@@ -102,6 +114,13 @@ function assertRunIdentifier(runTs: string) {
   }
 }
 
+/**
+ * Writes a repository bundle to its run directory.
+ *
+ * @param root - The root directory containing retrospective data
+ * @param bundle - The repository bundle to write
+ * @returns The path to the written bundle file
+ */
 export function writeBundle(root: string, bundle: RepoBundle) {
   const dir = runDir(root, bundle.runTs);
   mkdirSync(dir, { recursive: true });
@@ -170,7 +189,14 @@ export function cleanRunDir(root: string, runTs: string) {
   rmSync(runDir(root, runTs), { force: true, recursive: true });
 }
 
-// --- reports -----------------------------------------------------------------
+/**
+ * Writes a retrospective report for a run.
+ *
+ * @param root - The root directory containing the reports directory
+ * @param runTs - The identifier of the run associated with the report
+ * @param content - The Markdown content to write
+ * @returns The path to the written report file
+ */
 
 export function writeReport(root: string, runTs: string, content: string) {
   assertRunIdentifier(runTs);
@@ -181,6 +207,15 @@ export function writeReport(root: string, runTs: string, content: string) {
   return filePath;
 }
 
+/**
+ * Writes a Markdown report artifact for a run.
+ *
+ * @param root - The storage root containing the reports directory
+ * @param runTs - The validated run identifier used in the artifact filename
+ * @param suffix - The filename suffix identifying the artifact
+ * @param content - The Markdown content to write
+ * @returns The path to the written report artifact
+ */
 export function writeReportArtifact(root: string, runTs: string, suffix: string, content: string) {
   assertRunIdentifier(runTs);
   const dir = path.join(root, "reports");
@@ -201,7 +236,14 @@ export function listReportPaths(root: string) {
     .toSorted();
 }
 
-// --- lock (one run at a time) ------------------------------------------------
+/**
+ * Executes a callback while holding the retrospective lock for the specified root directory.
+ *
+ * @param root - The directory containing the retrospective lock database
+ * @param callback - The operation to execute while the lock is held
+ * @returns The value produced by `callback`
+ * @throws An error if the lock cannot be acquired within the configured timeout or if the callback fails
+ */
 
 export function withRetroLock<T>(root: string, callback: () => T) {
   const lockPath = path.join(root, "run-lock.sqlite");
