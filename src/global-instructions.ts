@@ -16,7 +16,7 @@ import * as z from "zod";
 import { MonkeError } from "./errors.ts";
 import type { SkillInstallTargetKind } from "./global-config.ts";
 import { assertDirectoryMutationAccess } from "./path-boundary.ts";
-import { parseBoundaryValue } from "./validation.ts";
+import { unwrapBoundaryResult } from "./validation.ts";
 
 const GLOBAL_INSTRUCTIONS_RELATIVE_PATH = path.join("instructions", "GLOBAL.md");
 const MANAGED_INSTRUCTIONS_START = "<!-- monke-rules:start -->";
@@ -246,9 +246,8 @@ function resolveAgentConfigDirectory(
     return defaultDirectory;
   }
 
-  const validDirectory = parseBoundaryValue(
-    ConfiguredDirectorySchema,
-    configuredDirectory,
+  const validDirectory = unwrapBoundaryResult(
+    ConfiguredDirectorySchema.safeParse(configuredDirectory),
     `${environmentVariable} environment variable`
   );
   return path.resolve(cwd, validDirectory);

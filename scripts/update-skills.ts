@@ -8,7 +8,7 @@ import { confirm, isCancel } from "@clack/prompts";
 import { Command } from "@commander-js/extra-typings";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
-import { MonkeError } from "../src/errors.ts";
+import { MonkeError, ThrownValueSchema } from "../src/errors.ts";
 import {
   copyStagedGuidanceToManagedRoots,
   IMPORTED_REFERENCES_ROOT,
@@ -310,6 +310,6 @@ if (import.meta.main) {
   try {
     await runUpdateSkills();
   } catch (error) {
-    reportCliFailure(error);
+    reportCliFailure(ThrownValueSchema.parse(error));
   }
 }

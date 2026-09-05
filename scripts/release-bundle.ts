@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,6 +6,7 @@ import { Command } from "@commander-js/extra-typings";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
 import { MINIMUM_CODIFF_VERSION_TEXT } from "../src/codiff.ts";
+import { ThrownValueSchema } from "../src/errors.ts";
 import { ReleasePlatformSchema } from "../src/install-manifest.ts";
 import {
   buildReleaseBundle,
@@ -115,5 +115,5 @@ program
 try {
   await program.parseAsync(Bun.argv.slice(2), { from: "user" });
 } catch (error) {
-  reportCliFailure(error);
+  reportCliFailure(ThrownValueSchema.parse(error));
 }

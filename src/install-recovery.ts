@@ -23,7 +23,7 @@ import {
 } from "./install-manifest.ts";
 import { assertDirectChildPath, resolveManagedDirectory } from "./path-boundary.ts";
 import { withInstallationLockAsync } from "./runtime.ts";
-import { parseBoundaryValue } from "./validation.ts";
+import { unwrapBoundaryResult } from "./validation.ts";
 
 export const COLLISION_RECOVERY_FILENAME = ".monke-tools-collision.json";
 const CollisionRecoverySchema = strictObject({
@@ -113,9 +113,8 @@ export function writeCollisionRecovery(installRoot: string, predecessorInstallRo
 function loadCollisionRecovery(backupRoot: string) {
   const recoveryPath = path.join(backupRoot, COLLISION_RECOVERY_FILENAME);
   try {
-    return parseBoundaryValue(
-      CollisionRecoverySchema,
-      JSON.parse(readFileSync(recoveryPath, "utf-8")),
+    return unwrapBoundaryResult(
+      CollisionRecoverySchema.safeParse(JSON.parse(readFileSync(recoveryPath, "utf-8"))),
       "collision recovery metadata"
     );
   } catch {

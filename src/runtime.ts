@@ -18,7 +18,7 @@ import { isCancel, multiselect as clackMultiSelect, select as clackSelect } from
 import * as z from "zod";
 
 import { DEFAULT_TOOL_BUILD_IDENTITY } from "./build-identity.ts";
-import { errorMessage, MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { ReleaseCatalogPageSchema } from "./release-catalog-schema.ts";
 import { sha256 } from "./sha256.ts";
 import type {
@@ -162,7 +162,9 @@ function createGitHubReleaseDistribution(
         signal: AbortSignal.timeout(RELEASE_REQUEST_TIMEOUT_MS)
       });
     } catch (error) {
-      throw new MonkeError(`GitHub Release request failed: ${errorMessage(error)}`);
+      throw new MonkeError(
+        `GitHub Release request failed: ${errorMessage(ThrownValueSchema.parse(error))}`
+      );
     }
     if (!response.ok) {
       throw new MonkeError(`GitHub Release request failed with HTTP ${response.status}`);
@@ -198,7 +200,9 @@ function createGitHubReleaseDistribution(
         if (error instanceof MonkeError) {
           throw error;
         }
-        throw new MonkeError(`GitHub Release metadata is invalid: ${errorMessage(error)}`);
+        throw new MonkeError(
+          `GitHub Release metadata is invalid: ${errorMessage(ThrownValueSchema.parse(error))}`
+        );
       }
     }
   };
@@ -229,9 +233,12 @@ function executeCommand(
       timeout: options?.timeoutSeconds === undefined ? undefined : options.timeoutSeconds * 1000
     });
   } catch (error) {
-    throw new MonkeError(`Failed to run ${formatCommand(command, args)}: ${errorMessage(error)}`, {
-      cause: error
-    });
+    throw new MonkeError(
+      `Failed to run ${formatCommand(command, args)}: ${errorMessage(ThrownValueSchema.parse(error))}`,
+      {
+        cause: error
+      }
+    );
   }
   return handleCompletedCommand(result, command, args, options?.allowFailure === true);
 }
@@ -268,9 +275,12 @@ function executeCommandAsync(
       });
     } catch (error) {
       reject(
-        new MonkeError(`Failed to run ${formatCommand(command, args)}: ${errorMessage(error)}`, {
-          cause: error
-        })
+        new MonkeError(
+          `Failed to run ${formatCommand(command, args)}: ${errorMessage(ThrownValueSchema.parse(error))}`,
+          {
+            cause: error
+          }
+        )
       );
       return;
     }
@@ -317,7 +327,7 @@ class AsyncCommandExecution {
       }
       this.rejectOnce(
         new MonkeError(
-          `Failed to run ${formatCommand(this.command, this.args)}: ${errorMessage(error)}`,
+          `Failed to run ${formatCommand(this.command, this.args)}: ${errorMessage(ThrownValueSchema.parse(error))}`,
           { cause: error }
         )
       );
@@ -712,7 +722,7 @@ function tryAcquireLockPath(lockPath: string) {
       closeSync(fileDescriptor);
       rmSync(lockPath, { force: true });
     }
-    if (!errorMessage(error).includes("EEXIST")) {
+    if (!errorMessage(ThrownValueSchema.parse(error)).includes("EEXIST")) {
       throw error;
     }
     return { wait: !tryEvictStaleLock(lockPath) };
@@ -788,7 +798,7 @@ function tryEvictStaleLock(lockPath: string) {
   try {
     mkdirSync(reclaimPath);
   } catch (error) {
-    if (errorMessage(error).includes("EEXIST")) {
+    if (errorMessage(ThrownValueSchema.parse(error)).includes("EEXIST")) {
       return false;
     }
     throw error;

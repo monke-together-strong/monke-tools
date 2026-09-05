@@ -1,3 +1,5 @@
+import * as z from "zod";
+
 export class MonkeError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -5,8 +7,9 @@ export class MonkeError extends Error {
   }
 }
 
-/** Read a displayable message off an unknown thrown value. */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- JavaScript catch values are untyped at this boundary.
-export function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+/** Normalize catch values while preserving Error identity, subclasses, and stacks. */
+export const ThrownValueSchema = z.union([z.instanceof(Error), z.unknown().transform(String)]);
+
+export function errorMessage(error: Error | string) {
+  return error instanceof Error ? error.message : error;
 }

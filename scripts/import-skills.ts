@@ -22,8 +22,8 @@ import pc from "picocolors";
 import * as z from "zod";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
-import { errorMessage, MonkeError } from "../src/errors.ts";
-import { parseBoundaryValue } from "../src/validation.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
+import { unwrapBoundaryResult } from "../src/validation.ts";
 import { copyStagedGuidanceToManagedRoots, IMPORTED_SKILLS_ROOT } from "./import-guidance.ts";
 
 interface ImportCommandOptions {
@@ -256,7 +256,12 @@ export function readImportRecipeStore(repoRoot: string): SkillImportRecipeStore 
     };
   }
 
-  return normalizeImportRecipeStore(JSON.parse(readFileSync(storePath, "utf-8")));
+  return normalizeImportRecipeStore(
+    unwrapBoundaryResult(
+      SkillImportRecipeStoreSchema.safeParse(JSON.parse(readFileSync(storePath, "utf-8"))),
+      "Skill import recipe store"
+    )
+  );
 }
 
 /** Writes the Skill import recipe store with deterministic recipe and skill ordering. */
@@ -600,9 +605,12 @@ export function runInstallCommand(repoRoot: string) {
       stdout: "inherit"
     });
   } catch (error) {
-    throw new MonkeError(`Failed to run skill install command: ${errorMessage(error)}`, {
-      cause: error
-    });
+    throw new MonkeError(
+      `Failed to run skill install command: ${errorMessage(ThrownValueSchema.parse(error))}`,
+      {
+        cause: error
+      }
+    );
   }
 
   if (result.exitCode !== 0) {
@@ -625,7 +633,10 @@ export function runSkillsCaptured(args: string[], cwd: string) {
       stdout: "pipe"
     });
   } catch (error) {
-    throw new MonkeError(`Failed to run skills CLI: ${errorMessage(error)}`, { cause: error });
+    throw new MonkeError(
+      `Failed to run skills CLI: ${errorMessage(ThrownValueSchema.parse(error))}`,
+      { cause: error }
+    );
   }
 
   const stdout = result.stdout.toString();
@@ -1078,11 +1089,9 @@ function stepSymbol(state: string) {
   }
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Persisted JSON is parsed into the recipe-store contract immediately below.
-export function normalizeImportRecipeStore(input: unknown): SkillImportRecipeStore {
-  const store = parseBoundaryValue(
-    SkillImportRecipeStoreSchema,
-    input,
+export function normalizeImportRecipeStore(input: SkillImportRecipeStore): SkillImportRecipeStore {
+  const store = unwrapBoundaryResult(
+    SkillImportRecipeStoreSchema.safeParse(input),
     "Skill import recipe store"
   );
 
@@ -1396,6 +1405,6 @@ if (import.meta.main) {
   try {
     await runImportSkills();
   } catch (error) {
-    reportCliFailure(error);
+    reportCliFailure(ThrownValueSchema.parse(error));
   }
 }

@@ -15,7 +15,7 @@ import path from "node:path";
 
 import * as z from "zod";
 
-import { errorMessage, MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { loadGlobalMonkeConfig, SkillInstallPreferenceSchema } from "./global-config.ts";
 import type {
   BuiltInSkillInstallTargetKind,
@@ -32,7 +32,7 @@ import {
 import { assertDirectoryMutationAccess } from "./path-boundary.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
-import { parseBoundaryValue } from "./validation.ts";
+import { unwrapBoundaryResult } from "./validation.ts";
 
 /** Directory name monke-tools owns inside each selected Agent skill root. */
 const SKILL_NAMESPACE = "monke-tools";
@@ -110,9 +110,8 @@ export function explicitSkillInstallPreference(
       })
     });
   }
-  return parseBoundaryValue(
-    SkillInstallPreferenceSchema,
-    { targets },
+  return unwrapBoundaryResult(
+    SkillInstallPreferenceSchema.safeParse({ targets }),
     "explicit Skill install target selection"
   );
 }
@@ -146,7 +145,7 @@ export function preflightInstallGuidance(
         homeDirectory
       });
     } catch (error) {
-      failures.push(`${target.agentSkillRoot}: ${errorMessage(error)}`);
+      failures.push(`${target.agentSkillRoot}: ${errorMessage(ThrownValueSchema.parse(error))}`);
     }
   }
   for (const target of nextTargets.values()) {
@@ -159,7 +158,7 @@ export function preflightInstallGuidance(
         homeDirectory
       });
     } catch (error) {
-      failures.push(`${target.agentSkillRoot}: ${errorMessage(error)}`);
+      failures.push(`${target.agentSkillRoot}: ${errorMessage(ThrownValueSchema.parse(error))}`);
     }
   }
   if (failures.length > 0) {
@@ -280,7 +279,7 @@ export function reconcileSkillNamespaces(options: {
     try {
       removeManagedTarget(previousTarget, options);
     } catch (error) {
-      const message = errorMessage(error);
+      const message = errorMessage(ThrownValueSchema.parse(error));
       failures.push(`${previousTarget.agentSkillRoot}: ${message}`);
     }
   }
@@ -293,7 +292,7 @@ export function reconcileSkillNamespaces(options: {
         `Linked ${SKILL_NAMESPACE} skills at ${skillTargetPolicy(target).managedLocation}\n`
       );
     } catch (error) {
-      const message = errorMessage(error);
+      const message = errorMessage(ThrownValueSchema.parse(error));
       failures.push(`${target.agentSkillRoot}: ${message}`);
     }
   }
@@ -332,17 +331,18 @@ export async function promptForSkillInstallPreference(
   previousPreference: SkillInstallPreference | null,
   homeDirectory: string
 ) {
-  const selectedKinds = parseBoundaryValue(
-    z.array(SkillInstallTargetKindSchema),
-    await runtime.multiSelect({
-      initialValues: previousPreference?.targets.map((target) => target.kind) ?? [],
-      message: "Skill install targets",
-      options: TARGET_OPTIONS.map((option) => ({
-        label: option.label,
-        value: option.kind
-      })),
-      required: true
-    }),
+  const selectedKinds = unwrapBoundaryResult(
+    z.array(SkillInstallTargetKindSchema).safeParse(
+      await runtime.multiSelect({
+        initialValues: previousPreference?.targets.map((target) => target.kind) ?? [],
+        message: "Skill install targets",
+        options: TARGET_OPTIONS.map((option) => ({
+          label: option.label,
+          value: option.kind
+        })),
+        required: true
+      })
+    ),
     "Skill install target selection"
   );
   const targets: SkillInstallTargetPreference[] = [];
@@ -678,9 +678,8 @@ function readFlatManifest(target: ResolvedSkillInstallTarget) {
     throw new MonkeError(`Invalid monke-tools flat Skill manifest at ${manifestPath}`);
   }
 
-  return parseBoundaryValue(
-    FlatSkillManifestSchema,
-    rawManifest,
+  return unwrapBoundaryResult(
+    FlatSkillManifestSchema.safeParse(rawManifest),
     `monke-tools flat Skill manifest at ${manifestPath}`
   );
 }

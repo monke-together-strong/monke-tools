@@ -24,7 +24,7 @@ import type {
   SessionRepoState,
   SessionState
 } from "./types.ts";
-import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
+import { unwrapBoundaryResult, parseOwnedYamlFile } from "./validation.ts";
 
 const GLOBAL_PORT_FLOOR = 10_000;
 // Reserve a generous flat block per repo so multiple concurrent sessions can each allocate
@@ -54,13 +54,12 @@ export function loadSessionState(
   return parseSessionStateFile(home, filePath);
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Persisted state is validated before its identity or contents are used.
-export function saveSessionState(home: string, state: unknown) {
+export function saveSessionState(home: string, state: SessionState) {
   const identity = SessionStateIdentitySchema.safeParse(state);
   const label = identity.success
     ? getSessionStateFilePath(home, identity.data.rootSourceRoot, identity.data.session)
     : "session state";
-  const parsed = parseBoundaryValue(SessionStateSchema, state, label);
+  const parsed = unwrapBoundaryResult(SessionStateSchema.safeParse(state), label);
   const filePath = getSessionStateFilePath(home, parsed.rootSourceRoot, parsed.session);
   mkdirSync(path.dirname(filePath), { recursive: true });
   const temporaryPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
@@ -292,7 +291,7 @@ export function getOrCreateReservation(home: string, sourceRoot: string, size: n
   };
 
   mkdirSync(path.dirname(filePath), { recursive: true });
-  const parsed = parseBoundaryValue(RepoReservationSchema, nextReservation, filePath);
+  const parsed = unwrapBoundaryResult(RepoReservationSchema.safeParse(nextReservation), filePath);
   writeFileSync(filePath, stringify(parsed), "utf-8");
   return parsed;
 }

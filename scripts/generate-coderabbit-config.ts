@@ -16,9 +16,10 @@ import {
   strictObject,
   string as stringSchema
 } from "zod";
+import type { output } from "zod";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
-import { errorMessage, MonkeError } from "../src/errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
 
 const SOURCE_ROOT = path.join("skills", "references");
 const ROOT_DOCUMENT = path.join(SOURCE_ROOT, "internal", "CODING_STANDARDS.md");
@@ -66,9 +67,7 @@ const SourceManifestSchema = strictObject({
   )
 });
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Workflow input is parsed into the relevance contract immediately below.
-export function isCodeRabbitSyncRelevant(rawOptions: unknown) {
-  const options = RelevanceOptionsSchema.parse(rawOptions);
+export function isCodeRabbitSyncRelevant(options: output<typeof RelevanceOptionsSchema>) {
   const sources = new Set(options.sources);
   return options.changedPaths.some(
     (changedPath) => CODE_RABBIT_SYNC_INPUTS.has(changedPath) || sources.has(changedPath)
@@ -102,9 +101,12 @@ export function listChangedPaths(repoRoot: string, before: string, after: string
       stdout: "pipe"
     });
   } catch (error) {
-    throw new MonkeError(`Could not inspect changed paths: ${errorMessage(error)}`, {
-      cause: error
-    });
+    throw new MonkeError(
+      `Could not inspect changed paths: ${errorMessage(ThrownValueSchema.parse(error))}`,
+      {
+        cause: error
+      }
+    );
   }
   const stdout = result.stdout.toString();
   const stderr = result.stderr.toString();
@@ -114,9 +116,7 @@ export function listChangedPaths(repoRoot: string, before: string, after: string
   return stdout.split("\0").filter(Boolean);
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- CLI and test inputs are parsed into the render contract immediately below.
-export function renderCodeRabbitConfig(rawOptions: unknown) {
-  const options = RenderOptionsSchema.parse(rawOptions);
+export function renderCodeRabbitConfig(options: output<typeof RenderOptionsSchema>) {
   const documents = [
     ...readLinkedDocuments(options.repoRoot),
     ...readConfiguredExcerpts(options.repoRoot)
@@ -352,6 +352,6 @@ if (import.meta.main) {
   try {
     await runCodeRabbitConfigGenerator();
   } catch (error) {
-    reportCliFailure(error);
+    reportCliFailure(ThrownValueSchema.parse(error));
   }
 }

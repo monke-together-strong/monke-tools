@@ -24,13 +24,11 @@ export function parseOwnedYamlText<T extends z.ZodType>(text: string, label: str
   }
 
   const value: unknown = document.toJS();
-  return parseBoundaryValue(schema, value, label);
+  return unwrapBoundaryResult(schema.safeParse(value), label);
 }
 
-/** Validate one runtime boundary and translate schema issues into application errors. */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This shared boundary parser validates the value before returning it.
-export function parseBoundaryValue<T extends z.ZodType>(schema: T, value: unknown, label: string) {
-  const result = schema.safeParse(value);
+/** Unwrap a validated boundary result and translate schema issues into application errors. */
+export function unwrapBoundaryResult<T>(result: z.ZodSafeParseResult<T>, label: string) {
   if (result.success) {
     return result.data;
   }
@@ -47,12 +45,15 @@ export function parseBoundaryValue<T extends z.ZodType>(schema: T, value: unknow
 function formatIssuePath(issuePath: PropertyKey[]) {
   let result = "";
   for (const segment of issuePath) {
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Zod supplies these typed issue-path segments; this only formats numeric indexes.
-    if (typeof segment === "number") {
+    if (isArrayIndex(segment)) {
       result += `[${segment}]`;
     } else {
       result += result ? `.${String(segment)}` : String(segment);
     }
   }
   return result;
+}
+
+function isArrayIndex(segment: PropertyKey): segment is number {
+  return typeof segment === "number";
 }

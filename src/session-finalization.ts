@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-import { errorMessage, MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import type { SessionStateStore } from "./session-state-store.ts";
 import type { Runtime, SessionState } from "./types.ts";
 import { assertCanonicalSourceCheckout } from "./worktree-safety.ts";
@@ -49,7 +49,7 @@ export function finalizeSession(runtime: Runtime, store: SessionStateStore, stat
       });
     } catch (error) {
       throw new MonkeError(
-        `Cleanup command failed for session ${state.session} repo ${repoState.sourceRoot}: ${cleanupCommand}\n${errorMessage(error)}`
+        `Cleanup command failed for session ${state.session} repo ${repoState.sourceRoot}: ${cleanupCommand}\n${errorMessage(ThrownValueSchema.parse(error))}`
       );
     }
   }

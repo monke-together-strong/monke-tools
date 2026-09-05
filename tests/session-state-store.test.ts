@@ -9,7 +9,6 @@ import {
   getSessionStateFilePath,
   listSessionStatesRelevantToWorktrees,
   loadSessionState,
-  saveSessionState,
   SessionStateStore
 } from "../src/session-state-store.ts";
 import type { RepoConfig, RepoReservation } from "../src/types.ts";
@@ -799,13 +798,14 @@ typo: true
         version: 2
       }
     }
-  ])("saveSessionState rejects $name", ({ expected, state }) => {
+  ])("loadSessionState rejects $name", ({ expected, state }) => {
     const sandbox = makeTempDir("session-state-store-lifecycle-invariant");
     // Pin the named invariant: several of these states also trip a second, incidental rule,
     // so matching only /Invalid/ would not prove the intended one fired.
-    expect(() => {
-      saveSessionState(path.join(sandbox, "home"), state);
-    }).toThrow(expected);
+    const home = path.join(sandbox, "home");
+    const filePath = getSessionStateFilePath(home, state.rootSourceRoot, state.session);
+    write(path.dirname(filePath), path.basename(filePath), JSON.stringify(state));
+    expect(() => loadSessionState(home, state.rootSourceRoot, state.session)).toThrow(expected);
   });
 
   test.each([1, 3])("loadSessionState rejects unsupported version %i", (version) => {
@@ -850,20 +850,26 @@ repos:
     );
   });
 
-  test("saveSessionState rejects invalid values before writing them", () => {
+  test("loadSessionState rejects malformed persisted values", () => {
     const sandbox = makeTempDir("session-state-store-invalid-write");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
 
-    expect(() => {
-      saveSessionState(home, {
+    const filePath = getSessionStateFilePath(home, sourceRoot, "banana");
+    write(
+      path.dirname(filePath),
+      path.basename(filePath),
+      JSON.stringify({
         generation: { number: 1, status: "incomplete" },
         repos: "wrong",
         rootSourceRoot: sourceRoot,
         session: "banana",
         version: 2
-      });
-    }).toThrow(/Invalid .*sessions.*repos/su);
+      })
+    );
+    expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
+      /Invalid .*sessions.*repos/su
+    );
   });
 
   test("getOrCreateReservation rejects corrupt persisted reservations", () => {

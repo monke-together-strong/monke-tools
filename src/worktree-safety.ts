@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
-import { errorMessage, MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees, resolveRepoContext } from "./git.ts";
 import type { WorktreeEntry } from "./git.ts";
 import { samePath } from "./path-identity.ts";
@@ -31,7 +31,9 @@ export function assertCanonicalSourceCheckout(runtime: Runtime, sourceRoot: stri
       inferSessionName: false
     });
   } catch (error) {
-    throw new MonkeError(`Cannot verify Source checkout ${sourceRoot}: ${errorMessage(error)}`);
+    throw new MonkeError(
+      `Cannot verify Source checkout ${sourceRoot}: ${errorMessage(ThrownValueSchema.parse(error))}`
+    );
   }
   if (
     !context.isSourceCheckout ||
@@ -115,7 +117,7 @@ function assertWorktreeIdentity(runtime: Runtime, sourceRoot: string, worktreePa
     });
   } catch (error) {
     throw new MonkeError(
-      `Cannot verify registered worktree ${worktreePath}: ${errorMessage(error)}`
+      `Cannot verify registered worktree ${worktreePath}: ${errorMessage(ThrownValueSchema.parse(error))}`
     );
   }
 
