@@ -26,7 +26,7 @@ mt swing banana          # Return to the session
 mt materialize           # Refresh the session's env and bootstrap
 ```
 
-Use `mt spawn banana --codex` to also open the session as a Codex workspace. New worktrees normally carry your uncommitted source changes; use `-m` to start a fresh session from the default branch instead.
+Use `mt spawn banana --codex` to also open the session as a Codex workspace. New worktrees normally carry your uncommitted source changes; use `-m` to create a new session from default-branch content instead. For an incomplete session, `-m` resumes retained worktrees and pinned session refs.
 
 When finished, `mt chop banana` removes the session's worktrees and runs its recorded cleanup commands, preserving local branches. Dirty files block removal; ignored files are deleted with the worktrees. Preview broader merged-session cleanup with `mt cleanup --merged --dry-run`.
 
@@ -73,6 +73,6 @@ vp run install:local
 
 Rerun the local install after CLI changes before testing from another repo. Locally installed skills link to source, so edits are visible immediately; adding or removing skill directories requires `mt skills configure` to refresh links.
 
-Use `vp run test -- <test-file>` for focused tests: the package script runs Vitest under Bun. PR CI owns the full suite. Build the standalone executable through `install:local`.
+Run `vp check <changed-files>` for scoped formatting, lint, and type checks. Use `vp run test -- <test-file>` for focused tests: the package script runs Vitest under Bun. PR CI owns the full suite. Build the standalone executable through `install:local`.
 
 For implementation details, see [CONTEXT.md](CONTEXT.md) and [installation and releases](docs/reference/installation.md). Track work in [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues).

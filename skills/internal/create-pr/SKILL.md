@@ -83,7 +83,8 @@ when they leave a material verification gap. Preserve required template fields.
 
 ## Publish and verify
 
-Push the branch, setting its upstream if absent. Create a ready PR with
+Push normally, setting the upstream if absent. If rebasing rewrote the published
+branch, push with `git push --force-with-lease`. Create a ready PR with
 `gh pr create --title ... --body-file ...`, or update the existing PR. Use draft
 only when requested. If the user requests CodeRabbit ignore the PR, post exactly
 `@coderabbitai ignore` as a PR comment.

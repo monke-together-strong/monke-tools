@@ -56,5 +56,6 @@ outside scope, provide the proposed update instead.
 Explain the causal chain and decisive evidence first, including the unresolved
 boundary and alternatives ruled out. Then give ordered next steps with reasons,
 distinguishing recommendations from changes made. Finish with whether the tracker
-was updated and its evidence link. Make the diagnosis understandable from the
-final response alone.
+was updated, linking to that update when written or to the primary evidence
+when proposing an update. Make the diagnosis understandable from the final
+response alone.

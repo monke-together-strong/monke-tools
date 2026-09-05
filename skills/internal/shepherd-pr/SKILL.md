@@ -13,14 +13,15 @@ coverage against its current head commit.
 On pickup and each heartbeat or re-entry, check PR state before CI or reviews:
 
 ```bash
-gh pr view <pr> --json state,mergedAt,closedAt,mergeCommit,headRefOid,baseRefName
+gh pr view <pr> --json state,mergedAt,closedAt,mergeCommit,headRefOid,baseRefName,isDraft
 ```
 
 If merged or closed, remove the heartbeat, report the terminal state and available
 merge details, and stop.
 
-For an open PR, fetch the live base and head. If the base is not an ancestor of
-the head, rebase a clean PR checkout, push with `--force-with-lease`, and restart
+For an open draft, run `gh pr ready <pr>`. Fetch the live base and head. If the
+base is not an ancestor of the head, rebase a clean PR checkout, push with
+`--force-with-lease`, and restart
 observation. Review and CI evidence must cover the new head after any push.
 
 ## Resolve CI failures
@@ -66,6 +67,7 @@ re-review. Inspect reviewer state before requesting anything manually.
 Before declaring readiness, refresh PR state, base, and head. If they changed,
 return to observation. For the current head, require all of the following:
 
+- The PR is not a draft.
 - CI is green and every observed failure has a verified repo-owned fix or an
   evidenced external cause.
 - Required reviews and automatic reviews that started have finished. Optional
