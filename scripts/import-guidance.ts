@@ -48,6 +48,11 @@ export function copyStagedGuidanceToManagedRoots(
   },
   move: (source: string, destination: string) => void = renameSync
 ) {
+  // Validate every destination before copying staged content or moving any originals.
+  const destinations = [...options.guidance, ...(options.obsoleteGuidance ?? [])].map((item) => ({
+    item,
+    targetPath: importedGuidancePath(options.repoRoot, item)
+  }));
   const stagedSkillsRoot = path.join(options.stagingDirectory, ".agents", "skills");
   const backupRoot = mkdtempSync(path.join(options.repoRoot, ".monke-guidance-backup-"));
   const preparedRoot = path.join(backupRoot, "prepared");
@@ -74,10 +79,8 @@ export function copyStagedGuidanceToManagedRoots(
       }
     }
 
-    const affectedGuidance = [...options.guidance, ...(options.obsoleteGuidance ?? [])];
     assertObsoleteReferencesAreUnconsumed(options.repoRoot, options.obsoleteGuidance ?? []);
-    for (const item of affectedGuidance) {
-      const targetPath = importedGuidancePath(options.repoRoot, item);
+    for (const { item, targetPath } of destinations) {
       if (affectedPaths.has(targetPath)) {
         continue;
       }
@@ -329,5 +332,10 @@ function importedGuidancePath(
   guidance: Pick<SkillImportRecipeSkill, "kind" | "slug">
 ) {
   const root = guidance.kind === "reference" ? IMPORTED_REFERENCES_ROOT : IMPORTED_SKILLS_ROOT;
-  return path.join(repoRoot, root, guidance.slug);
+  const managedRoot = path.resolve(repoRoot, root);
+  const guidancePath = path.resolve(managedRoot, guidance.slug);
+  if (guidancePath === managedRoot || !isPathWithin(managedRoot, guidancePath)) {
+    throw new MonkeError(`Imported ${guidance.kind} slug ${guidance.slug} escapes ${root}`);
+  }
+  return guidancePath;
 }

@@ -24,6 +24,25 @@ function guidanceFixture() {
 }
 
 describe("guidance transaction recovery", () => {
+  test.each([
+    ["guidance", "../unrelated"],
+    ["obsoleteGuidance", "../unrelated"],
+    ["guidance", "."],
+    ["guidance", "/outside"]
+  ] as const)("rejects %s slug %s before installing or removing guidance", (field, slug) => {
+    const fixture = guidanceFixture();
+    write(fixture.repoRoot, "skills/unrelated/keep.txt", "user content");
+    expect(() => {
+      copyStagedGuidanceToManagedRoots({
+        ...fixture,
+        [field]: [{ kind: "skill", selector: slug, slug }]
+      });
+    }).toThrow(/slug .* escapes/u);
+    expect(read(fixture.repoRoot, "skills/unrelated/keep.txt")).toBe("user content");
+    expect(read(fixture.target("alpha"), "SKILL.md")).toBe("original alpha");
+    expect(fs.existsSync(fixture.target("new"))).toBeFalsy();
+  });
+
   test("a recipe commit failure restores originals and removes newly installed guidance", () => {
     const fixture = guidanceFixture();
     expect(() => {
