@@ -1,7 +1,7 @@
 # Default PR Template
 
-Use this when the repository has no PR template. For a small change, plain prose
-with verification is sufficient.
+Use this when the repository has no PR template. Headings are optional for a
+small change.
 
 ```markdown
 ## Summary
@@ -14,4 +14,4 @@ with verification is sufficient.
 ```
 
 For visual proof or deployment-dependent changes, use the sections required by
-[Choose the evidence](../SKILL.md#choose-the-evidence). Omit unused placeholders.
+[Choose the evidence](../SKILL.md#choose-the-evidence).
