@@ -13,7 +13,6 @@ import { describe, expect, test } from "vitest";
 
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
 import { spawnSessionFromSourceRootLocked } from "../src/monke.ts";
-import { createRuntime } from "../src/runtime.ts";
 import {
   getSessionStateFilePath,
   loadSessionState,
@@ -37,6 +36,7 @@ import {
   withPlatform,
   write
 } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("single-repo sessions", () => {
   test("spawn bootstraps a single-repo session and rewrites only mapped env vars", () => {
@@ -2499,7 +2499,7 @@ apps:
     });
 
     git(repoRoot, ["branch", "respawned"]);
-    const runtime = createRuntime({
+    const runtime = createTestRuntime({
       cwd: repoRoot,
       env: { MONKE_HOME: home, PATH: process.env.PATH ?? "" },
       onStderr() {},

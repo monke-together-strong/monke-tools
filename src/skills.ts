@@ -46,9 +46,6 @@ const BUILT_IN_TARGET_ROOTS = {
   codex: path.join(".codex", "skills"),
   cursor: path.join(".cursor", "skills")
 } satisfies Record<BuiltInSkillInstallTargetKind, string>;
-type SkillInstallLayout = "namespace" | "flat";
-// Flip Claude back to "namespace" to restore the original symlink layout.
-const CLAUDE_SKILL_INSTALL_LAYOUT: SkillInstallLayout = "flat";
 const SkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor", "custom"]);
 const TARGET_OPTIONS: { kind: SkillInstallTargetKind; label: string }[] = [
   { kind: "codex", label: "Codex" },
@@ -739,7 +736,7 @@ function prepareSkillTargetPlan(target: ResolvedSkillInstallTarget, skillSourceT
 }
 
 function skillTargetPolicy(target: ResolvedSkillInstallTarget) {
-  const layout = target.kind === "claude" ? CLAUDE_SKILL_INSTALL_LAYOUT : "namespace";
+  const layout = target.kind === "claude" ? "flat" : "namespace";
   return {
     layout,
     managedLocation: layout === "flat" ? target.agentSkillRoot : target.namespacePath

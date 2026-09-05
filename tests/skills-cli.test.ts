@@ -5,9 +5,9 @@ import { describe, expect, test } from "vitest";
 
 import { saveGlobalMonkeConfig, loadGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
-import { createRuntime } from "../src/runtime.ts";
 import type { MultiSelectPrompt } from "../src/types.ts";
 import { makeTempDir, write, writeGlobalInstructionsSource } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 function managedInstructions(body: string) {
   return `<!-- monke-rules:start -->
@@ -95,7 +95,7 @@ describe("skills CLI", () => {
     await expect(
       runCliAsync(
         ["skills", "local-install", sourceCheckout, "--targets", "codex"],
-        createRuntime({
+        createTestRuntime({
           cwd: sandbox,
           env: skillsEnvironment(osHome, monkeHome),
           onStderr() {},
@@ -118,7 +118,7 @@ describe("skills CLI", () => {
     await expect(
       runCliAsync(
         ["skills", "local-install", requestedCheckout, "--targets", "codex"],
-        createRuntime({
+        createTestRuntime({
           cwd: sandbox,
           env: skillsEnvironment(osHome, monkeHome),
           onStderr() {},
@@ -145,7 +145,7 @@ describe("skills CLI", () => {
     await expect(
       runCliAsync(
         ["skills", "local-install", sourceCheckout, "--targets", "codex"],
-        createRuntime({
+        createTestRuntime({
           cwd: sandbox,
           env: skillsEnvironment(osHome, monkeHome),
           onStderr() {},
@@ -169,7 +169,7 @@ describe("skills CLI", () => {
     );
     await runCliAsync(
       ["skills", "configure"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         multiSelectValues: [["codex"]],
@@ -192,7 +192,7 @@ describe("skills CLI", () => {
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude", "cursor"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
@@ -216,7 +216,7 @@ describe("skills CLI", () => {
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "claude"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
@@ -246,7 +246,7 @@ describe("skills CLI", () => {
 
     await runCliAsync(
       ["skills", "configure"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         multiSelectValues: [["custom"]],
@@ -280,7 +280,7 @@ describe("skills CLI", () => {
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "cursor"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
@@ -306,7 +306,7 @@ describe("skills CLI", () => {
     write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
     selectActiveLocalInstall(monkeHome, sourceCheckout);
 
-    const runtime = createRuntime({
+    const runtime = createTestRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
       onStderr() {},
@@ -356,7 +356,7 @@ describe("skills CLI", () => {
           "--targets",
           operation === "refresh" ? "codex" : "cursor"
         ],
-        createRuntime({
+        createTestRuntime({
           cwd: sandbox,
           env: skillsEnvironment(osHome, monkeHome),
           onStderr() {},
@@ -383,7 +383,7 @@ describe("skills CLI", () => {
     selectActiveLocalInstall(exactMonkeHome, sourceCheckout);
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(exactHome, exactMonkeHome),
         onStderr() {},
@@ -400,7 +400,7 @@ describe("skills CLI", () => {
     selectActiveLocalInstall(partialMonkeHome, sourceCheckout);
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(partialHome, partialMonkeHome),
         onStderr() {},
@@ -421,7 +421,7 @@ describe("skills CLI", () => {
     writeSkillSource(sourceCheckout);
     write(osHome, ".claude/CLAUDE.md", "Personal Claude guidance.\n");
     selectActiveLocalInstall(monkeHome, sourceCheckout);
-    const runtime = createRuntime({
+    const runtime = createTestRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
       onStderr() {},
@@ -456,7 +456,7 @@ describe("skills CLI", () => {
       writeSkillSource(sourceCheckout);
       write(osHome, ".codex/AGENTS.md", userGuidance);
       selectActiveLocalInstall(monkeHome, sourceCheckout);
-      const runtime = createRuntime({
+      const runtime = createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
@@ -484,7 +484,7 @@ describe("skills CLI", () => {
     writeSkillSource(sourceCheckout);
     write(osHome, ".codex/AGENTS.md", "");
     selectActiveLocalInstall(monkeHome, sourceCheckout);
-    const runtime = createRuntime({
+    const runtime = createTestRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
       onStderr() {},
@@ -514,7 +514,7 @@ describe("skills CLI", () => {
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: {
           ...skillsEnvironment(osHome, monkeHome),
@@ -549,7 +549,7 @@ describe("skills CLI", () => {
     await expect(
       runCliAsync(
         ["skills", "local-install", sourceCheckout, "--targets", target],
-        createRuntime({
+        createTestRuntime({
           cwd: sandbox,
           env: {
             ...skillsEnvironment(osHome, monkeHome),
@@ -574,7 +574,7 @@ describe("skills CLI", () => {
     write(osHome, ".codex/.keep", "\n");
     symlinkSync(dotfileTarget, destinationPath);
     selectActiveLocalInstall(monkeHome, sourceCheckout);
-    const runtime = createRuntime({
+    const runtime = createTestRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
       onStderr() {},
@@ -613,7 +613,7 @@ describe("skills CLI", () => {
       await expect(
         runCliAsync(
           ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
-          createRuntime({
+          createTestRuntime({
             cwd: sandbox,
             env: skillsEnvironment(osHome, monkeHome),
             onStderr() {},
@@ -656,7 +656,7 @@ describe("skills CLI", () => {
       await expect(
         runCliAsync(
           ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
-          createRuntime({
+          createTestRuntime({
             cwd: sandbox,
             env: skillsEnvironment(osHome, monkeHome),
             onStderr() {},
@@ -683,7 +683,7 @@ describe("skills CLI", () => {
     let stderr = "";
     let installationLockObserved = false;
     let prompt: MultiSelectPrompt | undefined;
-    const runtime = createRuntime({
+    const runtime = createTestRuntime({
       cwd: sandbox,
       env: skillsEnvironment(osHome, monkeHome),
       multiSelectValues: [["codex", "custom"]],
@@ -737,7 +737,7 @@ describe("skills CLI", () => {
 
     await runCliAsync(
       ["skills", "configure"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         multiSelectValues: [["codex", "claude", "cursor", "custom"]],
@@ -749,7 +749,7 @@ describe("skills CLI", () => {
     let prompt: MultiSelectPrompt | undefined;
     await runCliAsync(
       ["skills", "configure"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         multiSelectValues: [["claude", "codex"]],
@@ -789,7 +789,7 @@ describe("skills CLI", () => {
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         multiSelectValues: [["codex"]],
@@ -819,7 +819,7 @@ describe("skills CLI", () => {
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "claude", "cursor", "codex"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         onMultiSelect() {
@@ -863,7 +863,7 @@ describe("skills CLI", () => {
 
     await runCliAsync(
       ["skills", "local-install", sourceCheckout, "--targets", "codex", "claude"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
@@ -902,7 +902,7 @@ describe("skills CLI", () => {
 
     await runCliAsync(
       ["skills", "local-install", newCheckout],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: skillsEnvironment(osHome, monkeHome),
         onStderr() {},
@@ -930,7 +930,7 @@ describe("skills CLI", () => {
     await expect(
       runCliAsync(
         ["skills", "configure"],
-        createRuntime({
+        createTestRuntime({
           cwd: sandbox,
           env: skillsEnvironment(osHome, monkeHome),
           onStderr() {},

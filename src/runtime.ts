@@ -25,11 +25,9 @@ import type {
   ExecOptions,
   ExecResult,
   InstallationActivationPhase,
-  MultiSelectPrompt,
   ReleaseDistribution,
   Runtime,
-  SessionMaterializationCheckpoint,
-  SelectPrompt
+  SessionMaterializationCheckpoint
 } from "./types.ts";
 
 const GLOBAL_LOCK_TIMEOUT_MS = 5000;
@@ -65,58 +63,47 @@ const LockTimestampSchema = z.number();
 export interface RuntimeOptions {
   /** Machine architecture override used by platform behavior tests. */
   architecture?: string;
-  /** Make the next select prompt follow the normal cancellation path in tests. */
-  cancelSelect?: boolean;
   /** Current working directory used by command execution. */
   cwd?: string;
   /** Environment overrides merged over the process environment. */
   env?: Record<string, string | undefined>;
   /** Optional injected activation boundary used by failure-behavior tests. */
   installationActivationBoundary?: (phase: InstallationActivationPhase) => void;
-  /** Scripted selected value sets used by tests for Clack-style multi-select prompts. */
-  multiSelectValues?: string[][];
-  /** Optional observer used by tests and embedding callers to inspect multi-select prompts. */
-  onMultiSelect?: (prompt: MultiSelectPrompt) => void;
-  /** Optional observer used by tests and embedding callers to inspect select prompts. */
-  onSelect?: (prompt: SelectPrompt) => void;
-  /** Optional stderr sink used by tests and embedding callers. */
-  onStderr?: (text: string) => void;
-  /** Optional stdout sink used by tests and embedding callers. */
-  onStdout?: (text: string) => void;
   /** Operating system override used by platform behavior tests. */
   platform?: NodeJS.Platform;
   /** Official Release boundary override used by update behavior tests. */
   releaseDistribution?: ReleaseDistribution;
-  /** Scripted selected values used by tests for Clack-style select prompts. */
-  selectValues?: string[];
   /** Optional injected Session checkpoint boundary used by interruption tests. */
   sessionMaterializationBoundary?: (checkpoint: SessionMaterializationCheckpoint) => void;
   /** Status-output TTY override used by presentation behavior tests. */
   stderrIsTTY?: boolean;
-  /** Scripted stdin lines used by tests for interactive prompts. */
-  stdinText?: string;
   /** Compiled Tool build identity override used by installation behavior tests. */
   toolBuildIdentity?: string;
   /** Versioned install root override used by installation behavior tests. */
   toolInstallRoot?: string;
+  /** Output sinks for embedding the CLI. */
+  writeStderr?: (text: string) => void;
+  writeStdout?: (text: string) => void;
 }
 
 /** Create the default runtime adapter around the current process. */
-export function createRuntime(options?: RuntimeOptions): Runtime {
+export function createRuntime(options: RuntimeOptions = {}): Runtime {
   // oxlint-disable-next-line node/no-process-env -- This adapter centralizes access to the process environment.
-  const runtimeEnv = { ...process.env, ...options?.env };
-  const runtimeCwd = options?.cwd ?? process.cwd();
-  const scriptedInput = createScriptedInput(options);
-  const scriptedSelectValues = options?.selectValues ? [...options.selectValues] : null;
-  const scriptedMultiSelectValues = options?.multiSelectValues
-    ? [...options.multiSelectValues]
-    : null;
-
-  const writeStdout = createStdoutWriter(options);
-  const writeStderr = createStderrWriter(options);
+  const runtimeEnv = { ...process.env, ...options.env };
+  const runtimeCwd = options.cwd ?? process.cwd();
+  const writeStdout =
+    options.writeStdout ??
+    ((text: string) => {
+      process.stdout.write(text);
+    });
+  const writeStderr =
+    options.writeStderr ??
+    ((text: string) => {
+      process.stderr.write(text);
+    });
 
   return {
-    architecture: options?.architecture ?? process.arch,
+    architecture: options.architecture ?? process.arch,
     cwd: runtimeCwd,
     env: runtimeEnv,
     exec(command: string, args: string[] = [], execOptions?: ExecOptions) {
@@ -125,99 +112,34 @@ export function createRuntime(options?: RuntimeOptions): Runtime {
     execAsync(command: string, args: string[] = [], execOptions?: ExecOptions) {
       return executeCommandAsync(runtimeEnv, runtimeCwd, command, args, execOptions);
     },
-    installationActivationBoundary: options?.installationActivationBoundary,
+    installationActivationBoundary: options.installationActivationBoundary,
     async multiSelect(prompt) {
-      options?.onMultiSelect?.(prompt);
-      if (scriptedMultiSelectValues !== null) {
-        const selected = scriptedMultiSelectValues.shift();
-        if (selected === undefined) {
-          throw new MonkeError("No scripted multi-select values remain");
-        }
-        for (const value of selected) {
-          if (!prompt.options.some((option) => option.value === value)) {
-            throw new MonkeError(`Unknown selection: ${value}`);
-          }
-        }
-        if (prompt.required === true && selected.length === 0) {
-          throw new MonkeError(`Select at least one option for ${prompt.message}`);
-        }
-        return selected;
-      }
-
       const selected = await clackMultiSelect(prompt);
       if (isCancel(selected)) {
         throw new MonkeError(`${prompt.message} cancelled`);
       }
       return selected;
     },
-    platform: options?.platform ?? process.platform,
+    platform: options.platform ?? process.platform,
     readLine(prompt: string) {
       writeStdout(prompt);
-      if (scriptedInput !== null) {
-        return scriptedInput.shift() ?? "";
-      }
-
       return readLineFromStdin();
     },
-    releaseDistribution:
-      options?.releaseDistribution ?? createGitHubReleaseDistribution(runtimeEnv),
+    releaseDistribution: options.releaseDistribution ?? createGitHubReleaseDistribution(runtimeEnv),
     async select(prompt) {
-      options?.onSelect?.(prompt);
-      if (options?.cancelSelect === true) {
-        throwSelectionCancelled(prompt.message);
-      }
-      if (scriptedSelectValues !== null) {
-        const selected = scriptedSelectValues.shift();
-        if (selected === undefined) {
-          throw new MonkeError("No scripted select values remain");
-        }
-        if (!prompt.options.some((option) => option.value === selected)) {
-          throw new MonkeError(`Unknown selection: ${selected}`);
-        }
-        return selected;
-      }
-
       const selected = await clackSelect(prompt);
       if (isCancel(selected)) {
-        throwSelectionCancelled(prompt.message);
+        throw new MonkeError(`${prompt.message} cancelled`);
       }
       return selected;
     },
-    sessionMaterializationBoundary: options?.sessionMaterializationBoundary,
-    stderrIsTTY: resolveStderrIsTTY(options),
-    toolBuildIdentity: options?.toolBuildIdentity ?? DEFAULT_TOOL_BUILD_IDENTITY,
-    toolInstallRoot: options?.toolInstallRoot ?? resolveRunningToolInstallRoot(),
+    sessionMaterializationBoundary: options.sessionMaterializationBoundary,
+    stderrIsTTY: options.stderrIsTTY ?? process.stderr.isTTY,
+    toolBuildIdentity: options.toolBuildIdentity ?? DEFAULT_TOOL_BUILD_IDENTITY,
+    toolInstallRoot: options.toolInstallRoot ?? resolveRunningToolInstallRoot(),
     writeStderr,
     writeStdout
   };
-}
-
-function createStdoutWriter(options: RuntimeOptions | undefined) {
-  return (text: string) => {
-    if (options?.onStdout) {
-      options.onStdout(text);
-      return;
-    }
-    process.stdout.write(text);
-  };
-}
-
-function createScriptedInput(options: RuntimeOptions | undefined) {
-  return options?.stdinText === undefined ? null : options.stdinText.split(/\r?\n/u);
-}
-
-function createStderrWriter(options: RuntimeOptions | undefined) {
-  return (text: string) => {
-    if (options?.onStderr) {
-      options.onStderr(text);
-      return;
-    }
-    process.stderr.write(text);
-  };
-}
-
-function resolveStderrIsTTY(options: RuntimeOptions | undefined) {
-  return options?.stderrIsTTY ?? process.stderr.isTTY;
 }
 
 function createGitHubReleaseDistribution(
@@ -280,10 +202,6 @@ function createGitHubReleaseDistribution(
       }
     }
   };
-}
-
-function throwSelectionCancelled(message: string): never {
-  throw new MonkeError(`${message} cancelled`);
 }
 
 function executeCommand(
@@ -826,20 +744,8 @@ export function isPortAvailable(port: number) {
       hostname: "127.0.0.1",
       port,
       socket: {
-        close() {
-          // Port probing only needs the listener lifecycle.
-        },
         data() {
           // Port probing never consumes socket data.
-        },
-        drain() {
-          // Port probing never writes socket data.
-        },
-        error() {
-          // Listen failures are handled by the surrounding try/catch.
-        },
-        open() {
-          // A successful open means the port is available.
         }
       }
     });
@@ -856,7 +762,7 @@ function sleep(milliseconds: number) {
 }
 
 function readLineFromStdin() {
-  const chunks: string[] = [];
+  const bytes: number[] = [];
   const buffer = Buffer.alloc(1);
 
   while (true) {
@@ -865,16 +771,16 @@ function readLineFromStdin() {
       break;
     }
 
-    const character = buffer.toString("utf-8", 0, bytesRead);
-    if (character === "\n") {
+    const byte = buffer.readUInt8(0);
+    if (byte === 10) {
       break;
     }
-    if (character !== "\r") {
-      chunks.push(character);
+    if (byte !== 13) {
+      bytes.push(byte);
     }
   }
 
-  return chunks.join("");
+  return Buffer.from(bytes).toString("utf-8");
 }
 
 function tryEvictStaleLock(lockPath: string) {

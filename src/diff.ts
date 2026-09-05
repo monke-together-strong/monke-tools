@@ -34,31 +34,21 @@ interface DiffChoice {
 interface RememberedDiff {
   baseRef?: string;
   context: RepoContext;
+  getTargets: (refresh?: boolean) => LocalWorktreeTarget[];
   owner?: { rootSourceRoot: string; session: string };
 }
 
-interface PreparedDiff {
-  choices: DiffChoice[];
-  remembered: RememberedDiff;
-}
-
-/** Open Codiff with independent startup work and the interactive picker available. */
+/** Verify Codiff alongside repo discovery, then discover picker targets only when needed. */
 export async function runDiffInteractive(runtime: Runtime, options: DiffOptions = {}) {
-  const [executable, prepared] = await Promise.all([
+  const [executable, remembered] = await Promise.all([
     verifyCodiffAsync(runtime),
-    prepareDiffAsync(runtime)
+    Promise.try(() => resolveRememberedDiff(runtime))
   ]);
-  warnSessionBranchElsewhere(runtime, prepared.remembered);
-  if (launchAutomaticDiff(runtime, executable, prepared.remembered, options)) {
+  warnSessionBranchElsewhere(runtime, remembered);
+  if (launchAutomaticDiff(runtime, executable, remembered, options)) {
     return;
   }
-  await selectAndLaunchDiff(runtime, executable, prepared);
-}
-
-async function prepareDiffAsync(runtime: Runtime) {
-  await Promise.resolve();
-  const remembered = resolveRememberedDiff(runtime);
-  return { choices: buildDiffChoices(runtime, remembered), remembered };
+  await selectAndLaunchDiff(runtime, executable, remembered);
 }
 
 function launchAutomaticDiff(
@@ -78,7 +68,7 @@ function launchAutomaticDiff(
   if (plan === undefined) {
     return false;
   }
-  warnDirtyRememberedBase(runtime, remembered.context, baseRef);
+  warnDirtyRememberedBase(runtime, remembered, baseRef);
   launchCodiff(runtime, executable, plan);
   if (baseRef !== remembered.baseRef) {
     persistDiffBase(runtime, remembered, baseRef);
@@ -98,9 +88,12 @@ function resolveAutomaticBase(runtime: Runtime, remembered: RememberedDiff) {
   );
 }
 
-async function selectAndLaunchDiff(runtime: Runtime, executable: string, prepared: PreparedDiff) {
-  const { remembered } = prepared;
-  let { choices } = prepared;
+async function selectAndLaunchDiff(
+  runtime: Runtime,
+  executable: string,
+  remembered: RememberedDiff
+) {
+  let choices = buildDiffChoices(remembered);
   while (true) {
     if (choices.length === 1) {
       launchLocalChanges(runtime, executable, remembered.context);
@@ -141,14 +134,17 @@ async function selectAndLaunchDiff(runtime: Runtime, executable: string, prepare
       runtime.writeStderr(
         `Selected Diff base ${choice.label} is no longer valid; choose another Diff base.\n`
       );
-      choices = buildDiffChoices(runtime, remembered);
+      remembered.getTargets(true);
+      choices = buildDiffChoices(remembered);
       continue;
     }
 
     if (refreshedTarget) {
       warnDirtyBase(runtime, refreshedTarget);
     } else {
-      warnDirtyRememberedBase(runtime, remembered.context, plan.baseRef);
+      // A remembered ref can survive its attached worktree being removed while the picker waits.
+      remembered.getTargets(true);
+      warnDirtyRememberedBase(runtime, remembered, plan.baseRef);
     }
     launchCodiff(runtime, executable, plan);
     if (refreshedTarget?.kind === "session" && refreshedTarget.branch !== null) {
@@ -158,12 +154,10 @@ async function selectAndLaunchDiff(runtime: Runtime, executable: string, prepare
   }
 }
 
-function buildDiffChoices(runtime: Runtime, remembered: RememberedDiff) {
-  const targets = listLocalWorktreeTargets(
-    runtime,
-    getMonkeHome(runtime),
-    remembered.context.sourceRoot
-  ).filter((target) => !samePath(target.path, remembered.context.worktreeRoot));
+function buildDiffChoices(remembered: RememberedDiff) {
+  const targets = remembered
+    .getTargets()
+    .filter((target) => !samePath(target.path, remembered.context.worktreeRoot));
   const choices: DiffChoice[] = targets.map((target) => ({
     label: formatDiffTargetLabel(target),
     target,
@@ -223,14 +217,12 @@ function warnSessionBranchElsewhere(runtime: Runtime, remembered: RememberedDiff
   if (mismatch === null) {
     return;
   }
-  const attached = listLocalWorktreeTargets(
-    runtime,
-    getMonkeHome(runtime),
-    remembered.context.sourceRoot
-  ).find(
-    (target) =>
-      target.branch === owner.session && !samePath(target.path, remembered.context.worktreeRoot)
-  );
+  const attached = remembered
+    .getTargets()
+    .find(
+      (target) =>
+        target.branch === owner.session && !samePath(target.path, remembered.context.worktreeRoot)
+    );
   if (attached === undefined) {
     return;
   }
@@ -239,15 +231,13 @@ function warnSessionBranchElsewhere(runtime: Runtime, remembered: RememberedDiff
   );
 }
 
-function warnDirtyRememberedBase(runtime: Runtime, context: RepoContext, baseRef: string) {
+function warnDirtyRememberedBase(runtime: Runtime, remembered: RememberedDiff, baseRef: string) {
   const branchPrefix = "refs/heads/";
   if (!baseRef.startsWith(branchPrefix)) {
     return;
   }
   const branch = baseRef.slice(branchPrefix.length);
-  const target = listLocalWorktreeTargets(runtime, getMonkeHome(runtime), context.sourceRoot).find(
-    (candidate) => candidate.branch === branch
-  );
+  const target = remembered.getTargets().find((candidate) => candidate.branch === branch);
   if (target) {
     warnDirtyBase(runtime, target);
   }
@@ -279,9 +269,16 @@ function resolveRememberedDiff(runtime: Runtime) {
       samePath(repo.sourceRoot, context.sourceRoot) &&
       path.normalize(repo.worktreePath) === normalizedWorktree
   );
+  let targets: LocalWorktreeTarget[] | undefined;
   return {
     baseRef: repoState?.diffBaseRef,
     context,
+    getTargets(refresh = false) {
+      if (refresh || targets === undefined) {
+        targets = listLocalWorktreeTargets(runtime, home, context.sourceRoot);
+      }
+      return targets;
+    },
     owner:
       sessionState === undefined
         ? undefined

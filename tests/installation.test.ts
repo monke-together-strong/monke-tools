@@ -19,7 +19,6 @@ import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-conf
 import { runCliAsync } from "../src/index.ts";
 import { loadToolInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
 import { writeCollisionRecovery } from "../src/install-recovery.ts";
-import { createRuntime } from "../src/runtime.ts";
 import { makeTempDir, write } from "./helpers.ts";
 import {
   activateLocal,
@@ -28,6 +27,7 @@ import {
   prepareStagedInstall,
   prepareSource
 } from "./installation-fixtures.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("versioned installation lifecycle", () => {
   test("a verified bundle activates one complete Release install with writable projected guidance", async () => {
@@ -122,7 +122,7 @@ describe("versioned installation lifecycle", () => {
     writeCollisionRecovery(backupRoot, null);
     await runCliAsync(
       ["skills", "configure"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: { HOME: home, MONKE_HOME: monkeHome },
         multiSelectValues: [["codex"]],
@@ -615,7 +615,7 @@ describe("versioned installation lifecycle", () => {
 
     await runCliAsync(
       ["home"],
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
         onStderr() {},
@@ -665,8 +665,8 @@ describe("versioned installation lifecycle", () => {
     ).toBeTruthy();
   });
 
-  test("Local refresh migrates legacy Global config and preserves its Skill preference", async () => {
-    const sandbox = makeTempDir("local-install-legacy-config");
+  test("Local refresh preserves the configured Skill preference", async () => {
+    const sandbox = makeTempDir("local-install-config");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
     const sourceCheckout = path.join(sandbox, "source");
@@ -675,7 +675,6 @@ describe("versioned installation lifecycle", () => {
       monkeHome,
       "config.yml",
       `version: 1
-installedSourceCheckout: /previous/checkout
 skillInstallPreference:
   targets:
     - kind: cursor
@@ -684,7 +683,7 @@ skillInstallPreference:
 
     await activateLocal({
       home,
-      installId: "local-migrated",
+      installId: "local-preferred",
       monkeHome,
       sourceCheckout,
       targetKinds: []
@@ -694,9 +693,6 @@ skillInstallPreference:
       skillInstallPreference: { targets: [{ kind: "cursor" }] },
       version: 1
     });
-    expect(readFileSync(path.join(monkeHome, "config.yml"), "utf-8")).not.toContain(
-      "installedSourceCheckout"
-    );
     expect(readlinkSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"))).toBe(
       path.join(sourceCheckout, "skills", "internal")
     );
@@ -730,7 +726,7 @@ skillInstallPreference:
           "--targets",
           "codex"
         ],
-        createRuntime({
+        createTestRuntime({
           architecture: "x64",
           cwd: sourceCheckout,
           env: {
@@ -808,7 +804,7 @@ skillInstallPreference:
           "--targets",
           "codex"
         ],
-        createRuntime({
+        createTestRuntime({
           architecture: "arm64",
           cwd: sourceCheckout,
           env: {
@@ -908,7 +904,7 @@ skillInstallPreference:
       "dir"
     );
 
-    const runningCommand = createRuntime({
+    const runningCommand = createTestRuntime({
       cwd: sandbox,
       env: {
         HOME: home,
