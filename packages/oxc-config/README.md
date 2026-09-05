@@ -71,7 +71,7 @@ export { default } from "@monke-together-strong/oxc-config/oxfmt";
 export { default } from "@monke-together-strong/oxc-config/oxlint";
 ```
 
-The Oxfmt preset formats JSDoc, uses a print width of 100, ignores team-managed `skills/**` and `AGENTS.md`, and appends consumer `ignorePatterns` after its shared ignores. Other consumer fields override the shared formatter defaults.
+The Oxfmt preset formats JSDoc and uses a print width of 100. It formats first-party skill code and metadata while excluding imported skills, imported references, skill Markdown, and `AGENTS.md`. Consumer `ignorePatterns` append after these shared ignores; other consumer fields override the shared formatter defaults.
 
 The default Oxlint preset composes Ultracite's core, anti-slop, and Vitest presets, enables type-aware linting and TypeScript type checking, rejects console calls and direct environment access, and requires explicit module boundary types. Environment variables should be read and validated through a centralized configuration boundary. It uses `eslint-plugin-perfectionist` to sort object literals, destructuring, object types, interfaces, JSX props, enums, and heritage clauses while treating comments as intentional object and enum partitions, and disables Ultracite's `sort-keys` rule. It also loads `eslint-plugin-jsdoc` through Oxlint's JavaScript-plugin compatibility layer to reject undefined JSDoc types that Oxlint does not yet implement natively. Files named `*.test.*`, `*.spec.*`, or stored under `__tests__` are assumed to use Vitest. Its framework-neutral test policy also covers files under `test/` and `tests/`, where `typescript/no-unsafe-type-assertion` is disabled because typed mock and fixture setup is not yet ergonomic enough to justify the churn.
 

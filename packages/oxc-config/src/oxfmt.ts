@@ -2,7 +2,9 @@ import type { OxfmtConfig } from "oxfmt";
 import ultracite from "ultracite/oxfmt";
 
 const sharedIgnorePatterns = [
-  "skills/**",
+  "skills/imported/**",
+  "skills/references/imported/**",
+  "skills/**/*.md",
   "AGENTS.md",
   // TanStack Router owns this file and explicitly requires linters and formatters to ignore it.
   "**/routeTree.gen.ts"
