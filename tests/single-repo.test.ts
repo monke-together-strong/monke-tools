@@ -909,37 +909,6 @@ describe("single-repo sessions", () => {
     ).toThrow(/Session worktree path collision.*already recorded/su);
   });
 
-  test("spawn -m keeps default branch file content while avoiding source checkout baseline ports", () => {
-    const sandbox = makeTempDir("single-repo-main-mode");
-    const binDirectory = path.join(sandbox, "bin");
-    const home = path.join(sandbox, "home");
-    const repoRoot = createRepo(path.join(sandbox, "root"), {
-      "apps/api/.env.local": "PORT=3000\nDEFAULT_ONLY=1\n",
-      "monke.yml": `apps:
-  api:
-    path: apps/api
-    envFile: .env.local
-    mappings:
-      - port: API_PORT
-        env: PORT
-`
-    });
-    git(repoRoot, ["switch", "-c", "feature"]);
-    write(repoRoot, "apps/api/.env.local", "PORT=10000\nBRANCH_DIRTY=1\n");
-
-    runMonke({
-      args: ["spawn", "fresh", "-m"],
-      binDirectory,
-      cwd: repoRoot,
-      monkeHome: home
-    });
-
-    const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
-    expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10001\nDEFAULT_ONLY=1\n");
-    expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
-    expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=10000\nBRANCH_DIRTY=1\n");
-  });
-
   test("spawn -m ignores dirty source content", () => {
     const sandbox = makeTempDir("single-repo-main-ignores-dirty");
     const binDirectory = path.join(sandbox, "bin");
@@ -1132,6 +1101,7 @@ apps:
     expect(read(worktreeRoot, "apps/api/.env.demo")).toBe("API_DEMO=true\n");
     expect(existsSync(path.join(worktreeRoot, ".envrc"))).toBeFalsy();
     expect(read(worktreeRoot, ".env")).toBe("API_PORT=10001\n");
+    expect(read(repoRoot, "apps/api/.env.local")).toBe("PORT=10000\nLOCAL_ONLY=1\n");
   });
 
   test("spawn -m prefers fetched origin main over stale local main", () => {

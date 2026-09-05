@@ -12,7 +12,7 @@ import {
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "../src/shell.ts";
 import {
   completeSessionState,
-  createRepo as createTestRepo,
+  createConfiguredRepo as createRepo,
   git,
   installGitShim,
   makeTempDir,
@@ -1961,7 +1961,3 @@ apps: {}
     expect(existsSync(path.join(fixture.sourceRoot, "cleanup-ran"))).toBeFalsy();
   });
 });
-
-function createRepo(root: string, files: Record<string, string>) {
-  return createTestRepo(root, { "monke.yml": "apps: {}\n", ...files });
-}

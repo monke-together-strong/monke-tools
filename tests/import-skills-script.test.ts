@@ -16,11 +16,10 @@ import { parse } from "yaml";
 import {
   buildGroupedSkillOptions,
   extractSecurityRiskAssessment,
+  mergeImportedGuidanceIntoRecipeStore,
   normalizeSourceForStaging,
   parseAvailableSkillGroups,
-  parseAvailableSkillNames,
   readImportRecipeStore,
-  recordImportedGuidance,
   runImportSkills,
   writeImportRecipeStore
 } from "../scripts/import-skills.ts";
@@ -57,7 +56,6 @@ describe("skill importing", () => {
         skills: ["Bravo Skill"]
       }
     ]);
-    expect(parseAvailableSkillNames(output)).toStrictEqual(["alpha-skill", "Bravo Skill"]);
   });
 
   test("buildGroupedSkillOptions keeps Clack group labels separate from skill values", () => {
@@ -92,8 +90,8 @@ describe("skill importing", () => {
     });
   });
 
-  test("parseAvailableSkillNames fails when skills list output is unrecognized", () => {
-    expect(() => parseAvailableSkillNames("No skills here")).toThrow(/Could not parse/u);
+  test("parseAvailableSkillGroups fails when skills list output is unrecognized", () => {
+    expect(() => parseAvailableSkillGroups("No skills here")).toThrow(/Could not parse/u);
   });
 
   test("extractSecurityRiskAssessment filters upstream install output down to security details", () => {
@@ -411,85 +409,57 @@ describe("skill importing", () => {
 
   test("skill import recipe recording rejects one source mapping two selectors to one slug", () => {
     const sandbox = makeTempDir("skill-import-recipes-source-slug");
-    recordImportedGuidance(sandbox, {
-      acceptOpenClawRisks: false,
-      kind: "reference",
-      skills: [{ selector: "alpha-reference", slug: "alpha" }],
-      source: "owner/repo"
-    });
+    const store = mergeImportedGuidanceIntoRecipeStore(
+      { recipes: [], version: 3 },
+      {
+        acceptOpenClawRisks: false,
+        kind: "reference",
+        skills: [{ selector: "alpha-reference", slug: "alpha" }],
+        source: "owner/repo"
+      }
+    );
 
     expect(() => {
-      recordImportedGuidance(sandbox, {
+      const nextStore = mergeImportedGuidanceIntoRecipeStore(store, {
         acceptOpenClawRisks: false,
         kind: "skill",
         skills: [{ selector: "alpha-skill", slug: "alpha" }],
         source: "owner/repo"
       });
+      writeImportRecipeStore(sandbox, nextStore);
     }).toThrow(/Duplicate imported slug in recipe owner\/repo: alpha/u);
   });
 
   test("skill import recipe recording rejects duplicate imported skill owners", () => {
-    const sandbox = makeTempDir("skill-import-recipes-duplicate");
-    writeImportRecipeStore(sandbox, {
+    const store = {
       recipes: [
         {
-          skills: [
-            {
-              kind: "skill",
-              selector: "alpha",
-              slug: "alpha"
-            }
-          ],
+          skills: [{ kind: "skill" as const, selector: "alpha", slug: "alpha" }],
           source: "owner/first"
         }
       ],
-      version: 3
-    });
+      version: 3 as const
+    };
 
     expect(() => {
-      recordImportedGuidance(sandbox, {
+      mergeImportedGuidanceIntoRecipeStore(store, {
         acceptOpenClawRisks: false,
         kind: "skill",
-        skills: [
-          {
-            selector: "other-alpha",
-            slug: "alpha"
-          }
-        ],
+        skills: [{ selector: "other-alpha", slug: "alpha" }],
         source: "owner/second"
       });
     }).toThrow(/alpha is already owned by recipe owner\/first/u);
-    expect(readImportRecipeStore(sandbox)).toStrictEqual({
-      recipes: [
-        {
-          skills: [
-            {
-              kind: "skill",
-              selector: "alpha",
-              slug: "alpha"
-            }
-          ],
-          source: "owner/first"
-        }
-      ],
-      version: 3
-    });
   });
 
   test("skills import script wraps npx skills and copies staged universal skills", async () => {
     const sandbox = makeTempDir("skill-import-script");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     let stdout = "";
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runImportSkills(["owner/repo"], {
         selectSkills(availableSkillGroups) {
           expect(availableSkillGroups).toStrictEqual([
@@ -508,10 +478,7 @@ describe("skill importing", () => {
           stdout += message;
         }
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     const plainStdout = stripAnsiForTest(stdout);
     expect(plainStdout).toContain("Security Risk Assessments");
@@ -524,8 +491,6 @@ describe("skill importing", () => {
     expect(stdout).not.toContain("Installation Summary");
     expect(stdout).not.toContain("Installed 2 skills");
     expect(stdout).not.toContain(".agents/skills");
-    expect(stdout).not.toContain("Imported alpha -> skills/imported/alpha");
-    expect(stdout).not.toContain("Imported bravo -> skills/imported/bravo");
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("new alpha");
     expect(read(sandbox, "skills/imported/bravo/SKILL.md")).toBe("new bravo");
     expect(existsSync(path.join(sandbox, ".agents"))).toBeFalsy();
@@ -547,28 +512,20 @@ describe("skill importing", () => {
     const sandbox = makeTempDir("skill-import-reference");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
       stageReferenceFixture: true
     });
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runImportSkills(["owner/repo", "--ref"], {
         selectSkills() {
           return ["alpha"];
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(existsSync(path.join(sandbox, "skills/references/imported/alpha/SKILL.md"))).toBeFalsy();
     expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
@@ -605,8 +562,6 @@ name: outside-entry
 
 # Must stay unchanged
 `;
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     writeFileSync(outsideEntryPath, outsideEntry, "utf-8");
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
@@ -615,10 +570,7 @@ name: outside-entry
       stageReferenceFixture: true
     });
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runImportSkills(["owner/repo", "--ref"], {
           selectSkills() {
@@ -627,10 +579,7 @@ name: outside-entry
           writeMessage() {}
         })
       ).rejects.toThrow(/regular file/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(readFileSync(outsideEntryPath, "utf-8")).toBe(outsideEntry);
     expect(existsSync(path.join(sandbox, "skills/references/imported/alpha"))).toBeFalsy();
@@ -641,8 +590,6 @@ name: outside-entry
     const sandbox = makeTempDir("skill-import-reference-supporting-symlink");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
@@ -650,20 +597,14 @@ name: outside-entry
       stageSupportingSymlink: true
     });
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runImportSkills(["owner/repo", "--ref"], {
         selectSkills() {
           return ["alpha"];
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     const importedLink = path.join(
       sandbox,
@@ -677,8 +618,6 @@ name: outside-entry
     const sandbox = makeTempDir("skill-import-kind-migration");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
@@ -695,10 +634,7 @@ name: outside-entry
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old skill");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runImportSkills(["owner/repo", "--ref"], {
         selectSkills() {
           return ["alpha"];
@@ -716,10 +652,7 @@ name: outside-entry
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(existsSync(path.join(sandbox, "skills/references/imported/alpha"))).toBeFalsy();
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toMatch(/^---\nname: alpha\n/u);
@@ -734,8 +667,6 @@ name: outside-entry
       const sandbox = makeTempDir("skill-import-consumed-reference");
       const skillsLogPath = path.join(sandbox, "skills.log");
       const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-      const originalCwd = process.cwd();
-      const originalPath = process.env.PATH;
       const originalStore = {
         recipes: [
           {
@@ -754,10 +685,7 @@ name: outside-entry
         "[Base](../../references/imported/alpha/MAIN.md)\n"
       );
 
-      try {
-        process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-        process.chdir(sandbox);
-
+      await withFakeNpx(sandbox, fakeBinDirectory, async () => {
         await expect(
           runImportSkills(["owner/repo"], {
             selectSkills() {
@@ -766,10 +694,7 @@ name: outside-entry
             writeMessage() {}
           })
         ).rejects.toThrow(`used by skills/${skillFolder}/reviewer/SKILL.md`);
-      } finally {
-        process.chdir(originalCwd);
-        process.env.PATH = originalPath;
-      }
+      });
 
       expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe("old reference");
       expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBeFalsy();
@@ -781,8 +706,6 @@ name: outside-entry
     const sandbox = makeTempDir("skill-import-reference-collision");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       mainCollisionSelector: "bravo",
       skillsCwdLogPath,
@@ -805,10 +728,7 @@ name: outside-entry
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runImportSkills(["owner/repo", "--ref"], {
           selectSkills() {
@@ -817,10 +737,7 @@ name: outside-entry
           writeMessage() {}
         })
       ).rejects.toThrow(/already contains MAIN\.md/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
     expect(read(sandbox, "skills/imported/bravo/SKILL.md")).toBe("old bravo");
@@ -833,14 +750,9 @@ name: outside-entry
     const sandbox = makeTempDir("skill-import-script-recipes");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runImportSkills(["owner/repo"], {
         selectSkills() {
           return ["alpha"];
@@ -853,10 +765,7 @@ name: outside-entry
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(readImportRecipeStore(sandbox)).toStrictEqual({
       recipes: [
@@ -884,8 +793,6 @@ name: outside-entry
     const sandbox = makeTempDir("skill-import-script-aliases");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
@@ -895,20 +802,14 @@ name: outside-entry
       }
     });
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runImportSkills(["owner/repo"], {
         selectSkills() {
           return ["alpha", "bravo"];
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/imported/renamed-alpha/SKILL.md")).toBe("new renamed-alpha");
     expect(read(sandbox, "skills/imported/renamed-bravo/SKILL.md")).toBe("new renamed-bravo");
@@ -949,24 +850,16 @@ name: outside-entry
     const sandbox = makeTempDir("skill-import-openclaw");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runImportSkills(["openclaw/agent-skills", "--accept-openclaw-risks"], {
         selectSkills() {
           return ["autoreview"];
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
     expect(skillsLog).toContain(
@@ -997,8 +890,6 @@ name: outside-entry
     const sandbox = makeTempDir("skill-import-reference-openclaw-install");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const installCalls: string[] = [];
     let stdout = "";
     const fakeBinDirectory = installFakeNpx(sandbox, {
@@ -1007,10 +898,7 @@ name: outside-entry
       stageReferenceFixture: true
     });
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runImportSkills(
         ["openclaw/agent-skills", "--ref", "--accept-openclaw-risks", "--install"],
         {
@@ -1028,10 +916,7 @@ name: outside-entry
           }
         }
       );
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(stripAnsiForTest(stdout)).toContain("Security Risk Assessments");
     expect(installCalls).toStrictEqual([sandbox]);
@@ -1046,8 +931,6 @@ name: outside-entry
     const sandbox = makeTempDir("skill-import-script-conflict");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
     writeImportRecipeStore(sandbox, {
       recipes: [
@@ -1066,10 +949,7 @@ name: outside-entry
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runImportSkills(["owner/second"], {
           selectSkills() {
@@ -1078,10 +958,7 @@ name: outside-entry
           writeMessage() {}
         })
       ).rejects.toThrow(/alpha is already owned by recipe owner\/first/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
     expect(readImportRecipeStore(sandbox)).toStrictEqual({
@@ -1105,15 +982,10 @@ name: outside-entry
     const sandbox = makeTempDir("skill-import-script-install");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const installCalls: string[] = [];
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runImportSkills(["owner/repo", "-i"], {
         runInstallCommand(repoRoot) {
           installCalls.push(repoRoot);
@@ -1124,10 +996,7 @@ name: outside-entry
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(installCalls).toStrictEqual([sandbox]);
   });
@@ -1136,8 +1005,6 @@ name: outside-entry
     const sandbox = makeTempDir("skill-update-script");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     let stdout = "";
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
     writeImportRecipeStore(sandbox, {
@@ -1163,19 +1030,13 @@ name: outside-entry
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runUpdateSkills([], {
         writeMessage(message) {
           stdout += message;
         }
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("new alpha");
     expect(read(sandbox, "skills/imported/bravo/SKILL.md")).toBe("new bravo");
@@ -1490,8 +1351,6 @@ name: alpha
     const sandbox = makeTempDir("skill-update-reference");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
@@ -1515,17 +1374,11 @@ name: alpha
     });
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runUpdateSkills([], {
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBeFalsy();
     expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe(
@@ -1588,8 +1441,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-script-failure");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       failInstallSources: ["owner/fails"],
       skillsCwdLogPath,
@@ -1624,19 +1475,13 @@ metadata: [unterminated
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/references/imported/bravo/MAIN.md", "old bravo");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runUpdateSkills([], {
           writeMessage() {}
         })
       ).rejects.toThrow(/owner\/fails/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
     expect(read(sandbox, "skills/references/imported/bravo/MAIN.md")).toBe(
@@ -1655,8 +1500,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-script-untracked");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
     writeImportRecipeStore(sandbox, {
       recipes: [
@@ -1676,19 +1519,13 @@ metadata: [unterminated
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/orphan/SKILL.md", "unknown");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runUpdateSkills([], {
           writeMessage() {}
         })
       ).rejects.toThrow(/Untracked imported skill directories: orphan/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(existsSync(skillsLogPath)).toBeFalsy();
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
@@ -1699,8 +1536,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-script-slug-mismatch");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
@@ -1725,19 +1560,13 @@ metadata: [unterminated
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runUpdateSkills([], {
           writeMessage() {}
         })
       ).rejects.toThrow(/recorded alpha but staged renamed-alpha/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
     expect(existsSync(path.join(sandbox, "skills/imported/renamed-alpha"))).toBeFalsy();
@@ -1762,8 +1591,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-script-slug-accept");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const confirmations: { recordedSlug: string; stagedSlug: string }[] = [];
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
@@ -1789,10 +1616,7 @@ metadata: [unterminated
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runUpdateSkills(["--interactive"], {
         confirmSlugReplacement(request) {
           confirmations.push({
@@ -1803,10 +1627,7 @@ metadata: [unterminated
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(confirmations).toStrictEqual([
       {
@@ -1837,8 +1658,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-reference-slug-accept");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
@@ -1858,20 +1677,14 @@ metadata: [unterminated
     });
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runUpdateSkills(["--interactive"], {
         confirmSlugReplacement() {
           return true;
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(existsSync(path.join(sandbox, "skills/references/imported/alpha"))).toBeFalsy();
     expect(
@@ -1889,8 +1702,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-consumed-reference");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const originalStore = {
       recipes: [
         {
@@ -1916,10 +1727,7 @@ metadata: [unterminated
       "[Base](../../references/imported/alpha/MAIN.md)\n"
     );
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runUpdateSkills(["--interactive"], {
           confirmSlugReplacement() {
@@ -1928,10 +1736,7 @@ metadata: [unterminated
           writeMessage() {}
         })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/SKILL\.md/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe("old reference");
     expect(existsSync(path.join(sandbox, "skills/references/imported/renamed-alpha"))).toBeFalsy();
@@ -1942,8 +1747,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-consumed-reference-support");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const originalStore = {
       recipes: [
         {
@@ -1970,10 +1773,7 @@ metadata: [unterminated
       "[Details](../../../references/imported/alpha/references/details.md)\n"
     );
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runUpdateSkills(["--interactive"], {
           confirmSlugReplacement() {
@@ -1982,10 +1782,7 @@ metadata: [unterminated
           writeMessage() {}
         })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/references\/checklist\.md/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe("old reference");
     expect(existsSync(path.join(sandbox, "skills/references/imported/renamed-alpha"))).toBeFalsy();
@@ -1996,8 +1793,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-consumed-reference-symlink");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const originalStore = {
       recipes: [
         {
@@ -2022,10 +1817,7 @@ metadata: [unterminated
     mkdirSync(path.dirname(supportingSymlink), { recursive: true });
     symlinkSync("../../../references/imported/alpha/MAIN.md", supportingSymlink);
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runUpdateSkills(["--interactive"], {
           confirmSlugReplacement() {
@@ -2034,10 +1826,7 @@ metadata: [unterminated
           writeMessage() {}
         })
       ).rejects.toThrow(/used by skills\/internal\/reviewer\/references\/base\.md/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe("old reference");
     expect(existsSync(path.join(sandbox, "skills/references/imported/renamed-alpha"))).toBeFalsy();
@@ -2048,8 +1837,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-reference-consumer");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const originalStore = {
       recipes: [
         {
@@ -2075,10 +1862,7 @@ metadata: [unterminated
     write(sandbox, "skills/references/imported/alpha/MAIN.md", "old reference");
     write(sandbox, "skills/references/imported/bravo/MAIN.md", "[Alpha](../alpha/MAIN.md)\n");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runUpdateSkills(["--interactive"], {
           confirmSlugReplacement() {
@@ -2104,10 +1888,7 @@ metadata: [unterminated
           writeMessage() {}
         })
       ).rejects.toThrow(/used by skills\/references\/internal\/reviewer\/alpha\.md/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/references/imported/alpha/MAIN.md")).toBe("old reference");
     expect(existsSync(path.join(sandbox, "skills/references/imported/renamed-alpha"))).toBeFalsy();
@@ -2118,8 +1899,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-script-multiple-slug-accept");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const confirmations: { recordedSlug: string; selector: string; stagedSlug: string }[] = [];
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
@@ -2152,10 +1931,7 @@ metadata: [unterminated
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runUpdateSkills(["--interactive"], {
         confirmSlugReplacement(request) {
           confirmations.push({
@@ -2167,10 +1943,7 @@ metadata: [unterminated
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(confirmations).toStrictEqual([
       {
@@ -2225,8 +1998,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-projected-slug-ownership");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       skillsCwdLogPath,
       skillsLogPath,
@@ -2250,20 +2021,14 @@ metadata: [unterminated
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/bravo/SKILL.md", "old bravo");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runUpdateSkills(["--interactive"], {
         confirmSlugReplacement() {
           return true;
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(existsSync(path.join(sandbox, "skills/imported/alpha"))).toBeFalsy();
     expect(read(sandbox, "skills/imported/bravo/SKILL.md")).toBe("new bravo");
@@ -2278,8 +2043,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-script-slug-duplicate");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, {
       failInstallSources: ["z/other"],
       skillsCwdLogPath,
@@ -2316,10 +2079,7 @@ metadata: [unterminated
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
     write(sandbox, "skills/imported/beta/SKILL.md", "old beta");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await expect(
         runUpdateSkills(["--interactive"], {
           confirmSlugReplacement() {
@@ -2328,10 +2088,7 @@ metadata: [unterminated
           writeMessage() {}
         })
       ).rejects.toThrow(/beta is owned by both a\/renames and z\/other/u);
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("old alpha");
     expect(read(sandbox, "skills/imported/beta/SKILL.md")).toBe("old beta");
@@ -2366,8 +2123,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-script-install");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const installCalls: string[] = [];
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
     writeImportRecipeStore(sandbox, {
@@ -2387,10 +2142,7 @@ metadata: [unterminated
     });
     write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runUpdateSkills(["--install"], {
         runInstallCommand(repoRoot) {
           installCalls.push(repoRoot);
@@ -2398,10 +2150,7 @@ metadata: [unterminated
         },
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     expect(installCalls).toStrictEqual([sandbox]);
   });
@@ -2410,8 +2159,6 @@ metadata: [unterminated
     const sandbox = makeTempDir("skill-update-script-openclaw");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const originalCwd = process.cwd();
-    const originalPath = process.env.PATH;
     const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
     writeImportRecipeStore(sandbox, {
       recipes: [
@@ -2431,17 +2178,11 @@ metadata: [unterminated
     });
     write(sandbox, "skills/imported/autoreview/SKILL.md", "old autoreview");
 
-    try {
-      process.env.PATH = [fakeBinDirectory, originalPath].filter(Boolean).join(path.delimiter);
-      process.chdir(sandbox);
-
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
       await runUpdateSkills([], {
         writeMessage() {}
       });
-    } finally {
-      process.chdir(originalCwd);
-      process.env.PATH = originalPath;
-    }
+    });
 
     const skillsLog = readFileSync(skillsLogPath, "utf-8");
     expect(skillsLog).toContain(

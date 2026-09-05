@@ -309,7 +309,6 @@ export const RepoReservationSchema = z
 
 export type AssignedPort = z.output<typeof AssignedPortSchema>;
 export type RepoReservation = z.output<typeof RepoReservationSchema>;
-export type ResourceCommandOutputState = z.output<typeof ResourceCommandOutputStateSchema>;
 export type ResourceCommandState = z.output<typeof ResourceCommandStateSchema>;
 export type ResourceValueState = z.output<typeof ResourceValueStateSchema>;
 export type SessionRepoState = z.output<typeof SessionRepoStateSchema>;

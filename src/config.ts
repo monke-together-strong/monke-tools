@@ -225,10 +225,10 @@ function parseRepoConfigObject(
     configPath
   );
 
-  const appsByLabel = new Map<string, AppConfig>();
+  const appLabels = new Set(Object.keys(config.apps));
   const appsInOrder: AppConfig[] = [];
   const localPortOrder: string[] = [];
-  const localMappingsByPort = new Map<string, LocalMapping[]>();
+  const localPorts = new Set<string>();
   const claimedTargets = new Map<string, string>();
 
   for (const [label, rawApp] of Object.entries(config.apps)) {
@@ -263,26 +263,22 @@ function parseRepoConfigObject(
       }
       claimedTargets.set(targetKey, portKey);
 
-      const existingMappings = localMappingsByPort.get(portKey);
-      if (!existingMappings) {
+      if (!localPorts.has(portKey)) {
         localPortOrder.push(portKey);
-        localMappingsByPort.set(portKey, []);
+        localPorts.add(portKey);
       }
 
       const localMapping: LocalMapping = { portKey, targetApp: label, targetEnv };
       localMappings.push(localMapping);
-      localMappingsByPort.get(portKey)?.push(localMapping);
     }
 
     const appConfig: AppConfig = {
       absoluteAppPath,
       label,
       localMappings,
-      relativeEnvFile,
-      relativePath
+      relativeEnvFile
     };
 
-    appsByLabel.set(label, appConfig);
     appsInOrder.push(appConfig);
   }
 
@@ -321,7 +317,7 @@ function parseRepoConfigObject(
       const targetApp = rawMapping.app;
       const targetEnv = rawMapping.env;
 
-      if (!appsByLabel.has(targetApp)) {
+      if (!appLabels.has(targetApp)) {
         throw new MonkeError(`External mapping for ${label} targets unknown app ${targetApp}`);
       }
 
@@ -333,8 +329,6 @@ function parseRepoConfigObject(
       externalTargetApps.add(targetApp);
 
       const externalMapping: ExternalMapping = {
-        dependencyLabel: label,
-        dependencyRoot: absoluteRepoRoot,
         portKey,
         targetApp,
         targetEnv
@@ -347,8 +341,7 @@ function parseRepoConfigObject(
       absoluteRepoRoot,
       label,
       mappings,
-      pathEnv,
-      relativePath
+      pathEnv
     });
   }
 
@@ -361,15 +354,12 @@ function parseRepoConfigObject(
   }
 
   return {
-    appsByLabel,
     appsInOrder,
     bootstrapCommand,
     cleanupCommand,
     configPath,
     externalInOrder,
     externalMappingsInOrder,
-    externalTargetApps,
-    localMappingsByPort,
     localPortOrder,
     resourceCommandsInOrder,
     resourceValuesInOrder,

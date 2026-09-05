@@ -107,18 +107,11 @@ export function rewriteManagedEnvFiles(
   }
 }
 
-export function syncRootEnvFile(
-  worktreeRoot: string,
-  assignments: { env: string; value: string }[]
-) {
-  syncRootEnvFileWithRemovals(worktreeRoot, assignments, []);
-}
-
 /** Synchronize assignments in the supplied checkout's root `.env` and remove stale names. */
 export function syncRootEnvFileWithRemovals(
   worktreeRoot: string,
   assignments: { env: string; value: string }[],
-  removedEnvNames: string[]
+  removedEnvNames: string[] = []
 ) {
   if (assignments.length === 0 && removedEnvNames.length === 0) {
     return;
@@ -311,7 +304,8 @@ function splitValueAndComment(value: string) {
   return { comment: "", value };
 }
 
-function describeRedactedValue(value: string) {
+/** Describe an env value in an error without leaking it. */
+export function describeRedactedValue(value: string) {
   return `<redacted length=${value.length}>`;
 }
 

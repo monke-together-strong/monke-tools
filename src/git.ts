@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
-import type { ExecResult, Runtime } from "./types.ts";
+import type { Runtime } from "./types.ts";
 
 export interface WorktreeEntry {
   branch: string | null;
@@ -392,40 +392,6 @@ function prepareFreshSessionWorktree(
   };
 }
 
-/** Best-effort removal for a fresh Session worktree and branch created by this process. */
-export function removeSessionWorktreeAndBranch(
-  runtime: Runtime,
-  sourceRoot: string,
-  worktreePath: string,
-  session: string,
-  onWarning: (message: string) => void
-) {
-  let removed = true;
-  const removeWorktree = runtime.exec("git", ["worktree", "remove", "--force", worktreePath], {
-    allowFailure: true,
-    cwd: sourceRoot
-  });
-  if (removeWorktree.exitCode !== 0 && existsSync(worktreePath)) {
-    onWarning(
-      `Failed to remove rolled-back worktree ${worktreePath}${formatCommandDetail(removeWorktree)}`
-    );
-    removed = false;
-  }
-
-  const removeBranch = runtime.exec("git", ["branch", "-D", session], {
-    allowFailure: true,
-    cwd: sourceRoot
-  });
-  if (removeBranch.exitCode !== 0 && branchExists(runtime, sourceRoot, session)) {
-    onWarning(
-      `Failed to remove rolled-back branch ${session} in ${sourceRoot}${formatCommandDetail(removeBranch)}`
-    );
-    removed = false;
-  }
-
-  return removed;
-}
-
 /** Assert that default branch spawn mode can spawn a fresh Session worktree. */
 export function assertFreshSessionWorktreeAvailable(
   runtime: Runtime,
@@ -552,11 +518,6 @@ function refExists(runtime: Runtime, sourceRoot: string, ref: string) {
     cwd: sourceRoot
   });
   return result.exitCode === 0;
-}
-
-function formatCommandDetail(result: Pick<ExecResult, "stderr" | "stdout">) {
-  const detail = (result.stderr || result.stdout).trim();
-  return detail ? `: ${detail}` : "";
 }
 
 function toSessionPath(targetPath: string) {

@@ -274,10 +274,6 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 
 **Cleanup**: The operation that runs registered per-session teardown and removes session-state records whose worktrees no longer exist. _Avoid_: Delete session, prune repos
 
-### Organization reports
-
-**Report target**: The configured shared organization destination to which monke-tools publishes finalized agent reports. _Avoid_: Setup target, storage backend, upload destination
-
 ### Agent retrospective
 
 **Retrospective**: One read-only analysis pass that combines recent **Agent transcript** evidence with required **PR analysis**, then reports **Durable fix proposals**. The transcript lane detects **Friction episodes**, **Repeated asks**, and **Standards opportunities** grouped by **Source checkout**; the PR lane studies **Implementation trajectories** in the same **Retrospective window**. _Avoid_: Audit, review, trace, session review
@@ -463,8 +459,6 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - **Global monke config** lives at `$MONKE_HOME/config.yml`, defaulting to `~/.monke/config.yml`.
 - The initial **Global monke config** format version is `1`.
 - The **Installed source checkout** belongs to the active Local **Install manifest**, not **Global monke config**.
-- A **Local tool install** has at most one active **Report target**.
-- A **Report target** is shared by an organization, not owned by one user.
 - A **Skill source tree** belongs to the **Installed source checkout**.
 - monke-tools does not infer a replacement **Installed source checkout** when the checkout recorded by the active Local **Install manifest** is missing.
 - A **Skill install preference** belongs to **Global monke config**.
@@ -522,7 +516,7 @@ monke-tools manages isolated local workspace sessions for a root repo and its de
 - Every **Distributed reference** is shared across **Skill install targets**.
 - A **Skill source tree** separates **Shared distributed skills** by ownership and **Harness-specific skills** by **Agent harness**.
 - A **Distributed skill** has a **Skill slug** and may have a different **Agent skill name**.
-- The **Core distributed skill** uses `core` as its **Skill slug** and `monke-tools-core` as its **Agent skill name**.
+- The **Core distributed skill** uses `monke-tools-core` as its **Skill slug** and `monke-tools-core` as its **Agent skill name**.
 - A **Distributed skill** is either an **Internal skill** or an **Imported skill**.
 - An **Imported skill** preserves its upstream **Agent skill name** by default.
 - An **Imported guidance** item has exactly one **Import kind**.

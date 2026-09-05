@@ -17,7 +17,7 @@ import { describe, expect, test } from "vitest";
 
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
-import { loadLocalInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
+import { loadToolInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
 import { writeCollisionRecovery } from "../src/install-recovery.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { makeTempDir, write } from "./helpers.ts";
@@ -433,7 +433,7 @@ describe("versioned installation lifecycle", () => {
       })
     );
 
-    expect(() => loadLocalInstall(installRoot)).toThrow(/minimumCodiffVersion/u);
+    expect(() => loadToolInstall(installRoot)).toThrow(/minimumCodiffVersion/u);
   });
 
   test("Local refresh atomically activates a self-describing install behind the stable command", async () => {

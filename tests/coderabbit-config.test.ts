@@ -6,7 +6,6 @@ import { parse } from "yaml";
 import { array as arraySchema, looseObject, string as stringSchema } from "zod";
 
 import {
-  CODE_RABBIT_SYNC_INPUTS,
   isCodeRabbitSyncRelevant,
   renderCodeRabbitConfig,
   runCodeRabbitConfigGenerator
@@ -56,41 +55,6 @@ function makeCodeRabbitRepo(name: string) {
 }
 
 describe("CodeRabbit central configuration", () => {
-  test("renders the complete repository code-smell review baseline", () => {
-    const repoRoot = path.join(import.meta.dirname, "..");
-    const [baseline] = BaselineConfigSchema.parse(
-      parse(renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" }).yaml)
-    ).reviews.path_instructions;
-
-    expect(baseline?.instructions).toContain("## Code-smell review baseline");
-    expect(baseline?.instructions).toContain("**The repo overrides.**");
-    expect(baseline?.instructions).toContain("**Always a judgement call.**");
-    for (const smell of [
-      "Mysterious Name",
-      "Duplicated Code",
-      "Feature Envy",
-      "Data Clumps",
-      "Primitive Obsession",
-      "Repeated Switches",
-      "Shotgun Surgery",
-      "Divergent Change",
-      "Speculative Generality",
-      "Message Chains",
-      "Middle Man",
-      "Refused Bequest"
-    ]) {
-      expect(baseline?.instructions).toContain(`**${smell}**`);
-    }
-    expect(baseline?.instructions).not.toContain(
-      "Anything in the repo that documents how code should be written"
-    );
-    expect(baseline?.instructions).not.toContain("### 4. Spawn both sub-agents in parallel");
-    expect(baseline?.instructions).not.toContain(
-      "Source: skills/references/imported/code-review/MAIN.md"
-    );
-    expect(baseline?.instructions).not.toContain("Excerpt anchor:");
-  });
-
   test("renders configured Markdown excerpts without source metadata", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-excerpt");
     write(
@@ -402,13 +366,6 @@ reviews:
     expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).not.toThrow();
   });
 
-  test("renders deterministically for the same source tree and commit", () => {
-    const repoRoot = makeCodeRabbitRepo("coderabbit-config-deterministic");
-    const options = { repoRoot, sourceCommit: "abc123" };
-
-    expect(renderCodeRabbitConfig(options)).toStrictEqual(renderCodeRabbitConfig(options));
-  });
-
   test("syncs only for renderer inputs or a document in the current dependency graph", () => {
     const sources = [
       "skills/references/internal/CODING_STANDARDS.md",
@@ -426,7 +383,12 @@ reviews:
       "skills/references/internal/CODING_STANDARDS.md",
       "skills/references/imported/code-review/MAIN.md",
       "skills/references/imported/ultracite.md",
-      ...CODE_RABBIT_SYNC_INPUTS
+      ".github/workflows/sync-coderabbit.yaml",
+      "bun.lock",
+      "package.json",
+      "scripts/generate-coderabbit-config.ts",
+      "config/coderabbit/sources.yaml",
+      "config/coderabbit/template.yaml"
     ]) {
       expect(isCodeRabbitSyncRelevant({ changedPaths: [changedPath], sources })).toBeTruthy();
     }

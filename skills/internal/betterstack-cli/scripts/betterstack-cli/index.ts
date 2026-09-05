@@ -211,7 +211,6 @@ interface BetterStackSourceMetadata {
 }
 
 interface BetterStackConnectionMetadata {
-  dataRegion: string;
   host: string;
   port: number;
   teamIds: number[];
@@ -292,11 +291,11 @@ async function loadQueryMetadata(context: ResolvedQueryContext) {
     return { matchingConnection: null, sourceMetadata };
   }
   const connections = await tryLoadConnections(context.metadataToken);
+  const regionHost = queryHostForRegion(sourceMetadata.dataRegion);
   const matchingConnection =
     connections.find(
       (connection) =>
-        connection.dataRegion === sourceMetadata.dataRegion &&
-        connection.teamIds.includes(sourceMetadata.teamId)
+        connection.host === regionHost && connection.teamIds.includes(sourceMetadata.teamId)
     ) ?? null;
   return { matchingConnection, sourceMetadata };
 }
@@ -351,7 +350,6 @@ async function loadConnections(token: string) {
   );
 
   return parsed.data.map((connection) => ({
-    dataRegion: connection.attributes.data_region,
     host: connection.attributes.host,
     port: connection.attributes.port,
     teamIds: connection.attributes.team_ids,
@@ -395,10 +393,9 @@ function validateQueryEndpointMatchesSource(
   const endpoint = new URL(normalizedUrl);
   const endpointHost = endpoint.hostname;
   const endpointPort = getEffectiveUrlPort(endpoint);
-  const expectedHost =
-    matchingConnection?.host ?? `${sourceMetadata.dataRegion}-connect.betterstackdata.com`;
+  const matchingRegionHost = queryHostForRegion(sourceMetadata.dataRegion);
+  const expectedHost = matchingConnection?.host ?? matchingRegionHost;
   const expectedPort = matchingConnection?.port ?? 443;
-  const matchingRegionHost = `${sourceMetadata.dataRegion}-connect.betterstackdata.com`;
 
   if (
     (endpointHost === expectedHost && endpointPort === expectedPort) ||
@@ -424,12 +421,18 @@ function validateQueryEndpointIsAllowed(normalizedUrl: string) {
   }
 
   fail(
-    `Query endpoint host ${endpoint.hostname} is not allowed. Expected a Better Stack query host ending in -connect.betterstackdata.com.`
+    `Query endpoint host ${endpoint.hostname} is not allowed. Expected a Better Stack query host ending in ${QUERY_HOST_SUFFIX}.`
   );
 }
 
+const QUERY_HOST_SUFFIX = "-connect.betterstackdata.com";
+
+function queryHostForRegion(region: string) {
+  return `${region}${QUERY_HOST_SUFFIX}`;
+}
+
 function isAllowedBetterStackQueryHost(hostname: string) {
-  return hostname.endsWith("-connect.betterstackdata.com");
+  return hostname.endsWith(QUERY_HOST_SUFFIX);
 }
 
 function formatConnectionEndpoint(connection: BetterStackConnectionMetadata) {

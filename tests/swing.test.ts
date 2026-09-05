@@ -16,6 +16,7 @@ import { hashKey } from "../src/runtime.ts";
 import { getSessionStateFilePath, loadSessionState } from "../src/session-state-store.ts";
 import type { SelectPrompt } from "../src/types.ts";
 import {
+  createConfiguredRepo as createRepo,
   createRepo as createTestRepo,
   git,
   installCodexUrlOpenShim,
@@ -890,10 +891,6 @@ apps:
     );
   });
 });
-
-function createRepo(root: string, files: Record<string, string>) {
-  return createTestRepo(root, { "monke.yml": "apps: {}\n", ...files });
-}
 
 function installBareOrigin(sandbox: string, repoRoot: string) {
   const originRoot = path.join(sandbox, "origin.git");

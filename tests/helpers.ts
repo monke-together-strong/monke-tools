@@ -103,6 +103,18 @@ export function completeSessionState(
   };
 }
 
+export function createFiles(root: string, files: Record<string, string>) {
+  mkdirSync(root, { recursive: true });
+  for (const [relativePath, contents] of Object.entries(files)) {
+    write(root, relativePath, contents);
+  }
+  return realpathSync.native(root);
+}
+
+export function createConfiguredRepo(root: string, files: Record<string, string>) {
+  return createRepo(root, { "monke.yml": "apps: {}\n", ...files });
+}
+
 export function createRepo(root: string, files: Record<string, string>) {
   mkdirSync(root, { recursive: true });
   git(root, ["init", "-b", "main"]);
@@ -347,53 +359,6 @@ printf '%s\\n' "$@" >> ${shellQuote(logPath)}
   return logPath;
 }
 
-export function installFakeGh(
-  binDirectory: string,
-  issues: Record<number, { body: string; comments?: readonly string[]; title: string }>
-) {
-  const logPath = path.join(binDirectory, "gh.log");
-  const issueCases = Object.entries(issues)
-    .map(([issueNumber, issue]) => {
-      const issueJson = JSON.stringify({
-        body: issue.body,
-        comments: (issue.comments ?? []).map((body) => ({ body })),
-        number: Math.trunc(Number(issueNumber)),
-        title: issue.title
-      });
-      return `    ${issueNumber}) printf '%s\\n' ${shellQuote(issueJson)}; exit 0 ;;`;
-    })
-    .join("\n");
-  const script = `#!/bin/sh
-set -eu
-first_arg=true
-for arg in "$@"; do
-  if [ "$first_arg" = true ]; then
-    first_arg=false
-  else
-    printf ' ' >> ${shellQuote(logPath)}
-  fi
-  printf '%s' "$arg" >> ${shellQuote(logPath)}
-done
-printf '\\n' >> ${shellQuote(logPath)}
-if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
-  printf '%s\\n' "owner/repo"
-  exit 0
-fi
-if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
-  case "$3" in
-${issueCases}
-  esac
-fi
-if [ "$1" = "issue" ] && [ "$2" = "close" ]; then
-  exit 0
-fi
-echo "unsupported gh invocation: $*" >&2
-exit 1
-`;
-  writeExecutable(path.join(binDirectory, "gh"), script);
-  return logPath;
-}
-
 export function installFakeGhForMergedPrs(
   binDirectory: string,
   options: {
@@ -454,7 +419,7 @@ interface RunMonkeOptions {
 }
 
 export function runMonke(options: RunMonkeOptions) {
-  const result = runMonkeProcess(options);
+  const result = runMonkeCapturingFailure(options);
   if (result.error) {
     throw result.error;
   }
@@ -462,10 +427,6 @@ export function runMonke(options: RunMonkeOptions) {
 }
 
 export function runMonkeCapturingFailure(options: RunMonkeOptions) {
-  return runMonkeProcess(options);
-}
-
-function runMonkeProcess(options: RunMonkeOptions) {
   const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
   const result = spawnSync(process.execPath, [runMonkeWorkerPath, ...options.args], {
     cwd: options.cwd,
@@ -561,18 +522,9 @@ function shellQuote(value: string) {
 }
 
 function findExecutableOnPath(command: string) {
-  const pathValue = process.env.PATH ?? "";
-  for (const segment of pathValue.split(path.delimiter)) {
-    if (!segment) {
-      continue;
-    }
-    const candidate = path.join(segment, command);
-    try {
-      return realpathSync.native(candidate);
-    } catch {
-      continue;
-    }
+  const executable = Bun.which(command);
+  if (!executable) {
+    throw new Error(`Could not find ${command} on PATH`);
   }
-
-  throw new Error(`Could not find ${command} on PATH`);
+  return realpathSync.native(executable);
 }

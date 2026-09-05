@@ -4,12 +4,12 @@ import { describe, expect, test } from "vitest";
 
 import { loadResolvedGraph } from "../src/config.ts";
 import { createRuntime } from "../src/runtime.ts";
-import { createRepo, makeTempDir } from "./helpers.ts";
+import { createFiles, makeTempDir } from "./helpers.ts";
 
 describe("resource configuration", () => {
   test("loadResolvedGraph accepts nested resource values and cleanupCommand", () => {
     const sandbox = makeTempDir("config-resources");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `cleanupCommand: pnpm cleanup:session
 resources:
@@ -39,7 +39,7 @@ apps:
 
   test("loadResolvedGraph accepts nested resource commands", () => {
     const sandbox = makeTempDir("config-resource-commands");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources:
   commands:
@@ -73,7 +73,7 @@ apps:
 
   test("loadResolvedGraph defaults resource command timeoutSeconds to 60", () => {
     const sandbox = makeTempDir("config-resource-command-default-timeout");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources:
   commands:
@@ -227,7 +227,7 @@ apps:
     }
   ])("loadResolvedGraph rejects resource commands with $name", ({ expected, resources }) => {
     const sandbox = makeTempDir("config-invalid-resource-command");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources:
   ${resources}
@@ -246,7 +246,7 @@ apps:
 
   test("loadResolvedGraph rejects old flat resources mappings", () => {
     const sandbox = makeTempDir("config-flat-resources");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources:
   DISCORD_CHANNEL: mt-\${session}
@@ -265,7 +265,7 @@ apps:
 
   test("loadResolvedGraph rejects empty resources sections", () => {
     const sandbox = makeTempDir("config-empty-resources");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources: {}
 apps:
@@ -285,7 +285,7 @@ apps:
 
   test("loadResolvedGraph rejects empty resource values sections", () => {
     const sandbox = makeTempDir("config-empty-resource-values");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources:
   values: {}
@@ -306,7 +306,7 @@ apps:
 
   test("loadResolvedGraph rejects invalid resource value declarations", () => {
     const sandbox = makeTempDir("config-invalid-resources");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources:
   values:
@@ -328,7 +328,7 @@ apps:
 
   test("loadResolvedGraph rejects empty resource literals", () => {
     const sandbox = makeTempDir("config-empty-resource-literal");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources:
   values:
@@ -350,7 +350,7 @@ apps:
 
   test("loadResolvedGraph rejects unsupported resource placeholders", () => {
     const sandbox = makeTempDir("config-resource-placeholder");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources:
   values:
@@ -372,7 +372,7 @@ apps:
 
   test("loadResolvedGraph rejects duplicate resource env names", () => {
     const sandbox = makeTempDir("config-duplicate-resource");
-    const root = createRepo(path.join(sandbox, "root"), {
+    const root = createFiles(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
       "monke.yml": `resources:
   values:

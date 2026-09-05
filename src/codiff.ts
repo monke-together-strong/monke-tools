@@ -11,13 +11,6 @@ export const MINIMUM_CODIFF_VERSION_TEXT = MINIMUM_CODIFF_VERSION.join(".");
 const CODIFF_CASK = "nkzw-tech/tap/codiff";
 const INSTALL_CODIFF = `brew install --cask --require-sha ${CODIFF_CASK}`;
 
-/** Verify and resolve the supported Codiff executable synchronously. */
-export function verifyCodiff(runtime: Runtime) {
-  const executable = resolveCodiff(runtime);
-  validateCodiffVersion(runtime.exec(executable, ["--version"], { allowFailure: true }));
-  return executable;
-}
-
 /** Verify Codiff while independent Diff discovery continues. */
 export async function verifyCodiffAsync(runtime: Runtime) {
   const executable = resolveCodiff(runtime);

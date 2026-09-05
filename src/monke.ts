@@ -11,7 +11,6 @@ import { openCodexWorkspace } from "./codex.ts";
 import { reconcileCodiff } from "./codiff.ts";
 import { loadResolvedGraph } from "./config.ts";
 import {
-  syncRootEnvFile,
   syncRootEnvFileWithRemovals,
   rewriteManagedEnvFiles,
   seedWorktreeFiles,
@@ -1442,7 +1441,7 @@ export function runSetup(runtime: Runtime) {
     throw new MonkeError(`Missing repo config for ${context.sourceRoot}`);
   }
 
-  syncRootEnvFile(
+  syncRootEnvFileWithRemovals(
     context.sourceRoot,
     repoConfig.externalInOrder.map((externalRepo) => ({
       env: externalRepo.pathEnv,

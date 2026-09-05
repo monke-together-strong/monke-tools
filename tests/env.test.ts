@@ -19,13 +19,10 @@ describe("environment rewriting", () => {
     write(sourceRoot, "node_modules/example/.env", "DEPENDENCY=1\n");
     symlinkSync(path.join(sourceRoot, "apps"), path.join(sourceRoot, "linked-apps"));
     const config: RepoConfig = {
-      appsByLabel: new Map(),
       appsInOrder: [],
       configPath: path.join(sourceRoot, "monke.yml"),
       externalInOrder: [],
       externalMappingsInOrder: [],
-      externalTargetApps: new Set(),
-      localMappingsByPort: new Map(),
       localPortOrder: [],
       resourceCommandsInOrder: [],
       resourceValuesInOrder: [],
