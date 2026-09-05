@@ -17,6 +17,12 @@ Check [./CONTEXT.md](./CONTEXT.md) for terminology questions.
 - Route application command execution through `Runtime.exec` and `Runtime.execAsync`; use direct Bun subprocess APIs only at release and developer-script boundaries.
 - Retain `node:fs` and `node:path` for synchronous metadata, permissions, symlinks, and atomic filesystem operations.
 
+## Imported guidance
+
+Treat `skills/imported/` and `skills/references/imported/` as upstream snapshots.
+Refresh them through the import/update tooling; do not edit their contents locally.
+Report findings against imported guidance for an upstream fix and later refresh.
+
 ## Task Tracking
 
 - [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues)

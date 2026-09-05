@@ -1,24 +1,12 @@
 # Browser Video Proof
 
-Use this when a PR changes a browser-visible workflow and the reviewer would
-benefit from seeing the behavior run end-to-end.
-
-## When To Record
-
-Record video proof when the PR changes one of these:
-
-- Auth, onboarding, navigation, redirects, or routing.
-- Upload/download, drag/drop, keyboard shortcuts, or multi-step forms.
-- UI state that is hard to trust from screenshots alone.
-- A bug fix where the failure was visual, timing-sensitive, or workflow-shaped.
-
-Prefer screenshots instead when one final visual state proves the change.
+Produce an MP4 showing the changed workflow and its successful end state.
 
 ## Preferred Path: Playwright Video
 
 Use Playwright when the workflow can be scripted deterministically.
 
-1. Start the app under test.
+1. Reuse the running manual-test target, or start the app from the PR worktree.
 
    Completion criterion: the target URL is reachable.
 
@@ -86,12 +74,4 @@ Use Playwright when the workflow can be scripted deterministically.
    Completion criterion: `ffprobe -hide_banner proof.mp4` reports H.264 video in
    an MP4 container.
 
-7. Pass the final MP4 through the
-   [proof asset review](proof-asset-review.md).
-
-   Completion criterion: the MP4 passes the Evidence Gate.
-
-8. Upload the MP4 with `$github-image-upload`.
-
-   Completion criterion: `$github-image-upload` returns a
-   `https://github.com/user-attachments/assets/...` URL for the MP4.
+Deliverable: the final MP4 path, ready for visual inspection.

@@ -15,10 +15,11 @@ A direct "merge this PR" / "merge PR #123" is approval.
 4. Close relevant issues and sub-issues - for instance, PRD issue, and breakdown issues of that PRD.
 5. Clean up only proven candidates: `git worktree remove <path>` for separate clean PR worktrees; delete the local PR branch only when unused and still at `headRefOid`. If the current checkout is the PR branch, keep it as the surviving checkout and switch it to `baseRefName`.
 6. Update the surviving checkout: use the checkout that remains open for the user after cleanup; run `git fetch origin`, `git switch <baseRefName>` if needed, then `git pull --ff-only origin <baseRefName>`.
-7. Execute the post-merge contract from the merged PR body.
+7. Execute any post-merge contract from the merged PR body.
    - Use only `## Post-Merge Verification` from `gh pr view <number> --json body` as the contract source.
    - If the section says `Not required: <reason>`, report that reason and skip verification.
-   - If the section is missing or lacks the environment, deployment gate, or checks, pause and ask the user for the missing contract.
+   - If the section is absent, inspect the merged change and task requirements. Skip with a reason when pre-merge evidence is sufficient (for example, docs or a local CLI cleanup). If correctness depends on deployment, migration, or the target environment, ask for the missing contract.
+   - If a required contract lacks the environment, deployment gate, or checks, ask for the missing details.
    - Wait for the deployment gate when the section gives a discoverable signal; otherwise ask before testing.
    - Run the listed checks and record pass/fail evidence for each one.
 8. Run `mt cleanup` when `mt` is available; report if it is unavailable or fails.

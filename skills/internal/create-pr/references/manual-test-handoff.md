@@ -1,20 +1,22 @@
 # Manual-Test Handoff
 
-Use this for a locally runnable UI or API.
+Start the app from the PR worktree using its documented command. Verify the
+changed route or endpoint responds and leave the app running for the handoff.
 
-Start the app from the PR worktree using its documented command. Open the link
-to confirm it works and leave the app running.
-
-In the final response, give 2–5 direct links to changed behavior. For each,
-state what to do and what should happen. Include a backing file path only when
-the test involves editing that file.
+In the final response, give the smallest set of reproducible steps covering the
+changed behavior. Use direct links for a UI and copyable requests for an API;
+state the action and expected result for each. Include any required fixture or
+access setup, and a backing file path when the test involves editing that file.
 
 ```markdown
 ## Manual Testing
+
 - [Selected-file reveal](http://localhost:4312/f/fixture/index.md) — Follow
   **Relative Target**; its folder opens and the selected file scrolls into view.
 - [Live Markdown update](http://localhost:4312/f/fixture/fresh-view.md) — Edit
   [fresh-view.md](/path/to/fresh-view.md); the open page updates.
 ```
 
-If the app cannot be started, report `Unavailable: <reason>`.
+The handoff is complete when the target is responding and each supplied step
+has been exercised with its expected result. If unavailable, report the reason;
+required proof is still governed by [Choose the evidence](../SKILL.md#choose-the-evidence).
