@@ -20,8 +20,7 @@ import { prAnalysisPath, readRunWindow, retroHome, runDir } from "./store.ts";
 import type { RetrospectiveWindow } from "./types.ts";
 
 export interface CommandResult {
-  error?: string;
-  status: number | null;
+  status: number;
   stderr: string;
   stdout: string;
 }
@@ -833,8 +832,7 @@ function defaultRunner(command: string, args: string[], options: { cwd?: string 
 function runText(exec: CommandRunner, command: string, args: string[], options?: { cwd?: string }) {
   const result = exec(command, args, options);
   if (result.status !== 0) {
-    const detail =
-      [result.stderr, result.stdout, result.error].find(isNonEmptyString) ?? "unknown error";
+    const detail = [result.stderr, result.stdout].find(isNonEmptyString) ?? "unknown error";
     throw new Error(`${command} ${args.join(" ")} failed: ${detail}`);
   }
   return result.stdout;
