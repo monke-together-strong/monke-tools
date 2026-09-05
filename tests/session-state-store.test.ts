@@ -91,10 +91,9 @@ describe("Session state store", () => {
       run: "identity.ts",
       timeoutSeconds: 60
     };
-    const current = { session: "second", sourceRoot: "/repo" };
+    const current = { rootSourceRoot: "/repo", session: "second", sourceRoot: "/repo" };
     const values = {
       ...current,
-      rootSourceRoot: "/repo",
       values: [{ env: "VALUE", value: "owned" }]
     };
     expect(store.resourceCommandInput({ ...current, command })).toStrictEqual({ OUTPUT: [] });

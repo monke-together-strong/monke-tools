@@ -133,13 +133,14 @@ export class SessionStateStore {
 
   resourceCommandInput(options: {
     command: ResourceCommandConfig;
+    rootSourceRoot: string;
     session: string;
     sourceRoot: string;
   }) {
     const valuesByEnv = new Map(options.command.outputs.map((env) => [env, new Set<string>()]));
 
     for (const state of this.#states.values()) {
-      if (state.session === options.session) {
+      if (this.key(state) === this.key(options)) {
         continue;
       }
 

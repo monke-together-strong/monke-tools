@@ -242,6 +242,7 @@ function resolveRepoResourceCommands(
     },
     repoConfig: context.repoConfig,
     resourceValues: context.resolvedResourceValues.values,
+    rootSourceRoot: context.rootSourceRoot,
     runtime: context.runtime,
     session: context.session,
     store: context.store,

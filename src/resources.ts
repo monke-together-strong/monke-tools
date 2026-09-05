@@ -93,6 +93,7 @@ export async function resolveResourceCommands(options: {
   onResolvedCommandOutputs: (commands: ResourceCommandState[]) => void;
   repoConfig: RepoConfig;
   resourceValues: ResourceValueState[];
+  rootSourceRoot: string;
   runtime: Runtime;
   session: string;
   store: SessionStateStore;
@@ -121,6 +122,7 @@ export async function resolveResourceCommands(options: {
       async () => {
         const stdin = options.store.resourceCommandInput({
           command,
+          rootSourceRoot: options.rootSourceRoot,
           session: options.session,
           sourceRoot: options.repoConfig.sourceRoot
         });

@@ -8,14 +8,12 @@ import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/session-state-store.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
 import {
-  completeSessionState,
   createRepo,
   git,
   installCodexUrlOpenShim,
   installGitShim,
   installShShim,
   makeTempDir,
-  materializedRepoState,
   read,
   readSingleYamlFile,
   runMonke,
@@ -654,14 +652,16 @@ external:
     expect(existsSync(path.join(home, "worktrees", "root", "collision"))).toBeFalsy();
   });
 
-  test("resource command retained inputs are scoped to the declaring repo across root graphs", () => {
-    const sandbox = makeTempDir("multi-repo-resource-command-declaring-scope");
-    const binDirectory = path.join(sandbox, "bin");
-    installShShim(binDirectory);
-    const home = path.join(sandbox, "home");
+  test.each(["alpha", "beta"])(
+    "resource command retained inputs span root graphs when the second Session is %s",
+    (secondSession) => {
+      const sandbox = makeTempDir("multi-repo-resource-command-declaring-scope");
+      const binDirectory = path.join(sandbox, "bin");
+      installShShim(binDirectory);
+      const home = path.join(sandbox, "home");
 
-    const depRoot = createRepo(path.join(sandbox, "dep"), {
-      "monke.yml": `resources:
+      const depRoot = createRepo(path.join(sandbox, "dep"), {
+        "monke.yml": `resources:
   commands:
     e2e-symbols:
       run: ./scripts/e2e-symbols.ts
@@ -675,7 +675,7 @@ apps:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-      "scripts/e2e-symbols.ts": `import { writeFileSync } from "node:fs";
+        "scripts/e2e-symbols.ts": `import { writeFileSync } from "node:fs";
 
 export default function ({ previous }) {
   writeFileSync("command-stdin.json", JSON.stringify(previous));
@@ -685,12 +685,12 @@ export default function ({ previous }) {
   return { E2E_FLOW1_SYMBOL: value };
 }
 `,
-      "services/db/.env.local": "PORT=5432\n"
-    });
+        "services/db/.env.local": "PORT=5432\n"
+      });
 
-    const rootA = createRepo(path.join(sandbox, "root-a"), {
-      "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
-      "monke.yml": `apps:
+      const rootA = createRepo(path.join(sandbox, "root-a"), {
+        "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+        "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -704,10 +704,10 @@ external:
         app: api
         env: DATABASE_URL
 `
-    });
-    const rootB = createRepo(path.join(sandbox, "root-b"), {
-      "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
-      "monke.yml": `apps:
+      });
+      const rootB = createRepo(path.join(sandbox, "root-b"), {
+        "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
+        "monke.yml": `apps:
   api:
     path: apps/api
     envFile: .env.local
@@ -721,43 +721,28 @@ external:
         app: api
         env: DATABASE_URL
 `
-    });
+      });
 
-    saveSessionState(
-      home,
-      completeSessionState({
-        repos: [
-          materializedRepoState({
-            cleanupEligible: true,
-            resourceCommandOutputs: [
-              {
-                name: "e2e-symbols",
-                outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
-              }
-            ],
-            sourceRoot: depRoot,
-            worktreePath: path.join(sandbox, "missing-alpha-dep")
-          }),
-          materializedRepoState({
-            sourceRoot: rootA,
-            worktreePath: path.join(sandbox, "missing-alpha-root")
-          })
-        ],
-        rootSourceRoot: rootA,
-        session: "alpha"
-      })
-    );
-    runMonke({
-      args: ["spawn", "beta"],
-      binDirectory,
-      cwd: rootB,
-      monkeHome: home
-    });
+      runMonke({
+        args: ["spawn", "alpha"],
+        binDirectory,
+        cwd: rootA,
+        monkeHome: home
+      });
+      runMonke({
+        args: ["spawn", secondSession],
+        binDirectory,
+        cwd: rootB,
+        monkeHome: home
+      });
 
-    const betaDepWorktree = getExpectedWorktreePath(home, depRoot, "beta");
-    expect(read(betaDepWorktree, "command-stdin.json")).toContain("SOL/USDT:USDT");
-    expect(read(betaDepWorktree, ".env")).toContain("E2E_FLOW1_SYMBOL=LINK/USDT:USDT\n");
-  });
+      const secondDepWorktree = getExpectedWorktreePath(home, depRoot, secondSession);
+      expect(JSON.parse(read(secondDepWorktree, "command-stdin.json"))).toStrictEqual({
+        E2E_FLOW1_SYMBOL: ["SOL/USDT:USDT"]
+      });
+      expect(read(secondDepWorktree, ".env")).toContain("E2E_FLOW1_SYMBOL=LINK/USDT:USDT\n");
+    }
+  );
 
   test("resource command return violation records an incomplete root repo and rerun heals external path env", () => {
     const sandbox = makeTempDir("multi-repo-resource-command-partial-root");
