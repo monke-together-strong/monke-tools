@@ -4,9 +4,10 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { resolveResourceCommands } from "../src/resources.ts";
-import { createRuntime, hashKey } from "../src/runtime.ts";
+import { hashKey } from "../src/runtime.ts";
 import type { RepoConfig, Runtime } from "../src/types.ts";
 import { makeTempDir } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("resources", () => {
   test("resource command lock covers command execution and immediate persistence", async () => {
@@ -40,7 +41,7 @@ describe("resources", () => {
       sourceRoot
     };
     const runtime: Runtime = {
-      ...createRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
+      ...createTestRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
       async execAsync(command, args, options) {
         expect(command).toBe("bun");
         expect(args?.[0]).toBe("--eval");
@@ -121,7 +122,7 @@ describe("resources", () => {
     const invocations: { args: string[] | undefined; command: string }[] = [];
 
     const runtime: Runtime = {
-      ...createRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
+      ...createTestRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
       async execAsync(command, args, _options) {
         invocations.push({ args, command });
         writeFileSync(

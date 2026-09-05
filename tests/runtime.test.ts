@@ -51,7 +51,7 @@ describe("runtime", () => {
       console.log(JSON.stringify([runtime.readLine(""), runtime.readLine(""), runtime.readLine("")]));
     `
       ],
-      { stdin: Buffer.from("café/日本語\\r\\nsecond/🍌") }
+      { stdin: Buffer.from("café/日本語\r\nsecond/🍌") }
     );
 
     expect(result.exitCode).toBe(0);
