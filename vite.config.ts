@@ -43,6 +43,15 @@ export default defineConfig({
     format: ["esm"],
     outDir: path.resolve(workspaceRoot, "packages/oxc-config/dist")
   },
+  resolve: {
+    alias: {
+      // Mirror Bun's text import for the checked runner asset during tests.
+      "./resource-command-runner.js": path.resolve(
+        workspaceRoot,
+        "src/resource-command-runner.js?raw"
+      )
+    }
+  },
   staged: {
     "*": "vp check --fix"
   },

@@ -7,7 +7,7 @@ import * as z from "zod";
 import { describeRedactedValue } from "./env.ts";
 import { MonkeError } from "./errors.ts";
 // oxlint-disable-next-line import/default -- The text loader exports source text, not the module's exports.
-import RESOURCE_COMMAND_MODULE_RUNNER from "./resource-command-runner.ts?raw" with { type: "text" };
+import RESOURCE_COMMAND_MODULE_RUNNER from "./resource-command-runner.js" with { type: "text" };
 import { withScopedLockAsync } from "./runtime.ts";
 import type { SessionStateStore } from "./session-state-store.ts";
 import type {

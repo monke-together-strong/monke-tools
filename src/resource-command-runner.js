@@ -1,3 +1,4 @@
+// @ts-check
 import { pathToFileURL } from "node:url";
 
 // oxlint-disable anti-slop/no-runtime-typeof -- This isolated process validates arbitrary repo-owned modules without depending on mt's libraries.
@@ -10,8 +11,10 @@ try {
     throw new Error("Missing resource command runner arguments");
   }
   const previousText = await Bun.stdin.text();
-  const previous: unknown = previousText.trim() ? JSON.parse(previousText) : {};
-  const resourceModule: unknown = await import(pathToFileURL(modulePath).href);
+  /** @type {unknown} */
+  const previous = previousText.trim() ? JSON.parse(previousText) : {};
+  /** @type {unknown} */
+  const resourceModule = await import(pathToFileURL(modulePath).href);
   if (
     typeof resourceModule !== "object" ||
     resourceModule === null ||
@@ -22,8 +25,9 @@ try {
   if (typeof resourceModule.default !== "function") {
     throw new TypeError(`Resource command module ${modulePath} default export must be a function`);
   }
+  /** @type {unknown} */
   // oxlint-disable-next-line typescript/no-unsafe-call -- The repo-owned export is callable above; its result stays unknown until the parent validates the output contract.
-  const value: unknown = await resourceModule.default({ previous });
+  const value = await resourceModule.default({ previous });
   await Bun.write(outputPath, JSON.stringify({ value }));
 } catch (error) {
   await Bun.write(
