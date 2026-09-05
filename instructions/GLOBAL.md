@@ -20,7 +20,6 @@
 ## Branching
 
 Follow git flow.
-Do not create `codex/` branches.
 
 ## Matt Pocock skills issue tracking
 
