@@ -35,13 +35,16 @@ import type {
   PrAnalysisManifest
 } from "../skills/internal/agent-session-retrospective/scripts/lib/pr-analysis.ts";
 import {
+  cleanRunDir,
   findingsPath,
   listFrozenSessions,
   loadFrozenSession,
   readBundle,
   readFindings,
   saveFrozenSession,
-  withRetroLock
+  withRetroLock,
+  writeReport,
+  writeReportArtifact
 } from "../skills/internal/agent-session-retrospective/scripts/lib/store.ts";
 import type {
   CanonicalSession,
@@ -1576,6 +1579,37 @@ describe("agent session retrospective", () => {
     );
   });
 
+  describe("retrospective run paths", () => {
+    test.each([
+      "",
+      " \t ",
+      ".",
+      "..",
+      "../retained",
+      "nested/run",
+      "/absolute",
+      "nested\\run",
+      "run\u0000id"
+    ])("rejects unsafe run identifier %j without removing another run", (runTs) => {
+      const root = path.join(dir, "retro");
+      const retainedPath = path.join(root, "runs", "retained", "evidence.json");
+      mkdirSync(path.dirname(retainedPath), { recursive: true });
+      writeFileSync(retainedPath, "retained evidence");
+
+      expect(() => {
+        cleanRunDir(root, runTs);
+      }).toThrow(/Invalid retrospective run identifier/u);
+      expect(() => writeReport(root, runTs, "report")).toThrow(
+        /Invalid retrospective run identifier/u
+      );
+      expect(() => writeReportArtifact(root, runTs, "session-sources", "sources")).toThrow(
+        /Invalid retrospective run identifier/u
+      );
+      expect(readFileSync(retainedPath, "utf-8")).toBe("retained evidence");
+      expect(existsSync(path.join(root, "reports"))).toBeFalsy();
+    });
+  });
+
   describe("retrospective lock", () => {
     const storeScript = path.resolve(
       import.meta.dirname,
@@ -1625,6 +1659,7 @@ describe("agent session retrospective", () => {
       expect(withRetroLock(dir, () => "recovered")).toBe("recovered");
     }, 15_000);
 
+    // The harness must outlive SQLite's five-second busy timeout plus worker startup and cleanup.
     test("serializes updates from competing processes", async () => {
       const counterPath = path.join(dir, "counter");
       writeFileSync(counterPath, "0");
@@ -1657,7 +1692,7 @@ describe("agent session retrospective", () => {
         }
         await Promise.all(workers.map((worker) => worker.exited));
       }
-    });
+    }, 15_000);
   });
 
   describe("retrospective CLI parsing", () => {
@@ -1665,6 +1700,32 @@ describe("agent session retrospective", () => {
       import.meta.dirname,
       "../skills/internal/agent-session-retrospective/scripts/run-retrospective.ts"
     );
+
+    test("rejects an empty equals-form run identifier while preserving unrelated evidence", () => {
+      const home = path.join(dir, "home");
+      const retainedPath = path.join(
+        home,
+        "agent-retrospectives",
+        "runs",
+        "retained",
+        "evidence.json"
+      );
+      mkdirSync(path.dirname(retainedPath), { recursive: true });
+      writeFileSync(retainedPath, "retained evidence");
+      const result = Bun.spawnSync([
+        process.execPath,
+        cliScript,
+        "--home",
+        home,
+        "commit",
+        "--run-ts=",
+        "--synthesis",
+        path.join(dir, "synthesis.md")
+      ]);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr.toString()).toContain("Invalid retrospective run identifier");
+      expect(readFileSync(retainedPath, "utf-8")).toBe("retained evidence");
+    });
 
     test.each([
       { args: ["collect", "--since=not-a-date"], error: /Invalid date/u },
