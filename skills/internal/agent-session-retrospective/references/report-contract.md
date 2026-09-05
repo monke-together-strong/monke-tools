@@ -75,7 +75,8 @@ Keep the section order above stable so cross-referencing prior report sets stays
 - `reports/<runTs>-retrospective.md` — the report.
 - `reports/<runTs>-session-sources.md` — transcript-derived supporting detail for the report.
 - `reports/<runTs>-pr-sources.md` — PR-derived supporting detail for the report.
-- `run.lock` — one run at a time.
+- `run-lock.sqlite` — a SQLite write transaction serializes retrospective commands; process exit
+  releases the lock. Report data remains in the files above.
 
 The frozen `sessions/` records are the durable corpus. Determinism lives at the corpus layer
 (a session id is analyzed once), not the analysis layer (the LLM may find different friction as

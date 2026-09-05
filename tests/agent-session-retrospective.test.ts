@@ -1,13 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  utimesSync,
-  writeFileSync
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -1591,70 +1582,48 @@ describe("agent session retrospective", () => {
       "../skills/internal/agent-session-retrospective/scripts/lib/store.ts"
     );
 
-    test("releases failed operations and leaves a replacement lock owned by someone else", () => {
-      const lockPath = path.join(dir, "run.lock");
+    test("releases the lock when an operation throws", () => {
       expect(() =>
         withRetroLock(dir, () => {
           throw new Error("operation failed");
         })
       ).toThrow("operation failed");
-      withRetroLock(dir, () => {
-        renameSync(lockPath, path.join(dir, "old.lock"));
-        writeFileSync(lockPath, "replacement owner");
-      });
-      expect(readFileSync(lockPath, "utf-8")).toBe("replacement owner");
-    });
-
-    test("reclaims abandoned incomplete metadata only after it is stale", () => {
-      const lockPath = path.join(dir, "run.lock");
-      writeFileSync(lockPath, "{");
-      const staleAt = new Date(Date.now() - 120_000);
-      utimesSync(lockPath, staleAt, staleAt);
       expect(withRetroLock(dir, () => "recovered")).toBe("recovered");
-      expect(existsSync(lockPath)).toBeFalsy();
     });
 
-    test.each(["initializing", "live"] as const)(
-      "waits for a %s owner instead of reclaiming its lock",
-      async (owner) => {
-        const lockPath = path.join(dir, "run.lock");
-        const enteredPath = path.join(dir, "entered");
-        writeFileSync(
-          lockPath,
-          owner === "initializing" ? "" : JSON.stringify({ acquiredAt: 0, pid: process.pid })
-        );
-        if (owner === "live") {
-          const staleAt = new Date(Date.now() - 120_000);
-          utimesSync(lockPath, staleAt, staleAt);
-        }
-        const worker = Bun.spawn(
-          [
-            process.execPath,
-            "--eval",
-            `
-        import { writeFileSync } from "node:fs";
+    test("times out behind a live owner and recovers after that owner is killed", async () => {
+      const holder = Bun.spawn(
+        [
+          process.execPath,
+          "--eval",
+          `
+        import { writeSync } from "node:fs";
         import { withRetroLock } from ${JSON.stringify(storeScript)};
-        process.stdout.write("attempting\\n");
-        withRetroLock(${JSON.stringify(dir)}, () => writeFileSync(${JSON.stringify(enteredPath)}, "entered"));
+        withRetroLock(${JSON.stringify(dir)}, () => {
+          writeSync(1, "holding\\n");
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
+        });
       `
-          ],
-          { stderr: "pipe", stdout: "pipe" }
-        );
+        ],
+        { stderr: "pipe", stdout: "pipe" }
+      );
+      try {
+        const reader = holder.stdout.getReader();
         try {
-          const reader = worker.stdout.getReader();
-          await reader.read();
-          reader.releaseLock();
-          await Bun.sleep(150);
-          expect(existsSync(enteredPath)).toBeFalsy();
-          rmSync(lockPath);
-          await expect(worker.exited).resolves.toBe(0);
-          expect(readFileSync(enteredPath, "utf-8")).toBe("entered");
+          const ready = await reader.read();
+          expect(new TextDecoder().decode(ready.value)).toBe("holding\n");
         } finally {
-          worker.kill();
-          await worker.exited;
+          reader.releaseLock();
         }
+        expect(() => withRetroLock(dir, () => "displaced live owner")).toThrow(
+          `Timed out waiting for retrospective lock at ${path.join(dir, "run-lock.sqlite")}`
+        );
+      } finally {
+        holder.kill("SIGKILL");
+        await holder.exited;
       }
-    );
+      expect(withRetroLock(dir, () => "recovered")).toBe("recovered");
+    }, 15_000);
 
     test("serializes updates from competing processes", async () => {
       const counterPath = path.join(dir, "counter");

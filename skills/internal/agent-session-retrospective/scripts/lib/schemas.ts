@@ -125,8 +125,3 @@ export const RepoMetaSchema = z.strictObject({
   version: z.literal(1)
 });
 export type RepoMeta = z.output<typeof RepoMetaSchema>;
-
-export const RetroLockMetadataSchema = z.strictObject({
-  acquiredAt: z.number().optional(),
-  pid: z.number().int().positive().optional()
-});
