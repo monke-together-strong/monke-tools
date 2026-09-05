@@ -1,6 +1,5 @@
 # Default PR Instructions
 
-- Keep the body short.
-- Link any source PRD; omit `PRD` when none exists.
-- Include required proof; omit `Proof` when it does not apply.
-- Keep the contract under the exact `## Post-Merge Verification` heading.
+Lead with the problem and resulting behavior, then relevant verification. A small
+PR usually needs one or two sentences and checks. Include only details that help
+a reviewer assess the change.

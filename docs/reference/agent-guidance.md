@@ -10,7 +10,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Spec**: A durable work target that records agreed behavior, implementation decisions, testing decisions, and scope for an agent to execute. A PRD can serve as a Spec when it carries that implementation contract.
 
-**Distributed skill**: Agent guidance distributed through the **Local tool install** so agents in a **Consumer repo** can use shared team workflows.
+**Distributed skill**: Agent guidance distributed through the **Active tool install** so agents in a **Consumer repo** can use shared team workflows.
 
 **Shared distributed skill**: A **Distributed skill** available to every selected compatible **Agent harness**.
 
@@ -140,8 +140,10 @@ owned guidance.
 A namespace is named `monke-tools`; each Agent skill root may contain one.
 A managed namespace contains one projection of compatible skills and shared
 references. Only skills are discoverable. Claude projects skills directly into
-its root with separate ownership tracking. Projections keep source changes live
-without copying skill contents.
+its root with separate ownership tracking. Local-install projections keep source
+changes live without copying skill contents. Release-install projections point
+into writable files in the active install, with original hashes retained in its
+manifest for update checks.
 
 Refresh may migrate a legacy namespace symlink or relink a projection to a new
 source tree. It preserves unrelated entries and refuses to overwrite non-symlinks

@@ -2,6 +2,10 @@
 
 See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminology.
 
+For install commands, target selection, updates, and troubleshooting, use the
+[installation guide](../../skills/internal/monke-tools-core/INSTALLATION.md).
+This reference covers implementation and release publication.
+
 ## Language
 
 **Local tool install**: A developer-machine install of monke-tools built from a source checkout and shared by all **Consumer repos** through the `mt` command.
@@ -74,3 +78,46 @@ install and performs no predecessor cleanup.
 
 A Codiff reconciliation failure after activation leaves the new install selected;
 retry that dependency with `mt install-dependencies`.
+
+## Release discovery and verification
+
+The public bootstrap reads `stable.tsv` from the dedicated
+`monke-tools-release-catalog` branch. It downloads the selected platform archive
+and checksums over HTTPS, verifies both assets against the catalog's SHA-256
+metadata, then checks the archive against its published checksum. Discovery,
+platform, download, checksum, or extraction failures never invoke bundle
+installation logic.
+
+Update discovers the highest stable `monke-tools-v*` version through the complete
+GitHub Releases API catalog, excluding drafts, prereleases, and other packages.
+It validates tag family, source provenance, platform compatibility, required
+assets, download origins, and GitHub SHA-256 metadata. Check-only mode performs
+no asset downloads, staging, reconciliation, cleanup, or activation.
+
+A mutating update downloads into a unique staging directory and verifies the
+bundle against published checksums and GitHub asset digests before activation.
+A clean release already matching the selected version needs no replacement.
+The next installation mutation discards recognized interrupted staging
+directories. Customized guidance is detected against manifest hashes before
+network access; the tool does not merge or migrate those edits.
+
+## Mainline releases
+
+A qualifying push to `main` publishes the next stable `monke-tools-v<version>`
+patch release. The serialized workflow derives the version from the highest
+stable monke-tools tag without committing a version bump back to `main`.
+Release-owned inputs include CLI source, root dependencies and build config,
+distributed guidance, global instructions, installers (including `install.sh`),
+and packaging. Documentation-only changes and changes confined to other
+workspace packages do not publish an mt release.
+
+Platform jobs build macOS arm64 and Linux x64 archives, execute `mt --version`,
+and run the shared archive verifier. Publication waits for both jobs, generates
+checksums, and re-verifies manifests, source commit, platform identities, and
+guidance hashes before attaching all assets to a draft and publishing it.
+Only after immutable release publication and verification does the workflow
+atomically advance the stable-catalog branch consumed by the bootstrap.
+
+PR CI owns the full test suite. Direct `main` pushes run `vp check`, platform
+builds, and release contract validation without rerunning `vp run test`.
+Tegami package versioning and publication use their own workflow.

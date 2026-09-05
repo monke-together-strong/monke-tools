@@ -1,46 +1,43 @@
 ---
 name: monke-tools-core
-description: Use monke-tools for session worktrees, env rewrites, dependency worktrees, and cleanup. Use whenever Codex needs to create, isolate, switch to, or repair worktrees in a repo with monke.yml or mt/monke-tools support; prefer mt spawn over raw git worktree commands for new session worktrees.
+description: Use mt for worktree creation, navigation, diff review, teardown, monke.yml configuration, installation, updates, and skill targets. Use for worktree tasks in repos with monke.yml or instructions requiring monke-tools.
 ---
 
 # monke-tools Core
 
-Use this skill when the current repo uses `mt` / monke-tools. A repo uses monke-tools when it has `monke.yml`, existing `mt-*` session worktrees, or local instructions mention `mt`.
-
-When creating an isolated branch/worktree for a task in a monke-tools repo, use `mt spawn <session>` from the source checkout instead of `git worktree add`. The session worktree is ready when dependency worktrees exist, env/path values are rewritten, and configured bootstrap behavior has completed or reported a clear failure.
-
-## Prerequisite
-
-The `mt` command must be available on `PATH`:
-
-```bash
-command -v mt
-```
-
-If it is missing or stale, ask the user to refresh the local install from the monke-tools checkout with `bun run install:local`.
+Use `mt spawn <session>` from the source checkout for new isolated work in a monke-tools repo. Follow the repo's branch naming rules and work in the resulting session checkout.
 
 ## Commands
 
-- `mt spawn <session> [--codex]`: create or update a Session worktree and its dependency worktrees. Use `--codex` when follow-up threads will use it; the flag opens it as a Codex workspace.
-- `mt swing [target] [--codex]`: navigate to an existing Session worktree, Ordinary worktree, Source checkout, Previous Swing target, or same-repo pull request. Use `--codex` when follow-up threads will use that checkout; the flag opens it as a Codex workspace.
-- `mt home`: print the resolved absolute Monke home path without creating it.
-- `mt materialize`: run inside a Session worktree to refresh Managed env file rewrites, Path env values, resources, and bootstrap behavior.
-- `mt setup`: run from a Source checkout to write Path env values into the Source checkout root `.env`.
-- `mt cleanup`: remove Session state records whose Dead worktrees no longer exist and run configured Cleanup commands; `mt cleanup --merged` additionally removes Session worktrees for Merge-cleanable Sessions whose branch is proven by a Merged PR (`--dry-run` to preview without removing).
-- `mt skills configure`: update which Agent skill roots receive monke-tools Distributed skills.
-- `mt skills local-install <source-checkout> [--targets <targets...>]`: record the Installed source checkout and install skills using explicit Codex, Claude, or Cursor targets, the saved preference, or interactive configuration when neither exists.
+- `mt spawn <session> [--codex]`: create or update a session worktree and its dependency worktrees. Use `--codex` when follow-up threads will use it; the flag opens the root session checkout as a Codex workspace.
+- `mt swing [target] [--codex]`: navigate to a session or linked-worktree branch, `^` for the source checkout, `-` for the previous target, or a same-repo PR (`pr:123` or URL). Omit the target for a picker. Use `--codex` when follow-up threads will use that checkout; the flag opens it as a Codex workspace.
+- `mt diff [-p|--pick]`: open Codiff for the current checkout using a remembered or inferred base, or a picker. Use `--pick` to choose explicitly. Bases contribute committed state; the current checkout includes staged, unstaged, and untracked changes.
+- `mt home`: print the resolved absolute monke home path without creating it, honoring `MONKE_HOME` and defaulting to `~/.monke`.
+- `mt materialize`: refresh env/path rewrites, resources, and bootstrap inside a session, reusing assigned ports.
+- `mt setup`: write dependency paths into the source checkout's root `.env`.
+- `mt chop [target]`: remove the current or selected session/worktree and run recorded session cleanup, preserving local branches. A session member selects the whole session; supply a target from the source checkout.
+- `mt cleanup`: remove dead-worktree state and run recorded cleanup. `--merged` additionally removes eligible sessions with merged-PR proof; preview with `--merged --dry-run`.
+- `mt update [--check]`: activate the latest stable release, or check without changing the install. Read [installation and updates](INSTALLATION.md) before updating, especially from a local build or customized release.
+- `mt skills configure`: change saved agent skill targets or reconcile their links and instructions.
 
-## Core Flows
+## Usage notes
 
-- Spawn a session worktree from the source checkout with `mt spawn <session>`; use the spawned session worktree for task work.
-- Refresh an existing Session from inside the Session worktree with `mt materialize`; completion requires Managed env file rewrites, Path env values, resources, and bootstrap behavior to finish or report a clear failure.
-- Update Source checkout Path env values with `mt setup`; do not use it as a replacement for Session materialization.
-- Clean stale monke-tools state with `mt cleanup`; report cleanup failures instead of deleting state by hand.
-- When editing or diagnosing `monke.yml`, read [MONKE-YML-REFERENCE.md](MONKE-YML-REFERENCE.md).
+Spawn creates a branch from source `HEAD` or reuses an existing branch at its tip. Dirty source changes carry into newly created worktrees only when that tip equals source `HEAD`; existing worktrees keep their contents. Use `--no-dirty` to reject dirty sources, or `-m` (`--main`, `--master`) for a fresh session from the default branch without carrying changes.
 
-## Rules
+Explicit PR navigation fetches the PR head and creates a session if needed; diverged local heads block navigation. Stored targets and picker selections do not revalidate PR heads. Fork PRs are unsupported.
 
-- Follow the consumer repo's own `AGENTS.md`, branching, task, and test rules.
-- Do not run `mt materialize` from a source checkout; use `mt spawn` or `mt setup` there.
-- Do not hand-edit monke-tools session state unless explicitly debugging state corruption.
-- If `mt` behavior seems stale after monke-tools source changes, refresh the local install from the monke-tools checkout with `bun run install:local`.
+Run subsequent agent commands with the resolved checkout as their working directory. Shell navigation requires an active shell adapter; `--codex` opens a workspace without creating a thread.
+
+A session is ready after dependencies, env/path rewrites, resources, and bootstrap succeed. On failure, report the failing repo and retry command; a created worktree alone is incomplete.
+
+## Remove and recover
+
+Resolve the target scope before removal. Dirty files block `chop`; use `--force` only when discarding them is authorized. Ignored files are always deleted with removed worktrees. Ordinary worktrees accept registered branches or paths; detached worktrees require current-location or path selection. Source checkouts are not removal targets.
+
+Failed cleanup retains state and resources. Diagnose the failure, then retry `mt chop <session>`, even if its worktrees are gone; recorded cleanup commands run root-first and may rerun. Preserve session state for recovery. Teardown is complete when removal and finalization succeed.
+
+## Configuration and installation
+
+When editing or diagnosing `monke.yml`, read the [configuration reference](MONKE-YML-REFERENCE.md).
+
+For missing or stale mt, local builds, release updates, skill targets, shell integration, or Codiff dependencies, read [installation and updates](INSTALLATION.md).
