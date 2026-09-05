@@ -6,8 +6,6 @@ import * as z from "zod";
 
 import { describeRedactedValue } from "./env.ts";
 import { MonkeError } from "./errors.ts";
-// oxlint-disable-next-line import/default -- The text loader exports source text, not the module's exports.
-import RESOURCE_COMMAND_MODULE_RUNNER from "./resource-command-runner.js" with { type: "text" };
 import { withScopedLockAsync } from "./runtime.ts";
 import type { SessionStateStore } from "./session-state-store.ts";
 import type {
@@ -22,6 +20,31 @@ import type {
 type ResourceCommandInput = Record<string, string[]>;
 
 const RESOURCE_COMMAND_RUNNER_ARGV = "monke-resource-command-runner";
+// Runs in the repo's Bun process. Keep inputs in argv/stdin and results separate from logs.
+const RESOURCE_COMMAND_MODULE_RUNNER = String.raw`
+import { pathToFileURL } from "node:url";
+
+const [, runnerArgv, modulePath, outputPath] = process.argv;
+try {
+  if (runnerArgv !== "monke-resource-command-runner" || !modulePath || !outputPath) {
+    throw new Error("Missing resource command runner arguments");
+  }
+  const previousText = await Bun.stdin.text();
+  const previous = previousText.trim() ? JSON.parse(previousText) : {};
+  const resourceModule = await import(pathToFileURL(modulePath).href);
+  if (typeof resourceModule !== "object" || resourceModule === null || !("default" in resourceModule)) {
+    throw new Error("Resource command module " + modulePath + " must export a default function");
+  }
+  if (typeof resourceModule.default !== "function") {
+    throw new TypeError("Resource command module " + modulePath + " default export must be a function");
+  }
+  const value = await resourceModule.default({ previous });
+  await Bun.write(outputPath, JSON.stringify({ value }));
+} catch (error) {
+  await Bun.write(Bun.stderr, (error instanceof Error && error.stack ? error.stack : String(error)) + "\n");
+  process.exit(1);
+}
+`;
 const ResourceCommandRunnerEnvelopeSchema = z.strictObject({ value: z.unknown() });
 const ResourceCommandReturnSchema = z.record(
   z.string(),
