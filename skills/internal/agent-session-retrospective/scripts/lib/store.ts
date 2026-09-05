@@ -1,23 +1,10 @@
-import {
-  closeSync,
-  existsSync,
-  fstatSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  rmdirSync,
-  unlinkSync,
-  writeFileSync
-} from "node:fs";
-import type { Stats } from "node:fs";
+import { Database, SQLiteError } from "bun:sqlite";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
 import { parse, stringify } from "yaml";
-import * as z from "zod";
+import type * as z from "zod";
 
 import { hashKey, sessionHashKey } from "./identity.ts";
 import {
@@ -25,8 +12,7 @@ import {
   RepoBundleSchema,
   RepoFindingsSchema,
   RepoMetaSchema,
-  RetrospectiveWindowSchema,
-  RetroLockMetadataSchema
+  RetrospectiveWindowSchema
 } from "./schemas.ts";
 import type {
   AgentKind,
@@ -201,111 +187,29 @@ export function listReportPaths(root: string) {
 
 // --- lock (one run at a time) ------------------------------------------------
 
-const STALE_LOCK_AGE_MS = 60_000;
-const LOCK_RETRY_INTERVAL_MS = 50;
-
 export function withRetroLock<T>(root: string, callback: () => T) {
-  const lockPath = path.join(root, "run.lock");
+  const lockPath = path.join(root, "run-lock.sqlite");
   mkdirSync(path.dirname(lockPath), { recursive: true });
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  let release = tryAcquireRetroLock(lockPath);
-  while (!release) {
-    if (Date.now() >= deadline) {
-      throw new Error(`Timed out waiting for retrospective lock at ${lockPath}`);
-    }
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LOCK_RETRY_INTERVAL_MS);
-    release = tryAcquireRetroLock(lockPath);
-  }
+  const database = new Database(lockPath, { create: true });
   try {
-    return callback();
-  } finally {
-    release();
-  }
-}
-
-function tryAcquireRetroLock(lockPath: string) {
-  if (existsSync(`${lockPath}.reclaim`)) {
-    return;
-  }
-  let fd: number;
-  try {
-    fd = openSync(lockPath, "wx", 0o600);
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) {
-      throw error;
-    }
-    evictIfStale(lockPath);
-    return;
-  }
-  const identity = fstatSync(fd);
-  try {
-    writeFileSync(fd, JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }), "utf-8");
-  } catch (error) {
-    closeSync(fd);
-    removeOwnedLock(lockPath, identity);
-    throw error;
-  }
-  return () => {
+    database.run(`PRAGMA busy_timeout = ${LOCK_TIMEOUT_MS}`);
     try {
-      removeOwnedLock(lockPath, identity);
-    } finally {
-      closeSync(fd);
-    }
-  };
-}
-
-/** Only one contender may inspect and reclaim a stale lock at a time. */
-function evictIfStale(lockPath: string) {
-  const reclaimPath = `${lockPath}.reclaim`;
-  try {
-    mkdirSync(reclaimPath);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "EEXIST") {
-      return;
-    }
-    throw error;
-  }
-  try {
-    const identity = lstatSync(lockPath);
-    let stale = Date.now() - identity.mtimeMs > STALE_LOCK_AGE_MS;
-    try {
-      const meta = parseJsonFile(lockPath, RetroLockMetadataSchema);
-      if (meta.pid !== undefined) {
-        try {
-          process.kill(meta.pid, 0);
-          stale = false;
-        } catch (error) {
-          stale = error instanceof Error && "code" in error && error.code === "ESRCH";
-        }
-      }
+      database.run("BEGIN IMMEDIATE");
     } catch (error) {
-      if (!(error instanceof SyntaxError || error instanceof z.ZodError)) {
-        throw error;
+      if (error instanceof SQLiteError && error.code === "SQLITE_BUSY") {
+        throw new Error(`Timed out waiting for retrospective lock at ${lockPath}`, {
+          cause: error
+        });
       }
-      // Incomplete metadata may belong to a process initializing a fresh lock.
-    }
-    if (stale) {
-      removeOwnedLock(lockPath, identity);
-    }
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
       throw error;
+    }
+    try {
+      return callback();
+    } finally {
+      database.run("ROLLBACK");
     }
   } finally {
-    rmdirSync(reclaimPath);
-  }
-}
-
-function removeOwnedLock(lockPath: string, identity: Pick<Stats, "dev" | "ino">) {
-  try {
-    const current = lstatSync(lockPath);
-    if (current.dev === identity.dev && current.ino === identity.ino) {
-      unlinkSync(lockPath);
-    }
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
-      throw error;
-    }
+    database.close();
   }
 }
 
