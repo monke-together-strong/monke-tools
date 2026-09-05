@@ -387,10 +387,8 @@ function activateStagedInstall(options: {
   }
   const stableMt = path.join(options.homeDirectory, ".local", "bin", "mt");
   const stableMonke = path.join(options.homeDirectory, ".local", "bin", "monke");
-  const obsoleteCommand = path.join(options.homeDirectory, ".local", "bin", "monke-tools");
   assertCommandEntryCanBeReplaced(stableMt);
   assertCommandEntryCanBeReplaced(stableMonke);
-  assertCommandEntryCanBeReplaced(obsoleteCommand);
   assertDirectoryMutationAccess(path.dirname(stableMt), "Stable command destination");
 
   writeFileSync(
@@ -411,7 +409,6 @@ function activateStagedInstall(options: {
   try {
     installStableCommand(stableMt, path.join(currentPointer, "mt"));
     installStableCommand(stableMonke, stableMt);
-    rmSync(obsoleteCommand, { force: true });
     symlinkSync(path.relative(options.monkeHome, installRoot), temporaryPointer, "dir");
     options.runtime.installationActivationBoundary?.("pointer-replacement");
     renameSync(temporaryPointer, currentPointer);

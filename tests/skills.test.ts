@@ -78,11 +78,7 @@ describe("skills", () => {
       "---\nname: monke-tools-core\n---\n"
     );
     write(sourceCheckout, "skills/imported/tdd/SKILL.md", "---\nname: tdd\n---\n");
-    write(
-      sourceCheckout,
-      "skills/codex/codex-chrome-use/SKILL.md",
-      "---\nname: codex-chrome-use\n---\n"
-    );
+    write(sourceCheckout, "skills/codex/example/SKILL.md", "---\nname: example\n---\n");
     write(sourceCheckout, "skills/references/internal/README.md", "shared reference\n");
 
     reconcileSkillNamespaces({
@@ -122,11 +118,7 @@ describe("skills", () => {
       "---\nname: monke-tools-core\n---\n"
     );
     write(sourceCheckout, "skills/imported/tdd/SKILL.md", "---\nname: tdd\n---\n");
-    write(
-      sourceCheckout,
-      "skills/codex/codex-chrome-use/SKILL.md",
-      "---\nname: codex-chrome-use\n---\n"
-    );
+    write(sourceCheckout, "skills/codex/example/SKILL.md", "---\nname: example\n---\n");
 
     reconcileSkillNamespaces({
       cwd: sandbox,
@@ -163,7 +155,7 @@ describe("skills", () => {
     );
     expect(lstatSync(tddLink).isSymbolicLink()).toBeTruthy();
     expect(readlinkSync(tddLink)).toBe(path.join(sourceCheckout, "skills", "imported", "tdd"));
-    expect(existsSync(path.join(claudeSkillRoot, "codex-chrome-use"))).toBeFalsy();
+    expect(existsSync(path.join(claudeSkillRoot, "example"))).toBeFalsy();
     expect(existsSync(path.join(claudeSkillRoot, "monke-tools"))).toBeFalsy();
 
     reconcileSkillNamespaces({

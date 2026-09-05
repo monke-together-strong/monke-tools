@@ -113,8 +113,6 @@ export interface LocalMapping {
 }
 
 export interface ExternalMapping {
-  dependencyLabel: string;
-  dependencyRoot: string;
   portKey: string;
   targetApp: string;
   targetEnv: string;
@@ -125,7 +123,6 @@ export interface AppConfig {
   label: string;
   localMappings: LocalMapping[];
   relativeEnvFile: string;
-  relativePath: string;
 }
 
 export interface ExternalRepoConfig {
@@ -133,7 +130,6 @@ export interface ExternalRepoConfig {
   label: string;
   mappings: ExternalMapping[];
   pathEnv: string;
-  relativePath: string;
 }
 
 /** A deterministic Resource value declared by one repo in monke.yml. */
@@ -157,7 +153,6 @@ export interface ResourceCommandConfig {
 }
 
 export interface RepoConfig {
-  appsByLabel: Map<string, AppConfig>;
   appsInOrder: AppConfig[];
   bootstrapCommand?: string;
   /** Repo-owned command run during Cleanup for dead session worktrees. */
@@ -165,8 +160,6 @@ export interface RepoConfig {
   configPath: string;
   externalInOrder: ExternalRepoConfig[];
   externalMappingsInOrder: ExternalMapping[];
-  externalTargetApps: Set<string>;
-  localMappingsByPort: Map<string, LocalMapping[]>;
   localPortOrder: string[];
   /** Dynamic Resource commands declared by this repo, in YAML order. */
   resourceCommandsInOrder: ResourceCommandConfig[];
@@ -184,7 +177,6 @@ export interface RepoMaterializationResult {
 export type {
   AssignedPort,
   RepoReservation,
-  ResourceCommandOutputState,
   ResourceCommandState,
   ResourceValueState,
   SessionRepoState,

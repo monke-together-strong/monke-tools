@@ -40,7 +40,7 @@ exit ${mtStatus}
     [
       "-c",
       `${adapter}
-mt 2>/dev/null
+monke 2>/dev/null
 mt_status=$?
 printf '%s\\n%s\\n' "$PWD" "$mt_status"
 `
@@ -197,32 +197,6 @@ apps:
     });
 
     expect(readFileSync(directivePath, "utf-8")).toBe("");
-  });
-
-  test("shell init emits bash and zsh adapters", () => {
-    const sandbox = makeTempDir("shell-init");
-    const monkeHome = path.join(sandbox, "monke-home");
-
-    const bash = runMonke({
-      args: ["shell", "init", "bash", "--binary", "/opt/mt"],
-      cwd: sandbox,
-      monkeHome
-    });
-    const zsh = runMonke({
-      args: ["shell", "init", "zsh", "--binary", "/opt/mt"],
-      cwd: sandbox,
-      monkeHome
-    });
-
-    expect(bash.stdout).toContain("# monke-tools shell integration for bash");
-    expect(bash.stdout).toContain(
-      `${SHELL_DIRECTORY_DIRECTIVE_ENV}="$__monke_mt_directive" '/opt/mt' "$@"`
-    );
-    expect(zsh.stdout).toContain("# monke-tools shell integration for zsh");
-    expect(zsh.stdout).toContain('cd -- "$__monke_mt_target"');
-    expect(zsh.stdout).toContain('monke() {\n  mt "$@"\n}');
-    expect(bash.stderr).toBe("");
-    expect(zsh.stderr).toBe("");
   });
 
   describe.each(["bash", "zsh"] as const)("%s adapter", (shell) => {

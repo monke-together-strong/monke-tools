@@ -163,13 +163,19 @@ session: banana
 generation:
   number: 1
   status: complete
-repos: []
+repos:
+  - sourceRoot: ${sourceRoot}
+    worktreePath: /worktree
+    assignedPorts: []
+    cleanupEligible: false
+    preparationStatus: prepared
+    materializationStatus: materialized
 typo: true
 `
     );
 
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(
-      new RegExp(`Invalid ${RegExp.escape(statePath)}`, "u")
+      new RegExp(`Invalid ${RegExp.escape(statePath)}[\\s\\S]*typo`, "u")
     );
   });
 
@@ -933,13 +939,10 @@ size: 1000
 
 function makeRepoConfig(sourceRoot: string, localPortOrder: string[]): RepoConfig {
   return {
-    appsByLabel: new Map(),
     appsInOrder: [],
     configPath: path.join(sourceRoot, "monke.yml"),
     externalInOrder: [],
     externalMappingsInOrder: [],
-    externalTargetApps: new Set(),
-    localMappingsByPort: new Map(),
     localPortOrder,
     resourceCommandsInOrder: [],
     resourceValuesInOrder: [],

@@ -4,7 +4,6 @@ import type { Runtime } from "./types.ts";
 
 /** Intent-level CLI logger that keeps status output on stderr. */
 export interface Logger {
-  error: (message: string) => void;
   hint: (message: string) => void;
   info: (message: string) => void;
   progress: (message: string) => void;
@@ -16,9 +15,6 @@ export function createLogger(runtime: Runtime): Logger {
   const colors = createColors(shouldUseColor(runtime));
 
   return {
-    error(message) {
-      runtime.writeStderr(`${colors.red(message)}\n`);
-    },
     hint(message) {
       runtime.writeStderr(`${colors.dim(message)}\n`);
     },

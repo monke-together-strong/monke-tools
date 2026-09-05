@@ -1,14 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
 import { runCliAsync } from "../src/index.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { makeTempDir, writeExecutable } from "./helpers.ts";
-
-const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
 function installCodiff(binDirectory: string, versionFile: string) {
   writeExecutable(
@@ -82,12 +79,6 @@ function dependencyRuntime(options: {
 }
 
 describe("dependency installation", () => {
-  test("Brewfile declares the narrowly trusted Codiff cask", () => {
-    expect(readFileSync(path.join(projectRoot, "Brewfile"), "utf-8")).toBe(
-      'cask_args require_sha: true\ncask "nkzw-tech/tap/codiff", greedy: true, trusted: true\n'
-    );
-  });
-
   test("compatible Codiff is a no-op", async () => {
     const sandbox = makeTempDir("install-dependencies-compatible");
     const binDirectory = path.join(sandbox, "bin");

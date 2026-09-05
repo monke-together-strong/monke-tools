@@ -724,11 +724,6 @@ function acquireLockPathAsync(lockPath: string) {
   });
 }
 
-/** Run a synchronous callback while holding a lock scoped inside the monke home directory. */
-export function withScopedLock<T>(home: string, namespace: string, callback: () => T) {
-  return withLockPath(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
-}
-
 /** Run asynchronous work while holding a lock scoped inside the monke home directory. */
 export async function withScopedLockAsync<T>(
   home: string,

@@ -193,11 +193,6 @@ export interface ResolveSkillSelectorSlugMappingsOptions {
   source: string;
 }
 
-/** Parses upstream skill selectors from grouped `skills add -l` output. */
-export function parseAvailableSkillNames(output: string) {
-  return parseAvailableSkillGroups(output).flatMap((group) => group.skills);
-}
-
 /** Parses upstream skill groups and selectors from `skills add -l` output. */
 export function parseAvailableSkillGroups(output: string) {
   const lines = stripTerminalEscapes(output).split(/\r?\n/u);
@@ -292,12 +287,6 @@ export function writeImportRecipeStore(repoRoot: string, store: SkillImportRecip
   const temporaryStorePath = `${storePath}.tmp`;
   writeFileSync(temporaryStorePath, `${JSON.stringify(normalizedStore, null, 2)}\n`, "utf-8");
   renameSync(temporaryStorePath, storePath);
-}
-
-/** Records Imported guidance ownership, merging compatible imports for the same source. */
-export function recordImportedGuidance(repoRoot: string, input: RecordImportedGuidanceInput) {
-  const store = mergeImportedGuidanceIntoRecipeStore(readImportRecipeStore(repoRoot), input);
-  writeImportRecipeStore(repoRoot, store);
 }
 
 /** Lists Skill slugs staged by the upstream CLI under `.agents/skills`. */
@@ -596,7 +585,7 @@ export function importedGuidancePath(
   return path.join(repoRoot, root, guidance.slug);
 }
 
-function mergeImportedGuidanceIntoRecipeStore(
+export function mergeImportedGuidanceIntoRecipeStore(
   store: SkillImportRecipeStore,
   input: RecordImportedGuidanceInput
 ) {

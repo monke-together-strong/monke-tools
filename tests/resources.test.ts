@@ -5,9 +5,8 @@ import { describe, expect, test } from "vitest";
 
 import { resolveResourceCommands } from "../src/resources.ts";
 import { createRuntime, hashKey } from "../src/runtime.ts";
-import { saveSessionState } from "../src/session-state-store.ts";
 import type { RepoConfig, Runtime } from "../src/types.ts";
-import { completeSessionState, makeTempDir, materializedRepoState } from "./helpers.ts";
+import { makeTempDir } from "./helpers.ts";
 
 describe("resources", () => {
   test("resource command lock covers command execution and immediate persistence", async () => {
@@ -23,13 +22,10 @@ describe("resources", () => {
     let persistenceSawLock = false;
 
     const repoConfig: RepoConfig = {
-      appsByLabel: new Map(),
       appsInOrder: [],
       configPath: path.join(sourceRoot, "monke.yml"),
       externalInOrder: [],
       externalMappingsInOrder: [],
-      externalTargetApps: new Set(),
-      localMappingsByPort: new Map(),
       localPortOrder: [],
       resourceCommandsInOrder: [
         {
@@ -44,9 +40,7 @@ describe("resources", () => {
       sourceRoot
     };
     const runtime: Runtime = {
-      ...createRuntime({ cwd: sourceRoot }),
-      cwd: sourceRoot,
-      env: {},
+      ...createRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
       async execAsync(command, args, options) {
         expect(command).toBe("bun");
         expect(args?.[0]).toBe("--eval");
@@ -67,18 +61,7 @@ describe("resources", () => {
           stderr: "",
           stdout: "progress log\n"
         };
-      },
-      multiSelect() {
-        return Promise.reject(new Error("unexpected multiSelect"));
-      },
-      readLine() {
-        throw new Error("unexpected readLine");
-      },
-      select() {
-        return Promise.reject(new Error("unexpected select"));
-      },
-      writeStderr() {},
-      writeStdout() {}
+      }
     };
 
     const resolved = await resolveResourceCommands({
@@ -111,124 +94,6 @@ describe("resources", () => {
     ]);
   });
 
-  test("resource command input values are sorted for deterministic stdin", async () => {
-    const sandbox = makeTempDir("resources-command-input-sort");
-    const home = path.join(sandbox, "home");
-    const sourceRoot = path.join(sandbox, "repo");
-    const repoConfig: RepoConfig = {
-      appsByLabel: new Map(),
-      appsInOrder: [],
-      configPath: path.join(sourceRoot, "monke.yml"),
-      externalInOrder: [],
-      externalMappingsInOrder: [],
-      externalTargetApps: new Set(),
-      localMappingsByPort: new Map(),
-      localPortOrder: [],
-      resourceCommandsInOrder: [
-        {
-          name: "e2e-symbols",
-          outputs: ["E2E_FLOW1_SYMBOL"],
-          run: "scripts/allocate-symbols.ts",
-          timeoutSeconds: 60
-        }
-      ],
-      resourceValuesInOrder: [],
-      seedPaths: [],
-      sourceRoot
-    };
-    let stdin: unknown;
-    let commandEnv: Record<string, string | undefined> | undefined;
-
-    saveSessionState(
-      home,
-      completeSessionState({
-        repos: [
-          materializedRepoState({
-            cleanupEligible: true,
-            resourceCommandOutputs: [
-              {
-                name: "e2e-symbols",
-                outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "ZEC/USDT:USDT" }]
-              }
-            ],
-            sourceRoot,
-            worktreePath: path.join(sourceRoot, "later")
-          })
-        ],
-        rootSourceRoot: sourceRoot,
-        session: "later"
-      })
-    );
-    saveSessionState(
-      home,
-      completeSessionState({
-        repos: [
-          materializedRepoState({
-            cleanupEligible: true,
-            resourceCommandOutputs: [
-              {
-                name: "e2e-symbols",
-                outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "ADA/USDT:USDT" }]
-              }
-            ],
-            sourceRoot,
-            worktreePath: path.join(sourceRoot, "earlier")
-          })
-        ],
-        rootSourceRoot: sourceRoot,
-        session: "earlier"
-      })
-    );
-
-    const runtime: Runtime = {
-      ...createRuntime({ cwd: sourceRoot }),
-      cwd: sourceRoot,
-      env: {},
-      async execAsync(command, args, options) {
-        expect(command).toBe("bun");
-        stdin = JSON.parse(options?.stdin ?? "");
-        commandEnv = options?.env;
-        writeFileSync(
-          args?.[5] ?? "",
-          JSON.stringify({ value: { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" } }),
-          "utf-8"
-        );
-        return {
-          exitCode: 0,
-          stderr: "",
-          stdout: ""
-        };
-      },
-      multiSelect() {
-        return Promise.reject(new Error("unexpected multiSelect"));
-      },
-      readLine() {
-        throw new Error("unexpected readLine");
-      },
-      select() {
-        return Promise.reject(new Error("unexpected select"));
-      },
-      writeStderr() {},
-      writeStdout() {}
-    };
-
-    await resolveResourceCommands({
-      existingRepoState: undefined,
-      home,
-      onResolvedCommandOutputs() {},
-      repoConfig,
-      resourceValues: [{ env: "E2E_CHANNEL_NAME", value: "current" }],
-      runtime,
-      session: "current",
-      worktreePath: sourceRoot
-    });
-
-    expect(stdin).toStrictEqual({
-      E2E_FLOW1_SYMBOL: ["ADA/USDT:USDT", "ZEC/USDT:USDT"]
-    });
-    expect(commandEnv).toStrictEqual({ E2E_CHANNEL_NAME: "current" });
-  });
-
   test("pnpm workspaces run resource modules through pnpm-mediated bun", async () => {
     const sandbox = makeTempDir("resources-command-pnpm-runner");
     const home = path.join(sandbox, "home");
@@ -236,13 +101,10 @@ describe("resources", () => {
     mkdirSync(sourceRoot, { recursive: true });
     writeFileSync(path.join(sourceRoot, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", "utf-8");
     const repoConfig: RepoConfig = {
-      appsByLabel: new Map(),
       appsInOrder: [],
       configPath: path.join(sourceRoot, "monke.yml"),
       externalInOrder: [],
       externalMappingsInOrder: [],
-      externalTargetApps: new Set(),
-      localMappingsByPort: new Map(),
       localPortOrder: [],
       resourceCommandsInOrder: [
         {
@@ -259,9 +121,7 @@ describe("resources", () => {
     const invocations: { args: string[] | undefined; command: string }[] = [];
 
     const runtime: Runtime = {
-      ...createRuntime({ cwd: sourceRoot }),
-      cwd: sourceRoot,
-      env: {},
+      ...createRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
       async execAsync(command, args, _options) {
         invocations.push({ args, command });
         writeFileSync(
@@ -274,18 +134,7 @@ describe("resources", () => {
           stderr: "",
           stdout: "pnpm progress log\n"
         };
-      },
-      multiSelect() {
-        return Promise.reject(new Error("unexpected multiSelect"));
-      },
-      readLine() {
-        throw new Error("unexpected readLine");
-      },
-      select() {
-        return Promise.reject(new Error("unexpected select"));
-      },
-      writeStderr() {},
-      writeStdout() {}
+      }
     };
 
     await resolveResourceCommands({

@@ -394,7 +394,7 @@ describe("Mainline Release selection", () => {
 
   test.each([
     ["src/index.ts", true],
-    ["skills/codex/codex-chrome-use/SKILL.md", true],
+    ["skills/codex/example/SKILL.md", true],
     ["skills/internal/implement/SKILL.md", true],
     ["install.sh", true],
     ["scripts/install-release.sh", true],

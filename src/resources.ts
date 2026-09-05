@@ -4,6 +4,7 @@ import path from "node:path";
 
 import * as z from "zod";
 
+import { describeRedactedValue } from "./env.ts";
 import { MonkeError } from "./errors.ts";
 import { withScopedLockAsync } from "./runtime.ts";
 import { listSessionStates } from "./session-state-store.ts";
@@ -572,10 +573,6 @@ function resolveResourceUser(env: Record<string, string | undefined>) {
     }
   }
   return "unknown";
-}
-
-function describeRedactedValue(value: string) {
-  return `<redacted length=${value.length}>`;
 }
 
 function rejectResourceValueCollisions(options: {

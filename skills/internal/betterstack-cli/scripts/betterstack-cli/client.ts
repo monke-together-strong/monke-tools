@@ -29,7 +29,6 @@ export const BetterStackConnectionsResponseSchema = object({
   data: array(
     object({
       attributes: object({
-        data_region: string(),
         host: string(),
         port: number(),
         team_ids: array(number()),

@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { launchCodiff, verifyCodiff, verifyCodiffAsync } from "./codiff.ts";
+import { launchCodiff, verifyCodiffAsync } from "./codiff.ts";
 import {
   findInitialDefaultBranchBase,
   findNewerDefaultBranchBase,
@@ -8,7 +8,6 @@ import {
   planBranchComparison,
   planWorkingTreeComparison
 } from "./comparison-plan.ts";
-import { MonkeError } from "./errors.ts";
 import { describeSessionBranchMismatch, resolveRepoContext } from "./git.ts";
 import { samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
@@ -43,17 +42,6 @@ interface PreparedDiff {
   remembered: RememberedDiff;
 }
 
-/** Open Codiff when no interactive Diff picker is needed. */
-export function runDiff(runtime: Runtime, options: DiffOptions = {}) {
-  const executable = verifyCodiff(runtime);
-  const prepared = prepareDiff(runtime);
-  warnSessionBranchElsewhere(runtime, prepared.remembered);
-  if (launchAutomaticDiff(runtime, executable, prepared.remembered, options)) {
-    return;
-  }
-  throw new MonkeError("Interactive Diff picker requires the async CLI runner");
-}
-
 /** Open Codiff with independent startup work and the interactive picker available. */
 export async function runDiffInteractive(runtime: Runtime, options: DiffOptions = {}) {
   const [executable, prepared] = await Promise.all([
@@ -69,10 +57,6 @@ export async function runDiffInteractive(runtime: Runtime, options: DiffOptions 
 
 async function prepareDiffAsync(runtime: Runtime) {
   await Promise.resolve();
-  return prepareDiff(runtime);
-}
-
-function prepareDiff(runtime: Runtime) {
   const remembered = resolveRememberedDiff(runtime);
   return { choices: buildDiffChoices(runtime, remembered), remembered };
 }

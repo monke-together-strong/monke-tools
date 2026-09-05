@@ -94,7 +94,6 @@ export const ToolInstallManifestSchema = discriminatedUnion("installKind", [
   ReleaseInstallManifestSchema
 ]);
 
-export type LocalInstallManifest = output<typeof LocalInstallManifestSchema>;
 export type ReleaseInstallManifest = output<typeof ReleaseInstallManifestSchema>;
 export type ToolInstallManifest = output<typeof ToolInstallManifestSchema>;
 
@@ -105,33 +104,10 @@ export function installIdForManifest(manifest: ToolInstallManifest) {
     : `release-${manifest.releaseVersion}-${manifest.platform}`;
 }
 
-/** Load the self-describing Active tool install when one is selected. */
-export function loadActiveLocalInstall(monkeHome: string) {
-  const installRoot = resolveActiveInstallRoot(monkeHome);
-  if (installRoot === null) {
-    return null;
-  }
-
-  return loadLocalInstall(installRoot);
-}
-
 /** Load the self-describing Active tool install, regardless of install kind. */
 export function loadActiveToolInstall(monkeHome: string) {
   const installRoot = resolveActiveInstallRoot(monkeHome);
   return installRoot === null ? null : loadToolInstall(installRoot);
-}
-
-/** Load a local install manifest from a root already resolved by the running command. */
-export function loadLocalInstall(installRoot: string) {
-  const loaded = loadToolInstall(installRoot);
-  return {
-    installRoot: loaded.installRoot,
-    manifest: parseBoundaryValue(
-      LocalInstallManifestSchema,
-      loaded.manifest,
-      "Local Tool Install manifest"
-    )
-  };
 }
 
 /** Load a Tool Install manifest from a resolved versioned install root. */
