@@ -179,37 +179,15 @@ export async function runActivateReleaseInstall(
     );
     cleanupStaleStagingDirectories(monkeHome, stagedInstall);
 
-    const postActivationFailures: string[] = [];
-    try {
-      runShellInstall(runtime, { binary: path.join(homeDirectory, ".local", "bin", "mt") });
-    } catch (error) {
-      postActivationFailures.push(
-        `Shell integration is incomplete. Retry with: mt shell install\n${errorMessage(error)}`
-      );
-    }
-    try {
-      await runReleaseInstallSkillsLocked(runtime, installRoot, {
-        explicitTargets: options.explicitTargets,
-        interactive: options.interactive === true
-      });
-    } catch (error) {
-      postActivationFailures.push(
-        `Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(error)}`
-      );
-    }
-    try {
-      reconcileCodiff(runtime, manifest.minimumCodiffVersion);
-    } catch (error) {
-      postActivationFailures.push(
-        `Codiff reconciliation failed. Retry with: mt install-dependencies\n${errorMessage(error)}`
-      );
-    }
-
-    if (postActivationFailures.length > 0) {
-      throw new MonkeError(
-        `The Release install is active, but ${postActivationFailures.length} post-activation step(s) are incomplete:\n${postActivationFailures.join("\n")}`
-      );
-    }
+    await finishInstallActivation(runtime, {
+      installKind: "Release",
+      minimumCodiffVersion: manifest.minimumCodiffVersion,
+      reconcileGuidance: () =>
+        runReleaseInstallSkillsLocked(runtime, installRoot, {
+          explicitTargets: options.explicitTargets,
+          interactive: options.interactive === true
+        })
+    });
     return { installId, manifest };
   };
   const activated = await runInstallationMutation(
@@ -338,23 +316,12 @@ export async function runActivateLocalInstall(
     );
     cleanupStaleStagingDirectories(monkeHome, stagedInstall);
 
-    const stableCommand = path.join(homeDirectory, ".local", "bin", "mt");
-    runShellInstall(runtime, { binary: stableCommand });
-    try {
-      await runInstallSkillsLocked(runtime, sourceCheckout, options.explicitTargets);
-    } catch (error) {
-      throw new MonkeError(
-        `The Local tool install is active, but Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(error)}`
-      );
-    }
-
-    try {
-      reconcileCodiff(runtime, manifest.minimumCodiffVersion);
-    } catch (error) {
-      throw new MonkeError(
-        `The Local tool install is active, but Codiff reconciliation failed. Retry with: mt install-dependencies\n${errorMessage(error)}`
-      );
-    }
+    await finishInstallActivation(runtime, {
+      installKind: "Local tool",
+      minimumCodiffVersion: manifest.minimumCodiffVersion,
+      reconcileGuidance: () =>
+        runInstallSkillsLocked(runtime, sourceCheckout, options.explicitTargets)
+    });
 
     return manifest;
   };
@@ -368,6 +335,45 @@ export async function runActivateLocalInstall(
   createLogger(runtime).success(
     `Activated Local tool install ${manifest.toolBuildIdentity} at ${path.join(monkeHome, "installs", manifest.installId)}`
   );
+}
+
+async function finishInstallActivation(
+  runtime: Runtime,
+  options: {
+    installKind: "Local tool" | "Release";
+    minimumCodiffVersion: string;
+    reconcileGuidance: () => Promise<void>;
+  }
+) {
+  const failures: string[] = [];
+  try {
+    runShellInstall(runtime, {
+      binary: path.join(getHomeDirectory(runtime), ".local", "bin", "mt")
+    });
+  } catch (error) {
+    failures.push(
+      `Shell integration is incomplete. Retry with: mt shell install\n${errorMessage(error)}`
+    );
+  }
+  try {
+    await options.reconcileGuidance();
+  } catch (error) {
+    failures.push(
+      `Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(error)}`
+    );
+  }
+  try {
+    reconcileCodiff(runtime, options.minimumCodiffVersion);
+  } catch (error) {
+    failures.push(
+      `Codiff reconciliation failed. Retry with: mt install-dependencies\n${errorMessage(error)}`
+    );
+  }
+  if (failures.length > 0) {
+    throw new MonkeError(
+      `The ${options.installKind} install is active, but ${failures.length} post-activation step(s) are incomplete:\n${failures.join("\n")}`
+    );
+  }
 }
 
 function activateStagedInstall(options: {
