@@ -18,8 +18,8 @@ import { parse } from "yaml";
 import type * as z from "zod";
 
 import { runCliAsync } from "../src/index.ts";
-import { createRuntime } from "../src/runtime.ts";
 import type { SelectPrompt, SessionRepoState, SessionState } from "../src/types.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 const tempDirectories: string[] = [];
 const runMonkeWorkerPath = fileURLToPath(new URL("run-monke-worker.ts", import.meta.url));
@@ -464,7 +464,7 @@ export async function runMonkeAsync(options: {
   let stderr = "";
   const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
 
-  const runtime = createRuntime({
+  const runtime = createTestRuntime({
     cancelSelect: options.cancelSelect,
     cwd: options.cwd,
     env: {

@@ -35,30 +35,21 @@ describe("global configuration", () => {
     });
   });
 
-  test("global monke config migrates legacy source identity while preserving preferences", () => {
-    const home = makeTempDir("global-config-active-identity");
-    const customSkillRoot = path.join(home, "custom-skills");
-    writeInvalidConfig(
+  test.each([
+    [{ kind: "codex" }, { kind: "codex" }],
+    [
+      { kind: "custom", path: "/tmp/first" },
+      { kind: "custom", path: "/tmp/second" }
+    ]
+  ])("global monke config rejects repeated target kinds: %j, %j", (first, second) => {
+    const home = makeTempDir("global-config-duplicate-target");
+    write(
       home,
-      `version: 1
-installedSourceCheckout: /tmp/monke-tools
-skillInstallPreference:
-  targets:
-    - kind: codex
-    - kind: custom
-      path: ${customSkillRoot}
-`
+      "config.yml",
+      JSON.stringify({ skillInstallPreference: { targets: [first, second] }, version: 1 })
     );
 
-    const migrated = loadGlobalMonkeConfig(home);
-    expect(migrated).toStrictEqual({
-      skillInstallPreference: {
-        targets: [{ kind: "codex" }, { kind: "custom", path: customSkillRoot }]
-      },
-      version: 1
-    });
-    saveGlobalMonkeConfig(home, migrated);
-    expect(parse(read(home, "config.yml"))).toStrictEqual(migrated);
+    expect(() => loadGlobalMonkeConfig(home)).toThrow(/targets\[1\]\.kind/u);
   });
 
   test("global monke config rejects empty preferences and relative custom paths", () => {

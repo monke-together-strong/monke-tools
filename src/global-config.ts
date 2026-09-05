@@ -4,7 +4,6 @@ import path from "node:path";
 import { stringify } from "yaml";
 import * as z from "zod";
 
-import { MonkeError } from "./errors.ts";
 import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
 
 const BuiltInSkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor"]);
@@ -20,81 +19,56 @@ const SkillInstallTargetPreferenceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("custom"), path: AbsolutePathSchema })
 ]);
 export const SkillInstallPreferenceSchema = z.strictObject({
-  targets: z.array(SkillInstallTargetPreferenceSchema).min(1, {
-    error: "must be a non-empty array"
-  })
+  targets: z
+    .array(SkillInstallTargetPreferenceSchema)
+    .min(1, {
+      error: "must be a non-empty array"
+    })
+    .superRefine((targets, context) => {
+      const seen = new Set<SkillInstallTargetKind>();
+      for (const [index, target] of targets.entries()) {
+        if (seen.has(target.kind)) {
+          context.addIssue({
+            code: "custom",
+            message:
+              target.kind === "custom"
+                ? "may contain at most one custom target"
+                : `Duplicate Skill install target ${target.kind}`,
+            path: [index, "kind"]
+          });
+        }
+        seen.add(target.kind);
+      }
+    })
 });
 const GlobalMonkeConfigSchema = z.strictObject({
   skillInstallPreference: SkillInstallPreferenceSchema.optional(),
   version: z.literal(1, { error: "must be 1" })
 });
-const PersistedGlobalMonkeConfigSchema = GlobalMonkeConfigSchema.extend({
-  installedSourceCheckout: AbsolutePathSchema.optional()
-});
-
-type ParsedSkillInstallPreference = z.output<typeof SkillInstallPreferenceSchema>;
-type ParsedGlobalMonkeConfig = z.output<typeof GlobalMonkeConfigSchema>;
-type ParsedPersistedGlobalMonkeConfig = z.output<typeof PersistedGlobalMonkeConfigSchema>;
-
 /** Built-in Agent skill roots supported by monke-tools. */
-export type BuiltInSkillInstallTargetKind = "codex" | "claude" | "cursor";
-
-/** Skill install target kinds stored in Global monke config. */
-export type SkillInstallTargetKind = BuiltInSkillInstallTargetKind | "custom";
-
-/** A stored built-in Skill install target preference. */
-export interface BuiltInSkillInstallTargetPreference {
-  /** Built-in Agent destination selected for Skill installation. */
-  kind: BuiltInSkillInstallTargetKind;
-}
-
-/** A stored custom Skill install target preference with an absolute Agent skill root path. */
-export interface CustomSkillInstallTargetPreference {
-  /** Custom Agent destination selected for Skill installation. */
-  kind: "custom";
-  /** Absolute Agent skill root path that will contain the managed monke-tools namespace. */
-  path: string;
-}
-
+export type BuiltInSkillInstallTargetKind = z.output<typeof BuiltInSkillInstallTargetKindSchema>;
 /** One stored Skill install target in the current Skill install preference. */
-export type SkillInstallTargetPreference =
-  | BuiltInSkillInstallTargetPreference
-  | CustomSkillInstallTargetPreference;
-
+export type SkillInstallTargetPreference = z.output<typeof SkillInstallTargetPreferenceSchema>;
+export type SkillInstallTargetKind = SkillInstallTargetPreference["kind"];
 /** The current set of Agent skill roots selected for Distributed skill installation. */
-export interface SkillInstallPreference {
-  /** Non-empty list of configured Skill install targets. */
-  targets: SkillInstallTargetPreference[];
-}
+export type SkillInstallPreference = z.output<typeof SkillInstallPreferenceSchema>;
+/** Versioned machine-local monke-tools configuration. */
+export type GlobalMonkeConfig = z.output<typeof GlobalMonkeConfigSchema>;
 
-/** Versioned machine-local monke-tools configuration stored under the monke home directory. */
-export interface GlobalMonkeConfig {
-  /** Current Skill install target selection. */
-  skillInstallPreference?: SkillInstallPreference;
-  /** Global config schema version. */
-  version: 1;
-}
-
-/** Load versioned Global monke config from `config.yml`, returning migration-safe defaults. */
+/** Load versioned Global monke config from `config.yml`, returning defaults when absent. */
 export function loadGlobalMonkeConfig(home: string): GlobalMonkeConfig {
   const configPath = getGlobalConfigPath(home);
   if (!existsSync(configPath)) {
     return { version: 1 };
   }
 
-  return normalizeGlobalMonkeConfig(
-    parseOwnedYamlFile(configPath, PersistedGlobalMonkeConfigSchema),
-    configPath
-  );
+  return parseOwnedYamlFile(configPath, GlobalMonkeConfigSchema);
 }
 
 /** Save versioned Global monke config to `config.yml` under the monke home directory. */
 export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig) {
   const configPath = getGlobalConfigPath(home);
-  const parsed = normalizeGlobalMonkeConfig(
-    parseBoundaryValue(GlobalMonkeConfigSchema, config, configPath),
-    configPath
-  );
+  const parsed = parseBoundaryValue(GlobalMonkeConfigSchema, config, configPath);
   mkdirSync(home, { recursive: true });
   writeFileSync(configPath, stringify(parsed), "utf-8");
 }
@@ -102,61 +76,4 @@ export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig) {
 /** Return the path of the Global monke config file for a monke home directory. */
 function getGlobalConfigPath(home: string) {
   return path.join(home, "config.yml");
-}
-
-function normalizeGlobalMonkeConfig(
-  config: ParsedGlobalMonkeConfig | ParsedPersistedGlobalMonkeConfig,
-  configPath: string
-): GlobalMonkeConfig {
-  const skillInstallPreference =
-    config.skillInstallPreference === undefined
-      ? undefined
-      : parseSkillInstallPreference(config.skillInstallPreference, configPath);
-
-  const normalized: GlobalMonkeConfig = { version: 1 };
-  if (skillInstallPreference !== undefined) {
-    normalized.skillInstallPreference = skillInstallPreference;
-  }
-  return normalized;
-}
-
-function parseSkillInstallPreference(preference: ParsedSkillInstallPreference, configPath: string) {
-  const location = `${configPath}#skillInstallPreference`;
-
-  const targets: SkillInstallTargetPreference[] = [];
-  const seenBuiltIns = new Set<BuiltInSkillInstallTargetKind>();
-  let customSeen = false;
-
-  for (const rawTarget of preference.targets) {
-    const { kind } = rawTarget;
-
-    switch (kind) {
-      case "codex":
-      case "claude":
-      case "cursor": {
-        if (seenBuiltIns.has(kind)) {
-          throw new MonkeError(`Duplicate Skill install target ${kind} in ${location}`);
-        }
-        seenBuiltIns.add(kind);
-        targets.push({ kind });
-        break;
-      }
-      case "custom": {
-        if (customSeen) {
-          throw new MonkeError(`${location} may contain at most one custom target`);
-        }
-        customSeen = true;
-        targets.push({
-          kind: "custom",
-          path: rawTarget.path
-        });
-        break;
-      }
-      default: {
-        throw new MonkeError(`Unsupported Skill install target in ${location}`);
-      }
-    }
-  }
-
-  return { targets };
 }

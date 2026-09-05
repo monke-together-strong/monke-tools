@@ -3,9 +3,9 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { runCliAsync } from "../src/index.ts";
-import { createRuntime } from "../src/runtime.ts";
-import type { RuntimeOptions } from "../src/runtime.ts";
 import { write, writeGlobalInstructionsSource } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
+import type { TestRuntimeOptions } from "./runtime-fixture.ts";
 
 export function prepareSource(sourceCheckout: string) {
   write(
@@ -105,7 +105,7 @@ export async function activateLocal(options: {
 
   await runCliAsync(
     args,
-    createRuntime({
+    createTestRuntime({
       architecture: "x64",
       cwd: options.sourceCheckout,
       env: {
@@ -132,13 +132,13 @@ export function activateRelease(options: {
   bundleRoot: string;
   home: string;
   monkeHome: string;
-  runtime?: RuntimeOptions;
+  runtime?: TestRuntimeOptions;
   sandbox: string;
 }) {
   const runtimeOptions = options.runtime ?? {};
   return runCliAsync(
     ["activate-release-install", options.bundleRoot, ...(options.args ?? [])],
-    createRuntime({
+    createTestRuntime({
       architecture: "x64",
       onStderr() {
         // Intentionally ignore command output.

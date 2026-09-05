@@ -423,9 +423,7 @@ function resolveCurrentGithubRepo(runtime: Runtime, rootSourceRoot: string) {
     cwd: rootSourceRoot
   }).stdout;
   const trimmed = output.trim();
-  const nameWithOwner = trimmed.startsWith("{")
-    ? parseGithubJson(trimmed, "GitHub repo", GithubRepositorySchema).nameWithOwner
-    : trimmed;
+  const { nameWithOwner } = parseGithubJson(trimmed, "GitHub repo", GithubRepositorySchema);
   const [owner, name] = nameWithOwner.split("/");
 
   if (!owner || !name) {

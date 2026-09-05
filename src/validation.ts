@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { parseDocument } from "yaml";
-import * as z from "zod";
+import type * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 
@@ -47,9 +47,9 @@ export function parseBoundaryValue<T extends z.ZodType>(schema: T, value: unknow
 function formatIssuePath(issuePath: PropertyKey[]) {
   let result = "";
   for (const segment of issuePath) {
-    const numericSegment = z.number().safeParse(segment);
-    if (numericSegment.success) {
-      result += `[${numericSegment.data}]`;
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Zod supplies these typed issue-path segments; this only formats numeric indexes.
+    if (typeof segment === "number") {
+      result += `[${segment}]`;
     } else {
       result += result ? `.${String(segment)}` : String(segment);
     }

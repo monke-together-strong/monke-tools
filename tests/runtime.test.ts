@@ -6,6 +6,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import { createRuntime, findExecutable, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe(findExecutable, () => {
   test("uses the supplied PATH in order", () => {
@@ -38,6 +39,25 @@ describe(findExecutable, () => {
 });
 
 describe("runtime", () => {
+  test("interactive lines preserve UTF-8 across CRLF and final EOF", () => {
+    const runtimeUrl = new URL("../src/runtime.ts", import.meta.url).href;
+    const result = Bun.spawnSync(
+      [
+        process.execPath,
+        "--eval",
+        `
+      import { createRuntime } from ${JSON.stringify(runtimeUrl)};
+      const runtime = createRuntime();
+      console.log(JSON.stringify([runtime.readLine(""), runtime.readLine(""), runtime.readLine("")]));
+    `
+      ],
+      { stdin: Buffer.from("café/日本語\\r\\nsecond/🍌") }
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout.toString())).toStrictEqual(["café/日本語", "second/🍌", ""]);
+  });
+
   test("createRuntime executes with its cwd, environment, and stdin", () => {
     const sandbox = makeTempDir("runtime-sync-input");
     const runtime = createRuntime({ cwd: sandbox, env: { MONKE_VALUE: "value" } });
@@ -325,7 +345,7 @@ await runtime.execAsync(
   });
 
   test("createRuntime reports exhausted scripted select values clearly", async () => {
-    const runtime = createRuntime({ selectValues: [] });
+    const runtime = createTestRuntime({ selectValues: [] });
 
     await expect(
       runtime.select({

@@ -22,8 +22,8 @@ import {
   reconcilePendingInstallBackups,
   writeCollisionRecovery
 } from "../src/install-recovery.ts";
-import { createRuntime } from "../src/runtime.ts";
 import { makeTempDir, write } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 import {
   prepareActiveLocal,
   prepareActiveRelease,
@@ -70,7 +70,7 @@ describe("Release update", () => {
 
     await runCliAsync(
       ["update", "--check"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
@@ -114,7 +114,7 @@ describe("Release update", () => {
     await expect(
       runCliAsync(
         ["update", "--check"],
-        createRuntime({
+        createTestRuntime({
           architecture: "x64",
           cwd: sandbox,
           env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
@@ -150,7 +150,7 @@ describe("Release update", () => {
 
     await runCliAsync(
       ["update"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: {
@@ -200,7 +200,7 @@ describe("Release update", () => {
 
     await runCliAsync(
       ["update", "--check"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { FORCE_COLOR: "1", HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
@@ -247,7 +247,7 @@ describe("Release update", () => {
 
     await runCliAsync(
       ["update", "--check"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: {
@@ -305,7 +305,7 @@ describe("Release update", () => {
 
     await runCliAsync(
       ["update"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
@@ -361,7 +361,7 @@ describe("Release update", () => {
 
     const update = runCliAsync(
       ["update"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
@@ -397,7 +397,7 @@ describe("Release update", () => {
 
     const update = runCliAsync(
       ["update"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
@@ -450,7 +450,7 @@ describe("Release update", () => {
 
       await runCliAsync(
         ["update"],
-        createRuntime({
+        createTestRuntime({
           architecture: "x64",
           cwd: sandbox,
           env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
@@ -508,7 +508,7 @@ describe("Release update", () => {
 
     const update = runCliAsync(
       ["update"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
@@ -554,7 +554,7 @@ describe("Release update", () => {
 
       await runCliAsync(
         arguments_,
-        createRuntime({
+        createTestRuntime({
           architecture: "x64",
           cwd: sandbox,
           env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
@@ -601,7 +601,7 @@ describe("Release update", () => {
 
     const update = runCliAsync(
       ["update"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
@@ -666,7 +666,7 @@ describe("Release update", () => {
       }
     };
     const runtime = () =>
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
@@ -699,7 +699,7 @@ describe("Release update", () => {
 
     const check = runCliAsync(
       ["update", "--check"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
@@ -769,7 +769,7 @@ describe("Release update", () => {
 
     const update = runCliAsync(
       ["update"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
@@ -830,7 +830,7 @@ describe("Release update", () => {
 
       const update = runCliAsync(
         ["update"],
-        createRuntime({
+        createTestRuntime({
           architecture: "x64",
           cwd: sandbox,
           env: { HOME: home, MONKE_HOME: monkeHome, PATH: "/usr/bin:/bin", SHELL: "/bin/zsh" },
@@ -880,7 +880,7 @@ describe("Release update", () => {
     let catalogCalled = false;
     const command = runCliAsync(
       arguments_,
-      createRuntime({
+      createTestRuntime({
         cwd: sandbox,
         env: { HOME: path.join(sandbox, "home"), MONKE_HOME: path.join(sandbox, "monke-home") },
         onStderr() {},
@@ -925,7 +925,7 @@ describe("Release update", () => {
 
     const check = runCliAsync(
       ["update", "--check"],
-      createRuntime({
+      createTestRuntime({
         architecture: "x64",
         cwd: sandbox,
         env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },

@@ -4,8 +4,8 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { runCliAsync } from "../src/index.ts";
-import { createRuntime } from "../src/runtime.ts";
 import { makeTempDir, writeExecutable } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 function installCodiff(binDirectory: string, versionFile: string) {
   writeExecutable(
@@ -63,7 +63,7 @@ function dependencyRuntime(options: {
   platform?: NodeJS.Platform;
   toolInstallRoot?: string;
 }) {
-  return createRuntime({
+  return createTestRuntime({
     architecture: options.architecture ?? "arm64",
     cwd: options.binDirectory,
     env: {
@@ -229,7 +229,7 @@ describe("dependency installation", () => {
     await expect(
       runCliAsync(
         ["install-dependencies"],
-        createRuntime({
+        createTestRuntime({
           architecture: "arm64",
           cwd: sandbox,
           env: { PATH: `${shadowBin}:${homebrewBin}` },

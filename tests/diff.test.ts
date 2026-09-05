@@ -1251,15 +1251,15 @@ async function runDiffChild(options: {
   home: string;
 }) {
   const indexUrl = new URL("../src/index.ts", import.meta.url).href;
-  const runtimeUrl = new URL("../src/runtime.ts", import.meta.url).href;
+  const runtimeUrl = new URL("runtime-fixture.ts", import.meta.url).href;
   const selected = `worktree:${options.baseWorktree}`;
   const childPath = [options.binDirectory, process.env.PATH ?? ""]
     .filter(Boolean)
     .join(path.delimiter);
   const script = `
 import { runCliAsync } from ${JSON.stringify(indexUrl)};
-import { createRuntime } from ${JSON.stringify(runtimeUrl)};
-await runCliAsync(["diff", "--pick"], createRuntime({
+import { createTestRuntime } from ${JSON.stringify(runtimeUrl)};
+await runCliAsync(["diff", "--pick"], createTestRuntime({
   cwd: ${JSON.stringify(options.currentWorktree)},
   env: { MONKE_HOME: ${JSON.stringify(options.home)}, PATH: ${JSON.stringify(childPath)} },
   selectValues: [${JSON.stringify(selected)}]
