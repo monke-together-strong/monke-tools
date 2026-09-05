@@ -44,14 +44,6 @@ export function clipProse(text: string) {
   return clip(text.trim(), PROSE_MAX);
 }
 
-/** Collapse a file-read tool result to {path, size} when the body is large. */
-export function elideFilePayload(filePath: string, body: string) {
-  if (body.length <= OUTPUT_HEAD_TAIL_MAX) {
-    return body.trim();
-  }
-  return `{path: ${filePath}, size: ${body.length} chars}`;
-}
-
 function clip(text: string, max: number) {
   if (text.length <= max) {
     return text;

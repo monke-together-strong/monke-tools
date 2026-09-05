@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -133,16 +132,12 @@ const GhPrSchema = object({
   baseRefName: string().optional(),
   commits: array(GhCommitSchema).optional(),
   createdAt: string(),
-  createdHeadRefOid: string().optional(),
-  creationHeadRefOid: string().optional(),
   files: array(GhFileSchema).optional(),
   headRefName: string().optional(),
   headRefOid: string().optional(),
   mergeCommit: GhMergeCommitSchema.nullish(),
   mergedAt: string(),
   number: numberSchema(),
-  openingSnapshotOid: string().optional(),
-  openingSnapshotRef: string().optional(),
   title: string(),
   url: string()
 });
@@ -481,11 +476,7 @@ export function readPrManifest(root: string, runTs: string) {
   if (!existsSync(filePath)) {
     return null;
   }
-  try {
-    return parseJson(readFileSync(filePath, "utf-8"), PrAnalysisManifestSchema);
-  } catch {
-    return null;
-  }
+  return parseJson(readFileSync(filePath, "utf-8"), PrAnalysisManifestSchema);
 }
 
 function writePrManifest(root: string, runTs: string, manifest: PrAnalysisManifest) {
@@ -568,16 +559,6 @@ function inferOpeningSnapshot(
   pr: GhPr,
   commits: PrCommitReference[]
 ): PrWorkItemSummary["openingSnapshot"] {
-  const exactRef =
-    pr.openingSnapshotOid ?? pr.openingSnapshotRef ?? pr.createdHeadRefOid ?? pr.creationHeadRefOid;
-  if (isNonEmptyString(exactRef)) {
-    return {
-      confidence: "exact",
-      reason: "GitHub provided a creation-time PR head ref.",
-      ref: exactRef
-    };
-  }
-
   const createdAtMs = Date.parse(pr.createdAt);
   if (!Number.isNaN(createdAtMs)) {
     const candidate = commits.findLast(
@@ -836,16 +817,16 @@ function clipDelta(value: string) {
 }
 
 function defaultRunner(command: string, args: string[], options: { cwd?: string } = {}) {
-  const result = spawnSync(command, args, {
+  const result = Bun.spawnSync([command, ...args], {
     cwd: options.cwd,
-    encoding: "utf-8",
+    stderr: "pipe",
+    stdout: "pipe",
     timeout: DEFAULT_COMMAND_TIMEOUT_MS
   });
   return {
-    error: result.error ? errorMessage(result.error) : undefined,
-    status: result.status,
-    stderr: result.stderr ?? "",
-    stdout: result.stdout ?? ""
+    status: result.exitCode,
+    stderr: result.stderr.toString(),
+    stdout: result.stdout.toString()
   };
 }
 

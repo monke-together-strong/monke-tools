@@ -13,7 +13,6 @@ const CanonicalToolCallSchema = z.strictObject({
   outputHeadTail: z.string().optional(),
   ref: z.string()
 });
-export type CanonicalToolCall = z.output<typeof CanonicalToolCallSchema>;
 
 /** A normalized prose turn (genuine human input or assistant text). */
 const CanonicalProseSchema = z.strictObject({
@@ -21,7 +20,6 @@ const CanonicalProseSchema = z.strictObject({
   ref: z.string(),
   text: z.string()
 });
-export type CanonicalProse = z.output<typeof CanonicalProseSchema>;
 
 const CanonicalTurnSchema = z.union([CanonicalToolCallSchema, CanonicalProseSchema]);
 export type CanonicalTurn = z.output<typeof CanonicalTurnSchema>;
@@ -86,10 +84,8 @@ export const RepoFindingsSchema = z.object({
 export type RepoFindings = z.output<typeof RepoFindingsSchema>;
 
 const RetrospectiveSinceSourceSchema = z.enum(["explicit", "previous-report", "first-run-default"]);
-export type RetrospectiveSinceSource = z.output<typeof RetrospectiveSinceSourceSchema>;
 
 const RetrospectiveUntilSourceSchema = z.enum(["explicit", "now"]);
-export type RetrospectiveUntilSource = z.output<typeof RetrospectiveUntilSourceSchema>;
 
 /** Resolved once by collect, then read by PR analysis and commit. */
 export const RetrospectiveWindowSchema = z.strictObject({
@@ -105,7 +101,6 @@ const FrozenFrictionSchema = z.strictObject({
   citedTurnRefs: z.array(z.string()),
   id: z.string()
 });
-export type FrozenFriction = z.output<typeof FrozenFrictionSchema>;
 
 /** FROZEN per-session record — written once, appended on resume, never recomputed. */
 export const FrozenSessionRecordSchema = z.strictObject({
@@ -133,5 +128,5 @@ export type RepoMeta = z.output<typeof RepoMetaSchema>;
 
 export const RetroLockMetadataSchema = z.strictObject({
   acquiredAt: z.number().optional(),
-  pid: z.number().optional()
+  pid: z.number().int().positive().optional()
 });
