@@ -7,7 +7,7 @@ import {
   literal,
   object,
   string,
-  union,
+  union
 } from "zod";
 import type { output } from "zod";
 
@@ -18,31 +18,31 @@ const CodexMessageContentBlockSchema = union([
   discriminatedUnion("type", [
     object({
       text: string(),
-      type: literal("input_text"),
+      type: literal("input_text")
     }),
     object({
       text: string(),
-      type: literal("output_text"),
-    }),
+      type: literal("output_text")
+    })
   ]),
-  JsonValueSchema.transform(() => null),
+  JsonValueSchema.transform(() => null)
 ]);
 
 const ClaudeToolResultTextBlockSchema = object({
   text: string(),
-  type: literal("text").optional(),
+  type: literal("text").optional()
 });
 
 export const TranscriptEnvelopeSchema = object({
-  timestamp: string().optional(),
+  timestamp: string().optional()
 });
 
 const CodexSourceSchema = object({
   subagent: object({
     thread_spawn: object({
-      parent_thread_id: string().optional(),
-    }).optional(),
-  }).optional(),
+      parent_thread_id: string().optional()
+    }).optional()
+  }).optional()
 });
 
 const CodexSessionMetaRecordSchema = object({
@@ -51,33 +51,33 @@ const CodexSessionMetaRecordSchema = object({
     id: string().optional(),
     parent_thread_id: string().optional(),
     source: CodexSourceSchema.optional().catch(undefined),
-    thread_source: string().optional(),
+    thread_source: string().optional()
   }),
   timestamp: string().optional(),
-  type: literal("session_meta"),
+  type: literal("session_meta")
 });
 
 const CodexTurnContextRecordSchema = object({
   payload: object({
-    cwd: string().optional(),
+    cwd: string().optional()
   }),
   timestamp: string().optional(),
-  type: literal("turn_context"),
+  type: literal("turn_context")
 });
 
 const CodexEventMessageRecordSchema = object({
   payload: discriminatedUnion("type", [
     object({
       message: string(),
-      type: literal("user_message"),
+      type: literal("user_message")
     }),
     object({
       message: string(),
-      type: literal("agent_message"),
-    }),
+      type: literal("agent_message")
+    })
   ]),
   timestamp: string().optional(),
-  type: literal("event_msg"),
+  type: literal("event_msg")
 });
 
 const CodexResponseItemRecordSchema = object({
@@ -85,34 +85,34 @@ const CodexResponseItemRecordSchema = object({
     object({
       content: union([string(), array(CodexMessageContentBlockSchema)]),
       role: enumSchema(["user", "assistant"]),
-      type: literal("message"),
+      type: literal("message")
     }),
     object({
       arguments: JsonValueSchema.optional(),
       call_id: string().optional(),
       name: string().optional(),
-      type: literal("function_call"),
+      type: literal("function_call")
     }),
     object({
       call_id: string().optional(),
       output: JsonValueSchema.optional(),
-      type: literal("function_call_output"),
-    }),
+      type: literal("function_call_output")
+    })
   ]),
   timestamp: string().optional(),
-  type: literal("response_item"),
+  type: literal("response_item")
 });
 
 export const CodexTranscriptRecordSchema = discriminatedUnion("type", [
   CodexSessionMetaRecordSchema,
   CodexTurnContextRecordSchema,
   CodexEventMessageRecordSchema,
-  CodexResponseItemRecordSchema,
+  CodexResponseItemRecordSchema
 ]);
 export type CodexTranscriptRecord = output<typeof CodexTranscriptRecordSchema>;
 
 const ClaudeMessageSchema = object({
-  content: union([string(), array(JsonValueSchema)]),
+  content: union([string(), array(JsonValueSchema)])
 });
 
 export const ClaudeTranscriptRecordSchema = object({
@@ -121,33 +121,33 @@ export const ClaudeTranscriptRecordSchema = object({
   message: ClaudeMessageSchema,
   sessionId: string().optional(),
   timestamp: string().optional(),
-  type: enumSchema(["user", "assistant"]),
+  type: enumSchema(["user", "assistant"])
 });
 export type ClaudeTranscriptRecord = output<typeof ClaudeTranscriptRecordSchema>;
 
 export const ClaudeTranscriptEnvelopeSchema = TranscriptEnvelopeSchema.extend({
   cwd: string().optional(),
-  sessionId: string().optional(),
+  sessionId: string().optional()
 });
 export type ClaudeTranscriptEnvelope = output<typeof ClaudeTranscriptEnvelopeSchema>;
 
 export const ClaudeContentBlockSchema = discriminatedUnion("type", [
   object({
     text: string(),
-    type: literal("text"),
+    type: literal("text")
   }),
   object({
     id: string().optional(),
     input: JsonValueSchema.optional(),
     name: string().optional(),
-    type: literal("tool_use"),
+    type: literal("tool_use")
   }),
   object({
     content: JsonValueSchema.optional(),
     is_error: boolean().optional(),
     tool_use_id: string(),
-    type: literal("tool_result"),
-  }),
+    type: literal("tool_result")
+  })
 ]);
 
 export function extractClaudeTextBlocks(content: JsonValue[]) {

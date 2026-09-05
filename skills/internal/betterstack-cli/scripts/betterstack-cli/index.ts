@@ -1,16 +1,18 @@
 #!/usr/bin/env bun
 
-import { Command, InvalidArgumentError } from '@commander-js/extra-typings';
-import type { OptionValues } from '@commander-js/extra-typings';
 import { existsSync, readFileSync } from "node:fs";
+
+import { Command, InvalidArgumentError } from "@commander-js/extra-typings";
+import type { OptionValues } from "@commander-js/extra-typings";
 import type { ZodType } from "zod";
+
 import {
   BetterStackApiError,
   BetterStackClient,
   BetterStackConnectionsResponseSchema,
   BetterStackSourceResponseSchema,
   normalizeQueryUrl
-} from './client';
+} from "./client";
 import { getFirstEnvValue, loadEnvFileIfPresent } from "./env";
 
 async function main() {
@@ -56,7 +58,7 @@ Notes:
 
   const connection = program.command("connection").description("Inspect Better Stack connections.");
   createPaginatedListCommand(connection, "List Better Stack connections.").action(
-    handleConnectionList,
+    handleConnectionList
   );
 
   const query = program.command("query").description("Run Better Stack SQL queries.");
@@ -71,7 +73,7 @@ function createPaginatedListCommand(parent: Command, description: string) {
       .command("list")
       .description(description)
       .option("--page <number>", "Page number.", parseIntegerOption)
-      .option("--per-page <number>", "Results per page.", parseIntegerOption),
+      .option("--per-page <number>", "Results per page.", parseIntegerOption)
   );
 }
 
@@ -80,7 +82,7 @@ function createSourceGetCommand(parent: Command) {
     parent
       .command("get")
       .description("Fetch one Better Stack source.")
-      .requiredOption("--id <number>", "Better Stack source id.", parseIntegerOption),
+      .requiredOption("--id <number>", "Better Stack source id.", parseIntegerOption)
   );
 }
 
@@ -98,17 +100,17 @@ function createQueryRunCommand(parent: Command) {
       .option("--host <host>", "Better Stack query endpoint host.")
       .option("--username <username>", "Better Stack query username.")
       .option("--password <password>", "Better Stack query password."),
-    "Better Stack source API token for metadata validation.",
+    "Better Stack source API token for metadata validation."
   );
 }
 
 function addCredentialOptions<
   Args extends unknown[],
   Options extends OptionValues,
-  GlobalOptions extends OptionValues,
+  GlobalOptions extends OptionValues
 >(
   command: Command<Args, Options, GlobalOptions>,
-  tokenDescription = "Better Stack source API token.",
+  tokenDescription = "Better Stack source API token."
 ) {
   return command
     .option("--token <token>", tokenDescription)
@@ -152,8 +154,8 @@ async function handleSourceList(options: PaginationOptions) {
   initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
-  const {page} = options;
-  const {perPage} = options;
+  const { page } = options;
+  const { perPage } = options;
 
   writeStdout(await client.listSources(page, perPage));
 }
@@ -162,7 +164,7 @@ async function handleSourceGet(options: SourceGetOptions) {
   initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
-  const {id} = options;
+  const { id } = options;
 
   writeStdout(await client.getSource(id));
 }
@@ -171,8 +173,8 @@ async function handleConnectionList(options: PaginationOptions) {
   initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
-  const {page} = options;
-  const {perPage} = options;
+  const { page } = options;
+  const { perPage } = options;
 
   writeStdout(await client.listConnections(page, perPage));
 }
@@ -232,10 +234,7 @@ class BetterStackInvalidResponseError extends BetterStackCliError {
   }
 }
 
-async function resolveQueryCredentials(
-  options: QueryRunOptions,
-  context: ResolvedQueryContext
-) {
+async function resolveQueryCredentials(options: QueryRunOptions, context: ResolvedQueryContext) {
   const { matchingConnection, sourceMetadata } = await loadQueryMetadata(context);
   validateQueryTable(context, sourceMetadata);
 
@@ -318,10 +317,7 @@ function requireQueryCredential(value: string | undefined, message: string) {
   return value;
 }
 
-async function loadSourceMetadata(
-  token: string,
-  sourceId: number
-) {
+async function loadSourceMetadata(token: string, sourceId: number) {
   const client = createMetadataClient(token);
   const raw = await client.getSource(sourceId);
   const parsed = parseMetadataResponse(
@@ -358,10 +354,7 @@ async function loadConnections(token: string) {
   }));
 }
 
-async function tryLoadSourceMetadata(
-  token: string,
-  sourceId: number
-) {
+async function tryLoadSourceMetadata(token: string, sourceId: number) {
   try {
     return await loadSourceMetadata(token, sourceId);
   } catch (error) {
@@ -455,11 +448,7 @@ function formatHostAndPort(host: string, port: number) {
   return port === 443 ? host : `${host}:${port}`;
 }
 
-function parseMetadataResponse<T extends ZodType>(
-  raw: string,
-  schema: T,
-  errorMessage: string
-) {
+function parseMetadataResponse<T extends ZodType>(raw: string, schema: T, errorMessage: string) {
   try {
     const parsed = schema.safeParse(JSON.parse(raw));
     if (parsed.success) {
@@ -485,7 +474,7 @@ function createMetadataClient(tokenOverride?: string) {
 
 async function resolveSql(options: QueryRunOptions) {
   const inlineSql = options.sql;
-  const {sqlFile} = options;
+  const { sqlFile } = options;
   const useStdin = options.stdin === true;
   const selectedInputs = [inlineSql !== undefined, sqlFile !== undefined, useStdin].filter(
     Boolean

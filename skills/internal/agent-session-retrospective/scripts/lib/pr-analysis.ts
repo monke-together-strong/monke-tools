@@ -11,18 +11,13 @@ import {
   number as numberSchema,
   object,
   strictObject,
-  string,
+  string
 } from "zod";
 import type { output, ZodType } from "zod";
 
 import { hashKey } from "./identity.ts";
 import { RetrospectiveWindowSchema } from "./schemas.ts";
-import {
-  prAnalysisPath,
-  readRunWindow,
-  retroHome,
-  runDir,
-} from "./store.ts";
+import { prAnalysisPath, readRunWindow, retroHome, runDir } from "./store.ts";
 import type { RetrospectiveWindow } from "./types.ts";
 
 export interface CommandResult {
@@ -32,13 +27,17 @@ export interface CommandResult {
   stdout: string;
 }
 
-export type CommandRunner = (command: string, args: string[], options?: { cwd?: string }) => CommandResult;
+export type CommandRunner = (
+  command: string,
+  args: string[],
+  options?: { cwd?: string }
+) => CommandResult;
 
 const PrAnalysisGapSchema = strictObject({
   impact: string(),
   number: numberSchema().optional(),
   reason: string(),
-  repo: string(),
+  repo: string()
 });
 export type PrAnalysisGap = output<typeof PrAnalysisGapSchema>;
 
@@ -59,12 +58,12 @@ const PrWorkItemSummarySchema = strictObject({
   openingSnapshot: strictObject({
     confidence: enumSchema(["exact", "inferred", "unknown"]),
     reason: string(),
-    ref: string().optional(),
+    ref: string().optional()
   }),
   repo: string(),
   title: string(),
   url: string(),
-  workItemPath: string(),
+  workItemPath: string()
 });
 export type PrWorkItemSummary = output<typeof PrWorkItemSummarySchema>;
 
@@ -76,7 +75,7 @@ const PrAnalysisManifestSchema = strictObject({
   runTs: string(),
   version: literal(1),
   window: RetrospectiveWindowSchema,
-  workItems: array(PrWorkItemSummarySchema),
+  workItems: array(PrWorkItemSummarySchema)
 });
 export type PrAnalysisManifest = output<typeof PrAnalysisManifestSchema>;
 
@@ -112,7 +111,7 @@ export interface RunPrAggregateOptions {
 
 const GhRepoSchema = object({
   isArchived: boolean().optional(),
-  nameWithOwner: string(),
+  nameWithOwner: string()
 });
 const GhCommitSchema = object({
   committedDate: string().optional(),
@@ -120,15 +119,15 @@ const GhCommitSchema = object({
   messageBody: string().optional(),
   messageHeadline: string().optional(),
   oid: string().optional(),
-  sha: string().optional(),
+  sha: string().optional()
 });
 const GhFileSchema = object({
   filename: string().optional(),
-  path: string().optional(),
+  path: string().optional()
 });
 const GhMergeCommitSchema = object({
   oid: string().optional(),
-  sha: string().optional(),
+  sha: string().optional()
 });
 const GhPrSchema = object({
   baseRefName: string().optional(),
@@ -145,12 +144,12 @@ const GhPrSchema = object({
   openingSnapshotOid: string().optional(),
   openingSnapshotRef: string().optional(),
   title: string(),
-  url: string(),
+  url: string()
 });
 const GhRepoListSchema = array(GhRepoSchema);
 const GhPrListSchema = array(GhPrSchema);
 const GhPrFilesResponseSchema = object({
-  files: array(GhFileSchema),
+  files: array(GhFileSchema)
 });
 type GhCommit = output<typeof GhCommitSchema>;
 type GhFile = output<typeof GhFileSchema>;
@@ -178,7 +177,7 @@ const PR_DETAIL_FIELDS = [
   "headRefName",
   "headRefOid",
   "mergeCommit",
-  "commits",
+  "commits"
 ].join(",");
 
 export function runPrCollect(options: RunPrCollectOptions) {
@@ -205,15 +204,15 @@ export function runPrCollect(options: RunPrCollectOptions) {
         "--limit",
         String(REPOSITORY_LIST_LIMIT),
         "--json",
-        "nameWithOwner,isArchived,isPrivate",
+        "nameWithOwner,isArchived,isPrivate"
       ]),
-      GhRepoListSchema,
+      GhRepoListSchema
     );
   } catch (error) {
     gaps.push({
       impact: "No PR trajectory evidence could be collected for the organization.",
       reason: `repository enumeration failed: ${errorMessage(error)}`,
-      repo: `${org}/*`,
+      repo: `${org}/*`
     });
   }
 
@@ -229,15 +228,23 @@ export function runPrCollect(options: RunPrCollectOptions) {
     gaps.push(...repoResult.gaps);
 
     for (const pr of repoResult.prs) {
-      const item = buildWorkItem(root, options.runTs, repo.nameWithOwner, pr, exec, options.repoCacheRoot);
+      const item = buildWorkItem(
+        root,
+        options.runTs,
+        repo.nameWithOwner,
+        pr,
+        exec,
+        options.repoCacheRoot
+      );
       writeWorkItem(item);
       workItems.push(summaryOf(item));
       if (item.postOpeningDelta.source === "unavailable") {
         gaps.push({
-          impact: "Primary post-opening delta evidence is missing, so PR trajectory analysis for this PR is degraded.",
+          impact:
+            "Primary post-opening delta evidence is missing, so PR trajectory analysis for this PR is degraded.",
           number: item.number,
           reason: `post-opening delta unavailable: ${item.postOpeningDelta.note ?? "no diff evidence"}`,
-          repo: item.repo,
+          repo: item.repo
         });
       }
     }
@@ -251,7 +258,7 @@ export function runPrCollect(options: RunPrCollectOptions) {
     runTs: options.runTs,
     version: 1,
     window,
-    workItems: workItems.toSorted((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number)),
+    workItems: workItems.toSorted((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number))
   };
   writePrManifest(root, options.runTs, manifest);
   return manifest;
@@ -261,7 +268,7 @@ function collectRepoPrs(
   repo: string,
   author: string,
   window: RetrospectiveWindow,
-  exec: CommandRunner,
+  exec: CommandRunner
 ) {
   const gaps: PrAnalysisGap[] = [];
   const summariesByNumber = new Map<number, GhPr>();
@@ -284,24 +291,25 @@ function collectRepoPrs(
           "--limit",
           String(PR_LIST_LIMIT),
           "--json",
-          PR_LIST_FIELDS,
+          PR_LIST_FIELDS
         ]),
-        GhPrListSchema,
+        GhPrListSchema
       );
     } catch (error) {
       gaps.push({
         impact: "Merged PRs from this date bucket are absent from PR trajectory analysis.",
         reason: `PR lookup failed for ${day}: ${errorMessage(error)}`,
-        repo,
+        repo
       });
       continue;
     }
 
     if (summaries.length >= PR_LIST_LIMIT) {
       gaps.push({
-        impact: "That date bucket may be incomplete if additional merged PRs exist beyond the limit.",
+        impact:
+          "That date bucket may be incomplete if additional merged PRs exist beyond the limit.",
         reason: `PR lookup for ${day} returned ${summaries.length} entries, hitting the per-day limit of ${PR_LIST_LIMIT}.`,
-        repo,
+        repo
       });
     }
 
@@ -319,7 +327,7 @@ function collectRepoPrs(
         impact: "This PR is absent from PR trajectory analysis.",
         number: summary.number,
         reason: `PR metadata lookup failed: ${errorMessage(error)}`,
-        repo,
+        repo
       });
     }
   }
@@ -336,15 +344,23 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
       "--repo",
       repo,
       "--json",
-      PR_DETAIL_FIELDS,
+      PR_DETAIL_FIELDS
     ]),
-    GhPrSchema,
+    GhPrSchema
   );
   let files: GhFile[] = [];
   try {
     const response = parseJson(
-      runText(exec, "gh", ["pr", "view", String(summary.number), "--repo", repo, "--json", "files"]),
-      GhPrFilesResponseSchema,
+      runText(exec, "gh", [
+        "pr",
+        "view",
+        String(summary.number),
+        "--repo",
+        repo,
+        "--json",
+        "files"
+      ]),
+      GhPrFilesResponseSchema
     );
     ({ files } = response);
   } catch (error) {
@@ -352,13 +368,13 @@ function hydratePr(repo: string, summary: GhPr, exec: CommandRunner, gaps: PrAna
       impact: "Changed-file context is missing, but post-opening delta analysis can still proceed.",
       number: summary.number,
       reason: `PR files lookup failed: ${errorMessage(error)}`,
-      repo,
+      repo
     });
   }
   return {
     ...summary,
     ...detail,
-    files,
+    files
   };
 }
 
@@ -377,12 +393,12 @@ export function runPrAggregate(options: RunPrAggregateOptions) {
     `Scope: ${manifest.org}; author: ${manifest.author}`,
     "",
     "## Recurring Corrective Patterns",
-    "",
+    ""
   ];
 
   const analyses = manifest.workItems.map((item) => ({
     body: existsSync(item.analysisPath) ? readFileSync(item.analysisPath, "utf-8").trim() : "",
-    item,
+    item
   }));
   const groupedPatterns = groupCorrectivePatterns(analyses);
   const recurringPatterns = groupedPatterns.filter((pattern) => pattern.items.length > 1);
@@ -410,7 +426,7 @@ export function runPrAggregate(options: RunPrAggregateOptions) {
         impact: "This PR is represented as a gap instead of an analyzed trajectory.",
         number: item.number,
         reason: `missing per-PR analysis at ${item.analysisPath}`,
-        repo: item.repo,
+        repo: item.repo
       });
     }
   }
@@ -430,9 +446,14 @@ export function runPrAggregate(options: RunPrAggregateOptions) {
     out.push("_No per-PR analyses were written._");
   }
   for (const { body, item } of represented) {
-    out.push(`### ${item.repo}#${item.number}`, "", `URL: ${item.url}`, `Opening snapshot: ${item.openingSnapshot.confidence}${
+    out.push(
+      `### ${item.repo}#${item.number}`,
+      "",
+      `URL: ${item.url}`,
+      `Opening snapshot: ${item.openingSnapshot.confidence}${
         isNonEmptyString(item.openingSnapshot.ref) ? ` ${item.openingSnapshot.ref}` : ""
-      }`);
+      }`
+    );
     if (isNonEmptyString(item.finalHeadSha)) {
       out.push(`Final head: ${item.finalHeadSha}`);
     }
@@ -479,7 +500,7 @@ function buildWorkItem(
   repo: string,
   pr: GhPr,
   exec: CommandRunner,
-  repoCacheRoot?: string,
+  repoCacheRoot?: string
 ): PrWorkItem {
   const commits = normalizeCommits(pr.commits);
   const openingSnapshot = inferOpeningSnapshot(pr, commits);
@@ -489,7 +510,14 @@ function buildWorkItem(
   const dir = path.join(runDir(root, runTs), "pr-analysis", "prs");
   const workItemPath = path.join(dir, `${id}.json`);
   const analysisPath = path.join(dir, `${id}.analysis.md`);
-  const postOpeningDelta = materializeDelta(repo, pr.number, openingSnapshot.ref, finalHeadSha, exec, repoCacheRoot);
+  const postOpeningDelta = materializeDelta(
+    repo,
+    pr.number,
+    openingSnapshot.ref,
+    finalHeadSha,
+    exec,
+    repoCacheRoot
+  );
 
   return {
     analysisPath,
@@ -510,7 +538,7 @@ function buildWorkItem(
     title: pr.title,
     url: pr.url,
     version: 1,
-    workItemPath,
+    workItemPath
   };
 }
 
@@ -532,20 +560,21 @@ function summaryOf(item: PrWorkItem) {
     repo: item.repo,
     title: item.title,
     url: item.url,
-    workItemPath: item.workItemPath,
+    workItemPath: item.workItemPath
   };
 }
 
 function inferOpeningSnapshot(
   pr: GhPr,
-  commits: PrCommitReference[],
+  commits: PrCommitReference[]
 ): PrWorkItemSummary["openingSnapshot"] {
-  const exactRef = pr.openingSnapshotOid ?? pr.openingSnapshotRef ?? pr.createdHeadRefOid ?? pr.creationHeadRefOid;
+  const exactRef =
+    pr.openingSnapshotOid ?? pr.openingSnapshotRef ?? pr.createdHeadRefOid ?? pr.creationHeadRefOid;
   if (isNonEmptyString(exactRef)) {
     return {
       confidence: "exact",
       reason: "GitHub provided a creation-time PR head ref.",
-      ref: exactRef,
+      ref: exactRef
     };
   }
 
@@ -553,19 +582,19 @@ function inferOpeningSnapshot(
   if (!Number.isNaN(createdAtMs)) {
     const candidate = commits.findLast(
       (commit) =>
-        commit.committedDate !== undefined && Date.parse(commit.committedDate) <= createdAtMs,
+        commit.committedDate !== undefined && Date.parse(commit.committedDate) <= createdAtMs
     );
     if (candidate) {
       return {
         confidence: "inferred",
         reason: "Latest PR commit whose commit date is at or before the PR creation time.",
-        ref: candidate.sha,
+        ref: candidate.sha
       };
     }
   }
   return {
     confidence: "unknown",
-    reason: "No creation-time head ref or inferable pre-open commit was available.",
+    reason: "No creation-time head ref or inferable pre-open commit was available."
   };
 }
 
@@ -575,7 +604,7 @@ function materializeDelta(
   openingRef: string | undefined,
   finalHeadSha: string | undefined,
   exec: CommandRunner,
-  repoCacheRoot?: string,
+  repoCacheRoot?: string
 ): PrWorkItem["postOpeningDelta"] {
   const missingRefNote =
     !isNonEmptyString(openingRef) || !isNonEmptyString(finalHeadSha)
@@ -593,16 +622,21 @@ function materializeDelta(
   ) {
     try {
       ensureRepoCache(repo, repoDir, exec);
-      runText(exec, "git", ["fetch", "origin", `pull/${number}/head:refs/remotes/pr/${number}`, "--force"], {
-        cwd: repoDir,
-      });
+      runText(
+        exec,
+        "git",
+        ["fetch", "origin", `pull/${number}/head:refs/remotes/pr/${number}`, "--force"],
+        {
+          cwd: repoDir
+        }
+      );
       const body = runText(exec, "git", ["diff", "--find-renames", openingRef, finalHeadSha], {
-        cwd: repoDir,
+        cwd: repoDir
       });
       return {
         body: clipDelta(body),
         confidence: "primary",
-        source: "local-git",
+        source: "local-git"
       };
     } catch {
       // Fall through to the GitHub diff fallback below.
@@ -615,7 +649,7 @@ function materializeDelta(
       body: clipDelta(body),
       confidence: "lower",
       note: "GitHub PR diff is the whole PR diff, not a true post-opening delta.",
-      source: "github-pr-diff-fallback",
+      source: "github-pr-diff-fallback"
     };
   } catch (error) {
     return {
@@ -624,7 +658,7 @@ function materializeDelta(
       note: missingRefNote
         ? `${missingRefNote} GitHub PR diff fallback failed: ${errorMessage(error)}`
         : `Diff materialization failed: ${errorMessage(error)}`,
-      source: "unavailable",
+      source: "unavailable"
     };
   }
 }
@@ -634,7 +668,15 @@ function ensureRepoCache(repo: string, repoDir: string, exec: CommandRunner) {
     return;
   }
   mkdirSync(path.dirname(repoDir), { recursive: true });
-  runText(exec, "gh", ["repo", "clone", repo, repoDir, "--", "--filter=blob:none", "--no-checkout"]);
+  runText(exec, "gh", [
+    "repo",
+    "clone",
+    repo,
+    repoDir,
+    "--",
+    "--filter=blob:none",
+    "--no-checkout"
+  ]);
 }
 
 function normalizeCommits(commits: GhCommit[] | undefined) {
@@ -650,7 +692,7 @@ function normalizeCommits(commits: GhCommit[] | undefined) {
         message: isNonEmptyString(commit.messageBody)
           ? `${headline}\n\n${commit.messageBody}`
           : headline,
-        sha,
+        sha
       };
       return normalized;
     })
@@ -675,7 +717,11 @@ function parseJson<T extends ZodType>(text: string, schema: T) {
 
 function prInWindow(pr: GhPr, window: RetrospectiveWindow) {
   const mergedAt = Date.parse(pr.mergedAt);
-  return !Number.isNaN(mergedAt) && mergedAt >= Date.parse(window.since) && mergedAt <= Date.parse(window.until);
+  return (
+    !Number.isNaN(mergedAt) &&
+    mergedAt >= Date.parse(window.since) &&
+    mergedAt <= Date.parse(window.until)
+  );
 }
 
 function extractCorrectivePatternLines(body: string) {
@@ -691,10 +737,8 @@ function extractCorrectivePatternLines(body: string) {
     .slice(0, CORRECTIVE_PATTERN_LIMIT);
 }
 
-function groupCorrectivePatterns(
-  analyses: { body: string; item: PrWorkItemSummary; }[],
-) {
-  const byPattern = new Map<string, { items: string[]; label: string; }>();
+function groupCorrectivePatterns(analyses: { body: string; item: PrWorkItemSummary }[]) {
+  const byPattern = new Map<string, { items: string[]; label: string }>();
   for (const { body, item } of analyses) {
     if (!body) {
       continue;
@@ -709,7 +753,9 @@ function groupCorrectivePatterns(
       byPattern.set(key, existing);
     }
   }
-  return [...byPattern.values()].toSorted((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label));
+  return [...byPattern.values()].toSorted(
+    (a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label)
+  );
 }
 
 function normalizePattern(value: string) {
@@ -727,10 +773,17 @@ function dedupeGaps(gaps: PrAnalysisGap[]) {
   for (const gap of gaps) {
     byKey.set(`${gap.repo}#${gap.number ?? ""}#${gap.reason}`, gap);
   }
-  return [...byKey.values()].toSorted((a, b) => comparePrLabels(a.repo, a.number, b.repo, b.number));
+  return [...byKey.values()].toSorted((a, b) =>
+    comparePrLabels(a.repo, a.number, b.repo, b.number)
+  );
 }
 
-function comparePrLabels(repoA: string, numberA: number | undefined, repoB: string, numberB: number | undefined) {
+function comparePrLabels(
+  repoA: string,
+  numberA: number | undefined,
+  repoB: string,
+  numberB: number | undefined
+) {
   return repoA.localeCompare(repoB) || (numberA ?? 0) - (numberB ?? 0);
 }
 
@@ -786,22 +839,17 @@ function defaultRunner(command: string, args: string[], options: { cwd?: string 
   const result = spawnSync(command, args, {
     cwd: options.cwd,
     encoding: "utf-8",
-    timeout: DEFAULT_COMMAND_TIMEOUT_MS,
+    timeout: DEFAULT_COMMAND_TIMEOUT_MS
   });
   return {
     error: result.error ? errorMessage(result.error) : undefined,
     status: result.status,
     stderr: result.stderr ?? "",
-    stdout: result.stdout ?? "",
+    stdout: result.stdout ?? ""
   };
 }
 
-function runText(
-  exec: CommandRunner,
-  command: string,
-  args: string[],
-  options?: { cwd?: string },
-) {
+function runText(exec: CommandRunner, command: string, args: string[], options?: { cwd?: string }) {
   const result = exec(command, args, options);
   if (result.status !== 0) {
     const detail =

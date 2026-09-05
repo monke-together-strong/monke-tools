@@ -1,15 +1,13 @@
 #!/usr/bin/env bun
 /**
- * agent-session-retrospective — deterministic collect/commit brackets.
+ * Agent-session-retrospective — deterministic collect/commit brackets.
  *
- *   bun run-retrospective.ts collect [--since DATE] [--until DATE]
- *                                    [--idle-minutes N] [--run-ts TS]
- *   bun run-retrospective.ts pr-collect --run-ts TS [--repo-cache DIR]
- *   bun run-retrospective.ts pr-aggregate --run-ts TS
- *   bun run-retrospective.ts commit  --run-ts TS --synthesis FILE
+ * Bun run-retrospective.ts collect [--since DATE] [--until DATE] [--idle-minutes N] [--run-ts TS]
+ * bun run-retrospective.ts pr-collect --run-ts TS [--repo-cache DIR] bun run-retrospective.ts
+ * pr-aggregate --run-ts TS bun run-retrospective.ts commit --run-ts TS --synthesis FILE
  *
- * The middle (per-repo and per-PR subagent fan-out) is fuzzy and host-native;
- * everything here is deterministic and bun-testable. The script owns disk I/O.
+ * The middle (per-repo and per-PR subagent fan-out) is fuzzy and host-native; everything here is
+ * deterministic and bun-testable. The script owns disk I/O.
  */
 
 import path from "node:path";
@@ -83,8 +81,8 @@ function main() {
         retroRoot: root,
         runTs,
         sinceMs: parseDateMs(flags.get("since")),
-        untilMs: parseDateMs(flags.get("until")),
-      }),
+        untilMs: parseDateMs(flags.get("until"))
+      })
     );
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
@@ -100,8 +98,8 @@ function main() {
         nowIso: new Date().toISOString(),
         retroRoot: root,
         runTs,
-        synthesisPath: flags.get("synthesis"),
-      }),
+        synthesisPath: flags.get("synthesis")
+      })
     );
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
@@ -117,8 +115,8 @@ function main() {
         repoCacheRoot:
           flags.get("repo-cache") ?? path.join(root, "tmp", "agent-retrospective-pr-analysis"),
         retroRoot: root,
-        runTs,
-      }),
+        runTs
+      })
     );
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
@@ -132,14 +130,16 @@ function main() {
     const result = withRetroLock(root, () =>
       runPrAggregate({
         retroRoot: root,
-        runTs,
-      }),
+        runTs
+      })
     );
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
   }
 
-  process.stderr.write("Usage: run-retrospective.ts <collect|pr-collect|pr-aggregate|commit> [flags]\n");
+  process.stderr.write(
+    "Usage: run-retrospective.ts <collect|pr-collect|pr-aggregate|commit> [flags]\n"
+  );
   process.exit(1);
 }
 

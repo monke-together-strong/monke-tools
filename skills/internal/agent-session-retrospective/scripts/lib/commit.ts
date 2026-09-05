@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { isNonEmptyString } from "@sindresorhus/is";
 
+import { readPrManifest } from "./pr-analysis.ts";
+import type { PrAnalysisManifest, PrWorkItemSummary } from "./pr-analysis.ts";
 import {
   cleanRunDir,
   listBundleHashes,
@@ -15,10 +17,8 @@ import {
   saveFrozenSession,
   saveRepoMeta,
   writeReport,
-  writeReportArtifact,
+  writeReportArtifact
 } from "./store.ts";
-import { readPrManifest } from './pr-analysis.ts';
-import type { PrAnalysisManifest, PrWorkItemSummary } from './pr-analysis.ts';
 import type {
   BundleSession,
   CanonicalTurn,
@@ -28,7 +28,7 @@ import type {
   RepeatedAskCluster,
   RepoBundle,
   RepoFindings,
-  RetrospectiveWindow,
+  RetrospectiveWindow
 } from "./types.ts";
 
 export interface ValidatedFindings {
@@ -40,10 +40,10 @@ export interface ValidatedFindings {
 }
 
 /**
- * Validate the LLM's citations against the bundle the script handed it: every
- * cited turn ref must exist in its session; every cited episode ref must name a
- * surviving episode. Offending items are dropped and counted (commit stays the
- * deterministic gate; a hallucinated ref never reaches the frozen record).
+ * Validate the LLM's citations against the bundle the script handed it: every cited turn ref must
+ * exist in its session; every cited episode ref must name a surviving episode. Offending items are
+ * dropped and counted (commit stays the deterministic gate; a hallucinated ref never reaches the
+ * frozen record).
  */
 export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
   // A session's friction is authored once, by its PRIMARY repo's subagent. Refs
@@ -85,7 +85,7 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
   const bundleSessionIds = new Set(bundle.sessions.map((session) => session.sessionId));
   const repeatedAsks = (findings.repeatedAsks ?? []).map((cluster) => ({
     ...cluster,
-    exampleSessionIds: (cluster.exampleSessionIds ?? []).filter((id) => bundleSessionIds.has(id)),
+    exampleSessionIds: (cluster.exampleSessionIds ?? []).filter((id) => bundleSessionIds.has(id))
   }));
 
   return {
@@ -93,7 +93,7 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
     episodes,
     fixes,
     repeatedAsks,
-    repoKey: findings.repoKey,
+    repoKey: findings.repoKey
   };
 }
 
@@ -136,7 +136,9 @@ export function runCommit(options: RunCommitOptions) {
 
   const prAnalysis = readPrAnalysis(root, options.runTs);
   if (!isNonEmptyString(prAnalysis?.trim())) {
-    throw new Error(`commit requires runs/${options.runTs}/pr-analysis.md from the required PR analysis lane`);
+    throw new Error(
+      `commit requires runs/${options.runTs}/pr-analysis.md from the required PR analysis lane`
+    );
   }
   const prAnalysisValidation = validatePrAnalysis(prAnalysis, readPrManifest(root, options.runTs));
 
@@ -163,7 +165,7 @@ export function runCommit(options: RunCommitOptions) {
         .map((episode) => ({
           body: episode.body,
           citedTurnRefs: episode.citedTurnRefs,
-          id: `${options.runTs}:${episode.id}`,
+          id: `${options.runTs}:${episode.id}`
         }));
       const record: FrozenSessionRecord = {
         agent: session.agent,
@@ -175,7 +177,7 @@ export function runCommit(options: RunCommitOptions) {
         repoKey: slice.bundle.repoKey,
         secondary: secondaryRootsOf(session, slices),
         sessionId: session.sessionId,
-        version: 1,
+        version: 1
       };
       saveFrozenSession(root, record);
       const repoMeta = loadRepoMeta(root, slice.bundle.repoKey);
@@ -183,7 +185,7 @@ export function runCommit(options: RunCommitOptions) {
         firstSeenAt: repoMeta?.firstSeenAt ?? options.nowIso,
         lastAnalyzedAt: options.nowIso,
         repoKey: slice.bundle.repoKey,
-        version: 1,
+        version: 1
       });
       if (prior) {
         appendedSessions += 1;
@@ -196,10 +198,15 @@ export function runCommit(options: RunCommitOptions) {
   const artifacts = buildReportArtifacts(options.runTs, synthesis, slices, {
     prAnalysis,
     prAnalysisWarnings: prAnalysisValidation.warnings,
-    window: readRunWindow(root, options.runTs),
+    window: readRunWindow(root, options.runTs)
   });
   const reportPath = writeReport(root, options.runTs, artifacts.report);
-  const sessionSourcePath = writeReportArtifact(root, options.runTs, "session-sources", artifacts.sessionSources);
+  const sessionSourcePath = writeReportArtifact(
+    root,
+    options.runTs,
+    "session-sources",
+    artifacts.sessionSources
+  );
   const prSourcePath = writeReportArtifact(root, options.runTs, "pr-sources", artifacts.prSources);
   cleanRunDir(root, options.runTs);
 
@@ -209,13 +216,13 @@ export function runCommit(options: RunCommitOptions) {
     frozenSessions,
     prAnalysis: {
       present: Boolean(prAnalysis?.trim()),
-      warnings: prAnalysisValidation.warnings,
+      warnings: prAnalysisValidation.warnings
     },
     reportPath,
     sourcePaths: {
       pr: prSourcePath,
-      session: sessionSourcePath,
-    },
+      session: sessionSourcePath
+    }
   };
 }
 
@@ -224,7 +231,7 @@ function secondaryRootsOf(session: BundleSession, slices: RepoSlice[]) {
   for (const slice of slices) {
     if (
       slice.bundle.sessions.some(
-        (candidate) => candidate.sessionId === session.sessionId && candidate.role === "secondary",
+        (candidate) => candidate.sessionId === session.sessionId && candidate.role === "secondary"
       )
     ) {
       roots.add(slice.bundle.repoKey);
@@ -245,7 +252,7 @@ export function buildReport(
   runTs: string,
   synthesis: string,
   slices: RepoSlice[],
-  context: ReportContext = {},
+  context: ReportContext = {}
 ) {
   return buildReportArtifacts(runTs, synthesis, slices, context).report;
 }
@@ -254,7 +261,7 @@ export function buildReportArtifacts(
   runTs: string,
   synthesis: string,
   slices: RepoSlice[],
-  context: ReportContext = {},
+  context: ReportContext = {}
 ) {
   const out: string[] = [
     `# Agent session retrospective — ${runTs}`,
@@ -268,7 +275,7 @@ export function buildReportArtifacts(
     synthesis || "_No cross-repo synthesis provided for this run._",
     "",
     "## PR Repeated Corrective Patterns",
-    "",
+    ""
   ];
   const prAnalysis = context.prAnalysis?.trim();
   if (isNonEmptyString(prAnalysis)) {
@@ -276,20 +283,21 @@ export function buildReportArtifacts(
   } else {
     out.push(
       `_PR analysis missing: no \`runs/${runTs}/pr-analysis.md\` was available at commit time. Transcript-only synthesis is degraded._`,
-     "");
+      ""
+    );
   }
 
   return {
     prSources: buildPrSources(runTs, prAnalysis, context),
     report: out.join("\n"),
-    sessionSources: buildSessionSources(runTs, slices, context.window),
+    sessionSources: buildSessionSources(runTs, slices, context.window)
   };
 }
 
 function buildSessionSources(
   runTs: string,
   slices: RepoSlice[],
-  window: RetrospectiveWindow | null | undefined,
+  window: RetrospectiveWindow | null | undefined
 ) {
   const out: string[] = [
     `# Session sources — ${runTs}`,
@@ -299,10 +307,10 @@ function buildSessionSources(
     `Main report: [${runTs}-retrospective.md](${runTs}-retrospective.md)`,
     "",
     "## Per-repo proposals",
-    "",
+    ""
   ];
   const reposWithSignal = slices.filter(
-    (slice) => slice.validated.fixes.length > 0 || slice.validated.repeatedAsks.length > 0,
+    (slice) => slice.validated.fixes.length > 0 || slice.validated.repeatedAsks.length > 0
   );
   if (reposWithSignal.length === 0) {
     out.push("_No per-repo proposals this run._", "");
@@ -313,7 +321,7 @@ function buildSessionSources(
       const { confidence, rest, target } = parseFixHeader(fix.body);
       out.push(`- Target: ${target}; Confidence: ${confidence} — ${indentBody(rest)}`);
       const evidence = episodesFor(fix, slice.validated.episodes).flatMap((episode) =>
-        renderEvidence(episode, slice.bundle),
+        renderEvidence(episode, slice.bundle)
       );
       if (evidence.length > 0) {
         out.push(
@@ -321,7 +329,7 @@ function buildSessionSources(
           "",
           evidence.map((line) => `  ${line}`).join("\n"),
           "",
-          "  </details>",
+          "  </details>"
         );
       }
     }
@@ -345,7 +353,8 @@ function buildSessionSources(
       seenEpisodes.add(dedupeKey);
       out.push(
         `- \`${slice.validated.repoKey}\` · ${episode.sessionId.slice(0, SESSION_ID_PREFIX_LENGTH)} · refs ${episode.citedTurnRefs.join(", ")}`,
-       `  ${firstLine(episode.body)}`);
+        `  ${firstLine(episode.body)}`
+      );
     }
   }
   out.push("");
@@ -353,14 +362,18 @@ function buildSessionSources(
   return out.join("\n");
 }
 
-function buildPrSources(runTs: string, prAnalysis: string | null | undefined, context: ReportContext) {
+function buildPrSources(
+  runTs: string,
+  prAnalysis: string | null | undefined,
+  context: ReportContext
+) {
   const out: string[] = [
     `# PR sources — ${runTs}`,
     "",
     formatWindowLine(context.window, runTs),
     "",
     `Main report: [${runTs}-retrospective.md](${runTs}-retrospective.md)`,
-    "",
+    ""
   ];
 
   if (isNonEmptyString(prAnalysis?.trim())) {
@@ -385,14 +398,14 @@ const REQUIRED_PR_HEADINGS = [
   "Post-Opening Delta",
   "Corrective Patterns",
   "Ignored Feature Scope",
-  "Commit Message Reference",
+  "Commit Message Reference"
 ];
 
 const REQUIRED_SYNTHESIS_HEADINGS = [
   "Active Actions",
   "Standards Opportunities",
   "Skill & Workflow Opportunities",
-  "Resolved or Superseded",
+  "Resolved or Superseded"
 ];
 
 const REQUIRED_ACTIVE_ACTION_FIELDS = [
@@ -407,7 +420,7 @@ const REQUIRED_ACTIVE_ACTION_FIELDS = [
   "Checked-against",
   "Current-state evidence",
   "Remaining gap",
-  "Session evidence",
+  "Session evidence"
 ];
 
 export function validateSynthesis(content: string | null | undefined) {
@@ -423,14 +436,12 @@ export function validateSynthesis(content: string | null | undefined) {
     return warnings;
   }
   const positions = REQUIRED_SYNTHESIS_HEADINGS.map((heading) => text.indexOf(`### ${heading}`));
-  if (!positions.every((position, index) => index === 0 || position > (positions[index - 1] ?? -1))) {
+  if (
+    !positions.every((position, index) => index === 0 || position > (positions[index - 1] ?? -1))
+  ) {
     warnings.push("Required synthesis headings are out of order.");
   }
-  const activeActions = extractMarkdownSection(
-    text,
-    "Active Actions",
-    SYNTHESIS_HEADING_LEVEL,
-  );
+  const activeActions = extractMarkdownSection(text, "Active Actions", SYNTHESIS_HEADING_LEVEL);
   if (isNonEmptyString(activeActions)) {
     warnings.push(...validateActiveActions(activeActions));
   }
@@ -454,7 +465,7 @@ function validateActiveActions(section: string) {
       field,
       position: lines.findIndex((line) =>
         new RegExp(`^${RegExp.escape(field)}:\\s+\\S`, "u").test(line)
-      ),
+      )
     }));
     for (const { field, position } of fieldPositions) {
       if (position === -1) {
@@ -462,10 +473,12 @@ function validateActiveActions(section: string) {
       }
     }
     const presentPositions = fieldPositions.filter(({ position }) => position !== -1);
-    if (!presentPositions.every(
-      ({ position }, fieldIndex) =>
-        fieldIndex === 0 || position > (presentPositions[fieldIndex - 1]?.position ?? -1),
-    )) {
+    if (
+      !presentPositions.every(
+        ({ position }, fieldIndex) =>
+          fieldIndex === 0 || position > (presentPositions[fieldIndex - 1]?.position ?? -1)
+      )
+    ) {
       warnings.push(`Active action \`${title}\` fields are out of order.`);
     }
   }
@@ -474,7 +487,7 @@ function validateActiveActions(section: string) {
 
 export function validatePrAnalysis(
   content: string | null | undefined,
-  manifest?: PrAnalysisManifest | null,
+  manifest?: PrAnalysisManifest | null
 ) {
   const text = content?.trim();
   if (!isNonEmptyString(text)) {
@@ -487,7 +500,7 @@ export function validatePrAnalysis(
 
   const counts = REQUIRED_PR_HEADINGS.map((heading) => ({
     count: countHeading(text, heading),
-    heading,
+    heading
   }));
   const perPrHeadingSeen = counts.some((entry) => entry.count > 0);
   if (!perPrHeadingSeen) {
@@ -499,15 +512,12 @@ export function validatePrAnalysis(
     .filter((entry) => entry.count !== expectedCount)
     .map(
       (entry) =>
-        `PR analysis heading \`## ${entry.heading}\` appears ${entry.count} time(s), expected ${expectedCount}.`,
+        `PR analysis heading \`## ${entry.heading}\` appears ${entry.count} time(s), expected ${expectedCount}.`
     );
   return { warnings };
 }
 
-function validateManifestBackedPrAnalysis(
-  text: string,
-  manifest: PrAnalysisManifest,
-) {
+function validateManifestBackedPrAnalysis(text: string, manifest: PrAnalysisManifest) {
   const warnings: string[] = [];
   for (const item of manifest.workItems) {
     const section = findPrAnalysisSection(text, item);
@@ -529,19 +539,27 @@ function validateManifestBackedPrAnalysis(
       isNonEmptyString(item.openingSnapshot.ref) &&
       !containsRef(section, item.openingSnapshot.ref)
     ) {
-      warnings.push(`PR \`${item.repo}#${item.number}\` omits known opening ref ${item.openingSnapshot.ref}.`);
+      warnings.push(
+        `PR \`${item.repo}#${item.number}\` omits known opening ref ${item.openingSnapshot.ref}.`
+      );
     }
     if (isNonEmptyString(item.finalHeadSha) && !containsRef(section, item.finalHeadSha)) {
-      warnings.push(`PR \`${item.repo}#${item.number}\` omits known final head ${item.finalHeadSha}.`);
+      warnings.push(
+        `PR \`${item.repo}#${item.number}\` omits known final head ${item.finalHeadSha}.`
+      );
     }
 
     const allowedShas = new Set(
       [item.openingSnapshot.ref, item.finalHeadSha, item.mergeCommitSha, ...item.commitShas].filter(
-        (sha): sha is string => Boolean(sha),
-      ),
+        (sha): sha is string => Boolean(sha)
+      )
     );
     for (const citedSha of citedShas(section)) {
-      if (![...allowedShas].some((allowed) => allowed.startsWith(citedSha) || citedSha.startsWith(allowed))) {
+      if (
+        ![...allowedShas].some(
+          (allowed) => allowed.startsWith(citedSha) || citedSha.startsWith(allowed)
+        )
+      ) {
         warnings.push(`PR \`${item.repo}#${item.number}\` cites unknown commit SHA ${citedSha}.`);
       }
     }
@@ -563,9 +581,7 @@ function findPrAnalysisSection(text: string, item: PrWorkItemSummary) {
 
 function countHeading(text: string, heading: string, level = 2) {
   return [
-    ...text.matchAll(
-      new RegExp(`^${"#".repeat(level)}\\s+${RegExp.escape(heading)}\\s*$`, "gmu"),
-    ),
+    ...text.matchAll(new RegExp(`^${"#".repeat(level)}\\s+${RegExp.escape(heading)}\\s*$`, "gmu"))
   ].length;
 }
 
@@ -608,7 +624,9 @@ function sourceFileName(runTs: string, kind: "session" | "pr") {
 
 function extractPrRepeatedPatterns(prAnalysis: string) {
   const section = extractMarkdownSection(prAnalysis, "Recurring Corrective Patterns");
-  return section ?? "_No recurring corrective-change patterns were extracted from per-PR analyses._";
+  return (
+    section ?? "_No recurring corrective-change patterns were extracted from per-PR analyses._"
+  );
 }
 
 function extractMarkdownSection(markdown: string, heading: string, level = 2) {
@@ -673,7 +691,5 @@ function indentBody(body: string) {
 
 function firstLine(text: string) {
   const line = text.split("\n").find((entry) => entry.trim()) ?? "";
-  return line.length > REPORT_LINE_MAX_LENGTH
-    ? `${line.slice(0, REPORT_LINE_MAX_LENGTH)}…`
-    : line;
+  return line.length > REPORT_LINE_MAX_LENGTH ? `${line.slice(0, REPORT_LINE_MAX_LENGTH)}…` : line;
 }

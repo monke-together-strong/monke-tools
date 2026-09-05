@@ -47,5 +47,7 @@ export function loadEnvFileIfPresent(filePath: string) {
 }
 
 export function getFirstEnvValue(names: string[]) {
-  return names.map((name) => process.env[name]).find((value) => value !== undefined && value !== "");
+  return names
+    .map((name) => process.env[name])
+    .find((value) => value !== undefined && value !== "");
 }

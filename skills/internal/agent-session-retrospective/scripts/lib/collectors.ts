@@ -13,13 +13,13 @@ import {
   CodexTranscriptRecordSchema,
   extractClaudeTextBlocks,
   JsonValueSchema,
-  TranscriptEnvelopeSchema,
+  TranscriptEnvelopeSchema
 } from "./transcript-schemas.ts";
 import type {
   ClaudeTranscriptEnvelope,
   ClaudeTranscriptRecord,
   CodexTranscriptRecord,
-  JsonValue,
+  JsonValue
 } from "./transcript-schemas.ts";
 import type { AgentKind } from "./types.ts";
 
@@ -62,7 +62,7 @@ const EXIT_CODE_PATTERNS = [
   /exited with code (?<exitCode>\d+)/iu,
   /exit code:? (?<exitCode>\d+)/iu,
   /exit status:? (?<exitCode>\d+)/iu,
-  /process exited with status (?<exitCode>\d+)/iu,
+  /process exited with status (?<exitCode>\d+)/iu
 ];
 const INJECTED_TEXT_PREFIX_LENGTH = 40;
 
@@ -79,7 +79,7 @@ function parseExitCode(output: string) {
 
 const codexSessionAdapter: SessionAdapter = {
   agent: "codex",
-  decode: decodeCodexSession,
+  decode: decodeCodexSession
 };
 
 export function parseCodexSession(filePath: string) {
@@ -130,10 +130,7 @@ function decodeCodexSession(rawRecords: JsonValue[]) {
   return session;
 }
 
-function readCodexSessionMetadata(
-  session: DecodedSession,
-  payload: CodexSessionMetaPayload,
-) {
+function readCodexSessionMetadata(session: DecodedSession, payload: CodexSessionMetaPayload) {
   if (payload.id !== undefined) {
     session.sessionId = payload.id;
   }
@@ -147,10 +144,7 @@ function readCodexSessionMetadata(
     payload.source?.subagent?.thread_spawn?.parent_thread_id ?? payload.parent_thread_id ?? null;
 }
 
-function readCodexTurnContext(
-  session: DecodedSession,
-  payload: CodexTurnContextPayload,
-) {
+function readCodexTurnContext(session: DecodedSession, payload: CodexTurnContextPayload) {
   if ((session.cwd === null || session.cwd === "") && payload.cwd !== undefined) {
     session.cwd = payload.cwd;
   }
@@ -158,14 +152,14 @@ function readCodexTurnContext(
 
 function decodeCodexEventMessage(
   payload: CodexEventPayload,
-  hasEventProse: boolean,
+  hasEventProse: boolean
 ): SessionEvent | null {
   if (payload.type === "user_message") {
     return {
       captureRawUserMessage: true,
       kind: "prose",
       role: "user",
-      text: payload.message,
+      text: payload.message
     };
   }
   return hasEventProse
@@ -173,7 +167,7 @@ function decodeCodexEventMessage(
         captureRawUserMessage: false,
         kind: "prose",
         role: "assistant",
-        text: payload.message,
+        text: payload.message
       }
     : null;
 }
@@ -181,7 +175,7 @@ function decodeCodexEventMessage(
 function decodeCodexResponseItem(
   payload: CodexResponsePayload,
   hasEventProse: boolean,
-  cwd: string | null,
+  cwd: string | null
 ): SessionEvent | null {
   if (payload.type === "message") {
     if (hasEventProse) {
@@ -195,7 +189,7 @@ function decodeCodexResponseItem(
       captureRawUserMessage: payload.role === "user" && text.trim() !== "",
       kind: "prose",
       role: payload.role,
-      text,
+      text
     };
   }
   if (payload.type === "function_call") {
@@ -206,7 +200,7 @@ function decodeCodexResponseItem(
       inputSummary: summarizeInput(input),
       kind: "tool-call",
       name: payload.name ?? "tool",
-      pathCandidates: collectToolPathCandidates(input),
+      pathCandidates: collectToolPathCandidates(input)
     };
   }
 
@@ -215,7 +209,7 @@ function decodeCodexResponseItem(
   const event: SessionEvent & { kind: "tool-result" } = {
     callId: payload.call_id ?? "",
     kind: "tool-result",
-    output,
+    output
   };
   if (exitCode !== undefined) {
     event.exitCode = exitCode;
@@ -303,7 +297,7 @@ function isInjectedUserText(text: string) {
 
 const claudeSessionAdapter: SessionAdapter = {
   agent: "claude",
-  decode: decodeClaudeSession,
+  decode: decodeClaudeSession
 };
 
 export function parseClaudeSession(filePath: string) {
@@ -329,9 +323,7 @@ function decodeClaudeSession(rawRecords: JsonValue[]) {
   return session;
 }
 
-function collectClaudeToolResults(
-  records: ClaudeTranscriptRecord[],
-) {
+function collectClaudeToolResults(records: ClaudeTranscriptRecord[]) {
   const results = new Map<string, SessionEvent & { kind: "tool-result" }>();
   for (const record of records) {
     if (!Array.isArray(record.message.content)) {
@@ -358,10 +350,7 @@ function parseClaudeTranscript(records: JsonValue[]) {
   return parsedRecords;
 }
 
-function readClaudeSessionMetadata(
-  session: DecodedSession,
-  record: ClaudeTranscriptEnvelope,
-) {
+function readClaudeSessionMetadata(session: DecodedSession, record: ClaudeTranscriptEnvelope) {
   if (session.sessionId === "" && record.sessionId !== undefined) {
     session.sessionId = record.sessionId;
   }
@@ -373,7 +362,7 @@ function readClaudeSessionMetadata(
 function decodeClaudeMessage(
   record: ClaudeTranscriptRecord,
   cwd: string | null,
-  toolResults: Map<string, SessionEvent & { kind: "tool-result" }>,
+  toolResults: Map<string, SessionEvent & { kind: "tool-result" }>
 ): SessionEvent[] {
   const { content } = record.message;
   if (!Array.isArray(content)) {
@@ -383,8 +372,8 @@ function decodeClaudeMessage(
             captureRawUserMessage: true,
             kind: "prose",
             role: "user",
-            text: content,
-          },
+            text: content
+          }
         ]
       : [];
   }
@@ -400,7 +389,7 @@ function decodeClaudeBlock(
   record: ClaudeTranscriptRecord,
   block: JsonValue,
   cwd: string | null,
-  toolResults: Map<string, SessionEvent & { kind: "tool-result" }>,
+  toolResults: Map<string, SessionEvent & { kind: "tool-result" }>
 ): SessionEvent[] {
   const parsed = ClaudeContentBlockSchema.safeParse(block);
   if (!parsed.success) {
@@ -410,18 +399,14 @@ function decodeClaudeBlock(
   if (content.type === "tool_result") {
     return [];
   }
-  if (
-    record.type === "user" &&
-    record.isMeta !== true &&
-    content.type === "text"
-  ) {
+  if (record.type === "user" && record.isMeta !== true && content.type === "text") {
     return [
       {
         captureRawUserMessage: true,
         kind: "prose",
         role: "user",
-        text: content.text,
-      },
+        text: content.text
+      }
     ];
   }
   if (record.type !== "assistant") {
@@ -433,8 +418,8 @@ function decodeClaudeBlock(
         captureRawUserMessage: false,
         kind: "prose",
         role: "assistant",
-        text: content.text,
-      },
+        text: content.text
+      }
     ];
   }
   if (content.type === "tool_use") {
@@ -445,7 +430,7 @@ function decodeClaudeBlock(
       inputSummary: summarizeInput(input),
       kind: "tool-call",
       name: content.name ?? "tool",
-      pathCandidates: collectToolPathCandidates(input),
+      pathCandidates: collectToolPathCandidates(input)
     };
     const result = call.callId === null ? undefined : toolResults.get(call.callId);
     return result ? [call, result] : [call];
@@ -453,9 +438,7 @@ function decodeClaudeBlock(
   return [];
 }
 
-function decodeClaudeToolResult(
-  block: JsonValue,
-) {
+function decodeClaudeToolResult(block: JsonValue) {
   const parsed = ClaudeContentBlockSchema.safeParse(block);
   if (!parsed.success || parsed.data.type !== "tool_result") {
     return null;
@@ -464,7 +447,7 @@ function decodeClaudeToolResult(
   const event: SessionEvent & { kind: "tool-result" } = {
     callId: content.tool_use_id,
     kind: "tool-result",
-    output: extractClaudeText(content.content),
+    output: extractClaudeText(content.content)
   };
   if (content.is_error === true) {
     event.error = "tool error";
@@ -483,10 +466,7 @@ function extractClaudeText(content: JsonValue | undefined) {
   return typeof content === "string" ? content : "";
 }
 
-function parseSessionWithAdapter(
-  filePath: string,
-  adapter: SessionAdapter,
-) {
+function parseSessionWithAdapter(filePath: string, adapter: SessionAdapter) {
   const { hash, lineCount, records } = readJsonlLines(filePath);
   if (records.length === 0) {
     return null;
@@ -496,7 +476,7 @@ function parseSessionWithAdapter(
     contentHash: hash,
     filePath,
     sourceLineCount: lineCount,
-    ...adapter.decode(records),
+    ...adapter.decode(records)
   });
 }
 
@@ -508,7 +488,7 @@ function createDecodedSession(): DecodedSession {
     parentSessionId: null,
     sessionId: "",
     startedAt: null,
-    threadSource: null,
+    threadSource: null
   };
 }
 
@@ -565,5 +545,7 @@ function walkJsonl(dir: string) {
 }
 
 export function parseSessionFile(file: DiscoveredFile) {
-  return file.agent === "codex" ? parseCodexSession(file.filePath) : parseClaudeSession(file.filePath);
+  return file.agent === "codex"
+    ? parseCodexSession(file.filePath)
+    : parseClaudeSession(file.filePath);
 }
