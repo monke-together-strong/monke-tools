@@ -363,7 +363,8 @@ class SessionStateOwner {
     private readonly onCheckpoint?: (checkpoint: SessionMaterializationCheckpoint) => void
   ) {
     this.#state = state;
-    this.persist("generation-start");
+    this.store.checkpoint(state);
+    this.onCheckpoint?.("generation-start");
   }
 
   get state() {
@@ -389,11 +390,6 @@ class SessionStateOwner {
   replaceState(state: SessionState, checkpoint: SessionMaterializationCheckpoint) {
     this.store.checkpoint(state);
     this.#state = state;
-    this.onCheckpoint?.(checkpoint);
-  }
-
-  private persist(checkpoint: SessionMaterializationCheckpoint) {
-    this.store.checkpoint(this.#state);
     this.onCheckpoint?.(checkpoint);
   }
 }
