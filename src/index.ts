@@ -91,8 +91,13 @@ function createProgram(runtime: Runtime) {
     .description("Clean eligible retained Sessions across all Roots; preserve local branches")
     .option("--dry-run", "Inspect without changes; report Sessions that would clean")
     .option("--json", "Write a versioned JSON report to stdout")
+    .option("--eligible", "Hide skipped Sessions in human output")
     .action((options) =>
-      runCleanup(runtime, { dryRun: options.dryRun === true, json: options.json === true })
+      runCleanup(runtime, {
+        dryRun: options.dryRun === true,
+        eligibleOnly: options.eligible === true,
+        json: options.json === true
+      })
     );
 
   program.command("setup").action(() => {

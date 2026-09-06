@@ -7,6 +7,7 @@ import {
   collectCleanupEvidence,
   createCleanupEvidenceCache,
   decideCleanupEligibility,
+  memoizeRepoStructure,
   readOnlyCleanupRuntime,
   revalidateCleanupEvidence
 } from "./cleanup-eligibility.ts";
@@ -69,6 +70,19 @@ export interface SessionCleanupEvidence {
   problems?: SessionCleanupProblem[];
   rootSourceRoot: string | null;
   session: string | null;
+}
+
+export interface UnownedWorktree {
+  branch: string | null;
+  eligible: false;
+  sourceRoot: string;
+  worktreePath: string;
+}
+
+/** Unowned-worktree discovery from an earlier pass; re-inspection reuses it instead of rescanning. */
+export interface SessionCleanupDiscovery {
+  unavailableSources: string[];
+  unownedWorktrees: UnownedWorktree[];
 }
 
 export interface SessionCleanupDecision {
@@ -171,9 +185,16 @@ export async function inspectSessionCleanup(
   runtime: Runtime,
   home: string,
   knownSourceRoots: string[] = [],
-  options: { operationLock?: OperationLock; sessionFile?: string } = {}
+  options: {
+    discovered?: SessionCleanupDiscovery;
+    operationLock?: OperationLock;
+    sessionFile?: string;
+  } = {}
 ) {
   const readOnly = readOnlyCleanupRuntime(runtime);
+  // Collection memoizes per-Source structure; revalidation and discovery below read fresh.
+  const collector = memoizeRepoStructure(runtime);
+  const collectorReadOnly = readOnlyCleanupRuntime(collector);
   const scan = scanSessionStates(home);
   const states = scan.records.flatMap((record) => (record.state ? [record.state] : []));
   const cache = createCleanupEvidenceCache();
@@ -230,7 +251,12 @@ export async function inspectSessionCleanup(
                 worktreePath: repo.worktreePath
               };
               try {
-                const registration = inspectSessionRepoRegistration(readOnly, home, state, repo);
+                const registration = inspectSessionRepoRegistration(
+                  collectorReadOnly,
+                  home,
+                  state,
+                  repo
+                );
                 member.mode = registration.mode;
                 member.registeredBranch = registration.registeredBranch;
               } catch (error) {
@@ -244,7 +270,7 @@ export async function inspectSessionCleanup(
               }
               if (member.mode === "live") {
                 member.evidence = await collectCleanupEvidence(
-                  runtime,
+                  collector,
                   {
                     role: samePath(repo.sourceRoot, state.rootSourceRoot) ? "root" : "dependency",
                     sourceRoot: repo.sourceRoot,
@@ -263,6 +289,9 @@ export async function inspectSessionCleanup(
 
   // A dependency can change while a later member waits for GitHub. Recheck all
   // members synchronously after provider reads; do not yield between members.
+  // This pass never yields, so one structure read per Source is as fresh as many.
+  const recheck = memoizeRepoStructure(runtime);
+  const recheckReadOnly = readOnlyCleanupRuntime(recheck);
   for (const snapshot of snapshots) {
     const state = states.find(
       (candidate) =>
@@ -278,7 +307,7 @@ export async function inspectSessionCleanup(
         continue;
       }
       try {
-        revalidateSessionMember(runtime, readOnly, home, state, repo, member);
+        revalidateSessionMember(recheck, recheckReadOnly, home, state, repo, member);
       } catch (error) {
         snapshot.blockers.push("member-changed-during-inspection");
         snapshot.problems?.push({
@@ -289,41 +318,8 @@ export async function inspectSessionCleanup(
       }
     }
   }
-  const unownedWorktrees: {
-    branch: string | null;
-    eligible: false;
-    sourceRoot: string;
-    worktreePath: string;
-  }[] = [];
-  const unavailableSources: string[] = [];
-  const sources = new Set(
-    [
-      ...knownSourceRoots,
-      ...states.flatMap((state) => state.repos.map((repo) => repo.sourceRoot))
-    ].map((source) => path.normalize(source))
-  );
-  for (const sourceRoot of sources) {
-    try {
-      assertCanonicalSourceCheckout(readOnly, sourceRoot);
-      for (const worktree of listWorktrees(readOnly, sourceRoot)) {
-        if (
-          !samePath(worktree.path, sourceRoot) &&
-          !states.some((state) =>
-            state.repos.some((repo) => samePath(repo.worktreePath, worktree.path))
-          )
-        ) {
-          unownedWorktrees.push({
-            branch: worktree.branch,
-            eligible: false,
-            sourceRoot,
-            worktreePath: worktree.path
-          });
-        }
-      }
-    } catch {
-      unavailableSources.push(sourceRoot);
-    }
-  }
+  const { unavailableSources, unownedWorktrees } =
+    options.discovered ?? discoverUnownedWorktrees(readOnly, states, knownSourceRoots);
   blockUnownedOverlaps(snapshots, unownedWorktrees);
   const changed = scanSessionStates(home).fingerprint !== scan.fingerprint;
   const operationPresent = operationAtStart || lockPresent();
@@ -372,6 +368,45 @@ export async function inspectSessionCleanup(
     ),
     unownedWorktrees
   };
+}
+
+/** List registered worktrees that no retained Session records, per available Source. */
+function discoverUnownedWorktrees(
+  runtime: Runtime,
+  states: SessionState[],
+  knownSourceRoots: string[]
+): SessionCleanupDiscovery {
+  const unownedWorktrees: UnownedWorktree[] = [];
+  const unavailableSources: string[] = [];
+  const sources = new Set(
+    [
+      ...knownSourceRoots,
+      ...states.flatMap((state) => state.repos.map((repo) => repo.sourceRoot))
+    ].map((source) => path.normalize(source))
+  );
+  for (const sourceRoot of sources) {
+    try {
+      assertCanonicalSourceCheckout(runtime, sourceRoot);
+      for (const worktree of listWorktrees(runtime, sourceRoot)) {
+        if (
+          !samePath(worktree.path, sourceRoot) &&
+          !states.some((state) =>
+            state.repos.some((repo) => samePath(repo.worktreePath, worktree.path))
+          )
+        ) {
+          unownedWorktrees.push({
+            branch: worktree.branch,
+            eligible: false,
+            sourceRoot,
+            worktreePath: worktree.path
+          });
+        }
+      }
+    } catch {
+      unavailableSources.push(sourceRoot);
+    }
+  }
+  return { unavailableSources, unownedWorktrees };
 }
 
 function blockUnownedOverlaps(

@@ -26,8 +26,15 @@ class GlobalCleanupError extends MonkeError {
 type Inventory = Awaited<ReturnType<typeof inspectSessionCleanup>>;
 type SessionReport = ReturnType<typeof createSessionCleanupReport>;
 
+export interface CleanupOptions {
+  dryRun: boolean;
+  /** Hide skipped Sessions in human output. JSON always includes every inspected Session. */
+  eligibleOnly: boolean;
+  json: boolean;
+}
+
 /** Both modes use the same eligibility policy. Only execution acquires the operation lock. */
-export async function runCleanup(runtime: Runtime, options: { dryRun: boolean; json: boolean }) {
+export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
   const home = getMonkeHome(runtime);
   let inventory: Inventory | undefined;
   const sessions: SessionReport[] = [];
@@ -72,7 +79,7 @@ export async function runCleanup(runtime: Runtime, options: { dryRun: boolean; j
     unavailableSources: inventory?.unavailableSources ?? [],
     unownedWorktrees: inventory?.unownedWorktrees ?? []
   };
-  writeCleanupReport(runtime, report, options.json);
+  writeCleanupReport(runtime, report, options);
   if (exitCode !== 0) {
     throw new MonkeError(
       "Cleanup incomplete; see the report for inspection errors, failed actions, and retained Sessions."
@@ -107,8 +114,13 @@ async function executeInventory(
   for (const original of inventory.sessions) {
     // Earlier Cleanup commands may change later Sessions, Git refs, or provider evidence.
     // Sessions execute serially because Cleanup commands can affect later candidates.
+    // Reuse the global unowned-worktree discovery; revalidateMember rechecks overlaps live.
     // oxlint-disable-next-line no-await-in-loop
     const fresh = await inspectSessionCleanup(runtime, home, [], {
+      discovered: {
+        unavailableSources: inventory.unavailableSources,
+        unownedWorktrees: inventory.unownedWorktrees
+      },
       operationLock: lock,
       sessionFile: original.snapshot.filePath
     });
@@ -140,17 +152,17 @@ function writeCleanupReport(
     unavailableSources: string[];
     unownedWorktrees: Inventory["unownedWorktrees"];
   },
-  json: boolean
+  options: Pick<CleanupOptions, "eligibleOnly" | "json">
 ) {
   const { globalFailure, sessions } = report;
-  if (json) {
+  if (options.json) {
     runtime.writeStdout(`${JSON.stringify(report, null, 2)}\n`);
   } else {
+    runtime.writeStdout(`${summarizeCleanup(report)}\n`);
     for (const session of sessions) {
-      runtime.writeStdout(formatSessionCleanupReport(session));
-    }
-    if (sessions.length === 0) {
-      runtime.writeStdout("No retained Sessions inspected.\n");
+      if (!options.eligibleOnly || session.outcome !== "skipped") {
+        runtime.writeStdout(formatSessionCleanupReport(session));
+      }
     }
     for (const worktree of report.unownedWorktrees) {
       runtime.writeStdout(
@@ -164,6 +176,41 @@ function writeCleanupReport(
       runtime.writeStdout(`Cleanup stopped: ${globalFailure}\n`);
     }
   }
+}
+
+function summarizeCleanup(report: {
+  sessions: SessionReport[];
+  unavailableSources: string[];
+  unownedWorktrees: unknown[];
+}) {
+  const { sessions } = report;
+  if (sessions.length === 0) {
+    return "No retained Sessions inspected.";
+  }
+  const count = (outcome: SessionReport["outcome"]) =>
+    sessions.filter((session) => session.outcome === outcome).length;
+  const inspectionErrors = sessions.filter((session) => session.inspectionFailed).length;
+  const parts = (
+    [
+      ["would clean", count("would-clean")],
+      ["eligible", count("eligible")],
+      ["cleaned", count("cleaned")],
+      ["failed", count("failed")],
+      ["skipped", count("skipped")]
+    ] as const
+  )
+    .filter(([, total]) => total > 0)
+    .map(([label, total]) => `${total} ${label}`);
+  const notes = [
+    inspectionErrors > 0 ? `${inspectionErrors} with inspection errors` : null,
+    report.unownedWorktrees.length > 0
+      ? `${report.unownedWorktrees.length} unowned worktrees untouched`
+      : null,
+    report.unavailableSources.length > 0
+      ? `${report.unavailableSources.length} Sources unavailable`
+      : null
+  ].filter((note) => note !== null);
+  return `Inspected ${sessions.length} Session${sessions.length === 1 ? "" : "s"}: ${parts.join(", ")}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`;
 }
 
 function assertGlobalSafety(lock: OperationLock, inventory: Inventory) {

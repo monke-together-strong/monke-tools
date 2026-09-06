@@ -234,8 +234,26 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(snapshot.committedWorkAttempted).toBeFalsy();
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       code: "dirty-worktree",
-      eligible: false
+      eligible: false,
+      evidence: [
+        kind === "untracked"
+          ? "?? new.txt"
+          : kind === "staged"
+            ? "M  tracked.txt"
+            : " M tracked.txt"
+      ]
     });
+  });
+
+  test("dirty evidence lists at most five paths and counts the rest", async () => {
+    const fixture = createFixture();
+    for (const index of [1, 2, 3, 4, 5, 6, 7]) {
+      write(fixture.candidate.worktreePath, `new-${index}.txt`, "edited\n");
+    }
+    const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
+    const { evidence: details } = decideCleanupEligibility(snapshot);
+    expect(details).toHaveLength(6);
+    expect(details.at(-1)).toBe("and 2 more");
   });
 
   test("detects dirty submodules even when repository config hides them", async () => {

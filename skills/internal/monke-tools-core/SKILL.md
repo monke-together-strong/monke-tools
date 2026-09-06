@@ -16,7 +16,7 @@ Use `mt spawn <session>` from the source checkout for new isolated work in a mon
 - `mt materialize`: refresh env/path rewrites, resources, and bootstrap inside a session, reusing assigned ports.
 - `mt setup`: write dependency paths into the source checkout's root `.env`.
 - `mt chop [target]`: remove the current or selected session/worktree and run recorded session cleanup, preserving local branches. A session member selects the whole session; supply a target from the source checkout.
-- `mt cleanup`: clean eligible retained Sessions across all Roots, including partially removed Sessions and those awaiting finalization. Preview without changes with `--dry-run`; both modes accept `--json` and work outside a repository. Every member must pass eligibility; unowned worktrees stay untouched.
+- `mt cleanup`: clean eligible retained Sessions across all Roots, including partially removed Sessions and those awaiting finalization. Preview without changes with `--dry-run`; both modes accept `--json` and `--eligible` (hide skipped Sessions in human output) and work outside a repository. Every member must pass eligibility; unowned worktrees stay untouched.
 - `mt update [--check]`: activate the latest stable release, or check without changing the install. Read [installation and updates](INSTALLATION.md) before updating, especially from a local build or customized release.
 - `mt skills configure`: change saved agent skill targets or reconcile their links and instructions.
 

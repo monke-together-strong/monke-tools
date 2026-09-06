@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import * as z from "zod";
 
 import { samePath } from "./path-identity.ts";
-import type { Runtime } from "./types.ts";
+import type { ExecResult, Runtime } from "./types.ts";
 import {
   assertCanonicalSourceCheckout,
   hasHiddenWorktreeIndexEntries,
@@ -277,17 +277,74 @@ function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
     local.head = OidSchema.parse(git(["rev-parse", "HEAD"]));
     if (!local.branch) {
       local.localBlock = decision("ineligible", "detached-head");
-    } else if (
-      git(["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"])
-    ) {
-      local.localBlock = decision("ineligible", "dirty-worktree");
-    } else if (hasHiddenWorktreeIndexEntries(runtime, candidate.worktreePath)) {
-      local.localBlock = decision("unknown", "hidden-index-entries");
+    } else {
+      // Keep leading status columns; trimming would corrupt " M path" entries.
+      const changes = runtime
+        .exec(
+          "git",
+          ["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"],
+          { cwd: candidate.worktreePath }
+        )
+        .stdout.split("\n")
+        .filter(Boolean);
+      if (changes.length > 0) {
+        local.localBlock = decision("ineligible", "dirty-worktree", summarizeChanges(changes));
+      } else if (hasHiddenWorktreeIndexEntries(runtime, candidate.worktreePath)) {
+        local.localBlock = decision("unknown", "hidden-index-entries");
+      }
     }
   } catch {
     local.localBlock = decision("unknown", "local-evidence-unavailable");
   }
   return local;
+}
+
+const DIRTY_PATH_LIMIT = 5;
+
+function summarizeChanges(lines: string[]) {
+  const shown = lines.slice(0, DIRTY_PATH_LIMIT);
+  return lines.length > shown.length
+    ? [...shown, `and ${lines.length - shown.length} more`]
+    : shown;
+}
+
+type StructureMemo = { ok: true; result: ExecResult } | { error: unknown; ok: false };
+
+/**
+ * Cache repository-structure reads (worktree listings, top-level and common-dir lookups) for one
+ * collection pass. Branch, HEAD, status, and index reads stay live, and callers must revalidate
+ * with an unmemoized runtime before acting.
+ */
+export function memoizeRepoStructure(runtime: Runtime): Runtime {
+  const cache = new Map<string, StructureMemo>();
+  return {
+    ...runtime,
+    exec(command, args, options) {
+      const structural =
+        command === "git" &&
+        args !== undefined &&
+        (args.includes("--show-toplevel") ||
+          args.includes("--git-common-dir") ||
+          (args.includes("worktree") && args.includes("list")));
+      if (!structural) {
+        return runtime.exec(command, args, options);
+      }
+      const key = JSON.stringify([args, options?.cwd]);
+      let memo = cache.get(key);
+      if (!memo) {
+        try {
+          memo = { ok: true, result: runtime.exec(command, args, options) };
+        } catch (error) {
+          memo = { error, ok: false };
+        }
+        cache.set(key, memo);
+      }
+      if (!memo.ok) {
+        throw memo.error;
+      }
+      return memo.result;
+    }
+  };
 }
 
 export function readOnlyCleanupRuntime(runtime: Runtime): Runtime {

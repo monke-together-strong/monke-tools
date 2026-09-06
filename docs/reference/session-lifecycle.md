@@ -143,7 +143,10 @@ member evidence and retained state after provider reads.
 `mt cleanup --dry-run` uses this report without acquiring a lock, creating Monke
 home, fetching Git objects, or running Cleanup commands. Eligible results say
 “Would clean.” `mt cleanup` holds the asynchronous global lock, verifies its own
-lock identity, and refreshes evidence before each Session. It shares Chop's
+lock identity, and refreshes evidence before each Session, reusing the initial
+unowned-worktree discovery while rechecking overlaps live before each removal.
+Collection memoizes worktree listings and repository-structure lookups per
+Source for one pass; branch, HEAD, cleanliness, and every revalidation read fresh. It shares Chop's
 removal and finalization lifecycle, with local proof rechecked before each
 removal. The initial report alone never authorizes effects. Monke's lock
 coordinates Monke operations; it cannot make concurrent external Git edits atomic.
@@ -155,7 +158,11 @@ checkouts are listed separately and left untouched. Neither `--merged` nor
 
 Both modes accept `--json`: stdout contains one JSON object with `schemaVersion:
 1`, `dryRun`, `inspectedAt`, `sessions`, `unownedWorktrees`, `unavailableSources`,
-`globalFailure`, and `exitCode`. Human output uses the same Session reports.
+`globalFailure`, and `exitCode`. Human output uses the same Session reports,
+preceded by one summary line counting outcomes, inspection errors, unowned
+worktrees, and unavailable Sources. `--eligible` hides skipped Sessions from
+human output only; JSON always includes every inspected Session. A dirty member
+lists up to five changed paths under its local check.
 Cleanup-command output is captured by the command runner and cannot contaminate
 JSON stdout. Exit 0 means inspection/execution completed, including expected
 eligibility skips. Exit 1 means evidence was unavailable, execution failed, or a

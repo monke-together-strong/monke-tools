@@ -176,6 +176,29 @@ describe("whole-Session read-only eligibility", () => {
       expect(row.decision.eligible).toBeFalsy();
       expect(row.decision.reasons).toContain("ownership-conflict");
     }
+    // Same Session name on both records: the message must name the other Root to be useful.
+    const rootRow = report.sessions.find((row) => row.snapshot.rootSourceRoot === f.root);
+    expect(rootRow?.snapshot.problems?.[0]?.message).toContain(
+      `also recorded by Session ${f.state.session} at ${f.dependency}`
+    );
+  });
+
+  test("collection lists each Source's worktrees once per pass and still rereads before deciding", async () => {
+    const f = fixture();
+    const listings: string[] = [];
+    const original = f.runtime.exec;
+    f.runtime.exec = (command, args, options) => {
+      if (args?.includes("worktree") && args.includes("list")) {
+        listings.push(options?.cwd ?? "");
+      }
+      return original(command, args, options);
+    };
+    const result = await decisionFor(f);
+    expect(result.decision.eligible).toBeTruthy();
+    // One collection pass, one post-provider recheck pass, and one unowned-worktree discovery.
+    for (const source of [f.root, f.dependency]) {
+      expect(listings.filter((cwd) => cwd === source)).toHaveLength(3);
+    }
   });
 
   test.each([false, true])(

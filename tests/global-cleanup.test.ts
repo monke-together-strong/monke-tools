@@ -231,6 +231,33 @@ describe("global Session cleanup", () => {
     expect(existsSync(unowned)).toBeTruthy();
   }, 30_000);
 
+  test("human output leads with a summary and --eligible hides skipped Sessions", async () => {
+    const f = fixture();
+    f.addSession("feature/clean");
+    const blocked = f.addSession("feature/blocked");
+    const [dependency] = blocked.repos;
+    if (!dependency) {
+      throw new Error("Missing dependency");
+    }
+    write(dependency.worktreePath, "tracked.txt", "unfinished\n");
+    let stdout = "";
+    const runtime = {
+      ...f.runtime,
+      writeStdout(text: string) {
+        stdout += text;
+      }
+    };
+    await runCliAsync(["cleanup", "--dry-run"], runtime);
+    const [summary] = stdout.split("\n");
+    expect(summary).toBe("Inspected 2 Sessions: 1 would clean, 1 skipped");
+    expect(stdout).toContain("Skipped: root / feature/blocked");
+    expect(stdout).toContain("       M tracked.txt");
+    stdout = "";
+    await runCliAsync(["cleanup", "--dry-run", "--eligible"], runtime);
+    expect(stdout).toContain("Would clean: root / feature/clean");
+    expect(stdout).not.toContain("Skipped:");
+  }, 30_000);
+
   test("one dirty member skips the whole Session before any effect", async () => {
     const f = fixture();
     const state = f.addSession("feature/blocked");

@@ -94,8 +94,8 @@ export function assertNoOtherStateOwnsSessionRepos(state: SessionState, allState
     if (collision !== undefined) {
       throw new MonkeError(
         paths.some((candidate) => samePath(candidate, collision.worktreePath))
-          ? `Session worktree ${collision.worktreePath} is also recorded by Session ${other.session}`
-          : `Session ${state.session} overlaps worktree ${collision.worktreePath} recorded by Session ${other.session}`
+          ? `Session worktree ${collision.worktreePath} is also recorded by Session ${other.session} at ${other.rootSourceRoot}`
+          : `Session ${state.session} overlaps worktree ${collision.worktreePath} recorded by Session ${other.session} at ${other.rootSourceRoot}`
       );
     }
   }

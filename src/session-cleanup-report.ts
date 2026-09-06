@@ -58,6 +58,8 @@ type CheckStatus = "passed" | "blocked" | "unknown" | "not-checked" | "not-neede
 
 export interface CleanupCheckReport {
   code: SessionCleanupReason | null;
+  /** Collected facts behind the status, such as the paths that make a worktree dirty. */
+  details?: string[];
   message: string;
   status: CheckStatus;
 }
@@ -142,13 +144,18 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
     };
   } else if (member.evidence) {
     const block = member.evidence.localBlock;
-    local = block
-      ? check(block.status === "ineligible" ? "blocked" : "unknown", block.code)
-      : {
-          code: null,
-          message: "Registered linked worktree; clean including untracked files and submodules.",
-          status: "passed"
-        };
+    if (block) {
+      local = check(block.status === "ineligible" ? "blocked" : "unknown", block.code);
+      if (block.evidence.length > 0) {
+        local.details = block.evidence;
+      }
+    } else {
+      local = {
+        code: null,
+        message: "Registered linked worktree; clean including untracked files and submodules.",
+        status: "passed"
+      };
+    }
     committedWork = committedWorkCheck(member.evidence, decision);
   } else {
     local = check("unknown", "member-missing-or-unverified");
@@ -229,6 +236,7 @@ export function formatSessionCleanupReport(report: ReturnType<typeof createSessi
     lines.push(
       `  ${member.sourceRoot} — ${member.worktreePath}`,
       `    Local worktree [${member.checks.local.status}]: ${member.checks.local.message}`,
+      ...(member.checks.local.details ?? []).map((detail) => `      ${detail}`),
       `    Committed work [${member.checks.committedWork.status}]: ${member.checks.committedWork.message}`
     );
   }
