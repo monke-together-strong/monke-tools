@@ -16,7 +16,7 @@ import { getExpectedWorktreePath } from "../src/git.ts";
 import { runCliAsync } from "../src/index.ts";
 import { saveSessionState, getSessionStateFilePath } from "../src/session-state-store.ts";
 import type { SessionState } from "../src/types.ts";
-import { createRepo, git, write } from "./helpers.ts";
+import { ageWorktree, createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 const ActionSchema = z.object({
@@ -111,6 +111,7 @@ describe("global Session cleanup", () => {
           .map((sourceRoot) => {
             const worktreePath = getExpectedWorktreePath(home, sourceRoot, session);
             git(sourceRoot, ["worktree", "add", "-b", session, worktreePath]);
+            ageWorktree(worktreePath);
             return {
               assignedPorts: [],
               cleanupEligible: true,

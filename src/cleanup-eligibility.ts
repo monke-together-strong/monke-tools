@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
+import path from "node:path";
 
 import * as z from "zod";
 
@@ -54,6 +55,7 @@ export const CleanupCodeSchema = z.enum([
   "ambiguous-pr",
   "head-mismatch",
   "no-merged-pr",
+  "recent-worktree",
   "ancestry-unavailable",
   "changed-during-inspection",
   "repository-changed-during-inspection",
@@ -80,6 +82,8 @@ export interface CleanupEvidence {
   head: string | null;
   localBlock: CleanupDecision | null;
   repository: CleanupRepositoryEvidence | null;
+  /** Milliseconds since the worktree was created; null when unknown. Absent in older saved evidence. */
+  worktreeAgeMs?: number | null;
 }
 
 export const CleanupRepositoryEvidenceSchema = z.object({
@@ -90,6 +94,9 @@ export const CleanupRepositoryEvidenceSchema = z.object({
 });
 
 export type CleanupRepositoryEvidence = z.output<typeof CleanupRepositoryEvidenceSchema>;
+
+/** Ancestry-only proof waits this long so a just-spawned Session is not removed before work starts. */
+export const RECENT_WORKTREE_MS = 24 * 60 * 60 * 1000;
 
 /** One audit's remote snapshots; never cache local identity, HEAD, or cleanliness. */
 export function createCleanupEvidenceCache() {
@@ -145,11 +152,19 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   }
   // A clean worktree whose HEAD is already inside the verified default branch
   // holds no unique work, whatever its role or PR history. The local check
-  // above already rejected any uncommitted change.
+  // above already rejected any uncommitted change. A freshly spawned Session
+  // looks the same, so this proof alone waits a day.
   if (snapshot.ancestorOfDefault) {
+    if (snapshot.worktreeAgeMs === undefined || snapshot.worktreeAgeMs === null) {
+      return decision("unknown", "recent-worktree");
+    }
+    if (snapshot.worktreeAgeMs < RECENT_WORKTREE_MS) {
+      return decision("ineligible", "recent-worktree");
+    }
     return decision("eligible", "unchanged-branch", [
       "registered linked worktree; clean including submodules and untracked files",
       `${head} is an ancestor of verified ${repository.name}:${repository.defaultBranch} at ${repository.defaultHead}`,
+      `worktree created ${Math.floor(snapshot.worktreeAgeMs / RECENT_WORKTREE_MS)} day(s) ago`,
       "member proof only; whole-Session eligibility is still required"
     ]);
   }
@@ -166,6 +181,21 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   return decision("ineligible", "no-merged-pr");
 }
 
+/**
+ * A linked worktree's `.git` file is written once at creation and never rewritten. Take the earlier
+ * of birth and modification time: copies and restores can reset birth time forward, and an mtime in
+ * the past is never newer than creation.
+ */
+function worktreeAge(worktreePath: string): number | null {
+  try {
+    const stat = statSync(path.join(worktreePath, ".git"));
+    const created = stat.birthtimeMs > 0 ? Math.min(stat.birthtimeMs, stat.mtimeMs) : stat.mtimeMs;
+    return Math.max(0, Date.now() - created);
+  } catch {
+    return null;
+  }
+}
+
 /** Read-only collection: no fetch, optional Git writes, write lock, or teardown. */
 export async function collectCleanupEvidence(
   runtime: Runtime,
@@ -179,7 +209,8 @@ export async function collectCleanupEvidence(
     ancestorOfDefault: null,
     candidate,
     committedWorkAttempted: false,
-    repository: null
+    repository: null,
+    worktreeAgeMs: worktreeAge(candidate.worktreePath)
   };
   if (local.localBlock) {
     return snapshot;
@@ -367,6 +398,13 @@ export function readOnlyCleanupRuntime(runtime: Runtime): Runtime {
   };
 }
 
+class GitHubNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GitHubNotFoundError";
+  }
+}
+
 async function github(runtime: Runtime, sourceRoot: string, endpoint: string, paginate = false) {
   const result = await runtime.execAsync(
     "gh",
@@ -374,6 +412,9 @@ async function github(runtime: Runtime, sourceRoot: string, endpoint: string, pa
     { cwd: sourceRoot, timeoutSeconds: 30 }
   );
   if (result.exitCode !== 0) {
+    if (/\bHTTP 404\b/u.test(result.stderr)) {
+      throw new GitHubNotFoundError("GitHub resource not found");
+    }
     throw new Error("GitHub evidence unavailable");
   }
   const parsed: unknown = JSON.parse(result.stdout);
@@ -450,14 +491,23 @@ async function inspectAncestry(
       return false;
     }
     // Remote comparison handles a missing default commit or shallow history without fetching.
-    const comparison = ComparisonSchema.parse(
-      await github(
-        runtime,
-        sourceRoot,
-        `repos/${repository.name}/compare/${head}...${repository.defaultHead}`
-      )
-    );
-    return comparison.behind_by === 0 && comparison.merge_base_commit.sha === head;
+    try {
+      const comparison = ComparisonSchema.parse(
+        await github(
+          runtime,
+          sourceRoot,
+          `repos/${repository.name}/compare/${head}...${repository.defaultHead}`
+        )
+      );
+      return comparison.behind_by === 0 && comparison.merge_base_commit.sha === head;
+    } catch (error) {
+      // defaultHead was just resolved on GitHub, so a 404 means GitHub has never
+      // seen head. A commit absent from the remote cannot be inside its default branch.
+      if (error instanceof GitHubNotFoundError) {
+        return false;
+      }
+      throw error;
+    }
   } catch {
     return null;
   }

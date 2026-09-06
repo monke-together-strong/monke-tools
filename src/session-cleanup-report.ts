@@ -46,6 +46,8 @@ const messages: Record<SessionCleanupReason, string> = {
   "owned-worktrees-gone": "All owned worktrees are already removed; Session finalization remains.",
   "ownership-conflict":
     "Session ownership conflicts with another record or an overlapping registered worktree; remove the wrong Session state file from Monke home, then rerun Cleanup.",
+  "recent-worktree":
+    "The branch has no commits outside the default branch, but the worktree is under a day old; ancestry-only proof waits for a day.",
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
   "repository-unavailable": "The repository or its default branch could not be verified.",
   "source-checkout": "Source checkouts cannot be removed.",
@@ -109,10 +111,14 @@ function committedWorkCheck(
       status: "unknown"
     };
   }
-  return check(
+  const report = check(
     decision.eligible ? "passed" : decision.status === "ineligible" ? "blocked" : "unknown",
     decision.code
   );
+  if (decision.evidence.length > 0) {
+    report.details = decision.evidence;
+  }
+  return report;
 }
 
 function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMember) {
@@ -239,7 +245,8 @@ export function formatSessionCleanupReport(report: ReturnType<typeof createSessi
       `  ${member.sourceRoot} — ${member.worktreePath}`,
       `    Local worktree [${member.checks.local.status}]: ${member.checks.local.message}`,
       ...(member.checks.local.details ?? []).map((detail) => `      ${detail}`),
-      `    Committed work [${member.checks.committedWork.status}]: ${member.checks.committedWork.message}`
+      `    Committed work [${member.checks.committedWork.status}]: ${member.checks.committedWork.message}`,
+      ...(member.checks.committedWork.details ?? []).map((detail) => `      ${detail}`)
     );
   }
   if (report.outcome === "skipped") {

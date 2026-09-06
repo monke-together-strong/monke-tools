@@ -118,8 +118,12 @@ Sessions. `eligibleForSessionCleanup` returns true only when every live member
 passes the individual-worktree check and the whole Session has no ownership,
 identity, hold, or operation blocker. A member passes with an exact merged PR
 for its current commit, or by proving that its commit is already inside the
-verified default branch, so it holds no unique work. Both proofs require a clean
-worktree first; uncommitted or untracked files always block. A member with
+verified default branch, so it holds no unique work. Ancestry-only proof also
+requires the worktree to be at least one day old, measured from its `.git`
+file, so a Session spawned from the default branch is not removed before work
+starts. Both proofs require a clean worktree first; uncommitted or untracked
+files always block. A branch GitHub has never seen cannot be inside its default
+branch, so a compare 404 on an unpushed commit counts as not an ancestor. A member with
 unique commits and no qualifying merged PR is ineligible, not unknown: the
 provider answered, so the skip is settled and does not mark inspection as
 failed. Actual member branch names can differ from the Session name.

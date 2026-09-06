@@ -18,7 +18,7 @@ import { createSessionCleanupReport } from "../src/session-cleanup-report.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/session-state-store.ts";
 import type { Runtime, SessionState } from "../src/types.ts";
 import { preflightWorktreeRemoval } from "../src/worktree-safety.ts";
-import { createRepo, git, write } from "./helpers.ts";
+import { ageWorktree, createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 const sandboxes: string[] = [];
@@ -42,6 +42,7 @@ function fixture() {
       `https://github.com/owner/${path.basename(source)}.git`
     ]);
     git(source, ["worktree", "add", "-b", session, getExpectedWorktreePath(home, source, session)]);
+    ageWorktree(getExpectedWorktreePath(home, source, session));
   }
   const state: SessionState = {
     generation: { number: 1, status: "complete" },

@@ -234,7 +234,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -600,7 +601,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -948,7 +950,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -1080,7 +1083,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -1136,7 +1140,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -1376,7 +1381,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -2222,7 +2228,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -2420,7 +2427,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -2846,7 +2854,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -3172,7 +3181,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -4796,7 +4806,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -4852,7 +4863,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",
@@ -4976,7 +4988,8 @@
               "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
               "name": "owner/repo-3",
               "pullRequests": []
-            }
+            },
+            "worktreeAgeMs": 604800000
           },
           "mode": "live",
           "sourceRoot": "/audit/path-7",

@@ -7,12 +7,13 @@ import {
   collectCleanupEvidence,
   createCleanupEvidenceCache,
   decideCleanupEligibility,
-  eligibleForCleanup
+  eligibleForCleanup,
+  RECENT_WORKTREE_MS
 } from "../src/cleanup-eligibility.ts";
 import type { CleanupEvidence, CleanupRepositoryEvidence } from "../src/cleanup-eligibility.ts";
 import type { Runtime } from "../src/types.ts";
 import { assertCleanWorktree } from "../src/worktree-safety.ts";
-import { createRepo, git, write } from "./helpers.ts";
+import { ageWorktree, createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 const HEAD = "a".repeat(40);
@@ -45,6 +46,7 @@ function evidence(patch: Partial<CleanupEvidence> = {}): CleanupEvidence {
       name: REPOSITORY,
       pullRequests: [mergedPr()]
     },
+    worktreeAgeMs: 2 * RECENT_WORKTREE_MS,
     ...patch
   };
 }
@@ -141,6 +143,27 @@ describe("cleanup committed-work policy", () => {
     }
   );
 
+  test.each([
+    { age: RECENT_WORKTREE_MS - 1, code: "recent-worktree", status: "ineligible" },
+    { age: null, code: "recent-worktree", status: "unknown" },
+    { age: undefined, code: "recent-worktree", status: "unknown" },
+    { age: RECENT_WORKTREE_MS, code: "unchanged-branch", status: "eligible" }
+  ] as const)("ancestry-only proof with worktree age $age is $code", ({ age, code, status }) => {
+    const snapshot = withPrs([]);
+    snapshot.ancestorOfDefault = true;
+    if (age === undefined) {
+      delete snapshot.worktreeAgeMs;
+    } else {
+      snapshot.worktreeAgeMs = age;
+    }
+    expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, status });
+  });
+
+  test("an exact merged PR does not wait for worktree age", () => {
+    const snapshot = evidence({ ancestorOfDefault: true, worktreeAgeMs: 0 });
+    expect(decideCleanupEligibility(snapshot).code).toBe("exact-merged-pr");
+  });
+
   test("ancestry proof never overrides a dirty worktree", () => {
     const snapshot = withPrs([]);
     snapshot.ancestorOfDefault = true;
@@ -226,7 +249,8 @@ describe("cleanup evidence from real Git worktrees", () => {
   test.each([
     { comparison: "ahead", expected: true, label: "remote ancestry proof" },
     { comparison: "behind", expected: false, label: "unique dependency commits" },
-    { comparison: "unavailable", expected: false, label: "unavailable ancestry" }
+    { comparison: "unavailable", expected: false, label: "unavailable ancestry" },
+    { comparison: "not-found", expected: false, label: "a commit GitHub has never seen" }
   ])("handles a missing local default commit with $label", async ({ comparison, expected }) => {
     const fixture = createFixture();
     fixture.pr.head.ref = "another-branch";
@@ -239,6 +263,9 @@ describe("cleanup evidence from real Git worktrees", () => {
       if (endpoint.includes("/compare/")) {
         if (comparison === "unavailable") {
           throw new Error("comparison unavailable");
+        }
+        if (comparison === "not-found") {
+          return { exitCode: 1, stderr: "gh: Not Found (HTTP 404)", stdout: "" };
         }
         return {
           exitCode: 0,
@@ -477,6 +504,7 @@ function createFixture() {
   const worktreePath = path.join(sandbox, "session-with-a-different-name");
   git(sourceRoot, ["remote", "add", "origin", `git@github.com:${REPOSITORY}.git`]);
   git(sourceRoot, ["worktree", "add", "-b", BRANCH, worktreePath]);
+  ageWorktree(worktreePath);
   const pr = mergedPr();
   pr.head.sha = git(worktreePath, ["rev-parse", "HEAD"]);
   const baseRuntime = createTestRuntime({ cwd: sourceRoot, env: { GH_REPO: "wrong/repo" } });

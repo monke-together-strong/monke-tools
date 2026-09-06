@@ -41,7 +41,8 @@ const SnapshotSchema = z.object({
               status: z.enum(["eligible", "ineligible", "unknown"])
             })
             .nullable(),
-          repository: CleanupRepositoryEvidenceSchema.nullable()
+          repository: CleanupRepositoryEvidenceSchema.nullable(),
+          worktreeAgeMs: z.number().nullable().optional()
         })
         .nullable(),
       mode: z.enum(["live", "gone", "stale", "unverified"]),
