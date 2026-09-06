@@ -1,3 +1,23 @@
+## @monke-together-strong/oxc-config@0.3.0
+
+### Update Ultracite and required Oxc versions
+
+#### Update Ultracite and required Oxc versions
+
+Upgrade Ultracite from 7.10.4 to 7.10.8 so consumers inherit its updated core, anti-slop, Vitest, and formatting presets. Require Oxlint ^1.79.0 and Oxfmt ^0.64.0 to support the updated rules and configuration types. Existing shared rule overrides remain in place.
+
+### Disable noisy conditional empty object spread rule
+
+#### Allow conditional optional fields
+
+Disable `anti-slop/no-conditional-empty-object-spread` so idiomatic conditional optional fields no longer produce lint errors.
+
+### Format first-party skill code
+
+#### Format first-party skill code
+
+The shared formatter now checks first-party code and metadata under `skills/`. Imported skills, imported references, and skill Markdown remain excluded so upstream assets and authored instructions retain their formatting.
+
 ## @monke-together-strong/oxc-config@0.2.1
 
 ### Enable anti-slop validation

@@ -126,6 +126,8 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       ...overrides
     ],
     rules: {
+      // Conditional optional fields are idiomatic; this rule generates too much noise.
+      "anti-slop/no-conditional-empty-object-spread": "off",
       "class-methods-use-this": "off",
       eqeqeq: ["error", "smart"],
       "func-style": "off",
