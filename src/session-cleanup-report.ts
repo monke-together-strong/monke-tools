@@ -42,7 +42,8 @@ const messages: Record<SessionCleanupReason, string> = {
   "owned-worktree-gone":
     "The owned worktree is already removed; its Source and registrations were verified.",
   "owned-worktrees-gone": "All owned worktrees are already removed; Session finalization remains.",
-  "ownership-conflict": "More than one Session record claims this Session or one of its worktrees.",
+  "ownership-conflict":
+    "Session ownership conflicts with another record or an overlapping registered worktree.",
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
   "repository-unavailable": "The repository or its default branch could not be verified.",
   "source-checkout": "Source checkouts cannot be removed.",
