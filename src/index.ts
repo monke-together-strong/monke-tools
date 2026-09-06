@@ -223,10 +223,14 @@ function explicitSkillTargets(
   return { builtInTargetKinds, customTargetPath };
 }
 
-if (import.meta.main) {
+async function main() {
   try {
     await runCliAsync(Bun.argv.slice(2));
   } catch (error) {
     reportCliFailure(ThrownValueSchema.parse(error));
   }
+}
+
+if (import.meta.main) {
+  void main();
 }
