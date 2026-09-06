@@ -53,12 +53,6 @@ describe("CLI", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("the CLI enforces cleanup option relationships", async () => {
-    await expect(runCliAsync(["cleanup", "--dry-run"])).rejects.toThrow(
-      "error: option '--dry-run' cannot be used without option '--merged'"
-    );
-  });
-
   test("Chop accepts at most one target", async () => {
     await expect(runCliAsync(["chop", "first", "second"])).rejects.toThrow(/too many arguments/u);
   });

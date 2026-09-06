@@ -38,7 +38,8 @@ function fixture(): SessionCleanupEvidence {
                     state: "closed"
                   }
                 ]
-        }
+        },
+        worktreeAgeMs: 2 * 24 * 60 * 60 * 1000
       },
       mode: "live",
       sourceRoot: `/sources/${name}`,

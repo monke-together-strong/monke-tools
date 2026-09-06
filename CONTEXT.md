@@ -81,7 +81,7 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 
 **Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target removes every recorded Session worktree and performs **Session finalization**; an Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
 
-**Cleanup**: The operation that runs registered per-session teardown and removes session-state records whose worktrees no longer exist. _Avoid_: Delete session, prune repos
+**Cleanup**: The operation that inspects retained Sessions across all Root repos and removes eligible Sessions through worktree removal and Session finalization. _Avoid_: Delete session, prune repos
 
 **Swing**: The operation that navigates the user's current shell to a **Source checkout**, **Session worktree**, or **Ordinary worktree** for the current **Root repo** scope. Ordinary targets must already exist; explicit pull request targets may materialize the matching **Session worktree** after validating the PR head.
 

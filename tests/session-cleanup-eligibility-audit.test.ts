@@ -13,6 +13,7 @@ const SnapshotSchema = z.object({
       "invalid-state-overlap",
       "ownership-conflict",
       "member-identity-unverified",
+      "source-missing",
       "held",
       "operation-lock-present",
       "state-changed-during-inspection",
@@ -40,7 +41,8 @@ const SnapshotSchema = z.object({
               status: z.enum(["eligible", "ineligible", "unknown"])
             })
             .nullable(),
-          repository: CleanupRepositoryEvidenceSchema.nullable()
+          repository: CleanupRepositoryEvidenceSchema.nullable(),
+          worktreeAgeMs: z.number().nullable().optional()
         })
         .nullable(),
       mode: z.enum(["live", "gone", "stale", "unverified"]),
@@ -66,31 +68,5 @@ const inventory = z
 describe("local whole-Session evidence, 2026-09-06", () => {
   test.each(inventory)("Session $id returns $expected", ({ expected, snapshot }) => {
     expect(eligibleForSessionCleanup(snapshot)).toBe(expected);
-  });
-
-  test("a Root cannot borrow its dependency's ancestry-only proof", () => {
-    const row = inventory.find(
-      (candidate) =>
-        candidate.expected &&
-        candidate.snapshot.members.some(
-          (member) =>
-            member.evidence?.ancestorOfDefault &&
-            member.evidence.repository?.pullRequests.length === 0
-        )
-    );
-    if (!row) {
-      throw new Error("Missing real unchanged-dependency case");
-    }
-    const snapshot = structuredClone(row.snapshot);
-    const member = snapshot.members.find(
-      (candidate) =>
-        candidate.evidence?.ancestorOfDefault &&
-        candidate.evidence.repository?.pullRequests.length === 0
-    );
-    if (!member) {
-      throw new Error("Missing member");
-    }
-    snapshot.rootSourceRoot = member.sourceRoot;
-    expect(eligibleForSessionCleanup(snapshot)).toBeFalsy();
   });
 });

@@ -496,8 +496,8 @@ external:
       cwd: root,
       monkeHome: home
     });
-    expect(cleanupResult.stdout).toBe("");
-    expect(cleanupResult.stderr).toBe("Removed 1 dead session\n");
+    expect(cleanupResult.stdout).toContain("Cleaned: root / default-graph");
+    expect(cleanupResult.stderr).toBe("");
   });
 
   test("spawn -m uses dependency resolved default branch env files", () => {

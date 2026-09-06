@@ -1,5 +1,7 @@
 # Remove only worktrees for merge-cleanable session cleanup
 
+**Status:** Command scope and eligibility superseded by [global Session cleanup](../reference/session-lifecycle.md#session-cleanup). Use `mt cleanup --dry-run` and `mt cleanup`; `--merged` has been removed. The decision to preserve local branches still applies. The discussion below records the original decision.
+
 monke-tools cleanup for **Merge-cleanable Sessions** starts by removing only eligible **Session worktree** paths, then relying on existing **Cleanup** behavior to remove dead **Session state**. It does not delete local branches in the first version, even though the real-GitHub prototype proved a safe branch-deletion predicate, because branch deletion changes the user trust boundary and Git's non-force deletion behavior is inconsistent for squash-merged branches.
 
 The behavior belongs in the core lifecycle command as `mt cleanup --merged --dry-run` and `mt cleanup --merged`, rather than only in an agent skill or standalone helper. `--dry-run` is part of the first version so users can see which Sessions are eligible and why others are skipped before any worktree directory is removed.

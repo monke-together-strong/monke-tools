@@ -1,6 +1,8 @@
 import {
   closeSync,
   existsSync,
+  fstatSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -624,7 +626,18 @@ export function withGlobalLock<T>(home: string, callback: () => T) {
 }
 
 /** Run asynchronous Session work while holding the machine-wide Monke lock. */
-export async function withGlobalLockAsync<T>(home: string, callback: () => Promise<T>) {
+export interface OperationLock {
+  assertHeld: () => void;
+  isHeld: () => boolean;
+  path: string;
+}
+
+type LockRelease = (() => void) & { ownership: OperationLock };
+
+export async function withGlobalLockAsync<T>(
+  home: string,
+  callback: (lock: OperationLock) => Promise<T>
+) {
   return await withLockPathAsync(path.join(home, "lock"), callback);
 }
 
@@ -635,7 +648,7 @@ export async function withInstallationLockAsync<T>(home: string, callback: () =>
 
 function acquireLockPathAsync(lockPath: string) {
   const deadline = prepareLockAcquisition(lockPath);
-  return new Promise<() => void>((resolve, reject) => {
+  return new Promise<LockRelease>((resolve, reject) => {
     const poll = () => {
       try {
         const attempt = tryAcquireLockBeforeDeadline(lockPath, deadline);
@@ -661,10 +674,13 @@ export async function withScopedLockAsync<T>(
   return await withLockPathAsync(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
 }
 
-async function withLockPathAsync<T>(lockPath: string, callback: () => Promise<T>) {
+async function withLockPathAsync<T>(
+  lockPath: string,
+  callback: (lock: OperationLock) => Promise<T>
+) {
   const release = await acquireLockPathAsync(lockPath);
   try {
-    return await callback();
+    return await callback(release.ownership);
   } finally {
     release();
   }
@@ -710,13 +726,13 @@ function tryAcquireLockPath(lockPath: string) {
     return { wait: true };
   }
   let fileDescriptor: number | null = null;
+  const contents = JSON.stringify({
+    acquiredAt: Date.now(),
+    pid: process.pid
+  });
   try {
     fileDescriptor = openSync(lockPath, "wx");
-    writeFileSync(
-      fileDescriptor,
-      JSON.stringify({ acquiredAt: Date.now(), pid: process.pid }),
-      "utf-8"
-    );
+    writeFileSync(fileDescriptor, contents, "utf-8");
   } catch (error) {
     if (fileDescriptor !== null) {
       closeSync(fileDescriptor);
@@ -728,16 +744,42 @@ function tryAcquireLockPath(lockPath: string) {
     return { wait: !tryEvictStaleLock(lockPath) };
   }
 
-  return {
-    release: () => {
+  const identity = fstatSync(fileDescriptor);
+  const ownership: OperationLock = {
+    assertHeld() {
+      if (!ownership.isHeld()) {
+        throw new MonkeError(`Operation lock ownership lost at ${lockPath}`);
+      }
+    },
+    isHeld() {
+      try {
+        const current = lstatSync(lockPath);
+        return (
+          fileDescriptor !== null &&
+          current.dev === identity.dev &&
+          current.ino === identity.ino &&
+          readFileSync(lockPath, "utf-8") === contents
+        );
+      } catch {
+        return false;
+      }
+    },
+    path: lockPath
+  };
+  const release = Object.assign(
+    () => {
+      const held = ownership.isHeld();
       if (fileDescriptor !== null) {
         closeSync(fileDescriptor);
         fileDescriptor = null;
       }
-      rmSync(lockPath, { force: true });
+      if (held) {
+        rmSync(lockPath, { force: true });
+      }
     },
-    wait: false
-  };
+    { ownership }
+  );
+  return { release, wait: false };
 }
 
 function assertLockDeadline(lockPath: string, deadline: number) {

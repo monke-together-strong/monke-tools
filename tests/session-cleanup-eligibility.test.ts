@@ -18,7 +18,7 @@ import { createSessionCleanupReport } from "../src/session-cleanup-report.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/session-state-store.ts";
 import type { Runtime, SessionState } from "../src/types.ts";
 import { preflightWorktreeRemoval } from "../src/worktree-safety.ts";
-import { createRepo, git, write } from "./helpers.ts";
+import { ageWorktree, createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 const sandboxes: string[] = [];
@@ -42,6 +42,7 @@ function fixture() {
       `https://github.com/owner/${path.basename(source)}.git`
     ]);
     git(source, ["worktree", "add", "-b", session, getExpectedWorktreePath(home, source, session)]);
+    ageWorktree(getExpectedWorktreePath(home, source, session));
   }
   const state: SessionState = {
     generation: { number: 1, status: "complete" },
@@ -138,7 +139,7 @@ describe("whole-Session read-only eligibility", () => {
     const before = readFileSync(statePath, "utf-8");
     const result = await decisionFor(f);
     expect(result.decision).toMatchObject({ eligible: true, kind: "live" });
-    expect(result.decision.reasons).toStrictEqual(["unchanged-dependency", "exact-merged-pr"]);
+    expect(result.decision.reasons).toStrictEqual(["unchanged-branch", "exact-merged-pr"]);
     expect(readFileSync(statePath, "utf-8")).toBe(before);
     expect(existsSync(f.rootPath)).toBeTruthy();
     expect(existsSync(path.join(f.home, "lock"))).toBeFalsy();
@@ -175,6 +176,29 @@ describe("whole-Session read-only eligibility", () => {
     for (const row of report.sessions) {
       expect(row.decision.eligible).toBeFalsy();
       expect(row.decision.reasons).toContain("ownership-conflict");
+    }
+    // Same Session name on both records: the message must name the other Root to be useful.
+    const rootRow = report.sessions.find((row) => row.snapshot.rootSourceRoot === f.root);
+    expect(rootRow?.snapshot.problems?.[0]?.message).toContain(
+      `also recorded by Session ${f.state.session} at ${f.dependency}`
+    );
+  });
+
+  test("collection lists each Source's worktrees once per pass and still rereads before deciding", async () => {
+    const f = fixture();
+    const listings: string[] = [];
+    const original = f.runtime.exec;
+    f.runtime.exec = (command, args, options) => {
+      if (args?.includes("worktree") && args.includes("list")) {
+        listings.push(options?.cwd ?? "");
+      }
+      return original(command, args, options);
+    };
+    const result = await decisionFor(f);
+    expect(result.decision.eligible).toBeTruthy();
+    // One collection pass, one post-provider recheck pass, and one unowned-worktree discovery.
+    for (const source of [f.root, f.dependency]) {
+      expect(listings.filter((cwd) => cwd === source)).toHaveLength(3);
     }
   });
 

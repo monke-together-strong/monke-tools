@@ -7,13 +7,13 @@ import {
   collectCleanupEvidence,
   createCleanupEvidenceCache,
   decideCleanupEligibility,
-  eligibleForCleanup
+  eligibleForCleanup,
+  RECENT_WORKTREE_MS
 } from "../src/cleanup-eligibility.ts";
 import type { CleanupEvidence, CleanupRepositoryEvidence } from "../src/cleanup-eligibility.ts";
-import { inspectMergedWorktreeCleanup } from "../src/cleanup-merged.ts";
 import type { Runtime } from "../src/types.ts";
 import { assertCleanWorktree } from "../src/worktree-safety.ts";
-import { createRepo, git, write } from "./helpers.ts";
+import { ageWorktree, createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 const HEAD = "a".repeat(40);
@@ -46,6 +46,7 @@ function evidence(patch: Partial<CleanupEvidence> = {}): CleanupEvidence {
       name: REPOSITORY,
       pullRequests: [mergedPr()]
     },
+    worktreeAgeMs: 2 * RECENT_WORKTREE_MS,
     ...patch
   };
 }
@@ -59,9 +60,17 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, eligible: false });
   });
 
+  test("a moved branch whose HEAD is inside the default branch passes despite a stale merged PR", () => {
+    const snapshot = evidence({ ancestorOfDefault: true, head: OTHER_HEAD });
+    expect(decideCleanupEligibility(snapshot)).toMatchObject({
+      code: "unchanged-branch",
+      eligible: true
+    });
+  });
+
   test("rejects a clean worktree with commits after merge, even for a dependency", () => {
     const snapshot = evidence({
-      ancestorOfDefault: true,
+      ancestorOfDefault: false,
       candidate: { role: "dependency", sourceRoot: "/source", worktreePath: "/worktree" },
       head: OTHER_HEAD
     });
@@ -87,6 +96,16 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot).code).toBe("open-pr");
   });
 
+  test("a Root with no merged PR and unique commits is a settled ineligible, not unknown", () => {
+    const snapshot = withPrs([]);
+    snapshot.ancestorOfDefault = false;
+    expect(decideCleanupEligibility(snapshot)).toMatchObject({
+      code: "no-merged-pr",
+      eligible: false,
+      status: "ineligible"
+    });
+  });
+
   test("ambiguous exact merged matches remain unknown", () => {
     const snapshot = withPrs([mergedPr(), { ...mergedPr(), number: 2 }]);
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
@@ -108,19 +127,54 @@ describe("cleanup committed-work policy", () => {
   });
 
   test.each([
-    { ancestor: true, expected: true, role: "dependency" },
-    { ancestor: false, expected: false, role: "dependency" },
-    { ancestor: null, expected: false, role: "dependency" },
-    { ancestor: true, expected: false, role: "root" }
+    { ancestor: true, code: "unchanged-branch", expected: true, role: "dependency" },
+    { ancestor: false, code: "no-merged-pr", expected: false, role: "dependency" },
+    { ancestor: null, code: "ancestry-unavailable", expected: false, role: "dependency" },
+    { ancestor: true, code: "unchanged-branch", expected: true, role: "root" },
+    { ancestor: false, code: "no-merged-pr", expected: false, role: "root" },
+    { ancestor: null, code: "ancestry-unavailable", expected: false, role: "root" }
   ] as const)(
-    "ancestry=$ancestor, role=$role gives $expected without a PR",
-    ({ ancestor, expected, role }) => {
+    "ancestry=$ancestor, role=$role gives $code without a PR",
+    ({ ancestor, code, expected, role }) => {
       const snapshot = withPrs([]);
       snapshot.ancestorOfDefault = ancestor;
       snapshot.candidate.role = role;
-      expect(eligibleForCleanup(snapshot)).toBe(expected);
+      expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, eligible: expected });
     }
   );
+
+  test.each([
+    { age: RECENT_WORKTREE_MS - 1, code: "recent-worktree", status: "ineligible" },
+    { age: null, code: "recent-worktree", status: "unknown" },
+    { age: undefined, code: "recent-worktree", status: "unknown" },
+    { age: RECENT_WORKTREE_MS, code: "unchanged-branch", status: "eligible" }
+  ] as const)("ancestry-only proof with worktree age $age is $code", ({ age, code, status }) => {
+    const snapshot = withPrs([]);
+    snapshot.ancestorOfDefault = true;
+    if (age === undefined) {
+      delete snapshot.worktreeAgeMs;
+    } else {
+      snapshot.worktreeAgeMs = age;
+    }
+    expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, status });
+  });
+
+  test("an exact merged PR does not wait for worktree age", () => {
+    const snapshot = evidence({ ancestorOfDefault: true, worktreeAgeMs: 0 });
+    expect(decideCleanupEligibility(snapshot).code).toBe("exact-merged-pr");
+  });
+
+  test("ancestry proof never overrides a dirty worktree", () => {
+    const snapshot = withPrs([]);
+    snapshot.ancestorOfDefault = true;
+    snapshot.localBlock = {
+      code: "dirty-worktree",
+      eligible: false,
+      evidence: ["?? new.txt"],
+      status: "ineligible"
+    };
+    expect(decideCleanupEligibility(snapshot).code).toBe("dirty-worktree");
+  });
 });
 
 describe("cleanup evidence from real Git worktrees", () => {
@@ -168,24 +222,35 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(eligibleForCleanup(snapshot)).toBeTruthy();
   });
 
-  test("proves an unchanged dependency against the current default without a PR", async () => {
-    const fixture = createFixture();
-    fixture.pr.head.ref = "another-branch";
-    const candidate = { ...fixture.candidate, role: "dependency" as const };
-    const snapshot = await collectCleanupEvidence(fixture.runtime, candidate);
-    expect(decideCleanupEligibility(snapshot)).toMatchObject({
-      code: "unchanged-dependency",
-      eligible: true
-    });
-    expect(
-      eligibleForCleanup(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
-    ).toBeFalsy();
-  });
+  test.each(["root", "dependency"] as const)(
+    "proves an unchanged %s against the current default without a PR",
+    async (role) => {
+      const fixture = createFixture();
+      fixture.pr.head.ref = "another-branch";
+      const candidate = { ...fixture.candidate, role };
+      const snapshot = await collectCleanupEvidence(fixture.runtime, candidate);
+      expect(decideCleanupEligibility(snapshot)).toMatchObject({
+        code: "unchanged-branch",
+        eligible: true
+      });
+      write(candidate.worktreePath, "unique.txt", "new work\n");
+      git(candidate.worktreePath, ["add", "."]);
+      git(candidate.worktreePath, ["commit", "-m", "unique"]);
+      const unique = await collectCleanupEvidence(fixture.runtime, candidate);
+      // Never pushed: no remote compare is possible, and none is needed.
+      expect(decideCleanupEligibility(unique)).toMatchObject({
+        code: "no-merged-pr",
+        eligible: false,
+        status: "ineligible"
+      });
+    }
+  );
 
   test.each([
     { comparison: "ahead", expected: true, label: "remote ancestry proof" },
     { comparison: "behind", expected: false, label: "unique dependency commits" },
-    { comparison: "unavailable", expected: false, label: "unavailable ancestry" }
+    { comparison: "unavailable", expected: false, label: "unavailable ancestry" },
+    { comparison: "not-found", expected: false, label: "a commit GitHub has never seen" }
   ])("handles a missing local default commit with $label", async ({ comparison, expected }) => {
     const fixture = createFixture();
     fixture.pr.head.ref = "another-branch";
@@ -198,6 +263,9 @@ describe("cleanup evidence from real Git worktrees", () => {
       if (endpoint.includes("/compare/")) {
         if (comparison === "unavailable") {
           throw new Error("comparison unavailable");
+        }
+        if (comparison === "not-found") {
+          return { exitCode: 1, stderr: "gh: Not Found (HTTP 404)", stdout: "" };
         }
         return {
           exitCode: 0,
@@ -235,8 +303,26 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(snapshot.committedWorkAttempted).toBeFalsy();
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       code: "dirty-worktree",
-      eligible: false
+      eligible: false,
+      evidence: [
+        kind === "untracked"
+          ? "?? new.txt"
+          : kind === "staged"
+            ? "M  tracked.txt"
+            : " M tracked.txt"
+      ]
     });
+  });
+
+  test("dirty evidence lists at most five paths and counts the rest", async () => {
+    const fixture = createFixture();
+    for (const index of [1, 2, 3, 4, 5, 6, 7]) {
+      write(fixture.candidate.worktreePath, `new-${index}.txt`, "edited\n");
+    }
+    const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
+    const { evidence: details } = decideCleanupEligibility(snapshot);
+    expect(details).toHaveLength(6);
+    expect(details.at(-1)).toBe("and 2 more");
   });
 
   test("detects dirty submodules even when repository config hides them", async () => {
@@ -253,23 +339,6 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(git(worktreePath, ["status", "--porcelain"])).toBe("");
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
     expect(decideCleanupEligibility(snapshot).code).toBe("dirty-worktree");
-    // The existing cleanup command must also stop reporting this checkout as clean.
-    const legacy = inspectMergedWorktreeCleanup(
-      {
-        ...fixture.runtime,
-        exec: (command, args, options) =>
-          command === "git"
-            ? fixture.baseRuntime.exec(command, args, options)
-            : fixture.runtime.exec(command, args, options)
-      },
-      {
-        ...fixture.candidate,
-        session: BRANCH
-      },
-      { refreshDefaultBranch: false }
-    );
-    expect(legacy.eligible).toBeFalsy();
-    expect(legacy.reasons.join(" ")).toContain("dirty/untracked");
   });
 
   test.each(["--assume-unchanged", "--skip-worktree"])(
@@ -308,28 +377,13 @@ describe("cleanup evidence from real Git worktrees", () => {
       write(worktreePath, "dep/sub.txt", "concealed edit\n");
       expect(git(worktreePath, ["status", "--porcelain", "--ignore-submodules=none"])).toBe("");
       const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
-      const legacy = inspectMergedWorktreeCleanup(
-        {
-          ...fixture.runtime,
-          exec: (command, args, options) =>
-            command === "git"
-              ? fixture.baseRuntime.exec(command, args, options)
-              : fixture.runtime.exec(command, args, options)
-        },
-        { ...fixture.candidate, session: BRANCH },
-        { refreshDefaultBranch: false }
-      );
       let chopAccepted = true;
       try {
         assertCleanWorktree(fixture.baseRuntime, worktreePath);
       } catch {
         chopAccepted = false;
       }
-      expect([eligibleForCleanup(snapshot), legacy.eligible, chopAccepted]).toStrictEqual([
-        false,
-        false,
-        false
-      ]);
+      expect([eligibleForCleanup(snapshot), chopAccepted]).toStrictEqual([false, false]);
     }
   );
 
@@ -450,6 +504,7 @@ function createFixture() {
   const worktreePath = path.join(sandbox, "session-with-a-different-name");
   git(sourceRoot, ["remote", "add", "origin", `git@github.com:${REPOSITORY}.git`]);
   git(sourceRoot, ["worktree", "add", "-b", BRANCH, worktreePath]);
+  ageWorktree(worktreePath);
   const pr = mergedPr();
   pr.head.sha = git(worktreePath, ["rev-parse", "HEAD"]);
   const baseRuntime = createTestRuntime({ cwd: sourceRoot, env: { GH_REPO: "wrong/repo" } });

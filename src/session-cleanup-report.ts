@@ -3,18 +3,19 @@ import path from "node:path";
 import type { CleanupEvidence } from "./cleanup-eligibility.ts";
 import {
   decideSessionCleanupEligibility,
-  decideSessionCleanupMember
+  decideSessionCleanupMember,
+  SETTLED_BLOCKERS
 } from "./session-cleanup-eligibility.ts";
 import type {
   SessionCleanupEvidence,
   SessionCleanupMember,
   SessionCleanupReason
 } from "./session-cleanup-eligibility.ts";
+import type { SessionAction } from "./session-lifecycle-progress.ts";
 
 const messages: Record<SessionCleanupReason, string> = {
   "ambiguous-pr": "More than one merged pull request matches this commit.",
-  "ancestry-unavailable":
-    "The dependency's relationship to the default branch could not be verified.",
+  "ancestry-unavailable": "The commit's relationship to the default branch could not be verified.",
   "changed-during-inspection": "The local branch or commit changed during inspection.",
   "closed-unmerged-pr": "The pull request for this commit was closed without merging.",
   "default-branch": "The worktree is on the repository's default branch.",
@@ -35,7 +36,8 @@ const messages: Record<SessionCleanupReason, string> = {
     "A member's Source checkout, recorded path, or registration could not be verified.",
   "member-missing-or-unverified": "The member has no usable worktree evidence.",
   "missing-worktree": "The worktree path is missing; ownership must be verified.",
-  "no-merged-pr": "No qualifying merged pull request proves this work is complete.",
+  "no-merged-pr":
+    "No qualifying merged pull request proves this work is complete, and the branch has commits outside the default branch.",
   "open-pr": "A pull request for this branch is still open.",
   "operation-lock-present":
     "A Monke operation lock is present; its status has not been overridden.",
@@ -43,34 +45,44 @@ const messages: Record<SessionCleanupReason, string> = {
     "The owned worktree is already removed; its Source and registrations were verified.",
   "owned-worktrees-gone": "All owned worktrees are already removed; Session finalization remains.",
   "ownership-conflict":
-    "Session ownership conflicts with another record or an overlapping registered worktree.",
+    "Session ownership conflicts with another record or an overlapping registered worktree; remove the wrong Session state file from Monke home, then rerun Cleanup.",
+  "recent-worktree":
+    "The branch has no commits outside the default branch, but the worktree is under a day old; ancestry-only proof waits for a day.",
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
   "repository-unavailable": "The repository or its default branch could not be verified.",
   "source-checkout": "Source checkouts cannot be removed.",
+  "source-missing":
+    "A member's recorded Source checkout no longer exists; Chop cannot run and the state is retained.",
   "state-changed-during-inspection": "Session state changed during inspection; inspect again.",
-  "unchanged-dependency": "The dependency has no commits outside the verified default branch.",
-  "unique-dependency-commits":
-    "The dependency has commits outside the verified default branch and no qualifying merge proof."
+  "unchanged-branch": "The branch has no commits outside the verified default branch."
 };
 
 type CheckStatus = "passed" | "blocked" | "unknown" | "not-checked" | "not-needed";
 
 export interface CleanupCheckReport {
   code: SessionCleanupReason | null;
+  /** Collected facts behind the status, such as the paths that make a worktree dirty. */
+  details?: string[];
   message: string;
   status: CheckStatus;
 }
 
 /** Supplied by the executor only after an actual attempt. Reporting performs no effects. */
-export type SessionCleanupExecution =
+export type SessionCleanupExecution = (
   | { outcome: "not-attempted" }
   | { outcome: "cleaned" }
   | {
       message: string;
-      outcome: "failed";
+      outcome: "failed" | "skipped";
       sourceRoot: string;
-      step: "revalidation" | "teardown" | "worktree-removal" | "finalization";
-    };
+      step: SessionAction["step"] | "teardown" | "finalization";
+    }
+) & {
+  attemptedAction?: SessionAction;
+  completedActions?: SessionAction[];
+  remainingActions?: SessionAction[];
+  retryCleanupCommands?: SessionAction[];
+};
 
 const NOT_ATTEMPTED: SessionCleanupExecution = { outcome: "not-attempted" };
 
@@ -99,10 +111,14 @@ function committedWorkCheck(
       status: "unknown"
     };
   }
-  return check(
+  const report = check(
     decision.eligible ? "passed" : decision.status === "ineligible" ? "blocked" : "unknown",
     decision.code
   );
+  if (decision.evidence.length > 0) {
+    report.details = decision.evidence;
+  }
+  return report;
 }
 
 function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMember) {
@@ -113,7 +129,8 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
   let local: CleanupCheckReport;
   let committedWork: CleanupCheckReport;
   if (problems.length > 0 || member.mode === "unverified") {
-    local = check("unknown", problems[0]?.code ?? "member-identity-unverified");
+    const code = problems[0]?.code ?? "member-identity-unverified";
+    local = check(SETTLED_BLOCKERS.has(code) ? "blocked" : "unknown", code);
     committedWork =
       member.evidence && member.evidence.committedWorkAttempted !== false
         ? {
@@ -135,13 +152,18 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
     };
   } else if (member.evidence) {
     const block = member.evidence.localBlock;
-    local = block
-      ? check(block.status === "ineligible" ? "blocked" : "unknown", block.code)
-      : {
-          code: null,
-          message: "Registered linked worktree; clean including untracked files and submodules.",
-          status: "passed"
-        };
+    if (block) {
+      local = check(block.status === "ineligible" ? "blocked" : "unknown", block.code);
+      if (block.evidence.length > 0) {
+        local.details = block.evidence;
+      }
+    } else {
+      local = {
+        code: null,
+        message: "Registered linked worktree; clean including untracked files and submodules.",
+        status: "passed"
+      };
+    }
     committedWork = committedWorkCheck(member.evidence, decision);
   } else {
     local = check("unknown", "member-missing-or-unverified");
@@ -162,19 +184,32 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
 /** JSON and text share this projection, including checks skipped by the collector. */
 export function createSessionCleanupReport(
   snapshot: SessionCleanupEvidence,
-  execution: SessionCleanupExecution = NOT_ATTEMPTED
+  execution: SessionCleanupExecution = NOT_ATTEMPTED,
+  options: { dryRun?: boolean; plannedActions?: SessionAction[] } = {}
 ) {
   const eligibility = decideSessionCleanupEligibility(snapshot);
+  const members = snapshot.members.map((member) => memberReport(snapshot, member));
+  // Eligibility can be conclusively false while another check still lacks evidence.
+  const inspectionFailed =
+    snapshot.blockers.some((blocker) => !SETTLED_BLOCKERS.has(blocker)) ||
+    members.some(
+      (member) =>
+        member.checks.local.status === "unknown" || member.checks.committedWork.status === "unknown"
+    );
   return {
     eligibility,
     execution,
-    members: snapshot.members.map((member) => memberReport(snapshot, member)),
+    inspectionFailed,
+    members,
     outcome:
       execution.outcome === "not-attempted"
         ? eligibility.eligible
-          ? ("eligible" as const)
+          ? options.dryRun
+            ? ("would-clean" as const)
+            : ("eligible" as const)
           : ("skipped" as const)
         : execution.outcome,
+    plannedActions: options.plannedActions ?? [],
     problems: snapshot.problems ?? [],
     reasons: eligibility.reasons.map((code) => ({ code, message: messages[code] })),
     rootSourceRoot: snapshot.rootSourceRoot,
@@ -190,10 +225,11 @@ export function formatSessionCleanupReport(report: ReturnType<typeof createSessi
     cleaned: "Cleaned",
     eligible: "Eligible (not attempted)",
     failed: "Failed",
-    skipped: "Skipped"
+    skipped: "Skipped",
+    "would-clean": "Would clean"
   };
   const lines = [`${labels[report.outcome]}: ${root} / ${label}`];
-  if (report.execution.outcome === "failed") {
+  if (report.execution.outcome === "failed" || report.execution.outcome === "skipped") {
     lines.push(
       `  ${report.execution.step} failed in ${report.execution.sourceRoot}: ${report.execution.message}`
     );
@@ -208,7 +244,9 @@ export function formatSessionCleanupReport(report: ReturnType<typeof createSessi
     lines.push(
       `  ${member.sourceRoot} — ${member.worktreePath}`,
       `    Local worktree [${member.checks.local.status}]: ${member.checks.local.message}`,
-      `    Committed work [${member.checks.committedWork.status}]: ${member.checks.committedWork.message}`
+      ...(member.checks.local.details ?? []).map((detail) => `      ${detail}`),
+      `    Committed work [${member.checks.committedWork.status}]: ${member.checks.committedWork.message}`,
+      ...(member.checks.committedWork.details ?? []).map((detail) => `      ${detail}`)
     );
   }
   if (report.outcome === "skipped") {
@@ -217,5 +255,32 @@ export function formatSessionCleanupReport(report: ReturnType<typeof createSessi
   if (report.outcome === "failed") {
     lines.push("  Cleanup was attempted and did not complete; earlier steps may have succeeded.");
   }
+  lines.push(...formatProgress(report));
   return `${lines.join("\n")}\n`;
+}
+
+function formatProgress(report: ReturnType<typeof createSessionCleanupReport>) {
+  const lines: string[] = [];
+  for (const action of report.plannedActions) {
+    lines.push(`  Planned: ${formatAction(action)}`);
+  }
+  for (const action of report.execution.completedActions ?? []) {
+    lines.push(`  Completed this attempt: ${formatAction(action)}`);
+  }
+  for (const action of report.execution.remainingActions ?? []) {
+    lines.push(`  Remaining: ${formatAction(action)}`);
+  }
+  if (report.execution.attemptedAction && report.outcome === "failed") {
+    lines.push("  The failed action may have produced effects; its completion is unverified.");
+  }
+  if (report.outcome === "failed" && (report.execution.retryCleanupCommands?.length ?? 0) > 0) {
+    lines.push(
+      "  Retry runs recorded Cleanup commands from the beginning, including earlier successes."
+    );
+  }
+  return lines;
+}
+
+function formatAction(action: SessionAction) {
+  return `${action.step} ${action.sourceRoot}${action.worktreePath ? ` (${action.worktreePath})` : ""}${action.command ? `: ${action.command}` : ""}`;
 }

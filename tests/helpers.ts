@@ -6,6 +6,7 @@ import {
   readdirSync,
   realpathSync,
   rmSync,
+  utimesSync,
   writeFileSync,
   mkdtempSync
 } from "node:fs";
@@ -140,6 +141,12 @@ export function git(cwd: string, args: string[], env?: Record<string, string>) {
     throw new Error(result.stderr || result.stdout || `git ${args.join(" ")} failed`);
   }
   return result.stdout.trim();
+}
+
+/** Backdate a linked worktree's creation marker so ancestry-only Cleanup proof applies. */
+export function ageWorktree(worktreePath: string, days = 2) {
+  const then = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  utimesSync(path.join(worktreePath, ".git"), then, then);
 }
 
 export function write(root: string, relativePath: string, contents: string) {

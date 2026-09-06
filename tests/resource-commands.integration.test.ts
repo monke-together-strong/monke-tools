@@ -241,7 +241,7 @@ export default function ({ previous }) {
             ],
             resourceValues: [{ env: "DISCORD_CHANNEL", value: "discord-first" }],
             sourceRoot: scenario.repoRoot,
-            worktreePath: path.join(scenario.sandbox, "missing-first")
+            worktreePath: getExpectedWorktreePath(scenario.home, scenario.repoRoot, "first")
           })
         ],
         rootSourceRoot: scenario.repoRoot,
@@ -473,7 +473,7 @@ export default function ({ previous }) {
             }
           ],
           sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "missing-first")
+          worktreePath: getExpectedWorktreePath(scenario.home, scenario.repoRoot, "first")
         }
       ],
       rootSourceRoot: scenario.repoRoot,
@@ -596,7 +596,7 @@ export default function ({ previous }) {
             }
           ],
           sourceRoot: scenario.repoRoot,
-          worktreePath: path.join(scenario.sandbox, "missing-first")
+          worktreePath: getExpectedWorktreePath(scenario.home, scenario.repoRoot, "first")
         }
       ],
       rootSourceRoot: scenario.repoRoot,

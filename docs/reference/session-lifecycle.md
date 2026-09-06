@@ -12,7 +12,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Merged PR**: A pull request whose GitHub `mergedAt` value is set.
 
-**Merge-cleanable Session**: A Session whose session branch is proven by a **Merged PR** and whose recorded session worktrees are eligible for explicit cleanup.
+**Merge-cleanable Session**: A Session whose every recorded session worktree is clean and proven complete, by a **Merged PR** for its exact commit or by that commit already being inside the verified default branch.
 
 **Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates a new Session from each participating repo's resolved default branch content, or resumes an incomplete Session from retained worktrees and pinned Session refs.
 
@@ -111,14 +111,22 @@ and does not finalize a Session.
 A partially materialized Session remains a valid target. Use only repos and
 resources recorded in its state, not inferred worktrees from today's config.
 
-## Read-only Session inspection
+## Session cleanup
 
 `inspectSessionCleanup` reports Git and retained ownership evidence for all retained
 Sessions. `eligibleForSessionCleanup` returns true only when every live member
 passes the individual-worktree check and the whole Session has no ownership,
-identity, hold, or operation blocker. The Root requires exact merged PR proof;
-a dependency can instead prove that it has no commits outside the verified
-default branch. Actual member branch names can differ from the Session name.
+identity, hold, or operation blocker. A member passes with an exact merged PR
+for its current commit, or by proving that its commit is already inside the
+verified default branch, so it holds no unique work. Ancestry-only proof also
+requires the worktree to be at least one day old, measured from its `.git`
+file, so a Session spawned from the default branch is not removed before work
+starts. Both proofs require a clean worktree first; uncommitted or untracked
+files always block. A branch GitHub has never seen cannot be inside its default
+branch, so a compare 404 on an unpushed commit counts as not an ancestor. A member with
+unique commits and no qualifying merged PR is ineligible, not unknown: the
+provider answered, so the skip is settled and does not mark inspection as
+failed. Actual member branch names can differ from the Session name.
 
 The report uses recorded membership. Nested worktree paths are overlapping
 ownership, including discovered unowned registrations; removing a parent must
@@ -136,12 +144,50 @@ candidates.
 
 Optional `cleanupHold: true` in Session state blocks this check. This is separate
 from each repo's `cleanupEligible`, which records whether its Cleanup command
-must run. A present global operation lock also blocks inspection eligibility;
+must run. A member whose recorded Source checkout no longer exists is a settled
+skip: the Session is reported as blocked, not as an inspection error, and its
+state is retained because Chop needs the Source too. A foreign global operation lock also blocks inspection eligibility;
 the inspector does not acquire, reclaim, or remove that lock. It rechecks local
 member evidence and retained state after provider reads.
 
-This report is not removal authority and does not verify resource teardown. The
-new method is not connected to automatic Chop or `mt cleanup --merged`.
+`mt cleanup --dry-run` uses this report without acquiring a lock, creating Monke
+home, fetching Git objects, or running Cleanup commands. Eligible results say
+“Would clean.” `mt cleanup` holds the asynchronous global lock, verifies its own
+lock identity, and refreshes evidence before each Session, reusing the initial
+unowned-worktree discovery while rechecking overlaps live before each removal.
+Collection memoizes worktree listings and repository-structure lookups per
+Source for one pass; branch, HEAD, cleanliness, and every revalidation read fresh. It shares Chop's
+removal and finalization lifecycle, with local proof rechecked before each
+removal. The initial report alone never authorizes effects. Monke's lock
+coordinates Monke operations; it cannot make concurrent external Git edits atomic.
+
+Both commands discover all retained Sessions across all Roots from Monke home,
+even outside a repository. Unowned worktrees discovered in known Source
+checkouts are listed separately and left untouched. Neither `--merged` nor
+`--all` is an option.
+
+Both modes accept `--json`: stdout contains one JSON object with `schemaVersion:
+1`, `dryRun`, `inspectedAt`, `sessions`, `unownedWorktrees`, `unavailableSources`,
+`globalFailure`, and `exitCode`. Human output uses the same Session reports,
+preceded by one summary line counting outcomes, inspection errors, unowned
+worktrees, and unavailable Sources. `--eligible` hides skipped Sessions from
+human output only; JSON always includes every inspected Session. A dirty member
+lists up to five changed paths under its local check.
+Cleanup-command output is captured by the command runner and cannot contaminate
+JSON stdout. Exit 0 means inspection/execution completed, including expected
+eligibility skips and settled blockers such as a hold or a missing Source. Exit
+1 means evidence was unavailable, execution failed, or a global safety check
+stopped the run; details remain in the report and the CLI writes a short error
+to stderr.
+
+Execution reports planned, completed-this-attempt, and remaining actions. A
+Session is skipped before its first effect attempt, or failed after an effect
+attempt starts. Failed commands may have produced external effects even when
+completion is unverified. Full state is retained on failure; retries run Cleanup
+commands from the beginning, including earlier successes. Independent Sessions
+continue after bounded failures. Lock ownership loss, retained-state changes
+after inspection, or corrupt state with unbounded ownership stop further
+execution. Every remaining Session is reported as skipped on a global stop.
 `createSessionCleanupReport` supplies the same per-member explanations to JSON
 and `formatSessionCleanupReport`. Local checks and committed-work checks report
 passed, blocked, unknown, not-checked, or not-needed. A dirty worktree can stop
