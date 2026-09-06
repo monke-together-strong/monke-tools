@@ -88,7 +88,7 @@ function cleanupExitCode(
   globalFailure: string | null
 ) {
   const inspectionError =
-    sessions.some((session) => session.eligibility.status === "unknown") ||
+    sessions.some((session) => session.inspectionFailed) ||
     (inventory?.unavailableSources.length ?? 0) > 0;
   return globalFailure ||
     inspectionError ||

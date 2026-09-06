@@ -67,11 +67,14 @@ describe("global Session cleanup", () => {
     let stdout = "";
     const runtime = createTestRuntime({
       cwd,
-      env: { MONKE_HOME: home },
+      env: { GIT_CEILING_DIRECTORIES: path.dirname(cwd), MONKE_HOME: home },
       onStdout: (text) => {
         stdout += text;
       }
     });
+    expect(() => runtime.exec("git", ["rev-parse", "--show-toplevel"])).toThrow(
+      /not a git repository/u
+    );
     await runCliAsync(["cleanup", "--dry-run", "--json"], runtime);
     expect(JSON.parse(stdout)).toMatchObject({
       dryRun: true,
@@ -124,7 +127,7 @@ describe("global Session cleanup", () => {
     let stdout = "";
     const runtime = createTestRuntime({
       cwd,
-      env: { MONKE_HOME: home },
+      env: { GIT_CEILING_DIRECTORIES: path.dirname(cwd), MONKE_HOME: home },
       onStdout: (text) => {
         stdout += text;
       }
@@ -194,6 +197,9 @@ describe("global Session cleanup", () => {
 
   test("global preview is immutable and execution cleans whole Sessions across Roots, preserving branches and unowned worktrees", async () => {
     const f = fixture();
+    expect(() => f.runtime.exec("git", ["rev-parse", "--show-toplevel"])).toThrow(
+      /not a git repository/u
+    );
     const a = f.addSession("feature/a");
     const b = f.addSession("feature/b", f.sources[0]);
     const unowned = path.join(f.cwd, "ordinary");
@@ -444,4 +450,54 @@ describe("global Session cleanup", () => {
     );
     expect(result.report.exitCode).toBe(1);
   }, 30_000);
+
+  test("a waiting operation's reclaim marker does not invalidate or strand cleanup's own lock", async () => {
+    const f = fixture();
+    f.addSession("feature/contended");
+    const original = f.runtime.execAsync;
+    f.runtime.execAsync = async (command, args, options) => {
+      const result = await original(command, args, options);
+      mkdirSync(path.join(f.home, "lock.reclaim"), { recursive: true });
+      return result;
+    };
+    const result = await f.run();
+    expect(result.error).toBeUndefined();
+    expect(result.report.sessions[0]?.outcome).toBe("cleaned");
+    expect(existsSync(path.join(f.home, "lock"))).toBeFalsy();
+    expect(existsSync(path.join(f.home, "lock.reclaim"))).toBeTruthy();
+  }, 30_000);
+
+  test.each(["dirty", "held"])(
+    "%s eligibility does not hide unknown member evidence in either mode",
+    async (blocker) => {
+      const f = fixture();
+      const state = f.addSession("feature/unknown");
+      const [dependency] = state.repos;
+      if (!dependency) {
+        throw new Error("Missing dependency");
+      }
+      if (blocker === "dirty") {
+        write(dependency.worktreePath, "tracked.txt", "unfinished\n");
+      } else {
+        saveSessionState(f.home, { ...state, cleanupHold: true });
+      }
+      const original = f.runtime.execAsync;
+      f.runtime.execAsync = (command, args, options) => {
+        if (args?.[1]?.includes("owner/root")) {
+          throw new Error("GitHub unavailable");
+        }
+        return original(command, args, options);
+      };
+      const preview = await f.run(true);
+      expect(preview.report.exitCode).toBe(1);
+      expect(preview.report.sessions[0]?.outcome).toBe("skipped");
+      const execution = await f.run();
+      expect(execution.report.exitCode).toBe(1);
+      expect(execution.report.sessions[0]?.outcome).toBe("skipped");
+      for (const repo of state.repos) {
+        expect(existsSync(repo.worktreePath)).toBeTruthy();
+      }
+    },
+    30_000
+  );
 });

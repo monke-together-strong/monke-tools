@@ -759,8 +759,7 @@ function tryAcquireLockPath(lockPath: string) {
           fileDescriptor !== null &&
           current.dev === identity.dev &&
           current.ino === identity.ino &&
-          readFileSync(lockPath, "utf-8") === contents &&
-          !existsSync(reclaimPathFor(lockPath))
+          readFileSync(lockPath, "utf-8") === contents
         );
       } catch {
         return false;

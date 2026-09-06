@@ -173,10 +173,19 @@ export function createSessionCleanupReport(
   options: { dryRun?: boolean; plannedActions?: SessionAction[] } = {}
 ) {
   const eligibility = decideSessionCleanupEligibility(snapshot);
+  const members = snapshot.members.map((member) => memberReport(snapshot, member));
+  // Eligibility can be conclusively false while another check still lacks evidence.
+  const inspectionFailed =
+    snapshot.blockers.some((blocker) => blocker !== "held") ||
+    members.some(
+      (member) =>
+        member.checks.local.status === "unknown" || member.checks.committedWork.status === "unknown"
+    );
   return {
     eligibility,
     execution,
-    members: snapshot.members.map((member) => memberReport(snapshot, member)),
+    inspectionFailed,
+    members,
     outcome:
       execution.outcome === "not-attempted"
         ? eligibility.eligible
