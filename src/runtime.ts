@@ -728,7 +728,6 @@ function tryAcquireLockPath(lockPath: string) {
   let fileDescriptor: number | null = null;
   const contents = JSON.stringify({
     acquiredAt: Date.now(),
-    nonce: crypto.randomUUID(),
     pid: process.pid
   });
   try {
