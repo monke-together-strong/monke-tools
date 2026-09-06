@@ -1,16 +1,12 @@
 core:changelogs:
-  - content: "---\nsubject: Add a shared TypeScript preset\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: minor\n---\n\n## Shared TypeScript configuration\n\nAdd a runtime-neutral TypeScript base preset with strict checking, checked indexed\naccess, explicit override markers, consistent returns, and unused-code checks.\n"
-    filename: first-typescript-config-release.md
-    v: 0.0.0
-  - content: "---\nsubject: Strengthen shared Oxlint validation\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: patch\n---\n\n## Stronger shared validation\n\nLoad `eslint-plugin-jsdoc` through Oxlint's JavaScript-plugin compatibility layer and reject\nundefined JSDoc types in every consumer while preserving consumer-provided plugins and rule\noverrides. Reject console calls and direct environment access, and require explicit module boundary\ntypes across consumers. Replace Ultracite's `sort-keys` rule with comment-aware Perfectionist\nsorting.\n"
-    filename: 2026-08-06-shared-jsdoc-validation.md
+  - content: "---\nsubject: Enable anti-slop validation\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: patch\n---\n\n## Broader shared validation\n\nCompose Ultracite's anti-slop preset into the shared Oxlint configuration so consumers catch type\nwidening, unsafe boundary handling, and unsupported type assertions alongside the existing core and\nVitest rules. Upgrade Ultracite to 7.10.4.\n"
+    filename: 2026-08-14-anti-slop-validation.md
     v: 0.0.0
 core:packages:
   - id: npm:monke-tools
     updated: false
   - changelogIds:
-      - first-typescript-config-release.md
-      - 2026-08-06-shared-jsdoc-validation.md
+      - 2026-08-14-anti-slop-validation.md
     id: npm:@monke-together-strong/oxc-config
     updated: true
 npm:packages:

@@ -30,7 +30,7 @@
     },
     "packages/oxc-config": {
       "name": "@monke-together-strong/oxc-config",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "dependencies": {
         "eslint-plugin-jsdoc": "63.3.3",
         "eslint-plugin-perfectionist": "5.10.1",
