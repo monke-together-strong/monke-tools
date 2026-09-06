@@ -1,6 +1,4 @@
-import path from "node:path";
-
-import { samePath } from "./path-identity.ts";
+import { containsPath, samePath } from "./path-identity.ts";
 import type { SessionRepoState, SessionState } from "./types.ts";
 
 export interface SessionAction {
@@ -39,11 +37,7 @@ export function sessionRemovalRank(
   invocationPath: string,
   rootSourceRoot: string
 ) {
-  const relative = path.relative(repo.worktreePath, invocationPath);
-  if (
-    relative === "" ||
-    (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
-  ) {
+  if (containsPath(repo.worktreePath, invocationPath)) {
     return 2;
   }
   return samePath(repo.sourceRoot, rootSourceRoot) ? 1 : 0;

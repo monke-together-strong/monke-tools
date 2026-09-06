@@ -13,7 +13,7 @@ import {
 import type { CleanupCode, CleanupDecision, CleanupEvidence } from "./cleanup-eligibility.ts";
 import { errorMessage, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees } from "./git.ts";
-import { samePath, worktreePathsOverlap } from "./path-identity.ts";
+import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
 import type { OperationLock } from "./runtime.ts";
 import {
   assertNoOtherStateOwnsSessionRepos,
@@ -435,9 +435,4 @@ function invalidRecordMayOverlap(
         containsPath(candidate, reference)
     )
   );
-}
-
-function containsPath(parent: string, child: string) {
-  const relative = path.relative(parent, child);
-  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }

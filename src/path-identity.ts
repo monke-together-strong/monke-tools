@@ -5,10 +5,13 @@ export function samePath(left: string, right: string) {
   return path.normalize(left) === path.normalize(right);
 }
 
+/** Whether a path is the parent itself or one of its lexical descendants. */
+export function containsPath(parent: string, child: string) {
+  const relative = path.relative(parent, child);
+  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
 /** Removal of either nested path can affect work owned at the other path. */
 export function worktreePathsOverlap(left: string, right: string) {
-  return [path.relative(left, right), path.relative(right, left)].some(
-    (relative) =>
-      relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
-  );
+  return containsPath(left, right) || containsPath(right, left);
 }

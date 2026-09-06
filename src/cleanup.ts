@@ -1,10 +1,8 @@
-import path from "node:path";
-
 import { teardownSession } from "./chop.ts";
 import { readOnlyCleanupRuntime } from "./cleanup-eligibility.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees } from "./git.ts";
-import { samePath, worktreePathsOverlap } from "./path-identity.ts";
+import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLockAsync } from "./runtime.ts";
 import type { OperationLock } from "./runtime.ts";
 import { inspectSessionCleanup, revalidateSessionMember } from "./session-cleanup-eligibility.ts";
@@ -258,13 +256,7 @@ function executeSession(
   }
   try {
     guard();
-    const invocation = state.repos.find((repo) => {
-      const relative = path.relative(repo.worktreePath, runtime.cwd);
-      return (
-        relative === "" ||
-        (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
-      );
-    });
+    const invocation = state.repos.find((repo) => containsPath(repo.worktreePath, runtime.cwd));
     teardownSession(
       { ...runtime, writeStdout: runtime.writeStderr },
       home,
