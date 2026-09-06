@@ -39,8 +39,8 @@ Reuse recorded verification that still covers the change, or run the smallest
 relevant checks. Scale additional evidence to the behavior:
 
 - For a locally runnable UI or API that benefits from hands-on verification,
-  prepare a [manual-test handoff](references/manual-test-handoff.md) and reuse
-  that running target for proof.
+  prepare a [manual-test handoff](references/manual-test-handoff.md) for the
+  final chat response only. Reuse that running target for PR verification proof.
 - For frontend-visible work, attach screenshots of the changed state or
   [video](references/browser-video-proof.md) when motion, timing, or a workflow
   carries the claim. Inspect final assets using
