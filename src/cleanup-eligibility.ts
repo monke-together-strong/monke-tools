@@ -6,6 +6,7 @@ import { samePath } from "./path-identity.ts";
 import type { Runtime } from "./types.ts";
 import {
   assertCanonicalSourceCheckout,
+  hasHiddenWorktreeIndexEntries,
   validateRegisteredWorktreeForRemoval
 } from "./worktree-safety.ts";
 
@@ -56,6 +57,7 @@ export const CleanupCodeSchema = z.enum([
   "unique-dependency-commits",
   "ancestry-unavailable",
   "changed-during-inspection",
+  "repository-changed-during-inspection",
   "exact-merged-pr",
   "unchanged-dependency"
 ]);
@@ -178,10 +180,15 @@ export async function collectCleanupEvidence(
   if (local.localBlock) {
     return snapshot;
   }
-  let repository = cache.get(candidate.sourceRoot);
+  const repositoryName = readRepositoryName(readOnly, candidate.sourceRoot);
+  if (!repositoryName) {
+    return snapshot;
+  }
+  const cacheKey = `${candidate.sourceRoot}\0${repositoryName.toLowerCase()}`;
+  let repository = cache.get(cacheKey);
   if (!repository) {
-    repository = inspectRepository(readOnly, candidate.sourceRoot);
-    cache.set(candidate.sourceRoot, repository);
+    repository = inspectRepository(readOnly, candidate.sourceRoot, repositoryName);
+    cache.set(cacheKey, repository);
   }
   snapshot.repository = await repository;
   if (candidate.role === "dependency" && snapshot.repository && snapshot.head) {
@@ -199,6 +206,12 @@ export async function collectCleanupEvidence(
     (current.head === local.head && current.branch === local.branch
       ? null
       : decision("unknown", "changed-during-inspection"));
+  if (
+    readRepositoryName(readOnly, candidate.sourceRoot)?.toLowerCase() !==
+    repositoryName.toLowerCase()
+  ) {
+    snapshot.localBlock ??= decision("unknown", "repository-changed-during-inspection");
+  }
   return snapshot;
 }
 
@@ -235,12 +248,7 @@ function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
       git(["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"])
     ) {
       local.localBlock = decision("ineligible", "dirty-worktree");
-    } else if (
-      git(["ls-files", "-v", "-z"])
-        .split("\0")
-        .some((entry) => /^[a-zS] /u.test(entry))
-    ) {
-      // assume-unchanged and skip-worktree can conceal tracked edits from status.
+    } else if (hasHiddenWorktreeIndexEntries(runtime, candidate.worktreePath)) {
       local.localBlock = decision("unknown", "hidden-index-entries");
     }
   } catch {
@@ -281,7 +289,7 @@ async function github(runtime: Runtime, sourceRoot: string, endpoint: string, pa
   return parsed;
 }
 
-async function inspectRepository(runtime: Runtime, sourceRoot: string) {
+function readRepositoryName(runtime: Runtime, sourceRoot: string) {
   try {
     const remote = runtime
       .exec("git", ["remote", "get-url", "origin"], { cwd: sourceRoot })
@@ -291,10 +299,14 @@ async function inspectRepository(runtime: Runtime, sourceRoot: string) {
       /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)(?<repository>[\w.-]+\/[\w.-]+?)(?:\.git)?$/u.exec(
         remote
       );
-    const name = match?.groups?.repository;
-    if (!name) {
-      return null;
-    }
+    return match?.groups?.repository ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function inspectRepository(runtime: Runtime, sourceRoot: string, name: string) {
+  try {
     const metadata = RepositorySchema.parse(await github(runtime, sourceRoot, `repos/${name}`));
     if (metadata.full_name.toLowerCase() !== name.toLowerCase()) {
       return null;

@@ -100,6 +100,32 @@ export function assertCleanWorktree(runtime: Runtime, worktreePath: string) {
       `Cannot Chop dirty worktree ${worktreePath}. Commit or stash staged, modified, and untracked files first.`
     );
   }
+  if (hasHiddenWorktreeIndexEntries(runtime, worktreePath)) {
+    throw new MonkeError(
+      `Cannot prove clean worktree ${worktreePath}: hidden index entries may conceal edits, including in submodules.`
+    );
+  }
+}
+
+/** Status cannot prove cleanliness for assume-unchanged or skip-worktree entries. */
+export function hasHiddenWorktreeIndexEntries(runtime: Runtime, worktreePath: string) {
+  const entries = runtime
+    .exec("git", ["ls-files", "-v", "--stage", "-z"], {
+      cwd: worktreePath
+    })
+    .stdout.split("\0");
+  if (entries.some((entry) => /^[a-zS] /u.test(entry))) {
+    return true;
+  }
+  if (!entries.some((entry) => /^[A-Z] 160000 /u.test(entry))) {
+    return false;
+  }
+  const submodules = runtime.exec(
+    "git",
+    ["submodule", "foreach", "--quiet", "--recursive", "git ls-files -v -z"],
+    { cwd: worktreePath }
+  ).stdout;
+  return submodules.split("\0").some((entry) => /^[a-zS] /u.test(entry));
 }
 
 function hasInitializedSubmodules(runtime: Runtime, worktreePath: string) {

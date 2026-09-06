@@ -12,6 +12,7 @@ import {
 import type { CleanupEvidence, CleanupRepositoryEvidence } from "../src/cleanup-eligibility.ts";
 import { inspectMergedWorktreeCleanup } from "../src/cleanup-merged.ts";
 import type { Runtime } from "../src/types.ts";
+import { assertCleanWorktree } from "../src/worktree-safety.ts";
 import { createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
@@ -280,6 +281,82 @@ describe("cleanup evidence from real Git worktrees", () => {
         code: "hidden-index-entries",
         eligible: false
       });
+    }
+  );
+
+  test.each(["--assume-unchanged", "--skip-worktree"])(
+    "rejects concealed submodule edits across all cleanup checks: %s",
+    async (flag) => {
+      const fixture = createFixture();
+      const { worktreePath } = fixture.candidate;
+      const dependency = createRepo(path.join(fixture.sandbox, "dependency"), {
+        "sub.txt": "original\n"
+      });
+      git(worktreePath, [
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        dependency,
+        "dep"
+      ]);
+      git(worktreePath, ["commit", "-am", "add submodule"]);
+      fixture.pr.head.sha = git(worktreePath, ["rev-parse", "HEAD"]);
+      git(path.join(worktreePath, "dep"), ["update-index", flag, "sub.txt"]);
+      write(worktreePath, "dep/sub.txt", "concealed edit\n");
+      expect(git(worktreePath, ["status", "--porcelain", "--ignore-submodules=none"])).toBe("");
+      const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
+      const legacy = inspectMergedWorktreeCleanup(
+        {
+          ...fixture.runtime,
+          exec: (command, args, options) =>
+            command === "git"
+              ? fixture.baseRuntime.exec(command, args, options)
+              : fixture.runtime.exec(command, args, options)
+        },
+        { ...fixture.candidate, session: BRANCH },
+        { refreshDefaultBranch: false }
+      );
+      let chopAccepted = true;
+      try {
+        assertCleanWorktree(fixture.baseRuntime, worktreePath);
+      } catch {
+        chopAccepted = false;
+      }
+      expect([eligibleForCleanup(snapshot), legacy.eligible, chopAccepted]).toStrictEqual([
+        false,
+        false,
+        false
+      ]);
+    }
+  );
+
+  test.each(["during lookup", "between cached calls"])(
+    "revalidates repository identity %s",
+    async (when) => {
+      const fixture = createFixture();
+      const cache = createCleanupEvidenceCache();
+      const replaceRemote = () =>
+        git(fixture.candidate.sourceRoot, [
+          "remote",
+          "set-url",
+          "origin",
+          "git@github.com:different/repo.git"
+        ]);
+      const initial = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
+      expect(eligibleForCleanup(initial)).toBeTruthy();
+      if (when === "between cached calls") {
+        replaceRemote();
+      } else {
+        cache.clear();
+        const original = fixture.runtime.execAsync;
+        fixture.runtime.execAsync = async (...args) => {
+          replaceRemote();
+          return await original(...args);
+        };
+      }
+      const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
+      expect(eligibleForCleanup(snapshot)).toBeFalsy();
     }
   );
 
