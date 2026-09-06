@@ -119,6 +119,8 @@ passes the individual-worktree check and the whole Session has no ownership,
 identity, hold, or operation blocker. The Root requires exact merged PR proof;
 a dependency can instead prove that it has no commits outside the verified
 default branch. Actual member branch names can differ from the Session name.
+A Root with no qualifying merged PR is ineligible, not unknown: the provider
+answered, so the skip is settled and does not mark inspection as failed.
 
 The report uses recorded membership. Nested worktree paths are overlapping
 ownership, including discovered unowned registrations; removing a parent must

@@ -59,7 +59,9 @@ export function inspectSessionRepoRegistration(
   }
 
   if (exact === undefined) {
-    throw new MonkeError(`Session worktree exists but is not registered`);
+    throw new MonkeError(
+      `Session worktree exists but is not registered; delete the directory by hand, then rerun Cleanup`
+    );
   }
   return {
     forceGitRemoval: false,

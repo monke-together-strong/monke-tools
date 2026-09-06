@@ -151,7 +151,8 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
     return decision("ineligible", "head-mismatch");
   }
   if (snapshot.candidate.role !== "dependency") {
-    return decision("unknown", "no-merged-pr");
+    // The provider answered; absence of a PR is a fact, not missing evidence.
+    return decision("ineligible", "no-merged-pr");
   }
   if (snapshot.ancestorOfDefault === null) {
     return decision("unknown", "ancestry-unavailable");

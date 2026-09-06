@@ -45,7 +45,7 @@ const messages: Record<SessionCleanupReason, string> = {
     "The owned worktree is already removed; its Source and registrations were verified.",
   "owned-worktrees-gone": "All owned worktrees are already removed; Session finalization remains.",
   "ownership-conflict":
-    "Session ownership conflicts with another record or an overlapping registered worktree.",
+    "Session ownership conflicts with another record or an overlapping registered worktree; remove the wrong Session state file from Monke home, then rerun Cleanup.",
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
   "repository-unavailable": "The repository or its default branch could not be verified.",
   "source-checkout": "Source checkouts cannot be removed.",

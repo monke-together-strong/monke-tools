@@ -86,6 +86,15 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot).code).toBe("open-pr");
   });
 
+  test("a Root with no merged PR is a settled ineligible, not unknown", () => {
+    const snapshot = withPrs([]);
+    expect(decideCleanupEligibility(snapshot)).toMatchObject({
+      code: "no-merged-pr",
+      eligible: false,
+      status: "ineligible"
+    });
+  });
+
   test("ambiguous exact merged matches remain unknown", () => {
     const snapshot = withPrs([mergedPr(), { ...mergedPr(), number: 2 }]);
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
