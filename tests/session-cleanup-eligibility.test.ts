@@ -375,7 +375,7 @@ describe("whole-Session read-only eligibility", () => {
     const f = fixture();
     const ordinary = path.join(f.sandbox, "ordinary");
     git(f.root, ["worktree", "add", "-b", "ordinary", ordinary]);
-    const report = await inspectSessionCleanup(f.runtime, f.home);
+    const report = await inspectSessionCleanup(f.runtime, f.home, [`${f.root}/.`, f.root]);
     expect(report.unownedWorktrees).toStrictEqual([
       { branch: "ordinary", eligible: false, sourceRoot: f.root, worktreePath: ordinary }
     ]);

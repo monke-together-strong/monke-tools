@@ -19,7 +19,12 @@ const inventory = z
   .object({
     capturedAt: z.string(),
     knownSourceRoots: z.array(z.string()).optional(),
-    rows: z.array(z.object({ expected: z.boolean(), file: z.string() }))
+    rows: z
+      .array(z.object({ expected: z.boolean(), file: z.string() }))
+      .refine(
+        (rows) => new Set(rows.map((row) => row.file)).size === rows.length,
+        "Duplicate state filenames in inventory"
+      )
   })
   .parse(await Bun.file(input).json());
 const runtime = createRuntime();

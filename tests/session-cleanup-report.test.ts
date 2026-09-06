@@ -1,3 +1,5 @@
+import { ok } from "node:assert/strict";
+
 import { describe, expect, test } from "vitest";
 
 import type { SessionCleanupEvidence } from "../src/session-cleanup-eligibility.ts";
@@ -52,9 +54,7 @@ describe("Session cleanup explanations", () => {
   test("a dirty dependency names its path and distinguishes skipped PR checks from passing Root proof", () => {
     const snapshot = fixture();
     const [dependency] = snapshot.members;
-    if (!dependency?.evidence) {
-      throw new Error("Missing fixture member");
-    }
+    ok(dependency?.evidence, "Missing fixture member");
     dependency.evidence.localBlock = {
       code: "dirty-worktree",
       eligible: false,
@@ -81,9 +81,7 @@ describe("Session cleanup explanations", () => {
     (attempted) => {
       const snapshot = fixture();
       const [dependency] = snapshot.members;
-      if (!dependency?.evidence) {
-        throw new Error("Missing fixture member");
-      }
+      ok(dependency?.evidence, "Missing fixture member");
       dependency.evidence.localBlock = {
         code: "dirty-worktree",
         eligible: false,
@@ -128,9 +126,7 @@ describe("Session cleanup explanations", () => {
   test("older evidence with a member problem keeps unknown check coverage", () => {
     const snapshot = fixture();
     const [member] = snapshot.members;
-    if (!member?.evidence) {
-      throw new Error("Missing fixture member");
-    }
+    ok(member?.evidence, "Missing fixture member");
     delete member.evidence.committedWorkAttempted;
     snapshot.blockers = ["member-changed-during-inspection"];
     snapshot.problems = [
@@ -148,9 +144,7 @@ describe("Session cleanup explanations", () => {
   test("verified absent members need no PR check while the remaining member must still pass", () => {
     const snapshot = fixture();
     const [dependency] = snapshot.members;
-    if (!dependency) {
-      throw new Error("Missing fixture member");
-    }
+    ok(dependency, "Missing fixture member");
     dependency.mode = "gone";
     dependency.evidence = null;
     const report = createSessionCleanupReport(snapshot);

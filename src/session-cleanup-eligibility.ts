@@ -285,10 +285,12 @@ export async function inspectSessionCleanup(
     worktreePath: string;
   }[] = [];
   const unavailableSources: string[] = [];
-  const sources = new Set([
-    ...knownSourceRoots,
-    ...states.flatMap((state) => state.repos.map((repo) => repo.sourceRoot))
-  ]);
+  const sources = new Set(
+    [
+      ...knownSourceRoots,
+      ...states.flatMap((state) => state.repos.map((repo) => repo.sourceRoot))
+    ].map((source) => path.normalize(source))
+  );
   for (const sourceRoot of sources) {
     try {
       assertCanonicalSourceCheckout(readOnly, sourceRoot);
