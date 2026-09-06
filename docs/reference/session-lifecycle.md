@@ -111,6 +111,63 @@ and does not finalize a Session.
 A partially materialized Session remains a valid target. Use only repos and
 resources recorded in its state, not inferred worktrees from today's config.
 
+## Read-only Session inspection
+
+`inspectSessionCleanup` reports Git and retained ownership evidence for all retained
+Sessions. `eligibleForSessionCleanup` returns true only when every live member
+passes the individual-worktree check and the whole Session has no ownership,
+identity, hold, or operation blocker. The Root requires exact merged PR proof;
+a dependency can instead prove that it has no commits outside the verified
+default branch. Actual member branch names can differ from the Session name.
+
+The report uses recorded membership. Nested worktree paths are overlapping
+ownership, including discovered unowned registrations; removing a parent must
+not encompass another worktree. Shared Git preflight also rejects nested
+registrations for Ordinary Chop, including with force.
+
+The report uses recorded membership. It does not infer dependencies from current
+configuration or assign unowned worktrees to Sessions by matching names. Corrupt
+records are reported. They block overlapping Sessions; if their ownership cannot
+be bounded, they block all Sessions. Verified absent members count as already
+removed, following Chop's registration checks. A partially absent Session can
+pass for recovery only when every remaining live member passes. Fully absent
+Sessions with verified ownership are reported separately as finalization
+candidates.
+
+Optional `cleanupHold: true` in Session state blocks this check. This is separate
+from each repo's `cleanupEligible`, which records whether its Cleanup command
+must run. A present global operation lock also blocks inspection eligibility;
+the inspector does not acquire, reclaim, or remove that lock. It rechecks local
+member evidence and retained state after provider reads.
+
+This report is not removal authority and does not verify resource teardown. The
+new method is not connected to automatic Chop or `mt cleanup --merged`.
+`createSessionCleanupReport` supplies the same per-member explanations to JSON
+and `formatSessionCleanupReport`. Local checks and committed-work checks report
+passed, blocked, unknown, not-checked, or not-needed. A dirty worktree can stop
+provider lookup; that is explicitly not-checked. Older saved evidence with
+unknown check coverage remains unknown. Retained repository/PR proof can establish
+that committed-work inspection ran, but an invalidation must not relabel it as
+not-checked.
+Ownership errors retain their conflicting Session/path details, and revalidation
+errors name the affected member. Collected members are revalidated even when
+another member already blocks the Session. Stale registrations retain their
+branch identity for that comparison.
+
+Inspection reports eligible (not attempted) or skipped. A later executor can supply
+an actual cleaned or failed result; failure names revalidation, teardown,
+worktree-removal, or finalization and the affected repo. Failed execution does not
+claim the whole Session was retained: earlier steps may already have succeeded.
+This reporting contract does not execute teardown or authorize removal.
+
+`scripts/audit-session-cleanup-eligibility.ts <expected.json> <report.json> [report.txt]` compares
+live results with independently labeled expectations. Its input has `capturedAt`,
+`rows` of `{ file, expected }` (state filename and boolean), and optional
+`knownSourceRoots` for reporting additional unowned Git worktrees. It uses
+`MONKE_HOME`, writes the JSON report with per-member explanations and optional
+text report, and fails if any expected result differs or
+any Session was added or disappeared.
+
 ## Removal and finalization
 
 Before removing any Session worktree, validate all checkable cross-repo

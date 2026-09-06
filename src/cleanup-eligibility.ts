@@ -76,6 +76,8 @@ export interface CleanupEvidence {
   ancestorOfDefault: boolean | null;
   branch: string | null;
   candidate: CleanupCandidate;
+  /** Absent only in older saved evidence; absence is not proof a check ran. */
+  committedWorkAttempted?: boolean;
   head: string | null;
   localBlock: CleanupDecision | null;
   repository: CleanupRepositoryEvidence | null;
@@ -169,17 +171,19 @@ export async function collectCleanupEvidence(
   candidate: CleanupCandidate,
   cache: CleanupEvidenceCache = createCleanupEvidenceCache()
 ): Promise<CleanupEvidence> {
-  const readOnly = readOnlyRuntime(runtime);
+  const readOnly = readOnlyCleanupRuntime(runtime);
   const local = inspectLocal(readOnly, candidate);
   const snapshot: CleanupEvidence = {
     ...local,
     ancestorOfDefault: null,
     candidate,
+    committedWorkAttempted: false,
     repository: null
   };
   if (local.localBlock) {
     return snapshot;
   }
+  snapshot.committedWorkAttempted = true;
   const repositoryName = readRepositoryName(readOnly, candidate.sourceRoot);
   if (!repositoryName) {
     return snapshot;
@@ -213,6 +217,35 @@ export async function collectCleanupEvidence(
     snapshot.localBlock ??= decision("unknown", "repository-changed-during-inspection");
   }
   return snapshot;
+}
+
+/** Recheck local proof synchronously after all members finish provider reads. */
+export function revalidateCleanupEvidence(
+  runtime: Runtime,
+  snapshot: CleanupEvidence
+): CleanupDecision | null {
+  const readOnly = readOnlyCleanupRuntime(runtime);
+  const current = inspectLocal(readOnly, snapshot.candidate);
+  if (
+    current.head !== snapshot.head ||
+    current.branch !== snapshot.branch ||
+    current.localBlock?.code !== snapshot.localBlock?.code
+  ) {
+    return current.localBlock ?? decision("unknown", "changed-during-inspection");
+  }
+  // An unchanged local blocker still explains a skipped member. No remote
+  // identity was established for that member, so do not invent a remote change.
+  if (snapshot.localBlock) {
+    return null;
+  }
+  if (
+    snapshot.repository &&
+    readRepositoryName(readOnly, snapshot.candidate.sourceRoot)?.toLowerCase() !==
+      snapshot.repository.name.toLowerCase()
+  ) {
+    return decision("unknown", "repository-changed-during-inspection");
+  }
+  return null;
 }
 
 function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
@@ -257,7 +290,7 @@ function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
   return local;
 }
 
-function readOnlyRuntime(runtime: Runtime): Runtime {
+export function readOnlyCleanupRuntime(runtime: Runtime): Runtime {
   return {
     ...runtime,
     exec(command, args, options) {

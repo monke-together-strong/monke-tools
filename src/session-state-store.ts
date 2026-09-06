@@ -24,7 +24,7 @@ import type {
   SessionRepoState,
   SessionState
 } from "./types.ts";
-import { unwrapBoundaryResult, parseOwnedYamlFile } from "./validation.ts";
+import { unwrapBoundaryResult, parseOwnedYamlFile, parseOwnedYamlText } from "./validation.ts";
 
 const GLOBAL_PORT_FLOOR = 10_000;
 // Reserve a generous flat block per repo so multiple concurrent sessions can each allocate
@@ -78,6 +78,65 @@ export function removeSessionState(home: string, rootSourceRoot: string, session
 
 export function listSessionStates(home: string) {
   return listSessionStateFiles(home).map((filePath) => parseSessionStateFile(home, filePath));
+}
+
+/** Tolerant, read-only discovery. Invalid records are evidence, never silently discarded. */
+export function scanSessionStates(home: string) {
+  let files: string[];
+  try {
+    files = listSessionStateFiles(home).toSorted();
+  } catch {
+    files = [path.join(home, "sessions")];
+  }
+  const records = files.map((filePath) => {
+    let text = "";
+    try {
+      text = readFileSync(filePath, "utf-8");
+      const state = parseOwnedYamlText(text, filePath, SessionStateSchema);
+      if (!samePath(filePath, getSessionStateFilePath(home, state.rootSourceRoot, state.session))) {
+        throw new MonkeError("Session state storage key mismatch");
+      }
+      const references: string[] = [];
+      return { filePath, fingerprint: hashKey(text), references, state };
+    } catch {
+      // Bound corrupt ownership only when the complete identity/path shape can
+      // still be read. An arbitrary scalar in broken YAML cannot prove isolation.
+      const references: string[] = [];
+      try {
+        const partial = parseOwnedYamlText(
+          text,
+          filePath,
+          z.object({
+            repos: z.array(
+              z.object({
+                sourceRoot: z.string().refine(path.isAbsolute),
+                worktreePath: z.string().refine(path.isAbsolute)
+              })
+            ),
+            rootSourceRoot: z.string().refine(path.isAbsolute),
+            session: z.string().min(1)
+          })
+        );
+        references.push(
+          partial.rootSourceRoot,
+          ...partial.repos.flatMap((repo) => [
+            repo.sourceRoot,
+            repo.worktreePath,
+            path.join(home, "worktrees", path.basename(repo.sourceRoot), partial.session)
+          ])
+        );
+      } catch {
+        /* Unreadable ownership blocks all Sessions. */
+      }
+      return { filePath, fingerprint: hashKey(text), references, state: null };
+    }
+  });
+  return {
+    fingerprint: hashKey(
+      JSON.stringify(records.map(({ filePath, fingerprint }) => [filePath, fingerprint]))
+    ),
+    records
+  };
 }
 
 /** Open under the global lock; owns the retained-state view for that operation. */

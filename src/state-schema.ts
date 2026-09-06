@@ -151,6 +151,7 @@ function validatePreparationLifecycle(repo: ParsedSessionRepoState, issue: Lifec
 }
 
 const SessionStateFieldsSchema = z.strictObject({
+  cleanupHold: z.boolean().optional(),
   copyDirty: z.boolean().optional(),
   generation: z.strictObject({
     number: z.number().int().nonnegative(),
