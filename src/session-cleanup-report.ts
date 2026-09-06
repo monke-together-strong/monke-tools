@@ -15,8 +15,7 @@ import type { SessionAction } from "./session-lifecycle-progress.ts";
 
 const messages: Record<SessionCleanupReason, string> = {
   "ambiguous-pr": "More than one merged pull request matches this commit.",
-  "ancestry-unavailable":
-    "The dependency's relationship to the default branch could not be verified.",
+  "ancestry-unavailable": "The commit's relationship to the default branch could not be verified.",
   "changed-during-inspection": "The local branch or commit changed during inspection.",
   "closed-unmerged-pr": "The pull request for this commit was closed without merging.",
   "default-branch": "The worktree is on the repository's default branch.",
@@ -37,7 +36,8 @@ const messages: Record<SessionCleanupReason, string> = {
     "A member's Source checkout, recorded path, or registration could not be verified.",
   "member-missing-or-unverified": "The member has no usable worktree evidence.",
   "missing-worktree": "The worktree path is missing; ownership must be verified.",
-  "no-merged-pr": "No qualifying merged pull request proves this work is complete.",
+  "no-merged-pr":
+    "No qualifying merged pull request proves this work is complete, and the branch has commits outside the default branch.",
   "open-pr": "A pull request for this branch is still open.",
   "operation-lock-present":
     "A Monke operation lock is present; its status has not been overridden.",
@@ -52,9 +52,7 @@ const messages: Record<SessionCleanupReason, string> = {
   "source-missing":
     "A member's recorded Source checkout no longer exists; Chop cannot run and the state is retained.",
   "state-changed-during-inspection": "Session state changed during inspection; inspect again.",
-  "unchanged-dependency": "The dependency has no commits outside the verified default branch.",
-  "unique-dependency-commits":
-    "The dependency has commits outside the verified default branch and no qualifying merge proof."
+  "unchanged-branch": "The branch has no commits outside the verified default branch."
 };
 
 type CheckStatus = "passed" | "blocked" | "unknown" | "not-checked" | "not-needed";

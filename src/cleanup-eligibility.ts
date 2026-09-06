@@ -54,12 +54,11 @@ export const CleanupCodeSchema = z.enum([
   "ambiguous-pr",
   "head-mismatch",
   "no-merged-pr",
-  "unique-dependency-commits",
   "ancestry-unavailable",
   "changed-during-inspection",
   "repository-changed-during-inspection",
   "exact-merged-pr",
-  "unchanged-dependency"
+  "unchanged-branch"
 ]);
 
 export type CleanupCode = z.output<typeof CleanupCodeSchema>;
@@ -144,26 +143,27 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
       `HEAD equals merged PR head: ${head}`
     ]);
   }
+  // A clean worktree whose HEAD is already inside the verified default branch
+  // holds no unique work, whatever its role or PR history. The local check
+  // above already rejected any uncommitted change.
+  if (snapshot.ancestorOfDefault) {
+    return decision("eligible", "unchanged-branch", [
+      "registered linked worktree; clean including submodules and untracked files",
+      `${head} is an ancestor of verified ${repository.name}:${repository.defaultBranch} at ${repository.defaultHead}`,
+      "member proof only; whole-Session eligibility is still required"
+    ]);
+  }
   if (branchPrs.some((pr) => !pr.merged_at && pr.head.sha === head)) {
     return decision("ineligible", "closed-unmerged-pr");
   }
   if (merged.length > 0) {
     return decision("ineligible", "head-mismatch");
   }
-  if (snapshot.candidate.role !== "dependency") {
-    // The provider answered; absence of a PR is a fact, not missing evidence.
-    return decision("ineligible", "no-merged-pr");
-  }
   if (snapshot.ancestorOfDefault === null) {
     return decision("unknown", "ancestry-unavailable");
   }
-  return snapshot.ancestorOfDefault
-    ? decision("eligible", "unchanged-dependency", [
-        "registered linked worktree; clean including submodules and untracked files",
-        `${head} is an ancestor of verified ${repository.name}:${repository.defaultBranch} at ${repository.defaultHead}`,
-        "dependency proof only; whole-Session eligibility is still required"
-      ])
-    : decision("ineligible", "unique-dependency-commits");
+  // Both answers came back; unique commits without a merged PR is a settled fact.
+  return decision("ineligible", "no-merged-pr");
 }
 
 /** Read-only collection: no fetch, optional Git writes, write lock, or teardown. */
@@ -196,7 +196,7 @@ export async function collectCleanupEvidence(
     cache.set(cacheKey, repository);
   }
   snapshot.repository = await repository;
-  if (candidate.role === "dependency" && snapshot.repository && snapshot.head) {
+  if (snapshot.repository && snapshot.head) {
     snapshot.ancestorOfDefault = await inspectAncestry(
       readOnly,
       candidate.sourceRoot,
@@ -439,7 +439,17 @@ async function inspectAncestry(
     if (result.exitCode === 0) {
       return true;
     }
-    // Remote comparison also handles a missing default commit or shallow history without fetching.
+    // Exit 1 means both commits are present and unrelated. Trust it unless history is
+    // shallow, where a cut-off could hide the ancestry.
+    if (
+      result.exitCode === 1 &&
+      runtime
+        .exec("git", ["rev-parse", "--is-shallow-repository"], { cwd: sourceRoot })
+        .stdout.trim() === "false"
+    ) {
+      return false;
+    }
+    // Remote comparison handles a missing default commit or shallow history without fetching.
     const comparison = ComparisonSchema.parse(
       await github(
         runtime,

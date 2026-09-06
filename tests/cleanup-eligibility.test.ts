@@ -58,9 +58,17 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, eligible: false });
   });
 
+  test("a moved branch whose HEAD is inside the default branch passes despite a stale merged PR", () => {
+    const snapshot = evidence({ ancestorOfDefault: true, head: OTHER_HEAD });
+    expect(decideCleanupEligibility(snapshot)).toMatchObject({
+      code: "unchanged-branch",
+      eligible: true
+    });
+  });
+
   test("rejects a clean worktree with commits after merge, even for a dependency", () => {
     const snapshot = evidence({
-      ancestorOfDefault: true,
+      ancestorOfDefault: false,
       candidate: { role: "dependency", sourceRoot: "/source", worktreePath: "/worktree" },
       head: OTHER_HEAD
     });
@@ -86,8 +94,9 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot).code).toBe("open-pr");
   });
 
-  test("a Root with no merged PR is a settled ineligible, not unknown", () => {
+  test("a Root with no merged PR and unique commits is a settled ineligible, not unknown", () => {
     const snapshot = withPrs([]);
+    snapshot.ancestorOfDefault = false;
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       code: "no-merged-pr",
       eligible: false,
@@ -116,19 +125,33 @@ describe("cleanup committed-work policy", () => {
   });
 
   test.each([
-    { ancestor: true, expected: true, role: "dependency" },
-    { ancestor: false, expected: false, role: "dependency" },
-    { ancestor: null, expected: false, role: "dependency" },
-    { ancestor: true, expected: false, role: "root" }
+    { ancestor: true, code: "unchanged-branch", expected: true, role: "dependency" },
+    { ancestor: false, code: "no-merged-pr", expected: false, role: "dependency" },
+    { ancestor: null, code: "ancestry-unavailable", expected: false, role: "dependency" },
+    { ancestor: true, code: "unchanged-branch", expected: true, role: "root" },
+    { ancestor: false, code: "no-merged-pr", expected: false, role: "root" },
+    { ancestor: null, code: "ancestry-unavailable", expected: false, role: "root" }
   ] as const)(
-    "ancestry=$ancestor, role=$role gives $expected without a PR",
-    ({ ancestor, expected, role }) => {
+    "ancestry=$ancestor, role=$role gives $code without a PR",
+    ({ ancestor, code, expected, role }) => {
       const snapshot = withPrs([]);
       snapshot.ancestorOfDefault = ancestor;
       snapshot.candidate.role = role;
-      expect(eligibleForCleanup(snapshot)).toBe(expected);
+      expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, eligible: expected });
     }
   );
+
+  test("ancestry proof never overrides a dirty worktree", () => {
+    const snapshot = withPrs([]);
+    snapshot.ancestorOfDefault = true;
+    snapshot.localBlock = {
+      code: "dirty-worktree",
+      eligible: false,
+      evidence: ["?? new.txt"],
+      status: "ineligible"
+    };
+    expect(decideCleanupEligibility(snapshot).code).toBe("dirty-worktree");
+  });
 });
 
 describe("cleanup evidence from real Git worktrees", () => {
@@ -176,19 +199,29 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(eligibleForCleanup(snapshot)).toBeTruthy();
   });
 
-  test("proves an unchanged dependency against the current default without a PR", async () => {
-    const fixture = createFixture();
-    fixture.pr.head.ref = "another-branch";
-    const candidate = { ...fixture.candidate, role: "dependency" as const };
-    const snapshot = await collectCleanupEvidence(fixture.runtime, candidate);
-    expect(decideCleanupEligibility(snapshot)).toMatchObject({
-      code: "unchanged-dependency",
-      eligible: true
-    });
-    expect(
-      eligibleForCleanup(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
-    ).toBeFalsy();
-  });
+  test.each(["root", "dependency"] as const)(
+    "proves an unchanged %s against the current default without a PR",
+    async (role) => {
+      const fixture = createFixture();
+      fixture.pr.head.ref = "another-branch";
+      const candidate = { ...fixture.candidate, role };
+      const snapshot = await collectCleanupEvidence(fixture.runtime, candidate);
+      expect(decideCleanupEligibility(snapshot)).toMatchObject({
+        code: "unchanged-branch",
+        eligible: true
+      });
+      write(candidate.worktreePath, "unique.txt", "new work\n");
+      git(candidate.worktreePath, ["add", "."]);
+      git(candidate.worktreePath, ["commit", "-m", "unique"]);
+      const unique = await collectCleanupEvidence(fixture.runtime, candidate);
+      // Never pushed: no remote compare is possible, and none is needed.
+      expect(decideCleanupEligibility(unique)).toMatchObject({
+        code: "no-merged-pr",
+        eligible: false,
+        status: "ineligible"
+      });
+    }
+  );
 
   test.each([
     { comparison: "ahead", expected: true, label: "remote ancestry proof" },

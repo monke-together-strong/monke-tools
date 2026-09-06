@@ -138,7 +138,7 @@ describe("whole-Session read-only eligibility", () => {
     const before = readFileSync(statePath, "utf-8");
     const result = await decisionFor(f);
     expect(result.decision).toMatchObject({ eligible: true, kind: "live" });
-    expect(result.decision.reasons).toStrictEqual(["unchanged-dependency", "exact-merged-pr"]);
+    expect(result.decision.reasons).toStrictEqual(["unchanged-branch", "exact-merged-pr"]);
     expect(readFileSync(statePath, "utf-8")).toBe(before);
     expect(existsSync(f.rootPath)).toBeTruthy();
     expect(existsSync(path.join(f.home, "lock"))).toBeFalsy();

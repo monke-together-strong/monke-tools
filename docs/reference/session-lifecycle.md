@@ -12,7 +12,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Merged PR**: A pull request whose GitHub `mergedAt` value is set.
 
-**Merge-cleanable Session**: A Session whose session branch is proven by a **Merged PR** and whose recorded session worktrees are eligible for explicit cleanup.
+**Merge-cleanable Session**: A Session whose every recorded session worktree is clean and proven complete, by a **Merged PR** for its exact commit or by that commit already being inside the verified default branch.
 
 **Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates a new Session from each participating repo's resolved default branch content, or resumes an incomplete Session from retained worktrees and pinned Session refs.
 
@@ -116,11 +116,13 @@ resources recorded in its state, not inferred worktrees from today's config.
 `inspectSessionCleanup` reports Git and retained ownership evidence for all retained
 Sessions. `eligibleForSessionCleanup` returns true only when every live member
 passes the individual-worktree check and the whole Session has no ownership,
-identity, hold, or operation blocker. The Root requires exact merged PR proof;
-a dependency can instead prove that it has no commits outside the verified
-default branch. Actual member branch names can differ from the Session name.
-A Root with no qualifying merged PR is ineligible, not unknown: the provider
-answered, so the skip is settled and does not mark inspection as failed.
+identity, hold, or operation blocker. A member passes with an exact merged PR
+for its current commit, or by proving that its commit is already inside the
+verified default branch, so it holds no unique work. Both proofs require a clean
+worktree first; uncommitted or untracked files always block. A member with
+unique commits and no qualifying merged PR is ineligible, not unknown: the
+provider answered, so the skip is settled and does not mark inspection as
+failed. Actual member branch names can differ from the Session name.
 
 The report uses recorded membership. Nested worktree paths are overlapping
 ownership, including discovered unowned registrations; removing a parent must
