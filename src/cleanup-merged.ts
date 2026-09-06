@@ -5,6 +5,7 @@ import * as z from "zod";
 import { errorMessage, ThrownValueSchema } from "./errors.ts";
 import { resolveDefaultBranchRef } from "./git.ts";
 import type { ExecResult, Runtime } from "./types.ts";
+import { hasHiddenWorktreeIndexEntries } from "./worktree-safety.ts";
 
 const GithubRepositoryLookupSchema = z.object({
   nameWithOwner: z.string().min(1)
@@ -389,14 +390,29 @@ function inspectWorktreeState(runtime: Runtime, worktreePath: string, worktreeIs
     ? tryGit(runtime, worktreePath, ["rev-parse", "HEAD"])
     : null;
   const statusResult = worktreeIsGitRoot
-    ? tryGit(runtime, worktreePath, ["status", "--porcelain", "--untracked-files=normal"])
+    ? tryGit(runtime, worktreePath, [
+        "status",
+        "--porcelain",
+        "--untracked-files=normal",
+        "--ignore-submodules=none"
+      ])
     : null;
+  let statusError =
+    statusResult?.ok === false ? `unable to read normal Git status: ${statusResult.error}` : null;
+  if (statusResult?.ok === true && statusResult.value === "") {
+    try {
+      if (hasHiddenWorktreeIndexEntries(runtime, worktreePath)) {
+        statusError = "unable to prove clean worktree: hidden index entries may conceal edits";
+      }
+    } catch {
+      statusError = "unable to inspect hidden worktree or submodule index entries";
+    }
+  }
 
   return {
     branch,
     localHead: localHeadResult?.ok === true ? localHeadResult.value : null,
-    statusError:
-      statusResult?.ok === false ? `unable to read normal Git status: ${statusResult.error}` : null,
+    statusError,
     statusLines: statusResult?.ok === true ? splitLines(statusResult.value) : []
   };
 }
