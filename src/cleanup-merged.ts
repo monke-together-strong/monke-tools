@@ -389,7 +389,12 @@ function inspectWorktreeState(runtime: Runtime, worktreePath: string, worktreeIs
     ? tryGit(runtime, worktreePath, ["rev-parse", "HEAD"])
     : null;
   const statusResult = worktreeIsGitRoot
-    ? tryGit(runtime, worktreePath, ["status", "--porcelain", "--untracked-files=normal"])
+    ? tryGit(runtime, worktreePath, [
+        "status",
+        "--porcelain",
+        "--untracked-files=normal",
+        "--ignore-submodules=none"
+      ])
     : null;
 
   return {
