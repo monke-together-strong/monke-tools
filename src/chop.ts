@@ -14,6 +14,10 @@ import { samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { finalizeSession } from "./session-finalization.ts";
 import {
+  assertNoOtherStateOwnsSessionRepos,
+  inspectSessionRepoRegistration
+} from "./session-safety.ts";
+import {
   getSessionStateFilePath,
   listSessionStates,
   listSessionStatesRelevantToWorktrees,
@@ -344,49 +348,12 @@ function inspectSessionRepo(
   repo: SessionRepoState,
   options: ChopOptions
 ): SessionRepoPreflight {
-  assertCanonicalSourceCheckout(runtime, repo.sourceRoot);
-  const expectedPath = getExpectedWorktreePath(home, repo.sourceRoot, state.session);
-  if (!samePath(repo.worktreePath, expectedPath) || !path.isAbsolute(repo.worktreePath)) {
-    throw new MonkeError(
-      `Recorded Session worktree path is not canonical; expected ${expectedPath}`
-    );
-  }
-
-  const worktrees = listWorktrees(runtime, repo.sourceRoot);
-  const exact = worktrees.find((entry) => samePath(entry.path, repo.worktreePath));
-  const conflicts = worktrees.filter(
-    (entry) => entry.branch === state.session && !samePath(entry.path, repo.worktreePath)
-  );
-  if (conflicts.length > 0) {
-    throw new MonkeError(
-      `Session branch ${state.session} is registered at unexpected path${conflicts.length === 1 ? "" : "s"} ${conflicts
-        .map((entry) => entry.path)
-        .join(", ")}`
-    );
-  }
-
-  if (!existsSync(repo.worktreePath)) {
-    if (exact !== undefined) {
-      assertWorktreeUnlocked(exact);
-    }
-    return {
-      forceGitRemoval: false,
-      mode: exact === undefined ? "gone" : "stale",
-      registeredBranch: exact?.branch,
-      repo
-    };
-  }
-
-  if (exact === undefined) {
-    throw new MonkeError(`Session worktree exists but is not registered`);
+  const identity = inspectSessionRepoRegistration(runtime, home, state, repo);
+  if (identity.mode !== "live") {
+    return identity;
   }
   const checked = preflightWorktreeRemoval(runtime, repo.sourceRoot, repo.worktreePath, options);
-  return {
-    forceGitRemoval: checked.forceGitRemoval,
-    mode: "live",
-    registeredBranch: exact.branch,
-    repo
-  };
+  return { ...identity, forceGitRemoval: checked.forceGitRemoval };
 }
 
 function warnSessionBranchMismatch(
@@ -477,24 +444,6 @@ function assertUniqueSessionRecords(state: SessionState) {
     }
     sourceRoots.add(sourceRoot);
     worktreePaths.add(worktreePath);
-  }
-}
-
-function assertNoOtherStateOwnsSessionRepos(state: SessionState, allStates: SessionState[]) {
-  const paths = new Set(state.repos.map((repo) => path.normalize(repo.worktreePath)));
-  for (const other of allStates) {
-    if (
-      other === state ||
-      (samePath(other.rootSourceRoot, state.rootSourceRoot) && other.session === state.session)
-    ) {
-      continue;
-    }
-    const collision = other.repos.find((repo) => paths.has(path.normalize(repo.worktreePath)));
-    if (collision !== undefined) {
-      throw new MonkeError(
-        `Session worktree ${collision.worktreePath} is also recorded by Session ${other.session}`
-      );
-    }
   }
 }
 

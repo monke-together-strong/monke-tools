@@ -1,0 +1,6502 @@
+[
+  {
+    "id": "001",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/1.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-1",
+            "head": "f4a0514e263e56c5fa1e35b9e5dff0cca735e5c2",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-1",
+              "worktreePath": "/audit/path-2"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-1",
+          "worktreePath": "/audit/path-2"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-1",
+      "session": "ref-1"
+    }
+  },
+  {
+    "id": "002",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/2.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-4",
+            "head": "f825c249829f9feb1b8ab4e4f9f63012d9142e68",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-4"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-4"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-3"
+    }
+  },
+  {
+    "id": "003",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/3.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-5",
+            "head": "6704e89eb329d8826085545b5adbf21b85a3fac5",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-5"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-5"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-5"
+    }
+  },
+  {
+    "id": "004",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/4.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-7",
+            "head": "76d2ad9609b954da364b771c667721c2ce55e314",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-8"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-8"
+        },
+        {
+          "evidence": {
+            "branch": "ref-8",
+            "head": "546845a23cc2dc3511803deff67a31361db5706c",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-9"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-8",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "546845a23cc2dc3511803deff67a31361db5706c"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-9"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-6"
+    }
+  },
+  {
+    "id": "005",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/5.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-9",
+            "head": "49d03544a4b579e365087a479cdef5f09d7aee46",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-11"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-11"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-9"
+    }
+  },
+  {
+    "id": "006",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/6.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-10",
+            "head": "10af9dec6275b0ee97137401a5b49c72d9e9534c",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-12"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-12"
+        },
+        {
+          "evidence": {
+            "branch": "ref-10",
+            "head": "5cbcc2a1bb654263daaf685eaa6b07f9c154e540",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-13"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-13"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-10"
+    }
+  },
+  {
+    "id": "007",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/7.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-11",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-14"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-14"
+        },
+        {
+          "evidence": {
+            "branch": "ref-12",
+            "head": "ea4fa7d79a7482cc7b80651d7d60d81e9eff0516",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-15"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-12",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "ea4fa7d79a7482cc7b80651d7d60d81e9eff0516"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-15"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-11"
+    }
+  },
+  {
+    "id": "008",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/8.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-13",
+            "head": "8ddd271e0844f1339cfa3759a84435f315cb8738",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-16",
+              "worktreePath": "/audit/path-17"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-16",
+          "worktreePath": "/audit/path-17"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-16",
+      "session": "ref-13"
+    }
+  },
+  {
+    "id": "009",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/9.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-14",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-18"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-18"
+        },
+        {
+          "evidence": {
+            "branch": "ref-15",
+            "head": "8646e3503b805424c63c6fb46d9fcf81a809c538",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-19"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-19"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-14"
+    }
+  },
+  {
+    "id": "010",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/10.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-16",
+            "head": "d3de48c6f9bda0c39f4c7c7926458f2449690c93",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-20"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-16",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "5d9619dcc10c6484c03f3719b004f61325fa0fde"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-20"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-16"
+    }
+  },
+  {
+    "id": "011",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/11.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-18",
+            "head": "85cb56df89776a3a080dd976fc0836141e3a245e",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-21"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-21"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-17"
+    }
+  },
+  {
+    "id": "012",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/12.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-19",
+            "head": "92890c2678a035ca6ec7a6f20456da55af753cf2",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-22"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-22"
+        },
+        {
+          "evidence": {
+            "branch": "ref-20",
+            "head": "d402722a91c6ea9f6fc223b1bce21470d810396a",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-23"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-23"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-19"
+    }
+  },
+  {
+    "id": "013",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/13.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-21",
+            "head": "a038a3e93f2adeb1e1e5f0e0711b84d864ea3965",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-24"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-24"
+        },
+        {
+          "evidence": {
+            "branch": "ref-21",
+            "head": "57b65ae98b9f45b4482965e17945c2fbff07b165",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-25"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-22",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-21",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "57b65ae98b9f45b4482965e17945c2fbff07b165"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": null,
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-25"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-21"
+    }
+  },
+  {
+    "id": "014",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/14.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-24",
+            "head": "a628b5e5ed783f38ebf186ad2c49097cd35ef54a",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-26"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-26"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-23"
+    }
+  },
+  {
+    "id": "015",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/15.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-25",
+            "head": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-27"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-27"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-25"
+    }
+  },
+  {
+    "id": "016",
+    "expected": false,
+    "snapshot": {
+      "blockers": ["ownership-conflict"],
+      "filePath": "/audit/sessions/16.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-26",
+            "head": "23c3003e0bc991f7fc79baf2d2855ab630ddce55",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-28"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-26",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    },
+                    "sha": "5b52b0c91f68a2d136aa9c6cb41a4def263c3fe0"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": null,
+                  "number": 1,
+                  "state": "open"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-28"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-26"
+    }
+  },
+  {
+    "id": "017",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/17.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-27",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-29"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-29"
+        },
+        {
+          "evidence": {
+            "branch": "ref-27",
+            "head": "c1f99c347d69d29a45dfc0d773a97fe43c067ff5",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-30"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-27",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "c1f99c347d69d29a45dfc0d773a97fe43c067ff5"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-30"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-27"
+    }
+  },
+  {
+    "id": "018",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/18.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-28",
+            "head": "bda6061047320eb6e8519284c8693329021411ac",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-31"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-31"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-28"
+    }
+  },
+  {
+    "id": "019",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/19.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-29",
+            "head": "2f732914760590252f528df50d16dd8e9b6a0a9a",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-32"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-32"
+        },
+        {
+          "evidence": null,
+          "mode": "gone",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-33"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-29"
+    }
+  },
+  {
+    "id": "020",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/20.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-30",
+            "head": "6b6c452b879bc82aa1a4f5c1ad2ef9743c3c5a23",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-34"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-34"
+        },
+        {
+          "evidence": {
+            "branch": "ref-30",
+            "head": "34ebfab4798458c2c19d2611c46fce408d8995f0",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-35"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-35"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-30"
+    }
+  },
+  {
+    "id": "021",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/21.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-31",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-36"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-36"
+        },
+        {
+          "evidence": {
+            "branch": "ref-32",
+            "head": "8001dad4714a32570373bc0f6c678521c0b36768",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-37"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-32",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "8001dad4714a32570373bc0f6c678521c0b36768"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-37"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-31"
+    }
+  },
+  {
+    "id": "022",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/22.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-33",
+            "head": "dc5f4b43ecab2d6ff979516876e16b6973ab9485",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-38"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-38"
+        },
+        {
+          "evidence": {
+            "branch": "ref-34",
+            "head": "f3f82082934e15d7d6b1a827ea9612dad4a7b072",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-39"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-39"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-33"
+    }
+  },
+  {
+    "id": "023",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/23.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-35",
+            "head": "dc5f4b43ecab2d6ff979516876e16b6973ab9485",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-40"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-40"
+        },
+        {
+          "evidence": {
+            "branch": "ref-36",
+            "head": "73c5d8f54068fb99c41f746d099eed7d1585986a",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-41"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-41"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-35"
+    }
+  },
+  {
+    "id": "024",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/24.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-37",
+            "head": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-42"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-42"
+        },
+        {
+          "evidence": {
+            "branch": "ref-37",
+            "head": "16dd6984504b9028246a49e9ae769df416881b9c",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-43"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-43"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-37"
+    }
+  },
+  {
+    "id": "025",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/25.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-38",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-44"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-44"
+        },
+        {
+          "evidence": {
+            "branch": "ref-38",
+            "head": "0e2693fe453567e314abbda8baf141787c80cdd5",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-45"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-45"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-38"
+    }
+  },
+  {
+    "id": "026",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/26.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-40",
+            "head": "e5b0c9f7457168ddad3ea4a04bea6f5c0bd43218",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-1",
+              "worktreePath": "/audit/path-46"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-40",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "e5b0c9f7457168ddad3ea4a04bea6f5c0bd43218"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-1",
+          "worktreePath": "/audit/path-46"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-1",
+      "session": "ref-39"
+    }
+  },
+  {
+    "id": "027",
+    "expected": false,
+    "snapshot": {
+      "blockers": ["member-identity-unverified"],
+      "filePath": "/audit/sessions/27.yml",
+      "members": [
+        {
+          "evidence": null,
+          "mode": "unverified",
+          "sourceRoot": "/audit/path-47",
+          "worktreePath": "/audit/path-48"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-47",
+      "session": "ref-41"
+    }
+  },
+  {
+    "id": "028",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/28.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-42",
+            "head": "f56fc4fc6afa6902f642bebfe9b62e3325a7ef34",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-49"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-49"
+        },
+        {
+          "evidence": {
+            "branch": "ref-42",
+            "head": "476830f3153ddbcfe1356478d50bf0474530fc34",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-50"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-50"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-42"
+    }
+  },
+  {
+    "id": "029",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/29.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-44",
+            "head": "c012aa58ad815a324debdfcb06e2d87b4cf79e7c",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-51"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "00f8ad8569ba6b6a5f154edaea99fd64b14cfdc1",
+              "name": "owner/repo-4",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-51"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-43"
+    }
+  },
+  {
+    "id": "030",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/30.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-45",
+            "head": "25a7de231fb38ceec6a6a763d161731aa0554255",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-52"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-52"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-45"
+    }
+  },
+  {
+    "id": "031",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/31.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-46",
+            "head": "997c0403fac146518db3b9d05881bab5f8224adb",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-53"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-46",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "94a4f30c8e4efcedd5ea6642aeb610006b017e11"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-53"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-46"
+    }
+  },
+  {
+    "id": "032",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/32.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-47",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-54"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-54"
+        },
+        {
+          "evidence": null,
+          "mode": "gone",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-55"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-47"
+    }
+  },
+  {
+    "id": "033",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/33.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-48",
+            "head": "f44c413db068035eb1f0cbd259cebb8c17d9a6fb",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-56"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-56"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-48"
+    }
+  },
+  {
+    "id": "034",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/34.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-49",
+            "head": "33522d98047e42dc72c0401ec8a83915a590aa65",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-57"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-57"
+        },
+        {
+          "evidence": null,
+          "mode": "gone",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-58"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-49"
+    }
+  },
+  {
+    "id": "035",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/35.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-50",
+            "head": "147cb6d1c931d0ad6daa0b208bf418ba885fe8d2",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-59",
+              "worktreePath": "/audit/path-60"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-59",
+          "worktreePath": "/audit/path-60"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-59",
+      "session": "ref-50"
+    }
+  },
+  {
+    "id": "036",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/36.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-51",
+            "head": "37c638cc1694e5bfbab6091482c705a02ad41add",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-61"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-61"
+        },
+        {
+          "evidence": {
+            "branch": "ref-51",
+            "head": "196c7b73428d7df2b3dda7058a404763c133921c",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-62"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-62"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-51"
+    }
+  },
+  {
+    "id": "037",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/37.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-52",
+            "head": "2f732914760590252f528df50d16dd8e9b6a0a9a",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-63"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-63"
+        },
+        {
+          "evidence": {
+            "branch": "ref-52",
+            "head": "2d9fbbb6b301fc6c57f7f1a55829282d41c55bfa",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-64"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-64"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-52"
+    }
+  },
+  {
+    "id": "038",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/38.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-53",
+            "head": "a1fa54d241f5820565a2b1fa6d303d2ba9b88f96",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-65"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-65"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-53"
+    }
+  },
+  {
+    "id": "039",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/39.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-54",
+            "head": "c52460ea612c4005f31939398a90f9a340ee762f",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-66"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-66"
+        },
+        {
+          "evidence": {
+            "branch": "ref-54",
+            "head": "feb08acb2bbba1a25e6e369a7b1786d4c31d076b",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-67"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-67"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-54"
+    }
+  },
+  {
+    "id": "040",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/40.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-55",
+            "head": "1d1a2dc288ed7741176a343e63f61ebf55cbe105",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-68"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-68"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-55"
+    }
+  },
+  {
+    "id": "041",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/41.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-56",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-69"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-69"
+        },
+        {
+          "evidence": {
+            "branch": "ref-57",
+            "head": "9f29501da53518070d2c97779ce4b437eaeb7438",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-70"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-70"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-56"
+    }
+  },
+  {
+    "id": "042",
+    "expected": false,
+    "snapshot": {
+      "blockers": ["member-identity-unverified"],
+      "filePath": "/audit/sessions/42.yml",
+      "members": [
+        {
+          "evidence": null,
+          "mode": "gone",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-72"
+        },
+        {
+          "evidence": null,
+          "mode": "unverified",
+          "sourceRoot": "/audit/path-71",
+          "worktreePath": "/audit/path-73"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-71",
+      "session": "ref-58"
+    }
+  },
+  {
+    "id": "043",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/43.yml",
+      "members": [
+        {
+          "evidence": null,
+          "mode": "gone",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-74"
+        },
+        {
+          "evidence": {
+            "branch": "ref-59",
+            "head": "0130fe8eefaeaba34bf34296ec997127ae0ef41e",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-75"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-75"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-59"
+    }
+  },
+  {
+    "id": "044",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/44.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-60",
+            "head": "2f732914760590252f528df50d16dd8e9b6a0a9a",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-76"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-76"
+        },
+        {
+          "evidence": {
+            "branch": "ref-61",
+            "head": "5442758826237d3cbb574c30fee6b2720e377a6c",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-77"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-77"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-60"
+    }
+  },
+  {
+    "id": "045",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/45.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-63",
+            "head": "ff31c244fa761cf7bfe530da23071a88aa18536c",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-16",
+              "worktreePath": "/audit/path-78"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "3184ac5de63d2e8b4be4d9e4018763facbd4937f",
+              "name": "owner/repo-5",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-5"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-63",
+                    "repo": {
+                      "full_name": "owner/repo-5"
+                    },
+                    "sha": "ff31c244fa761cf7bfe530da23071a88aa18536c"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-16",
+          "worktreePath": "/audit/path-78"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-16",
+      "session": "ref-62"
+    }
+  },
+  {
+    "id": "046",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/46.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-64",
+            "head": "2a51a941fd6335dd5aa38ebfb89a2f6b704741fc",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-79"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-64",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "f1655edcb5302a183aed692ae6bbe363bc1ecbcd"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-79"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-64"
+    }
+  },
+  {
+    "id": "047",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/47.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-65",
+            "head": "e67762ba73f3d60d1aa4c731117c5a4245f364c4",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-80"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-80"
+        },
+        {
+          "evidence": {
+            "branch": "ref-65",
+            "head": "16052af1bc0a152c470e41507c690abc593f8b14",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-81"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-81"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-65"
+    }
+  },
+  {
+    "id": "048",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/48.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-66",
+            "head": "73deda891c86e1b2501299bd55fe340f8c2fcb39",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-82"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-66",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "73deda891c86e1b2501299bd55fe340f8c2fcb39"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-82"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-66"
+    }
+  },
+  {
+    "id": "049",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/49.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-68",
+            "head": "4e1cd2ed6780d64c44b083b8afdfb804ece3a738",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-83"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "00f8ad8569ba6b6a5f154edaea99fd64b14cfdc1",
+              "name": "owner/repo-4",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-4"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-68",
+                    "repo": {
+                      "full_name": "owner/repo-4"
+                    },
+                    "sha": "4e1cd2ed6780d64c44b083b8afdfb804ece3a738"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": null,
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-83"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-67"
+    }
+  },
+  {
+    "id": "050",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/50.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-69",
+            "head": "47a4a76656488ae04aef1342cdb8a2270147a153",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-84"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-84"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-69"
+    }
+  },
+  {
+    "id": "051",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/51.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-70",
+            "head": "f56fc4fc6afa6902f642bebfe9b62e3325a7ef34",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-85"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-85"
+        },
+        {
+          "evidence": null,
+          "mode": "gone",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-86"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-70"
+    }
+  },
+  {
+    "id": "052",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/52.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-71",
+            "head": "cf48097adaae324af852d7db858db93ff74d690d",
+            "localBlock": null,
+            "ancestorOfDefault": false,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-87"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-87"
+        },
+        {
+          "evidence": {
+            "branch": "ref-72",
+            "head": "c18c17e403ffffe965d1f6df6e7f46f8ed3bc932",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-88"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-88"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-71"
+    }
+  },
+  {
+    "id": "053",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/53.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-73",
+            "head": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-89"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-89"
+        },
+        {
+          "evidence": {
+            "branch": "ref-73",
+            "head": "6502bec6c207af79916ca47c2545f38f6eac7579",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-90"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-90"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-73"
+    }
+  },
+  {
+    "id": "054",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/54.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-74",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-91"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-91"
+        },
+        {
+          "evidence": null,
+          "mode": "gone",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-92"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-74"
+    }
+  },
+  {
+    "id": "055",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/55.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-75",
+            "head": "cf48097adaae324af852d7db858db93ff74d690d",
+            "localBlock": null,
+            "ancestorOfDefault": false,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-93"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-93"
+        },
+        {
+          "evidence": {
+            "branch": "ref-75",
+            "head": "45d8b3e5dae2129cf4932e81b734f6fb84f498ad",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-94"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-94"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-75"
+    }
+  },
+  {
+    "id": "056",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/56.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-76",
+            "head": "1f36ff587b52e4185ef70eec4e95477443f9a8af",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-95"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-95"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-76"
+    }
+  },
+  {
+    "id": "057",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/57.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-78",
+            "head": "5f36c0d19bc50319d9ce166671859c13b66fb308",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-96"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-78",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    },
+                    "sha": "5f36c0d19bc50319d9ce166671859c13b66fb308"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-96"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-77"
+    }
+  },
+  {
+    "id": "058",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/58.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-79",
+            "head": "7fc3b0f31ab70ec290c1a70008c78e1cf916017c",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-97"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-97"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-79"
+    }
+  },
+  {
+    "id": "059",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/59.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-80",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-98"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-98"
+        },
+        {
+          "evidence": {
+            "branch": null,
+            "head": "468c86ed6d67a5d6528efaed59e418e29cbc9e59",
+            "localBlock": {
+              "code": "detached-head",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-99"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-99"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-80"
+    }
+  },
+  {
+    "id": "060",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/60.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-81",
+            "head": "a038a3e93f2adeb1e1e5f0e0711b84d864ea3965",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-100"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-100"
+        },
+        {
+          "evidence": {
+            "branch": "ref-81",
+            "head": "e068515b58b738e168b2072b55a848eed8cc1846",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-101"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-81",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "e068515b58b738e168b2072b55a848eed8cc1846"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": null,
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-101"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-81"
+    }
+  },
+  {
+    "id": "061",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/61.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-82",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-102"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-102"
+        },
+        {
+          "evidence": {
+            "branch": "ref-82",
+            "head": "eee03b92eb4be26bf10d35276db33f99afe52ef1",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-103"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-103"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-82"
+    }
+  },
+  {
+    "id": "062",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/62.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-84",
+            "head": "292d3b6bc46c45d6652676d1f682274f9e185137",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-104"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-84",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    },
+                    "sha": "292d3b6bc46c45d6652676d1f682274f9e185137"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-104"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-83"
+    }
+  },
+  {
+    "id": "063",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/63.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-85",
+            "head": "8c91069d272667975e97ef7bddc5d35a41b0c46c",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-105"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-105"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-85"
+    }
+  },
+  {
+    "id": "064",
+    "expected": false,
+    "snapshot": {
+      "blockers": ["member-identity-unverified"],
+      "filePath": "/audit/sessions/64.yml",
+      "members": [
+        {
+          "evidence": null,
+          "mode": "unverified",
+          "sourceRoot": "/audit/path-47",
+          "worktreePath": "/audit/path-106"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-47",
+      "session": "ref-86"
+    }
+  },
+  {
+    "id": "065",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/65.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-87",
+            "head": "abd8c75e6a84a874075cd0b8688ed44c15c9c779",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-107"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-87",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "c68e2ee2e6ad0addd518f82c0a339a9226e19c7f"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-107"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-87"
+    }
+  },
+  {
+    "id": "066",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/66.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-88",
+            "head": "a20c7bd79bd3fb228cf38dde5d17ec98660b8b69",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-108"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-108"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-88"
+    }
+  },
+  {
+    "id": "067",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/67.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-89",
+            "head": "10af9dec6275b0ee97137401a5b49c72d9e9534c",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-109"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-109"
+        },
+        {
+          "evidence": {
+            "branch": "ref-89",
+            "head": "18e2c38d2ab83fa8687add5dc702744bd83620fb",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-110"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-110"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-89"
+    }
+  },
+  {
+    "id": "068",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/68.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-91",
+            "head": "bb2ca35f61451052015e8b5cb3ad9f8453213185",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-111"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-111"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-90"
+    }
+  },
+  {
+    "id": "069",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/69.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-92",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-112"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-112"
+        },
+        {
+          "evidence": {
+            "branch": "ref-93",
+            "head": "4b9266174152f0b617c1d345744b60f7e2727b60",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-113"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-93",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "4b9266174152f0b617c1d345744b60f7e2727b60"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-113"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-92"
+    }
+  },
+  {
+    "id": "070",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/70.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-94",
+            "head": "dd236496cb3c099f1f8a3f6646a5ad8a86619d22",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-114"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-114"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-94"
+    }
+  },
+  {
+    "id": "071",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/71.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-95",
+            "head": "164591d03c8f7e6c22a39ada4d232fb71ed0ef29",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-115"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-115"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-95"
+    }
+  },
+  {
+    "id": "072",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/72.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-96",
+            "head": "a96915c897233f92e3b0842829a646b44834d492",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-116"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-96",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "59118eaf3359968ab562244a0d898793a45f5f43"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-116"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-96"
+    }
+  },
+  {
+    "id": "073",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/73.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-97",
+            "head": "5564aa7d3644d5ad60a69b25deb1848b493c41f0",
+            "localBlock": null,
+            "ancestorOfDefault": false,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-117"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-117"
+        },
+        {
+          "evidence": {
+            "branch": "ref-98",
+            "head": "83a5fd4523e954938960a8f6906af799a9f1e305",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-118"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-118"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-97"
+    }
+  },
+  {
+    "id": "074",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/74.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-99",
+            "head": "4abd0afa1988d3bc0d5251ebfa3e0e37333f5aac",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-119"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-99",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "8806ea049e25051b5301730cb88eb1d34fb3f16d"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-119"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-99"
+    }
+  },
+  {
+    "id": "075",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/75.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-100",
+            "head": "37c638cc1694e5bfbab6091482c705a02ad41add",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-120"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-120"
+        },
+        {
+          "evidence": {
+            "branch": "ref-100",
+            "head": "fe35ae515d9f000de03d141b86fa03d194028c4d",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-121"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-121"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-100"
+    }
+  },
+  {
+    "id": "076",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/76.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-102",
+            "head": "31b2f96c6b735b2476b30a5d3a9e45923a1d9ccd",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-122"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-102",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "31b2f96c6b735b2476b30a5d3a9e45923a1d9ccd"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-122"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-101"
+    }
+  },
+  {
+    "id": "077",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/77.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-103",
+            "head": "ed5e980c7f852e4abb1e36296b37de8391a0f77c",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-123"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-103",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "ed5e980c7f852e4abb1e36296b37de8391a0f77c"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-123"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-103"
+    }
+  },
+  {
+    "id": "078",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/78.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-104",
+            "head": "c6ec93326a549107da90461f05e5865158dc00dd",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-124"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-124"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-104"
+    }
+  },
+  {
+    "id": "079",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/79.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-105",
+            "head": "5075be1afc2ab327e8ce525a2fd015b0f1412c70",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-125"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-125"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-105"
+    }
+  },
+  {
+    "id": "080",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/80.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-106",
+            "head": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-126"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-126"
+        },
+        {
+          "evidence": {
+            "branch": "ref-106",
+            "head": "e5c780b72e78ff5eb1ee149092d8f84620980413",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-127"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-127"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-106"
+    }
+  },
+  {
+    "id": "081",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/81.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-108",
+            "head": "d949b59cd53f2b8f79d8b02bdf957800f20ed4f1",
+            "localBlock": null,
+            "ancestorOfDefault": false,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-128"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-108",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    },
+                    "sha": "d949b59cd53f2b8f79d8b02bdf957800f20ed4f1"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-128"
+        },
+        {
+          "evidence": {
+            "branch": "ref-109",
+            "head": "79d30ee97289d4221d59afc4acf1094832da341f",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-129"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-109",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "79d30ee97289d4221d59afc4acf1094832da341f"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-129"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-107"
+    }
+  },
+  {
+    "id": "082",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/82.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-111",
+            "head": "82ec494551e8383da8076c3161f22d4ee627b246",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-59",
+              "worktreePath": "/audit/path-130"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-59",
+          "worktreePath": "/audit/path-130"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-59",
+      "session": "ref-110"
+    }
+  },
+  {
+    "id": "083",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/83.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-112",
+            "head": "00aa0055526831ef2f0d0cd61511cefc2e56fa29",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-131"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-131"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-112"
+    }
+  },
+  {
+    "id": "084",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/84.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-113",
+            "head": "9c1063aeee8e6892851f75e67afaebdc44f8082f",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-132"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-132"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-113"
+    }
+  },
+  {
+    "id": "085",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/85.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-114",
+            "head": "24973ea36aafed96b1a10ca7170141ff75c23ce6",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-133"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-114",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "24973ea36aafed96b1a10ca7170141ff75c23ce6"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-133"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-114"
+    }
+  },
+  {
+    "id": "086",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/86.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-115",
+            "head": "ec480770f93da59b48d0844696a8bb1b7aff88e4",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-134"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-115",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "ec480770f93da59b48d0844696a8bb1b7aff88e4"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-134"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-115"
+    }
+  },
+  {
+    "id": "087",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/87.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-116",
+            "head": "2f732914760590252f528df50d16dd8e9b6a0a9a",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-135"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-135"
+        },
+        {
+          "evidence": {
+            "branch": "ref-116",
+            "head": "428110e93404f7999a2757a51963f84466a2c745",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-136"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-136"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-116"
+    }
+  },
+  {
+    "id": "088",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/88.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-117",
+            "head": "2f732914760590252f528df50d16dd8e9b6a0a9a",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-137"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-137"
+        },
+        {
+          "evidence": {
+            "branch": "ref-117",
+            "head": "2a9807f22596a819cb8a1e79f88bba5cc957d69b",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-138"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-138"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-117"
+    }
+  },
+  {
+    "id": "089",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/89.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-118",
+            "head": "3e1fc95eb78545613a85a223cc3df0f5c95423a0",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-139"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-118",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "3e1fc95eb78545613a85a223cc3df0f5c95423a0"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-139"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-118"
+    }
+  },
+  {
+    "id": "090",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/90.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-119",
+            "head": "7dd6e5cf658a39cac3aedc69f146d841b60a212e",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-140"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-140"
+        },
+        {
+          "evidence": {
+            "branch": "ref-119",
+            "head": "7041afebb0cb9d2800825d1a93424dba36c52eba",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-141"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-141"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-119"
+    }
+  },
+  {
+    "id": "091",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/91.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-120",
+            "head": "74a4bb0dedf6becf43247e7d27b7c799eb44215e",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-142"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-142"
+        },
+        {
+          "evidence": {
+            "branch": "ref-120",
+            "head": "bb367044f64642bbceaff241b22244afc0110f3d",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-143"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-143"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-120"
+    }
+  },
+  {
+    "id": "092",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/92.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-121",
+            "head": "431597c6847b3a9cf085a067897d482c32b11009",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-144"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-144"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-121"
+    }
+  },
+  {
+    "id": "093",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/93.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-122",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-145"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-145"
+        },
+        {
+          "evidence": {
+            "branch": "ref-122",
+            "head": "d2d979bc028c93c400e431e090f4a644dac55f2c",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-146"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-146"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-122"
+    }
+  },
+  {
+    "id": "094",
+    "expected": false,
+    "snapshot": {
+      "blockers": ["member-identity-unverified"],
+      "filePath": "/audit/sessions/94.yml",
+      "members": [
+        {
+          "evidence": null,
+          "mode": "unverified",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-147"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-123"
+    }
+  },
+  {
+    "id": "095",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/95.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-124",
+            "head": "a20c7bd79bd3fb228cf38dde5d17ec98660b8b69",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-148"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-148"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-124"
+    }
+  },
+  {
+    "id": "096",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/96.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-125",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-149"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-149"
+        },
+        {
+          "evidence": {
+            "branch": "ref-125",
+            "head": "8f9d35b4f4af2d423d2c2e540d48b1fd8357f4c3",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-150"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-125",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "8f9d35b4f4af2d423d2c2e540d48b1fd8357f4c3"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-150"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-125"
+    }
+  },
+  {
+    "id": "097",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/97.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-126",
+            "head": "f5caf41d6151918399b9f8f824c86988fd48ace7",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-151"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "00f8ad8569ba6b6a5f154edaea99fd64b14cfdc1",
+              "name": "owner/repo-4",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-151"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-126"
+    }
+  },
+  {
+    "id": "098",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/98.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-127",
+            "head": "e4b5eb2315fbe16eb3e338c0dea668a00d3deffb",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-152"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-152"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-127"
+    }
+  },
+  {
+    "id": "099",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/99.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-128",
+            "head": "870afb9923bb0c87705df43ec31da235cd049e49",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-153"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-153"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-128"
+    }
+  },
+  {
+    "id": "100",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/100.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": null,
+            "head": "c0741a7f3ff2c443a0a9b33473f0f0dcc144da14",
+            "localBlock": {
+              "code": "detached-head",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-154"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-154"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-129"
+    }
+  },
+  {
+    "id": "101",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/101.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-130",
+            "head": "e67762ba73f3d60d1aa4c731117c5a4245f364c4",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-155"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-155"
+        },
+        {
+          "evidence": {
+            "branch": "ref-130",
+            "head": "16052af1bc0a152c470e41507c690abc593f8b14",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-156"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-156"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-130"
+    }
+  },
+  {
+    "id": "102",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/102.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-131",
+            "head": "6b6c452b879bc82aa1a4f5c1ad2ef9743c3c5a23",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-157"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-157"
+        },
+        {
+          "evidence": {
+            "branch": "ref-131",
+            "head": "295c32a6cee8620192f624d458c87b7bfda4e3fa",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-158"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-158"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-131"
+    }
+  },
+  {
+    "id": "103",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/103.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-132",
+            "head": "f3303689f03473c1e2741327686a1e45bfc35639",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-159"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-159"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-132"
+    }
+  },
+  {
+    "id": "104",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/104.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-133",
+            "head": "b4ef4571037f1c3e98f55dc6f2a935c2969e215a",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-160"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-160"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-133"
+    }
+  },
+  {
+    "id": "105",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/105.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-134",
+            "head": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+            "localBlock": null,
+            "ancestorOfDefault": true,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-161"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-161"
+        },
+        {
+          "evidence": {
+            "branch": "ref-134",
+            "head": "d53c90d52e5ad9483e3d0ceccfbc5c5e744f3a22",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-162"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-134",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "d53c90d52e5ad9483e3d0ceccfbc5c5e744f3a22"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-162"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-134"
+    }
+  },
+  {
+    "id": "106",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/106.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-135",
+            "head": "4015475cbefa7c05f3fba4db245594cee54cbd40",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-163"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-135",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    },
+                    "sha": "4015475cbefa7c05f3fba4db245594cee54cbd40"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": null,
+                  "number": 1,
+                  "state": "open"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-163"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-135"
+    }
+  },
+  {
+    "id": "107",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/107.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-136",
+            "head": "66c8ae742e5600e6d4e5868f9bd70a1174e5c973",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-164"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-164"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-136"
+    }
+  },
+  {
+    "id": "108",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/108.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-137",
+            "head": "5564aa7d3644d5ad60a69b25deb1848b493c41f0",
+            "localBlock": null,
+            "ancestorOfDefault": false,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-165"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-165"
+        },
+        {
+          "evidence": {
+            "branch": "ref-138",
+            "head": "39b2baf83827607a861d8561b378c74e00394cba",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-166"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-166"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-137"
+    }
+  },
+  {
+    "id": "109",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/109.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-139",
+            "head": "c11bf76dfe7f6b6eebdc7b355f84fea8f03a8b2f",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-167"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-167"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-139"
+    }
+  },
+  {
+    "id": "110",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/110.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-140",
+            "head": "e9d1bbbe831ef778cdf5ce1173b736f7619e718c",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-168"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-140",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "e9d1bbbe831ef778cdf5ce1173b736f7619e718c"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-168"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-140"
+    }
+  },
+  {
+    "id": "111",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/111.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-141",
+            "head": "42a5fd545b494f3b45aeb9ee8cf444f7a296031c",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-169"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-169"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-141"
+    }
+  },
+  {
+    "id": "112",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/112.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-142",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-170"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-170"
+        },
+        {
+          "evidence": {
+            "branch": "ref-142",
+            "head": "db3e89547c2bd52de771b328486c26055414b055",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-171"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-171"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-142"
+    }
+  },
+  {
+    "id": "113",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/113.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-143",
+            "head": "65e6344be5c61cef1d81f697a80f8110176aaae1",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-172"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "00f8ad8569ba6b6a5f154edaea99fd64b14cfdc1",
+              "name": "owner/repo-4",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-4"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-143",
+                    "repo": {
+                      "full_name": "owner/repo-4"
+                    },
+                    "sha": "65e6344be5c61cef1d81f697a80f8110176aaae1"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-172"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-143"
+    }
+  },
+  {
+    "id": "114",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/114.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-144",
+            "head": "75304526a074006816c22f715529ff9336555f98",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-173"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-144",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "75304526a074006816c22f715529ff9336555f98"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-173"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-144"
+    }
+  },
+  {
+    "id": "115",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/115.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-145",
+            "head": "5564aa7d3644d5ad60a69b25deb1848b493c41f0",
+            "localBlock": null,
+            "ancestorOfDefault": false,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-174"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-174"
+        },
+        {
+          "evidence": null,
+          "mode": "gone",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-175"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-145"
+    }
+  },
+  {
+    "id": "116",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/116.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-147",
+            "head": "5e7224c309559f0c8917b4b74eb86f202ebec659",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-176"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-176"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-146"
+    }
+  },
+  {
+    "id": "117",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/117.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-148",
+            "head": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-177"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-177"
+        },
+        {
+          "evidence": {
+            "branch": "ref-148",
+            "head": "86ece74042514a334ecc82a6e6512f33af5e481e",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-178"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-148",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "86ece74042514a334ecc82a6e6512f33af5e481e"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": null,
+                  "number": 1,
+                  "state": "open"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-178"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-148"
+    }
+  },
+  {
+    "id": "118",
+    "expected": false,
+    "snapshot": {
+      "blockers": ["member-identity-unverified"],
+      "filePath": "/audit/sessions/118.yml",
+      "members": [
+        {
+          "evidence": null,
+          "mode": "unverified",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-179"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-149"
+    }
+  },
+  {
+    "id": "119",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/119.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-150",
+            "head": "f8c36e2f2d0e981cfb4683fdfbef2fa959d226f8",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-180"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "00f8ad8569ba6b6a5f154edaea99fd64b14cfdc1",
+              "name": "owner/repo-4",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-180"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-150"
+    }
+  },
+  {
+    "id": "120",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/120.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-151",
+            "head": "5564aa7d3644d5ad60a69b25deb1848b493c41f0",
+            "localBlock": null,
+            "ancestorOfDefault": false,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-181"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-181"
+        },
+        {
+          "evidence": {
+            "branch": "ref-152",
+            "head": "c29cbaaf1722e6aa4786a9f2768d33a8b82a8dab",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-182"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-182"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-151"
+    }
+  },
+  {
+    "id": "121",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/121.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-153",
+            "head": "b42277baf0035cfc5ff19b213242c386bd247276",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-183"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-183"
+        },
+        {
+          "evidence": null,
+          "mode": "gone",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-184"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-153"
+    }
+  },
+  {
+    "id": "122",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/122.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-154",
+            "head": "61a45884db68c61296607244c01f2a6172842586",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-185"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-185"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-154"
+    }
+  },
+  {
+    "id": "123",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/123.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-155",
+            "head": "bf59a61b220cdd72a22485b73363abb8272d3f65",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-186"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-186"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-155"
+    }
+  },
+  {
+    "id": "124",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/124.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-156",
+            "head": "7a9231c9c8eaa08676a7304ecda0dedf4be01b80",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-187"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-156",
+                    "repo": {
+                      "full_name": "owner/repo-1"
+                    },
+                    "sha": "b26dd8f9f03b57fc11969b5ed03dbeb3b1141e49"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-187"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-156"
+    }
+  },
+  {
+    "id": "125",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/125.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-157",
+            "head": "2e2faf7e7bbde93ced252ddfbecdb246d3af2550",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-188"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-188"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-7",
+      "session": "ref-157"
+    }
+  },
+  {
+    "id": "126",
+    "expected": false,
+    "snapshot": {
+      "blockers": ["ownership-conflict"],
+      "filePath": "/audit/sessions/126.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-26",
+            "head": "23c3003e0bc991f7fc79baf2d2855ab630ddce55",
+            "localBlock": null,
+            "ancestorOfDefault": false,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-28"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-26",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    },
+                    "sha": "5b52b0c91f68a2d136aa9c6cb41a4def263c3fe0"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": null,
+                  "number": 1,
+                  "state": "open"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-28"
+        },
+        {
+          "evidence": {
+            "branch": "ref-26",
+            "head": "e8fd96580776b3ecdda3f9a26fbd104bcd283e67",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-189"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-26",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "e8fd96580776b3ecdda3f9a26fbd104bcd283e67"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": null,
+                  "number": 1,
+                  "state": "open"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-189"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-26"
+    }
+  },
+  {
+    "id": "127",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/127.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-158",
+            "head": "1ec960847827f3a84facf997f37c55de77538b8a",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-190"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "97d397c8bcdfc10712dc1f0952d516974c4cc807",
+              "name": "owner/repo-1",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-190"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-158"
+    }
+  },
+  {
+    "id": "128",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/128.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-159",
+            "head": "180c7be5d5ce4309933ebf4ec9e4d3099a61d4cf",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-191"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-191"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-159"
+    }
+  },
+  {
+    "id": "129",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/129.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-160",
+            "head": "848511ec0289798ebe36bf78d2d11a574fd8668e",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-192"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "00f8ad8569ba6b6a5f154edaea99fd64b14cfdc1",
+              "name": "owner/repo-4",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-4"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-160",
+                    "repo": {
+                      "full_name": "owner/repo-4"
+                    },
+                    "sha": "f5caf41d6151918399b9f8f824c86988fd48ace7"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-192"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-160"
+    }
+  },
+  {
+    "id": "130",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/130.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-73",
+            "head": "26faefc003da8c0cd477cb6f34969cd5580c23d9",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-193"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-193"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-73"
+    }
+  },
+  {
+    "id": "131",
+    "expected": true,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/131.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-162",
+            "head": "9cbf4062904bc07b5e02f1a9c81c2da1a53322c7",
+            "localBlock": null,
+            "ancestorOfDefault": false,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-194"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+              "name": "owner/repo-3",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-162",
+                    "repo": {
+                      "full_name": "owner/repo-3"
+                    },
+                    "sha": "9cbf4062904bc07b5e02f1a9c81c2da1a53322c7"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-194"
+        },
+        {
+          "evidence": {
+            "branch": "ref-163",
+            "head": "e0d420d061fe2baf3bc11141f7d945eda08c63f1",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-195"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": [
+                {
+                  "base": {
+                    "ref": "ref-2",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    }
+                  },
+                  "head": {
+                    "ref": "ref-163",
+                    "repo": {
+                      "full_name": "owner/repo-2"
+                    },
+                    "sha": "e0d420d061fe2baf3bc11141f7d945eda08c63f1"
+                  },
+                  "html_url": "https://github.com/owner/repo/pull/1",
+                  "merged_at": "2026-09-06T00:00:00Z",
+                  "number": 1,
+                  "state": "closed"
+                }
+              ]
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-195"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-161"
+    }
+  },
+  {
+    "id": "132",
+    "expected": false,
+    "snapshot": {
+      "blockers": ["member-identity-unverified"],
+      "filePath": "/audit/sessions/132.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-164",
+            "head": "e0a48b20437985cc3b0bd236e9eab5b78d885452",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-196"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-196"
+        },
+        {
+          "evidence": null,
+          "mode": "unverified",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-197"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-164"
+    }
+  },
+  {
+    "id": "133",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/133.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-165",
+            "head": "29aef7dab49ae7f554c68d85a3285d23d75d64d9",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-198"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-198"
+        },
+        {
+          "evidence": {
+            "branch": "ref-165",
+            "head": "cf1dafe4f3cf0114f0f553a0b1c9a3c656a64856",
+            "localBlock": null,
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-6",
+              "worktreePath": "/audit/path-199"
+            },
+            "repository": {
+              "defaultBranch": "ref-2",
+              "defaultHead": "6502bec6c207af79916ca47c2545f38f6eac7579",
+              "name": "owner/repo-2",
+              "pullRequests": []
+            }
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-199"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-165"
+    }
+  },
+  {
+    "id": "134",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/134.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-166",
+            "head": "38ba8c6c1b2bde4f005767080f9385d8878aabb9",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "dependency",
+              "sourceRoot": "/audit/path-7",
+              "worktreePath": "/audit/path-200"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-7",
+          "worktreePath": "/audit/path-200"
+        },
+        {
+          "evidence": null,
+          "mode": "gone",
+          "sourceRoot": "/audit/path-6",
+          "worktreePath": "/audit/path-201"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-6",
+      "session": "ref-166"
+    }
+  },
+  {
+    "id": "135",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/135.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-167",
+            "head": "8c4b876bb2de4b8b9c92f154e5ad7802e9e2cb40",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-202"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-202"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-167"
+    }
+  },
+  {
+    "id": "136",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/136.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-169",
+            "head": "dc17b26a708971839115f13c788200bdaaa79b7d",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-3",
+              "worktreePath": "/audit/path-203"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-3",
+          "worktreePath": "/audit/path-203"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-3",
+      "session": "ref-168"
+    }
+  },
+  {
+    "id": "137",
+    "expected": false,
+    "snapshot": {
+      "blockers": [],
+      "filePath": "/audit/sessions/137.yml",
+      "members": [
+        {
+          "evidence": {
+            "branch": "ref-170",
+            "head": "f1e5a10bf0db6e87d0ed13c04fa2d5ede51a07e6",
+            "localBlock": {
+              "code": "dirty-worktree",
+              "eligible": false,
+              "evidence": [],
+              "status": "ineligible"
+            },
+            "ancestorOfDefault": null,
+            "candidate": {
+              "role": "root",
+              "sourceRoot": "/audit/path-10",
+              "worktreePath": "/audit/path-204"
+            },
+            "repository": null
+          },
+          "mode": "live",
+          "sourceRoot": "/audit/path-10",
+          "worktreePath": "/audit/path-204"
+        }
+      ],
+      "rootSourceRoot": "/audit/path-10",
+      "session": "ref-170"
+    }
+  }
+]

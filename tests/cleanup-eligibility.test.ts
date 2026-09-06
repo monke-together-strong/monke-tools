@@ -163,6 +163,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     const fixture = createFixture();
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
     expect(snapshot.branch).toBe(BRANCH);
+    expect(snapshot.committedWorkAttempted).toBeTruthy();
     expect(snapshot.repository?.defaultBranch).toBe("develop");
     expect(eligibleForCleanup(snapshot)).toBeTruthy();
   });
@@ -231,6 +232,7 @@ describe("cleanup evidence from real Git worktrees", () => {
       git(fixture.candidate.worktreePath, ["add", "."]);
     }
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
+    expect(snapshot.committedWorkAttempted).toBeFalsy();
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       code: "dirty-worktree",
       eligible: false
