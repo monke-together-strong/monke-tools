@@ -39,11 +39,15 @@ const ReportSchema = z.object({
         sourceRoot: z.string().optional(),
         step: z.string().optional()
       }),
+      inspectionFailed: z.boolean(),
+      members: z.array(z.object({ checks: z.object({ local: z.object({ status: z.string() }) }) })),
       outcome: z.string(),
       plannedActions: z.array(ActionSchema),
+      reasons: z.array(z.object({ code: z.string() })),
       session: z.string().nullable()
     })
   ),
+  unavailableSources: z.array(z.string()),
   unownedWorktrees: z.array(z.unknown())
 });
 const sandboxes: string[] = [];
@@ -455,6 +459,38 @@ describe("global Session cleanup", () => {
     expect(row?.plannedActions[0]?.sourceRoot).toBe(f.root);
   }, 30_000);
 
+  test("a missing Source is a settled skip, not an inspection error", async () => {
+    const f = fixture();
+    const [missing] = f.sources;
+    if (!missing) {
+      throw new Error("Missing fixture Source");
+    }
+    const clean = f.addSession("feature/clean");
+    saveSessionState(f.home, {
+      ...clean,
+      repos: clean.repos.filter((repo) => repo.sourceRoot === f.root)
+    });
+    const dead = f.addSession("feature/dead", missing);
+    rmSync(missing, { force: true, recursive: true });
+    const preview = await f.run(true);
+    expect(preview.error).toBeUndefined();
+    expect(preview.report.exitCode).toBe(0);
+    expect(preview.report.unavailableSources).toStrictEqual([]);
+    const row = preview.report.sessions.find((session) => session.session === dead.session);
+    expect(row?.outcome).toBe("skipped");
+    expect(row?.inspectionFailed).toBeFalsy();
+    expect(row?.reasons.map((reason) => reason.code)).toStrictEqual(["source-missing"]);
+    expect(row?.members[0]?.checks.local.status).toBe("blocked");
+    const result = await f.run();
+    expect(result.error).toBeUndefined();
+    expect(
+      result.report.sessions.find((session) => session.session === clean.session)?.outcome
+    ).toBe("cleaned");
+    expect(
+      existsSync(getSessionStateFilePath(f.home, dead.rootSourceRoot, dead.session))
+    ).toBeTruthy();
+  }, 30_000);
+
   test("an unavailable independent Source does not prevent cleaning an eligible Session", async () => {
     const f = fixture();
     const state = f.addSession("feature/available");
@@ -467,7 +503,8 @@ describe("global Session cleanup", () => {
       ...state,
       repos: state.repos.filter((repo) => repo.sourceRoot === f.root)
     });
-    rmSync(missing, { force: true, recursive: true });
+    // Present but unverifiable: no longer a Git repository.
+    rmSync(path.join(missing, ".git"), { force: true, recursive: true });
     const result = await f.run();
     expect(result.report.sessions.find((row) => row.session === state.session)?.outcome).toBe(
       "cleaned"

@@ -29,6 +29,7 @@ export type SessionCleanupBlocker =
   | "invalid-state-overlap"
   | "ownership-conflict"
   | "member-identity-unverified"
+  | "source-missing"
   | "held"
   | "operation-lock-present"
   | "state-changed-during-inspection"
@@ -92,6 +93,15 @@ export interface SessionCleanupDecision {
   status: CleanupDecision["status"];
 }
 
+/**
+ * Blockers that are facts about the Session, not missing evidence. They skip, never fail,
+ * inspection.
+ */
+export const SETTLED_BLOCKERS: ReadonlySet<SessionCleanupBlocker> = new Set([
+  "held",
+  "source-missing"
+]);
+
 export function eligibleForSessionCleanup(snapshot: SessionCleanupEvidence) {
   return decideSessionCleanupEligibility(snapshot).eligible;
 }
@@ -105,7 +115,9 @@ export function decideSessionCleanupEligibility(
       eligible: false,
       kind: "blocked",
       reasons: snapshot.blockers,
-      status: snapshot.blockers.includes("held") ? "ineligible" : "unknown"
+      status: snapshot.blockers.some((blocker) => SETTLED_BLOCKERS.has(blocker))
+        ? "ineligible"
+        : "unknown"
     };
   }
   if (
@@ -250,6 +262,16 @@ export async function inspectSessionCleanup(
                 sourceRoot: repo.sourceRoot,
                 worktreePath: repo.worktreePath
               };
+              // A Source that no longer exists is a settled fact, not missing evidence.
+              if (!existsSync(repo.sourceRoot)) {
+                snapshot.blockers.push("source-missing");
+                snapshot.problems?.push({
+                  code: "source-missing",
+                  message: `Recorded Source checkout does not exist at ${repo.sourceRoot}`,
+                  worktreePath: repo.worktreePath
+                });
+                return member;
+              }
               try {
                 const registration = inspectSessionRepoRegistration(
                   collectorReadOnly,
@@ -385,6 +407,10 @@ function discoverUnownedWorktrees(
     ].map((source) => path.normalize(source))
   );
   for (const sourceRoot of sources) {
+    if (!existsSync(sourceRoot)) {
+      // Nothing to discover; the owning Sessions report source-missing themselves.
+      continue;
+    }
     try {
       assertCanonicalSourceCheckout(runtime, sourceRoot);
       for (const worktree of listWorktrees(runtime, sourceRoot)) {

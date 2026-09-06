@@ -3,7 +3,8 @@ import path from "node:path";
 import type { CleanupEvidence } from "./cleanup-eligibility.ts";
 import {
   decideSessionCleanupEligibility,
-  decideSessionCleanupMember
+  decideSessionCleanupMember,
+  SETTLED_BLOCKERS
 } from "./session-cleanup-eligibility.ts";
 import type {
   SessionCleanupEvidence,
@@ -48,6 +49,8 @@ const messages: Record<SessionCleanupReason, string> = {
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
   "repository-unavailable": "The repository or its default branch could not be verified.",
   "source-checkout": "Source checkouts cannot be removed.",
+  "source-missing":
+    "A member's recorded Source checkout no longer exists; Chop cannot run and the state is retained.",
   "state-changed-during-inspection": "Session state changed during inspection; inspect again.",
   "unchanged-dependency": "The dependency has no commits outside the verified default branch.",
   "unique-dependency-commits":
@@ -122,7 +125,8 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
   let local: CleanupCheckReport;
   let committedWork: CleanupCheckReport;
   if (problems.length > 0 || member.mode === "unverified") {
-    local = check("unknown", problems[0]?.code ?? "member-identity-unverified");
+    const code = problems[0]?.code ?? "member-identity-unverified";
+    local = check(SETTLED_BLOCKERS.has(code) ? "blocked" : "unknown", code);
     committedWork =
       member.evidence && member.evidence.committedWorkAttempted !== false
         ? {
@@ -183,7 +187,7 @@ export function createSessionCleanupReport(
   const members = snapshot.members.map((member) => memberReport(snapshot, member));
   // Eligibility can be conclusively false while another check still lacks evidence.
   const inspectionFailed =
-    snapshot.blockers.some((blocker) => blocker !== "held") ||
+    snapshot.blockers.some((blocker) => !SETTLED_BLOCKERS.has(blocker)) ||
     members.some(
       (member) =>
         member.checks.local.status === "unknown" || member.checks.committedWork.status === "unknown"

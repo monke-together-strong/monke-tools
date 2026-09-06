@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import { teardownSession } from "./chop.ts";
 import { readOnlyCleanupRuntime } from "./cleanup-eligibility.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
@@ -288,12 +290,14 @@ function executeSession(
   const readOnly = readOnlyCleanupRuntime(runtime);
   const scan = scanSessionStates(home);
   const states = scan.records.flatMap((record) => (record.state ? [record.state] : []));
-  // Match the inspector's discovery scope. An unavailable unrelated Source is
+  // Match the inspector's discovery scope. An unavailable or missing unrelated Source is
   // reported separately; a previously available Source failing revalidation blocks removal.
   const sources = [
     ...new Set(states.flatMap((retained) => retained.repos.map((repo) => repo.sourceRoot)))
   ].filter(
-    (source) => !inventory.unavailableSources.some((unavailable) => samePath(source, unavailable))
+    (source) =>
+      existsSync(source) &&
+      !inventory.unavailableSources.some((unavailable) => samePath(source, unavailable))
   );
   function guard() {
     assertGlobalSafety(lock, inventory);

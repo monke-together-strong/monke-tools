@@ -13,6 +13,7 @@ const SnapshotSchema = z.object({
       "invalid-state-overlap",
       "ownership-conflict",
       "member-identity-unverified",
+      "source-missing",
       "held",
       "operation-lock-present",
       "state-changed-during-inspection",

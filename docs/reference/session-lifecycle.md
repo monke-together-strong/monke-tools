@@ -136,7 +136,9 @@ candidates.
 
 Optional `cleanupHold: true` in Session state blocks this check. This is separate
 from each repo's `cleanupEligible`, which records whether its Cleanup command
-must run. A foreign global operation lock also blocks inspection eligibility;
+must run. A member whose recorded Source checkout no longer exists is a settled
+skip: the Session is reported as blocked, not as an inspection error, and its
+state is retained because Chop needs the Source too. A foreign global operation lock also blocks inspection eligibility;
 the inspector does not acquire, reclaim, or remove that lock. It rechecks local
 member evidence and retained state after provider reads.
 
@@ -165,9 +167,10 @@ human output only; JSON always includes every inspected Session. A dirty member
 lists up to five changed paths under its local check.
 Cleanup-command output is captured by the command runner and cannot contaminate
 JSON stdout. Exit 0 means inspection/execution completed, including expected
-eligibility skips. Exit 1 means evidence was unavailable, execution failed, or a
-global safety check stopped the run; details remain in the report and the CLI
-writes a short error to stderr.
+eligibility skips and settled blockers such as a hold or a missing Source. Exit
+1 means evidence was unavailable, execution failed, or a global safety check
+stopped the run; details remain in the report and the CLI writes a short error
+to stderr.
 
 Execution reports planned, completed-this-attempt, and remaining actions. A
 Session is skipped before its first effect attempt, or failed after an effect
