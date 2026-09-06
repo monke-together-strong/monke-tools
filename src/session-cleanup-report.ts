@@ -113,17 +113,18 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
   let committedWork: CleanupCheckReport;
   if (problems.length > 0 || member.mode === "unverified") {
     local = check("unknown", problems[0]?.code ?? "member-identity-unverified");
-    committedWork = member.evidence?.committedWorkAttempted
-      ? {
-          code: null,
-          message: "Member identity changed; previously collected proof is not accepted.",
-          status: "unknown"
-        }
-      : {
-          code: null,
-          message: "Not checked because member identity could not be verified.",
-          status: "not-checked"
-        };
+    committedWork =
+      member.evidence && member.evidence.committedWorkAttempted !== false
+        ? {
+            code: null,
+            message: "Member identity changed; previously collected proof is not accepted.",
+            status: "unknown"
+          }
+        : {
+            code: null,
+            message: "Not checked because member identity could not be verified.",
+            status: "not-checked"
+          };
   } else if (member.mode === "gone" || member.mode === "stale") {
     local = check("passed", "owned-worktree-gone");
     committedWork = {

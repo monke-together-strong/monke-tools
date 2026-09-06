@@ -120,6 +120,11 @@ identity, hold, or operation blocker. The Root requires exact merged PR proof;
 a dependency can instead prove that it has no commits outside the verified
 default branch. Actual member branch names can differ from the Session name.
 
+The report uses recorded membership. Nested worktree paths are overlapping
+ownership, including discovered unowned registrations; removing a parent must
+not encompass another worktree. Shared Git preflight also rejects nested
+registrations for Ordinary Chop, including with force.
+
 The report uses recorded membership. It does not infer dependencies from current
 configuration or assign unowned worktrees to Sessions by matching names. Corrupt
 records are reported. They block overlapping Sessions; if their ownership cannot
@@ -140,10 +145,14 @@ new method is not connected to automatic Chop or `mt cleanup --merged`.
 `createSessionCleanupReport` supplies the same per-member explanations to JSON
 and `formatSessionCleanupReport`. Local checks and committed-work checks report
 passed, blocked, unknown, not-checked, or not-needed. A dirty worktree can stop
-provider lookup; that is explicitly not-checked. Older saved evidence without
-check coverage remains unknown rather than implying that a check passed or ran.
+provider lookup; that is explicitly not-checked. Older saved evidence with
+unknown check coverage remains unknown. Retained repository/PR proof can establish
+that committed-work inspection ran, but an invalidation must not relabel it as
+not-checked.
 Ownership errors retain their conflicting Session/path details, and revalidation
-errors name the affected member.
+errors name the affected member. Collected members are revalidated even when
+another member already blocks the Session. Stale registrations retain their
+branch identity for that comparison.
 
 Inspection reports eligible (not attempted) or skipped. A later executor can supply
 an actual cleaned or failed result; failure names revalidation, teardown,

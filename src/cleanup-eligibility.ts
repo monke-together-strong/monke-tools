@@ -226,15 +226,22 @@ export function revalidateCleanupEvidence(
 ): CleanupDecision | null {
   const readOnly = readOnlyCleanupRuntime(runtime);
   const current = inspectLocal(readOnly, snapshot.candidate);
-  if (current.localBlock) {
-    return current.localBlock;
+  if (
+    current.head !== snapshot.head ||
+    current.branch !== snapshot.branch ||
+    current.localBlock?.code !== snapshot.localBlock?.code
+  ) {
+    return current.localBlock ?? decision("unknown", "changed-during-inspection");
   }
-  if (current.head !== snapshot.head || current.branch !== snapshot.branch) {
-    return decision("unknown", "changed-during-inspection");
+  // An unchanged local blocker still explains a skipped member. No remote
+  // identity was established for that member, so do not invent a remote change.
+  if (snapshot.localBlock) {
+    return null;
   }
   if (
+    snapshot.repository &&
     readRepositoryName(readOnly, snapshot.candidate.sourceRoot)?.toLowerCase() !==
-    snapshot.repository?.name.toLowerCase()
+      snapshot.repository.name.toLowerCase()
   ) {
     return decision("unknown", "repository-changed-during-inspection");
   }

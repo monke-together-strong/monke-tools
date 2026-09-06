@@ -4,7 +4,7 @@ import path from "node:path";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees, resolveRepoContext } from "./git.ts";
 import type { WorktreeEntry } from "./git.ts";
-import { samePath } from "./path-identity.ts";
+import { samePath, worktreePathsOverlap } from "./path-identity.ts";
 import type { Runtime } from "./types.ts";
 
 /** Reject a locked Git worktree registration. */
@@ -72,15 +72,25 @@ export function validateRegisteredWorktreeForRemoval(
   targetPath: string
 ) {
   const target = path.normalize(targetPath);
-  const entry = listWorktrees(runtime, sourceRoot).find(
-    (worktree) => path.normalize(worktree.path) === target
-  );
+  const worktrees = listWorktrees(runtime, sourceRoot);
+  const entry = worktrees.find((worktree) => path.normalize(worktree.path) === target);
   if (entry === undefined || entry.prunable || !existsSync(entry.path)) {
     throw new MonkeError(`No removable registered worktree exists at ${targetPath}`);
   }
   assertWorktreeUnlocked(entry);
   if (samePath(entry.path, sourceRoot)) {
     throw new MonkeError(`Cannot Chop the Source checkout at ${sourceRoot}`);
+  }
+  const nested = worktrees.find(
+    (other) =>
+      !samePath(other.path, entry.path) &&
+      !samePath(other.path, sourceRoot) &&
+      worktreePathsOverlap(other.path, entry.path)
+  );
+  if (nested) {
+    throw new MonkeError(
+      `Worktree ${entry.path} overlaps another registered worktree ${nested.path}`
+    );
   }
   assertWorktreeIdentity(runtime, sourceRoot, entry.path);
   return entry;

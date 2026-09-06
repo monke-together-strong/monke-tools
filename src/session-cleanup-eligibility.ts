@@ -13,7 +13,7 @@ import {
 import type { CleanupCode, CleanupDecision, CleanupEvidence } from "./cleanup-eligibility.ts";
 import { errorMessage, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees } from "./git.ts";
-import { samePath } from "./path-identity.ts";
+import { samePath, worktreePathsOverlap } from "./path-identity.ts";
 import {
   assertNoOtherStateOwnsSessionRepos,
   inspectSessionRepoRegistration
@@ -55,6 +55,7 @@ export interface SessionCleanupMemberDecision {
 export interface SessionCleanupMember {
   evidence: CleanupEvidence | null;
   mode: "live" | "gone" | "stale" | "unverified";
+  registeredBranch?: string | null;
   sourceRoot: string;
   worktreePath: string;
 }
@@ -218,7 +219,9 @@ export async function inspectSessionCleanup(
               worktreePath: repo.worktreePath
             };
             try {
-              member.mode = inspectSessionRepoRegistration(readOnly, home, state, repo).mode;
+              const registration = inspectSessionRepoRegistration(readOnly, home, state, repo);
+              member.mode = registration.mode;
+              member.registeredBranch = registration.registeredBranch;
             } catch (error) {
               snapshot.blockers.push("member-identity-unverified");
               snapshot.problems?.push({
@@ -255,12 +258,12 @@ export async function inspectSessionCleanup(
         candidate.session === snapshot.session &&
         candidate.rootSourceRoot === snapshot.rootSourceRoot
     );
-    if (!state || !eligibleForSessionCleanup(snapshot)) {
+    if (!state) {
       continue;
     }
     for (const [index, repo] of state.repos.entries()) {
       const member = snapshot.members[index];
-      if (!member) {
+      if (!member || member.mode === "unverified") {
         continue;
       }
       try {
@@ -308,6 +311,7 @@ export async function inspectSessionCleanup(
       unavailableSources.push(sourceRoot);
     }
   }
+  blockUnownedOverlaps(snapshots, unownedWorktrees);
   const changed = scanSessionStates(home).fingerprint !== scan.fingerprint;
   const operationPresent = operationAtStart || lockPresent();
   for (const snapshot of snapshots) {
@@ -348,6 +352,27 @@ export async function inspectSessionCleanup(
   };
 }
 
+function blockUnownedOverlaps(
+  snapshots: SessionCleanupEvidence[],
+  unownedWorktrees: { worktreePath: string }[]
+) {
+  for (const snapshot of snapshots) {
+    for (const member of snapshot.members) {
+      const overlap = unownedWorktrees.find((worktree) =>
+        worktreePathsOverlap(worktree.worktreePath, member.worktreePath)
+      );
+      if (overlap) {
+        snapshot.blockers.push("ownership-conflict");
+        snapshot.problems?.push({
+          code: "ownership-conflict",
+          message: `Worktree ${member.worktreePath} overlaps unowned registered worktree ${overlap.worktreePath}`,
+          worktreePath: member.worktreePath
+        });
+      }
+    }
+  }
+}
+
 function revalidateSessionMember(
   runtime: Runtime,
   readOnly: Runtime,
@@ -357,8 +382,8 @@ function revalidateSessionMember(
   member: SessionCleanupMember
 ) {
   const current = inspectSessionRepoRegistration(readOnly, home, state, repo);
-  if (current.mode !== member.mode) {
-    throw new Error("Member presence changed");
+  if (current.mode !== member.mode || current.registeredBranch !== member.registeredBranch) {
+    throw new Error("Member presence or registered branch changed");
   }
   if (member.evidence) {
     const invalidation = revalidateCleanupEvidence(runtime, member.evidence);

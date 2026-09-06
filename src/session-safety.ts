@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
 import { getExpectedWorktreePath, listWorktrees } from "./git.ts";
-import { samePath } from "./path-identity.ts";
+import { samePath, worktreePathsOverlap } from "./path-identity.ts";
 import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
 import { assertCanonicalSourceCheckout, assertWorktreeUnlocked } from "./worktree-safety.ts";
 
@@ -80,7 +80,7 @@ export function assertNoOtherStateOwnsSessionRepos(state: SessionState, allState
       `Multiple records claim Session ${state.session} at ${state.rootSourceRoot}`
     );
   }
-  const paths = new Set(state.repos.map((repo) => path.normalize(repo.worktreePath)));
+  const paths = state.repos.map((repo) => repo.worktreePath);
   for (const other of allStates) {
     if (
       other === state ||
@@ -88,10 +88,14 @@ export function assertNoOtherStateOwnsSessionRepos(state: SessionState, allState
     ) {
       continue;
     }
-    const collision = other.repos.find((repo) => paths.has(path.normalize(repo.worktreePath)));
+    const collision = other.repos.find((repo) =>
+      paths.some((candidate) => worktreePathsOverlap(candidate, repo.worktreePath))
+    );
     if (collision !== undefined) {
       throw new MonkeError(
-        `Session worktree ${collision.worktreePath} is also recorded by Session ${other.session}`
+        paths.some((candidate) => samePath(candidate, collision.worktreePath))
+          ? `Session worktree ${collision.worktreePath} is also recorded by Session ${other.session}`
+          : `Session ${state.session} overlaps worktree ${collision.worktreePath} recorded by Session ${other.session}`
       );
     }
   }

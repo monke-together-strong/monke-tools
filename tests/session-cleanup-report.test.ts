@@ -125,6 +125,26 @@ describe("Session cleanup explanations", () => {
     expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
   });
 
+  test("older evidence with a member problem keeps unknown check coverage", () => {
+    const snapshot = fixture();
+    const [member] = snapshot.members;
+    if (!member?.evidence) {
+      throw new Error("Missing fixture member");
+    }
+    delete member.evidence.committedWorkAttempted;
+    snapshot.blockers = ["member-changed-during-inspection"];
+    snapshot.problems = [
+      {
+        code: "member-changed-during-inspection",
+        message: "Registration changed",
+        worktreePath: member.worktreePath
+      }
+    ];
+    const report = createSessionCleanupReport(snapshot);
+    expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
+    expect(formatSessionCleanupReport(report)).not.toContain("Committed work [not-checked]");
+  });
+
   test("verified absent members need no PR check while the remaining member must still pass", () => {
     const snapshot = fixture();
     const [dependency] = snapshot.members;

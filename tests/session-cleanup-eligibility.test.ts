@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -6,8 +14,10 @@ import { stringify } from "yaml";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { inspectSessionCleanup } from "../src/session-cleanup-eligibility.ts";
+import { createSessionCleanupReport } from "../src/session-cleanup-report.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/session-state-store.ts";
 import type { Runtime, SessionState } from "../src/types.ts";
+import { preflightWorktreeRemoval } from "../src/worktree-safety.ts";
 import { createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
@@ -94,6 +104,14 @@ function fixture() {
     }
   };
   return { dependency, dependencyPath, home, root, rootPath, runtime, sandbox, state };
+}
+
+function nestedChild(f: ReturnType<typeof fixture>, childSource: string) {
+  const child = path.join(f.rootPath, "child");
+  writeFileSync(path.join(f.root, ".git/info/exclude"), "child/\n");
+  git(childSource, ["worktree", "add", "-b", "child-branch", child]);
+  write(child, "unfinished.txt", "child work\n");
+  return child;
 }
 
 async function decisionFor(f: ReturnType<typeof fixture>) {
@@ -277,6 +295,80 @@ describe("whole-Session read-only eligibility", () => {
     git(f.root, ["worktree", "add", path.join(f.sandbox, "elsewhere"), f.state.session]);
     const result = await decisionFor(f);
     expect(result.decision.eligible).toBeFalsy();
+  });
+
+  test("a skipped Session invalidates an earlier member that changes during provider lookup", async () => {
+    const f = fixture();
+    const original = f.runtime.execAsync;
+    f.runtime.execAsync = async (command, args, options) => {
+      const result = await original(command, args, options);
+      if (args?.[1]?.includes("owner/root/pulls?")) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 20);
+        });
+        write(f.dependencyPath, "late.txt", "new work\n");
+        return { ...result, stdout: "[[]]" };
+      }
+      return result;
+    };
+    const result = await decisionFor(f);
+    expect(result.decision.reasons).toContain("member-changed-during-inspection");
+    const report = createSessionCleanupReport(result.snapshot);
+    expect(report.members[0]?.checks.local.status).toBe("unknown");
+    expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
+  });
+
+  test("a stale member changing registered branches invalidates recovery", async () => {
+    const f = fixture();
+    const admin = git(f.dependencyPath, ["rev-parse", "--absolute-git-dir"]);
+    renameSync(f.dependencyPath, path.join(f.sandbox, "moved"));
+    const original = f.runtime.execAsync;
+    f.runtime.execAsync = async (command, args, options) => {
+      const result = await original(command, args, options);
+      if (args?.[1]?.includes("owner/root/pulls?")) {
+        writeFileSync(path.join(admin, "HEAD"), "ref: refs/heads/different\n");
+      }
+      return result;
+    };
+    const result = await decisionFor(f);
+    expect(result.decision.eligible).toBeFalsy();
+    expect(result.decision.reasons).toContain("member-changed-during-inspection");
+  });
+
+  test("nested retained ownership and Ordinary preflight protect a dirty child", async () => {
+    const f = fixture();
+    const child = nestedChild(f, f.root);
+    const rootRepo = f.state.repos.find((repo) => repo.sourceRoot === f.root);
+    if (!rootRepo) {
+      throw new Error("Missing Root fixture");
+    }
+    const childState = {
+      ...f.state,
+      repos: [{ ...rootRepo, worktreePath: child }],
+      session: `${f.state.session}/child`
+    };
+    saveSessionState(f.home, childState);
+    const owned = await decisionFor(f);
+    expect(owned.decision.reasons).toContain("ownership-conflict");
+    renameSync(
+      getSessionStateFilePath(f.home, f.root, childState.session),
+      path.join(f.sandbox, "retained-child.yml")
+    );
+    const unowned = await decisionFor(f);
+    expect(unowned.decision.reasons).toContain("ownership-conflict");
+    for (const force of [false, true]) {
+      expect(() =>
+        preflightWorktreeRemoval(createTestRuntime({ cwd: f.root }), f.root, f.rootPath, { force })
+      ).toThrow(/overlaps another registered worktree/u);
+    }
+  });
+
+  test("a nested unowned worktree from another known Source blocks the parent", async () => {
+    const f = fixture();
+    nestedChild(f, f.dependency);
+    const unowned = await decisionFor(f);
+    expect(unowned.decision.eligible).toBeFalsy();
+    expect(unowned.decision.reasons).toContain("ownership-conflict");
   });
 
   test("an unowned worktree is reported without inferring Session membership", async () => {
