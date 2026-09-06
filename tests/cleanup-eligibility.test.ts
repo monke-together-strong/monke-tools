@@ -10,7 +10,6 @@ import {
   eligibleForCleanup
 } from "../src/cleanup-eligibility.ts";
 import type { CleanupEvidence, CleanupRepositoryEvidence } from "../src/cleanup-eligibility.ts";
-import { inspectMergedWorktreeCleanup } from "../src/cleanup-merged.ts";
 import type { Runtime } from "../src/types.ts";
 import { assertCleanWorktree } from "../src/worktree-safety.ts";
 import { createRepo, git, write } from "./helpers.ts";
@@ -253,23 +252,6 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(git(worktreePath, ["status", "--porcelain"])).toBe("");
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
     expect(decideCleanupEligibility(snapshot).code).toBe("dirty-worktree");
-    // The existing cleanup command must also stop reporting this checkout as clean.
-    const legacy = inspectMergedWorktreeCleanup(
-      {
-        ...fixture.runtime,
-        exec: (command, args, options) =>
-          command === "git"
-            ? fixture.baseRuntime.exec(command, args, options)
-            : fixture.runtime.exec(command, args, options)
-      },
-      {
-        ...fixture.candidate,
-        session: BRANCH
-      },
-      { refreshDefaultBranch: false }
-    );
-    expect(legacy.eligible).toBeFalsy();
-    expect(legacy.reasons.join(" ")).toContain("dirty/untracked");
   });
 
   test.each(["--assume-unchanged", "--skip-worktree"])(
@@ -308,28 +290,13 @@ describe("cleanup evidence from real Git worktrees", () => {
       write(worktreePath, "dep/sub.txt", "concealed edit\n");
       expect(git(worktreePath, ["status", "--porcelain", "--ignore-submodules=none"])).toBe("");
       const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
-      const legacy = inspectMergedWorktreeCleanup(
-        {
-          ...fixture.runtime,
-          exec: (command, args, options) =>
-            command === "git"
-              ? fixture.baseRuntime.exec(command, args, options)
-              : fixture.runtime.exec(command, args, options)
-        },
-        { ...fixture.candidate, session: BRANCH },
-        { refreshDefaultBranch: false }
-      );
       let chopAccepted = true;
       try {
         assertCleanWorktree(fixture.baseRuntime, worktreePath);
       } catch {
         chopAccepted = false;
       }
-      expect([eligibleForCleanup(snapshot), legacy.eligible, chopAccepted]).toStrictEqual([
-        false,
-        false,
-        false
-      ]);
+      expect([eligibleForCleanup(snapshot), chopAccepted]).toStrictEqual([false, false]);
     }
   );
 

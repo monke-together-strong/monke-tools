@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
+import type { SessionAction, SessionLifecycleObserver } from "./session-lifecycle-progress.ts";
 import type { SessionStateStore } from "./session-state-store.ts";
 import type { Runtime, SessionState } from "./types.ts";
 import { assertCanonicalSourceCheckout } from "./worktree-safety.ts";
@@ -8,7 +9,12 @@ import { assertCanonicalSourceCheckout } from "./worktree-safety.ts";
 const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
 
 /** Finalize one already-dead Session using only lifecycle data saved in its state. */
-export function finalizeSession(runtime: Runtime, store: SessionStateStore, state: SessionState) {
+export function finalizeSession(
+  runtime: Runtime,
+  store: SessionStateStore,
+  state: SessionState,
+  observer: SessionLifecycleObserver = {}
+) {
   const liveRepo = state.repos.find((repo) => existsSync(repo.worktreePath));
   if (liveRepo !== undefined) {
     throw new MonkeError(
@@ -17,6 +23,11 @@ export function finalizeSession(runtime: Runtime, store: SessionStateStore, stat
   }
 
   for (const repoState of state.repos) {
+    observer.beforeStep?.({
+      sourceRoot: repoState.sourceRoot,
+      step: "revalidation",
+      worktreePath: repoState.worktreePath
+    });
     assertCanonicalSourceCheckout(runtime, repoState.sourceRoot);
   }
 
@@ -35,6 +46,14 @@ export function finalizeSession(runtime: Runtime, store: SessionStateStore, stat
       )
     );
 
+    const action: SessionAction = {
+      command: cleanupCommand,
+      sourceRoot: repoState.sourceRoot,
+      step: "cleanup-command",
+      worktreePath: repoState.worktreePath
+    };
+    observer.beforeStep?.(action);
+    observer.beforeEffect?.(action);
     try {
       runtime.exec("sh", ["-c", cleanupCommand], {
         cwd: repoState.sourceRoot,
@@ -47,6 +66,7 @@ export function finalizeSession(runtime: Runtime, store: SessionStateStore, stat
         },
         timeoutSeconds: CLEANUP_COMMAND_TIMEOUT_SECONDS
       });
+      observer.completed?.(action);
     } catch (error) {
       throw new MonkeError(
         `Cleanup command failed for session ${state.session} repo ${repoState.sourceRoot}: ${cleanupCommand}\n${errorMessage(ThrownValueSchema.parse(error))}`
@@ -54,5 +74,9 @@ export function finalizeSession(runtime: Runtime, store: SessionStateStore, stat
     }
   }
 
+  const action: SessionAction = { sourceRoot: state.rootSourceRoot, step: "state-removal" };
+  observer.beforeStep?.(action);
+  observer.beforeEffect?.(action);
   store.remove(state);
+  observer.completed?.(action);
 }

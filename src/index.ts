@@ -3,6 +3,7 @@ import { Argument, Command, Option } from "@commander-js/extra-typings";
 import "zod/compile";
 
 import { runChop } from "./chop.ts";
+import { runCleanup } from "./cleanup.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runDiffInteractive } from "./diff.ts";
 import { ThrownValueSchema } from "./errors.ts";
@@ -12,7 +13,7 @@ import {
   runActivateLocalInstall,
   runActivateReleaseInstall
 } from "./installation.ts";
-import { runCleanup, runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
+import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
@@ -85,22 +86,14 @@ function createProgram(runtime: Runtime) {
       runChop(runtime, target, { force: options.force === true });
     });
 
-  const cleanup = program
+  program
     .command("cleanup")
-    .option("--merged")
-    .option("--dry-run")
-    .action((options) => {
-      if (options.dryRun && !options.merged) {
-        cleanup.error("error: option '--dry-run' cannot be used without option '--merged'");
-      }
-
-      runCleanup(
-        runtime,
-        options.merged === true
-          ? { dryRun: options.dryRun === true, mode: "merged" }
-          : { mode: "dead-only" }
-      );
-    });
+    .description("Clean eligible retained Sessions across all Roots; preserve local branches")
+    .option("--dry-run", "Inspect without changes; report Sessions that would clean")
+    .option("--json", "Write a versioned JSON report to stdout")
+    .action((options) =>
+      runCleanup(runtime, { dryRun: options.dryRun === true, json: options.json === true })
+    );
 
   program.command("setup").action(() => {
     runSetup(runtime);

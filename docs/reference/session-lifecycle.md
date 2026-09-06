@@ -111,7 +111,7 @@ and does not finalize a Session.
 A partially materialized Session remains a valid target. Use only repos and
 resources recorded in its state, not inferred worktrees from today's config.
 
-## Read-only Session inspection
+## Session cleanup
 
 `inspectSessionCleanup` reports Git and retained ownership evidence for all retained
 Sessions. `eligibleForSessionCleanup` returns true only when every live member
@@ -136,12 +136,40 @@ candidates.
 
 Optional `cleanupHold: true` in Session state blocks this check. This is separate
 from each repo's `cleanupEligible`, which records whether its Cleanup command
-must run. A present global operation lock also blocks inspection eligibility;
+must run. A foreign global operation lock also blocks inspection eligibility;
 the inspector does not acquire, reclaim, or remove that lock. It rechecks local
 member evidence and retained state after provider reads.
 
-This report is not removal authority and does not verify resource teardown. The
-new method is not connected to automatic Chop or `mt cleanup --merged`.
+`mt cleanup --dry-run` uses this report without acquiring a lock, creating Monke
+home, fetching Git objects, or running Cleanup commands. Eligible results say
+“Would clean.” `mt cleanup` holds the asynchronous global lock, verifies its own
+lock identity, and refreshes evidence before each Session. It shares Chop's
+removal and finalization lifecycle, with local proof rechecked before each
+removal. The initial report alone never authorizes effects. Monke's lock
+coordinates Monke operations; it cannot make concurrent external Git edits atomic.
+
+Both commands discover all retained Sessions across all Roots from Monke home,
+even outside a repository. Unowned worktrees discovered in known Source
+checkouts are listed separately and left untouched. Neither `--merged` nor
+`--all` is an option.
+
+Both modes accept `--json`: stdout contains one JSON object with `schemaVersion:
+1`, `dryRun`, `inspectedAt`, `sessions`, `unownedWorktrees`, `unavailableSources`,
+`globalFailure`, and `exitCode`. Human output uses the same Session reports.
+Cleanup-command output is captured by the command runner and cannot contaminate
+JSON stdout. Exit 0 means inspection/execution completed, including expected
+eligibility skips. Exit 1 means evidence was unavailable, execution failed, or a
+global safety check stopped the run; details remain in the report and the CLI
+writes a short error to stderr.
+
+Execution reports planned, completed-this-attempt, and remaining actions. A
+Session is skipped before its first effect attempt, or failed after an effect
+attempt starts. Failed commands may have produced external effects even when
+completion is unverified. Full state is retained on failure; retries run Cleanup
+commands from the beginning, including earlier successes. Independent Sessions
+continue after bounded failures. Lock ownership loss, retained-state changes
+after inspection, or corrupt state with unbounded ownership stop further
+execution. Every remaining Session is reported as skipped on a global stop.
 `createSessionCleanupReport` supplies the same per-member explanations to JSON
 and `formatSessionCleanupReport`. Local checks and committed-work checks report
 passed, blocked, unknown, not-checked, or not-needed. A dirty worktree can stop

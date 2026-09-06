@@ -14,6 +14,7 @@ import type { CleanupCode, CleanupDecision, CleanupEvidence } from "./cleanup-el
 import { errorMessage, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees } from "./git.ts";
 import { samePath, worktreePathsOverlap } from "./path-identity.ts";
+import type { OperationLock } from "./runtime.ts";
 import {
   assertNoOtherStateOwnsSessionRepos,
   inspectSessionRepoRegistration
@@ -169,85 +170,95 @@ export function decideSessionCleanupMember(
 export async function inspectSessionCleanup(
   runtime: Runtime,
   home: string,
-  knownSourceRoots: string[] = []
+  knownSourceRoots: string[] = [],
+  options: { operationLock?: OperationLock; sessionFile?: string } = {}
 ) {
   const readOnly = readOnlyCleanupRuntime(runtime);
   const scan = scanSessionStates(home);
   const states = scan.records.flatMap((record) => (record.state ? [record.state] : []));
   const cache = createCleanupEvidenceCache();
   const limit = pLimit(4);
-  const lockPresent = () =>
-    existsSync(path.join(home, "lock")) || existsSync(path.join(home, "lock.reclaim"));
+  const lockPresent = () => {
+    if (options.operationLock) {
+      return (
+        !samePath(options.operationLock.path, path.join(home, "lock")) ||
+        !options.operationLock.isHeld()
+      );
+    }
+    return existsSync(path.join(home, "lock")) || existsSync(path.join(home, "lock.reclaim"));
+  };
   const operationAtStart = lockPresent();
   const snapshots = await Promise.all(
-    scan.records.map(async (record) => {
-      const { state } = record;
-      const snapshot: SessionCleanupEvidence = {
-        blockers: [],
-        filePath: record.filePath,
-        members: [],
-        problems: [],
-        rootSourceRoot: state?.rootSourceRoot ?? null,
-        session: state?.session ?? null
-      };
-      if (!state) {
-        snapshot.blockers.push("invalid-state");
-        return snapshot;
-      }
-      if (state.cleanupHold) {
-        snapshot.blockers.push("held");
-      }
-      if (scan.records.some((other) => !other.state && invalidRecordMayOverlap(other, state))) {
-        snapshot.blockers.push("invalid-state-overlap");
-      }
-      try {
-        assertNoOtherStateOwnsSessionRepos(state, states);
-      } catch (error) {
-        snapshot.blockers.push("ownership-conflict");
-        snapshot.problems?.push({
-          code: "ownership-conflict",
-          message: errorMessage(ThrownValueSchema.parse(error))
-        });
-      }
-      snapshot.members = await Promise.all(
-        state.repos.map((repo) =>
-          limit(async () => {
-            const member: SessionCleanupMember = {
-              evidence: null,
-              mode: "unverified",
-              sourceRoot: repo.sourceRoot,
-              worktreePath: repo.worktreePath
-            };
-            try {
-              const registration = inspectSessionRepoRegistration(readOnly, home, state, repo);
-              member.mode = registration.mode;
-              member.registeredBranch = registration.registeredBranch;
-            } catch (error) {
-              snapshot.blockers.push("member-identity-unverified");
-              snapshot.problems?.push({
-                code: "member-identity-unverified",
-                message: errorMessage(ThrownValueSchema.parse(error)),
+    scan.records
+      .filter((record) => !options.sessionFile || record.filePath === options.sessionFile)
+      .map(async (record) => {
+        const { state } = record;
+        const snapshot: SessionCleanupEvidence = {
+          blockers: [],
+          filePath: record.filePath,
+          members: [],
+          problems: [],
+          rootSourceRoot: state?.rootSourceRoot ?? null,
+          session: state?.session ?? null
+        };
+        if (!state) {
+          snapshot.blockers.push("invalid-state");
+          return snapshot;
+        }
+        if (state.cleanupHold) {
+          snapshot.blockers.push("held");
+        }
+        if (scan.records.some((other) => !other.state && invalidRecordMayOverlap(other, state))) {
+          snapshot.blockers.push("invalid-state-overlap");
+        }
+        try {
+          assertNoOtherStateOwnsSessionRepos(state, states);
+        } catch (error) {
+          snapshot.blockers.push("ownership-conflict");
+          snapshot.problems?.push({
+            code: "ownership-conflict",
+            message: errorMessage(ThrownValueSchema.parse(error))
+          });
+        }
+        snapshot.members = await Promise.all(
+          state.repos.map((repo) =>
+            limit(async () => {
+              const member: SessionCleanupMember = {
+                evidence: null,
+                mode: "unverified",
+                sourceRoot: repo.sourceRoot,
                 worktreePath: repo.worktreePath
-              });
-              return member;
-            }
-            if (member.mode === "live") {
-              member.evidence = await collectCleanupEvidence(
-                runtime,
-                {
-                  role: samePath(repo.sourceRoot, state.rootSourceRoot) ? "root" : "dependency",
-                  sourceRoot: repo.sourceRoot,
+              };
+              try {
+                const registration = inspectSessionRepoRegistration(readOnly, home, state, repo);
+                member.mode = registration.mode;
+                member.registeredBranch = registration.registeredBranch;
+              } catch (error) {
+                snapshot.blockers.push("member-identity-unverified");
+                snapshot.problems?.push({
+                  code: "member-identity-unverified",
+                  message: errorMessage(ThrownValueSchema.parse(error)),
                   worktreePath: repo.worktreePath
-                },
-                cache
-              );
-            }
-            return member;
-          })
-        )
-      );
-      return snapshot;
-    })
+                });
+                return member;
+              }
+              if (member.mode === "live") {
+                member.evidence = await collectCleanupEvidence(
+                  runtime,
+                  {
+                    role: samePath(repo.sourceRoot, state.rootSourceRoot) ? "root" : "dependency",
+                    sourceRoot: repo.sourceRoot,
+                    worktreePath: repo.worktreePath
+                  },
+                  cache
+                );
+              }
+              return member;
+            })
+          )
+        );
+        return snapshot;
+      })
   );
 
   // A dependency can change while a later member waits for GitHub. Recheck all
@@ -347,9 +358,18 @@ export async function inspectSessionCleanup(
               }
             : null
         }))
-      }
+      },
+      state:
+        states.find(
+          (state) =>
+            state.session === snapshot.session && state.rootSourceRoot === snapshot.rootSourceRoot
+        ) ?? null
     })),
+    stateFingerprint: scan.fingerprint,
     unavailableSources,
+    unboundedOwnership: scan.records.some(
+      (record) => !record.state && record.references.length === 0
+    ),
     unownedWorktrees
   };
 }
@@ -375,7 +395,7 @@ function blockUnownedOverlaps(
   }
 }
 
-function revalidateSessionMember(
+export function revalidateSessionMember(
   runtime: Runtime,
   readOnly: Runtime,
   home: string,

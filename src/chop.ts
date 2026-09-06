@@ -13,6 +13,8 @@ import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { finalizeSession } from "./session-finalization.ts";
+import { sessionRemovalRank } from "./session-lifecycle-progress.ts";
+import type { SessionAction, SessionLifecycleObserver } from "./session-lifecycle-progress.ts";
 import {
   assertNoOtherStateOwnsSessionRepos,
   inspectSessionRepoRegistration
@@ -56,19 +58,10 @@ interface SessionRepoPreflight {
   repo: SessionRepoState;
 }
 
-interface OrdinaryChopResult {
-  kind: "ordinary";
-  removedInvocation: boolean;
-  sourceRoot: string;
-  worktreePath: string;
-}
-
 interface SessionChopResult {
   kind: "session";
   session: string;
 }
-
-type ChopResult = OrdinaryChopResult | SessionChopResult;
 
 /** Remove one selected Session or Ordinary worktree while preserving local branches. */
 export function runChop(runtime: Runtime, target: string | undefined, options: ChopOptions) {
@@ -80,7 +73,7 @@ export function runChop(runtime: Runtime, target: string | undefined, options: C
     const selected = resolveChopTarget(runtime, home, invocation, target);
 
     if (selected.kind === "session") {
-      return chopSession(runtime, home, invocation.worktreeRoot, selected, options);
+      return teardownSession(runtime, home, invocation.worktreeRoot, selected, options);
     }
 
     const preflight = inspectOrdinaryWorktree(
@@ -243,14 +236,23 @@ function validateSessionChopTarget(home: string, state: SessionState): SessionCh
   };
 }
 
-function chopSession(
+export function teardownSession(
   runtime: Runtime,
   home: string,
   invocationWorktreePath: string,
   target: SessionChopTarget,
-  options: ChopOptions
-): ChopResult {
-  const preflight = preflightSession(runtime, home, target.state, target.allStates, options);
+  options: ChopOptions,
+  observer: SessionLifecycleObserver = {}
+): SessionChopResult {
+  observer.beforeStep?.({ sourceRoot: target.state.rootSourceRoot, step: "revalidation" });
+  const preflight = preflightSession(
+    runtime,
+    home,
+    target.state,
+    target.allStates,
+    options,
+    observer
+  );
   for (const candidate of preflight) {
     warnSessionBranchMismatch(runtime, target.state, candidate);
   }
@@ -261,6 +263,11 @@ function chopSession(
   );
 
   for (const candidate of ordered) {
+    observer.beforeStep?.({
+      sourceRoot: candidate.repo.sourceRoot,
+      step: "revalidation",
+      worktreePath: candidate.repo.worktreePath
+    });
     const current = inspectSessionRepo(runtime, home, target.state, candidate.repo, options);
     if (
       candidate.registeredBranch !== undefined &&
@@ -271,10 +278,19 @@ function chopSession(
         `Session worktree branch/HEAD changed from ${formatWorktreeBranch(candidate.registeredBranch)} to ${formatWorktreeBranch(current.registeredBranch)} at ${current.repo.worktreePath}`
       );
     }
+    observer.revalidateMember?.(candidate.repo);
     if (current.mode !== "gone") {
+      const action: SessionAction = {
+        sourceRoot: current.repo.sourceRoot,
+        step: "worktree-removal",
+        worktreePath: current.repo.worktreePath
+      };
+      observer.beforeStep?.(action);
+      observer.beforeEffect?.(action);
       removeWorktree(runtime, current.repo.sourceRoot, current.repo.worktreePath, {
         force: current.mode === "stale" || current.forceGitRemoval
       });
+      observer.completed?.(action);
     }
     if (samePath(current.repo.worktreePath, invocationWorktreePath)) {
       requestShellDirectoryAfterRemoval(runtime, current.repo.sourceRoot);
@@ -282,7 +298,7 @@ function chopSession(
   }
 
   // Reuse the targeted ownership scan; unrelated invalid state must not block this removal.
-  finalizeSession(runtime, new SessionStateStore(home, target.allStates), target.state);
+  finalizeSession(runtime, new SessionStateStore(home, target.allStates), target.state, observer);
   return {
     kind: "session",
     session: target.state.session
@@ -294,9 +310,10 @@ function preflightSession(
   home: string,
   state: SessionState,
   allStates: SessionState[],
-  options: ChopOptions
+  options: ChopOptions,
+  observer: SessionLifecycleObserver
 ) {
-  const failures: string[] = [];
+  const failures: { message: string; sourceRoot: string }[] = [];
   const sessionChecks = [
     () => {
       assertSessionIdentity(home, state);
@@ -318,7 +335,10 @@ function preflightSession(
     try {
       check();
     } catch (error) {
-      failures.push(errorMessage(ThrownValueSchema.parse(error)));
+      failures.push({
+        message: errorMessage(ThrownValueSchema.parse(error)),
+        sourceRoot: state.rootSourceRoot
+      });
     }
   }
 
@@ -327,14 +347,19 @@ function preflightSession(
     try {
       repos.push(inspectSessionRepo(runtime, home, state, repo, options));
     } catch (error) {
-      failures.push(`${repo.worktreePath}: ${errorMessage(ThrownValueSchema.parse(error))}`);
+      failures.push({
+        message: `${repo.worktreePath}: ${errorMessage(ThrownValueSchema.parse(error))}`,
+        sourceRoot: repo.sourceRoot
+      });
     }
   }
 
-  if (failures.length > 0) {
+  const [failure] = failures;
+  if (failure) {
+    observer.beforeStep?.({ sourceRoot: failure.sourceRoot, step: "revalidation" });
     throw new MonkeError(
       `Cannot Chop Session ${state.session}; preflight failed:\n${failures
-        .map((failure) => `- ${failure}`)
+        .map((problem) => `- ${problem.message}`)
         .join("\n")}`
     );
   }
@@ -453,24 +478,10 @@ function orderSessionRemovals(
   rootSourceRoot: string
 ) {
   return [...repos].toSorted((left, right) => {
-    const leftRank = removalRank(left.repo, invocationWorktreePath, rootSourceRoot);
-    const rightRank = removalRank(right.repo, invocationWorktreePath, rootSourceRoot);
+    const leftRank = sessionRemovalRank(left.repo, invocationWorktreePath, rootSourceRoot);
+    const rightRank = sessionRemovalRank(right.repo, invocationWorktreePath, rootSourceRoot);
     return leftRank - rightRank;
   });
-}
-
-function removalRank(
-  repo: SessionRepoState,
-  invocationWorktreePath: string,
-  rootSourceRoot: string
-) {
-  if (samePath(repo.worktreePath, invocationWorktreePath)) {
-    return 2;
-  }
-  if (samePath(repo.sourceRoot, rootSourceRoot)) {
-    return 1;
-  }
-  return 0;
 }
 
 function findSessionOwner(states: SessionState[], worktreePath: string, sourceRoot?: string) {

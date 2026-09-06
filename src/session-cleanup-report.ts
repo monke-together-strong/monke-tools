@@ -10,6 +10,7 @@ import type {
   SessionCleanupMember,
   SessionCleanupReason
 } from "./session-cleanup-eligibility.ts";
+import type { SessionAction } from "./session-lifecycle-progress.ts";
 
 const messages: Record<SessionCleanupReason, string> = {
   "ambiguous-pr": "More than one merged pull request matches this commit.",
@@ -62,15 +63,21 @@ export interface CleanupCheckReport {
 }
 
 /** Supplied by the executor only after an actual attempt. Reporting performs no effects. */
-export type SessionCleanupExecution =
+export type SessionCleanupExecution = (
   | { outcome: "not-attempted" }
   | { outcome: "cleaned" }
   | {
       message: string;
-      outcome: "failed";
+      outcome: "failed" | "skipped";
       sourceRoot: string;
-      step: "revalidation" | "teardown" | "worktree-removal" | "finalization";
-    };
+      step: SessionAction["step"] | "teardown" | "finalization";
+    }
+) & {
+  attemptedAction?: SessionAction;
+  completedActions?: SessionAction[];
+  remainingActions?: SessionAction[];
+  retryCleanupCommands?: SessionAction[];
+};
 
 const NOT_ATTEMPTED: SessionCleanupExecution = { outcome: "not-attempted" };
 
@@ -162,7 +169,8 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
 /** JSON and text share this projection, including checks skipped by the collector. */
 export function createSessionCleanupReport(
   snapshot: SessionCleanupEvidence,
-  execution: SessionCleanupExecution = NOT_ATTEMPTED
+  execution: SessionCleanupExecution = NOT_ATTEMPTED,
+  options: { dryRun?: boolean; plannedActions?: SessionAction[] } = {}
 ) {
   const eligibility = decideSessionCleanupEligibility(snapshot);
   return {
@@ -172,9 +180,12 @@ export function createSessionCleanupReport(
     outcome:
       execution.outcome === "not-attempted"
         ? eligibility.eligible
-          ? ("eligible" as const)
+          ? options.dryRun
+            ? ("would-clean" as const)
+            : ("eligible" as const)
           : ("skipped" as const)
         : execution.outcome,
+    plannedActions: options.plannedActions ?? [],
     problems: snapshot.problems ?? [],
     reasons: eligibility.reasons.map((code) => ({ code, message: messages[code] })),
     rootSourceRoot: snapshot.rootSourceRoot,
@@ -190,10 +201,11 @@ export function formatSessionCleanupReport(report: ReturnType<typeof createSessi
     cleaned: "Cleaned",
     eligible: "Eligible (not attempted)",
     failed: "Failed",
-    skipped: "Skipped"
+    skipped: "Skipped",
+    "would-clean": "Would clean"
   };
   const lines = [`${labels[report.outcome]}: ${root} / ${label}`];
-  if (report.execution.outcome === "failed") {
+  if (report.execution.outcome === "failed" || report.execution.outcome === "skipped") {
     lines.push(
       `  ${report.execution.step} failed in ${report.execution.sourceRoot}: ${report.execution.message}`
     );
@@ -217,5 +229,32 @@ export function formatSessionCleanupReport(report: ReturnType<typeof createSessi
   if (report.outcome === "failed") {
     lines.push("  Cleanup was attempted and did not complete; earlier steps may have succeeded.");
   }
+  lines.push(...formatProgress(report));
   return `${lines.join("\n")}\n`;
+}
+
+function formatProgress(report: ReturnType<typeof createSessionCleanupReport>) {
+  const lines: string[] = [];
+  for (const action of report.plannedActions) {
+    lines.push(`  Planned: ${formatAction(action)}`);
+  }
+  for (const action of report.execution.completedActions ?? []) {
+    lines.push(`  Completed this attempt: ${formatAction(action)}`);
+  }
+  for (const action of report.execution.remainingActions ?? []) {
+    lines.push(`  Remaining: ${formatAction(action)}`);
+  }
+  if (report.execution.attemptedAction && report.outcome === "failed") {
+    lines.push("  The failed action may have produced effects; its completion is unverified.");
+  }
+  if (report.outcome === "failed" && (report.execution.retryCleanupCommands?.length ?? 0) > 0) {
+    lines.push(
+      "  Retry runs recorded Cleanup commands from the beginning, including earlier successes."
+    );
+  }
+  return lines;
+}
+
+function formatAction(action: SessionAction) {
+  return `${action.step} ${action.sourceRoot}${action.worktreePath ? ` (${action.worktreePath})` : ""}${action.command ? `: ${action.command}` : ""}`;
 }
