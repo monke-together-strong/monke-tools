@@ -20,7 +20,7 @@ import { samePath } from "./path-identity.ts";
 import { getMonkeHome, hashKey, withGlobalLockAsync } from "./runtime.ts";
 import { requestShellDirectory } from "./shell.ts";
 import type { RepoContext, Runtime } from "./types.ts";
-import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
+import { unwrapBoundaryResult, parseOwnedYamlFile } from "./validation.ts";
 import { listLocalWorktreeTargets, resolveLocalWorktreeTarget } from "./worktree-targets.ts";
 
 const SwingHistoryTargetSchema = z.discriminatedUnion("kind", [
@@ -580,7 +580,7 @@ function loadSwingHistory(home: string, rootSourceRoot: string): SwingHistory {
 
 function saveSwingHistory(home: string, rootSourceRoot: string, history: SwingHistory) {
   const filePath = getSwingHistoryFilePath(home, rootSourceRoot);
-  const parsed = parseBoundaryValue(SwingHistorySchema, history, filePath);
+  const parsed = unwrapBoundaryResult(SwingHistorySchema.safeParse(history), filePath);
   mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, stringify(parsed), "utf-8");
 }
@@ -596,5 +596,5 @@ function parseGithubJson<T extends z.ZodType>(output: string, label: string, sch
   } catch {
     throw new MonkeError(`Invalid ${label}: expected JSON output`);
   }
-  return parseBoundaryValue(schema, parsed, label);
+  return unwrapBoundaryResult(schema.safeParse(parsed), label);
 }

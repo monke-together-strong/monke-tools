@@ -27,8 +27,7 @@ export function configureCliParser<T extends ConfigurableCliParser>(program: T) 
 }
 
 /** Render one failure at an executable boundary. */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Executable catch values are untyped at this final reporting boundary.
-export function reportCliFailure(error: unknown) {
+export function reportCliFailure(error: Error | string) {
   if (error instanceof CommanderError && error.exitCode === 0) {
     return;
   }
@@ -37,8 +36,7 @@ export function reportCliFailure(error: unknown) {
   process.exitCode = 1;
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Executable catch values are classified into supported failure shapes here.
-function formatCliFailure(error: unknown) {
+function formatCliFailure(error: Error | string) {
   if (error instanceof z.ZodError) {
     return `error: invalid input\n${z.prettifyError(error)}`;
   }
@@ -52,5 +50,5 @@ function formatCliFailure(error: unknown) {
   if (error instanceof Error) {
     return error.stack ?? `${error.name}: ${error.message}`;
   }
-  return String(error);
+  return error;
 }

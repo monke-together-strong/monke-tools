@@ -17,8 +17,8 @@ import path from "node:path";
 import { parseDocument } from "yaml";
 import * as z from "zod";
 
-import { errorMessage, MonkeError } from "../src/errors.ts";
-import { parseBoundaryValue } from "../src/validation.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
+import { unwrapBoundaryResult } from "../src/validation.ts";
 import type { SkillImportRecipeSkill } from "./import-skills.ts";
 
 export const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
@@ -115,13 +115,13 @@ export function copyStagedGuidanceToManagedRoots(
           move(backupPath, targetPath);
         }
       } catch (recoveryError) {
-        failures.push(`${targetPath}: ${errorMessage(recoveryError)}`);
+        failures.push(`${targetPath}: ${errorMessage(ThrownValueSchema.parse(recoveryError))}`);
       }
     }
     if (failures.length > 0) {
       retainRecovery = true;
       throw new MonkeError(
-        `${errorMessage(error)}\nGuidance restoration failed:\n${failures.join("\n")}\nRecovery copies retained at ${backupRoot}`,
+        `${errorMessage(ThrownValueSchema.parse(error))}\nGuidance restoration failed:\n${failures.join("\n")}\nRecovery copies retained at ${backupRoot}`,
         { cause: error }
       );
     }
@@ -156,7 +156,10 @@ function transformPreparedSkillInvocationPolicy(
     frontmatterMatch.groups?.frontmatter ?? "",
     frontmatterLabel
   );
-  parseBoundaryValue(SkillInvocationFrontmatterSchema, frontmatter.toJS(), frontmatterLabel);
+  unwrapBoundaryResult(
+    SkillInvocationFrontmatterSchema.safeParse(frontmatter.toJS()),
+    frontmatterLabel
+  );
   frontmatter.set("disable-model-invocation", disableModelInvocation);
   writeFileSync(
     skillEntryPath,
@@ -193,7 +196,10 @@ function transformPreparedSkillInvocationPolicy(
       : "policy:\n  allow_implicit_invocation: false\n",
     openaiMetadataLabel
   );
-  parseBoundaryValue(CodexSkillMetadataSchema, openaiMetadata.toJS(), openaiMetadataLabel);
+  unwrapBoundaryResult(
+    CodexSkillMetadataSchema.safeParse(openaiMetadata.toJS()),
+    openaiMetadataLabel
+  );
   openaiMetadata.setIn(["policy", "allow_implicit_invocation"], !disableModelInvocation);
   mkdirSync(agentsPath, { recursive: true });
   writeFileSync(openaiMetadataPath, openaiMetadata.toString(), "utf-8");

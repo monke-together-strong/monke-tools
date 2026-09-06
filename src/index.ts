@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-
-import "zod/compile";
 import { Argument, Command, Option } from "@commander-js/extra-typings";
+import "zod/compile";
 
 import { runChop } from "./chop.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runDiffInteractive } from "./diff.ts";
+import { ThrownValueSchema } from "./errors.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
 import {
   expectedReleaseIdentityFromEnvironment,
@@ -223,6 +223,14 @@ function explicitSkillTargets(
   return { builtInTargetKinds, customTargetPath };
 }
 
+async function main() {
+  try {
+    await runCliAsync(Bun.argv.slice(2));
+  } catch (error) {
+    reportCliFailure(ThrownValueSchema.parse(error));
+  }
+}
+
 if (import.meta.main) {
-  runCliAsync(Bun.argv.slice(2)).catch(reportCliFailure);
+  void main();
 }

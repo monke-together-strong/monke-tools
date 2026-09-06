@@ -18,7 +18,7 @@ import path from "node:path";
 import { number, strictObject } from "zod";
 
 import { reconcileCodiff, MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
-import { errorMessage, MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { runInstallSkillsLocked, runReleaseInstallSkillsLocked } from "./guidance-installation.ts";
 import {
   INSTALL_MANIFEST_FILENAME,
@@ -49,7 +49,7 @@ import { runShellInstall } from "./shell.ts";
 import { preflightInstallGuidance } from "./skills.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import type { Runtime } from "./types.ts";
-import { parseBoundaryValue } from "./validation.ts";
+import { unwrapBoundaryResult } from "./validation.ts";
 
 const InstallationLockMetadataSchema = strictObject({
   acquiredAt: number().int().nonnegative(),
@@ -275,9 +275,8 @@ export async function runActivateLocalInstall(
     resolveManagedDirectory(stagedInstall, "Staged Local tool install");
     assertExecutableFile(path.join(stagedInstall, "mt"), "Staged mt executable");
 
-    const manifest = parseBoundaryValue(
-      LocalInstallManifestSchema,
-      {
+    const manifest = unwrapBoundaryResult(
+      LocalInstallManifestSchema.safeParse({
         createdAt: options.createdAt,
         createdBy: "bun run install:local",
         installId: options.installId,
@@ -289,7 +288,7 @@ export async function runActivateLocalInstall(
         sourceCommit: options.sourceCommit,
         sourceDirty: options.dirty,
         toolBuildIdentity: runtime.toolBuildIdentity
-      },
+      }),
       "Local Install manifest"
     );
     if (path.basename(stagedInstall) !== manifest.installId) {
@@ -352,21 +351,21 @@ async function finishInstallActivation(
     });
   } catch (error) {
     failures.push(
-      `Shell integration is incomplete. Retry with: mt shell install\n${errorMessage(error)}`
+      `Shell integration is incomplete. Retry with: mt shell install\n${errorMessage(ThrownValueSchema.parse(error))}`
     );
   }
   try {
     await options.reconcileGuidance();
   } catch (error) {
     failures.push(
-      `Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(error)}`
+      `Skill or Global agent instruction reconciliation is incomplete. Retry with: mt skills configure\n${errorMessage(ThrownValueSchema.parse(error))}`
     );
   }
   try {
     reconcileCodiff(runtime, options.minimumCodiffVersion);
   } catch (error) {
     failures.push(
-      `Codiff reconciliation failed. Retry with: mt install-dependencies\n${errorMessage(error)}`
+      `Codiff reconciliation failed. Retry with: mt install-dependencies\n${errorMessage(ThrownValueSchema.parse(error))}`
     );
   }
   if (failures.length > 0) {
@@ -555,9 +554,8 @@ function assertInheritedInstallationLock(monkeHome: string) {
   } catch {
     throw new MonkeError(`Inherited installation lock is invalid: ${lockPath}`);
   }
-  const metadata = parseBoundaryValue(
-    InstallationLockMetadataSchema,
-    value,
+  const metadata = unwrapBoundaryResult(
+    InstallationLockMetadataSchema.safeParse(value),
     "inherited installation lock"
   );
   if (metadata.pid !== process.pid && metadata.pid !== process.ppid) {

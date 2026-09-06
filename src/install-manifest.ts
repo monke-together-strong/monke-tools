@@ -16,7 +16,7 @@ import type { output } from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { assertDirectChildPath, resolveManagedDirectory } from "./path-boundary.ts";
-import { parseBoundaryValue } from "./validation.ts";
+import { unwrapBoundaryResult } from "./validation.ts";
 
 export const INSTALL_MANIFEST_FILENAME = "install-manifest.json";
 
@@ -125,7 +125,10 @@ export function loadToolInstall(installRoot: string) {
   }
   return {
     installRoot: path.resolve(installRoot),
-    manifest: parseBoundaryValue(ToolInstallManifestSchema, value, "Tool Install manifest")
+    manifest: unwrapBoundaryResult(
+      ToolInstallManifestSchema.safeParse(value),
+      "Tool Install manifest"
+    )
   };
 }
 

@@ -360,28 +360,25 @@ function readResourceCommandRunnerOutput(options: {
     });
   }
 
-  return envelope.data.value;
+  const value = ResourceCommandReturnSchema.safeParse(envelope.data.value);
+  if (!value.success) {
+    throw resourceCommandFailure({
+      command: options.command,
+      kind: "return contract violation",
+      stderr: options.stderr,
+      stdout: options.stdout
+    });
+  }
+  return value.data;
 }
 
 function validateResourceCommandReturn(
   command: ResourceCommandConfig,
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The command runner return crosses a process boundary and is parsed immediately below.
-  returned: unknown,
+  value: z.output<typeof ResourceCommandReturnSchema>,
   stdout: string,
   stderr: string,
   stdin: ResourceCommandInput
 ) {
-  const parsed = ResourceCommandReturnSchema.safeParse(returned);
-  if (!parsed.success) {
-    throw resourceCommandFailure({
-      command,
-      kind: "return contract violation",
-      stderr,
-      stdout
-    });
-  }
-
-  const value = parsed.data;
   const expected = new Set(command.outputs);
   const actual = Object.keys(value);
   const missing = command.outputs.filter((output) => !(output in value));

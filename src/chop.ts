@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
-import { errorMessage, MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import {
   branchExists,
   describeSessionBranchMismatch,
@@ -314,7 +314,7 @@ function preflightSession(
     try {
       check();
     } catch (error) {
-      failures.push(errorMessage(error));
+      failures.push(errorMessage(ThrownValueSchema.parse(error)));
     }
   }
 
@@ -323,7 +323,7 @@ function preflightSession(
     try {
       repos.push(inspectSessionRepo(runtime, home, state, repo, options));
     } catch (error) {
-      failures.push(`${repo.worktreePath}: ${errorMessage(error)}`);
+      failures.push(`${repo.worktreePath}: ${errorMessage(ThrownValueSchema.parse(error))}`);
     }
   }
 

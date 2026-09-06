@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { validate } from "zod";
 
-import { errorMessage, MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import {
   FullCommitSchema,
   loadActiveToolInstall,
@@ -29,7 +29,7 @@ import { findChangedReleaseGuidancePaths } from "./release-guidance.ts";
 import { getMonkeHome } from "./runtime.ts";
 import { sha256File } from "./sha256.ts";
 import type { Runtime } from "./types.ts";
-import { parseBoundaryValue } from "./validation.ts";
+import { unwrapBoundaryResult } from "./validation.ts";
 
 const MAX_RELEASE_PAGES = 10_000;
 const RELEASE_ASSET_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
@@ -138,9 +138,8 @@ function assertSelectedReleaseContract(
   selected: Awaited<ReturnType<typeof selectLatestStableRelease>>,
   platform: ReleaseInstallManifest["platform"]
 ) {
-  parseBoundaryValue(
-    FullCommitSchema,
-    selected.release.target_commitish,
+  unwrapBoundaryResult(
+    FullCommitSchema.safeParse(selected.release.target_commitish),
     "Selected Release source commit"
   );
   const archiveName = releaseArchiveName(selected.version, platform);
@@ -197,7 +196,9 @@ async function downloadAndActivate(
         expectedVersion: version
       });
     } catch (error) {
-      throw new MonkeError(`Release archive verification failed: ${errorMessage(error)}`);
+      throw new MonkeError(
+        `Release archive verification failed: ${errorMessage(ThrownValueSchema.parse(error))}`
+      );
     }
 
     const bundleRoot = path.join(updateRoot, `bundle-${crypto.randomUUID()}`);

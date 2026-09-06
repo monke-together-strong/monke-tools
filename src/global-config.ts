@@ -4,7 +4,7 @@ import path from "node:path";
 import { stringify } from "yaml";
 import * as z from "zod";
 
-import { parseBoundaryValue, parseOwnedYamlFile } from "./validation.ts";
+import { unwrapBoundaryResult, parseOwnedYamlFile } from "./validation.ts";
 
 const BuiltInSkillInstallTargetKindSchema = z.enum(["codex", "claude", "cursor"]);
 const AbsolutePathSchema = z
@@ -68,7 +68,7 @@ export function loadGlobalMonkeConfig(home: string): GlobalMonkeConfig {
 /** Save versioned Global monke config to `config.yml` under the monke home directory. */
 export function saveGlobalMonkeConfig(home: string, config: GlobalMonkeConfig) {
   const configPath = getGlobalConfigPath(home);
-  const parsed = parseBoundaryValue(GlobalMonkeConfigSchema, config, configPath);
+  const parsed = unwrapBoundaryResult(GlobalMonkeConfigSchema.safeParse(config), configPath);
   mkdirSync(home, { recursive: true });
   writeFileSync(configPath, stringify(parsed), "utf-8");
 }

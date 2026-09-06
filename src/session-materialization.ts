@@ -3,7 +3,7 @@ import { ok, fail } from "node:assert/strict";
 import pLimit from "p-limit";
 import type { LimitFunction } from "p-limit";
 
-import { errorMessage, MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import type { SessionStateStore } from "./session-state-store.ts";
 import type { SessionMaterializationCheckpoint, SessionRepoState, SessionState } from "./types.ts";
 
@@ -88,7 +88,7 @@ export async function runSessionMaterialization<TPrepared, TResult>(
         } catch (error) {
           owner.replaceRepo(
             transitionRepo(owner.repo(node.sourceRoot), {
-              message: errorMessage(error),
+              message: errorMessage(ThrownValueSchema.parse(error)),
               phase: "preparation-failed",
               reused: reusableRoots.has(node.sourceRoot)
             }),
@@ -211,7 +211,7 @@ async function materializeAfterPrerequisites<TPrepared, TResult>(options: {
     } catch (error) {
       options.owner.replaceRepo(
         transitionRepo(options.owner.repo(options.node.sourceRoot), {
-          message: errorMessage(error),
+          message: errorMessage(ThrownValueSchema.parse(error)),
           phase: "materialization-failed"
         }),
         "repo-result"

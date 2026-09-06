@@ -2,7 +2,7 @@ import { existsSync, realpathSync } from "node:fs";
 
 import * as z from "zod";
 
-import { errorMessage } from "./errors.ts";
+import { errorMessage, ThrownValueSchema } from "./errors.ts";
 import { resolveDefaultBranchRef } from "./git.ts";
 import type { ExecResult, Runtime } from "./types.ts";
 
@@ -413,7 +413,7 @@ function getDefaultBranch(
     };
   } catch (error) {
     return {
-      error: `unable to resolve default branch: ${errorMessage(error)}`,
+      error: `unable to resolve default branch: ${errorMessage(ThrownValueSchema.parse(error))}`,
       ok: false
     };
   }
@@ -440,7 +440,10 @@ function getGithubRepositoryFullName(
 
     return { ok: true, value: parsed.data.nameWithOwner };
   } catch (error) {
-    return { error: `GitHub repository lookup failed: ${errorMessage(error)}`, ok: false };
+    return {
+      error: `GitHub repository lookup failed: ${errorMessage(ThrownValueSchema.parse(error))}`,
+      ok: false
+    };
   }
 }
 
@@ -483,16 +486,22 @@ function queryMergedPrs(
       return { error: "GitHub merged PR lookup did not return a list", ok: false };
     }
 
-    return { ok: true, value: parsed.map(normalizeMergedPrMatch) };
+    return {
+      ok: true,
+      value: parsed.map((value) => {
+        const match = MergedPrInputSchema.safeParse(value);
+        return normalizeMergedPrMatch(match.success ? match.data : {});
+      })
+    };
   } catch (error) {
-    return { error: `GitHub merged PR lookup failed: ${errorMessage(error)}`, ok: false };
+    return {
+      error: `GitHub merged PR lookup failed: ${errorMessage(ThrownValueSchema.parse(error))}`,
+      ok: false
+    };
   }
 }
 
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Each item comes from an external GitHub response and is parsed immediately below.
-function normalizeMergedPrMatch(value: unknown) {
-  const parsed = MergedPrInputSchema.safeParse(value);
-  const record = parsed.success ? parsed.data : {};
+function normalizeMergedPrMatch(record: z.output<typeof MergedPrInputSchema>) {
   return {
     baseRefName: record.baseRefName ?? "",
     headRefName: record.headRefName ?? "",
@@ -538,7 +547,7 @@ function tryGit(
     }
     return { ok: true, value: result.stdout.trim() };
   } catch (error) {
-    return { error: errorMessage(error), ok: false };
+    return { error: errorMessage(ThrownValueSchema.parse(error)), ok: false };
   }
 }
 

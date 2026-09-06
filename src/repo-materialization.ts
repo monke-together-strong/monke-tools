@@ -5,7 +5,7 @@ import {
   rewriteManagedEnvFiles,
   syncRootEnvFileWithRemovals
 } from "./env.ts";
-import { errorMessage, MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { createLogger } from "./logger.ts";
 import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
 import {
@@ -530,7 +530,7 @@ async function runBootstrapCommand(
       ])
     });
   } catch (error) {
-    const detail = errorMessage(error);
+    const detail = errorMessage(ThrownValueSchema.parse(error));
     throw new MonkeError(
       `Bootstrap command failed for ${repoConfig.sourceRoot}: ${repoConfig.bootstrapCommand}\n${detail}\nPartial Session state was kept; fix the command and re-run ${retryCommand} to resume from this repo.`
     );

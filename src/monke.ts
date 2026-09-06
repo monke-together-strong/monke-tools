@@ -11,7 +11,7 @@ import { openCodexWorkspace } from "./codex.ts";
 import { reconcileCodiff } from "./codiff.ts";
 import { loadResolvedGraph } from "./config.ts";
 import { syncRootEnvFileWithRemovals, seedWorktreeFiles } from "./env.ts";
-import { errorMessage, MonkeError } from "./errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import {
   assertCleanCheckoutForSessionBranchCreation,
   assertFreshSessionWorktreeAvailable,
@@ -1293,7 +1293,7 @@ function removeDeadSessionStates(
       removed += 1;
     } catch (error) {
       failures.push({
-        detail: errorMessage(error),
+        detail: errorMessage(ThrownValueSchema.parse(error)),
         session: state.session,
         stateFile: getSessionStateFilePath(home, state.rootSourceRoot, state.session)
       });
@@ -1402,7 +1402,7 @@ function prepareRepoWorktree(runtime: Runtime, repoConfig: RepoConfig, worktreeP
     });
   } catch (error) {
     throw new MonkeError(
-      `Worktree preparation failed for ${repoConfig.sourceRoot} in ${worktreePath}\n${errorMessage(error)}`,
+      `Worktree preparation failed for ${repoConfig.sourceRoot} in ${worktreePath}\n${errorMessage(ThrownValueSchema.parse(error))}`,
       { cause: error }
     );
   }
