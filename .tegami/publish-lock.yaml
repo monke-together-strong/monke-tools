@@ -1,12 +1,20 @@
 core:changelogs:
-  - content: "---\nsubject: Enable anti-slop validation\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: patch\n---\n\n## Broader shared validation\n\nCompose Ultracite's anti-slop preset into the shared Oxlint configuration so consumers catch type\nwidening, unsafe boundary handling, and unsupported type assertions alongside the existing core and\nVitest rules. Upgrade Ultracite to 7.10.4.\n"
-    filename: 2026-08-14-anti-slop-validation.md
+  - content: "---\nsubject: Update Ultracite and required Oxc versions\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: minor\n---\n\n## Update Ultracite and required Oxc versions\n\nUpgrade Ultracite from 7.10.4 to 7.10.8 so consumers inherit its updated core, anti-slop, Vitest, and formatting presets. Require Oxlint ^1.79.0 and Oxfmt ^0.64.0 to support the updated rules and configuration types. Existing shared rule overrides remain in place.\n"
+    filename: 2026-09-05-update-ultracite.md
+    v: 0.0.0
+  - content: "---\nsubject: Disable noisy conditional empty object spread rule\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: patch\n---\n\n## Allow conditional optional fields\n\nDisable `anti-slop/no-conditional-empty-object-spread` so idiomatic conditional optional fields no longer produce lint errors.\n"
+    filename: 2026-09-06-disable-conditional-empty-spread.md
+    v: 0.0.0
+  - content: "---\nsubject: Format first-party skill code\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: patch\n---\n\n## Format first-party skill code\n\nThe shared formatter now checks first-party code and metadata under `skills/`. Imported skills, imported references, and skill Markdown remain excluded so upstream assets and authored instructions retain their formatting.\n"
+    filename: 2026-09-04-format-owned-skill-code.md
     v: 0.0.0
 core:packages:
   - id: npm:monke-tools
     updated: false
   - changelogIds:
-      - 2026-08-14-anti-slop-validation.md
+      - 2026-09-05-update-ultracite.md
+      - 2026-09-06-disable-conditional-empty-spread.md
+      - 2026-09-04-format-owned-skill-code.md
     id: npm:@monke-together-strong/oxc-config
     updated: true
 npm:packages:
