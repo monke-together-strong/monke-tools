@@ -4,13 +4,15 @@ import type { SessionRepoState, SessionState } from "./types.ts";
 export interface SessionAction {
   command?: string;
   sourceRoot: string;
-  step: "revalidation" | "worktree-removal" | "cleanup-command" | "state-removal";
+  step: "revalidation" | "process-stop" | "worktree-removal" | "cleanup-command" | "state-removal";
   worktreePath?: string;
 }
 
 /** Effects are attempted only after beforeEffect returns; completion means the call succeeded. */
 export interface SessionLifecycleObserver {
   beforeEffect?: (action: SessionAction) => void;
+  /** Runs after revalidation and before removal; may stop processes or throw to retain the member. */
+  beforeRemoval?: (repo: SessionRepoState) => void;
   beforeStep?: (action: SessionAction) => void;
   completed?: (action: SessionAction) => void;
   revalidateMember?: (repo: SessionRepoState) => void;

@@ -18,6 +18,12 @@ import type { SessionAction } from "./session-lifecycle-progress.ts";
 import { inspectSessionRepoRegistration } from "./session-safety.ts";
 import { scanSessionStates } from "./session-state-store.ts";
 import type { Runtime, SessionState } from "./types.ts";
+import {
+  describeTree,
+  scanWorktreeProcesses,
+  stopStaleWorktreeProcesses
+} from "./worktree-processes.ts";
+import type { WorktreeProcessScan } from "./worktree-processes.ts";
 
 class GlobalCleanupError extends MonkeError {
   constructor(message: string) {
@@ -51,7 +57,9 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
       await withGlobalLockAsync(home, async (lock) => {
         inventory = await inspectSessionCleanup(runtime, home, [], { operationLock: lock });
         assertGlobalSafety(lock, inventory);
-        await executeInventory(runtime, home, lock, inventory, sessions);
+        // One process-table pass for the whole run; members index it before removal.
+        const processes = scanWorktreeProcesses(runtime, home);
+        await executeInventory(runtime, home, lock, inventory, sessions, processes);
       });
     }
   } catch (error) {
@@ -111,7 +119,8 @@ async function executeInventory(
   home: string,
   lock: OperationLock,
   inventory: Inventory,
-  sessions: SessionReport[]
+  sessions: SessionReport[],
+  processes: WorktreeProcessScan
 ) {
   for (const original of inventory.sessions) {
     // Earlier Cleanup commands may change later Sessions, Git refs, or provider evidence.
@@ -137,7 +146,7 @@ async function executeInventory(
       sessions.push(reportSession(row, { outcome: "not-attempted" }, false, runtime.cwd));
       continue;
     }
-    const result = executeSession(runtime, home, lock, fresh, row);
+    const result = executeSession(runtime, home, lock, fresh, row, processes);
     sessions.push(result.report);
     if (result.globalFailure) {
       throw new GlobalCleanupError(result.globalFailure);
@@ -275,7 +284,8 @@ function executeSession(
   home: string,
   lock: OperationLock,
   inventory: Inventory,
-  row: Inventory["sessions"][number]
+  row: Inventory["sessions"][number],
+  processes: WorktreeProcessScan
 ) {
   const { snapshot } = row;
   const { state } = row;
@@ -322,6 +332,47 @@ function executeSession(
           }
           started = true;
           attemptedAction = action;
+        },
+        beforeRemoval(repo) {
+          const action: SessionAction = {
+            sourceRoot: repo.sourceRoot,
+            step: "process-stop",
+            worktreePath: repo.worktreePath
+          };
+          current = action;
+          attemptedAction = undefined;
+          if (processes.treesUnder(repo.worktreePath).length === 0) {
+            return;
+          }
+          guard();
+          const outcome = stopStaleWorktreeProcesses(runtime, processes, repo.worktreePath, {
+            beforeKill() {
+              started = true;
+              attemptedAction = action;
+            }
+          });
+          for (const tree of outcome.killed) {
+            runtime.writeStderr(
+              `Stopped stale process in ${repo.worktreePath}: ${describeTree(tree)}\n`
+            );
+          }
+          for (const tree of outcome.bystanders) {
+            runtime.writeStderr(
+              `Left running; not attached to ${repo.worktreePath}: ${describeTree(tree)}\n`
+            );
+          }
+          if (outcome.killed.length > 0) {
+            completedActions.push({
+              ...action,
+              command: outcome.killed.map(describeTree).join("; ")
+            });
+          }
+          attemptedAction = undefined;
+          if (outcome.recent.length > 0) {
+            throw new MonkeError(
+              `Worktree ${repo.worktreePath} is in use: ${outcome.recent.map(describeTree).join("; ")}. Processes under a day old are never stopped.`
+            );
+          }
         },
         beforeStep(action) {
           current = action;

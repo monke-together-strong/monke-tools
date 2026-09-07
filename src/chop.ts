@@ -280,6 +280,7 @@ export function teardownSession(
     }
     observer.revalidateMember?.(candidate.repo);
     if (current.mode !== "gone") {
+      observer.beforeRemoval?.(candidate.repo);
       const action: SessionAction = {
         sourceRoot: current.repo.sourceRoot,
         step: "worktree-removal",
