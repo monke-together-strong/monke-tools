@@ -32,7 +32,8 @@ const AuditCaseSchema = z.object({
         status: z.enum(["eligible", "ineligible", "unknown"])
       })
       .nullable(),
-    repository: CleanupRepositoryEvidenceSchema.nullable()
+    repository: CleanupRepositoryEvidenceSchema.nullable(),
+    worktreeAgeMs: z.number().nullable().optional()
   })
 });
 

@@ -143,7 +143,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -310,7 +311,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -477,7 +479,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -685,7 +688,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -769,7 +773,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -811,7 +816,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -832,7 +838,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -853,7 +860,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -874,7 +882,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -1000,7 +1009,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -1335,7 +1345,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -1356,7 +1367,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
@@ -1586,7 +1598,8 @@
         "defaultHead": "0000000000000000000000000000000000000005",
         "name": "example/repository-1",
         "pullRequests": []
-      }
+      },
+      "worktreeAgeMs": 604800000
     }
   },
   {
