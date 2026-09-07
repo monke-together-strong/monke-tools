@@ -51,9 +51,9 @@ Use the listed default unless an exception applies. Completion requires one of t
 
 ## Data And Utilities
 
-- `zod`: Use for runtime validation and typed parsing of untrusted config, persisted state, manifests, subprocess output, requests, and API data instead of casts or custom structural validators.
-- `@sindresorhus/is`: Use for reusable runtime type guards and assertions over unknown values, especially shallow checks at data boundaries. Keep full payload validation in `zod` and domain-specific predicates local.
-- `type-fest`: Use for reusable type-only utilities instead of maintaining custom mapped or conditional type aliases. Import its types directly and prefer built-in TypeScript utility types when they already express the intent.
-- `ts-extras`: Use for strongly typed standard-library helpers, nullish guards, and exhaustive assertions when they improve inference or remove casts, such as `objectKeys`, `objectEntries`, `arrayIncludes`, and `assertNever`.
+- `zod`: Use for runtime validation and typed parsing of untrusted config, persisted state, manifests, subprocess output, requests, and API data instead of casts or custom structural validators. Derive input and output types from schemas.
+- `@sindresorhus/is`: Use for runtime type predicates and assertion functions that narrow values and check common invariants. Keep full payload validation in `zod` and domain-specific predicates local.
+- `type-fest`: Use its common data types and type utilities before defining custom equivalents, including recursive types and mapped or conditional types. Prefer built-in TypeScript utilities when they already express the intent. Import types directly.
+- `ts-extras`: Use for strongly typed standard-library helpers, property and collection narrowing, nullish guards, and exhaustiveness checks when they improve inference or remove casts, such as `objectKeys`, `objectEntries`, `objectHasOwn`, `arrayIncludes`, and `assertNever`.
 - `date-fns`: Use for date arithmetic, formatting, parsing, comparison, and small date utilities.
 - `es-toolkit`: Use for general-purpose JavaScript utility helpers when the standard library would make the implementation noisy.
