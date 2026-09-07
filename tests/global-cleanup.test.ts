@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -15,7 +16,7 @@ import * as z from "zod";
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { runCliAsync } from "../src/index.ts";
 import { saveSessionState, getSessionStateFilePath } from "../src/session-state-store.ts";
-import type { SessionState } from "../src/types.ts";
+import type { Runtime, SessionState } from "../src/types.ts";
 import { ageWorktree, createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
@@ -33,6 +34,7 @@ const ReportSchema = z.object({
       execution: z.object({
         attemptedAction: ActionSchema.optional(),
         completedActions: z.array(ActionSchema).optional(),
+        message: z.string().optional(),
         outcome: z.string(),
         remainingActions: z.array(ActionSchema).optional(),
         retryCleanupCommands: z.array(ActionSchema).optional(),
@@ -51,6 +53,8 @@ const ReportSchema = z.object({
   unownedWorktrees: z.array(z.unknown())
 });
 const sandboxes: string[] = [];
+const children: number[] = [];
+const host = createTestRuntime();
 function sandbox() {
   mkdirSync("tmp", { recursive: true });
   const directory = mkdtempSync(path.resolve("tmp/global-cleanup-"));
@@ -60,6 +64,13 @@ function sandbox() {
 
 describe("global Session cleanup", () => {
   afterEach(() => {
+    for (const pid of children.splice(0)) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }
     for (const directory of sandboxes.splice(0)) {
       rmSync(directory, { force: true, recursive: true });
     }
@@ -315,6 +326,129 @@ describe("global Session cleanup", () => {
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
     }
+  }, 30_000);
+
+  /** A long-lived child inside the worktree. `attached` puts the worktree path in its argv. */
+  function processIn(worktreePath: string, attached: boolean) {
+    const child = spawn(
+      "sh",
+      ["-c", "trap '' TERM; while :; do sleep 1; done", ...(attached ? [worktreePath] : [])],
+      { cwd: worktreePath, detached: true, stdio: "ignore" }
+    );
+    child.unref();
+    const { pid } = child;
+    if (pid === undefined) {
+      throw new Error("Missing child pid");
+    }
+    children.push(pid);
+    return pid;
+  }
+
+  /** Report the child as `days` old to Cleanup's process scan without waiting. */
+  function ageProcess(runtime: Runtime, pid: number, days: number) {
+    const original = runtime.exec;
+    const started = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const stamp = `${started.toDateString().slice(0, 3)} ${started.toDateString().slice(4, 7)} ${String(started.getDate()).padStart(2, " ")} ${started.toTimeString().slice(0, 8)} ${started.getFullYear()}`;
+    runtime.exec = (command, args, options) => {
+      const result = original(command, args, options);
+      if (command !== "ps") {
+        return result;
+      }
+      const stdout = result.stdout
+        .split("\n")
+        .map((line) =>
+          new RegExp(`^\\s*${pid}\\s`, "u").test(line)
+            ? line.replace(/\S+ \S+\s+\d+ \d\d:\d\d:\d\d \d{4}/u, stamp)
+            : line
+        )
+        .join("\n");
+      return { ...result, stdout };
+    };
+  }
+
+  /**
+   * A killed child stays a zombie until this test process reaps it, so check the state, not the
+   * signal.
+   */
+  function alive(pid: number) {
+    const stat = host.exec("ps", ["-o", "stat=", "-p", String(pid)], { allowFailure: true });
+    const state = stat.stdout.trim();
+    return state.length > 0 && !state.startsWith("Z");
+  }
+
+  test("a day-old attached process tree is stopped before removal and reported", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/served");
+    const [dependency] = state.repos;
+    if (!dependency) {
+      throw new Error("Missing dependency");
+    }
+    const pid = processIn(dependency.worktreePath, true);
+    ageProcess(f.runtime, pid, 2);
+    const descendants = host
+      .exec("pgrep", ["-P", String(pid)], { allowFailure: true })
+      .stdout.split("\n")
+      .filter(Boolean)
+      .map(Number);
+    expect(descendants.length).toBeGreaterThan(0);
+    const result = await f.run();
+    expect(result.error).toBeUndefined();
+    for (const member of [pid, ...descendants]) {
+      expect(alive(member), `pid ${member} should be stopped`).toBeFalsy();
+    }
+    expect(result.report.sessions[0]).toMatchObject({ outcome: "cleaned" });
+    expect(result.report.sessions[0]?.execution.completedActions?.[0]).toMatchObject({
+      sourceRoot: dependency.sourceRoot,
+      step: "process-stop"
+    });
+    expect(existsSync(dependency.worktreePath)).toBeFalsy();
+  }, 30_000);
+
+  test.each([
+    { attached: true, label: "attached" },
+    { attached: false, label: "unattached" }
+  ])(
+    "a recent $label process retains the Session before any effect",
+    async ({ attached }) => {
+      const f = fixture();
+      const state = f.addSession("feature/busy");
+      const [dependency] = state.repos;
+      if (!dependency) {
+        throw new Error("Missing dependency");
+      }
+      const pid = processIn(dependency.worktreePath, attached);
+      const result = await f.run();
+      expect(alive(pid)).toBeTruthy();
+      expect(result.report.sessions[0]).toMatchObject({
+        execution: { outcome: "skipped", step: "process-stop" },
+        outcome: "skipped"
+      });
+      expect(result.report.sessions[0]?.execution.message).toContain("is in use");
+      for (const repo of state.repos) {
+        expect(existsSync(repo.worktreePath)).toBeTruthy();
+      }
+      expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeTruthy();
+    },
+    30_000
+  );
+
+  test("an old process merely inside the worktree is left running and does not block", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/visited");
+    const [dependency] = state.repos;
+    if (!dependency) {
+      throw new Error("Missing dependency");
+    }
+    const pid = processIn(dependency.worktreePath, false);
+    ageProcess(f.runtime, pid, 30);
+    const result = await f.run();
+    expect(result.error).toBeUndefined();
+    expect(alive(pid)).toBeTruthy();
+    expect(result.report.sessions[0]).toMatchObject({ outcome: "cleaned" });
+    expect(result.report.sessions[0]?.execution.completedActions?.[0]?.step).not.toBe(
+      "process-stop"
+    );
+    expect(existsSync(dependency.worktreePath)).toBeFalsy();
   }, 30_000);
 
   test("removal failure reports completed work, retains state, and retries the remaining worktree", async () => {

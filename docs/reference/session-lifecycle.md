@@ -201,8 +201,8 @@ another member already blocks the Session. Stale registrations retain their
 branch identity for that comparison.
 
 Inspection reports eligible (not attempted) or skipped. A later executor can supply
-an actual cleaned or failed result; failure names revalidation, teardown,
-worktree-removal, or finalization and the affected repo. Failed execution does not
+an actual cleaned or failed result; failure names revalidation, process-stop,
+teardown, worktree-removal, or finalization and the affected repo. Failed execution does not
 claim the whole Session was retained: earlier steps may already have succeeded.
 This reporting contract does not execute teardown or authorize removal.
 
@@ -222,6 +222,18 @@ worktrees. Report all preflight failures together and remove nothing on failure.
 Revalidate each worktree immediately before removing it; on failure, stop later
 removals and retain state for retry. Remove the invoking worktree last if it
 belongs to the Session, otherwise the Root repo worktree last.
+
+Cleanup scans the process table once per run for processes whose working
+directory is inside the managed worktree area, grouped into trees by parent. A
+tree is attached when any member's command line names a path inside that
+worktree, and is as old as its oldest member. Before removing a member, an
+attached tree at least one day old, the same threshold as ancestry-only proof,
+is stopped: roots first with SIGTERM, then SIGKILL after a short grace. Any
+tree under a day old, attached or not, skips the Session with the process list,
+since it may be an agent mid-task. An old tree that never named the worktree,
+such as an idle shell, is left running and reported; removal proceeds.
+Stops are reported as completed process-stop actions. Chop does not stop
+processes.
 
 Treat a recorded missing path as already removed only when its path and Source
 identity are valid, no live worktree carries the Session branch elsewhere, and
