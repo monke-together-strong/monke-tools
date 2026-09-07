@@ -8,12 +8,37 @@ import type { Runtime } from "./types.ts";
 /** A live process whose working directory is inside a managed worktree. */
 export interface WorktreeProcess {
   ageMs: number;
-  /** True when the executable or an argument lives inside the worktree, not just the cwd. */
+  /** True when the command line names a path inside the worktree, not just the cwd. */
   attached: boolean;
   command: string;
   cwd: string;
   pid: number;
   ppid: number;
+  /** `ps lstart`, kept verbatim so identity can be rechecked before signaling. */
+  started: string;
+}
+
+const PS_LINE =
+  /^\s*(?<pid>\d+)\s+(?<ppid>\d+)\s+(?<started>\S+ \S+\s+\d+ \d\d:\d\d:\d\d \d{4})\s+(?<command>.*)$/u;
+
+/** One `ps` record. `lstart` must parse; a silent zero age would wrongly hold a stale process. */
+function parsePsLine(line: string) {
+  const match = PS_LINE.exec(line);
+  if (!match?.groups) {
+    return null;
+  }
+  const started = match.groups.started ?? "";
+  const startedAt = Date.parse(started);
+  if (Number.isNaN(startedAt)) {
+    throw new MonkeError(`Unreadable process start time in ps output: ${line.trim()}`);
+  }
+  return {
+    command: match.groups.command ?? "",
+    pid: Number(match.groups.pid),
+    ppid: Number(match.groups.ppid),
+    started,
+    startedAt
+  };
 }
 
 /** Processes with a common ancestor inside the worktree; a supervisor and what it spawned. */
@@ -60,26 +85,19 @@ export function scanWorktreeProcesses(runtime: Runtime, home: string): WorktreeP
       allowFailure: true
     });
     for (const line of ps.stdout.split("\n")) {
-      const match =
-        /^\s*(?<pid>\d+)\s+(?<ppid>\d+)\s+(?<start>\S+ \S+\s+\d+ \d\d:\d\d:\d\d \d{4})\s+(?<command>.*)$/u.exec(
-          line
-        );
-      if (!match?.groups) {
+      const record = parsePsLine(line);
+      const cwd = record === null ? undefined : cwdByPid.get(record.pid);
+      if (record === null || cwd === undefined) {
         continue;
       }
-      const id = Number(match.groups.pid);
-      const cwd = cwdByPid.get(id);
-      if (cwd === undefined) {
-        continue;
-      }
-      const started = Date.parse(match.groups.start ?? "");
       processes.push({
-        ageMs: Number.isNaN(started) ? 0 : Math.max(0, scannedAt - started),
+        ageMs: Math.max(0, scannedAt - record.startedAt),
         attached: false,
-        command: match.groups.command ?? "",
+        command: record.command,
         cwd,
-        pid: id,
-        ppid: Number(match.groups.ppid)
+        pid: record.pid,
+        ppid: record.ppid,
+        started: record.started
       });
     }
   }
@@ -97,9 +115,18 @@ export function scanWorktreeProcesses(runtime: Runtime, home: string): WorktreeP
   };
 }
 
-/** A shell that merely `cd`ed into a worktree is not attached; a server started from it is. */
+/**
+ * A shell that merely `cd`ed into a worktree is not attached; a server started from it is. `ps`
+ * prints arguments unquoted, so match the path as a substring rather than by token.
+ */
 function commandReferences(command: string, worktreePath: string) {
-  return command.split(/\s+/u).some((word) => containsPath(worktreePath, word));
+  const normalized = path.normalize(worktreePath);
+  const index = command.indexOf(normalized);
+  if (index === -1) {
+    return false;
+  }
+  const next = command[index + normalized.length];
+  return next === undefined || next === path.sep || /\s/u.test(next);
 }
 
 function groupTrees(processes: WorktreeProcess[]): WorktreeProcessTree[] {
@@ -154,7 +181,8 @@ export function stopStaleWorktreeProcesses(
   const members = stale.flatMap((tree) => tree.members);
   const roots = stale.flatMap((tree) => tree.roots);
   for (const signal of ["TERM", "KILL"] as const) {
-    const targets = signal === "TERM" ? roots : survivors(runtime, members);
+    // A pid can be reused between the scan and now; only signal the process the scan saw.
+    const targets = survivors(runtime, signal === "TERM" ? roots : members);
     if (targets.length === 0) {
       break;
     }
@@ -177,24 +205,33 @@ export function stopStaleWorktreeProcesses(
   return { bystanders, killed: stale, recent };
 }
 
-/** A zombie still answers `kill -0` until its parent reaps it; it holds no directory. */
+/**
+ * The scanned processes that are still the same processes: same pid and start time, not a zombie. A
+ * zombie answers `kill -0` until reaped but holds no directory; a reused pid has a different start
+ * time.
+ */
 function survivors(runtime: Runtime, processes: WorktreeProcess[]) {
   if (processes.length === 0) {
     return [];
   }
   const states = runtime.exec(
     "ps",
-    ["-o", "pid=,stat=", "-p", processes.map((candidate) => String(candidate.pid)).join(",")],
+    [
+      "-o",
+      "pid=,stat=,lstart=",
+      "-p",
+      processes.map((candidate) => String(candidate.pid)).join(",")
+    ],
     { allowFailure: true }
   );
-  const alive = new Set<number>();
+  const live = new Map<number, string>();
   for (const line of states.stdout.split("\n")) {
-    const match = /^\s*(?<pid>\d+)\s+(?<stat>\S+)/u.exec(line);
+    const match = /^\s*(?<pid>\d+)\s+(?<stat>\S+)\s+(?<started>.+?)\s*$/u.exec(line);
     if (match?.groups && !match.groups.stat?.startsWith("Z")) {
-      alive.add(Number(match.groups.pid));
+      live.set(Number(match.groups.pid), match.groups.started ?? "");
     }
   }
-  return processes.filter((candidate) => alive.has(candidate.pid));
+  return processes.filter((candidate) => live.get(candidate.pid) === candidate.started);
 }
 
 export function describeTree(tree: WorktreeProcessTree) {

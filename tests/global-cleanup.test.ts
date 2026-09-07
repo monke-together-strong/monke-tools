@@ -385,9 +385,17 @@ describe("global Session cleanup", () => {
     }
     const pid = processIn(dependency.worktreePath, true);
     ageProcess(f.runtime, pid, 2);
+    const descendants = host
+      .exec("pgrep", ["-P", String(pid)], { allowFailure: true })
+      .stdout.split("\n")
+      .filter(Boolean)
+      .map(Number);
+    expect(descendants.length).toBeGreaterThan(0);
     const result = await f.run();
     expect(result.error).toBeUndefined();
-    expect(alive(pid)).toBeFalsy();
+    for (const member of [pid, ...descendants]) {
+      expect(alive(member), `pid ${member} should be stopped`).toBeFalsy();
+    }
     expect(result.report.sessions[0]).toMatchObject({ outcome: "cleaned" });
     expect(result.report.sessions[0]?.execution.completedActions?.[0]).toMatchObject({
       sourceRoot: dependency.sourceRoot,
