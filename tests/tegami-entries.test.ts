@@ -14,7 +14,11 @@ function tegamiPackages() {
   return new Set([...block.matchAll(/"(?<name>[^"]+)":/gu)].map((match) => match.groups?.name));
 }
 
-const FrontmatterSchema = z.object({ packages: z.record(z.string(), z.unknown()) });
+const FrontmatterSchema = z.object({
+  packages: z
+    .record(z.string(), z.unknown())
+    .refine((packages) => Object.keys(packages).length > 0, "an entry must name a package")
+});
 
 describe("Tegami release entries", () => {
   const published = tegamiPackages();
@@ -28,7 +32,7 @@ describe("Tegami release entries", () => {
 
   test.each(entries)("%s names only packages Tegami publishes", (entry) => {
     const text = readFileSync(path.join(repositoryRoot, ".tegami", entry), "utf-8");
-    const frontmatter = /^---\n(?<yaml>[\s\S]*?)\n---/u.exec(text)?.groups?.yaml;
+    const frontmatter = /^---\n(?<yaml>[\s\S]*?)\n---(?:\n|$)/u.exec(text)?.groups?.yaml;
     expect(frontmatter, "missing frontmatter").toBeDefined();
     const { packages } = FrontmatterSchema.parse(parse(frontmatter ?? ""));
     for (const name of Object.keys(packages)) {
