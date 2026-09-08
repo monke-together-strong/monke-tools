@@ -52,45 +52,60 @@ function fixture(): SessionCleanupEvidence {
 }
 
 describe("Session cleanup explanations", () => {
-  test("reports cross-branch merged-head proof while a dirty sibling still retains the Session", () => {
-    const snapshot = fixture();
-    const [dependency, root] = snapshot.members;
-    ok(dependency?.evidence && root?.evidence?.repository, "Missing fixture members");
-    root.evidence.ancestorOfDefault = false;
-    root.evidence.repository.pullRequests = [];
-    root.evidence.commitPullRequests = [
-      {
-        ancestorOfDefault: true,
-        pullRequest: {
-          base: { ref: "main", repo: { full_name: "owner/root" } },
-          head: { ref: "feature/merged-name", repo: { full_name: "owner/root" }, sha: head },
-          html_url: "https://github.com/owner/root/pull/2",
-          merge_commit_sha: "b".repeat(40),
-          merged_at: "2026-09-06T00:00:00Z",
-          number: 2,
-          state: "closed"
+  test.each(["merged-pr-head", "matching-merged-diff"] as const)(
+    "reports %s proof while a dirty sibling still retains the Session",
+    (code) => {
+      const snapshot = fixture();
+      const [dependency, root] = snapshot.members;
+      ok(dependency?.evidence && root?.evidence?.repository, "Missing fixture members");
+      root.evidence.ancestorOfDefault = false;
+      root.evidence.repository.pullRequests = [];
+      root.evidence.commitPullRequests = [
+        {
+          ancestorOfDefault: true,
+          matchingDiff:
+            code === "matching-merged-diff"
+              ? {
+                  changeHash: "d".repeat(64),
+                  mergeBase: "c".repeat(40),
+                  mergeParent: "e".repeat(40)
+                }
+              : undefined,
+          pullRequest: {
+            base: { ref: "main", repo: { full_name: "owner/root" } },
+            head: {
+              ref: "feature/merged-name",
+              repo: { full_name: "owner/root" },
+              sha: code === "matching-merged-diff" ? "f".repeat(40) : head
+            },
+            html_url: "https://github.com/owner/root/pull/2",
+            merge_commit_sha: "b".repeat(40),
+            merged_at: "2026-09-06T00:00:00Z",
+            number: 2,
+            state: "closed"
+          }
         }
-      }
-    ];
-    dependency.evidence.localBlock = {
-      code: "dirty-worktree",
-      eligible: false,
-      evidence: [" M work.txt"],
-      status: "ineligible"
-    };
-    const report = createSessionCleanupReport(snapshot);
-    expect(report.eligibility.eligible).toBeFalsy();
-    expect(report.members[1]?.checks.committedWork).toMatchObject({
-      code: "merged-pr-head",
-      status: "passed"
-    });
-    expect(formatSessionCleanupReport(report)).toContain("feature/merged-name -> main");
-    root.evidence.commitPullRequests = null;
-    expect(createSessionCleanupReport(snapshot).members[1]?.checks.committedWork).toMatchObject({
-      code: "commit-pr-unavailable",
-      status: "unknown"
-    });
-  });
+      ];
+      dependency.evidence.localBlock = {
+        code: "dirty-worktree",
+        eligible: false,
+        evidence: [" M work.txt"],
+        status: "ineligible"
+      };
+      const report = createSessionCleanupReport(snapshot);
+      expect(report.eligibility.eligible).toBeFalsy();
+      expect(report.members[1]?.checks.committedWork).toMatchObject({
+        code,
+        status: "passed"
+      });
+      expect(formatSessionCleanupReport(report)).toContain("feature/merged-name -> main");
+      root.evidence.commitPullRequests = null;
+      expect(createSessionCleanupReport(snapshot).members[1]?.checks.committedWork).toMatchObject({
+        code: "commit-pr-unavailable",
+        status: "unknown"
+      });
+    }
+  );
 
   test("a dirty dependency names its path and distinguishes skipped PR checks from passing Root proof", () => {
     const snapshot = fixture();

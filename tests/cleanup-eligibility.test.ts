@@ -1,3 +1,4 @@
+import { ok } from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 
@@ -287,6 +288,9 @@ describe("cleanup evidence from real Git worktrees", () => {
     switch (kind) {
       case "intermediate": {
         pr.head.sha = OTHER_HEAD;
+        write(fixture.candidate.sourceRoot, "feature.txt", "changed before merge\n");
+        git(fixture.candidate.sourceRoot, ["commit", "-am", "superseded feature"]);
+        pr.merge_commit_sha = git(fixture.candidate.sourceRoot, ["rev-parse", "HEAD"]);
         break;
       }
       case "fork": {
@@ -395,6 +399,109 @@ describe("cleanup evidence from real Git worktrees", () => {
       eligible: false
     });
   });
+
+  test.each([1, 3])(
+    "matches the complete change of %s rebased commits without relying on PR HEAD equality",
+    async (commits) => {
+      const fixture = createCommitPrFixture(commits);
+      fixture.commitPr.head.sha = OTHER_HEAD;
+      const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
+      expect(decideCleanupEligibility(snapshot)).toMatchObject({
+        code: "matching-merged-diff",
+        eligible: true
+      });
+      const diff = snapshot.commitPullRequests?.[0]?.matchingDiff;
+      ok(
+        diff !== undefined && diff !== null && diff !== false,
+        "Expected a matching complete diff"
+      );
+      expect(diff.changeHash).toMatch(/^[\da-f]{64}$/u);
+      snapshot.worktreeAgeMs = RECENT_WORKTREE_MS - 1;
+      expect(decideCleanupEligibility(snapshot).code).toBe("recent-worktree");
+      snapshot.worktreeAgeMs = null;
+      expect(decideCleanupEligibility(snapshot)).toMatchObject({
+        code: "recent-worktree",
+        status: "unknown"
+      });
+      snapshot.worktreeAgeMs = RECENT_WORKTREE_MS;
+      snapshot.localBlock = {
+        code: "dirty-worktree",
+        eligible: false,
+        evidence: ["?? new.txt"],
+        status: "ineligible"
+      };
+      expect(decideCleanupEligibility(snapshot).code).toBe("dirty-worktree");
+    }
+  );
+
+  test.each(["missing-object", "ambiguous", "changed-head", "open-branch", "wrong-base"] as const)(
+    "complete-change proof still rejects %s",
+    async (kind) => {
+      const fixture = createCommitPrFixture();
+      fixture.commitPr.head.sha = OTHER_HEAD;
+      const original = fixture.runtime.execAsync;
+      fixture.runtime.execAsync = async (command, args, options) => {
+        if (args?.[1]?.includes("/commits/")) {
+          if (kind === "missing-object") {
+            fixture.commitPr.merge_commit_sha = OTHER_HEAD;
+          }
+          if (kind === "wrong-base") {
+            fixture.commitPr.base.ref = "release";
+          }
+          if (kind === "ambiguous") {
+            return {
+              exitCode: 0,
+              stderr: "",
+              stdout: JSON.stringify([[fixture.commitPr, { ...fixture.commitPr, number: 2 }]])
+            };
+          }
+          if (kind === "changed-head") {
+            write(fixture.candidate.worktreePath, "new.txt", "new unique work\n");
+            git(fixture.candidate.worktreePath, ["add", "."]);
+            git(fixture.candidate.worktreePath, ["commit", "-m", "new work"]);
+          }
+        }
+        if (kind === "missing-object" && args?.[1]?.includes("/compare/")) {
+          return {
+            exitCode: 0,
+            stderr: "",
+            stdout: JSON.stringify({
+              behind_by: 0,
+              merge_base_commit: { sha: OTHER_HEAD },
+              status: "ahead"
+            })
+          };
+        }
+        if (kind === "open-branch" && args?.[1]?.includes("/pulls?state=")) {
+          return {
+            exitCode: 0,
+            stderr: "",
+            stdout: JSON.stringify([
+              [
+                {
+                  ...fixture.commitPr,
+                  head: { ...fixture.commitPr.head, ref: BRANCH },
+                  merged_at: null,
+                  state: "open"
+                }
+              ]
+            ])
+          };
+        }
+        return await original(command, args, options);
+      };
+      const codes = {
+        ambiguous: "ambiguous-pr",
+        "changed-head": "changed-during-inspection",
+        "missing-object": "diff-unavailable",
+        "open-branch": "open-pr",
+        "wrong-base": "no-merged-pr"
+      };
+      expect(
+        decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
+      ).toMatchObject({ code: codes[kind], eligible: false });
+    }
+  );
 
   test("verifies a missing local merge commit through remote comparison without fetching", async () => {
     const fixture = createCommitPrFixture();
@@ -734,12 +841,17 @@ function withPrs(pullRequests: CleanupRepositoryEvidence["pullRequests"]) {
   return snapshot;
 }
 
-function createCommitPrFixture() {
+function createCommitPrFixture(commits = 1) {
   const fixture = createFixture();
   const { sourceRoot, worktreePath } = fixture.candidate;
   write(worktreePath, "feature.txt", "work merged under a different branch\n");
   git(worktreePath, ["add", "."]);
   git(worktreePath, ["commit", "-m", "feature"]);
+  for (let index = 1; index < commits; index += 1) {
+    write(worktreePath, `part-${index}.txt`, `part ${index}\n`);
+    git(worktreePath, ["add", "."]);
+    git(worktreePath, ["commit", "-m", `part ${index}`]);
+  }
   const head = git(worktreePath, ["rev-parse", "HEAD"]);
   git(sourceRoot, ["merge", "--squash", BRANCH]);
   git(sourceRoot, ["commit", "-m", "squashed feature"]);

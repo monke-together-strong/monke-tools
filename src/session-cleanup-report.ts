@@ -22,6 +22,7 @@ const messages: Record<SessionCleanupReason, string> = {
     "Pull requests associated with the current commit could not be verified.",
   "default-branch": "The worktree is on the repository's default branch.",
   "detached-head": "The worktree is not attached to a branch.",
+  "diff-unavailable": "The complete branch change could not be compared with the landed merge.",
   "dirty-worktree":
     "The worktree has staged, modified, or untracked files, including submodule changes.",
   "exact-merged-pr": "The current commit matches an exact merged pull request in this repository.",
@@ -33,6 +34,8 @@ const messages: Record<SessionCleanupReason, string> = {
   "invalid-state": "The retained Session state is invalid or cannot be read.",
   "invalid-state-overlap": "Invalid Session state may claim the same worktrees.",
   "local-evidence-unavailable": "Git could not establish the local branch, commit, or cleanliness.",
+  "matching-merged-diff":
+    "The complete branch change exactly matches a merged PR's change in the default branch.",
   "member-changed-during-inspection": "A member changed after inspection; inspect again.",
   "member-identity-unverified":
     "A member's Source checkout, recorded path, or registration could not be verified.",
@@ -51,7 +54,7 @@ const messages: Record<SessionCleanupReason, string> = {
   "ownership-conflict":
     "Session ownership conflicts with another record or an overlapping registered worktree; remove the wrong Session state file from Monke home, then rerun Cleanup.",
   "recent-worktree":
-    "Ancestry or a merged PR under another branch provides completion evidence, but the worktree must have a verified age of at least one day.",
+    "Ancestry or matching merged work provides completion evidence, but the worktree must have a verified age of at least one day.",
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
   "repository-unavailable": "The repository or its default branch could not be verified.",
   "source-checkout": "Source checkouts cannot be removed.",

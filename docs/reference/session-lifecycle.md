@@ -122,9 +122,16 @@ verified default branch, so it holds no unique work. If neither proves completio
 Cleanup queries GitHub's commit-associated PRs. A PR under another branch counts
 only when its HEAD exactly equals the member's HEAD, both PR repositories match
 the Source remote, its base is the verified default branch, and its merge commit
-remains an ancestor of the verified default HEAD. Intermediate commits in a merged
-PR do not qualify. An open PR on the member's current branch still blocks Cleanup.
-Ancestry and cross-branch PR proof require the worktree to be at least one day old, measured from its `.git`
+remains an ancestor of the verified default HEAD. Association with an intermediate
+commit alone does not qualify. A rebased or amended HEAD can instead qualify when
+its complete change from its sole merge base with the default branch exactly
+matches the associated PR merge's change from its first parent. This comparison
+requires nonempty deltas with identical paths, full before/after object IDs and
+file modes. It rejects divergent merge commits and does not normalize whitespace
+or ignore binary/submodule changes. Shallow history or missing Git objects cannot
+provide this proof; Cleanup does not fetch them.
+An open PR on the member's current branch still blocks Cleanup.
+Ancestry, cross-branch HEAD and complete-diff proof require the worktree to be at least one day old, measured from its `.git`
 file, so a Session spawned from the default branch is not removed before work
 starts. Every proof requires a clean worktree first; uncommitted or untracked
 files always block. A branch GitHub has never seen cannot be inside its default
@@ -132,7 +139,7 @@ branch, so a compare 404 on an unpushed commit counts as not an ancestor. A memb
 unique commits and no qualifying merged PR is ineligible, not unknown: the
 provider answered, so the skip is settled and does not mark inspection as
 failed. Actual member branch names can differ from the Session name.
-Commit-PR lookup or ancestry failures remain unknown. Repeated commit lookups share
+Commit-PR lookup, ancestry or complete-diff inspection failures remain unknown. Repeated commit lookups share
 one inspection's cache, keyed by Source, repository, HEAD, and verified default HEAD;
 local identity and cleanliness are rechecked after provider reads.
 

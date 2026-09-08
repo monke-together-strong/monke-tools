@@ -3,6 +3,8 @@ import path from "node:path";
 
 import * as z from "zod";
 
+import { inspectMatchingMergeDiff } from "./cleanup-diff-evidence.ts";
+import type { MatchingMergeDiff } from "./cleanup-diff-evidence.ts";
 import { samePath } from "./path-identity.ts";
 import type { ExecResult, Runtime } from "./types.ts";
 import {
@@ -65,6 +67,8 @@ export const CleanupCodeSchema = z.enum([
   "repository-changed-during-inspection",
   "exact-merged-pr",
   "merged-pr-head",
+  "matching-merged-diff",
+  "diff-unavailable",
   "unchanged-branch"
 ]);
 
@@ -82,7 +86,7 @@ export interface CleanupEvidence {
   ancestorOfDefault: boolean | null;
   branch: string | null;
   candidate: CleanupCandidate;
-  /** Exact HEAD matches from commit-associated PRs; null means the lookup failed. */
+  /** Qualifying merged commit-associated PRs; null means the lookup failed. */
   commitPullRequests?: CommitPullRequestEvidence[] | null;
   /** Absent only in older saved evidence; absence is not proof a check ran. */
   committedWorkAttempted?: boolean;
@@ -95,6 +99,8 @@ export interface CleanupEvidence {
 
 export interface CommitPullRequestEvidence {
   ancestorOfDefault: boolean | null;
+  /** Only attempted for non-exact heads with a verified landed merge. */
+  matchingDiff?: MatchingMergeDiff | false | null;
   pullRequest: z.output<typeof CommitPullRequestSchema>;
 }
 
@@ -173,22 +179,24 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   // above already rejected any uncommitted change. A freshly spawned Session
   // looks the same, so this proof alone waits a day.
   if (snapshot.ancestorOfDefault) {
-    if (snapshot.worktreeAgeMs === undefined || snapshot.worktreeAgeMs === null) {
-      return decision("unknown", "recent-worktree");
-    }
-    if (snapshot.worktreeAgeMs < RECENT_WORKTREE_MS) {
-      return decision("ineligible", "recent-worktree");
+    const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+    if (ageBlock) {
+      return ageBlock;
     }
     return decision("eligible", "unchanged-branch", [
       "registered linked worktree; clean including submodules and untracked files",
       `${head} is an ancestor of verified ${repository.name}:${repository.defaultBranch} at ${repository.defaultHead}`,
-      `worktree created ${Math.floor(snapshot.worktreeAgeMs / RECENT_WORKTREE_MS)} day(s) ago`,
+      "worktree is at least one day old",
       "member proof only; whole-Session eligibility is still required"
     ]);
   }
   const commitDecision = decideCommitPullRequests(snapshot, repository, head);
   if (commitDecision) {
     return commitDecision;
+  }
+  const diffDecision = decideMatchingDiff(snapshot, repository);
+  if (diffDecision) {
+    return diffDecision;
   }
   if (branchPrs.some((pr) => !pr.merged_at && pr.head.sha === head)) {
     return decision("ineligible", "closed-unmerged-pr");
@@ -212,8 +220,8 @@ function decideCommitPullRequests(
     return decision("unknown", "commit-pr-unavailable");
   }
   const matches =
-    snapshot.commitPullRequests?.filter(({ pullRequest: pr }) =>
-      isExactMergedHead(pr, repository, head)
+    snapshot.commitPullRequests?.filter(
+      ({ pullRequest: pr }) => isMergedToDefault(pr, repository) && pr.head.sha === head
     ) ?? [];
   if (matches.length > 1) {
     return decision("unknown", "ambiguous-pr");
@@ -225,11 +233,9 @@ function decideCommitPullRequests(
   if (match.ancestorOfDefault === null) {
     return decision("unknown", "ancestry-unavailable");
   }
-  if (snapshot.worktreeAgeMs === undefined || snapshot.worktreeAgeMs === null) {
-    return decision("unknown", "recent-worktree");
-  }
-  if (snapshot.worktreeAgeMs < RECENT_WORKTREE_MS) {
-    return decision("ineligible", "recent-worktree");
+  const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+  if (ageBlock) {
+    return ageBlock;
   }
   const pr = match.pullRequest;
   return decision("eligible", "merged-pr-head", [
@@ -237,18 +243,67 @@ function decideCommitPullRequests(
     `${repository.name}#${pr.number}: ${pr.head.ref} -> ${repository.defaultBranch}`,
     `HEAD equals merged PR head: ${head}`,
     `merge commit ${pr.merge_commit_sha} is an ancestor of verified default HEAD ${repository.defaultHead}`,
-    `worktree created ${Math.floor(snapshot.worktreeAgeMs / RECENT_WORKTREE_MS)} day(s) ago`,
+    "worktree is at least one day old",
     "member proof only; whole-Session eligibility is still required"
   ]);
 }
 
-function isExactMergedHead(
+function decideMatchingDiff(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence
+): CleanupDecision | null {
+  const candidates =
+    snapshot.commitPullRequests?.filter(({ pullRequest }) =>
+      isMergedToDefault(pullRequest, repository)
+    ) ?? [];
+  const matches = candidates.filter(
+    (pr) => pr.ancestorOfDefault === true && Boolean(pr.matchingDiff)
+  );
+  if (matches.length > 1) {
+    return decision("unknown", "ambiguous-pr");
+  }
+  const [match] = matches;
+  if (
+    !match ||
+    match.matchingDiff === undefined ||
+    match.matchingDiff === null ||
+    match.matchingDiff === false
+  ) {
+    if (candidates.some((pr) => pr.ancestorOfDefault === null)) {
+      return decision("unknown", "ancestry-unavailable");
+    }
+    return candidates.some((pr) => pr.matchingDiff === null)
+      ? decision("unknown", "diff-unavailable")
+      : null;
+  }
+  const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+  if (ageBlock) {
+    return ageBlock;
+  }
+  const { matchingDiff: diff, pullRequest: pr } = match;
+  return decision("eligible", "matching-merged-diff", [
+    "registered linked worktree; clean including submodules and untracked files",
+    `${repository.name}#${pr.number}: ${pr.head.ref} -> ${repository.defaultBranch}`,
+    `complete change ${diff.mergeBase}..${snapshot.head} exactly matches ${diff.mergeParent}..${pr.merge_commit_sha}`,
+    `all paths, file modes and full before/after object IDs match; change SHA-256: ${diff.changeHash}`,
+    `merge commit ${pr.merge_commit_sha} is an ancestor of verified default HEAD ${repository.defaultHead}`,
+    "no divergent merge commits; worktree is at least one day old",
+    "member proof only; whole-Session eligibility is still required"
+  ]);
+}
+
+function recentWorktreeDecision(ageMs: number | null | undefined): CleanupDecision | null {
+  if (ageMs === undefined || ageMs === null) {
+    return decision("unknown", "recent-worktree");
+  }
+  return ageMs < RECENT_WORKTREE_MS ? decision("ineligible", "recent-worktree") : null;
+}
+
+function isMergedToDefault(
   pr: z.output<typeof CommitPullRequestSchema>,
-  repository: CleanupRepositoryEvidence,
-  head: string
+  repository: CleanupRepositoryEvidence
 ) {
   return (
-    pr.head.sha === head &&
     pr.head.repo?.full_name === repository.name &&
     pr.state === "closed" &&
     pr.merged_at !== null &&
@@ -632,15 +687,25 @@ async function inspectCommitPullRequests(
       .array(z.array(CommitPullRequestSchema))
       .parse(pages)
       .flat()
-      .filter((pr) => isExactMergedHead(pr, repository, head));
+      .filter((pr) => isMergedToDefault(pr, repository));
     return await Promise.all(
-      matches.map(async (pr) => ({
-        ancestorOfDefault:
+      matches.map(async (pr) => {
+        const ancestorOfDefault =
           pr.merge_commit_sha === null
             ? null
-            : await inspectAncestry(runtime, sourceRoot, pr.merge_commit_sha, repository),
-        pullRequest: pr
-      }))
+            : await inspectAncestry(runtime, sourceRoot, pr.merge_commit_sha, repository);
+        const matchingDiff =
+          ancestorOfDefault === true && pr.head.sha !== head && pr.merge_commit_sha !== null
+            ? inspectMatchingMergeDiff(
+                runtime,
+                sourceRoot,
+                head,
+                repository.defaultHead,
+                pr.merge_commit_sha
+              )
+            : undefined;
+        return { ancestorOfDefault, matchingDiff, pullRequest: pr };
+      })
     );
   } catch (error) {
     // The repository was verified above; an unpushed commit has no associated PRs.
