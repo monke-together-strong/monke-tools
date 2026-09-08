@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 import { isNonEmptyString } from "@sindresorhus/is";
+import sanitizeHtml from "sanitize-html";
 
 import { readPrManifest } from "./pr-analysis.ts";
 import type { PrAnalysisManifest, PrWorkItemSummary } from "./pr-analysis.ts";
@@ -308,29 +309,33 @@ export function buildReportArtifacts(
 export function renderReportHtml(markdown: string) {
   const navigation: string[] = [];
   const ids = new Set<string>();
-  const body = Bun.markdown
-    .html(markdown)
-    .replaceAll(
-      /<h(?<level>[1-6])>(?<label>.*?)<\/h\k<level>>/gsu,
-      (_heading, level: string, label: string) => {
-        const base = label
-          .replaceAll(/<[^>]*>/gu, "")
-          .toLowerCase()
-          .replaceAll(/[^a-z0-9]+/gu, "-")
-          .replaceAll(/^-|-$/gu, "");
-        let id = base;
-        let suffix = 1;
-        while (ids.has(id)) {
-          id = `${base}-${suffix}`;
-          suffix += 1;
-        }
-        ids.add(id);
-        if (level === "3" || level === "4") {
-          navigation.push(`<li><a href="#${id}">${label}</a></li>`);
-        }
-        return `<h${level} id="${id}">${label}</h${level}>`;
+  const sanitized = sanitizeHtml(Bun.markdown.html(markdown), {
+    allowedAttributes: { a: ["href", "title"], code: ["class"] },
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedTags: [...sanitizeHtml.defaults.allowedTags, "details", "summary"],
+    allowProtocolRelative: false
+  });
+  const body = sanitized.replaceAll(
+    /<h(?<level>[1-6])>(?<label>.*?)<\/h\k<level>>/gsu,
+    (_heading, level: string, label: string) => {
+      const base = label
+        .replaceAll(/<[^>]*>/gu, "")
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9]+/gu, "-")
+        .replaceAll(/^-|-$/gu, "");
+      let id = base;
+      let suffix = 1;
+      while (ids.has(id)) {
+        id = `${base}-${suffix}`;
+        suffix += 1;
       }
-    );
+      ids.add(id);
+      if (level === "3" || level === "4") {
+        navigation.push(`<li><a href="#${id}">${label}</a></li>`);
+      }
+      return `<h${level} id="${id}">${label}</h${level}>`;
+    }
+  );
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent session retrospective</title>
@@ -512,9 +517,11 @@ export function validateSynthesis(content: string | null | undefined) {
     if (!isNonEmptyString(section)) {
       continue;
     }
-    for (const match of section.matchAll(/^####\s+(?<id>A\d+)\b/gmu)) {
-      const id = match.groups?.id;
+    for (const match of section.matchAll(/^####\s+(?<title>.+)$/gmu)) {
+      const title = match.groups?.title ?? "";
+      const id = /^(?<id>A[1-9]\d*) — \S.*$/u.exec(title)?.groups?.id;
       if (!id) {
+        warnings.push(`Candidate heading \`${title}\` must use \`A<number> — <problem>\`.`);
         continue;
       }
       if (actionIds.has(id)) {

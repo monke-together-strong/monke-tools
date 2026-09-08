@@ -830,6 +830,10 @@ describe("agent session retrospective", () => {
       ].join("\n");
 
       expect(validateSynthesis(synthesis)).toStrictEqual([]);
+      expect(validateSynthesis(synthesis.replace("#### A1", "#### B1"))).toContain(
+        "Candidate heading `B1 — Reviews can approve the wrong tree` must use `A<number> — <problem>`."
+      );
+
       expect(
         validateSynthesis(synthesis.replace("Done when: Delivered code matches reviewed code.", ""))
       ).toContain(
@@ -872,6 +876,24 @@ describe("agent session retrospective", () => {
     expect(html).toContain("<p>Problem: A &lt; B.</p>");
     expect(html).toContain("<p>Done when: Verified.</p>");
     expect(html).toContain("<details><summary>Audit for A1</summary>");
+  });
+
+  test("removes executable report content while retaining audit disclosure and safe links", () => {
+    const html = renderReportHtml(
+      [
+        '<script>alert("report")</script>',
+        '<h4 onclick="alert(1)">A1 — <a href="javascript:alert(2)">Unsafe heading</a></h4>',
+        '<img src="x" onerror="alert(3)">',
+        '<details ontoggle="alert(4)"><summary>Audit</summary>Evidence</details>',
+        "[Unsafe URL](javascript:alert%285%29)",
+        "[Source](report-session-sources.md#evidence-repo-e1)",
+        "[PR](https://github.com/example/repo/pull/1)"
+      ].join("\n\n")
+    );
+    expect(html).not.toMatch(/<script|onclick=|onerror=|ontoggle=|javascript:/u);
+    expect(html).toContain("<details><summary>Audit</summary>Evidence</details>");
+    expect(html).toContain('href="report-session-sources.md#evidence-repo-e1"');
+    expect(html).toContain('href="https://github.com/example/repo/pull/1"');
   });
 
   describe(buildReportArtifacts, () => {
