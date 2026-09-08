@@ -510,6 +510,31 @@ describe("global Session cleanup", () => {
     );
   }, 30_000);
 
+  test("cleanup runs in each Session worktree before removing any member", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/cleanup-cwd");
+    const log = path.join(f.cwd, "cleanup-cwd.log");
+    const requireWorktrees = state.repos
+      .map((repo) => `test -d '${repo.worktreePath}'`)
+      .join(" && ");
+    saveSessionState(f.home, {
+      ...state,
+      repos: state.repos.map((repo) => ({
+        ...repo,
+        cleanupCommand: `${requireWorktrees} && printf '%s\\n' "$PWD" >> '${log}'`
+      }))
+    });
+    const result = await f.run();
+    expect(result.error).toBeUndefined();
+    expect(readFileSync(log, "utf-8").trim().split("\n")).toStrictEqual(
+      [...state.repos].toReversed().map((repo) => repo.worktreePath)
+    );
+    for (const repo of state.repos) {
+      expect(existsSync(repo.worktreePath)).toBeFalsy();
+    }
+    expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeFalsy();
+  }, 30_000);
+
   test("Cleanup commands rerun from the beginning after failure while independent Sessions continue", async () => {
     const f = fixture();
     const state = f.addSession("feature/retry");
@@ -534,6 +559,9 @@ describe("global Session cleanup", () => {
       outcome: "failed"
     });
     expect(failed?.execution.retryCleanupCommands).toHaveLength(2);
+    for (const repo of state.repos) {
+      expect(existsSync(repo.worktreePath)).toBeTruthy();
+    }
     expect(result.report.sessions.find((row) => row.session === independent.session)?.outcome).toBe(
       "cleaned"
     );

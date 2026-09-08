@@ -6,7 +6,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Session state store**: The module that owns **Session state** for one operation: opened under the global lock, it scans retained session states once, serves cross-session queries, and persists repo checkpoints.
 
-**Session finalization**: The targeted lifecycle step that runs a Session's Cleanup commands after all its recorded worktrees are logically gone, then removes **Session state** only after every command succeeds.
+**Session finalization**: The targeted lifecycle step that removes **Session state** after Cleanup commands succeed and all recorded worktrees are logically gone.
 
 **Dead worktree**: A session worktree recorded in session state whose filesystem path no longer exists.
 
@@ -226,7 +226,7 @@ belongs to the Session, otherwise the Root repo worktree last.
 Cleanup scans the process table once per run for processes whose working
 directory is inside the managed worktree area, grouped into trees by parent. A
 tree is attached when any member's command line names a path inside that
-worktree, and is as old as its oldest member. Before removing a member, an
+worktree, and is as old as its oldest member. Before running Cleanup commands, an
 attached tree at least one day old, the same threshold as ancestry-only proof,
 is stopped: roots first with SIGTERM, then SIGKILL after a short grace. Any
 tree under a day old, attached or not, skips the Session with the process list,
@@ -243,15 +243,14 @@ worktree with initialized submodules, immediately revalidate cleanliness before
 using Git's internal removal `--force` to bypass its submodule restriction. This
 exception does not broaden the user's `mt chop --force` semantics.
 
-Finalization runs only recorded Cleanup commands in reverse materialization order,
+Before removing any worktrees, teardown runs only recorded Cleanup commands in reverse materialization order,
 from Root toward dependencies. Missing recorded commands remain absent regardless
 of current config. Stop at the first failure, retain full state and resources,
-and leave later dependency commands unrun. Retries start from the first command;
+and leave later dependency commands unrun and all remaining worktrees intact. Commands run in their Session worktree. A missing worktree with a required command blocks all commands unless explicit Chop recovery uses `--cleanup-from-source`. Retries start from the first command;
 individual successes are not checkpointed.
 
 A named Session remains a valid Chop target while state is retained, even after
-all worktrees disappear. `mt chop <session>` retries finalization; Cleanup discovers
-and finalizes dead Sessions broadly. Successful finalization removes state, after
+all worktrees disappear. `mt chop <session>` retries teardown. Cleanup discovers dead Sessions broadly, but required commands need their worktrees restored or deliberate `mt chop <session> --cleanup-from-source` recovery. Successful finalization removes state, after
 which another named Chop reports no target.
 
 ## Diff

@@ -412,8 +412,8 @@ apps: {}
     expect(existsSync(fixture.statePath)).toBeFalsy();
     expect(readFileSync(directivePath, "utf-8")).toBe(fixture.depRoot);
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe(
-      `root|${fixture.root}|root-${fixture.session}|dynamic-${fixture.session}|${fixture.session}\n` +
-        `dep|${fixture.depRoot}|dep-${fixture.session}|${fixture.session}\n`
+      `root|${fixture.rootWorktree}|root-${fixture.session}|dynamic-${fixture.session}|${fixture.session}\n` +
+        `dep|${fixture.depWorktree}|dep-${fixture.session}|${fixture.session}\n`
     );
     const removals = readWorktreeRemovals(gitLog);
     expect(removals).toStrictEqual([
@@ -621,6 +621,69 @@ apps: {}
     expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
   });
 
+  test("source recovery retains a worktree that reappears during cleanup", () => {
+    const sandbox = makeTempDir("chop-reappeared-session");
+    const home = path.join(sandbox, "home");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": `bootstrapCommand: "true"
+cleanupCommand: git worktree add "$MONKE_WORKTREE_PATH" "$MONKE_SESSION"
+apps: {}
+`
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
+    const worktree = getExpectedWorktreePath(home, root, "banana");
+    git(root, ["worktree", "remove", worktree]);
+
+    expect(() => {
+      runMonke({
+        args: ["chop", "banana", "--cleanup-from-source"],
+        cwd: root,
+        monkeHome: home
+      });
+    }).toThrow(/Session worktree reappeared after preflight/u);
+
+    expect(existsSync(worktree)).toBeTruthy();
+    expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
+  });
+
+  test.each(["reappeared", "branch"] as const)(
+    "cleanup does not run in a dependency %s by the root command",
+    (change) => {
+      const fixture = createMultiRepoSessionFixture(`chop-cleanup-${change}`);
+      const state = loadSessionState(fixture.home, fixture.root, fixture.session);
+      const command =
+        change === "reappeared"
+          ? `git -C "${fixture.depRoot}" worktree add "${fixture.depWorktree}" "$MONKE_SESSION"`
+          : `git -C "${fixture.depWorktree}" switch -c raced`;
+      saveSessionState(fixture.home, {
+        ...state,
+        repos: state.repos.map((repo) =>
+          repo.sourceRoot === fixture.root ? { ...repo, cleanupCommand: command } : repo
+        )
+      });
+      if (change === "reappeared") {
+        git(fixture.depRoot, ["worktree", "remove", fixture.depWorktree]);
+      }
+
+      expect(() => {
+        runMonke({
+          args: ["chop", fixture.session, "--cleanup-from-source"],
+          cwd: fixture.root,
+          monkeHome: fixture.home
+        });
+      }).toThrow(
+        change === "reappeared"
+          ? /Session worktree reappeared after preflight/u
+          : /Session worktree branch\/HEAD changed/u
+      );
+
+      expect(existsSync(fixture.cleanupLog)).toBeFalsy();
+      expect(existsSync(fixture.depWorktree)).toBeTruthy();
+      expect(existsSync(fixture.rootWorktree)).toBeTruthy();
+      expect(existsSync(fixture.statePath)).toBeTruthy();
+    }
+  );
+
   test("rejects a Session branch live at an unexpected path", () => {
     const sandbox = makeTempDir("chop-session-unexpected-live-branch");
     const home = path.join(sandbox, "home");
@@ -645,7 +708,7 @@ apps: {}
   });
 
   test.each(["staged", "modified", "untracked"] as const)(
-    "a just-in-time %s race stops later Session removals and retains state",
+    "a just-in-time %s race blocks cleanup and retains all Session worktrees",
     (dirtyKind) => {
       const fixture = createMultiRepoSessionFixture(`chop-session-${dirtyKind}-race`);
       const targetFile =
@@ -673,17 +736,17 @@ apps: {}
         });
       }).toThrow(/dirty worktree/u);
 
-      expect(existsSync(fixture.depWorktree)).toBeFalsy();
+      expect(existsSync(fixture.depWorktree)).toBeTruthy();
       expect(existsSync(fixture.rootWorktree)).toBeTruthy();
       expect(existsSync(fixture.statePath)).toBeTruthy();
       expect(existsSync(fixture.cleanupLog)).toBeFalsy();
       const removals = readWorktreeRemovals(gitLog);
-      expect(removals).toStrictEqual([`worktree remove ${fixture.depWorktree}`]);
+      expect(removals).toStrictEqual([]);
     }
   );
 
   test.each(["branch", "lock", "registration", "repository"] as const)(
-    "--force still detects a just-in-time %s race before the affected Session removal",
+    "--force still detects a just-in-time %s race before Session cleanup",
     (raceKind) => {
       const fixture = createMultiRepoSessionFixture(`chop-session-${raceKind}-race`);
       const movedPath = path.join(fixture.sandbox, "moved-root-worktree");
@@ -697,7 +760,7 @@ apps: {}
       const expectedFailures = {
         branch: /Session worktree branch\/HEAD changed from banana to raced/u,
         lock: /locked.*race/u,
-        registration: /unexpected path/u,
+        registration: /Session worktree is missing/u,
         repository: /Cannot verify registered worktree/u
       };
       const gitLog = installGitShim(fixture.binDirectory, {
@@ -717,11 +780,11 @@ apps: {}
         });
       }).toThrow(expectedFailures[raceKind]);
 
-      expect(existsSync(fixture.depWorktree)).toBeFalsy();
       expect(existsSync(fixture.statePath)).toBeTruthy();
-      expect(existsSync(fixture.cleanupLog)).toBeFalsy();
       const removals = readWorktreeRemovals(gitLog);
-      expect(removals).toStrictEqual([`worktree remove --force ${fixture.depWorktree}`]);
+      expect(existsSync(fixture.depWorktree)).toBeTruthy();
+      expect(existsSync(fixture.cleanupLog)).toBeFalsy();
+      expect(removals).toStrictEqual([]);
     }
   );
 
@@ -746,7 +809,7 @@ apps: {}
     expect(existsSync(fixture.depWorktree)).toBeFalsy();
     expect(existsSync(fixture.rootWorktree)).toBeTruthy();
     expect(existsSync(fixture.statePath)).toBeTruthy();
-    expect(existsSync(fixture.cleanupLog)).toBeFalsy();
+    expect(existsSync(fixture.cleanupLog)).toBeTruthy();
     const removals = readWorktreeRemovals(gitLog);
     expect(removals).toStrictEqual([
       `worktree remove ${fixture.depWorktree}`,
@@ -754,7 +817,7 @@ apps: {}
     ]);
 
     runMonke({
-      args: ["chop", fixture.session],
+      args: ["chop", fixture.session, "--cleanup-from-source"],
       cwd: fixture.root,
       monkeHome: fixture.home
     });
@@ -887,7 +950,7 @@ external:
     expect(existsSync(getSessionStateFilePath(home, root, "partial"))).toBeFalsy();
   });
 
-  test("failed Session finalization retains state for an isolated explicit retry", () => {
+  test("failed Session cleanup retains worktrees and state for an isolated explicit retry", () => {
     const sandbox = makeTempDir("chop-finalization-retry");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
@@ -948,7 +1011,7 @@ external:
         monkeHome: home
       });
     }).toThrow(/Cleanup command failed/u);
-    expect(existsSync(worktree)).toBeFalsy();
+    expect(existsSync(worktree)).toBeTruthy();
     expect(existsSync(getSessionStateFilePath(home, root, "retry"))).toBeTruthy();
     expect(existsSync(otherStatePath)).toBeTruthy();
     expect(existsSync(otherCleanup)).toBeFalsy();
@@ -998,8 +1061,8 @@ external:
       });
     }).toThrow(/Cleanup command failed/u);
     expect(readFileSync(attempts, "utf-8")).toBe("root\n");
-    expect(existsSync(fixture.depWorktree)).toBeFalsy();
-    expect(existsSync(fixture.rootWorktree)).toBeFalsy();
+    expect(existsSync(fixture.depWorktree)).toBeTruthy();
+    expect(existsSync(fixture.rootWorktree)).toBeTruthy();
     expect(existsSync(fixture.statePath)).toBeTruthy();
 
     writeFileSync(allow, "", "utf-8");
@@ -1037,14 +1100,17 @@ external:
       });
     }).toThrow(/Cleanup command failed/u);
 
-    expect(existsSync(fixture.depWorktree)).toBeFalsy();
-    expect(existsSync(fixture.rootWorktree)).toBeFalsy();
+    expect(existsSync(fixture.depWorktree)).toBeTruthy();
+    expect(existsSync(fixture.rootWorktree)).toBeTruthy();
     expect(existsSync(fixture.statePath)).toBeTruthy();
     expect(readFileSync(attempts, "utf-8")).toBe("root\n");
 
+    // Recovery must still work when worktrees were removed outside mt.
+    git(fixture.depRoot, ["worktree", "remove", fixture.depWorktree]);
+    git(fixture.root, ["worktree", "remove", fixture.rootWorktree]);
     writeFileSync(allow, "", "utf-8");
     runMonke({
-      args: ["chop", fixture.session],
+      args: ["chop", fixture.session, "--cleanup-from-source"],
       cwd: fixture.depRoot,
       monkeHome: fixture.home
     });
@@ -1053,7 +1119,7 @@ external:
     expect(existsSync(fixture.statePath)).toBeFalsy();
   });
 
-  test("self-removal requests shell relocation before a later Cleanup failure", () => {
+  test("Cleanup failure leaves the invoking worktree and shell location intact", () => {
     const fixture = createFailingCleanupSessionFixture("chop-cleanup-failure-shell");
     const directivePath = path.join(fixture.sandbox, "directive");
     writeFileSync(directivePath, "", "utf-8");
@@ -1069,12 +1135,12 @@ external:
       });
     }).toThrow(/Cleanup command failed/u);
 
-    expect(existsSync(fixture.worktree)).toBeFalsy();
+    expect(existsSync(fixture.worktree)).toBeTruthy();
     expect(existsSync(fixture.statePath)).toBeTruthy();
-    expect(readFileSync(directivePath, "utf-8")).toBe(fixture.root);
+    expect(readFileSync(directivePath, "utf-8")).toBe("");
   });
 
-  test("self-removal warns and prints the Source checkout before Cleanup fails without an adapter", () => {
+  test("Cleanup failure does not request shell relocation without an adapter", () => {
     const fixture = createFailingCleanupSessionFixture("chop-cleanup-failure-no-shell");
 
     const result = runMonkeCapturingFailure({
@@ -1084,10 +1150,8 @@ external:
     });
 
     expect(result.error).toBeInstanceOf(Error);
-    expect(result.stdout).toBe(`${fixture.root}\n`);
-    expect(result.stderr).toContain(
-      `WARNING: your shell is still in the removed worktree; switch to ${fixture.root}`
-    );
+    expect(result.stdout).toBe("");
+    expect(result.stderr).not.toContain("removed worktree");
     expect(existsSync(fixture.statePath)).toBeTruthy();
   });
 
@@ -1254,7 +1318,7 @@ repos:
     expect(existsSync(fixture.statePath)).toBeTruthy();
   });
 
-  test("broad Cleanup reuses saved-state-only Root-first Session finalization", () => {
+  test("explicit source recovery reuses saved-state-only Root-first cleanup", () => {
     const sandbox = makeTempDir("cleanup-targeted-finalization");
     const home = path.join(sandbox, "home");
     const cleanupLog = path.join(sandbox, "cleanup.log");
@@ -1302,7 +1366,7 @@ apps: {}
     });
 
     runMonke({
-      args: ["cleanup"],
+      args: ["chop", "dead", "--cleanup-from-source"],
       cwd: root,
       monkeHome: home
     });

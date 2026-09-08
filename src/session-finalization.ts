@@ -8,9 +8,8 @@ import { assertCanonicalSourceCheckout } from "./worktree-safety.ts";
 
 const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
 
-/** Finalize one already-dead Session using only lifecycle data saved in its state. */
+/** Remove state only after every recorded worktree is gone. */
 export function finalizeSession(
-  runtime: Runtime,
   store: SessionStateStore,
   state: SessionState,
   observer: SessionLifecycleObserver = {}
@@ -22,6 +21,20 @@ export function finalizeSession(
     );
   }
 
+  const action: SessionAction = { sourceRoot: state.rootSourceRoot, step: "state-removal" };
+  observer.beforeStep?.(action);
+  observer.beforeEffect?.(action);
+  store.remove(state);
+  observer.completed?.(action);
+}
+
+/** Run recorded commands while Session worktrees are still available. */
+export function cleanupSessionResources(
+  runtime: Runtime,
+  state: SessionState,
+  observer: SessionLifecycleObserver = {},
+  cleanupFromSource = false
+) {
   for (const repoState of state.repos) {
     observer.beforeStep?.({
       sourceRoot: repoState.sourceRoot,
@@ -29,6 +42,18 @@ export function finalizeSession(
       worktreePath: repoState.worktreePath
     });
     assertCanonicalSourceCheckout(runtime, repoState.sourceRoot);
+    if (
+      repoState.cleanupEligible &&
+      repoState.cleanupCommand &&
+      !existsSync(repoState.worktreePath) &&
+      !cleanupFromSource
+    ) {
+      throw new MonkeError(
+        `Cannot run cleanup: Session worktree is missing: ${repoState.worktreePath}. ` +
+          `Restore the worktree and retry. Only if the recorded commands are safe from source checkouts, ` +
+          `use mt chop <session> --cleanup-from-source for explicit recovery. Session state is retained.`
+      );
+    }
   }
 
   for (const repoState of [...state.repos].toReversed()) {
@@ -56,7 +81,10 @@ export function finalizeSession(
     observer.beforeEffect?.(action);
     try {
       runtime.exec("sh", ["-c", cleanupCommand], {
-        cwd: repoState.sourceRoot,
+        cwd:
+          cleanupFromSource && !existsSync(repoState.worktreePath)
+            ? repoState.sourceRoot
+            : repoState.worktreePath,
         env: {
           ...resourceEnv,
           ...resourceCommandEnv,
@@ -73,10 +101,4 @@ export function finalizeSession(
       );
     }
   }
-
-  const action: SessionAction = { sourceRoot: state.rootSourceRoot, step: "state-removal" };
-  observer.beforeStep?.(action);
-  observer.beforeEffect?.(action);
-  store.remove(state);
-  observer.completed?.(action);
 }

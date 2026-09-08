@@ -6,7 +6,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Session resource**: A per-session string value resolved for a repo, persisted in session state, written to the session root `.env`, and optionally used during cleanup.
 
-**Resource value**: The configured literal string that becomes a session resource value, with `${session}` available as the session-name placeholder and `${user}` available as the machine-user placeholder. _Avoid_: Provider acquisition, allocator, command output
+**Resource value**: The configured literal string that becomes a session resource value, with `${session}` available as the session-name placeholder `${user}` available as the machine-user placeholder, and `${id}` as a stable repo-and-Session identifier safe for resource names. _Avoid_: Provider acquisition, allocator, command output
 
 **Resource values**: The repo configuration section for deterministic literal session resources.
 
@@ -73,8 +73,10 @@ command creates a new input and lock namespace.
 
 ## Cleanup
 
-For a Dead worktree, cleanup runs from the repo's Source checkout with Session
-resources, command outputs, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and
-`MONKE_WORKTREE_PATH` in its environment. Failed cleanup retains this state for
-retry; [session finalization](session-lifecycle.md#removal-and-finalization) owns
-ordering and removal.
+Cleanup runs in the Session worktree with saved resources, command outputs,
+`MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment.
+Missing worktrees block required commands. Only deliberate
+`mt chop <session> --cleanup-from-source` recovery permits using the Source
+checkout instead. Failed cleanup retains state for retry;
+[session finalization](session-lifecycle.md#removal-and-finalization) owns ordering
+and removal.

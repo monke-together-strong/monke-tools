@@ -316,7 +316,7 @@ apps:
     );
   });
 
-  test("cleanupCommand runs only for dead worktrees and removes state after success", () => {
+  test("missing worktree cleanup requires explicit source recovery", () => {
     const sandbox = makeTempDir("cleanup-command");
     const binDirectory = path.join(sandbox, "bin");
     const shLogPath = installShShim(binDirectory);
@@ -360,8 +360,18 @@ apps:
     const worktree = getExpectedWorktreePath(home, root, "clean-command");
     git(root, ["worktree", "remove", worktree, "--force"]);
 
-    runMonke({
+    const missing = runMonkeCapturingFailure({
       args: ["cleanup"],
+      binDirectory,
+      cwd: root,
+      monkeHome: home
+    });
+    expect(missing.error).toBeInstanceOf(Error);
+    expect(missing.stdout).toContain("Session worktree is missing");
+    expect(existsSync(path.join(root, "cleanup.log"))).toBeFalsy();
+    expect(existsSync(getSessionStateFilePath(home, root, "clean-command"))).toBeTruthy();
+    runMonke({
+      args: ["chop", "clean-command", "--cleanup-from-source"],
       binDirectory,
       cwd: root,
       monkeHome: home
@@ -420,7 +430,7 @@ apps:
     git(root, ["worktree", "remove", worktree, "--force"]);
 
     runMonke({
-      args: ["cleanup"],
+      args: ["chop", "clean-command", "--cleanup-from-source"],
       binDirectory,
       cwd: root,
       monkeHome: home
@@ -478,7 +488,7 @@ apps:
     ]);
 
     runMonke({
-      args: ["cleanup"],
+      args: ["chop", "drift-clean", "--cleanup-from-source"],
       binDirectory,
       cwd: root,
       monkeHome: home
@@ -490,7 +500,7 @@ apps:
     );
   });
 
-  test("one failing cleanupCommand does not block other dead sessions", () => {
+  test("missing cleanup worktrees retain each Session without executing commands", () => {
     const sandbox = makeTempDir("cleanup-command-failure-isolation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -534,10 +544,8 @@ apps:
     expect(failure.error).toBeInstanceOf(Error);
     expect(failure.stdout).toContain("retry-one");
     expect(failure.stdout).toContain("retry-two");
-    expect(read(root, "cleanup-attempts.log").trim().split("\n").toSorted()).toStrictEqual([
-      "retry-one",
-      "retry-two"
-    ]);
+    expect(existsSync(path.join(root, "cleanup-attempts.log"))).toBeFalsy();
+    expect(failure.stdout).toContain("Session worktree is missing");
     expect(existsSync(getSessionStateFilePath(home, root, "retry-one"))).toBeTruthy();
     expect(existsSync(getSessionStateFilePath(home, root, "retry-two"))).toBeTruthy();
   });
@@ -574,13 +582,13 @@ apps:
     git(root, ["worktree", "remove", getExpectedWorktreePath(home, root, "retry-me"), "--force"]);
 
     const failure = runMonkeCapturingFailure({
-      args: ["cleanup"],
+      args: ["chop", "retry-me", "--cleanup-from-source"],
       binDirectory,
       cwd: root,
       monkeHome: home
     });
     expect(failure.error).toBeInstanceOf(Error);
-    expect(failure.stdout).toMatch(/Cleanup command failed.*cleanup failed/su);
+    expect(failure.stderr).toMatch(/Cleanup command failed.*cleanup failed/su);
 
     expect(read(root, "cleanup-failure.log")).toBe("mt-retry-me\n");
     const retainedState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);

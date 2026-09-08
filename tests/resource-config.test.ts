@@ -3,7 +3,9 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { loadResolvedGraph } from "../src/config.ts";
+import { resolveResourceValues } from "../src/resources.ts";
 import { createRuntime } from "../src/runtime.ts";
+import { SessionStateStore } from "../src/session-state-store.ts";
 import { createFiles, makeTempDir } from "./helpers.ts";
 
 describe("resource configuration", () => {
@@ -35,6 +37,42 @@ apps:
       { env: "DISCORD_CHANNEL", literal: "mt-${user}-${session}" },
       { env: "STATIC_HANDLE", literal: "stable" }
     ]);
+  });
+
+  test("resource IDs are stable, name-safe, and distinct across repos and full Session names", () => {
+    const sandbox = makeTempDir("resource-id");
+    const store = new SessionStateStore(path.join(sandbox, "home"));
+    const roots = ["first", "second"].map((name) =>
+      createFiles(path.join(sandbox, name), {
+        "monke.yml": `resources:
+  values:
+    COMPOSE_PROJECT_NAME: app-\${id}
+apps: {}
+`
+      })
+    );
+    const values = roots.flatMap((root) => {
+      const graph = loadResolvedGraph(createRuntime({ cwd: root }), root);
+      const repoConfig = graph.reposByRoot.get(root);
+      if (!repoConfig) {
+        throw new Error("Missing repo config");
+      }
+      return ["feature/x", "fix/x"].map((session) => {
+        const options = {
+          env: {},
+          existingRepoState: undefined,
+          repoConfig,
+          rootSourceRoot: root,
+          session,
+          store
+        };
+        const result = resolveResourceValues(options);
+        expect(resolveResourceValues(options)).toStrictEqual(result);
+        expect(result.values[0]?.value).toMatch(/^app-[a-f0-9]{32}$/u);
+        return result.values[0]?.value;
+      });
+    });
+    expect(new Set(values).size).toBe(4);
   });
 
   test("loadResolvedGraph accepts nested resource commands", () => {

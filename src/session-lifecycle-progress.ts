@@ -11,7 +11,7 @@ export interface SessionAction {
 /** Effects are attempted only after beforeEffect returns; completion means the call succeeded. */
 export interface SessionLifecycleObserver {
   beforeEffect?: (action: SessionAction) => void;
-  /** Runs after revalidation and before removal; may stop processes or throw to retain the member. */
+  /** Runs after revalidation, before any cleanup commands or removals; may stop processes. */
   beforeRemoval?: (repo: SessionRepoState) => void;
   beforeStep?: (action: SessionAction) => void;
   completed?: (action: SessionAction) => void;

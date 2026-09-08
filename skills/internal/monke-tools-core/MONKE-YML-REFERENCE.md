@@ -42,7 +42,7 @@ Generate outputs for the actual worktree. If a generator embeds absolute paths, 
 
 ## Resources
 
-`resources.values` contains literal strings with `${session}` and `${user}` placeholders. Values are persisted and written to the session root `.env`.
+`resources.values` contains literal strings with `${session}`, `${user}`, and `${id}` placeholders. `${id}` is a stable 32-character lowercase hex identifier derived from the repo source path and full Session name, suitable for resource names that cannot contain branch slashes. Values are persisted and written to the session root `.env`.
 
 For dynamic values, add `resources.commands` under the same `resources` section:
 
@@ -69,4 +69,23 @@ Return exactly the declared output names as nonempty strings; stdout/stderr are 
 
 ## Cleanup
 
-`cleanupCommand` runs from the source checkout after session worktrees are removed, with resources, command outputs, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment. Make it safe to retry: failed finalization retains state and can rerun previously successful commands. See [removal and recovery](SKILL.md#remove-and-recover) for `chop` and `cleanup` behavior.
+`cleanupCommand` runs root-first before any Session worktree is removed, from each repo's Session worktree. It receives saved resources, command outputs, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH`. A failure stops teardown and retains state and remaining worktrees. Commands must be safe to retry; successful commands may rerun.
+
+If a worktree with a required command is missing, no cleanup commands run. Restore it and retry. For deliberate recovery only, `mt chop <session> --cleanup-from-source` permits running the recorded command from a source checkout when its worktree is missing. Check every command first: a source checkout has different code, env files, and Compose configuration. Automatic Cleanup never makes this substitution.
+
+### Docker cleanup
+
+Give each repo and Session its own Compose project before starting containers:
+
+```yaml
+resources:
+  values:
+    COMPOSE_PROJECT_NAME: myapp-${id}
+cleanupCommand: docker compose --profile '*' down
+```
+
+Compose reads the persisted project name from the Session root `.env`; cleanup receives that same saved value. Match startup's Compose files and env loading, and ensure startup does not override the project name with `-p` or a different environment value. Enable the profiles the repo uses (`'*'` enables all). Preserve volumes by default. Avoid `--remove-orphans` unless all containers in the project belong to this repo and Session.
+
+For application cleanup followed by Docker teardown, put the sequence in a repo script and use `cleanupCommand: bun run session:cleanup`. Run application cleanup before stopping infrastructure it needs, joining required steps with `&&` so failures propagate. Worktree guards and absolute paths are unnecessary in normal cleanup.
+
+Apply project naming to new Sessions. Existing Sessions keep recorded commands and resource values; adding a project name to an existing Session changes the container and volume namespace. Clean up or explicitly migrate its old project before materializing the new configuration. Never suppress Docker errors with `|| true` or use source recovery blindly: failed cleanup retains state for retry.

@@ -102,7 +102,7 @@ describe("CLI", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("Chop help documents force and ignored-file disposal", () => {
+  test("Chop help documents force, ignored-file disposal, and explicit recovery", () => {
     const result = spawnSync("bun", ["run", "src/index.ts", "chop", "--help"], {
       cwd: projectRoot,
       encoding: "utf-8"
@@ -111,7 +111,8 @@ describe("CLI", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Usage: mt chop [options] [target]");
     expect(result.stdout).toContain("--force");
-    expect(result.stdout).toMatch(/ignored files are\s+always deleted/u);
+    expect(result.stdout.replaceAll(/\s+/gu, " ")).toContain("ignored files are always deleted");
+    expect(result.stdout).toContain("--cleanup-from-source");
     expect(result.stderr).toBe("");
   });
 });

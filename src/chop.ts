@@ -12,7 +12,7 @@ import {
 import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
-import { finalizeSession } from "./session-finalization.ts";
+import { cleanupSessionResources, finalizeSession } from "./session-finalization.ts";
 import { sessionRemovalRank } from "./session-lifecycle-progress.ts";
 import type { SessionAction, SessionLifecycleObserver } from "./session-lifecycle-progress.ts";
 import {
@@ -48,6 +48,7 @@ interface SessionChopTarget {
 type ChopTarget = OrdinaryChopTarget | SessionChopTarget;
 
 interface ChopOptions {
+  cleanupFromSource?: boolean;
   force: boolean;
 }
 
@@ -263,24 +264,49 @@ export function teardownSession(
   );
 
   for (const candidate of ordered) {
+    observer.revalidateMember?.(candidate.repo);
+    if (candidate.mode !== "gone") {
+      observer.beforeRemoval?.(candidate.repo);
+    }
+  }
+  cleanupSessionResources(
+    runtime,
+    target.state,
+    {
+      ...observer,
+      beforeEffect(action) {
+        for (const candidate of preflight) {
+          observer.beforeStep?.({
+            sourceRoot: candidate.repo.sourceRoot,
+            step: "revalidation",
+            worktreePath: candidate.repo.worktreePath
+          });
+          const current = inspectSessionRepo(runtime, home, target.state, candidate.repo, options);
+          assertSessionMemberUnchanged(candidate, current);
+          if (candidate.mode !== current.mode) {
+            throw new MonkeError(
+              `Session worktree presence changed after preflight at ${current.repo.worktreePath}; retry teardown`
+            );
+          }
+          observer.revalidateMember?.(candidate.repo);
+        }
+        observer.beforeStep?.(action);
+        observer.beforeEffect?.(action);
+      }
+    },
+    options.cleanupFromSource === true
+  );
+
+  for (const candidate of ordered) {
     observer.beforeStep?.({
       sourceRoot: candidate.repo.sourceRoot,
       step: "revalidation",
       worktreePath: candidate.repo.worktreePath
     });
     const current = inspectSessionRepo(runtime, home, target.state, candidate.repo, options);
-    if (
-      candidate.registeredBranch !== undefined &&
-      current.registeredBranch !== undefined &&
-      current.registeredBranch !== candidate.registeredBranch
-    ) {
-      throw new MonkeError(
-        `Session worktree branch/HEAD changed from ${formatWorktreeBranch(candidate.registeredBranch)} to ${formatWorktreeBranch(current.registeredBranch)} at ${current.repo.worktreePath}`
-      );
-    }
+    assertSessionMemberUnchanged(candidate, current);
     observer.revalidateMember?.(candidate.repo);
     if (current.mode !== "gone") {
-      observer.beforeRemoval?.(candidate.repo);
       const action: SessionAction = {
         sourceRoot: current.repo.sourceRoot,
         step: "worktree-removal",
@@ -299,11 +325,31 @@ export function teardownSession(
   }
 
   // Reuse the targeted ownership scan; unrelated invalid state must not block this removal.
-  finalizeSession(runtime, new SessionStateStore(home, target.allStates), target.state, observer);
+  finalizeSession(new SessionStateStore(home, target.allStates), target.state, observer);
   return {
     kind: "session",
     session: target.state.session
   };
+}
+
+function assertSessionMemberUnchanged(
+  candidate: SessionRepoPreflight,
+  current: SessionRepoPreflight
+) {
+  if (candidate.mode === "gone" && current.mode !== "gone") {
+    throw new MonkeError(
+      `Session worktree reappeared after preflight at ${current.repo.worktreePath}; retry teardown to inspect it before cleanup`
+    );
+  }
+  if (
+    candidate.registeredBranch !== undefined &&
+    current.registeredBranch !== undefined &&
+    current.registeredBranch !== candidate.registeredBranch
+  ) {
+    throw new MonkeError(
+      `Session worktree branch/HEAD changed from ${formatWorktreeBranch(candidate.registeredBranch)} to ${formatWorktreeBranch(current.registeredBranch)} at ${current.repo.worktreePath}`
+    );
+  }
 }
 
 function preflightSession(
