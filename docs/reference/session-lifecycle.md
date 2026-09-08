@@ -12,7 +12,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Merged PR**: A pull request whose GitHub `mergedAt` value is set.
 
-**Merge-cleanable Session**: A Session whose every recorded session worktree is clean and proven complete, by a **Merged PR** for its exact commit or by that commit already being inside the verified default branch.
+**Merge-cleanable Session**: A Session whose every recorded session worktree is clean and proven complete, by a **Merged PR** for its exact commit, by that commit already being inside the verified default branch, or by its complete change exactly matching a qualifying landed PR. All Session-level safety gates still apply.
 
 **Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates a new Session from each participating repo's resolved default branch content, or resumes an incomplete Session from retained worktrees and pinned Session refs.
 
