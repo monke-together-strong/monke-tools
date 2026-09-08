@@ -8,9 +8,8 @@ import { assertCanonicalSourceCheckout } from "./worktree-safety.ts";
 
 const CLEANUP_COMMAND_TIMEOUT_SECONDS = 60;
 
-/** Finalize one already-dead Session using only lifecycle data saved in its state. */
+/** Remove state only after every recorded worktree is gone. */
 export function finalizeSession(
-  runtime: Runtime,
   store: SessionStateStore,
   state: SessionState,
   observer: SessionLifecycleObserver = {}
@@ -22,6 +21,19 @@ export function finalizeSession(
     );
   }
 
+  const action: SessionAction = { sourceRoot: state.rootSourceRoot, step: "state-removal" };
+  observer.beforeStep?.(action);
+  observer.beforeEffect?.(action);
+  store.remove(state);
+  observer.completed?.(action);
+}
+
+/** Run recorded commands while Session worktrees are still available. */
+export function cleanupSessionResources(
+  runtime: Runtime,
+  state: SessionState,
+  observer: SessionLifecycleObserver = {}
+) {
   for (const repoState of state.repos) {
     observer.beforeStep?.({
       sourceRoot: repoState.sourceRoot,
@@ -56,7 +68,7 @@ export function finalizeSession(
     observer.beforeEffect?.(action);
     try {
       runtime.exec("sh", ["-c", cleanupCommand], {
-        cwd: repoState.sourceRoot,
+        cwd: existsSync(repoState.worktreePath) ? repoState.worktreePath : repoState.sourceRoot,
         env: {
           ...resourceEnv,
           ...resourceCommandEnv,
@@ -73,10 +85,4 @@ export function finalizeSession(
       );
     }
   }
-
-  const action: SessionAction = { sourceRoot: state.rootSourceRoot, step: "state-removal" };
-  observer.beforeStep?.(action);
-  observer.beforeEffect?.(action);
-  store.remove(state);
-  observer.completed?.(action);
 }

@@ -254,6 +254,7 @@ function reportSession(
   const state = row.decision.eligible ? row.state : null;
   const plannedActions: SessionAction[] = state
     ? [
+        ...cleanupCommandActions(state),
         ...state.repos
           .filter((repo) =>
             snapshot.members.some(
@@ -272,7 +273,6 @@ function reportSession(
             step: "worktree-removal" as const,
             worktreePath: member.worktreePath
           })),
-        ...cleanupCommandActions(state),
         { sourceRoot: state.rootSourceRoot, step: "state-removal" }
       ]
     : [];
@@ -315,6 +315,16 @@ function executeSession(
       throw new GlobalCleanupError("Retained Session state changed after inspection.");
     }
   }
+  const revalidateMember = (repo: SessionState["repos"][number]) => {
+    const member = snapshot.members.find((candidate) =>
+      samePath(candidate.worktreePath, repo.worktreePath)
+    );
+    if (!member) {
+      throw new MonkeError(`Missing member evidence: ${repo.worktreePath}`);
+    }
+    revalidateSessionMember(runtime, readOnly, home, state, repo, member);
+    assertNoNewOverlaps(readOnly, sources, repo.worktreePath);
+  };
   try {
     guard();
     const invocation = state.repos.find((repo) => containsPath(repo.worktreePath, runtime.cwd));
@@ -327,8 +337,13 @@ function executeSession(
       {
         beforeEffect(action) {
           guard();
-          if (action.step !== "worktree-removal") {
+          if (action.step === "state-removal") {
             assertFinalizationReady(readOnly, home, state);
+          }
+          if (action.step === "cleanup-command") {
+            for (const repo of state.repos) {
+              revalidateMember(repo);
+            }
           }
           started = true;
           attemptedAction = action;
@@ -383,16 +398,7 @@ function executeSession(
           completedActions.push(action);
           attemptedAction = undefined;
         },
-        revalidateMember(repo) {
-          const member = snapshot.members.find((candidate) =>
-            samePath(candidate.worktreePath, repo.worktreePath)
-          );
-          if (!member) {
-            throw new MonkeError(`Missing member evidence: ${repo.worktreePath}`);
-          }
-          revalidateSessionMember(runtime, readOnly, home, state, repo, member);
-          assertNoNewOverlaps(readOnly, sources, repo.worktreePath);
-        }
+        revalidateMember
       }
     );
     assertGlobalSafety(lock, inventory);

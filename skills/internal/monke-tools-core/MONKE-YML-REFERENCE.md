@@ -69,4 +69,21 @@ Return exactly the declared output names as nonempty strings; stdout/stderr are 
 
 ## Cleanup
 
-`cleanupCommand` runs from the source checkout after session worktrees are removed, with resources, command outputs, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment. Make it safe to retry: failed finalization retains state and can rerun previously successful commands. See [removal and recovery](SKILL.md#remove-and-recover) for `chop` and `cleanup` behavior.
+`cleanupCommand` runs root-first before any Session worktree is removed, from each repo's Session worktree. If that worktree is already missing, it runs from the source checkout for recovery. It receives saved resources, command outputs, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH`. A failure stops teardown and retains state and remaining worktrees. Commands must be safe to retry; successful commands may rerun.
+
+### Docker cleanup
+
+When writing `monke.yml` for a repo that starts Docker containers, include teardown in `cleanupCommand`. Inspect the actual startup command to match its Compose files, project name, env files, profiles, and services. Run application cleanup before stopping infrastructure it needs, joining required steps with `&&` so failures propagate.
+
+For a repo using the default Compose project identity and a `db` service:
+
+```yaml
+cleanupCommand: >-
+  test -d "$MONKE_WORKTREE_PATH" &&
+  docker compose --project-directory "$MONKE_WORKTREE_PATH"
+  -f "$MONKE_WORKTREE_PATH/docker-compose.yml" down db
+```
+
+Use the actual service names and enable required profiles. Preserve volumes by default. Dependencies with the same worktree basename can share a Compose project name: explicitly name this repo's services and omit `--remove-orphans` in that case. Use `--remove-orphans` only when startup establishes a project exclusive to this repo and Session.
+
+The worktree guard deliberately fails during missing-worktree recovery instead of targeting the source checkout's containers. To support that recovery, a repo needs teardown based on a persisted Session resource identity that works without its worktree. Never suppress Docker failures with `|| true`; retained state is needed for retry. See [removal and recovery](SKILL.md#remove-and-recover).

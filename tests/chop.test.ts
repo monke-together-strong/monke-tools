@@ -412,8 +412,8 @@ apps: {}
     expect(existsSync(fixture.statePath)).toBeFalsy();
     expect(readFileSync(directivePath, "utf-8")).toBe(fixture.depRoot);
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe(
-      `root|${fixture.root}|root-${fixture.session}|dynamic-${fixture.session}|${fixture.session}\n` +
-        `dep|${fixture.depRoot}|dep-${fixture.session}|${fixture.session}\n`
+      `root|${fixture.rootWorktree}|root-${fixture.session}|dynamic-${fixture.session}|${fixture.session}\n` +
+        `dep|${fixture.depWorktree}|dep-${fixture.session}|${fixture.session}\n`
     );
     const removals = readWorktreeRemovals(gitLog);
     expect(removals).toStrictEqual([
@@ -676,7 +676,7 @@ apps: {}
       expect(existsSync(fixture.depWorktree)).toBeFalsy();
       expect(existsSync(fixture.rootWorktree)).toBeTruthy();
       expect(existsSync(fixture.statePath)).toBeTruthy();
-      expect(existsSync(fixture.cleanupLog)).toBeFalsy();
+      expect(existsSync(fixture.cleanupLog)).toBeTruthy();
       const removals = readWorktreeRemovals(gitLog);
       expect(removals).toStrictEqual([`worktree remove ${fixture.depWorktree}`]);
     }
@@ -719,7 +719,7 @@ apps: {}
 
       expect(existsSync(fixture.depWorktree)).toBeFalsy();
       expect(existsSync(fixture.statePath)).toBeTruthy();
-      expect(existsSync(fixture.cleanupLog)).toBeFalsy();
+      expect(existsSync(fixture.cleanupLog)).toBeTruthy();
       const removals = readWorktreeRemovals(gitLog);
       expect(removals).toStrictEqual([`worktree remove --force ${fixture.depWorktree}`]);
     }
@@ -746,7 +746,7 @@ apps: {}
     expect(existsSync(fixture.depWorktree)).toBeFalsy();
     expect(existsSync(fixture.rootWorktree)).toBeTruthy();
     expect(existsSync(fixture.statePath)).toBeTruthy();
-    expect(existsSync(fixture.cleanupLog)).toBeFalsy();
+    expect(existsSync(fixture.cleanupLog)).toBeTruthy();
     const removals = readWorktreeRemovals(gitLog);
     expect(removals).toStrictEqual([
       `worktree remove ${fixture.depWorktree}`,
@@ -887,7 +887,7 @@ external:
     expect(existsSync(getSessionStateFilePath(home, root, "partial"))).toBeFalsy();
   });
 
-  test("failed Session finalization retains state for an isolated explicit retry", () => {
+  test("failed Session cleanup retains worktrees and state for an isolated explicit retry", () => {
     const sandbox = makeTempDir("chop-finalization-retry");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "root"), {
@@ -948,7 +948,7 @@ external:
         monkeHome: home
       });
     }).toThrow(/Cleanup command failed/u);
-    expect(existsSync(worktree)).toBeFalsy();
+    expect(existsSync(worktree)).toBeTruthy();
     expect(existsSync(getSessionStateFilePath(home, root, "retry"))).toBeTruthy();
     expect(existsSync(otherStatePath)).toBeTruthy();
     expect(existsSync(otherCleanup)).toBeFalsy();
@@ -998,8 +998,8 @@ external:
       });
     }).toThrow(/Cleanup command failed/u);
     expect(readFileSync(attempts, "utf-8")).toBe("root\n");
-    expect(existsSync(fixture.depWorktree)).toBeFalsy();
-    expect(existsSync(fixture.rootWorktree)).toBeFalsy();
+    expect(existsSync(fixture.depWorktree)).toBeTruthy();
+    expect(existsSync(fixture.rootWorktree)).toBeTruthy();
     expect(existsSync(fixture.statePath)).toBeTruthy();
 
     writeFileSync(allow, "", "utf-8");
@@ -1037,11 +1037,14 @@ external:
       });
     }).toThrow(/Cleanup command failed/u);
 
-    expect(existsSync(fixture.depWorktree)).toBeFalsy();
-    expect(existsSync(fixture.rootWorktree)).toBeFalsy();
+    expect(existsSync(fixture.depWorktree)).toBeTruthy();
+    expect(existsSync(fixture.rootWorktree)).toBeTruthy();
     expect(existsSync(fixture.statePath)).toBeTruthy();
     expect(readFileSync(attempts, "utf-8")).toBe("root\n");
 
+    // Recovery must still work when worktrees were removed outside mt.
+    git(fixture.depRoot, ["worktree", "remove", fixture.depWorktree]);
+    git(fixture.root, ["worktree", "remove", fixture.rootWorktree]);
     writeFileSync(allow, "", "utf-8");
     runMonke({
       args: ["chop", fixture.session],
@@ -1053,7 +1056,7 @@ external:
     expect(existsSync(fixture.statePath)).toBeFalsy();
   });
 
-  test("self-removal requests shell relocation before a later Cleanup failure", () => {
+  test("Cleanup failure leaves the invoking worktree and shell location intact", () => {
     const fixture = createFailingCleanupSessionFixture("chop-cleanup-failure-shell");
     const directivePath = path.join(fixture.sandbox, "directive");
     writeFileSync(directivePath, "", "utf-8");
@@ -1069,12 +1072,12 @@ external:
       });
     }).toThrow(/Cleanup command failed/u);
 
-    expect(existsSync(fixture.worktree)).toBeFalsy();
+    expect(existsSync(fixture.worktree)).toBeTruthy();
     expect(existsSync(fixture.statePath)).toBeTruthy();
-    expect(readFileSync(directivePath, "utf-8")).toBe(fixture.root);
+    expect(readFileSync(directivePath, "utf-8")).toBe("");
   });
 
-  test("self-removal warns and prints the Source checkout before Cleanup fails without an adapter", () => {
+  test("Cleanup failure does not request shell relocation without an adapter", () => {
     const fixture = createFailingCleanupSessionFixture("chop-cleanup-failure-no-shell");
 
     const result = runMonkeCapturingFailure({
@@ -1084,10 +1087,8 @@ external:
     });
 
     expect(result.error).toBeInstanceOf(Error);
-    expect(result.stdout).toBe(`${fixture.root}\n`);
-    expect(result.stderr).toContain(
-      `WARNING: your shell is still in the removed worktree; switch to ${fixture.root}`
-    );
+    expect(result.stdout).toBe("");
+    expect(result.stderr).not.toContain("removed worktree");
     expect(existsSync(fixture.statePath)).toBeTruthy();
   });
 
