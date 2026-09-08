@@ -1,139 +1,101 @@
 # Session synthesis contract
 
-This contract owns the post-analysis candidate lifecycle and the Markdown passed to `commit
---synthesis`. Load it after transcript findings have been grouped and before any candidate is
-ranked.
+This contract owns candidate decisions and the Markdown passed to `commit --synthesis`.
 
-## Resolution audit
+## Resolution and recurrence
 
-Assign each grouped candidate a stable run-local id (`A1`, `A2`, …), then inspect its current
-authoritative state. Transcript claims and prior reports are discovery evidence, not current-state
-proof. Check the surface that could resolve the candidate: current default-branch code, installed
-or source skill guidance, merged PRs, issue state, configuration, or the smallest relevant
-verification.
+Give each candidate a run-local id (`A1`, `A2`, …). Inspect the current authoritative code,
+guidance, configuration, tracker, or smallest relevant verification. Transcript and prior-report
+claims are leads, not current-state proof. Identify the inspected revision or installed surface;
+a change in an isolated worktree does not establish that the active workflow received it.
 
-Record:
+Use `unresolved`, `partially-resolved`, `resolved`, `superseded`, or `unknown`. An open issue is
+unresolved. Use unknown when the necessary state cannot be inspected. For partial repairs,
+describe only the remaining gap. Distinguish source-verified repair from observed effectiveness;
+no recorded recurrence alone does not prove success.
 
-- `Resolution: unresolved | partially-resolved | resolved | superseded | unknown`
-- `Checked-at:` timestamp
-- `Checked-against:` concrete paths, refs, issues, PRs, or commands
-- `Current-state evidence:` what the current state proves
-- `Remaining gap:` the remaining problem, or `none`
+Link the previous matching finding when present. Record whether this run is new, continuing,
+regressed after verified resolution, or resolved. Separate new independent task lineages from
+historical corroboration; report unknown counts honestly. Preserve first-seen evidence through
+prior-report links rather than introducing a separate tracking database.
 
-For a candidate grounded in repeated asks about code shape, design, quality, or working method,
-also audit the active Global agent instructions, the Team coding baseline, and the applicable repo
-coding standards. This audit determines whether the implied rule is absent, partial, already
-covered, or not a coding standard; an existing rule redirects the candidate toward execution or
-enforcement instead of duplicating guidance.
+## Prioritization
 
-An open tracker is `unresolved`, not resolved. A completed change is `resolved` only when the
-current authoritative state contains it and the relevant behavior is verified where practical.
-Use `unknown` when current state cannot be inspected. If evidence recurs after a verified
-resolution, classify the candidate as an active regression.
+Prioritize observed consequences, independent recurrence, and the likely benefit and effort of
+the remaining change. Explain the ordering briefly. A consequential one-off may outrank recurring
+inconvenience. Use measured costs where available; label rough effort estimates and leave unknowns
+explicit. Do not invent scores or estimates to fill the report.
+
+When actions may share a cause, check whether one change could address them. Consolidate only
+when evidence supports the common mechanism; otherwise retain separate actions and name the
+hypothesis and the evidence needed to establish it.
 
 ## Required synthesis shape
 
-The synthesis file contains these four level-three headings exactly once and in this order.
-`commit` rejects a file that omits or duplicates one.
+Use these four level-three headings exactly once, in order. `commit` validates this structure.
 
-### Active Actions
+### Recommended Decisions
 
-Include only `unresolved`, `partially-resolved`, and `unknown` candidates, ranked by **value ×
-recurrence**. For a partially resolved candidate, recommend only its remaining gap. Keep an unknown
-candidate's uncertainty visible rather than presenting its recommendation as settled.
+Put the small shortlist worth acting on this week here, in priority order. Explain the selection
+in one short paragraph. Each candidate has one full entry here or in Remaining Active Actions,
+never both. There is no minimum quota; write `_No recommended decisions._` when appropriate.
 
-Each action begins with `#### <id> — <problem-focused name>`. Name the failure or risk a reader
-needs to understand, not the fix they should apply. Put the decision summary before audit metadata
-so the problem is understandable without reverse-engineering the evidence. Include these fields in
-this exact order:
+### Remaining Active Actions
+
+Put other unresolved, partially resolved, or unknown candidates here using the same action shape.
+Write `_No remaining active actions._` when empty.
+
+Each active entry starts with `#### <id> — <plain-language problem>` and these fields in order:
 
 ```text
-Problem: <plain-language statement of what is wrong now>
-Impact: <the concrete cost, failure, or risk>
-Cause: <why the current system permits the problem>
-Proposed fix: <the concrete durable fix>
-
-Target: <code | tooling | setup | infra | deps | docs | agent-skill | AGENTS.md | CLAUDE.md | hook | preflight>
-Confidence: <high | medium | low>
+Problem: <observable mismatch>
+Impact: <observed cost or explicitly identified risk>
+Cause: <supported mechanism; identify a hypothesis as such>
+Proposed fix: <concrete remaining change or investigation>
+Next step: <fix | finish landing | investigate | watch>
+Why now: <priority rationale, independent recurrence, benefit and effort where known>
+Done when: <one observable closure condition>
+Uncertainty: <what remains unestablished, including confidence in the proposed remedy>
+Change since last report: <new | continuing | regressed; new incidents and prior finding link>
+Target: <actual owner and landing surface; existing issue or PR when available>
+Standards disposition: <add-team-baseline | add-repo-standard | update-team-baseline | update-repo-standard | already-covered | not-a-standard; short reason>
+Workflow disposition: <create-skill | create-workflow | update | combine | no-skill; named owner and short reason>
+Confidence: <high | medium | low; state which claim this assesses>
 Resolution: <unresolved | partially-resolved | unknown>
 Checked-at: <timestamp>
-Checked-against: <current-state evidence inspected>
-Current-state evidence: <what that evidence proves>
+Checked-against: <paths and refs, issues, PRs, or commands>
+Current-state evidence: <what the inspection proves>
 Remaining gap: <what remains>
-Session evidence: <repo/session/episode refs supporting recurrence>
+Session evidence: <direct source links and decisive excerpt or refs>
 ```
 
-The first nonblank line after the action heading must be `Problem:`. Make its first sentence
-understandable without the metadata or source files. Lead with the observable mismatch or failure;
-introduce specialized terms only after the plain-language statement and define them when needed.
-Keep `Problem`, `Impact`, and `Cause` distinct. For a partially resolved candidate, all four summary
-fields describe only the remaining gap. Keep an unknown candidate's uncertainty visible rather than
-presenting its cause or fix as settled.
-
-Write `_No active actions._` when empty.
-
-### Standards Opportunities
-
-Give every active action exactly one disposition after inspecting both team-wide/global and
-repo-specific coding guidance:
-
-```text
-#### <action id> — <short standards opportunity name>
-Disposition: <add-team-baseline | add-repo-standard | update-team-baseline | update-repo-standard | already-covered | not-a-standard>
-Standards checked: <Global agent instructions, Team coding baseline, and repo standards inspected>
-Evidence: <the recurring asks and current standards coverage>
-Rationale: <why this is the narrowest authoritative standards surface, or why no standards change belongs here>
-Proposed wording: <a concise rule, or "n/a">
-```
-
-Use the Team coding baseline for a generally applicable rule and repo coding standards for a rule
-that depends on one repo's stack, architecture, or domain. Generality decides scope; the number of
-repos is evidence, not a mechanical threshold. Use `already-covered` when current guidance states
-the rule adequately, and `not-a-standard` for product requirements, one-off fixes, or problems
-better prevented in code or tooling.
-
-Write `_No standards opportunities._` only when there are no active actions.
-
-### Skill & Workflow Opportunities
-
-Give every active action exactly one disposition after inspecting relevant existing skills and
-workflows:
-
-```text
-#### <action id> — <short opportunity name>
-Disposition: <create-skill | create-workflow | update | combine | no-skill>
-Candidates: <existing skills/workflows considered, or "none found">
-Evidence: <the active action and session evidence that justify the decision>
-Rationale: <why this disposition is the smallest durable response>
-```
-
-`create-skill` and `create-workflow` name a reusable boundary and trigger, not merely a document
-title. `update` names the existing owner. `combine` names every overlapping owner and the unified
-boundary. `no-skill` explains why code, tooling, setup, or another target is the better durable
-fix.
-
-Write `_No skill or workflow opportunities._` only when there are no active actions.
+Keep the problem understandable without metadata. Give each field its own Markdown paragraph
+so it remains readable in HTML. Use evidence anchors for decisive excerpts; identify user statements,
+tool results, source inspection, and assistant claims distinctly. A valid citation locates evidence;
+it does not establish that the cited claim is true.
 
 ### Resolved or Superseded
 
-Preserve candidates suppressed from active ranking:
+Keep a concise entry for each suppressed candidate: id, resolution, checked-at, checked-against,
+current-state evidence, prior finding link, and session evidence. State whether effectiveness was
+observed or remains unmeasured. Write `_No resolved or superseded candidates._` when empty.
 
-```text
-#### <id> — <name>
-Resolution: <resolved | superseded>
-Checked-at: <timestamp>
-Checked-against: <current-state evidence inspected>
-Current-state evidence: <what fixed it or what replaced it>
-Session evidence: <the historical evidence retained for recurrence memory>
-```
+### Supporting Evidence
 
-Write `_No resolved or superseded candidates._` when empty.
+Keep detailed standards and workflow audits here, linked from the action, using
+`<details><summary>Audit for A1</summary>` with blank lines around the Markdown body.
+For standards candidates, inspect Global instructions, the Team coding baseline, and applicable
+repo guidance. Record coverage, authoritative owner, rationale, and proposed wording when needed.
+Generally applicable rules belong in the Team baseline; stack/domain rules belong in repo guidance.
+An already-covered ask calls for investigating execution or enforcement, not another copy.
 
-## Completion criteria
+For each active action, inspect relevant skills/workflows before choosing its disposition. Name
+existing owners; a new skill or workflow needs a reusable boundary and trigger. Keep this reasoning
+in the audit, with only the decision in the action. Retain source-only candidate dispositions here
+or in linked session sources so low-signal evidence remains available to later runs.
 
-The synthesis is complete when every grouped candidate appears exactly once in **Active Actions**
-or **Resolved or Superseded**, and every active action has exactly one entry in **Standards
-Opportunities** and **Skill & Workflow Opportunities**. Every active action starts with a
-plain-language problem and includes the required summary and audit fields in order. Immediately
-before commit, refresh any active candidate whose issue, PR, branch, or installed-guidance evidence
-may have changed during the run.
+## Completion
+
+Every candidate has one active or resolved entry, current-state evidence, and linked session
+support. Every active action has one standards and one workflow disposition, an observable closure
+condition, and explicit uncertainty. Refresh mutable evidence immediately before commit.

@@ -13,8 +13,8 @@ Run a report-only audit of two evidence lanes:
 - **PR trajectories** — corrective changes between a PR's opening snapshot and merged outcome.
 
 Group recurring evidence into **durable fixes**, audit whether each problem still exists, and rank
-active candidates by **value × recurrence**. Keep session actions and PR corrective patterns in
-separate report lanes. Complete both lanes before synthesis; a PR lane with explicit gaps is
+active candidates using the synthesis contract’s prioritization. Keep session actions and PR
+corrective patterns in separate report lanes. Complete both lanes before synthesis; a PR lane with explicit gaps is
 complete, while a transcript-only result is degraded and must name the missing PR evidence.
 Let the verified gap, rather than its landing surface, decide the fix: code, tooling, setup, and
 infrastructure are first-class alongside skill and workflow changes.
@@ -90,9 +90,8 @@ features are not standards candidates merely because their wording recurs.
 
 Then inspect the newest six report sets under `reports/`: each compact retrospective plus its
 session and PR source siblings when present. Cross-reference rather than copy forward. Promote a
-session thread when this run corroborates prior report sets. A corroborated thread outranks a fresh
-one-off even when its earlier evidence was low-signal. Keep PR-only recurrence in the PR
-corrective-pattern lane unless session evidence independently supports the same problem.
+session thread when this run corroborates prior report sets. Use corroboration to strengthen evidence.
+Keep PR-only recurrence in the PR corrective-pattern lane unless session evidence independently supports the same problem.
 
 **Done when** every current session proposal, repeated-ask cluster, and standards candidate, and
 every prior session thread considered for promotion, belongs to one candidate, is explicitly
@@ -118,13 +117,14 @@ recurrence after a verified resolution as an active regression.
 
 ## 6. Synthesize decisions
 
-Rank active candidates by **value × recurrence**. For each one, inspect relevant existing skills and
-workflows and choose the synthesis contract's `create-skill`, `create-workflow`, `update`,
-`combine`, or `no-skill` disposition. Write the contract's exact problem-first, four-section
+Apply the synthesis contract’s prioritization and weekly-change rules. Load
+[the report contract](references/report-contract.md) for presentation and selective `$show-me` use.
+For each candidate, inspect relevant existing skills and workflows and choose the synthesis
+contract’s workflow disposition. Write the contract's decision-first, four-section
 Markdown shape to a synthesis file in the run directory.
 
 **Done when** every candidate appears exactly once in an active or resolved section, every active
-candidate has exactly one standards disposition and one skill/workflow disposition, and every
+candidate has co-located standards and workflow dispositions, a next step, and a closure condition. Every
 recommendation retains session and resolution evidence.
 
 ## 7. Commit the report
@@ -136,15 +136,15 @@ bun scripts/run-retrospective.ts commit --run-ts <runTs> --synthesis <synthesisF
 ```
 
 Commit validates citations and required report mechanics, freezes accepted session friction, and
-writes the report set. Load [the report contract](references/report-contract.md) only when report
-shape or disk layout needs inspection.
+writes the Markdown, HTML, and supporting sources.
 
 **Done when** the printed report path exists and the dropped citation counts have been surfaced; a
 high count means subagents cited evidence absent from their bundles.
 
 ## 8. Hand back decisions
 
-Read the compact report and present its lead proposals, coverage gaps, and dropped citation counts.
+Inspect the generated HTML and Markdown,
+and present the recommended decisions, coverage gaps, and dropped citation counts.
 Each proposal must remain named, evidenced, current-state-checked, and confidence-tagged so the
 human can decide what to implement.
 

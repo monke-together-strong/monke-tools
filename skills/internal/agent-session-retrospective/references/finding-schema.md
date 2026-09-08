@@ -84,7 +84,7 @@ episode sources.
   Not "the agent could have been faster" — that cites nothing.
 - Lead every `durableFixProposal.body` with `Target:` and `Confidence:` lines. The body is prose;
   there are no other required fields.
-- **Rank the fix by value × recurrence, not by where it lands.** A code, tooling, or setup fix is
+- **Describe observed consequences and independent recurrence; synthesis owns ranking.** A code, tooling, or setup fix is
   first-class — e.g. "`mt spawn` doesn't install deps / generate clients, so the agent runs the
   same workaround every session" is a high-value proposal, not a footnote. Name the actual landing
   surface even when a transcript says the fix already landed; current-state resolution belongs to
