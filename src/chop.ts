@@ -48,6 +48,7 @@ interface SessionChopTarget {
 type ChopTarget = OrdinaryChopTarget | SessionChopTarget;
 
 interface ChopOptions {
+  cleanupFromSource?: boolean;
   force: boolean;
 }
 
@@ -268,7 +269,7 @@ export function teardownSession(
       observer.beforeRemoval?.(candidate.repo);
     }
   }
-  cleanupSessionResources(runtime, target.state, observer);
+  cleanupSessionResources(runtime, target.state, observer, options.cleanupFromSource === true);
 
   for (const candidate of ordered) {
     observer.beforeStep?.({

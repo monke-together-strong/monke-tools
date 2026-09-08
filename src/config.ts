@@ -521,16 +521,16 @@ function requireResourceCommandRunPath(relativePath: string, location: string) {
 function requireResourceLiteral(literal: string, location: string) {
   for (const match of literal.matchAll(/\$\{(?<placeholder>[^}]*)\}/gu)) {
     const placeholder = match.groups?.placeholder ?? "";
-    if (placeholder !== "session" && placeholder !== "user") {
+    if (placeholder !== "session" && placeholder !== "user" && placeholder !== "id") {
       throw new MonkeError(
-        `${location} contains unsupported placeholder \${${placeholder}}; supported placeholders are \${session} and \${user}`
+        `${location} contains unsupported placeholder \${${placeholder}}; supported placeholders are \${session}, \${user}, and \${id}`
       );
     }
   }
 
-  if (literal.replaceAll(/\$\{(?:session|user)\}/gu, "").includes("${")) {
+  if (literal.replaceAll(/\$\{(?:session|user|id)\}/gu, "").includes("${")) {
     throw new MonkeError(
-      `${location} contains an unsupported placeholder; supported placeholders are \${session} and \${user}`
+      `${location} contains an unsupported placeholder; supported placeholders are \${session}, \${user}, and \${id}`
     );
   }
 

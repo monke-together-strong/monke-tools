@@ -246,12 +246,11 @@ exception does not broaden the user's `mt chop --force` semantics.
 Before removing any worktrees, teardown runs only recorded Cleanup commands in reverse materialization order,
 from Root toward dependencies. Missing recorded commands remain absent regardless
 of current config. Stop at the first failure, retain full state and resources,
-and leave later dependency commands unrun and all remaining worktrees intact. Commands run in their Session worktree, falling back to the Source checkout only if that worktree is already missing. Retries start from the first command;
+and leave later dependency commands unrun and all remaining worktrees intact. Commands run in their Session worktree. A missing worktree with a required command blocks all commands unless explicit Chop recovery uses `--cleanup-from-source`. Retries start from the first command;
 individual successes are not checkpointed.
 
 A named Session remains a valid Chop target while state is retained, even after
-all worktrees disappear. `mt chop <session>` retries finalization; Cleanup discovers
-and finalizes dead Sessions broadly. Successful finalization removes state, after
+all worktrees disappear. `mt chop <session>` retries teardown. Cleanup discovers dead Sessions broadly, but required commands need their worktrees restored or deliberate `mt chop <session> --cleanup-from-source` recovery. Successful finalization removes state, after
 which another named Chop reports no target.
 
 ## Diff

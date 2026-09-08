@@ -697,7 +697,7 @@ apps: {}
       const expectedFailures = {
         branch: /Session worktree branch\/HEAD changed from banana to raced/u,
         lock: /locked.*race/u,
-        registration: /unexpected path/u,
+        registration: /Session worktree is missing/u,
         repository: /Cannot verify registered worktree/u
       };
       const gitLog = installGitShim(fixture.binDirectory, {
@@ -717,11 +717,14 @@ apps: {}
         });
       }).toThrow(expectedFailures[raceKind]);
 
-      expect(existsSync(fixture.depWorktree)).toBeFalsy();
       expect(existsSync(fixture.statePath)).toBeTruthy();
-      expect(existsSync(fixture.cleanupLog)).toBeTruthy();
       const removals = readWorktreeRemovals(gitLog);
-      expect(removals).toStrictEqual([`worktree remove --force ${fixture.depWorktree}`]);
+      const missingBeforeCleanup = raceKind === "registration";
+      expect(existsSync(fixture.depWorktree)).toBe(missingBeforeCleanup);
+      expect(existsSync(fixture.cleanupLog)).toBe(!missingBeforeCleanup);
+      expect(removals).toStrictEqual(
+        missingBeforeCleanup ? [] : [`worktree remove --force ${fixture.depWorktree}`]
+      );
     }
   );
 
@@ -754,7 +757,7 @@ apps: {}
     ]);
 
     runMonke({
-      args: ["chop", fixture.session],
+      args: ["chop", fixture.session, "--cleanup-from-source"],
       cwd: fixture.root,
       monkeHome: fixture.home
     });
@@ -1047,7 +1050,7 @@ external:
     git(fixture.root, ["worktree", "remove", fixture.rootWorktree]);
     writeFileSync(allow, "", "utf-8");
     runMonke({
-      args: ["chop", fixture.session],
+      args: ["chop", fixture.session, "--cleanup-from-source"],
       cwd: fixture.depRoot,
       monkeHome: fixture.home
     });
@@ -1255,7 +1258,7 @@ repos:
     expect(existsSync(fixture.statePath)).toBeTruthy();
   });
 
-  test("broad Cleanup reuses saved-state-only Root-first Session finalization", () => {
+  test("explicit source recovery reuses saved-state-only Root-first cleanup", () => {
     const sandbox = makeTempDir("cleanup-targeted-finalization");
     const home = path.join(sandbox, "home");
     const cleanupLog = path.join(sandbox, "cleanup.log");
@@ -1303,7 +1306,7 @@ apps: {}
     });
 
     runMonke({
-      args: ["cleanup"],
+      args: ["chop", "dead", "--cleanup-from-source"],
       cwd: root,
       monkeHome: home
     });

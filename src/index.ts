@@ -82,8 +82,15 @@ function createProgram(runtime: Runtime) {
       "--force",
       "Discard staged, modified, and untracked files; ignored files are always deleted"
     )
+    .option(
+      "--cleanup-from-source",
+      "Explicit recovery: run cleanup from the source checkout only for missing Session worktrees"
+    )
     .action((target, options) => {
-      runChop(runtime, target, { force: options.force === true });
+      runChop(runtime, target, {
+        cleanupFromSource: options.cleanupFromSource === true,
+        force: options.force === true
+      });
     });
 
   program

@@ -32,7 +32,8 @@ export function finalizeSession(
 export function cleanupSessionResources(
   runtime: Runtime,
   state: SessionState,
-  observer: SessionLifecycleObserver = {}
+  observer: SessionLifecycleObserver = {},
+  cleanupFromSource = false
 ) {
   for (const repoState of state.repos) {
     observer.beforeStep?.({
@@ -41,6 +42,18 @@ export function cleanupSessionResources(
       worktreePath: repoState.worktreePath
     });
     assertCanonicalSourceCheckout(runtime, repoState.sourceRoot);
+    if (
+      repoState.cleanupEligible &&
+      repoState.cleanupCommand &&
+      !existsSync(repoState.worktreePath) &&
+      !cleanupFromSource
+    ) {
+      throw new MonkeError(
+        `Cannot run cleanup: Session worktree is missing: ${repoState.worktreePath}. ` +
+          `Restore the worktree and retry. Only if the recorded commands are safe from source checkouts, ` +
+          `use mt chop <session> --cleanup-from-source for explicit recovery. Session state is retained.`
+      );
+    }
   }
 
   for (const repoState of [...state.repos].toReversed()) {
@@ -68,7 +81,10 @@ export function cleanupSessionResources(
     observer.beforeEffect?.(action);
     try {
       runtime.exec("sh", ["-c", cleanupCommand], {
-        cwd: existsSync(repoState.worktreePath) ? repoState.worktreePath : repoState.sourceRoot,
+        cwd:
+          cleanupFromSource && !existsSync(repoState.worktreePath)
+            ? repoState.sourceRoot
+            : repoState.worktreePath,
         env: {
           ...resourceEnv,
           ...resourceCommandEnv,

@@ -34,7 +34,7 @@ A session is ready after dependencies, env/path rewrites, resources, and bootstr
 
 Resolve the target scope before removal. Dirty files block `chop`; use `--force` only when discarding them is authorized. Ignored files are always deleted with removed worktrees. Ordinary worktrees accept registered branches or paths; detached worktrees require current-location or path selection. Source checkouts are not removal targets.
 
-Cleanup commands run before any Session worktrees are removed; failure retains the remaining worktrees and Session state. Earlier commands may already have removed resources. Diagnose the reported repository/step and completed actions, then retry `mt cleanup` for eligible Sessions or `mt chop <session>` for an explicit target, even if its worktrees are gone; recorded cleanup commands run root-first and may rerun. Preserve session state for recovery. Teardown is complete when removal and finalization succeed.
+Cleanup commands run before any Session worktrees are removed; failure retains the remaining worktrees and Session state. Earlier commands may already have removed resources. Diagnose the reported repository/step and completed actions, then retry `mt cleanup` for eligible Sessions or `mt chop <session>` for an explicit target; recorded cleanup commands run root-first and may rerun. A missing worktree blocks required commands; restore it, or explicitly use `mt chop <session> --cleanup-from-source` only after verifying those commands are safe from the source checkout. Preserve session state for recovery. Teardown is complete when removal and finalization succeed.
 
 ## Configuration and installation
 

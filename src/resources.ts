@@ -8,6 +8,7 @@ import { describeRedactedValue } from "./env.ts";
 import { MonkeError } from "./errors.ts";
 import { withScopedLockAsync } from "./runtime.ts";
 import type { SessionStateStore } from "./session-state-store.ts";
+import { sha256 } from "./sha256.ts";
 import type {
   RepoConfig,
   ResourceCommandConfig,
@@ -75,6 +76,7 @@ export function resolveResourceValues(options: {
     const value =
       remembered ??
       interpolateResourceLiteral({
+        id: sha256(JSON.stringify([options.repoConfig.sourceRoot, options.session])).slice(0, 32),
         literal: resource.literal,
         location: `${options.repoConfig.configPath}#resources.values.${resource.env}`,
         session: options.session,
@@ -480,6 +482,7 @@ function toImmediateResourceCommandStates(
 }
 
 function interpolateResourceLiteral(options: {
+  id: string;
   literal: string;
   location: string;
   session: string;
@@ -488,6 +491,9 @@ function interpolateResourceLiteral(options: {
   const value = options.literal.replaceAll(
     /\$\{(?<name>[^}]*)\}/gu,
     (placeholder, name: string) => {
+      if (name === "id") {
+        return options.id;
+      }
       if (name === "session") {
         return options.session;
       }
@@ -495,14 +501,14 @@ function interpolateResourceLiteral(options: {
         return options.user;
       }
       throw new MonkeError(
-        `${options.location} contains unsupported placeholder ${placeholder}; supported placeholders are \${session} and \${user}`
+        `${options.location} contains unsupported placeholder ${placeholder}; supported placeholders are \${session}, \${user}, and \${id}`
       );
     }
   );
 
   if (value.includes("${")) {
     throw new MonkeError(
-      `${options.location} contains an unsupported placeholder; supported placeholders are \${session} and \${user}`
+      `${options.location} contains an unsupported placeholder; supported placeholders are \${session}, \${user}, and \${id}`
     );
   }
 
