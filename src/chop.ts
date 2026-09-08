@@ -278,15 +278,7 @@ export function teardownSession(
       worktreePath: candidate.repo.worktreePath
     });
     const current = inspectSessionRepo(runtime, home, target.state, candidate.repo, options);
-    if (
-      candidate.registeredBranch !== undefined &&
-      current.registeredBranch !== undefined &&
-      current.registeredBranch !== candidate.registeredBranch
-    ) {
-      throw new MonkeError(
-        `Session worktree branch/HEAD changed from ${formatWorktreeBranch(candidate.registeredBranch)} to ${formatWorktreeBranch(current.registeredBranch)} at ${current.repo.worktreePath}`
-      );
-    }
+    assertSessionMemberUnchanged(candidate, current);
     observer.revalidateMember?.(candidate.repo);
     if (current.mode !== "gone") {
       const action: SessionAction = {
@@ -312,6 +304,26 @@ export function teardownSession(
     kind: "session",
     session: target.state.session
   };
+}
+
+function assertSessionMemberUnchanged(
+  candidate: SessionRepoPreflight,
+  current: SessionRepoPreflight
+) {
+  if (candidate.mode === "gone" && current.mode !== "gone") {
+    throw new MonkeError(
+      `Session worktree reappeared after preflight at ${current.repo.worktreePath}; retry teardown to inspect it before cleanup`
+    );
+  }
+  if (
+    candidate.registeredBranch !== undefined &&
+    current.registeredBranch !== undefined &&
+    current.registeredBranch !== candidate.registeredBranch
+  ) {
+    throw new MonkeError(
+      `Session worktree branch/HEAD changed from ${formatWorktreeBranch(candidate.registeredBranch)} to ${formatWorktreeBranch(current.registeredBranch)} at ${current.repo.worktreePath}`
+    );
+  }
 }
 
 function preflightSession(

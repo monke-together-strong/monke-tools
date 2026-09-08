@@ -621,6 +621,31 @@ apps: {}
     expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
   });
 
+  test("source recovery retains a worktree that reappears during cleanup", () => {
+    const sandbox = makeTempDir("chop-reappeared-session");
+    const home = path.join(sandbox, "home");
+    const root = createRepo(path.join(sandbox, "root"), {
+      "monke.yml": `bootstrapCommand: "true"
+cleanupCommand: git worktree add "$MONKE_WORKTREE_PATH" "$MONKE_SESSION"
+apps: {}
+`
+    });
+    runMonke({ args: ["spawn", "banana"], cwd: root, monkeHome: home });
+    const worktree = getExpectedWorktreePath(home, root, "banana");
+    git(root, ["worktree", "remove", worktree]);
+
+    expect(() => {
+      runMonke({
+        args: ["chop", "banana", "--cleanup-from-source"],
+        cwd: root,
+        monkeHome: home
+      });
+    }).toThrow(/Session worktree reappeared after preflight/u);
+
+    expect(existsSync(worktree)).toBeTruthy();
+    expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
+  });
+
   test("rejects a Session branch live at an unexpected path", () => {
     const sandbox = makeTempDir("chop-session-unexpected-live-branch");
     const home = path.join(sandbox, "home");
