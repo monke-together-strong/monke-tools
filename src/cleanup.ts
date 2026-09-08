@@ -340,11 +340,6 @@ function executeSession(
           if (action.step === "state-removal") {
             assertFinalizationReady(readOnly, home, state);
           }
-          if (action.step === "cleanup-command") {
-            for (const repo of state.repos) {
-              revalidateMember(repo);
-            }
-          }
           started = true;
           attemptedAction = action;
         },

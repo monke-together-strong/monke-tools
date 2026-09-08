@@ -646,6 +646,44 @@ apps: {}
     expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
   });
 
+  test.each(["reappeared", "branch"] as const)(
+    "cleanup does not run in a dependency %s by the root command",
+    (change) => {
+      const fixture = createMultiRepoSessionFixture(`chop-cleanup-${change}`);
+      const state = loadSessionState(fixture.home, fixture.root, fixture.session);
+      const command =
+        change === "reappeared"
+          ? `git -C "${fixture.depRoot}" worktree add "${fixture.depWorktree}" "$MONKE_SESSION"`
+          : `git -C "${fixture.depWorktree}" switch -c raced`;
+      saveSessionState(fixture.home, {
+        ...state,
+        repos: state.repos.map((repo) =>
+          repo.sourceRoot === fixture.root ? { ...repo, cleanupCommand: command } : repo
+        )
+      });
+      if (change === "reappeared") {
+        git(fixture.depRoot, ["worktree", "remove", fixture.depWorktree]);
+      }
+
+      expect(() => {
+        runMonke({
+          args: ["chop", fixture.session, "--cleanup-from-source"],
+          cwd: fixture.root,
+          monkeHome: fixture.home
+        });
+      }).toThrow(
+        change === "reappeared"
+          ? /Session worktree reappeared after preflight/u
+          : /Session worktree branch\/HEAD changed/u
+      );
+
+      expect(existsSync(fixture.cleanupLog)).toBeFalsy();
+      expect(existsSync(fixture.depWorktree)).toBeTruthy();
+      expect(existsSync(fixture.rootWorktree)).toBeTruthy();
+      expect(existsSync(fixture.statePath)).toBeTruthy();
+    }
+  );
+
   test("rejects a Session branch live at an unexpected path", () => {
     const sandbox = makeTempDir("chop-session-unexpected-live-branch");
     const home = path.join(sandbox, "home");
@@ -670,7 +708,7 @@ apps: {}
   });
 
   test.each(["staged", "modified", "untracked"] as const)(
-    "a just-in-time %s race stops later Session removals and retains state",
+    "a just-in-time %s race blocks cleanup and retains all Session worktrees",
     (dirtyKind) => {
       const fixture = createMultiRepoSessionFixture(`chop-session-${dirtyKind}-race`);
       const targetFile =
@@ -698,17 +736,17 @@ apps: {}
         });
       }).toThrow(/dirty worktree/u);
 
-      expect(existsSync(fixture.depWorktree)).toBeFalsy();
+      expect(existsSync(fixture.depWorktree)).toBeTruthy();
       expect(existsSync(fixture.rootWorktree)).toBeTruthy();
       expect(existsSync(fixture.statePath)).toBeTruthy();
-      expect(existsSync(fixture.cleanupLog)).toBeTruthy();
+      expect(existsSync(fixture.cleanupLog)).toBeFalsy();
       const removals = readWorktreeRemovals(gitLog);
-      expect(removals).toStrictEqual([`worktree remove ${fixture.depWorktree}`]);
+      expect(removals).toStrictEqual([]);
     }
   );
 
   test.each(["branch", "lock", "registration", "repository"] as const)(
-    "--force still detects a just-in-time %s race before the affected Session removal",
+    "--force still detects a just-in-time %s race before Session cleanup",
     (raceKind) => {
       const fixture = createMultiRepoSessionFixture(`chop-session-${raceKind}-race`);
       const movedPath = path.join(fixture.sandbox, "moved-root-worktree");
@@ -744,12 +782,9 @@ apps: {}
 
       expect(existsSync(fixture.statePath)).toBeTruthy();
       const removals = readWorktreeRemovals(gitLog);
-      const missingBeforeCleanup = raceKind === "registration";
-      expect(existsSync(fixture.depWorktree)).toBe(missingBeforeCleanup);
-      expect(existsSync(fixture.cleanupLog)).toBe(!missingBeforeCleanup);
-      expect(removals).toStrictEqual(
-        missingBeforeCleanup ? [] : [`worktree remove --force ${fixture.depWorktree}`]
-      );
+      expect(existsSync(fixture.depWorktree)).toBeTruthy();
+      expect(existsSync(fixture.cleanupLog)).toBeFalsy();
+      expect(removals).toStrictEqual([]);
     }
   );
 

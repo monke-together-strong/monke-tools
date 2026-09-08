@@ -269,7 +269,33 @@ export function teardownSession(
       observer.beforeRemoval?.(candidate.repo);
     }
   }
-  cleanupSessionResources(runtime, target.state, observer, options.cleanupFromSource === true);
+  cleanupSessionResources(
+    runtime,
+    target.state,
+    {
+      ...observer,
+      beforeEffect(action) {
+        for (const candidate of preflight) {
+          observer.beforeStep?.({
+            sourceRoot: candidate.repo.sourceRoot,
+            step: "revalidation",
+            worktreePath: candidate.repo.worktreePath
+          });
+          const current = inspectSessionRepo(runtime, home, target.state, candidate.repo, options);
+          assertSessionMemberUnchanged(candidate, current);
+          if (candidate.mode !== current.mode) {
+            throw new MonkeError(
+              `Session worktree presence changed after preflight at ${current.repo.worktreePath}; retry teardown`
+            );
+          }
+          observer.revalidateMember?.(candidate.repo);
+        }
+        observer.beforeStep?.(action);
+        observer.beforeEffect?.(action);
+      }
+    },
+    options.cleanupFromSource === true
+  );
 
   for (const candidate of ordered) {
     observer.beforeStep?.({
