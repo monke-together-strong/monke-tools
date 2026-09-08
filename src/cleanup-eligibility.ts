@@ -26,6 +26,9 @@ const PullRequestSchema = z.object({
   number: z.number().int().positive(),
   state: z.enum(["open", "closed"])
 });
+const CommitPullRequestSchema = PullRequestSchema.extend({
+  merge_commit_sha: OidSchema.nullable()
+});
 const ComparisonSchema = z.object({
   behind_by: z.number().int().nonnegative(),
   merge_base_commit: z.object({ sha: OidSchema }),
@@ -55,11 +58,13 @@ export const CleanupCodeSchema = z.enum([
   "ambiguous-pr",
   "head-mismatch",
   "no-merged-pr",
+  "commit-pr-unavailable",
   "recent-worktree",
   "ancestry-unavailable",
   "changed-during-inspection",
   "repository-changed-during-inspection",
   "exact-merged-pr",
+  "merged-pr-head",
   "unchanged-branch"
 ]);
 
@@ -77,6 +82,8 @@ export interface CleanupEvidence {
   ancestorOfDefault: boolean | null;
   branch: string | null;
   candidate: CleanupCandidate;
+  /** Exact HEAD matches from commit-associated PRs; null means the lookup failed. */
+  commitPullRequests?: CommitPullRequestEvidence[] | null;
   /** Absent only in older saved evidence; absence is not proof a check ran. */
   committedWorkAttempted?: boolean;
   head: string | null;
@@ -84,6 +91,11 @@ export interface CleanupEvidence {
   repository: CleanupRepositoryEvidence | null;
   /** Milliseconds since the worktree was created; null when unknown. Absent in older saved evidence. */
   worktreeAgeMs?: number | null;
+}
+
+export interface CommitPullRequestEvidence {
+  ancestorOfDefault: boolean | null;
+  pullRequest: z.output<typeof CommitPullRequestSchema>;
 }
 
 export const CleanupRepositoryEvidenceSchema = z.object({
@@ -95,12 +107,18 @@ export const CleanupRepositoryEvidenceSchema = z.object({
 
 export type CleanupRepositoryEvidence = z.output<typeof CleanupRepositoryEvidenceSchema>;
 
-/** Ancestry-only proof waits this long so a just-spawned Session is not removed before work starts. */
+/**
+ * Ancestry and cross-branch PR proof wait so a just-spawned Session is not removed before work
+ * starts.
+ */
 export const RECENT_WORKTREE_MS = 24 * 60 * 60 * 1000;
 
 /** One audit's remote snapshots; never cache local identity, HEAD, or cleanliness. */
 export function createCleanupEvidenceCache() {
-  return new Map<string, Promise<CleanupRepositoryEvidence | null>>();
+  return {
+    commitPullRequests: new Map<string, Promise<CommitPullRequestEvidence[] | null>>(),
+    repositories: new Map<string, Promise<CleanupRepositoryEvidence | null>>()
+  };
 }
 
 export type CleanupEvidenceCache = ReturnType<typeof createCleanupEvidenceCache>;
@@ -168,6 +186,10 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
       "member proof only; whole-Session eligibility is still required"
     ]);
   }
+  const commitDecision = decideCommitPullRequests(snapshot, repository, head);
+  if (commitDecision) {
+    return commitDecision;
+  }
   if (branchPrs.some((pr) => !pr.merged_at && pr.head.sha === head)) {
     return decision("ineligible", "closed-unmerged-pr");
   }
@@ -179,6 +201,61 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   }
   // Both answers came back; unique commits without a merged PR is a settled fact.
   return decision("ineligible", "no-merged-pr");
+}
+
+function decideCommitPullRequests(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence,
+  head: string
+): CleanupDecision | null {
+  if (snapshot.commitPullRequests === null) {
+    return decision("unknown", "commit-pr-unavailable");
+  }
+  const matches =
+    snapshot.commitPullRequests?.filter(({ pullRequest: pr }) =>
+      isExactMergedHead(pr, repository, head)
+    ) ?? [];
+  if (matches.length > 1) {
+    return decision("unknown", "ambiguous-pr");
+  }
+  const [match] = matches;
+  if (!match || match.ancestorOfDefault === false) {
+    return null;
+  }
+  if (match.ancestorOfDefault === null) {
+    return decision("unknown", "ancestry-unavailable");
+  }
+  if (snapshot.worktreeAgeMs === undefined || snapshot.worktreeAgeMs === null) {
+    return decision("unknown", "recent-worktree");
+  }
+  if (snapshot.worktreeAgeMs < RECENT_WORKTREE_MS) {
+    return decision("ineligible", "recent-worktree");
+  }
+  const pr = match.pullRequest;
+  return decision("eligible", "merged-pr-head", [
+    "registered linked worktree; clean including submodules and untracked files",
+    `${repository.name}#${pr.number}: ${pr.head.ref} -> ${repository.defaultBranch}`,
+    `HEAD equals merged PR head: ${head}`,
+    `merge commit ${pr.merge_commit_sha} is an ancestor of verified default HEAD ${repository.defaultHead}`,
+    `worktree created ${Math.floor(snapshot.worktreeAgeMs / RECENT_WORKTREE_MS)} day(s) ago`,
+    "member proof only; whole-Session eligibility is still required"
+  ]);
+}
+
+function isExactMergedHead(
+  pr: z.output<typeof CommitPullRequestSchema>,
+  repository: CleanupRepositoryEvidence,
+  head: string
+) {
+  return (
+    pr.head.sha === head &&
+    pr.head.repo?.full_name === repository.name &&
+    pr.state === "closed" &&
+    pr.merged_at !== null &&
+    pr.merge_commit_sha !== null &&
+    pr.base.ref === repository.defaultBranch &&
+    pr.base.repo?.full_name === repository.name
+  );
 }
 
 /**
@@ -221,10 +298,10 @@ export async function collectCleanupEvidence(
     return snapshot;
   }
   const cacheKey = `${candidate.sourceRoot}\0${repositoryName.toLowerCase()}`;
-  let repository = cache.get(cacheKey);
+  let repository = cache.repositories.get(cacheKey);
   if (!repository) {
     repository = inspectRepository(readOnly, candidate.sourceRoot, repositoryName);
-    cache.set(cacheKey, repository);
+    cache.repositories.set(cacheKey, repository);
   }
   snapshot.repository = await repository;
   if (snapshot.repository && snapshot.head) {
@@ -234,6 +311,25 @@ export async function collectCleanupEvidence(
       snapshot.head,
       snapshot.repository
     );
+    const currentDecision = decideCleanupEligibility(snapshot);
+    if (
+      ["no-merged-pr", "head-mismatch", "closed-unmerged-pr", "ancestry-unavailable"].includes(
+        currentDecision.code
+      )
+    ) {
+      const commitKey = `${cacheKey}\0${snapshot.head}\0${snapshot.repository.defaultHead}`;
+      let commitPullRequests = cache.commitPullRequests.get(commitKey);
+      if (!commitPullRequests) {
+        commitPullRequests = inspectCommitPullRequests(
+          readOnly,
+          candidate.sourceRoot,
+          snapshot.head,
+          snapshot.repository
+        );
+        cache.commitPullRequests.set(commitKey, commitPullRequests);
+      }
+      snapshot.commitPullRequests = await commitPullRequests;
+    }
   }
   // Provider lookups can take seconds. Never attach old proof to a changed checkout.
   const current = inspectLocal(readOnly, candidate);
@@ -409,10 +505,16 @@ async function github(runtime: Runtime, sourceRoot: string, endpoint: string, pa
   const result = await runtime.execAsync(
     "gh",
     ["api", endpoint, "--hostname", "github.com", ...(paginate ? ["--paginate", "--slurp"] : [])],
-    { cwd: sourceRoot, timeoutSeconds: 30 }
+    { allowFailure: true, cwd: sourceRoot, timeoutSeconds: 30 }
   );
   if (result.exitCode !== 0) {
-    if (/\bHTTP 404\b/u.test(result.stderr)) {
+    const commit = /\/commits\/(?<sha>[\da-f]{40})\/pulls(?:\?|$)/u.exec(endpoint)?.groups?.sha;
+    if (
+      /\bHTTP 404\b/u.test(result.stderr) ||
+      (commit !== undefined &&
+        /\bHTTP 422\b/u.test(result.stderr) &&
+        result.stderr.includes(`No commit found for SHA: ${commit}`))
+    ) {
       throw new GitHubNotFoundError("GitHub resource not found");
     }
     throw new Error("GitHub evidence unavailable");
@@ -510,6 +612,39 @@ async function inspectAncestry(
     }
   } catch {
     return null;
+  }
+}
+
+async function inspectCommitPullRequests(
+  runtime: Runtime,
+  sourceRoot: string,
+  head: string,
+  repository: CleanupRepositoryEvidence
+): Promise<CommitPullRequestEvidence[] | null> {
+  try {
+    const pages = await github(
+      runtime,
+      sourceRoot,
+      `repos/${repository.name}/commits/${head}/pulls?per_page=100`,
+      true
+    );
+    const matches = z
+      .array(z.array(CommitPullRequestSchema))
+      .parse(pages)
+      .flat()
+      .filter((pr) => isExactMergedHead(pr, repository, head));
+    return await Promise.all(
+      matches.map(async (pr) => ({
+        ancestorOfDefault:
+          pr.merge_commit_sha === null
+            ? null
+            : await inspectAncestry(runtime, sourceRoot, pr.merge_commit_sha, repository),
+        pullRequest: pr
+      }))
+    );
+  } catch (error) {
+    // The repository was verified above; an unpushed commit has no associated PRs.
+    return error instanceof GitHubNotFoundError ? [] : null;
   }
 }
 

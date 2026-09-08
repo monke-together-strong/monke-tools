@@ -18,6 +18,8 @@ const messages: Record<SessionCleanupReason, string> = {
   "ancestry-unavailable": "The commit's relationship to the default branch could not be verified.",
   "changed-during-inspection": "The local branch or commit changed during inspection.",
   "closed-unmerged-pr": "The pull request for this commit was closed without merging.",
+  "commit-pr-unavailable":
+    "Pull requests associated with the current commit could not be verified.",
   "default-branch": "The worktree is on the repository's default branch.",
   "detached-head": "The worktree is not attached to a branch.",
   "dirty-worktree":
@@ -35,6 +37,8 @@ const messages: Record<SessionCleanupReason, string> = {
   "member-identity-unverified":
     "A member's Source checkout, recorded path, or registration could not be verified.",
   "member-missing-or-unverified": "The member has no usable worktree evidence.",
+  "merged-pr-head":
+    "The current commit matches a merged PR head under another branch, and its merge remains in the default branch.",
   "missing-worktree": "The worktree path is missing; ownership must be verified.",
   "no-merged-pr":
     "No qualifying merged pull request proves this work is complete, and the branch has commits outside the default branch.",
@@ -47,7 +51,7 @@ const messages: Record<SessionCleanupReason, string> = {
   "ownership-conflict":
     "Session ownership conflicts with another record or an overlapping registered worktree; remove the wrong Session state file from Monke home, then rerun Cleanup.",
   "recent-worktree":
-    "The branch has no commits outside the default branch, but the worktree is under a day old; ancestry-only proof waits for a day.",
+    "Ancestry or a merged PR under another branch provides completion evidence, but the worktree must have a verified age of at least one day.",
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
   "repository-unavailable": "The repository or its default branch could not be verified.",
   "source-checkout": "Source checkouts cannot be removed.",

@@ -117,16 +117,24 @@ resources recorded in its state, not inferred worktrees from today's config.
 Sessions. `eligibleForSessionCleanup` returns true only when every live member
 passes the individual-worktree check and the whole Session has no ownership,
 identity, hold, or operation blocker. A member passes with an exact merged PR
-for its current commit, or by proving that its commit is already inside the
-verified default branch, so it holds no unique work. Ancestry-only proof also
-requires the worktree to be at least one day old, measured from its `.git`
+for its current branch and commit, or by proving that its commit is already inside the
+verified default branch, so it holds no unique work. If neither proves completion,
+Cleanup queries GitHub's commit-associated PRs. A PR under another branch counts
+only when its HEAD exactly equals the member's HEAD, both PR repositories match
+the Source remote, its base is the verified default branch, and its merge commit
+remains an ancestor of the verified default HEAD. Intermediate commits in a merged
+PR do not qualify. An open PR on the member's current branch still blocks Cleanup.
+Ancestry and cross-branch PR proof require the worktree to be at least one day old, measured from its `.git`
 file, so a Session spawned from the default branch is not removed before work
-starts. Both proofs require a clean worktree first; uncommitted or untracked
+starts. Every proof requires a clean worktree first; uncommitted or untracked
 files always block. A branch GitHub has never seen cannot be inside its default
 branch, so a compare 404 on an unpushed commit counts as not an ancestor. A member with
 unique commits and no qualifying merged PR is ineligible, not unknown: the
 provider answered, so the skip is settled and does not mark inspection as
 failed. Actual member branch names can differ from the Session name.
+Commit-PR lookup or ancestry failures remain unknown. Repeated commit lookups share
+one inspection's cache, keyed by Source, repository, HEAD, and verified default HEAD;
+local identity and cleanliness are rechecked after provider reads.
 
 The report uses recorded membership. Nested worktree paths are overlapping
 ownership, including discovered unowned registrations; removing a parent must
