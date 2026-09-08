@@ -18,6 +18,7 @@ import {
 import {
   buildReportArtifacts,
   parseFixHeader,
+  renderReportHtml,
   runCommit,
   validatePrAnalysis,
   validateFindings,
@@ -755,35 +756,35 @@ describe("agent session retrospective", () => {
   describe(validateSynthesis, () => {
     test("requires each synthesis section exactly once", () => {
       const valid = [
-        "### Active Actions",
+        "### Recommended Decisions",
         "",
         "_No active actions._",
         "",
-        "### Standards Opportunities",
+        "### Remaining Active Actions",
         "",
-        "_No standards opportunities._",
-        "",
-        "### Skill & Workflow Opportunities",
-        "",
-        "_No skill or workflow opportunities._",
+        "_No remaining active actions._",
         "",
         "### Resolved or Superseded",
         "",
-        "_No resolved or superseded candidates._"
+        "_No resolved or superseded candidates._",
+        "",
+        "### Supporting Evidence",
+        "",
+        "_No supporting audits._"
       ].join("\n");
       expect(validateSynthesis(valid)).toStrictEqual([]);
-      expect(validateSynthesis("### Active Actions")).toStrictEqual([
-        "Heading `### Standards Opportunities` appears 0 time(s), expected 1.",
-        "Heading `### Skill & Workflow Opportunities` appears 0 time(s), expected 1.",
-        "Heading `### Resolved or Superseded` appears 0 time(s), expected 1."
+      expect(validateSynthesis("### Recommended Decisions")).toStrictEqual([
+        "Heading `### Remaining Active Actions` appears 0 time(s), expected 1.",
+        "Heading `### Resolved or Superseded` appears 0 time(s), expected 1.",
+        "Heading `### Supporting Evidence` appears 0 time(s), expected 1."
       ]);
       expect(
         validateSynthesis(
           [
-            "### Resolved or Superseded",
-            "### Active Actions",
-            "### Standards Opportunities",
-            "### Skill & Workflow Opportunities"
+            "### Supporting Evidence",
+            "### Recommended Decisions",
+            "### Remaining Active Actions",
+            "### Resolved or Superseded"
           ].join("\n")
         )
       ).toStrictEqual(["Required synthesis headings are out of order."]);
@@ -791,7 +792,7 @@ describe("agent session retrospective", () => {
 
     test("requires active actions to explain the problem before metadata and evidence", () => {
       const synthesis = [
-        "### Active Actions",
+        "### Recommended Decisions",
         "",
         "#### A1 — Reviews can approve the wrong tree",
         "Problem: Review approval can describe different code than the delivered commit.",
@@ -799,7 +800,14 @@ describe("agent session retrospective", () => {
         "Cause: The workflows do not share an immutable pre-commit snapshot.",
         "Proposed fix: Review one fingerprinted Git tree and verify the final commit matches it.",
         "",
+        "Next step: fix",
+        "Why now: Observed delivery risk; effort unknown.",
+        "Done when: Delivered code matches reviewed code.",
+        "Uncertainty: Effectiveness is unmeasured.",
+        "Change since last report: new",
         "Target: agent-skill",
+        "Standards disposition: not-a-standard",
+        "Workflow disposition: update review workflow",
         "Confidence: high",
         "Resolution: unresolved",
         "Checked-at: 2026-08-10T00:00:00Z",
@@ -808,25 +816,44 @@ describe("agent session retrospective", () => {
         "Remaining gap: No shared snapshot or final identity check exists.",
         "Session evidence: repo e1",
         "",
-        "### Standards Opportunities",
+        "### Remaining Active Actions",
         "",
-        "#### A1 — Immutable review identity is not a coding standard",
-        "Disposition: not-a-standard",
-        "Standards checked: Global instructions, Team baseline, and repo guidance.",
-        "Evidence: A1 concerns workflow identity rather than how code is written.",
-        "Rationale: A workflow guard is the authoritative prevention surface.",
-        "Proposed wording: n/a",
-        "",
-        "### Skill & Workflow Opportunities",
-        "",
-        "_No skill or workflow opportunities._",
+        "_No remaining active actions._",
         "",
         "### Resolved or Superseded",
         "",
-        "_No resolved or superseded candidates._"
+        "_No resolved or superseded candidates._",
+        "",
+        "### Supporting Evidence",
+        "",
+        "_No supporting audits._"
       ].join("\n");
 
       expect(validateSynthesis(synthesis)).toStrictEqual([]);
+      expect(validateSynthesis(synthesis.replace("#### A1", "#### B1"))).toContain(
+        "Candidate heading `B1 — Reviews can approve the wrong tree` must use `A<number> — <problem>`."
+      );
+
+      expect(
+        validateSynthesis(synthesis.replace("Done when: Delivered code matches reviewed code.", ""))
+      ).toContain(
+        "Active action `A1 — Reviews can approve the wrong tree` is missing `Done when:`."
+      );
+      const action = synthesis.slice(
+        synthesis.indexOf("#### A1"),
+        synthesis.indexOf("### Remaining Active Actions")
+      );
+      expect(
+        validateSynthesis(synthesis.replace("_No remaining active actions._", action))
+      ).toContain("Candidate A1 appears more than once.");
+      expect(
+        validateSynthesis(
+          synthesis
+            .replace(action, "_No recommended decisions._\n")
+            .replace("_No remaining active actions._", action)
+        )
+      ).toStrictEqual([]);
+
       expect(
         validateSynthesis(
           synthesis.replace(
@@ -840,25 +867,54 @@ describe("agent session retrospective", () => {
     });
   });
 
+  test("renders navigable HTML with readable fields and disclosed audits", () => {
+    const html = renderReportHtml(
+      "### Recommended Decisions\n\n#### A1 — A decision\n\nProblem: A < B.\n\nDone when: Verified.\n\n<details><summary>Audit for A1</summary>\n\nEvidence.\n\n</details>"
+    );
+    expect(html).toContain('href="#a1-a-decision"');
+    expect(html).toContain('id="a1-a-decision"');
+    expect(html).toContain("<p>Problem: A &lt; B.</p>");
+    expect(html).toContain("<p>Done when: Verified.</p>");
+    expect(html).toContain("<details><summary>Audit for A1</summary>");
+  });
+
+  test("removes executable report content while retaining audit disclosure and safe links", () => {
+    const html = renderReportHtml(
+      [
+        '<script>alert("report")</script>',
+        '<h4 onclick="alert(1)">A1 — <a href="javascript:alert(2)">Unsafe heading</a></h4>',
+        '<img src="x" onerror="alert(3)">',
+        '<details ontoggle="alert(4)"><summary>Audit</summary>Evidence</details>',
+        "[Unsafe URL](javascript:alert%285%29)",
+        "[Source](report-session-sources.md#evidence-repo-e1)",
+        "[PR](https://github.com/example/repo/pull/1)"
+      ].join("\n\n")
+    );
+    expect(html).not.toMatch(/<script|onclick=|onerror=|ontoggle=|javascript:/u);
+    expect(html).toContain("<details><summary>Audit</summary>Evidence</details>");
+    expect(html).toContain('href="report-session-sources.md#evidence-repo-e1"');
+    expect(html).toContain('href="https://github.com/example/repo/pull/1"');
+  });
+
   describe(buildReportArtifacts, () => {
     test("keeps the main report problem-focused and moves evidence to session sources", () => {
       const bundle = bundleWith(["t0"]);
       const synthesis = [
-        "### Active Actions",
+        "### Recommended Decisions",
         "",
         "GLOBAL-SYNTHESIS",
         "",
-        "### Standards Opportunities",
+        "### Remaining Active Actions",
         "",
-        "_No standards opportunities._",
-        "",
-        "### Skill & Workflow Opportunities",
-        "",
-        "_No skill or workflow opportunities._",
+        "_No remaining active actions._",
         "",
         "### Resolved or Superseded",
         "",
-        "_No resolved or superseded candidates._"
+        "_No resolved or superseded candidates._",
+        "",
+        "### Supporting Evidence",
+        "",
+        "_No supporting audits._"
       ].join("\n");
       const artifacts = buildReportArtifacts(
         "ts",
@@ -891,7 +947,8 @@ describe("agent session retrospective", () => {
       const prAt = report.indexOf("PR Repeated Corrective Patterns");
       expect(globalAt).toBeGreaterThan(-1);
       expect(globalAt).toBeLessThan(prAt);
-      expect(report).toContain("### Standards Opportunities");
+      expect(report).toContain("### Remaining Active Actions");
+      expect(artifacts.sessionSources).toContain(`### Evidence ${bundle.repoHash}-e1`);
       expect(report).toContain("[session sources](ts-session-sources.md)");
       expect(report).toContain("[PR sources](ts-pr-sources.md)");
       expect(report).not.toContain("Per-repo proposals");
@@ -960,7 +1017,7 @@ describe("agent session retrospective", () => {
       writeFileSync(
         synthesisPath,
         [
-          "### Active Actions",
+          "### Recommended Decisions",
           "",
           "#### A1 — A global problem",
           "Problem: The global workflow has a problem.",
@@ -968,7 +1025,14 @@ describe("agent session retrospective", () => {
           "Cause: The workflow lacks a durable guard.",
           "Proposed fix: Add the durable guard.",
           "",
+          "Next step: fix",
+          "Why now: Observed delivery risk; effort unknown.",
+          "Done when: The guard prevents the observed failure.",
+          "Uncertainty: Effectiveness is unmeasured.",
+          "Change since last report: new",
           "Target: preflight",
+          "Standards disposition: not-a-standard",
+          "Workflow disposition: no-skill",
           "Confidence: medium",
           "Resolution: unresolved",
           "Checked-at: 2026-06-01T00:00:00.000Z",
@@ -977,22 +1041,17 @@ describe("agent session retrospective", () => {
           "Remaining gap: The workflow remains unguarded.",
           "Session evidence: repo e1",
           "",
-          "### Standards Opportunities",
+          "### Remaining Active Actions",
           "",
-          "#### A1 — Workflow guards do not belong in coding standards",
-          "Disposition: not-a-standard",
-          "Standards checked: Global instructions, Team baseline, and repo guidance.",
-          "Evidence: A1 concerns workflow enforcement rather than code-writing guidance.",
-          "Rationale: The preflight is the authoritative prevention surface.",
-          "Proposed wording: n/a",
-          "",
-          "### Skill & Workflow Opportunities",
-          "",
-          "_No skill or workflow opportunities._",
+          "_No remaining active actions._",
           "",
           "### Resolved or Superseded",
           "",
-          "_No resolved or superseded candidates._"
+          "_No resolved or superseded candidates._",
+          "",
+          "### Supporting Evidence",
+          "",
+          "_No supporting audits._"
         ].join("\n"),
         "utf-8"
       );
@@ -1003,6 +1062,7 @@ describe("agent session retrospective", () => {
         runTs,
         synthesisPath
       });
+      expect(readFileSync(result.htmlPath, "utf-8")).toContain("a1-a-global-problem");
       const report = readFileSync(result.reportPath, "utf-8");
       const sessionSources = readFileSync(result.sourcePaths.session, "utf-8");
       const prSources = readFileSync(result.sourcePaths.pr, "utf-8");
@@ -1088,7 +1148,7 @@ describe("agent session retrospective", () => {
         "utf-8"
       );
       const synthesisPath = path.join(dir, "synthesis.md");
-      writeFileSync(synthesisPath, "### Active Actions\n\n_No active actions._\n", "utf-8");
+      writeFileSync(synthesisPath, "### Recommended Decisions\n\n_No active actions._\n", "utf-8");
 
       expect(() =>
         runCommit({

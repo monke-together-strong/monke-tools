@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 import { isNonEmptyString } from "@sindresorhus/is";
+import sanitizeHtml from "sanitize-html";
 
 import { readPrManifest } from "./pr-analysis.ts";
 import type { PrAnalysisManifest, PrWorkItemSummary } from "./pr-analysis.ts";
@@ -218,6 +219,8 @@ export function runCommit(options: RunCommitOptions) {
     window: readRunWindow(root, options.runTs)
   });
   const reportPath = writeReport(root, options.runTs, artifacts.report);
+  const htmlPath = reportPath.replace(/\.md$/u, ".html");
+  writeFileSync(htmlPath, renderReportHtml(artifacts.report), "utf-8");
   const sessionSourcePath = writeReportArtifact(
     root,
     options.runTs,
@@ -231,6 +234,7 @@ export function runCommit(options: RunCommitOptions) {
     appendedSessions,
     dropped,
     frozenSessions,
+    htmlPath,
     prAnalysis: {
       present: Boolean(prAnalysis?.trim()),
       warnings: prAnalysisValidation.warnings
@@ -302,6 +306,48 @@ export function buildReportArtifacts(
   };
 }
 
+export function renderReportHtml(markdown: string) {
+  const navigation: string[] = [];
+  const ids = new Set<string>();
+  const sanitized = sanitizeHtml(Bun.markdown.html(markdown), {
+    allowedAttributes: { a: ["href", "title"], code: ["class"] },
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedTags: [...sanitizeHtml.defaults.allowedTags, "details", "summary"],
+    allowProtocolRelative: false
+  });
+  const body = sanitized.replaceAll(
+    /<h(?<level>[1-6])>(?<label>.*?)<\/h\k<level>>/gsu,
+    (_heading, level: string, label: string) => {
+      const base = label
+        .replaceAll(/<[^>]*>/gu, "")
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9]+/gu, "-")
+        .replaceAll(/^-|-$/gu, "");
+      let id = base;
+      let suffix = 1;
+      while (ids.has(id)) {
+        id = `${base}-${suffix}`;
+        suffix += 1;
+      }
+      ids.add(id);
+      if (level === "3" || level === "4") {
+        navigation.push(`<li><a href="#${id}">${label}</a></li>`);
+      }
+      return `<h${level} id="${id}">${label}</h${level}>`;
+    }
+  );
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent session retrospective</title>
+<style>
+:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f3f6f5;color:#182a32;font:16px/1.6 system-ui,sans-serif}
+main{max-width:1000px;margin:auto;padding:32px;background:white}a{color:#076b68}h2,h3{margin-top:2em}h4{border-left:4px solid #076b68;padding:12px;background:#eef5f2}
+p,li{overflow-wrap:anywhere}pre{overflow:auto;padding:16px;background:#eef2f3}table{display:block;overflow:auto;border-collapse:collapse}td,th{padding:8px;border:1px solid #dce5e8}
+details{padding:12px;background:#f4f7fb;margin:16px 0}summary{cursor:pointer}nav ul{padding-left:24px}nav{border-bottom:1px solid #dce5e8;padding-bottom:16px}
+@media(max-width:700px){main{padding:18px}}@media print{nav{display:none}main{max-width:none;padding:0}}
+</style></head><body><main><nav aria-label="Report contents"><details><summary>Jump to a decision or section</summary><ul>${navigation.join("")}</ul></details></nav>${body}</main></body></html>`;
+}
+
 function buildSessionSources(
   runTs: string,
   slices: RepoSlice[],
@@ -360,8 +406,13 @@ function buildSessionSources(
       }
       seenEpisodes.add(dedupeKey);
       out.push(
+        `### Evidence ${slice.bundle.repoHash}-${episode.id}`,
+        "",
         `- \`${slice.validated.repoKey}\` · ${episode.sessionId.slice(0, SESSION_ID_PREFIX_LENGTH)} · refs ${episode.citedTurnRefs.join(", ")}`,
-        `  ${firstLine(episode.body)}`
+        `  ${firstLine(episode.body)}`,
+        "",
+        ...renderEvidence(episode, slice.bundle),
+        ""
       );
     }
   }
@@ -410,10 +461,10 @@ const REQUIRED_PR_HEADINGS = [
 ];
 
 const REQUIRED_SYNTHESIS_HEADINGS = [
-  "Active Actions",
-  "Standards Opportunities",
-  "Skill & Workflow Opportunities",
-  "Resolved or Superseded"
+  "Recommended Decisions",
+  "Remaining Active Actions",
+  "Resolved or Superseded",
+  "Supporting Evidence"
 ];
 
 const REQUIRED_ACTIVE_ACTION_FIELDS = [
@@ -421,7 +472,14 @@ const REQUIRED_ACTIVE_ACTION_FIELDS = [
   "Impact",
   "Cause",
   "Proposed fix",
+  "Next step",
+  "Why now",
+  "Done when",
+  "Uncertainty",
+  "Change since last report",
   "Target",
+  "Standards disposition",
+  "Workflow disposition",
   "Confidence",
   "Resolution",
   "Checked-at",
@@ -449,9 +507,31 @@ export function validateSynthesis(content: string | null | undefined) {
   ) {
     warnings.push("Required synthesis headings are out of order.");
   }
-  const activeActions = extractMarkdownSection(text, "Active Actions", SYNTHESIS_HEADING_LEVEL);
-  if (isNonEmptyString(activeActions)) {
-    warnings.push(...validateActiveActions(activeActions));
+  const actionIds = new Set<string>();
+  for (const name of [
+    "Recommended Decisions",
+    "Remaining Active Actions",
+    "Resolved or Superseded"
+  ]) {
+    const section = extractMarkdownSection(text, name, SYNTHESIS_HEADING_LEVEL);
+    if (!isNonEmptyString(section)) {
+      continue;
+    }
+    for (const match of section.matchAll(/^####\s+(?<title>.+)$/gmu)) {
+      const title = match.groups?.title ?? "";
+      const id = /^(?<id>A[1-9]\d*) — \S.*$/u.exec(title)?.groups?.id;
+      if (!id) {
+        warnings.push(`Candidate heading \`${title}\` must use \`A<number> — <problem>\`.`);
+        continue;
+      }
+      if (actionIds.has(id)) {
+        warnings.push(`Candidate ${id} appears more than once.`);
+      }
+      actionIds.add(id);
+    }
+    if (name !== "Resolved or Superseded") {
+      warnings.push(...validateActiveActions(section));
+    }
   }
   return warnings;
 }

@@ -14,24 +14,18 @@ source files:
 The main report has a report title, a `Window:` line showing the resolved retrospective window, a
 `Sources:` line linking those two files, and two sections, in this order:
 
-1. **Session Actions** — the transcript-derived synthesis passed via `--synthesis`, with the exact
-   subsections defined by [synthesis-contract.md](synthesis-contract.md):
-   - **Active Actions** — unresolved, partially resolved, or unknown candidates ranked by **value ×
-     recurrence**. Every action uses the problem-first field order from the synthesis contract;
-     status and evidence follow.
-   - **Standards Opportunities** — one explicit standards disposition for every active action after
-     checking team-wide/global and repo-specific coding guidance.
-   - **Skill & Workflow Opportunities** — one `create-skill`, `create-workflow`, `update`,
-     `combine`, or `no-skill` decision for every active action.
-   - **Resolved or Superseded** — current-state-verified candidates suppressed from active ranking
-     but preserved as recurrence memory.
+1. **Session Actions** — the four subsections defined by
+   [synthesis-contract.md](synthesis-contract.md): Recommended Decisions, Remaining Active Actions,
+   Resolved or Superseded, and Supporting Evidence. Each action has one home; detailed audits are
+   disclosed beneath the decisions.
 2. **PR Repeated Corrective Patterns** — only recurring corrective-change patterns from the
    required PR analysis lane, plus a short pointer when explicit PR gaps exist.
 
 The source files hold the bulky evidence:
 
 - **Session sources** — per-repo proposals, repeated asks, inline cited-turn evidence, and the audit
-  appendix of frozen friction episodes.
+  appendix of frozen friction episodes. Link an episode as
+  `<runTs>-session-sources.md#evidence-<repoHash>-<episodeId>` using its bundle identifiers.
 - **PR sources** — the full PR trajectory aggregate, including one-off patterns, explicit gaps, and
   per-PR analyses.
 
@@ -39,6 +33,18 @@ A reader should be able to identify each problem and its impact immediately, see
 that expose missing standards even when no failure occurred, act from the main report alone, see
 why stale candidates were suppressed, and drill into linked sources only when they need transcript
 provenance.
+
+## HTML presentation
+
+`commit` also renders `reports/<runTs>-retrospective.html` from the same Markdown. Keep Markdown
+as the canonical content. The HTML supplies heading links, readable fields, collapsible supporting
+audits, and responsive layout. Inspect the generated artifact before handoff.
+
+Use `$show-me` when a relationship, state transition, or before/after comparison materially helps
+the reader evaluate a recommendation. Place the smallest useful visual beside that action using
+established evidence. Integrate a Markdown code sketch or table into the synthesis so both outputs
+retain it; avoid a separate presentation or an additional analysis pass. Skip visuals that merely
+repeat a list or imply unsupported measurements. Leave the imported show-me skill unchanged.
 
 ## Report sets are the cross-run memory
 
@@ -72,7 +78,8 @@ Keep the section order above stable so cross-referencing prior report sets stays
 - `runs/<runTs>/pr-analysis.md` — aggregate PR analysis report for the trajectory window
   (transient; embedded or summarized in the final report; content contract in
   [pr-analysis.md](pr-analysis.md)).
-- `reports/<runTs>-retrospective.md` — the report.
+- `reports/<runTs>-retrospective.md` — the canonical report.
+- `reports/<runTs>-retrospective.html` — the generated reading view.
 - `reports/<runTs>-session-sources.md` — transcript-derived supporting detail for the report.
 - `reports/<runTs>-pr-sources.md` — PR-derived supporting detail for the report.
 - `run-lock.sqlite` — a SQLite write transaction serializes retrospective commands; process exit
