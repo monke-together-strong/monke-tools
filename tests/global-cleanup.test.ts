@@ -929,11 +929,11 @@ describe("global Session cleanup", () => {
   test("Cleanup removes the exact pnpm bootstrap deletion with HEAD already in default", async () => {
     const f = fixture();
     const before = readFileSync(
-      path.join(import.meta.dirname, "fixtures/cleanup-pnpm-bootstrap-before.yaml"),
+      path.join(import.meta.dirname, "fixtures/cleanup-pnpm-bootstrap-before.txt"),
       "utf-8"
     );
     const after = readFileSync(
-      path.join(import.meta.dirname, "fixtures/cleanup-pnpm-bootstrap-after.yaml"),
+      path.join(import.meta.dirname, "fixtures/cleanup-pnpm-bootstrap-after.txt"),
       "utf-8"
     );
     for (const source of f.sources) {

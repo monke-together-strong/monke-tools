@@ -15,12 +15,13 @@ import { createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 const sandboxes: string[] = [];
+// Raw text fixtures preserve the exact pnpm bytes required by this recognizer.
 const before = readFileSync(
-  new URL("fixtures/cleanup-pnpm-bootstrap-before.yaml", import.meta.url),
+  new URL("fixtures/cleanup-pnpm-bootstrap-before.txt", import.meta.url),
   "utf-8"
 );
 const after = readFileSync(
-  new URL("fixtures/cleanup-pnpm-bootstrap-after.yaml", import.meta.url),
+  new URL("fixtures/cleanup-pnpm-bootstrap-after.txt", import.meta.url),
   "utf-8"
 );
 const manifest = { packageManager: "pnpm@12.1.0" };
