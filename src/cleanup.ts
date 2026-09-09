@@ -13,6 +13,7 @@ import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts
 import { getMonkeHome, withGlobalLockAsync } from "./runtime.ts";
 import type { OperationLock } from "./runtime.ts";
 import { inspectSessionCleanup, revalidateSessionMember } from "./session-cleanup-eligibility.ts";
+import type { SessionCleanupMember } from "./session-cleanup-eligibility.ts";
 import {
   createSessionCleanupReport,
   formatSessionCleanupReport
@@ -249,6 +250,10 @@ function assertGlobalSafety(lock: OperationLock, inventory: Inventory) {
   }
 }
 
+function detachedMemberHead(member: SessionCleanupMember | undefined): string | null {
+  return member?.mode === "live" && member.evidence?.branch === null ? member.evidence.head : null;
+}
+
 function reportSession(
   row: Inventory["sessions"][number],
   execution: SessionCleanupExecution,
@@ -265,11 +270,10 @@ function reportSession(
               sessionRemovalRank(left, cwd, state.rootSourceRoot) -
               sessionRemovalRank(right, cwd, state.rootSourceRoot)
           )
-          .flatMap((member) =>
-            member.mode === "live" && member.evidence?.branch === null && member.evidence.head
-              ? [retainedHeadAction(member.sourceRoot, member.worktreePath, member.evidence.head)]
-              : []
-          ),
+          .flatMap((member) => {
+            const head = detachedMemberHead(member);
+            return head ? [retainedHeadAction(member.sourceRoot, member.worktreePath, head)] : [];
+          }),
         ...cleanupCommandActions(state),
         ...state.repos
           .filter((repo) =>
@@ -372,12 +376,9 @@ function executeSession(
             const member = snapshot.members.find((candidate) =>
               samePath(candidate.worktreePath, repo.worktreePath)
             );
-            if (
-              member?.mode === "live" &&
-              member.evidence?.branch === null &&
-              member.evidence.head
-            ) {
-              assertRetainedHead(runtime, repo.sourceRoot, repo.worktreePath, member.evidence.head);
+            const head = detachedMemberHead(member);
+            if (head) {
+              assertRetainedHead(runtime, repo.sourceRoot, repo.worktreePath, head);
             }
           }
           if (action.step === "state-removal") {
@@ -390,18 +391,15 @@ function executeSession(
           const member = snapshot.members.find((candidate) =>
             samePath(candidate.worktreePath, repo.worktreePath)
           );
-          if (member?.mode === "live" && member.evidence?.branch === null && member.evidence.head) {
-            const preservation = retainedHeadAction(
-              repo.sourceRoot,
-              repo.worktreePath,
-              member.evidence.head
-            );
+          const head = detachedMemberHead(member);
+          if (head) {
+            const preservation = retainedHeadAction(repo.sourceRoot, repo.worktreePath, head);
             current = preservation;
             guard();
             revalidateMember(repo);
             started = true;
             attemptedAction = preservation;
-            preserveDetachedHead(runtime, repo.sourceRoot, repo.worktreePath, member.evidence.head);
+            preserveDetachedHead(runtime, repo.sourceRoot, repo.worktreePath, head);
             completedActions.push(preservation);
             attemptedAction = undefined;
           }

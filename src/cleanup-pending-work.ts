@@ -25,6 +25,13 @@ export interface PendingWorkProof {
   witness: string | null;
 }
 const oid = /^[\da-f]{40}$/u;
+const MAX_PENDING_FILE_BYTES = 32 * 1024 * 1024;
+const MAX_PENDING_PATHS = 1000;
+
+function gitBlobOid(bytes: Uint8Array) {
+  return new Bun.CryptoHasher("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
+}
+
 function git(runtime: Runtime, cwd: string, args: string[]) {
   const result = runtime.exec("git", ["-c", "core.fileMode=true", ...args], { cwd }).stdout;
   // Runtime decodes UTF-8: reject replacement characters rather than conflate path bytes.
@@ -79,7 +86,7 @@ function diskEntry(root: string, name: string): Entry | null {
     }
     throw error;
   }
-  if ((!stat.isFile() && !stat.isSymbolicLink()) || stat.size > 32 * 1024 * 1024) {
+  if ((!stat.isFile() && !stat.isSymbolicLink()) || stat.size > MAX_PENDING_FILE_BYTES) {
     throw new Error("Unsupported pending file");
   }
   const bytes = stat.isSymbolicLink()
@@ -89,7 +96,7 @@ function diskEntry(root: string, name: string): Entry | null {
     // Git records executable permissions as a mode bit.
     // oxlint-disable-next-line eslint/no-bitwise
     mode: stat.isSymbolicLink() ? "120000" : (stat.mode & 0o111) !== 0 ? "100755" : "100644",
-    oid: new Bun.CryptoHasher("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex")
+    oid: gitBlobOid(bytes)
   };
 }
 function equal(a: Entry | null, b: Entry | null) {
@@ -166,7 +173,7 @@ export function inspectPendingWork(
         names.add(from);
       }
     }
-    if (names.size > 1000) {
+    if (names.size > MAX_PENDING_PATHS) {
       return null;
     }
     const committed = tree(runtime, root, head);
@@ -219,10 +226,7 @@ export function provePendingWork(
     ) {
       const before = git(runtime, source, ["show", `${head}:pnpm-lock.yaml`]);
       const bytes = readFileSync(path.join(root, "pnpm-lock.yaml"));
-      const digest = new Bun.CryptoHasher("sha1")
-        .update(`blob ${bytes.length}\0`)
-        .update(bytes)
-        .digest("hex");
+      const digest = gitBlobOid(bytes);
       if (digest !== only.disk.oid) {
         return null;
       }
