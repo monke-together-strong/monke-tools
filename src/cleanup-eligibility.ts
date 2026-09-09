@@ -5,6 +5,12 @@ import * as z from "zod";
 
 import { inspectMatchingMergeDiff } from "./cleanup-diff-evidence.ts";
 import type { MatchingMergeDiff } from "./cleanup-diff-evidence.ts";
+import {
+  inspectDefaultTree,
+  inspectPendingWork,
+  provePendingWork
+} from "./cleanup-pending-work.ts";
+import type { PendingWork, PendingWorkProof } from "./cleanup-pending-work.ts";
 import { samePath } from "./path-identity.ts";
 import type { ExecResult, Runtime } from "./types.ts";
 import {
@@ -41,6 +47,8 @@ const ComparisonSchema = z.object({
 export interface CleanupCandidate {
   /** Set only when retained Session membership proves this is a dependency. */
   role?: "root" | "dependency";
+  /** Retained Session identity; never inferred from a directory name. */
+  sessionBranch?: string;
   sourceRoot: string;
   worktreePath: string;
 }
@@ -69,6 +77,7 @@ export const CleanupCodeSchema = z.enum([
   "merged-pr-head",
   "matching-merged-diff",
   "diff-unavailable",
+  "matching-default-tree",
   "unchanged-branch"
 ]);
 
@@ -90,8 +99,10 @@ export interface CleanupEvidence {
   commitPullRequests?: CommitPullRequestEvidence[] | null;
   /** Absent only in older saved evidence; absence is not proof a check ran. */
   committedWorkAttempted?: boolean;
+  defaultTree?: { tree: string; witness: string } | false | null;
   head: string | null;
   localBlock: CleanupDecision | null;
+  pendingWork?: PendingWorkProof;
   repository: CleanupRepositoryEvidence | null;
   /** Milliseconds since the worktree was created; null when unknown. Absent in older saved evidence. */
   worktreeAgeMs?: number | null;
@@ -140,7 +151,7 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
     return snapshot.localBlock;
   }
   const { branch, head, repository } = snapshot;
-  if (!branch || !head) {
+  if (!head || (!branch && !snapshot.candidate.sessionBranch)) {
     return decision("unknown", "local-evidence-unavailable");
   }
   if (!repository) {
@@ -150,10 +161,21 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
     return decision("ineligible", "default-branch");
   }
   const branchPrs = repository.pullRequests.filter(
-    (pr) => pr.head.ref === branch && pr.head.repo?.full_name === repository.name
+    (pr) =>
+      pr.head.ref === (branch ?? snapshot.candidate.sessionBranch) &&
+      pr.head.repo?.full_name === repository.name
   );
-  if (branchPrs.some((pr) => pr.state === "open")) {
+  if (hasOpenPullRequest(snapshot, repository)) {
     return decision("ineligible", "open-pr");
+  }
+  if (snapshot.pendingWork || !branch) {
+    const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+    if (ageBlock) {
+      return ageBlock;
+    }
+  }
+  if (!branch) {
+    return decideDetached(snapshot, repository, head);
   }
   const merged = branchPrs.filter(
     (pr) =>
@@ -169,7 +191,7 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   const [match] = exact;
   if (match) {
     return decision("eligible", "exact-merged-pr", [
-      "registered linked worktree; clean including submodules and untracked files",
+      localWorkDescription(snapshot),
       `${repository.name}#${match.number}: ${branch} -> ${repository.defaultBranch}`,
       `HEAD equals merged PR head: ${head}`
     ]);
@@ -184,19 +206,15 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
       return ageBlock;
     }
     return decision("eligible", "unchanged-branch", [
-      "registered linked worktree; clean including submodules and untracked files",
+      localWorkDescription(snapshot),
       `${head} is an ancestor of verified ${repository.name}:${repository.defaultBranch} at ${repository.defaultHead}`,
       "worktree is at least one day old",
       "member proof only; whole-Session eligibility is still required"
     ]);
   }
-  const commitDecision = decideCommitPullRequests(snapshot, repository, head);
-  if (commitDecision) {
-    return commitDecision;
-  }
-  const diffDecision = decideMatchingDiff(snapshot, repository);
-  if (diffDecision) {
-    return diffDecision;
+  const alternate = decideAlternateCommittedWork(snapshot, repository, head);
+  if (alternate) {
+    return alternate;
   }
   if (branchPrs.some((pr) => !pr.merged_at && pr.head.sha === head)) {
     return decision("ineligible", "closed-unmerged-pr");
@@ -209,6 +227,76 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   }
   // Both answers came back; unique commits without a merged PR is a settled fact.
   return decision("ineligible", "no-merged-pr");
+}
+
+function decideAlternateCommittedWork(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence,
+  head: string
+) {
+  return (
+    decideDefaultTree(snapshot, repository) ??
+    decideCommitPullRequests(snapshot, repository, head) ??
+    decideMatchingDiff(snapshot, repository)
+  );
+}
+
+function hasOpenPullRequest(snapshot: CleanupEvidence, repository: CleanupRepositoryEvidence) {
+  return repository.pullRequests.some(
+    (pr) =>
+      pr.state === "open" &&
+      pr.head.repo?.full_name === repository.name &&
+      (pr.head.ref === (snapshot.branch ?? snapshot.candidate.sessionBranch) ||
+        (snapshot.branch === null && pr.head.sha === snapshot.head))
+  );
+}
+
+function decideDetached(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence,
+  head: string
+) {
+  if (snapshot.ancestorOfDefault) {
+    return decision("eligible", "unchanged-branch", [
+      localWorkDescription(snapshot),
+      `${head} is an ancestor of verified default HEAD ${repository.defaultHead}`,
+      "detached HEAD requires a durable preservation ref before removal; worktree is at least one day old"
+    ]);
+  }
+  return decideDefaultTree(snapshot, repository) ?? decision("ineligible", "detached-head");
+}
+
+export function localWorkDescription(snapshot: CleanupEvidence): string {
+  const proof = snapshot.pendingWork;
+  if (!proof) {
+    return "registered linked worktree; clean including submodules and untracked files";
+  }
+  return proof.kind === "forward-bundle"
+    ? `entire pending bundle preserved together at descendant ${proof.witness}; fingerprint ${proof.fingerprint}`
+    : `only the exact pnpm 12.1.0 bootstrap deletion; application document unchanged; fingerprint ${proof.fingerprint}`;
+}
+
+function decideDefaultTree(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence
+): CleanupDecision | null {
+  if (
+    snapshot.defaultTree === undefined ||
+    snapshot.defaultTree === null ||
+    snapshot.defaultTree === false
+  ) {
+    return null;
+  }
+  const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+  if (ageBlock) {
+    return ageBlock;
+  }
+  return decision("eligible", "matching-default-tree", [
+    localWorkDescription(snapshot),
+    `complete HEAD tree ${snapshot.defaultTree.tree} equals ${snapshot.defaultTree.witness} reachable from verified default HEAD ${repository.defaultHead}`,
+    "worktree is at least one day old; member proof only, whole-Session eligibility required",
+    ...(snapshot.branch ? [] : ["detached HEAD requires a durable preservation ref before removal"])
+  ]);
 }
 
 function decideCommitPullRequests(
@@ -239,7 +327,7 @@ function decideCommitPullRequests(
   }
   const pr = match.pullRequest;
   return decision("eligible", "merged-pr-head", [
-    "registered linked worktree; clean including submodules and untracked files",
+    localWorkDescription(snapshot),
     `${repository.name}#${pr.number}: ${pr.head.ref} -> ${repository.defaultBranch}`,
     `HEAD equals merged PR head: ${head}`,
     `merge commit ${pr.merge_commit_sha} is an ancestor of verified default HEAD ${repository.defaultHead}`,
@@ -282,7 +370,7 @@ function decideMatchingDiff(
   }
   const { matchingDiff: diff, pullRequest: pr } = match;
   return decision("eligible", "matching-merged-diff", [
-    "registered linked worktree; clean including submodules and untracked files",
+    localWorkDescription(snapshot),
     `${repository.name}#${pr.number}: ${pr.head.ref} -> ${repository.defaultBranch}`,
     `complete change ${diff.mergeBase}..${snapshot.head} exactly matches ${diff.mergeParent}..${pr.merge_commit_sha}`,
     `all paths, file modes and full before/after object IDs match; change SHA-256: ${diff.changeHash}`,
@@ -344,10 +432,11 @@ export async function collectCleanupEvidence(
     repository: null,
     worktreeAgeMs: worktreeAge(candidate.worktreePath)
   };
-  if (local.localBlock) {
+  const pending = inspectCandidatePending(readOnly, candidate, local);
+  if (local.localBlock && !pending) {
     return snapshot;
   }
-  snapshot.committedWorkAttempted = true;
+  snapshot.committedWorkAttempted = snapshot.localBlock === null;
   const repositoryName = readRepositoryName(readOnly, candidate.sourceRoot);
   if (!repositoryName) {
     return snapshot;
@@ -360,12 +449,26 @@ export async function collectCleanupEvidence(
   }
   snapshot.repository = await repository;
   if (snapshot.repository && snapshot.head) {
+    acceptPendingProof(readOnly, snapshot, pending, snapshot.head, snapshot.repository.defaultHead);
+    if (snapshot.localBlock) {
+      snapshot.localBlock = revalidateCleanupEvidence(runtime, snapshot) ?? snapshot.localBlock;
+      return snapshot;
+    }
+    snapshot.committedWorkAttempted = true;
     snapshot.ancestorOfDefault = await inspectAncestry(
       readOnly,
       candidate.sourceRoot,
       snapshot.head,
       snapshot.repository
     );
+    if (candidate.sessionBranch && snapshot.ancestorOfDefault !== true) {
+      snapshot.defaultTree = inspectDefaultTree(
+        readOnly,
+        candidate.sourceRoot,
+        snapshot.head,
+        snapshot.repository.defaultHead
+      );
+    }
     const currentDecision = decideCleanupEligibility(snapshot);
     if (
       ["no-merged-pr", "head-mismatch", "closed-unmerged-pr", "ancestry-unavailable"].includes(
@@ -387,12 +490,7 @@ export async function collectCleanupEvidence(
     }
   }
   // Provider lookups can take seconds. Never attach old proof to a changed checkout.
-  const current = inspectLocal(readOnly, candidate);
-  snapshot.localBlock =
-    current.localBlock ??
-    (current.head === local.head && current.branch === local.branch
-      ? null
-      : decision("unknown", "changed-during-inspection"));
+  snapshot.localBlock = revalidateCleanupEvidence(runtime, snapshot) ?? snapshot.localBlock;
   if (
     readRepositoryName(readOnly, candidate.sourceRoot)?.toLowerCase() !==
     repositoryName.toLowerCase()
@@ -402,6 +500,40 @@ export async function collectCleanupEvidence(
   return snapshot;
 }
 
+function acceptPendingProof(
+  runtime: Runtime,
+  snapshot: CleanupEvidence,
+  pending: PendingWork | null,
+  head: string,
+  defaultHead: string
+) {
+  if (!pending) {
+    return;
+  }
+  const proof = provePendingWork(
+    runtime,
+    snapshot.candidate.sourceRoot,
+    snapshot.candidate.worktreePath,
+    head,
+    defaultHead,
+    pending
+  );
+  if (proof !== null && proof !== false) {
+    snapshot.pendingWork = proof;
+    snapshot.localBlock = null;
+  }
+}
+
+function inspectCandidatePending(
+  runtime: Runtime,
+  candidate: CleanupCandidate,
+  local: Pick<CleanupEvidence, "head" | "localBlock">
+) {
+  return local.localBlock?.code === "dirty-worktree" && candidate.sessionBranch && local.head
+    ? inspectPendingWork(runtime, candidate.worktreePath, local.head)
+    : null;
+}
+
 /** Recheck local proof synchronously after all members finish provider reads. */
 export function revalidateCleanupEvidence(
   runtime: Runtime,
@@ -409,11 +541,18 @@ export function revalidateCleanupEvidence(
 ): CleanupDecision | null {
   const readOnly = readOnlyCleanupRuntime(runtime);
   const current = inspectLocal(readOnly, snapshot.candidate);
-  if (
-    current.head !== snapshot.head ||
-    current.branch !== snapshot.branch ||
-    current.localBlock?.code !== snapshot.localBlock?.code
-  ) {
+  if (current.head !== snapshot.head || current.branch !== snapshot.branch) {
+    return decision("unknown", "changed-during-inspection");
+  }
+  if (snapshot.pendingWork && !snapshot.localBlock) {
+    if (current.localBlock?.code !== "dirty-worktree" || !current.head) {
+      return current.localBlock ?? decision("unknown", "changed-during-inspection");
+    }
+    const pending = inspectPendingWork(readOnly, snapshot.candidate.worktreePath, current.head);
+    if (pending?.fingerprint !== snapshot.pendingWork.fingerprint) {
+      return decision("unknown", "changed-during-inspection");
+    }
+  } else if (current.localBlock?.code !== snapshot.localBlock?.code) {
     return current.localBlock ?? decision("unknown", "changed-during-inspection");
   }
   // An unchanged local blocker still explains a skipped member. No remote
@@ -455,10 +594,14 @@ function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
   try {
     const git = (args: string[]) =>
       runtime.exec("git", args, { cwd: candidate.worktreePath }).stdout.trim();
+    const grafts = git(["rev-parse", "--path-format=absolute", "--git-path", "info/grafts"]);
+    if (existsSync(grafts)) {
+      throw new Error("Grafted history cannot prove cleanup eligibility");
+    }
     const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
     local.branch = branch === "HEAD" ? null : branch;
     local.head = OidSchema.parse(git(["rev-parse", "HEAD"]));
-    if (!local.branch) {
+    if (!local.branch && !candidate.sessionBranch) {
       local.localBlock = decision("ineligible", "detached-head");
     } else {
       // Keep leading status columns; trimming would corrupt " M path" entries.
@@ -470,10 +613,10 @@ function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
         )
         .stdout.split("\n")
         .filter(Boolean);
-      if (changes.length > 0) {
-        local.localBlock = decision("ineligible", "dirty-worktree", summarizeChanges(changes));
-      } else if (hasHiddenWorktreeIndexEntries(runtime, candidate.worktreePath)) {
+      if (hasHiddenWorktreeIndexEntries(runtime, candidate.worktreePath)) {
         local.localBlock = decision("unknown", "hidden-index-entries");
+      } else if (changes.length > 0) {
+        local.localBlock = decision("ineligible", "dirty-worktree", summarizeChanges(changes));
       }
     }
   } catch {
@@ -537,11 +680,24 @@ export function readOnlyCleanupRuntime(runtime: Runtime): Runtime {
       return runtime.exec(
         command,
         command === "git"
-          ? ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", ...(args ?? [])]
+          ? [
+              "-c",
+              "core.fsmonitor=false",
+              "-c",
+              "core.untrackedCache=false",
+              "-c",
+              "core.fileMode=true",
+              ...(args ?? [])
+            ]
           : args,
         {
           ...options,
-          env: { ...options?.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0" },
+          env: {
+            ...options?.env,
+            GIT_NO_LAZY_FETCH: "1",
+            GIT_NO_REPLACE_OBJECTS: "1",
+            GIT_OPTIONAL_LOCKS: "0"
+          },
           timeoutSeconds: 30
         }
       );

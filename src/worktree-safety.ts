@@ -49,10 +49,19 @@ export function preflightWorktreeRemoval(
   runtime: Runtime,
   sourceRoot: string,
   targetPath: string,
-  options: { force: boolean }
+  options: { force: boolean },
+  authorizePreservedWork?: () => boolean
 ) {
   const worktree = validateRegisteredWorktreeForRemoval(runtime, sourceRoot, targetPath);
   if (options.force) {
+    return { forceGitRemoval: true, worktree };
+  }
+  if (authorizePreservedWork?.()) {
+    if (hasHiddenWorktreeIndexEntries(runtime, worktree.path)) {
+      throw new MonkeError(
+        `Cannot remove preserved worktree with hidden index entries: ${worktree.path}`
+      );
+    }
     return { forceGitRemoval: true, worktree };
   }
   assertCleanWorktree(runtime, worktree.path);

@@ -269,33 +269,46 @@ export function teardownSession(
       observer.beforeRemoval?.(candidate.repo);
     }
   }
+  const revalidateAll = () => {
+    for (const candidate of preflight) {
+      observer.beforeStep?.({
+        sourceRoot: candidate.repo.sourceRoot,
+        step: "revalidation",
+        worktreePath: candidate.repo.worktreePath
+      });
+      const current = inspectSessionRepo(
+        runtime,
+        home,
+        target.state,
+        candidate.repo,
+        options,
+        observer
+      );
+      assertSessionMemberUnchanged(candidate, current);
+      if (candidate.mode !== current.mode) {
+        throw new MonkeError(
+          `Session worktree presence changed after preflight at ${current.repo.worktreePath}; retry teardown`
+        );
+      }
+      observer.revalidateMember?.(candidate.repo);
+    }
+  };
   cleanupSessionResources(
     runtime,
     target.state,
     {
       ...observer,
       beforeEffect(action) {
-        for (const candidate of preflight) {
-          observer.beforeStep?.({
-            sourceRoot: candidate.repo.sourceRoot,
-            step: "revalidation",
-            worktreePath: candidate.repo.worktreePath
-          });
-          const current = inspectSessionRepo(runtime, home, target.state, candidate.repo, options);
-          assertSessionMemberUnchanged(candidate, current);
-          if (candidate.mode !== current.mode) {
-            throw new MonkeError(
-              `Session worktree presence changed after preflight at ${current.repo.worktreePath}; retry teardown`
-            );
-          }
-          observer.revalidateMember?.(candidate.repo);
-        }
+        revalidateAll();
         observer.beforeStep?.(action);
         observer.beforeEffect?.(action);
       }
     },
     options.cleanupFromSource === true
   );
+  // Shutdown and cleanup commands can modify any sibling. Recheck the whole Session
+  // before removing its first worktree, then recheck each member at removal.
+  revalidateAll();
 
   for (const candidate of ordered) {
     observer.beforeStep?.({
@@ -303,7 +316,14 @@ export function teardownSession(
       step: "revalidation",
       worktreePath: candidate.repo.worktreePath
     });
-    const current = inspectSessionRepo(runtime, home, target.state, candidate.repo, options);
+    const current = inspectSessionRepo(
+      runtime,
+      home,
+      target.state,
+      candidate.repo,
+      options,
+      observer
+    );
     assertSessionMemberUnchanged(candidate, current);
     observer.revalidateMember?.(candidate.repo);
     if (current.mode !== "gone") {
@@ -392,7 +412,7 @@ function preflightSession(
   const repos: SessionRepoPreflight[] = [];
   for (const repo of state.repos) {
     try {
-      repos.push(inspectSessionRepo(runtime, home, state, repo, options));
+      repos.push(inspectSessionRepo(runtime, home, state, repo, options, observer));
     } catch (error) {
       failures.push({
         message: `${repo.worktreePath}: ${errorMessage(ThrownValueSchema.parse(error))}`,
@@ -418,13 +438,22 @@ function inspectSessionRepo(
   home: string,
   state: SessionState,
   repo: SessionRepoState,
-  options: ChopOptions
+  options: ChopOptions,
+  observer: SessionLifecycleObserver
 ): SessionRepoPreflight {
   const identity = inspectSessionRepoRegistration(runtime, home, state, repo);
   if (identity.mode !== "live") {
     return identity;
   }
-  const checked = preflightWorktreeRemoval(runtime, repo.sourceRoot, repo.worktreePath, options);
+  const checked = preflightWorktreeRemoval(
+    runtime,
+    repo.sourceRoot,
+    repo.worktreePath,
+    options,
+    observer.authorizePreservedWork
+      ? () => observer.authorizePreservedWork?.(repo) === true
+      : undefined
+  );
   return { ...identity, forceGitRemoval: checked.forceGitRemoval };
 }
 

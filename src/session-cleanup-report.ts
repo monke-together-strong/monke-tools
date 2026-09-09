@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { localWorkDescription } from "./cleanup-eligibility.ts";
 import type { CleanupEvidence } from "./cleanup-eligibility.ts";
 import {
   decideSessionCleanupEligibility,
@@ -16,7 +17,8 @@ import type { SessionAction } from "./session-lifecycle-progress.ts";
 const messages: Record<SessionCleanupReason, string> = {
   "ambiguous-pr": "More than one merged pull request matches this commit.",
   "ancestry-unavailable": "The commit's relationship to the default branch could not be verified.",
-  "changed-during-inspection": "The local branch or commit changed during inspection.",
+  "changed-during-inspection":
+    "The local branch, commit, index, or pending files changed during inspection.",
   "closed-unmerged-pr": "The pull request for this commit was closed without merging.",
   "commit-pr-unavailable":
     "Pull requests associated with the current commit could not be verified.",
@@ -34,6 +36,7 @@ const messages: Record<SessionCleanupReason, string> = {
   "invalid-state": "The retained Session state is invalid or cannot be read.",
   "invalid-state-overlap": "Invalid Session state may claim the same worktrees.",
   "local-evidence-unavailable": "Git could not establish the local branch, commit, or cleanliness.",
+  "matching-default-tree": "The complete committed tree occurs in verified default history.",
   "matching-merged-diff":
     "The complete branch change exactly matches a merged PR's change in the default branch.",
   "member-changed-during-inspection": "A member changed after inspection; inspect again.",
@@ -167,7 +170,8 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
     } else {
       local = {
         code: null,
-        message: "Registered linked worktree; clean including untracked files and submodules.",
+        message: localWorkDescription(member.evidence),
+        ...(member.evidence.pendingWork ? { details: member.evidence.pendingWork.paths } : {}),
         status: "passed"
       };
     }
@@ -289,5 +293,5 @@ function formatProgress(report: ReturnType<typeof createSessionCleanupReport>) {
 }
 
 function formatAction(action: SessionAction) {
-  return `${action.step} ${action.sourceRoot}${action.worktreePath ? ` (${action.worktreePath})` : ""}${action.command ? `: ${action.command}` : ""}`;
+  return `${action.step} ${action.sourceRoot}${action.worktreePath ? ` (${action.worktreePath})` : ""}${action.command ? `: ${action.command}` : ""}${action.retainedRef ? `; retained HEAD: ${action.retainedRef}` : ""}${action.recoveryCommand ? `; recover: ${action.recoveryCommand}` : ""}`;
 }

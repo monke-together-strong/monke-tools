@@ -12,7 +12,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Merged PR**: A pull request whose GitHub `mergedAt` value is set.
 
-**Merge-cleanable Session**: A Session whose every recorded session worktree is clean and proven complete, by a **Merged PR** for its exact commit, by that commit already being inside the verified default branch, or by its complete change exactly matching a qualifying landed PR. All Session-level safety gates still apply.
+**Merge-cleanable Session**: A Session whose live members each pass committed-work proof and local-work checks. Committed work qualifies by an exact **Merged PR**, default-branch ancestry, a complete change matching a qualifying landed PR, or complete-tree equality in verified default history. Local work must be clean or satisfy one of the narrow pending-work checks below. All Session-level safety gates still apply.
 
 **Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates a new Session from each participating repo's resolved default branch content, or resumes an incomplete Session from retained worktrees and pinned Session refs.
 
@@ -133,8 +133,39 @@ provide this proof; Cleanup does not fetch them.
 An open PR on the member's current branch still blocks Cleanup.
 Ancestry, cross-branch HEAD and complete-diff proof require the worktree to be at least one day old, measured from its `.git`
 file, so a Session spawned from the default branch is not removed before work
-starts. Every proof requires a clean worktree first; uncommitted or untracked
-files always block. A branch GitHub has never seen cannot be inside its default
+starts. Complete HEAD-tree equality with a commit reachable from the verified default
+HEAD is another age-gated proof. It compares the full tree ID, including paths,
+modes and submodule commits, without patch normalization.
+
+Pending work blocks unless a retained Session member satisfies one of two narrow
+checks. Forward preservation requires one strict descendant of the member's HEAD,
+also reachable from verified default HEAD, to contain the entire pending bundle
+together: exact disk blobs and modes, and absence for deletions. Changed index
+entries must equal disk; an unchanged index may still equal HEAD. Historical
+copies, separate per-path witnesses, conflicts, split staged/unstaged edits,
+hidden index flags and unsupported filesystem states cannot authorize removal.
+The other check recognizes only the reproduced pnpm 12.1.0 native-bootstrap
+entry deletion in the first document of `pnpm-lock.yaml`, with the matching
+`packageManager` pin, no other dirty path, unchanged application-document bytes,
+and consistent index and disk states. Inspection never invokes pnpm. These
+exceptions still require committed-work proof and a verified age of at least one
+day, including when an exact merged PR exists.
+
+Detached linked worktrees qualify only within verified retained Session membership
+and only by ancestry or complete-tree equality. An open same-repository PR on the
+retained Session branch or with that exact HEAD blocks removal. Before teardown
+removes a detached worktree, Cleanup creates and verifies a durable ref under
+`refs/monke/retained/`, preserving its original commit and history. The report
+includes the ref and a recovery command. Ref creation failures or collisions
+retain the worktree; successful refs remain after cleanup or partial failure.
+
+Pending paths, the complete index, disk bytes and modes are fingerprinted and
+rechecked after provider calls, during preflight, after process shutdown and
+Cleanup commands, and immediately before removal. Dirt exceptions authorize Git
+force only for the individually proven member. The operation lock cannot prevent
+an external editor writing between the final check and Git removal.
+
+A branch GitHub has never seen cannot be inside its default
 branch, so a compare 404 on an unpushed commit counts as not an ancestor. A member with
 unique commits and no qualifying merged PR is ineligible, not unknown: the
 provider answered, so the skip is settled and does not mark inspection as

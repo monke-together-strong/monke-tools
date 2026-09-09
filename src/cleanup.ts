@@ -2,6 +2,11 @@ import { existsSync } from "node:fs";
 
 import { teardownSession } from "./chop.ts";
 import { readOnlyCleanupRuntime } from "./cleanup-eligibility.ts";
+import {
+  assertRetainedHead,
+  preserveDetachedHead,
+  retainedHeadAction
+} from "./cleanup-retained-head.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees } from "./git.ts";
 import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
@@ -254,6 +259,17 @@ function reportSession(
   const state = row.decision.eligible ? row.state : null;
   const plannedActions: SessionAction[] = state
     ? [
+        ...snapshot.members
+          .toSorted(
+            (left, right) =>
+              sessionRemovalRank(left, cwd, state.rootSourceRoot) -
+              sessionRemovalRank(right, cwd, state.rootSourceRoot)
+          )
+          .flatMap((member) =>
+            member.mode === "live" && member.evidence?.branch === null && member.evidence.head
+              ? [retainedHeadAction(member.sourceRoot, member.worktreePath, member.evidence.head)]
+              : []
+          ),
         ...cleanupCommandActions(state),
         ...state.repos
           .filter((repo) =>
@@ -335,8 +351,35 @@ function executeSession(
       { allStates: states, kind: "session", state },
       { force: false },
       {
+        authorizePreservedWork(repo) {
+          revalidateMember(repo);
+          return snapshot.members.some(
+            (member) =>
+              samePath(member.worktreePath, repo.worktreePath) &&
+              member.evidence?.pendingWork !== undefined
+          );
+        },
         beforeEffect(action) {
           guard();
+          if (action.step === "worktree-removal") {
+            const repo = state.repos.find((candidate) =>
+              samePath(candidate.worktreePath, action.worktreePath ?? "")
+            );
+            if (!repo) {
+              throw new MonkeError("Missing removal member");
+            }
+            revalidateMember(repo);
+            const member = snapshot.members.find((candidate) =>
+              samePath(candidate.worktreePath, repo.worktreePath)
+            );
+            if (
+              member?.mode === "live" &&
+              member.evidence?.branch === null &&
+              member.evidence.head
+            ) {
+              assertRetainedHead(runtime, repo.sourceRoot, repo.worktreePath, member.evidence.head);
+            }
+          }
           if (action.step === "state-removal") {
             assertFinalizationReady(readOnly, home, state);
           }
@@ -344,6 +387,24 @@ function executeSession(
           attemptedAction = action;
         },
         beforeRemoval(repo) {
+          const member = snapshot.members.find((candidate) =>
+            samePath(candidate.worktreePath, repo.worktreePath)
+          );
+          if (member?.mode === "live" && member.evidence?.branch === null && member.evidence.head) {
+            const preservation = retainedHeadAction(
+              repo.sourceRoot,
+              repo.worktreePath,
+              member.evidence.head
+            );
+            current = preservation;
+            guard();
+            revalidateMember(repo);
+            started = true;
+            attemptedAction = preservation;
+            preserveDetachedHead(runtime, repo.sourceRoot, repo.worktreePath, member.evidence.head);
+            completedActions.push(preservation);
+            attemptedAction = undefined;
+          }
           const action: SessionAction = {
             sourceRoot: repo.sourceRoot,
             step: "process-stop",
