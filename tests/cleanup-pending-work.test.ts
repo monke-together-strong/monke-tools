@@ -86,6 +86,18 @@ describe("cleanup preservation proofs", () => {
       expect(f.proof()).toBeFalsy();
     });
 
+    test("witness paths are literal, including names that look like exclusion pathspecs", () => {
+      const name = ":(exclude)a.txt";
+      const f = fixture({ "a.txt": "old\n", [name]: "keep this file\n" });
+      rmSync(path.join(f.root, name));
+      write(f.source, "a.txt", "advance default\n");
+      f.commit();
+      expect(f.proof()).toBeFalsy();
+      rmSync(path.join(f.source, name));
+      const witness = f.commit();
+      expect(f.proof()).toMatchObject({ kind: "forward-bundle", witness });
+    });
+
     test("rejects separate witnesses and content found only before HEAD", () => {
       const f = fixture();
       write(f.source, "a.txt", "new a\n");

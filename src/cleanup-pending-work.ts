@@ -40,9 +40,17 @@ function git(runtime: Runtime, cwd: string, args: string[]) {
   }
   return result;
 }
-function tree(runtime: Runtime, cwd: string, ref: string) {
+function tree(runtime: Runtime, cwd: string, ref: string, paths: string[] = []) {
   const entries = new Map<string, Entry>();
-  for (const line of git(runtime, cwd, ["ls-tree", "-r", "-z", ref]).split("\0")) {
+  for (const line of git(runtime, cwd, [
+    "--literal-pathspecs",
+    "ls-tree",
+    "-r",
+    "-z",
+    ref,
+    "--",
+    ...paths
+  ]).split("\0")) {
     if (!line) {
       continue;
     }
@@ -261,8 +269,9 @@ export function provePendingWork(
       .trim()
       .split("\n")
       .filter(Boolean);
+    const pendingPaths = pending.paths.map((entry) => entry.path);
     for (const witness of witnesses) {
-      const entries = tree(runtime, source, witness);
+      const entries = tree(runtime, source, witness, pendingPaths);
       if (
         pending.paths.length > 0 &&
         pending.paths.every((p) => equal(p.disk, entries.get(p.path) ?? null))
