@@ -134,9 +134,11 @@ describe("runtime", () => {
   });
 
   test("createRuntime reports asynchronous commands that cannot be started", async () => {
+    const signalListenerCount = process.listenerCount("SIGTERM");
     await expect(createRuntime().execAsync("definitely-missing-monke-command")).rejects.toThrow(
       /Failed to run definitely-missing-monke-command/u
     );
+    expect(process.listenerCount("SIGTERM")).toBe(signalListenerCount);
   });
 
   test("createRuntime preserves output from allowed asynchronous timeouts", async () => {
@@ -186,13 +188,23 @@ describe("runtime", () => {
       const workerPath = path.join(sandbox, "worker.ts");
       const childPidPath = path.join(sandbox, "child.pid");
       const descendantPidPath = path.join(sandbox, "descendant.pid");
+      const signalSentMarker = path.join(sandbox, "signal-sent");
       const descendantSurvivedMarker = path.join(sandbox, "descendant-survived");
       const unexpectedCommandMarker = path.join(sandbox, "unexpected-command");
       const runtimeUrl = pathToFileURL(path.resolve("src/runtime.ts")).href;
       write(
         sandbox,
         "worker.ts",
-        `import { createRuntime } from ${JSON.stringify(runtimeUrl)};
+        `import { existsSync } from "node:fs";
+import { createRuntime } from ${JSON.stringify(runtimeUrl)};
+
+// Hold spawn's return so termination happens before the child can be registered.
+const spawn = Bun.spawn;
+Bun.spawn = (...args) => {
+  const child = spawn(...args);
+  while (!existsSync(${JSON.stringify(signalSentMarker)})) Bun.sleepSync(1);
+  return child;
+};
 
 const runtime = createRuntime();
 try {
@@ -216,6 +228,7 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
           return childPid !== undefined && descendantPid !== undefined;
         });
         worker.kill(signal);
+        writeFileSync(signalSentMarker, "");
         await worker.exited;
         await wait(1700);
         // kill(pid, 0) also sees an exited child awaiting its parent's reap on Linux.
