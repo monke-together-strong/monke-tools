@@ -97,9 +97,9 @@ external side effect. Prepared-only repos are removed without cleanup commands.
 
 Resolve Session names before Ordinary targets. A managed path or branch selects
 the whole owning Session only with valid state and matching Root repo scope.
-Missing/invalid state, a managed target outside that scope, or a detached or
-branch-mismatched Session worktree fails validation even with `--force`. Paths in
-the managed worktree area never fall back to Ordinary targets.
+Missing/invalid state or a managed target outside that scope fails validation
+even with `--force`. Detached or branch-mismatched retained members produce a
+warning. Managed paths never fall back to Ordinary targets.
 
 Ordinary targets must be registered to the invoking repo. A detached worktree can
 be selected by current location or registered absolute/relative path. An exact
@@ -113,191 +113,150 @@ resources recorded in its state, not inferred worktrees from today's config.
 
 ## Session cleanup
 
-`inspectSessionCleanup` reports Git and retained ownership evidence for all retained
-Sessions. `eligibleForSessionCleanup` returns true only when every live member
-passes the individual-worktree check and the whole Session has no ownership,
-identity, hold, or operation blocker. A member passes with an exact merged PR
-for its current branch and commit, or by proving that its commit is already inside the
-verified default branch, so it holds no unique work. If neither proves completion,
-Cleanup queries GitHub's commit-associated PRs. A PR under another branch counts
-only when its HEAD exactly equals the member's HEAD, both PR repositories match
-the Source remote, its base is the verified default branch, and its merge commit
-remains an ancestor of the verified default HEAD. Association with an intermediate
-commit alone does not qualify. A rebased or amended HEAD can instead qualify when
-its complete change from its sole merge base with the default branch exactly
-matches the associated PR merge's change from its first parent. This comparison
-requires nonempty deltas with identical paths, full before/after object IDs and
-file modes. It rejects divergent merge commits and does not normalize whitespace
-or ignore binary/submodule changes. Shallow history or missing Git objects cannot
-provide this proof; Cleanup does not fetch them.
-An open PR on the member's current branch still blocks Cleanup.
-Ancestry, cross-branch HEAD and complete-diff proof require the worktree to be at least one day old, measured from its `.git`
-file, so a Session spawned from the default branch is not removed before work
-starts. Complete HEAD-tree equality with a commit reachable from the verified default
-HEAD is another age-gated proof. It compares the full tree ID, including paths,
-modes and submodule commits, without patch normalization.
+Cleanup inspects all retained Sessions across all Roots from Monke home, even
+outside a repository. Every live member must pass local-work and committed-work
+checks; the whole Session must pass ownership, identity, hold, and operation
+checks. Actual member branches may differ from the Session name.
 
-Pending work blocks unless a retained Session member satisfies one of two narrow
-checks. Forward preservation requires one strict descendant of the member's HEAD,
-also reachable from verified default HEAD, to contain the entire pending bundle
-together: exact disk blobs and modes, and absence for deletions. Changed index
-entries must equal disk; an unchanged index may still equal HEAD. Historical
-copies, separate per-path witnesses, conflicts, split staged/unstaged edits,
-hidden index flags and unsupported filesystem states cannot authorize removal.
-The other check recognizes only the reproduced pnpm 12.1.0 native-bootstrap
-entry deletion in the first document of `pnpm-lock.yaml`, with the matching
-`packageManager` pin, no other dirty path, unchanged application-document bytes,
-and consistent index and disk states. Inspection never invokes pnpm. These
-exceptions still require committed-work proof and a verified age of at least one
-day, including when an exact merged PR exists.
+### Committed work
 
-Detached linked worktrees qualify only within verified retained Session membership
-and only by ancestry or complete-tree equality. An open same-repository PR on the
-retained Session branch or with that exact HEAD blocks removal. Before teardown
-removes a detached worktree, Cleanup creates and verifies a durable ref under
-`refs/monke/retained/`, preserving its original commit and history. The report
-includes the ref and a recovery command. Ref creation failures or collisions
-retain the worktree; successful refs remain after cleanup or partial failure.
+An open PR on the current branch blocks removal. Otherwise, committed work needs
+one of these proofs against the verified default branch:
 
-Pending paths, the complete index, disk bytes and modes are fingerprinted and
-rechecked after provider calls, during preflight, after process shutdown and
-Cleanup commands, and immediately before removal. Dirt exceptions authorize Git
-force only for the individually proven member. The operation lock cannot prevent
-an external editor writing between the final check and Git removal.
+| Proof             | Requirement                                                                                                                                                           |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Current-branch PR | Exact same-repository PR HEAD, merged into default.                                                                                                                   |
+| Ancestry          | Member HEAD is an ancestor of default HEAD.                                                                                                                           |
+| Cross-branch PR   | Exact PR HEAD, both repositories match Source, default base, and merge commit reachable from default HEAD. Intermediate-commit association is insufficient.           |
+| Complete diff     | The nonempty change from HEAD's sole merge base exactly matches a qualifying PR merge's change from its first parent: paths, modes, and full before/after object IDs. |
+| Complete tree     | HEAD's full tree ID equals a commit's tree reachable from default HEAD, including modes and submodule commits.                                                        |
 
-A branch GitHub has never seen cannot be inside its default
-branch, so a compare 404 on an unpushed commit counts as not an ancestor. A member with
-unique commits and no qualifying merged PR is ineligible, not unknown: the
-provider answered, so the skip is settled and does not mark inspection as
-failed. Actual member branch names can differ from the Session name.
-Commit-PR lookup, ancestry or complete-diff inspection failures remain unknown. Repeated commit lookups share
-one inspection's cache, keyed by Source, repository, HEAD, and verified default HEAD;
-local identity and cleanliness are rechecked after provider reads.
+All proofs except a clean current-branch merged PR require a worktree age of at
+least one day, measured from its `.git` file. Complete-diff proof rejects divergent
+merges, shallow history, and missing objects; it never normalizes whitespace or
+ignores binary/submodule changes. Inspection does not fetch missing objects.
 
-The report uses recorded membership. Nested worktree paths are overlapping
-ownership, including discovered unowned registrations; removing a parent must
-not encompass another worktree. Shared Git preflight also rejects nested
-registrations for Ordinary Chop, including with force.
+Unique commits without qualifying evidence are a settled skip. GitHub compare
+404 for an unpushed commit means not-an-ancestor; provider/inspection failures
+remain unknown. Commit lookups share a per-inspection cache keyed by Source,
+repository, HEAD, and verified default HEAD.
 
-The report uses recorded membership. It does not infer dependencies from current
-configuration or assign unowned worktrees to Sessions by matching names. Corrupt
-records are reported. They block overlapping Sessions; if their ownership cannot
-be bounded, they block all Sessions. Verified absent members count as already
-removed, following Chop's registration checks. A partially absent Session can
-pass for recovery only when every remaining live member passes. Fully absent
-Sessions with verified ownership are reported separately as finalization
-candidates.
+### Pending and detached work
 
-Optional `cleanupHold: true` in Session state blocks this check. This is separate
-from each repo's `cleanupEligible`, which records whether its Cleanup command
-must run. A member whose recorded Source checkout no longer exists is a settled
-skip: the Session is reported as blocked, not as an inspection error, and its
-state is retained because Chop needs the Source too. A foreign global operation lock also blocks inspection eligibility;
-the inspector does not acquire, reclaim, or remove that lock. It rechecks local
-member evidence and retained state after provider reads.
+Only verified retained Session members may use these pending-work exceptions:
 
-`mt cleanup --dry-run` uses this report without acquiring a lock, creating Monke
-home, fetching Git objects, or running Cleanup commands. Eligible results say
-“Would clean.” `mt cleanup` holds the asynchronous global lock, verifies its own
-lock identity, and refreshes evidence before each Session, reusing the initial
-unowned-worktree discovery while rechecking overlaps live before each removal.
-Collection memoizes worktree listings and repository-structure lookups per
-Source for one pass; branch, HEAD, cleanliness, and every revalidation read fresh. It shares Chop's
-removal and finalization lifecycle, with local proof rechecked before each
-removal. The initial report alone never authorizes effects. Monke's lock
-coordinates Monke operations; it cannot make concurrent external Git edits atomic.
+- **Forward preservation:** one strict descendant of member HEAD, reachable from
+  verified default HEAD, contains the entire pending bundle together: exact raw
+  disk blobs and modes, with deletions absent. Changed index entries must equal
+  disk; unchanged entries may equal HEAD. Historical-only or per-path witnesses,
+  split staged/unstaged edits, conflicts, hidden index flags, dirty submodules,
+  and unsupported filesystem states do not qualify.
+- **pnpm bootstrap residue:** the sole dirty path is `pnpm-lock.yaml`, matching
+  the reproduced pnpm 12.1.0 native-bootstrap deletion in its first YAML document.
+  The `packageManager` pin must match, application-document bytes and file modes
+  must be unchanged, and index/disk states must agree. Inspection never runs pnpm.
 
-Both commands discover all retained Sessions across all Roots from Monke home,
-even outside a repository. Unowned worktrees discovered in known Source
-checkouts are listed separately and left untouched. Neither `--merged` nor
-`--all` is an option.
+Both exceptions still require committed-work proof and at least one day of age,
+even with an exact merged PR. They authorize Git force only for the proven member.
 
-Both modes accept `--json`: stdout contains one JSON object with `schemaVersion:
-1`, `dryRun`, `inspectedAt`, `sessions`, `unownedWorktrees`, `unavailableSources`,
-`globalFailure`, and `exitCode`. Human output uses the same Session reports,
-preceded by one summary line counting outcomes, inspection errors, unowned
-worktrees, and unavailable Sources. `--eligible` hides skipped Sessions from
-human output only; JSON always includes every inspected Session. A dirty member
-lists up to five changed paths under its local check.
-Cleanup-command output is captured by the command runner and cannot contaminate
-JSON stdout. Exit 0 means inspection/execution completed, including expected
-eligibility skips and settled blockers such as a hold or a missing Source. Exit
-1 means evidence was unavailable, execution failed, or a global safety check
-stopped the run; details remain in the report and the CLI writes a short error
-to stderr.
+Detached members qualify only by ancestry or complete-tree equality. An open
+same-repository PR on the retained Session branch or exact HEAD blocks removal.
+Before removal, Cleanup compare-and-sets `refs/monke/retained/<HEAD>` and verifies
+the ref and worktree HEAD. A failure or collision retains the worktree; the ref
+survives success or partial failure. Reports include its recovery command.
 
-Execution reports planned, completed-this-attempt, and remaining actions. A
-Session is skipped before its first effect attempt, or failed after an effect
-attempt starts. Failed commands may have produced external effects even when
-completion is unverified. Full state is retained on failure; retries run Cleanup
-commands from the beginning, including earlier successes. Independent Sessions
-continue after bounded failures. Lock ownership loss, retained-state changes
-after inspection, or corrupt state with unbounded ownership stop further
-execution. Every remaining Session is reported as skipped on a global stop.
-`createSessionCleanupReport` supplies the same per-member explanations to JSON
-and `formatSessionCleanupReport`. Local checks and committed-work checks report
-passed, blocked, unknown, not-checked, or not-needed. A dirty worktree can stop
-provider lookup; that is explicitly not-checked. Older saved evidence with
-unknown check coverage remains unknown. Retained repository/PR proof can establish
-that committed-work inspection ran, but an invalidation must not relabel it as
-not-checked.
-Ownership errors retain their conflicting Session/path details, and revalidation
-errors name the affected member. Collected members are revalidated even when
-another member already blocks the Session. Stale registrations retain their
-branch identity for that comparison.
+### Ownership and execution
 
-Inspection reports eligible (not attempted) or skipped. A later executor can supply
-an actual cleaned or failed result; failure names revalidation, process-stop,
-teardown, worktree-removal, or finalization and the affected repo. Failed execution does not
-claim the whole Session was retained: earlier steps may already have succeeded.
-This reporting contract does not execute teardown or authorize removal.
+Use recorded membership and commands, never today's dependency config or
+name-matching unowned paths. Unowned worktrees are listed and left untouched.
+Nested/overlapping registrations block removal, including Ordinary Chop with
+force. Corrupt records block affected Sessions; unbounded ownership blocks all.
+Verified absent members count as removed; fully absent Sessions can finalize.
+A missing Source checkout or `cleanupHold: true` is a settled blocker.
+`cleanupEligible` separately records whether a repo's Cleanup command must run.
 
-`scripts/audit-session-cleanup-eligibility.ts <expected.json> <report.json> [report.txt]` compares
-live results with independently labeled expectations. Its input has `capturedAt`,
-`rows` of `{ file, expected }` (state filename and boolean), and optional
-`knownSourceRoots` for reporting additional unowned Git worktrees. It uses
-`MONKE_HOME`, writes the JSON report with per-member explanations and optional
-text report, and fails if any expected result differs or
-any Session was added or disappeared.
+`mt cleanup --dry-run` reports “Would clean” without acquiring a lock, creating
+Monke home, fetching, or running commands. A foreign operation lock blocks
+eligibility. Real cleanup holds and verifies the global lock, refreshes evidence
+before each Session, and uses Chop's removal/finalization lifecycle. Initial
+inspection alone never authorizes effects.
+
+Revalidate every collected member and retained state after provider calls, even
+when a sibling already blocks cleanup. Fingerprint pending paths, the full index,
+disk bytes, and modes; recheck at preflight, after process/resource effects, and
+immediately before removal. Worktree listings and repository structure may be
+memoized per Source during collection; branch, HEAD, cleanliness, and revalidation
+are fresh reads. Reuse initial unowned discovery but check overlaps live before
+removal. Monke's lock cannot make external editor or Git writes atomic.
+
+### Reports
+
+Both modes accept `--json`, emitting one object with `schemaVersion: 1`,
+`dryRun`, `inspectedAt`, `sessions`, `unownedWorktrees`, `unavailableSources`,
+`globalFailure`, and `exitCode`. Command output is captured separately.
+Human output starts with outcome/error/unowned/unavailable counts and shows up
+to five dirty paths per member. `--eligible` filters human output only; JSON
+always includes all Sessions. Neither `--merged` nor `--all` is supported.
+
+- **Exit 0:** inspection/execution completed, including settled skips.
+- **Exit 1:** unavailable evidence, execution failure, or a global safety stop.
+  Details remain in the report, with a short stderr error.
+- **Member checks:** local and committed-work checks are passed, blocked, unknown,
+  not-checked, or not-needed. A dirty member may prevent provider lookup.
+  Older evidence with unknown coverage stays unknown; retained repository/PR
+  proof may establish coverage, and invalidation must not erase it.
+- **Actions:** planned, completed this attempt, and remaining. Inspection reports
+  eligible or skipped; execution reports cleaned, skipped before any effect
+  attempt, or failed after an attempt starts. Failures identify the member and
+  phase: revalidation, process-stop, teardown, removal, or finalization.
+
+Reports preserve ownership conflicts, stale-registration branch identities, and
+partial effects; a failed command may have external effects despite unverified
+completion. `createSessionCleanupReport` supplies the same explanations to JSON
+and `formatSessionCleanupReport`. Bounded failures allow independent Sessions
+to continue. Lost lock ownership, changed retained state, or unbounded corrupt
+ownership stops execution and reports remaining Sessions as skipped.
+
+The audit command
+`scripts/audit-session-cleanup-eligibility.ts <expected.json> <report.json> [report.txt]`
+compares live results with independent labels. Input contains `capturedAt`,
+`rows: [{ file, expected }]` (state filename and boolean), and optional
+`knownSourceRoots` for additional unowned discovery. It uses `MONKE_HOME`, writes
+JSON and optional text explanations, and fails on mismatches or added/missing
+Sessions.
 
 ## Removal and finalization
 
-Before removing any Session worktree, validate all checkable cross-repo
-prerequisites: state consistency, Source-checkout identities, and recorded
-worktrees. Report all preflight failures together and remove nothing on failure.
-Revalidate each worktree immediately before removing it; on failure, stop later
-removals and retain state for retry. Remove the invoking worktree last if it
-belongs to the Session, otherwise the Root repo worktree last.
+Validate all Session state, Source identities, and recorded worktrees before
+effects; report all preflight failures together. Revalidate after commands/process
+stops and before each removal. Failure stops later removals and retains state.
+Remove the invoking member last, otherwise the Root last.
 
-Cleanup scans the process table once per run for processes whose working
-directory is inside the managed worktree area, grouped into trees by parent. A
-tree is attached when any member's command line names a path inside that
-worktree, and is as old as its oldest member. Before running Cleanup commands, an
-attached tree at least one day old, the same threshold as ancestry-only proof,
-is stopped: roots first with SIGTERM, then SIGKILL after a short grace. Any
-tree under a day old, attached or not, skips the Session with the process list,
-since it may be an agent mid-task. An old tree that never named the worktree,
-such as an idle shell, is left running and reported; removal proceeds.
-Stops are reported as completed process-stop actions. Chop does not stop
-processes.
+Cleanup scans managed-area working directories once per run, grouping processes
+by parent. A tree is attached if any command line names a worktree path; its age
+is its oldest member's age. Any tree under one day old blocks the Session and is
+listed. Before Cleanup commands, old attached roots receive SIGTERM, then SIGKILL
+after a grace period; completed stops are reported. Old unattached trees, such as
+idle shells, remain running and are reported. Chop does not stop processes.
 
-Treat a recorded missing path as already removed only when its path and Source
-identity are valid, no live worktree carries the Session branch elsewhere, and
-no locked registration remains. Prune only exact unlocked stale registrations;
-there is no checkout-level status to inspect for an absent path. For a clean
-worktree with initialized submodules, immediately revalidate cleanliness before
-using Git's internal removal `--force` to bypass its submodule restriction. This
-exception does not broaden the user's `mt chop --force` semantics.
-
-Before removing any worktrees, teardown runs only recorded Cleanup commands in reverse materialization order,
-from Root toward dependencies. Missing recorded commands remain absent regardless
-of current config. Stop at the first failure, retain full state and resources,
-and leave later dependency commands unrun and all remaining worktrees intact. Commands run in their Session worktree. A missing worktree with a required command blocks all commands unless explicit Chop recovery uses `--cleanup-from-source`. Retries start from the first command;
+Run only recorded Cleanup commands, before any removals, in reverse
+materialization order (Root toward dependencies). Commands run in their Session
+worktree; a missing required-command worktree blocks all commands unless explicit
+Chop recovery uses `--cleanup-from-source`. Stop at the first failure and retain
+full state/resources. Retries restart all commands, including earlier successes;
 individual successes are not checkpointed.
 
-A named Session remains a valid Chop target while state is retained, even after
-all worktrees disappear. `mt chop <session>` retries teardown. Cleanup discovers dead Sessions broadly, but required commands need their worktrees restored or deliberate `mt chop <session> --cleanup-from-source` recovery. Successful finalization removes state, after
-which another named Chop reports no target.
+An absent path counts as removed only with valid path/Source identity, no live
+Session branch elsewhere, and no locked registration. Prune only exact unlocked
+stale registrations. Clean initialized submodules permit internal Git removal
+`--force` after an immediate cleanliness recheck; this does not broaden user
+`mt chop --force` semantics.
+
+Finalize state only after required commands succeed and all recorded worktrees
+are gone. Retained state keeps a named Session choppable, including after all
+worktrees disappear. Restore missing required-command worktrees or deliberately
+use `mt chop <session> --cleanup-from-source`. After finalization, named Chop
+reports no target.
 
 ## Diff
 
