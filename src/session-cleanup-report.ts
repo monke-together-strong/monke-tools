@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { localWorkDescription } from "./cleanup-eligibility.ts";
 import type { CleanupEvidence } from "./cleanup-eligibility.ts";
 import {
   decideSessionCleanupEligibility,
@@ -16,10 +17,14 @@ import type { SessionAction } from "./session-lifecycle-progress.ts";
 const messages: Record<SessionCleanupReason, string> = {
   "ambiguous-pr": "More than one merged pull request matches this commit.",
   "ancestry-unavailable": "The commit's relationship to the default branch could not be verified.",
-  "changed-during-inspection": "The local branch or commit changed during inspection.",
+  "changed-during-inspection":
+    "The local branch, commit, index, or pending files changed during inspection.",
   "closed-unmerged-pr": "The pull request for this commit was closed without merging.",
+  "commit-pr-unavailable":
+    "Pull requests associated with the current commit could not be verified.",
   "default-branch": "The worktree is on the repository's default branch.",
   "detached-head": "The worktree is not attached to a branch.",
+  "diff-unavailable": "The complete branch change could not be compared with the landed merge.",
   "dirty-worktree":
     "The worktree has staged, modified, or untracked files, including submodule changes.",
   "exact-merged-pr": "The current commit matches an exact merged pull request in this repository.",
@@ -31,10 +36,15 @@ const messages: Record<SessionCleanupReason, string> = {
   "invalid-state": "The retained Session state is invalid or cannot be read.",
   "invalid-state-overlap": "Invalid Session state may claim the same worktrees.",
   "local-evidence-unavailable": "Git could not establish the local branch, commit, or cleanliness.",
+  "matching-default-tree": "The complete committed tree occurs in verified default history.",
+  "matching-merged-diff":
+    "The complete branch change exactly matches a merged PR's change in the default branch.",
   "member-changed-during-inspection": "A member changed after inspection; inspect again.",
   "member-identity-unverified":
     "A member's Source checkout, recorded path, or registration could not be verified.",
   "member-missing-or-unverified": "The member has no usable worktree evidence.",
+  "merged-pr-head":
+    "The current commit matches a merged PR head under another branch, and its merge remains in the default branch.",
   "missing-worktree": "The worktree path is missing; ownership must be verified.",
   "no-merged-pr":
     "No qualifying merged pull request proves this work is complete, and the branch has commits outside the default branch.",
@@ -47,7 +57,7 @@ const messages: Record<SessionCleanupReason, string> = {
   "ownership-conflict":
     "Session ownership conflicts with another record or an overlapping registered worktree; remove the wrong Session state file from Monke home, then rerun Cleanup.",
   "recent-worktree":
-    "The branch has no commits outside the default branch, but the worktree is under a day old; ancestry-only proof waits for a day.",
+    "Ancestry or matching merged work provides completion evidence, but the worktree must have a verified age of at least one day.",
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
   "repository-unavailable": "The repository or its default branch could not be verified.",
   "source-checkout": "Source checkouts cannot be removed.",
@@ -160,7 +170,8 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
     } else {
       local = {
         code: null,
-        message: "Registered linked worktree; clean including untracked files and submodules.",
+        message: localWorkDescription(member.evidence),
+        ...(member.evidence.pendingWork ? { details: member.evidence.pendingWork.paths } : {}),
         status: "passed"
       };
     }
@@ -282,5 +293,5 @@ function formatProgress(report: ReturnType<typeof createSessionCleanupReport>) {
 }
 
 function formatAction(action: SessionAction) {
-  return `${action.step} ${action.sourceRoot}${action.worktreePath ? ` (${action.worktreePath})` : ""}${action.command ? `: ${action.command}` : ""}`;
+  return `${action.step} ${action.sourceRoot}${action.worktreePath ? ` (${action.worktreePath})` : ""}${action.command ? `: ${action.command}` : ""}${action.retainedRef ? `; retained HEAD: ${action.retainedRef}` : ""}${action.recoveryCommand ? `; recover: ${action.recoveryCommand}` : ""}`;
 }

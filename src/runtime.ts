@@ -264,6 +264,10 @@ function executeCommandAsync(
   };
 
   return new Promise((resolve, reject) => {
+    // A detached child may run before spawn returns, so intercept signals first.
+    if (activeAsyncChildren.size === 0 && timedOutProcessGroups.size === 0) {
+      attachParentTerminationHandlers();
+    }
     let child: AsyncChildProcess;
     try {
       child = Bun.spawn({
@@ -276,6 +280,7 @@ function executeCommandAsync(
         stdout: "pipe"
       });
     } catch (error) {
+      detachParentTerminationHandlersIfIdle();
       reject(
         new MonkeError(
           `Failed to run ${formatCommand(command, args)}: ${errorMessage(ThrownValueSchema.parse(error))}`,
@@ -461,9 +466,6 @@ class AsyncCommandExecution {
 }
 
 function registerAsyncChild(child: AsyncChildProcess) {
-  if (activeAsyncChildren.size === 0 && timedOutProcessGroups.size === 0) {
-    attachParentTerminationHandlers();
-  }
   activeAsyncChildren.add(child);
 }
 

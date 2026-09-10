@@ -22,6 +22,8 @@ import { createTestRuntime } from "./runtime-fixture.ts";
 
 const ActionSchema = z.object({
   command: z.string().optional(),
+  recoveryCommand: z.string().optional(),
+  retainedRef: z.string().optional(),
   sourceRoot: z.string(),
   step: z.string(),
   worktreePath: z.string().optional()
@@ -727,4 +729,229 @@ describe("global Session cleanup", () => {
     },
     30_000
   );
+
+  function preserveForwardBundle(state: SessionState) {
+    for (const repo of state.repos) {
+      write(repo.sourceRoot, "tracked.txt", "preserved forward content\n");
+      git(repo.sourceRoot, ["commit", "-am", "preserve pending work"]);
+      write(repo.worktreePath, "tracked.txt", "preserved forward content\n");
+      ageWorktree(repo.worktreePath);
+    }
+  }
+
+  test("Cleanup removes members with a verified forward bundle using member-specific permission", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/forward");
+    preserveForwardBundle(state);
+    const result = await f.run();
+    expect(result.error).toBeUndefined();
+    expect(result.report.sessions[0]?.outcome).toBe("cleaned");
+    for (const repo of state.repos) {
+      expect(existsSync(repo.worktreePath)).toBeFalsy();
+    }
+  }, 30_000);
+
+  test("an unpreserved sibling prevents all effects even when another member has a forward bundle", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/blocked-bundle");
+    preserveForwardBundle(state);
+    const [dependency] = state.repos;
+    if (!dependency) {
+      throw new Error("Missing dependency");
+    }
+    write(dependency.worktreePath, "tracked.txt", "unique sibling work\n");
+    const effects: string[] = [];
+    const original = f.runtime.exec;
+    f.runtime.exec = (command, args, options) => {
+      if (
+        command === "kill" ||
+        (command === "git" && (args?.includes("remove") || args?.includes("update-ref")))
+      ) {
+        effects.push(command);
+      }
+      return original(command, args, options);
+    };
+    const result = await f.run();
+    expect(result.report.sessions[0]?.outcome).toBe("skipped");
+    expect(effects).toStrictEqual([]);
+    for (const repo of state.repos) {
+      expect(existsSync(repo.worktreePath)).toBeTruthy();
+    }
+  }, 30_000);
+
+  test("a cleanup command changing an accepted dirty file preserves the worktree despite unchanged status", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/bundle-cleanup-race");
+    preserveForwardBundle(state);
+    const laterRoot = state.repos.find((repo) => repo.sourceRoot === f.root);
+    if (!laterRoot) {
+      throw new Error("Missing Root member");
+    }
+    const before = git(laterRoot.worktreePath, ["status", "--porcelain"]);
+    saveSessionState(f.home, {
+      ...state,
+      repos: state.repos.map((repo) => ({
+        ...repo,
+        cleanupCommand:
+          repo.sourceRoot === f.root
+            ? `printf 'late authored work\\n' > '${path.join(laterRoot.worktreePath, "tracked.txt")}'`
+            : undefined
+      }))
+    });
+    const result = await f.run();
+    expect(result.report.sessions[0]?.outcome).toBe("failed");
+    expect(git(laterRoot.worktreePath, ["status", "--porcelain"])).toBe(before);
+    expect(readFileSync(path.join(laterRoot.worktreePath, "tracked.txt"), "utf-8")).toBe(
+      "late authored work\n"
+    );
+    for (const repo of state.repos) {
+      expect(existsSync(repo.worktreePath)).toBeTruthy();
+    }
+  }, 30_000);
+
+  test("process shutdown that changes an accepted dirty file prevents removal", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/bundle-stop-race");
+    preserveForwardBundle(state);
+    const laterRoot = state.repos.find((repo) => repo.sourceRoot === f.root);
+    if (!laterRoot) {
+      throw new Error("Missing Root member");
+    }
+    const pid = processIn(laterRoot.worktreePath, true);
+    ageProcess(f.runtime, pid, 2);
+    const original = f.runtime.exec;
+    f.runtime.exec = (command, args, options) => {
+      const result = original(command, args, options);
+      if (command === "kill") {
+        write(laterRoot.worktreePath, "tracked.txt", "shutdown authored work\n");
+      }
+      return result;
+    };
+    const result = await f.run();
+    expect(result.report.sessions[0]?.outcome).toBe("failed");
+    expect(readFileSync(path.join(laterRoot.worktreePath, "tracked.txt"), "utf-8")).toBe(
+      "shutdown authored work\n"
+    );
+    for (const repo of state.repos) {
+      expect(existsSync(repo.worktreePath)).toBeTruthy();
+    }
+  }, 30_000);
+
+  test("a detached member gets a durable ref before removal and a recovery command in the report", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/detached-preserved");
+    const [dependency] = state.repos;
+    if (!dependency) {
+      throw new Error("Missing dependency");
+    }
+    git(dependency.worktreePath, ["checkout", "--detach"]);
+    ageWorktree(dependency.worktreePath);
+    const head = git(dependency.worktreePath, ["rev-parse", "HEAD"]);
+    const result = await f.run();
+    expect(result.error).toBeUndefined();
+    expect(result.report.sessions[0]?.outcome).toBe("cleaned");
+    expect(git(dependency.sourceRoot, ["rev-parse", `refs/monke/retained/${head}`])).toBe(head);
+    expect(result.report.sessions[0]?.execution.completedActions?.[0]?.recoveryCommand).toContain(
+      "worktree add --detach"
+    );
+    expect(result.report.sessions[0]?.execution.completedActions?.[0]).toMatchObject({
+      retainedRef: `refs/monke/retained/${head}`,
+      step: "head-preservation"
+    });
+  }, 30_000);
+
+  test.each(["write-failure", "collision"])(
+    "detached retention %s retains every worktree",
+    async (failure) => {
+      const f = fixture();
+      const state = f.addSession("feature/detached-failure");
+      const [dependency] = state.repos;
+      if (!dependency) {
+        throw new Error("Missing dependency");
+      }
+      git(dependency.worktreePath, ["checkout", "--detach"]);
+      const head = git(dependency.worktreePath, ["rev-parse", "HEAD"]);
+      if (failure === "collision") {
+        write(dependency.sourceRoot, "other.txt", "another commit\n");
+        git(dependency.sourceRoot, ["add", "other.txt"]);
+        git(dependency.sourceRoot, ["commit", "-m", "another commit"]);
+        git(dependency.sourceRoot, ["update-ref", `refs/monke/retained/${head}`, "HEAD"]);
+      } else {
+        const original = f.runtime.exec;
+        f.runtime.exec = (command, args, options) => {
+          if (command === "git" && args?.includes("update-ref")) {
+            throw new Error("ref write failed");
+          }
+          return original(command, args, options);
+        };
+      }
+      ageWorktree(dependency.worktreePath);
+      const result = await f.run();
+      expect(result.report.sessions[0]).toMatchObject({
+        execution: { step: "head-preservation" },
+        outcome: "failed"
+      });
+      for (const repo of state.repos) {
+        expect(existsSync(repo.worktreePath)).toBeTruthy();
+      }
+    },
+    30_000
+  );
+
+  test("a detached retention ref survives a subsequent worktree removal failure", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/detached-partial");
+    const [dependency] = state.repos;
+    if (!dependency) {
+      throw new Error("Missing dependency");
+    }
+    git(dependency.worktreePath, ["checkout", "--detach"]);
+    ageWorktree(dependency.worktreePath);
+    const head = git(dependency.worktreePath, ["rev-parse", "HEAD"]);
+    const original = f.runtime.exec;
+    f.runtime.exec = (command, args, options) => {
+      if (command === "git" && args?.includes("remove")) {
+        throw new Error("removal failed after preservation");
+      }
+      return original(command, args, options);
+    };
+    const result = await f.run();
+    expect(result.report.sessions[0]).toMatchObject({
+      execution: { completedActions: [{ step: "head-preservation" }], step: "worktree-removal" },
+      outcome: "failed"
+    });
+    expect(git(dependency.sourceRoot, ["rev-parse", `refs/monke/retained/${head}`])).toBe(head);
+    for (const repo of state.repos) {
+      expect(existsSync(repo.worktreePath)).toBeTruthy();
+    }
+  }, 30_000);
+
+  test("Cleanup removes the exact pnpm bootstrap deletion with HEAD already in default", async () => {
+    const f = fixture();
+    const before = readFileSync(
+      path.join(import.meta.dirname, "fixtures/cleanup-pnpm-bootstrap-before.txt"),
+      "utf-8"
+    );
+    const after = readFileSync(
+      path.join(import.meta.dirname, "fixtures/cleanup-pnpm-bootstrap-after.txt"),
+      "utf-8"
+    );
+    for (const source of f.sources) {
+      write(source, "package.json", JSON.stringify({ packageManager: "pnpm@12.1.0" }));
+      write(source, "pnpm-lock.yaml", before);
+      git(source, ["add", "package.json", "pnpm-lock.yaml"]);
+      git(source, ["commit", "-m", "pin package manager"]);
+    }
+    const state = f.addSession("feature/bootstrap-preserved");
+    for (const repo of state.repos) {
+      write(repo.worktreePath, "pnpm-lock.yaml", after);
+      ageWorktree(repo.worktreePath);
+    }
+    const result = await f.run();
+    expect(result.error).toBeUndefined();
+    expect(result.report.sessions[0]?.outcome).toBe("cleaned");
+    for (const repo of state.repos) {
+      expect(existsSync(repo.worktreePath)).toBeFalsy();
+    }
+  }, 30_000);
 });

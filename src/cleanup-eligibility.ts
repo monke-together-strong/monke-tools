@@ -3,6 +3,14 @@ import path from "node:path";
 
 import * as z from "zod";
 
+import { inspectMatchingMergeDiff } from "./cleanup-diff-evidence.ts";
+import type { MatchingMergeDiff } from "./cleanup-diff-evidence.ts";
+import {
+  inspectDefaultTree,
+  inspectPendingWork,
+  provePendingWork
+} from "./cleanup-pending-work.ts";
+import type { PendingWork, PendingWorkProof } from "./cleanup-pending-work.ts";
 import { samePath } from "./path-identity.ts";
 import type { ExecResult, Runtime } from "./types.ts";
 import {
@@ -26,6 +34,9 @@ const PullRequestSchema = z.object({
   number: z.number().int().positive(),
   state: z.enum(["open", "closed"])
 });
+const CommitPullRequestSchema = PullRequestSchema.extend({
+  merge_commit_sha: OidSchema.nullable()
+});
 const ComparisonSchema = z.object({
   behind_by: z.number().int().nonnegative(),
   merge_base_commit: z.object({ sha: OidSchema }),
@@ -36,6 +47,8 @@ const ComparisonSchema = z.object({
 export interface CleanupCandidate {
   /** Set only when retained Session membership proves this is a dependency. */
   role?: "root" | "dependency";
+  /** Retained Session identity; never inferred from a directory name. */
+  sessionBranch?: string;
   sourceRoot: string;
   worktreePath: string;
 }
@@ -55,11 +68,16 @@ export const CleanupCodeSchema = z.enum([
   "ambiguous-pr",
   "head-mismatch",
   "no-merged-pr",
+  "commit-pr-unavailable",
   "recent-worktree",
   "ancestry-unavailable",
   "changed-during-inspection",
   "repository-changed-during-inspection",
   "exact-merged-pr",
+  "merged-pr-head",
+  "matching-merged-diff",
+  "diff-unavailable",
+  "matching-default-tree",
   "unchanged-branch"
 ]);
 
@@ -77,13 +95,24 @@ export interface CleanupEvidence {
   ancestorOfDefault: boolean | null;
   branch: string | null;
   candidate: CleanupCandidate;
+  /** Qualifying merged commit-associated PRs; null means the lookup failed. */
+  commitPullRequests?: CommitPullRequestEvidence[] | null;
   /** Absent only in older saved evidence; absence is not proof a check ran. */
   committedWorkAttempted?: boolean;
+  defaultTree?: { tree: string; witness: string } | false | null;
   head: string | null;
   localBlock: CleanupDecision | null;
+  pendingWork?: PendingWorkProof;
   repository: CleanupRepositoryEvidence | null;
   /** Milliseconds since the worktree was created; null when unknown. Absent in older saved evidence. */
   worktreeAgeMs?: number | null;
+}
+
+export interface CommitPullRequestEvidence {
+  ancestorOfDefault: boolean | null;
+  /** Only attempted for non-exact heads with a verified landed merge. */
+  matchingDiff?: MatchingMergeDiff | false | null;
+  pullRequest: z.output<typeof CommitPullRequestSchema>;
 }
 
 export const CleanupRepositoryEvidenceSchema = z.object({
@@ -95,12 +124,18 @@ export const CleanupRepositoryEvidenceSchema = z.object({
 
 export type CleanupRepositoryEvidence = z.output<typeof CleanupRepositoryEvidenceSchema>;
 
-/** Ancestry-only proof waits this long so a just-spawned Session is not removed before work starts. */
+/**
+ * Ancestry and cross-branch PR proof wait so a just-spawned Session is not removed before work
+ * starts.
+ */
 export const RECENT_WORKTREE_MS = 24 * 60 * 60 * 1000;
 
 /** One audit's remote snapshots; never cache local identity, HEAD, or cleanliness. */
 export function createCleanupEvidenceCache() {
-  return new Map<string, Promise<CleanupRepositoryEvidence | null>>();
+  return {
+    commitPullRequests: new Map<string, Promise<CommitPullRequestEvidence[] | null>>(),
+    repositories: new Map<string, Promise<CleanupRepositoryEvidence | null>>()
+  };
 }
 
 export type CleanupEvidenceCache = ReturnType<typeof createCleanupEvidenceCache>;
@@ -116,7 +151,7 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
     return snapshot.localBlock;
   }
   const { branch, head, repository } = snapshot;
-  if (!branch || !head) {
+  if (!head || (!branch && !snapshot.candidate.sessionBranch)) {
     return decision("unknown", "local-evidence-unavailable");
   }
   if (!repository) {
@@ -126,10 +161,21 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
     return decision("ineligible", "default-branch");
   }
   const branchPrs = repository.pullRequests.filter(
-    (pr) => pr.head.ref === branch && pr.head.repo?.full_name === repository.name
+    (pr) =>
+      pr.head.ref === (branch ?? snapshot.candidate.sessionBranch) &&
+      pr.head.repo?.full_name === repository.name
   );
-  if (branchPrs.some((pr) => pr.state === "open")) {
+  if (hasOpenPullRequest(snapshot, repository)) {
     return decision("ineligible", "open-pr");
+  }
+  if (snapshot.pendingWork || !branch) {
+    const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+    if (ageBlock) {
+      return ageBlock;
+    }
+  }
+  if (!branch) {
+    return decideDetached(snapshot, repository, head);
   }
   const merged = branchPrs.filter(
     (pr) =>
@@ -145,7 +191,7 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   const [match] = exact;
   if (match) {
     return decision("eligible", "exact-merged-pr", [
-      "registered linked worktree; clean including submodules and untracked files",
+      localWorkDescription(snapshot),
       `${repository.name}#${match.number}: ${branch} -> ${repository.defaultBranch}`,
       `HEAD equals merged PR head: ${head}`
     ]);
@@ -155,18 +201,20 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   // above already rejected any uncommitted change. A freshly spawned Session
   // looks the same, so this proof alone waits a day.
   if (snapshot.ancestorOfDefault) {
-    if (snapshot.worktreeAgeMs === undefined || snapshot.worktreeAgeMs === null) {
-      return decision("unknown", "recent-worktree");
-    }
-    if (snapshot.worktreeAgeMs < RECENT_WORKTREE_MS) {
-      return decision("ineligible", "recent-worktree");
+    const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+    if (ageBlock) {
+      return ageBlock;
     }
     return decision("eligible", "unchanged-branch", [
-      "registered linked worktree; clean including submodules and untracked files",
+      localWorkDescription(snapshot),
       `${head} is an ancestor of verified ${repository.name}:${repository.defaultBranch} at ${repository.defaultHead}`,
-      `worktree created ${Math.floor(snapshot.worktreeAgeMs / RECENT_WORKTREE_MS)} day(s) ago`,
+      "worktree is at least one day old",
       "member proof only; whole-Session eligibility is still required"
     ]);
+  }
+  const alternate = decideAlternateCommittedWork(snapshot, repository, head);
+  if (alternate) {
+    return alternate;
   }
   if (branchPrs.some((pr) => !pr.merged_at && pr.head.sha === head)) {
     return decision("ineligible", "closed-unmerged-pr");
@@ -179,6 +227,178 @@ export function decideCleanupEligibility(snapshot: CleanupEvidence): CleanupDeci
   }
   // Both answers came back; unique commits without a merged PR is a settled fact.
   return decision("ineligible", "no-merged-pr");
+}
+
+function decideAlternateCommittedWork(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence,
+  head: string
+) {
+  return (
+    decideDefaultTree(snapshot, repository) ??
+    decideCommitPullRequests(snapshot, repository, head) ??
+    decideMatchingDiff(snapshot, repository)
+  );
+}
+
+function hasOpenPullRequest(snapshot: CleanupEvidence, repository: CleanupRepositoryEvidence) {
+  return repository.pullRequests.some(
+    (pr) =>
+      pr.state === "open" &&
+      pr.head.repo?.full_name === repository.name &&
+      (pr.head.ref === (snapshot.branch ?? snapshot.candidate.sessionBranch) ||
+        (snapshot.branch === null && pr.head.sha === snapshot.head))
+  );
+}
+
+function decideDetached(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence,
+  head: string
+) {
+  if (snapshot.ancestorOfDefault) {
+    return decision("eligible", "unchanged-branch", [
+      localWorkDescription(snapshot),
+      `${head} is an ancestor of verified default HEAD ${repository.defaultHead}`,
+      "detached HEAD requires a durable preservation ref before removal; worktree is at least one day old"
+    ]);
+  }
+  return decideDefaultTree(snapshot, repository) ?? decision("ineligible", "detached-head");
+}
+
+export function localWorkDescription(snapshot: CleanupEvidence): string {
+  const proof = snapshot.pendingWork;
+  if (!proof) {
+    return "registered linked worktree; clean including submodules and untracked files";
+  }
+  return proof.kind === "forward-bundle"
+    ? `entire pending bundle preserved together at descendant ${proof.witness}; fingerprint ${proof.fingerprint}`
+    : `only the exact pnpm 12.1.0 bootstrap deletion; application document unchanged; fingerprint ${proof.fingerprint}`;
+}
+
+function decideDefaultTree(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence
+): CleanupDecision | null {
+  if (
+    snapshot.defaultTree === undefined ||
+    snapshot.defaultTree === null ||
+    snapshot.defaultTree === false
+  ) {
+    return null;
+  }
+  const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+  if (ageBlock) {
+    return ageBlock;
+  }
+  return decision("eligible", "matching-default-tree", [
+    localWorkDescription(snapshot),
+    `complete HEAD tree ${snapshot.defaultTree.tree} equals ${snapshot.defaultTree.witness} reachable from verified default HEAD ${repository.defaultHead}`,
+    "worktree is at least one day old; member proof only, whole-Session eligibility required",
+    ...(snapshot.branch ? [] : ["detached HEAD requires a durable preservation ref before removal"])
+  ]);
+}
+
+function decideCommitPullRequests(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence,
+  head: string
+): CleanupDecision | null {
+  if (snapshot.commitPullRequests === null) {
+    return decision("unknown", "commit-pr-unavailable");
+  }
+  const matches =
+    snapshot.commitPullRequests?.filter(
+      ({ pullRequest: pr }) => isMergedToDefault(pr, repository) && pr.head.sha === head
+    ) ?? [];
+  if (matches.length > 1) {
+    return decision("unknown", "ambiguous-pr");
+  }
+  const [match] = matches;
+  if (!match || match.ancestorOfDefault === false) {
+    return null;
+  }
+  if (match.ancestorOfDefault === null) {
+    return decision("unknown", "ancestry-unavailable");
+  }
+  const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+  if (ageBlock) {
+    return ageBlock;
+  }
+  const pr = match.pullRequest;
+  return decision("eligible", "merged-pr-head", [
+    localWorkDescription(snapshot),
+    `${repository.name}#${pr.number}: ${pr.head.ref} -> ${repository.defaultBranch}`,
+    `HEAD equals merged PR head: ${head}`,
+    `merge commit ${pr.merge_commit_sha} is an ancestor of verified default HEAD ${repository.defaultHead}`,
+    "worktree is at least one day old",
+    "member proof only; whole-Session eligibility is still required"
+  ]);
+}
+
+function decideMatchingDiff(
+  snapshot: CleanupEvidence,
+  repository: CleanupRepositoryEvidence
+): CleanupDecision | null {
+  const candidates =
+    snapshot.commitPullRequests?.filter(({ pullRequest }) =>
+      isMergedToDefault(pullRequest, repository)
+    ) ?? [];
+  const matches = candidates.filter(
+    (pr) => pr.ancestorOfDefault === true && Boolean(pr.matchingDiff)
+  );
+  if (matches.length > 1) {
+    return decision("unknown", "ambiguous-pr");
+  }
+  const [match] = matches;
+  if (
+    !match ||
+    match.matchingDiff === undefined ||
+    match.matchingDiff === null ||
+    match.matchingDiff === false
+  ) {
+    if (candidates.some((pr) => pr.ancestorOfDefault === null)) {
+      return decision("unknown", "ancestry-unavailable");
+    }
+    return candidates.some((pr) => pr.matchingDiff === null)
+      ? decision("unknown", "diff-unavailable")
+      : null;
+  }
+  const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
+  if (ageBlock) {
+    return ageBlock;
+  }
+  const { matchingDiff: diff, pullRequest: pr } = match;
+  return decision("eligible", "matching-merged-diff", [
+    localWorkDescription(snapshot),
+    `${repository.name}#${pr.number}: ${pr.head.ref} -> ${repository.defaultBranch}`,
+    `complete change ${diff.mergeBase}..${snapshot.head} exactly matches ${diff.mergeParent}..${pr.merge_commit_sha}`,
+    `all paths, file modes and full before/after object IDs match; change SHA-256: ${diff.changeHash}`,
+    `merge commit ${pr.merge_commit_sha} is an ancestor of verified default HEAD ${repository.defaultHead}`,
+    "no divergent merge commits; worktree is at least one day old",
+    "member proof only; whole-Session eligibility is still required"
+  ]);
+}
+
+function recentWorktreeDecision(ageMs: number | null | undefined): CleanupDecision | null {
+  if (ageMs === undefined || ageMs === null) {
+    return decision("unknown", "recent-worktree");
+  }
+  return ageMs < RECENT_WORKTREE_MS ? decision("ineligible", "recent-worktree") : null;
+}
+
+function isMergedToDefault(
+  pr: z.output<typeof CommitPullRequestSchema>,
+  repository: CleanupRepositoryEvidence
+) {
+  return (
+    pr.head.repo?.full_name === repository.name &&
+    pr.state === "closed" &&
+    pr.merged_at !== null &&
+    pr.merge_commit_sha !== null &&
+    pr.base.ref === repository.defaultBranch &&
+    pr.base.repo?.full_name === repository.name
+  );
 }
 
 /**
@@ -212,36 +432,65 @@ export async function collectCleanupEvidence(
     repository: null,
     worktreeAgeMs: worktreeAge(candidate.worktreePath)
   };
-  if (local.localBlock) {
+  const pending = inspectCandidatePending(readOnly, candidate, local);
+  if (local.localBlock && !pending) {
     return snapshot;
   }
-  snapshot.committedWorkAttempted = true;
+  snapshot.committedWorkAttempted = snapshot.localBlock === null;
   const repositoryName = readRepositoryName(readOnly, candidate.sourceRoot);
   if (!repositoryName) {
     return snapshot;
   }
   const cacheKey = `${candidate.sourceRoot}\0${repositoryName.toLowerCase()}`;
-  let repository = cache.get(cacheKey);
+  let repository = cache.repositories.get(cacheKey);
   if (!repository) {
     repository = inspectRepository(readOnly, candidate.sourceRoot, repositoryName);
-    cache.set(cacheKey, repository);
+    cache.repositories.set(cacheKey, repository);
   }
   snapshot.repository = await repository;
   if (snapshot.repository && snapshot.head) {
+    acceptPendingProof(readOnly, snapshot, pending, snapshot.head, snapshot.repository.defaultHead);
+    if (snapshot.localBlock) {
+      snapshot.localBlock = revalidateCleanupEvidence(runtime, snapshot) ?? snapshot.localBlock;
+      return snapshot;
+    }
+    snapshot.committedWorkAttempted = true;
     snapshot.ancestorOfDefault = await inspectAncestry(
       readOnly,
       candidate.sourceRoot,
       snapshot.head,
       snapshot.repository
     );
+    if (candidate.sessionBranch && snapshot.ancestorOfDefault !== true) {
+      snapshot.defaultTree = inspectDefaultTree(
+        readOnly,
+        candidate.sourceRoot,
+        snapshot.head,
+        snapshot.repository.defaultHead
+      );
+    }
+    const currentDecision = decideCleanupEligibility(snapshot);
+    if (
+      ["no-merged-pr", "head-mismatch", "closed-unmerged-pr", "ancestry-unavailable"].includes(
+        currentDecision.code
+      )
+    ) {
+      const commitKey = `${cacheKey}\0${snapshot.head}\0${snapshot.repository.defaultHead}`;
+      let commitPullRequests = cache.commitPullRequests.get(commitKey);
+      if (!commitPullRequests) {
+        commitPullRequests = inspectCommitPullRequests(
+          readOnly,
+          candidate.sourceRoot,
+          snapshot.head,
+          snapshot.repository
+        );
+        cache.commitPullRequests.set(commitKey, commitPullRequests);
+      }
+      snapshot.commitPullRequests = await commitPullRequests;
+    }
   }
   // Provider lookups can take seconds. Never attach old proof to a changed checkout.
-  const current = inspectLocal(readOnly, candidate);
-  snapshot.localBlock =
-    current.localBlock ??
-    (current.head === local.head && current.branch === local.branch
-      ? null
-      : decision("unknown", "changed-during-inspection"));
+  snapshot.localBlock = revalidateCleanupEvidence(runtime, snapshot) ?? snapshot.localBlock;
   if (
     readRepositoryName(readOnly, candidate.sourceRoot)?.toLowerCase() !==
     repositoryName.toLowerCase()
@@ -251,6 +500,40 @@ export async function collectCleanupEvidence(
   return snapshot;
 }
 
+function acceptPendingProof(
+  runtime: Runtime,
+  snapshot: CleanupEvidence,
+  pending: PendingWork | null,
+  head: string,
+  defaultHead: string
+) {
+  if (!pending) {
+    return;
+  }
+  const proof = provePendingWork(
+    runtime,
+    snapshot.candidate.sourceRoot,
+    snapshot.candidate.worktreePath,
+    head,
+    defaultHead,
+    pending
+  );
+  if (proof !== null && proof !== false) {
+    snapshot.pendingWork = proof;
+    snapshot.localBlock = null;
+  }
+}
+
+function inspectCandidatePending(
+  runtime: Runtime,
+  candidate: CleanupCandidate,
+  local: Pick<CleanupEvidence, "head" | "localBlock">
+) {
+  return local.localBlock?.code === "dirty-worktree" && candidate.sessionBranch && local.head
+    ? inspectPendingWork(runtime, candidate.worktreePath, local.head)
+    : null;
+}
+
 /** Recheck local proof synchronously after all members finish provider reads. */
 export function revalidateCleanupEvidence(
   runtime: Runtime,
@@ -258,11 +541,18 @@ export function revalidateCleanupEvidence(
 ): CleanupDecision | null {
   const readOnly = readOnlyCleanupRuntime(runtime);
   const current = inspectLocal(readOnly, snapshot.candidate);
-  if (
-    current.head !== snapshot.head ||
-    current.branch !== snapshot.branch ||
-    current.localBlock?.code !== snapshot.localBlock?.code
-  ) {
+  if (current.head !== snapshot.head || current.branch !== snapshot.branch) {
+    return decision("unknown", "changed-during-inspection");
+  }
+  if (snapshot.pendingWork && !snapshot.localBlock) {
+    if (current.localBlock?.code !== "dirty-worktree" || !current.head) {
+      return current.localBlock ?? decision("unknown", "changed-during-inspection");
+    }
+    const pending = inspectPendingWork(readOnly, snapshot.candidate.worktreePath, current.head);
+    if (pending?.fingerprint !== snapshot.pendingWork.fingerprint) {
+      return decision("unknown", "changed-during-inspection");
+    }
+  } else if (current.localBlock?.code !== snapshot.localBlock?.code) {
     return current.localBlock ?? decision("unknown", "changed-during-inspection");
   }
   // An unchanged local blocker still explains a skipped member. No remote
@@ -304,10 +594,14 @@ function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
   try {
     const git = (args: string[]) =>
       runtime.exec("git", args, { cwd: candidate.worktreePath }).stdout.trim();
+    const grafts = git(["rev-parse", "--path-format=absolute", "--git-path", "info/grafts"]);
+    if (existsSync(grafts)) {
+      throw new Error("Grafted history cannot prove cleanup eligibility");
+    }
     const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
     local.branch = branch === "HEAD" ? null : branch;
     local.head = OidSchema.parse(git(["rev-parse", "HEAD"]));
-    if (!local.branch) {
+    if (!local.branch && !candidate.sessionBranch) {
       local.localBlock = decision("ineligible", "detached-head");
     } else {
       // Keep leading status columns; trimming would corrupt " M path" entries.
@@ -319,10 +613,10 @@ function inspectLocal(runtime: Runtime, candidate: CleanupCandidate) {
         )
         .stdout.split("\n")
         .filter(Boolean);
-      if (changes.length > 0) {
-        local.localBlock = decision("ineligible", "dirty-worktree", summarizeChanges(changes));
-      } else if (hasHiddenWorktreeIndexEntries(runtime, candidate.worktreePath)) {
+      if (hasHiddenWorktreeIndexEntries(runtime, candidate.worktreePath)) {
         local.localBlock = decision("unknown", "hidden-index-entries");
+      } else if (changes.length > 0) {
+        local.localBlock = decision("ineligible", "dirty-worktree", summarizeChanges(changes));
       }
     }
   } catch {
@@ -386,11 +680,24 @@ export function readOnlyCleanupRuntime(runtime: Runtime): Runtime {
       return runtime.exec(
         command,
         command === "git"
-          ? ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", ...(args ?? [])]
+          ? [
+              "-c",
+              "core.fsmonitor=false",
+              "-c",
+              "core.untrackedCache=false",
+              "-c",
+              "core.fileMode=true",
+              ...(args ?? [])
+            ]
           : args,
         {
           ...options,
-          env: { ...options?.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0" },
+          env: {
+            ...options?.env,
+            GIT_NO_LAZY_FETCH: "1",
+            GIT_NO_REPLACE_OBJECTS: "1",
+            GIT_OPTIONAL_LOCKS: "0"
+          },
           timeoutSeconds: 30
         }
       );
@@ -409,10 +716,16 @@ async function github(runtime: Runtime, sourceRoot: string, endpoint: string, pa
   const result = await runtime.execAsync(
     "gh",
     ["api", endpoint, "--hostname", "github.com", ...(paginate ? ["--paginate", "--slurp"] : [])],
-    { cwd: sourceRoot, timeoutSeconds: 30 }
+    { allowFailure: true, cwd: sourceRoot, timeoutSeconds: 30 }
   );
   if (result.exitCode !== 0) {
-    if (/\bHTTP 404\b/u.test(result.stderr)) {
+    const commit = /\/commits\/(?<sha>[\da-f]{40})\/pulls(?:\?|$)/u.exec(endpoint)?.groups?.sha;
+    if (
+      /\bHTTP 404\b/u.test(result.stderr) ||
+      (commit !== undefined &&
+        /\bHTTP 422\b/u.test(result.stderr) &&
+        result.stderr.includes(`No commit found for SHA: ${commit}`))
+    ) {
       throw new GitHubNotFoundError("GitHub resource not found");
     }
     throw new Error("GitHub evidence unavailable");
@@ -510,6 +823,49 @@ async function inspectAncestry(
     }
   } catch {
     return null;
+  }
+}
+
+async function inspectCommitPullRequests(
+  runtime: Runtime,
+  sourceRoot: string,
+  head: string,
+  repository: CleanupRepositoryEvidence
+): Promise<CommitPullRequestEvidence[] | null> {
+  try {
+    const pages = await github(
+      runtime,
+      sourceRoot,
+      `repos/${repository.name}/commits/${head}/pulls?per_page=100`,
+      true
+    );
+    const matches = z
+      .array(z.array(CommitPullRequestSchema))
+      .parse(pages)
+      .flat()
+      .filter((pr) => isMergedToDefault(pr, repository));
+    return await Promise.all(
+      matches.map(async (pr) => {
+        const ancestorOfDefault =
+          pr.merge_commit_sha === null
+            ? null
+            : await inspectAncestry(runtime, sourceRoot, pr.merge_commit_sha, repository);
+        const matchingDiff =
+          ancestorOfDefault === true && pr.head.sha !== head && pr.merge_commit_sha !== null
+            ? inspectMatchingMergeDiff(
+                runtime,
+                sourceRoot,
+                head,
+                repository.defaultHead,
+                pr.merge_commit_sha
+              )
+            : undefined;
+        return { ancestorOfDefault, matchingDiff, pullRequest: pr };
+      })
+    );
+  } catch (error) {
+    // The repository was verified above; an unpushed commit has no associated PRs.
+    return error instanceof GitHubNotFoundError ? [] : null;
   }
 }
 

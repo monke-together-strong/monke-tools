@@ -186,6 +186,7 @@ export function decideSessionCleanupMember(
     ...member.evidence,
     candidate: {
       role: samePath(member.sourceRoot, rootSourceRoot ?? "") ? "root" : "dependency",
+      sessionBranch: member.evidence.candidate.sessionBranch,
       sourceRoot: member.sourceRoot,
       worktreePath: member.worktreePath
     }
@@ -295,6 +296,7 @@ export async function inspectSessionCleanup(
                   collector,
                   {
                     role: samePath(repo.sourceRoot, state.rootSourceRoot) ? "root" : "dependency",
+                    sessionBranch: state.session,
                     sourceRoot: repo.sourceRoot,
                     worktreePath: repo.worktreePath
                   },

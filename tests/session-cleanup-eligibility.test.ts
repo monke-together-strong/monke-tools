@@ -145,7 +145,7 @@ describe("whole-Session read-only eligibility", () => {
     expect(existsSync(path.join(f.home, "lock"))).toBeFalsy();
   });
 
-  test.each(["dirty", "unique-commit", "detached", "locked"])(
+  test.each(["dirty", "unique-commit", "locked"])(
     "a %s dependency blocks the entire Session",
     async (kind) => {
       const f = fixture();
@@ -154,8 +154,6 @@ describe("whole-Session read-only eligibility", () => {
         if (kind === "unique-commit") {
           git(f.dependencyPath, ["commit", "-am", "unfinished"]);
         }
-      } else if (kind === "detached") {
-        git(f.dependencyPath, ["checkout", "--detach"]);
       } else {
         git(f.dependency, ["worktree", "lock", f.dependencyPath]);
       }
@@ -163,6 +161,14 @@ describe("whole-Session read-only eligibility", () => {
       expect(result.decision.eligible).toBeFalsy();
     }
   );
+
+  test("a detached dependency already in default history passes within its retained Session", async () => {
+    const f = fixture();
+    git(f.dependencyPath, ["checkout", "--detach"]);
+    const result = await decisionFor(f);
+    expect(result.decision.eligible).toBeTruthy();
+    expect(existsSync(f.dependencyPath)).toBeTruthy();
+  });
 
   test("two Session records claiming one dependency block both owners", async () => {
     const f = fixture();
