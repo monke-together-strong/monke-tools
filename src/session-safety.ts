@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
 import { getExpectedWorktreePath, listWorktrees } from "./git.ts";
-import { samePath, worktreePathsOverlap } from "./path-identity.ts";
+import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
 import type { Runtime, SessionRepoState, SessionState } from "./types.ts";
 import { assertCanonicalSourceCheckout, assertWorktreeUnlocked } from "./worktree-safety.ts";
 
@@ -16,15 +16,10 @@ export function inspectSessionRepoRegistration(
 ) {
   assertCanonicalSourceCheckout(runtime, repo.sourceRoot);
   const expectedPath = getExpectedWorktreePath(home, repo.sourceRoot, state.session);
-  const relative = path.relative(
-    path.join(home, "worktrees", path.basename(repo.sourceRoot)),
-    expectedPath
-  );
+  const sessionParent = path.join(home, "worktrees", path.basename(repo.sourceRoot));
   if (
-    !relative ||
-    relative === ".." ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative) ||
+    !path.relative(sessionParent, expectedPath) ||
+    !containsPath(sessionParent, expectedPath) ||
     !samePath(repo.worktreePath, expectedPath) ||
     !path.isAbsolute(repo.worktreePath)
   ) {

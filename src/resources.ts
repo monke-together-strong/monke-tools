@@ -6,6 +6,7 @@ import * as z from "zod";
 
 import { describeRedactedValue } from "./env.ts";
 import { MonkeError } from "./errors.ts";
+import { containsPath } from "./path-identity.ts";
 import { withScopedLockAsync } from "./runtime.ts";
 import type { SessionStateStore } from "./session-state-store.ts";
 import { sha256 } from "./sha256.ts";
@@ -418,8 +419,7 @@ function validateResourceCommandReturn(
 
 function resolveResourceCommandRunPath(worktreePath: string, command: ResourceCommandConfig) {
   const resolved = path.resolve(worktreePath, command.run);
-  const relative = path.relative(worktreePath, resolved);
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  if (!containsPath(worktreePath, resolved)) {
     throw new MonkeError(
       `Resource command ${command.name} run path must resolve inside ${worktreePath}: ${command.run}`
     );

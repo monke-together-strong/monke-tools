@@ -18,6 +18,7 @@ import { parseDocument } from "yaml";
 import * as z from "zod";
 
 import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
+import { containsPath } from "../src/path-identity.ts";
 import { unwrapBoundaryResult } from "../src/validation.ts";
 import type { SkillImportRecipeSkill } from "./import-skills.ts";
 
@@ -292,7 +293,7 @@ function listReferenceConsumers(
   obsoleteReferenceRoot: string,
   referencePathPrefix: string
 ): string[] {
-  if (!existsSync(root) || isPathWithin(obsoleteReferenceRoot, root)) {
+  if (!existsSync(root) || containsPath(obsoleteReferenceRoot, root)) {
     return [];
   }
 
@@ -312,7 +313,7 @@ function listReferenceConsumers(
       const linkTarget = readlinkSync(entryPath);
       const resolvedTarget = path.resolve(path.dirname(entryPath), linkTarget);
       return linkTarget.includes(referencePathPrefix) ||
-        isPathWithin(obsoleteReferenceRoot, resolvedTarget)
+        containsPath(obsoleteReferenceRoot, resolvedTarget)
         ? [entryPath]
         : [];
     }
@@ -327,17 +328,7 @@ function contentContainsRelativePathInto(
 ) {
   const relativePathPattern = /(?:\.\.?\/)+[^\s)"'`>]+/gu;
   return [...content.matchAll(relativePathPattern)].some((match) =>
-    isPathWithin(targetRoot, path.resolve(consumerDirectory, match[0] ?? ""))
-  );
-}
-
-function isPathWithin(parent: string, candidate: string) {
-  const relativePath = path.relative(parent, candidate);
-  return (
-    relativePath.length === 0 ||
-    (!relativePath.startsWith(`..${path.sep}`) &&
-      relativePath !== ".." &&
-      !path.isAbsolute(relativePath))
+    containsPath(targetRoot, path.resolve(consumerDirectory, match[0] ?? ""))
   );
 }
 
@@ -353,7 +344,7 @@ function importedGuidancePath(
     /[/\\\0]/u.test(guidance.slug) ||
     path.basename(guidance.slug) !== guidance.slug ||
     guidancePath === managedRoot ||
-    !isPathWithin(managedRoot, guidancePath)
+    !containsPath(managedRoot, guidancePath)
   ) {
     throw new MonkeError(`Imported ${guidance.kind} slug ${guidance.slug} escapes ${root}`);
   }
