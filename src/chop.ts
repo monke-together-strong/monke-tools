@@ -10,7 +10,7 @@ import {
   resolveRepoContext
 } from "./git.ts";
 import { createLogger } from "./logger.ts";
-import { samePath } from "./path-identity.ts";
+import { containsPath, samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { cleanupSessionResources, finalizeSession } from "./session-finalization.ts";
 import { sessionRemovalRank } from "./session-lifecycle-progress.ts";
@@ -637,8 +637,7 @@ function assertOutsideManagedWorktrees(home: string, worktreePath: string) {
 }
 
 function isManagedWorktreePath(home: string, worktreePath: string) {
-  const relative = path.relative(path.join(home, "worktrees"), worktreePath);
-  return !(path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`));
+  return containsPath(path.join(home, "worktrees"), worktreePath);
 }
 
 function removeWorktree(

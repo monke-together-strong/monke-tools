@@ -5,6 +5,7 @@ import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { resolveGitRepoRoot } from "./git.ts";
+import { containsPath } from "./path-identity.ts";
 import type {
   AppConfig,
   ExternalMapping,
@@ -382,8 +383,7 @@ function pathExistsOnFilesystem(sourceRoot: string, relativePath: string) {
 
 function resolveInside(root: string, relativePath: string, location: string) {
   const resolved = path.resolve(root, relativePath);
-  const relative = path.relative(root, resolved);
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  if (!containsPath(root, resolved)) {
     throw new MonkeError(`${location} must resolve inside ${root}`);
   }
   return resolved;
