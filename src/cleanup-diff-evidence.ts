@@ -1,5 +1,6 @@
 import * as z from "zod";
 
+import { sha256 } from "./sha256.ts";
 import type { Runtime } from "./types.ts";
 
 const OidSchema = z.string().regex(/^[\da-f]{40}$/u);
@@ -59,7 +60,7 @@ export function inspectMatchingMergeDiff(
       return false;
     }
     return {
-      changeHash: new Bun.CryptoHasher("sha256").update(branchChanges).digest("hex"),
+      changeHash: sha256(branchChanges),
       mergeBase,
       mergeParent
     };
