@@ -2,6 +2,7 @@ import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 import path from "node:path";
 
 import { isPnpmBootstrapDeletion, pnpmBootstrapManifestSchema } from "./cleanup-pnpm-bootstrap.ts";
+import { sha256 } from "./sha256.ts";
 import type { Runtime } from "./types.ts";
 
 interface Entry {
@@ -202,9 +203,7 @@ export function inspectPendingWork(
       return null;
     }
     return {
-      fingerprint: new Bun.CryptoHasher("sha256")
-        .update(JSON.stringify([head, status, rawIndex, flags, paths]))
-        .digest("hex"),
+      fingerprint: sha256(JSON.stringify([head, status, rawIndex, flags, paths])),
       paths
     };
   } catch {
