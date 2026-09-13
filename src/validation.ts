@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 
+import { isNumber } from "@sindresorhus/is";
 import { parseDocument } from "yaml";
 import type * as z from "zod";
 
@@ -45,15 +46,11 @@ export function unwrapBoundaryResult<T>(result: z.ZodSafeParseResult<T>, label: 
 function formatIssuePath(issuePath: PropertyKey[]) {
   let result = "";
   for (const segment of issuePath) {
-    if (isArrayIndex(segment)) {
+    if (isNumber(segment)) {
       result += `[${segment}]`;
     } else {
       result += result ? `.${String(segment)}` : String(segment);
     }
   }
   return result;
-}
-
-function isArrayIndex(segment: PropertyKey): segment is number {
-  return typeof segment === "number";
 }
