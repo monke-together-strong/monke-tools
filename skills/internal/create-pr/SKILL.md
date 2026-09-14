@@ -5,8 +5,8 @@ description: Create a GitHub PR when asked to open or update a pull request, or 
 
 # Create PR
 
-Create one self-contained PR. Finish by verifying the published result and
-reporting it to the user.
+Create a short PR explaining the problem, changed behavior, and evidence needed
+to review it. Keep the full investigation in the work records.
 
 ## Prepare the branch
 
@@ -33,6 +33,17 @@ without a repo template, use the
 [default template](references/default-pr-template.md). The selected guidance and
 template determine which evidence and body sections are required.
 
+## Choose the explanation
+
+Before drafting, if the diff changes interactions between components, processes,
+workers, services, or states, invoke `$show-me` and create one small
+GitHub-renderable view. It carries ownership, flow, or ordering; prose explains
+the problem and significance. Use prose alone for a local change that fits in
+two sentences.
+
+Aim for 100–200 words of prose, often less. Expand for a concrete review decision
+or required template field; link background material for depth.
+
 ## Choose the evidence
 
 Reuse recorded verification that still covers the change, or run the smallest
@@ -46,40 +57,28 @@ relevant checks. Scale additional evidence to the behavior:
   carries the claim. Inspect final assets using
   [proof asset review](references/proof-asset-review.md), upload them with
   `$github-image-upload`, and embed the GitHub attachments.
-- For changes whose correctness depends on deployment, migration, or the target
-  environment, include `## Post-Merge Verification` with `Environment`,
-  `Deployment gate`, and concrete `Checks`. Mark unknowns explicitly. Omit this
-  section when pre-merge evidence is sufficient, unless repo instructions require
-  it; in that case use `Not required: <reason>`.
+- For deployment-dependent correctness, include `## Post-Merge Verification`:
+  name the environment, unresolved deployment gate, and observable success
+  condition in one to three short bullets. Link an existing runbook for the
+  procedure. Otherwise omit this section unless the repo template requires it.
 
-Evidence is complete when required pre-merge checks have recorded results,
-required media has passed asset review and is embedded from GitHub, and
-environment-dependent checks have a post-merge contract. A post-merge contract
-covers only checks that depend on that environment. Report missing required
-pre-merge evidence and resolve it before publishing.
+Complete required pre-merge checks and media review before publishing. Reserve
+post-merge checks for evidence that requires the target environment.
 
 ## Write the body
 
-Write for a reviewer who has not seen the conversation. Lead with the problem
-and resulting behavior. Select implementation details that explain correctness,
-a tradeoff, or a review decision; group broad changes by purpose. Link the source
-PRD or issue when available. A small PR usually needs one or two sentences and
-relevant checks.
+Lead with the problem and resulting behavior in one or two sentences. Add the
+chosen visual and material tradeoffs or risks. Link the source issue or PRD;
+the diff carries file details.
 
-Summarize verification supporting the final change, consolidating repeated runs
-into relevant checks and results. Retain material limitations and unresolved
-uncertainty. Describe the final implementation rather than the work chronology,
-superseded approaches, or reviewer bookkeeping.
+Verification is normally one line naming relevant checks and their result.
+Add one decisive behavior result or benchmark when it explains why the change
+works. Link CI or a shareable artifact for detail. Retain material limitations;
+test inventories, repeated runs, and incidental timings stay in the work records.
 
-When understanding the change requires tracking multiple owners, stages, states,
-or ordering constraints, use `$show-me` to choose the smallest GitHub-renderable
-view. Let the visual carry those relationships, with adjacent prose explaining
-their significance. Simple changes can stay in prose.
-
-Before publishing, edit the body until each paragraph or bullet contributes a
-distinct explanation, review decision, or piece of evidence. Keep optional
-sections only when they contain substantive content; explain skipped checks only
-when they leave a material verification gap. Preserve required template fields.
+Read the draft as a reviewer: can the opening and visual explain the change?
+Keep each fact in one place and remove prose that repeats the visual or diff.
+Preserve required template fields.
 
 ## Publish and verify
 

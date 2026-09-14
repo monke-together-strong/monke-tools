@@ -6,11 +6,13 @@ small change.
 ```markdown
 ## Summary
 
-<Problem and resulting behavior. Link the source PRD or issue when applicable.>
+<One or two sentences: problem and resulting behavior. Link the source issue.>
+
+<For interaction changes, insert the small view chosen with show-me.>
 
 ## Verification
 
-<Relevant checks and results.>
+<One line: relevant checks and result; link CI or detailed evidence.>
 ```
 
 For visual proof or deployment-dependent changes, use the sections required by
