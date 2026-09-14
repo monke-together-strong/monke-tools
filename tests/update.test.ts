@@ -485,7 +485,7 @@ describe("Release update", () => {
       );
       expect(stderr).toContain("Release install in place of the Local tool install");
       expect(stderr).toContain(sourceCheckout);
-      expect(stderr).toContain("vp run install:local");
+      expect(stderr).toContain("vpr install:local");
     }
   );
 

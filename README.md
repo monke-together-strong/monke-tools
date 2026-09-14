@@ -68,11 +68,11 @@ Install [Vite+](https://viteplus.dev/guide/), then run from this checkout:
 
 ```bash
 vp install
-vp run install:local
+vpr install:local
 ```
 
 Rerun the local install after CLI changes before testing from another repo. Locally installed skills link to source, so edits are visible immediately; adding or removing skill directories requires `mt skills configure` to refresh links.
 
-Run `vp check <changed-files>` for scoped formatting, lint, and type checks. Use `vp run test -- <test-file>` for focused tests: the package script runs Vitest under Bun. PR CI owns the full suite. Build the standalone executable through `install:local`.
+Run `vp check <changed-files>` for scoped formatting, lint, and type checks. Use `vpr test -- <test-file>` for focused tests: the package script runs Vitest under Bun. PR CI owns the full suite. Build the standalone executable through `install:local`.
 
 For implementation details, see [CONTEXT.md](CONTEXT.md) and [installation and releases](docs/reference/installation.md). Track work in [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues).

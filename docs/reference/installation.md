@@ -119,5 +119,5 @@ Only after immutable release publication and verification does the workflow
 atomically advance the stable-catalog branch consumed by the bootstrap.
 
 PR CI owns the full test suite. Direct `main` pushes run `vp check`, platform
-builds, and release contract validation without rerunning `vp run test`.
+builds, and release contract validation without rerunning `vpr test`.
 Tegami package versioning and publication use their own workflow.

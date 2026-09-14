@@ -232,7 +232,7 @@ function reportLocalTransition(runtime: Runtime, sourceCheckout: string) {
   logger.info(
     `Activated a Release install in place of the Local tool install. Preserved Installed source checkout: ${sourceCheckout}`
   );
-  logger.hint("To return to Skill authoring mode, run `vp run install:local` from that checkout.");
+  logger.hint("To return to Skill authoring mode, run `vpr install:local` from that checkout.");
 }
 
 async function assertAssetDigest(filePath: string, asset: ReleaseCatalogAsset) {

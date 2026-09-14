@@ -98,7 +98,7 @@ export function runLocalInstallSkills(
     const activeInstall = loadFixedToolInstall(runtime, monkeHome);
     if (activeInstall?.manifest.installKind !== "local") {
       throw new MonkeError(
-        "Skills Local Install requires an Active Local tool install; run vp run install:local from the source checkout"
+        "Skills Local Install requires an Active Local tool install; run vpr install:local from the source checkout"
       );
     }
     const requestedCheckout = path.resolve(sourceCheckout);

@@ -113,7 +113,7 @@ trap 'exit 1' 1 2 15
 acquire_installation_lock
 
 if ! capture_source_state; then
-  printf 'Source checkout changed while Local provenance was being captured; rerun vp run install:local\n' >&2
+  printf 'Source checkout changed while Local provenance was being captured; rerun vpr install:local\n' >&2
   exit 1
 fi
 SOURCE_COMMIT=$CAPTURED_SOURCE_COMMIT
@@ -148,7 +148,7 @@ cleanup_old_bun_builds
 if ! capture_source_state ||
   [ "$CAPTURED_SOURCE_COMMIT" != "$SOURCE_COMMIT" ] ||
   [ "$CAPTURED_SOURCE_SNAPSHOT" != "$SOURCE_SNAPSHOT" ]; then
-  printf 'Source checkout changed while the Local tool install was compiling; rerun vp run install:local\n' >&2
+  printf 'Source checkout changed while the Local tool install was compiling; rerun vpr install:local\n' >&2
   exit 1
 fi
 

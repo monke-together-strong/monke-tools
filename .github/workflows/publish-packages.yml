@@ -44,7 +44,7 @@ jobs:
         uses: ./.github/actions/setup-mainline
 
       - name: Version or publish packages
-        run: vp run tegami ci
+        run: vpr tegami ci
         env:
           GITHUB_TOKEN: ${{ github.token }}
 

@@ -7,7 +7,7 @@ Check [./CONTEXT.md](./CONTEXT.md) for terminology questions.
 - Toolchain and package manager: Vite+ (`vp`) backed by Bun
 - Install: `vp install`
 - Check: `vp check`
-- Test: `vp run test` (the package script preserves the Bun runtime)
+- Test: `vpr test` (the package script preserves the Bun runtime)
 - Follow git flow, don't create `codex/` branches
 - Put clean source clones created for testing under `tmp/`.
 
