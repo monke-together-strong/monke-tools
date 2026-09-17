@@ -5,8 +5,10 @@ automated assertions and file-validity checks do not.
 
 ## Evidence Gate
 
-1. Name the behavior each asset claims to prove from the work target and diff.
-2. Inspect the exact final file that will be uploaded.
+1. List the views and states the diff changes and the behavior each carries.
+   This list, not the assets already in hand, sets what the PR must show.
+2. Map each asset to the entries it proves, then inspect the exact final file
+   that will be uploaded.
    - Screenshot: inspect at original resolution.
    - Video: inspect frames across the full timeline, then watch the complete
      playback when motion, timing, or transitions carry the claim.
@@ -20,5 +22,9 @@ automated assertions and file-validity checks do not.
    - sensitive content is visible
    - the final state appears too briefly to evaluate
 
-Completion criterion: each asset's named claim is directly visible in the
+5. When an entry cannot be captured, write that where its asset would have gone.
+   An unevidenced entry left silent reads as covered.
+
+Completion criterion: every listed view and state has a passing asset or a
+stated reason it has none, each asset's claim is directly visible in the
 inspected upload candidate, and no rejection condition applies.

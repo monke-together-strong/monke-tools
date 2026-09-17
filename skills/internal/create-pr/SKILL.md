@@ -1,11 +1,11 @@
 ---
 name: create-pr
-description: Create a GitHub PR when asked to open or update a pull request, or prepare a branch for review.
+description: Create or edit a PR
 ---
 
-# Create PR
+# Create or edit PR
 
-Create a short PR explaining the problem, changed behavior, and evidence needed
+Create or edit short PR explaining the problem, changed behavior, and evidence needed
 to review it. Keep the full investigation in the work records.
 
 ## Prepare the branch
@@ -17,8 +17,9 @@ work. Fetch and rebase onto the latest base before analyzing or verifying the PR
 use `$resolving-merge-conflicts` if needed.
 
 Inspect the rebased commits and diff, and confirm the base is an ancestor of
-`HEAD`. Consolidate new ADRs where possible. Exclude research notes and artifacts,
-including `docs/research/`, unless the user asks to publish them.
+`HEAD`. Consolidate new ADRs where possible. Exclude research and exploration
+notes and artifacts, including `docs/research/` and `docs/explorations/`, unless
+the user asks to publish them.
 
 ## Load PR requirements
 
@@ -52,9 +53,9 @@ relevant checks. Scale additional evidence to the behavior:
 - For a locally runnable UI or API that benefits from hands-on verification,
   prepare a [manual-test handoff](references/manual-test-handoff.md) for the
   final chat response only. Reuse that running target for PR verification proof.
-- For frontend-visible work, attach screenshots of the changed state or
-  [video](references/browser-video-proof.md) when motion, timing, or a workflow
-  carries the claim. Inspect final assets using
+- For frontend-visible work, attach a screenshot of each changed view or state,
+  or [video](references/browser-video-proof.md) when motion, timing, or a
+  workflow carries the claim. Inspect final assets using
   [proof asset review](references/proof-asset-review.md), upload them with
   `$github-image-upload`, and embed the GitHub attachments.
 - For deployment-dependent correctness, include `## Post-Merge Verification`:
@@ -71,10 +72,11 @@ Lead with the problem and resulting behavior in one or two sentences. Add the
 chosen visual and material tradeoffs or risks. Link the source issue or PRD;
 the diff carries file details.
 
-Verification is normally one line naming relevant checks and their result.
-Add one decisive behavior result or benchmark when it explains why the change
-works. Link CI or a shareable artifact for detail. Retain material limitations;
-test inventories, repeated runs, and incidental timings stay in the work records.
+Verification should records what CI cannot prove: a decisive
+behavior result, a benchmark, or a material limitation such as coverage the
+environment blocked. CI runs the checks it is configured for on every PR, so a
+reviewer already assumes lint, typecheck, and the suites passed; name one only
+when its result would surprise them.
 
 Read the draft as a reviewer: can the opening and visual explain the change?
 Keep each fact in one place and remove prose that repeats the visual or diff.
