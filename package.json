@@ -25,7 +25,7 @@
     "prepare": "vp config"
   },
   "dependencies": {
-    "@clack/prompts": "0.11.0",
+    "@clack/prompts": "1.8.1",
     "@commander-js/extra-typings": "~15.0.0",
     "@sindresorhus/is": "^8.1.0",
     "commander": "~15.0.0",
@@ -36,7 +36,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@clack/core": "0.5.0",
+    "@clack/core": "1.5.1",
     "@types/bun": "^1.4.0",
     "@types/sanitize-html": "^2.16.1",
     "@typescript/native": "npm:typescript@^7.0.2",

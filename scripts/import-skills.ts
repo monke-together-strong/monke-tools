@@ -16,7 +16,7 @@ import path from "node:path";
 
 import { GroupMultiSelectPrompt } from "@clack/core";
 import { isCancel } from "@clack/prompts";
-import type { Option } from "@clack/prompts";
+import type { CANCEL_SYMBOL, Option } from "@clack/prompts";
 import { Command } from "@commander-js/extra-typings";
 import pc from "picocolors";
 import * as z from "zod";
@@ -845,7 +845,7 @@ async function groupedSkillMultiselect(options: {
   message: string;
   options: GroupedSkillOptions;
   required: boolean;
-}) {
+}): Promise<string[] | typeof CANCEL_SYMBOL> {
   const result: unknown = await new GroupMultiSelectPrompt<Option<string>>({
     cursorAt: options.cursorAt,
     options: options.options,
@@ -891,6 +891,7 @@ ${error}
 `;
         }
         case "active":
+        case "validating":
         case "initial": {
           return `${title}${pc.cyan("\u2502")}  ${renderVisibleGroupedPromptOptions({
             bar: pc.cyan("\u2502"),
@@ -921,7 +922,10 @@ ${pc.reset(pc.dim(`Press ${pc.gray(pc.bgWhite(pc.inverse(" space ")))} to select
     }
   }).prompt();
 
-  const parsedResult = z.union([z.symbol(), z.array(z.string())]).safeParse(result);
+  if (isCancel(result)) {
+    return result;
+  }
+  const parsedResult = z.array(z.string()).safeParse(result);
   if (parsedResult.success) {
     return parsedResult.data;
   }

@@ -16,7 +16,7 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 
-import { isCancel, multiselect as clackMultiSelect, select as clackSelect } from "@clack/prompts";
+import { autocomplete, autocompleteMultiselect, isCancel } from "@clack/prompts";
 import * as z from "zod";
 
 import { DEFAULT_TOOL_BUILD_IDENTITY } from "./build-identity.ts";
@@ -116,7 +116,11 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     },
     installationActivationBoundary: options.installationActivationBoundary,
     async multiSelect(prompt) {
-      const selected = await clackMultiSelect(prompt);
+      const selected = await autocompleteMultiselect({
+        ...prompt,
+        placeholder: "Type to search...",
+        required: prompt.required ?? true
+      });
       if (isCancel(selected)) {
         throw new MonkeError(`${prompt.message} cancelled`);
       }
@@ -129,7 +133,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     },
     releaseDistribution: options.releaseDistribution ?? createGitHubReleaseDistribution(runtimeEnv),
     async select(prompt) {
-      const selected = await clackSelect(prompt);
+      const selected = await autocomplete({ ...prompt, placeholder: "Type to search..." });
       if (isCancel(selected)) {
         throw new MonkeError(`${prompt.message} cancelled`);
       }
