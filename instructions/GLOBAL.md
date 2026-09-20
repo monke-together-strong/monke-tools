@@ -1,7 +1,7 @@
 ## Code Style
 
 - Always strive for concise, simple solutions.
-- If a problem can be solved in a simpler way, propose it.
+- Ground proposed changes in actual callers, data, and behavior. Before adding complexity, show a concrete case that requires it and compare the simpler existing solution. If the requirement is uncertain, run a focused experiment; delegate to a subagent when it can investigate independently.
 - Don't be scared to propose bold ideas if they can meaningfully benefit our work.
 - Tests are good. Endless smoke tests, "regression tests" for feature deletions, etc. are not. Tests should be focused, not slop.
 
