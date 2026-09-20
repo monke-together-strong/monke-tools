@@ -235,10 +235,13 @@ export async function inspectSessionCleanup(
     scan.records
       .filter(
         (record) =>
-          (!options.sessionFile || record.filePath === options.sessionFile) &&
+          (!options.sessionFile || samePath(record.filePath, options.sessionFile)) &&
           ((options.targets?.length ?? 0) === 0 ||
-            options.targets?.includes(record.filePath) === true ||
-            record.state?.repos.some((repo) => options.targets?.includes(repo.worktreePath)))
+            options.targets?.some(
+              (target) =>
+                samePath(target, record.filePath) ||
+                record.state?.repos.some((repo) => samePath(target, repo.worktreePath))
+            ))
       )
       .map(async (record) => {
         const { state } = record;

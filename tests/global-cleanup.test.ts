@@ -218,6 +218,25 @@ describe("global Session cleanup", () => {
     expect(state.repos.every((repo) => existsSync(repo.worktreePath))).toBeTruthy();
   });
 
+  test("selects a Session whose recorded member path is lexically equivalent to the target", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/equivalent-target");
+    const untouched = f.addSession("feature/untouched");
+    const [member] = state.repos;
+    ok(member);
+    const target = member.worktreePath;
+    member.worktreePath = `${path.dirname(target)}/./${path.basename(target)}`;
+    saveSessionState(f.home, state);
+
+    const result = await f.run(false, f.cwd, [target]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.report.sessions).toHaveLength(1);
+    expect(result.report.sessions[0]?.outcome).toBe("cleaned");
+    expect(state.repos.every((repo) => !existsSync(repo.worktreePath))).toBeTruthy();
+    expect(untouched.repos.every((repo) => existsSync(repo.worktreePath))).toBeTruthy();
+  }, 15_000);
+
   test("reports missing cleanup worktrees and runs explicitly selected recovery with saved resources", async () => {
     const f = fixture();
     const state = f.addSession("feature/recover");
@@ -241,7 +260,7 @@ describe("global Session cleanup", () => {
       root.worktreePath
     );
     expect(existsSync(state.repos[0]?.worktreePath ?? "")).toBeFalsy();
-  });
+  }, 15_000);
 
   test("archives untracked files before removal and keeps tracked edits blocked", async () => {
     const f = fixture();

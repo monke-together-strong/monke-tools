@@ -162,7 +162,7 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
     for (const target of targets ?? []) {
       const owned = inventory.sessions.some(
         (row) =>
-          row.snapshot.filePath === target ||
+          samePath(row.snapshot.filePath, target) ||
           row.state?.repos.some((repo) => samePath(repo.worktreePath, target))
       );
       const unowned = inventory.unownedWorktrees.some((repo) =>
@@ -178,7 +178,9 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
       return;
     }
     const selected = inventory.unownedWorktrees.filter(
-      (repo) => (targets?.length ?? 0) === 0 || targets?.includes(repo.worktreePath)
+      (repo) =>
+        (targets?.length ?? 0) === 0 ||
+        targets?.some((target) => samePath(target, repo.worktreePath))
     );
     const results = await cleanupOrdinaryWorktrees(
       runtime,
