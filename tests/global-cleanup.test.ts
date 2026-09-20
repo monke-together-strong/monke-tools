@@ -77,7 +77,8 @@ describe("global Session cleanup", () => {
   afterEach(() => {
     for (const pid of children.splice(0)) {
       try {
-        process.kill(pid, "SIGKILL");
+        // Each fixture owns a detached process group, including any orphaned children.
+        process.kill(-pid, "SIGKILL");
       } catch {
         /* already gone */
       }
@@ -853,12 +854,16 @@ describe("global Session cleanup", () => {
   }, 30_000);
 
   /** A long-lived child inside the worktree. `attached` puts the worktree path in its argv. */
-  function processIn(worktreePath: string, attached: boolean) {
-    const child = spawn(
-      "sh",
-      ["-c", "trap '' TERM; while :; do sleep 1; done", ...(attached ? [worktreePath] : [])],
-      { cwd: worktreePath, detached: true, stdio: "ignore" }
-    );
+  function processIn(
+    worktreePath: string,
+    attached: boolean,
+    command = "trap '' TERM; sleep 60 & wait"
+  ) {
+    const child = spawn("sh", ["-c", command, ...(attached ? [worktreePath] : [])], {
+      cwd: worktreePath,
+      detached: true,
+      stdio: "ignore"
+    });
     child.unref();
     const { pid } = child;
     if (pid === undefined) {
@@ -931,6 +936,25 @@ describe("global Session cleanup", () => {
       step: "process-stop"
     });
     expect(existsSync(dependency.worktreePath)).toBeFalsy();
+  }, 30_000);
+
+  test("a child spawned during shutdown retains every Session member", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/respawning");
+    const [repo] = state.repos;
+    ok(repo);
+    const pid = processIn(repo.worktreePath, true, "trap 'sleep 60 &' TERM; sleep 60 & wait; wait");
+    ageProcess(f.runtime, pid, 2);
+    await expect
+      .poll(() => host.exec("pgrep", ["-P", String(pid)], { allowFailure: true }).stdout.trim())
+      .not.toBe("");
+    const result = await f.run();
+    expect(result.report.sessions[0]).toMatchObject({ outcome: "failed" });
+    expect(result.report.sessions[0]?.execution.message).toContain("is in use");
+    for (const member of state.repos) {
+      expect(existsSync(member.worktreePath)).toBeTruthy();
+    }
+    expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeTruthy();
   }, 30_000);
 
   test.each([

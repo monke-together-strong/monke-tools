@@ -279,9 +279,10 @@ effects; report all preflight failures together. Revalidate after commands/proce
 stops and before each removal. Failure stops later removals and retains state.
 Remove the invoking member last, otherwise the Root last.
 
-Cleanup scans managed-area working directories once per run, grouping processes
-by parent. A tree is attached if any command line names a worktree path; its age
-is its oldest member's age. Any tree under one day old blocks the Session and is
+Cleanup scans each Session's worktree directories before effects and refreshes
+process state before cleanup commands and worktree removals. Each scan groups
+processes by parent. A tree is attached if any command line names a worktree path;
+its age is its oldest member's age. Any tree under one day old blocks the Session and is
 listed. Before Cleanup commands, old attached roots receive SIGTERM, then SIGKILL
 after a grace period; completed stops are reported. Old unattached trees, such as
 idle shells, remain running and are reported. Chop does not stop processes.
