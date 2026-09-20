@@ -66,8 +66,11 @@ Spawn and Materialize reuse complete remembered outputs and execute automatic
 commands for missing or incomplete outputs. Explicit commands retain remembered
 outputs without executing; `mt resources acquire` acquires missing commands for
 the current repo, including explicit commands. Outputs no longer declared are
-pruned for the current repo and Session. Validated outputs are persisted immediately so retries
-can reuse them. Removing Session state ends its contribution to later inputs.
+pruned for the current repo and Session. If acquisition runs no command while
+recorded cleanup remains eligible, saved values and outputs are retained for
+cleanup until release succeeds or a new acquisition establishes replacement
+cleanup authority. Validated outputs are persisted immediately so retries can
+reuse them. Removing Session state ends its contribution to later inputs.
 
 Each repo/command-name pair has a separate Command lock covering input reads,
 execution, validation, and persistence across Session worktrees. Renaming a
