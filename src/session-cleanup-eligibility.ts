@@ -86,6 +86,7 @@ export interface UnownedWorktree {
 
 /** Unowned-worktree discovery from an earlier pass; re-inspection reuses it instead of rescanning. */
 export interface SessionCleanupDiscovery {
+  sourceRoots: string[];
   unavailableSources: string[];
   unownedWorktrees: UnownedWorktree[];
 }
@@ -365,7 +366,7 @@ export async function inspectSessionCleanup(
       }
     }
   }
-  const { unavailableSources, unownedWorktrees } =
+  const { sourceRoots, unavailableSources, unownedWorktrees } =
     options.discovered ?? discoverUnownedWorktrees(readOnly, states, knownSourceRoots);
   blockUnownedOverlaps(snapshots, unownedWorktrees);
   const changed = scanSessionStates(home).fingerprint !== scan.fingerprint;
@@ -408,6 +409,7 @@ export async function inspectSessionCleanup(
             state.session === snapshot.session && state.rootSourceRoot === snapshot.rootSourceRoot
         ) ?? null
     })),
+    sourceRoots,
     stateFingerprint: scan.fingerprint,
     unavailableSources,
     unboundedOwnership: scan.records.some(
@@ -457,7 +459,13 @@ function discoverUnownedWorktrees(
       unavailableSources.push(sourceRoot);
     }
   }
-  return { unavailableSources, unownedWorktrees };
+  return {
+    sourceRoots: [...sources].filter(
+      (source) => existsSync(source) && !unavailableSources.includes(source)
+    ),
+    unavailableSources,
+    unownedWorktrees
+  };
 }
 
 function blockUnownedOverlaps(

@@ -45,9 +45,17 @@ const ReportSchema = z.object({
         step: z.string().optional()
       }),
       inspectionFailed: z.boolean(),
-      members: z.array(z.object({ checks: z.object({ local: z.object({ status: z.string() }) }) })),
+      members: z.array(
+        z.object({
+          checks: z.object({
+            committedWork: z.object({ code: z.string().nullable(), status: z.string() }),
+            local: z.object({ status: z.string() })
+          })
+        })
+      ),
       outcome: z.string(),
       plannedActions: z.array(ActionSchema),
+      readiness: z.string(),
       reasons: z.array(z.object({ code: z.string() })),
       session: z.string().nullable()
     })
@@ -246,6 +254,10 @@ describe("global Session cleanup", () => {
     ok(blockedMember);
     write(blockedMember.worktreePath, "tracked.txt", "unfinished tracked edit\n");
     const before = files(f.cwd);
+    const plain = await f.run(true);
+    expect(
+      plain.report.sessions.find((session) => session.session === state.session)?.readiness
+    ).toBe("archive-required");
     const preview = await f.run(true, f.cwd, ["--archive-untracked"]);
     expect(preview.report.sessions.find((s) => s.session === state.session)?.outcome).toBe(
       "would-clean"
@@ -319,6 +331,110 @@ describe("global Session cleanup", () => {
       ).toBeTruthy();
     },
     15_000
+  );
+
+  test.each(["worktree", "source", "worktree-after-recovery"])(
+    "ordinary cleanup retains a cross-repository nested %s",
+    async (kind) => {
+      const f = fixture();
+      const selected = path.join(f.cwd, "ordinary-parent");
+      const nested = path.join(selected, "nested");
+      const [dependency] = f.sources;
+      ok(dependency);
+      write(f.root, ".git/info/exclude", "nested/\n");
+      git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
+      ageWorktree(selected);
+      const createNested = () => {
+        if (kind === "source") {
+          createRepo(nested, { "tracked.txt": "nested source" });
+        } else {
+          git(dependency, ["worktree", "add", "-b", "nested", nested]);
+        }
+        write(nested, "unfinished.txt", "unique work");
+      };
+      if (kind === "worktree-after-recovery") {
+        const original = f.runtime.exec;
+        f.runtime.exec = (command, args, options) => {
+          const result = original(command, args, options);
+          if (command === "sh" && args?.[1] === "true") {
+            createNested();
+          }
+          return result;
+        };
+      } else {
+        createNested();
+      }
+      const result = await f.run(false, kind === "source" ? nested : dependency, [
+        selected,
+        "--include-unowned",
+        "--recover-with",
+        "true"
+      ]);
+      expect(existsSync(selected)).toBeTruthy();
+      expect(readFileSync(path.join(nested, "unfinished.txt"), "utf-8")).toBe("unique work");
+      expect(result.report.unownedWorktrees).not.toContainEqual(
+        expect.objectContaining({
+          outcome: "cleaned",
+          worktreePath: selected
+        })
+      );
+    }
+  );
+
+  test.each(["before", "after"])(
+    "ordinary cleanup outside Monke home retains a recent process started %s recovery",
+    async (when) => {
+      const f = fixture();
+      const selected = path.join(f.cwd, "external-ordinary");
+      git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
+      ageWorktree(selected);
+      let pid = when === "before" ? processIn(selected, true) : undefined;
+      if (when === "after") {
+        const original = f.runtime.exec;
+        f.runtime.exec = (command, args, options) => {
+          const result = original(command, args, options);
+          if (command === "sh" && args?.[1] === "true") {
+            pid = processIn(selected, true);
+          }
+          return result;
+        };
+      }
+      await f.run(false, f.cwd, [selected, "--include-unowned", "--recover-with", "true"]);
+      expect(existsSync(selected)).toBeTruthy();
+      ok(pid !== undefined);
+      expect(alive(pid)).toBeTruthy();
+    }
+  );
+
+  test.each([false, true])(
+    "archive readiness retains an open PR blocker, missing sibling=%s",
+    async (missingSibling) => {
+      const f = fixture();
+      const state = f.addSession("feature/active-notes");
+      const root = state.repos.at(-1);
+      const [dependency] = state.repos;
+      ok(root && dependency);
+      write(root.worktreePath, "notes.md", "untracked notes");
+      if (missingSibling) {
+        git(dependency.sourceRoot, ["worktree", "remove", dependency.worktreePath]);
+        dependency.cleanupCommand = "true";
+        saveSessionState(f.home, state);
+      }
+      const original = f.runtime.execAsync;
+      f.runtime.execAsync = async (command, args, options) => {
+        const result = await original(command, args, options);
+        return args?.[1]?.includes("/pulls?")
+          ? { ...result, stdout: result.stdout.replaceAll('"state":"closed"', '"state":"open"') }
+          : result;
+      };
+      const preview = await f.run(true);
+      expect(preview.report.sessions[0]?.readiness).toBe("blocked");
+      expect(preview.report.sessions[0]?.members.at(-1)?.checks.committedWork).toMatchObject({
+        code: "open-pr",
+        status: "blocked"
+      });
+      expect(existsSync(root.worktreePath)).toBeTruthy();
+    }
   );
 
   test("dirty ordinary worktrees are settled skips", async () => {
@@ -557,12 +673,17 @@ describe("global Session cleanup", () => {
     }
     const pid = processIn(dependency.worktreePath, true);
     ageProcess(f.runtime, pid, 2);
-    const descendants = host
-      .exec("pgrep", ["-P", String(pid)], { allowFailure: true })
-      .stdout.split("\n")
-      .filter(Boolean)
-      .map(Number);
-    expect(descendants.length).toBeGreaterThan(0);
+    let descendants: number[] = [];
+    await expect
+      .poll(() => {
+        descendants = host
+          .exec("pgrep", ["-P", String(pid)], { allowFailure: true })
+          .stdout.split("\n")
+          .filter(Boolean)
+          .map(Number);
+        return descendants.length;
+      })
+      .toBeGreaterThan(0);
     const result = await f.run();
     expect(result.error).toBeUndefined();
     for (const member of [pid, ...descendants]) {

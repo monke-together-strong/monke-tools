@@ -60,11 +60,10 @@ export interface WorktreeProcessScan {
 const TERM_GRACE_MS = 2000;
 
 /**
- * Snapshot every process rooted under the managed worktree area. `lsof -d cwd` avoids walking
+ * Snapshot every process rooted under the supplied checkout paths. `lsof -d cwd` avoids walking
  * directory trees, so the cost is one pass over the process table.
  */
-export function scanWorktreeProcesses(runtime: Runtime, home: string): WorktreeProcessScan {
-  const area = path.join(home, "worktrees");
+export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): WorktreeProcessScan {
   const scannedAt = Date.now();
   const cwdByPid = new Map<number, string>();
   const lsof = runtime.exec("lsof", ["-a", "-d", "cwd", "-F", "pn"], { allowFailure: true });
@@ -74,7 +73,7 @@ export function scanWorktreeProcesses(runtime: Runtime, home: string): WorktreeP
       pid = Number(line.slice(1));
     } else if (line.startsWith("n") && pid !== null) {
       const cwd = line.slice(1);
-      if (containsPath(area, cwd) && cwd !== area) {
+      if (roots.some((root) => containsPath(root, cwd))) {
         cwdByPid.set(pid, cwd);
       }
     }

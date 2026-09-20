@@ -14,6 +14,7 @@ import { requestShellDirectoryAfterRemoval } from "./shell.ts";
 import type { Runtime } from "./types.ts";
 import { scanWorktreeProcesses, stopStaleWorktreeProcesses } from "./worktree-processes.ts";
 import {
+  assertNoOverlappingCheckouts,
   preflightWorktreeRemoval,
   validateRegisteredWorktreeForRemoval
 } from "./worktree-safety.ts";
@@ -22,14 +23,14 @@ export async function cleanupOrdinaryWorktrees(
   runtime: Runtime,
   home: string,
   worktrees: UnownedWorktree[],
-  options: { dryRun: boolean; recoveryCommand?: string },
+  options: { dryRun: boolean; recoveryCommand?: string; sourceRoots: string[] },
   lock?: OperationLock
 ): Promise<UnownedWorktree[]> {
   const result: UnownedWorktree[] = [];
   for (const worktree of worktrees) {
     let attempted = false;
     try {
-      assertUnowned(runtime, home, worktree);
+      assertUnowned(runtime, home, worktree, options.sourceRoots);
       // oxlint-disable-next-line no-await-in-loop
       const evidence = await collectCleanupEvidence(
         runtime,
@@ -63,14 +64,14 @@ export async function cleanupOrdinaryWorktrees(
         if (scanSessionStates(home).fingerprint !== fingerprint) {
           throw new MonkeError("Session ownership changed during ordinary cleanup");
         }
-        assertUnowned(runtime, home, worktree);
+        assertUnowned(runtime, home, worktree, options.sourceRoots);
         const changed = revalidateCleanupEvidence(runtime, evidence);
         if (changed) {
           throw new MonkeError(`Ordinary worktree changed: ${changed.code}`);
         }
       };
       guard();
-      const processes = scanWorktreeProcesses(runtime, home);
+      const processes = scanWorktreeProcesses(runtime, [worktree.worktreePath]);
       const stopped = stopStaleWorktreeProcesses(runtime, processes, worktree.worktreePath, {
         beforeKill() {
           guard();
@@ -97,7 +98,10 @@ export async function cleanupOrdinaryWorktrees(
       });
       guard();
       // Re-scan after the recovery command: it must not leave a new process in the worktree.
-      if (scanWorktreeProcesses(runtime, home).treesUnder(worktree.worktreePath).length > 0) {
+      if (
+        scanWorktreeProcesses(runtime, [worktree.worktreePath]).treesUnder(worktree.worktreePath)
+          .length > 0
+      ) {
         throw new MonkeError("Ordinary worktree became active during recovery");
       }
       const checked = preflightWorktreeRemoval(
@@ -136,7 +140,12 @@ export async function cleanupOrdinaryWorktrees(
   return result;
 }
 
-function assertUnowned(runtime: Runtime, home: string, worktree: UnownedWorktree) {
+function assertUnowned(
+  runtime: Runtime,
+  home: string,
+  worktree: UnownedWorktree,
+  sources: string[]
+) {
   const owners = listSessionStatesRelevantToWorktrees(home, [worktree.worktreePath]);
   if (
     owners.some((state) =>
@@ -151,5 +160,6 @@ function assertUnowned(runtime: Runtime, home: string, worktree: UnownedWorktree
   ) {
     throw new MonkeError("Cannot remove a Source checkout or the Monke home");
   }
+  assertNoOverlappingCheckouts(runtime, sources, worktree.worktreePath);
   validateRegisteredWorktreeForRemoval(runtime, worktree.sourceRoot, worktree.worktreePath);
 }

@@ -108,14 +108,14 @@ function committedWorkCheck(
   evidence: CleanupEvidence,
   decision: ReturnType<typeof decideSessionCleanupMember>
 ): CleanupCheckReport {
-  if (evidence.committedWorkAttempted === false) {
+  if (!evidence.archiveReadiness && evidence.committedWorkAttempted === false) {
     return {
       code: null,
       message: "Not checked because the local worktree check stopped inspection.",
       status: "not-checked"
     };
   }
-  if (evidence.localBlock) {
+  if (!evidence.archiveReadiness && evidence.localBlock) {
     return {
       code: evidence.localBlock.code,
       message:
@@ -125,12 +125,13 @@ function committedWorkCheck(
       status: "unknown"
     };
   }
+  const proof = evidence.archiveReadiness ?? decision;
   const report = check(
-    decision.eligible ? "passed" : decision.status === "ineligible" ? "blocked" : "unknown",
-    decision.code
+    proof.eligible ? "passed" : proof.status === "ineligible" ? "blocked" : "unknown",
+    proof.code
   );
-  if (decision.evidence.length > 0) {
-    report.details = decision.evidence;
+  if (proof.evidence.length > 0) {
+    report.details = proof.evidence;
   }
   return report;
 }
@@ -201,7 +202,7 @@ function cleanupReadiness(snapshot: SessionCleanupEvidence, eligible: boolean) {
     const decision = decideSessionCleanupMember(snapshot.rootSourceRoot, member);
     return (
       decision.eligible ||
-      (decision.code === "dirty-worktree" && member.evidence?.archiveCandidate !== undefined)
+      (decision.code === "dirty-worktree" && member.evidence?.archiveReadiness?.eligible === true)
     );
   });
   if (!membersReady || snapshot.blockers.some((code) => code !== "resource-recovery-required")) {
@@ -210,7 +211,13 @@ function cleanupReadiness(snapshot: SessionCleanupEvidence, eligible: boolean) {
   if (snapshot.blockers.includes("resource-recovery-required")) {
     return "resource-recovery-required";
   }
-  if (snapshot.members.some((member) => member.evidence?.archiveCandidate)) {
+  if (
+    snapshot.members.some(
+      (member) =>
+        member.evidence?.pendingWork?.kind === "untracked-archive" ||
+        member.evidence?.archiveReadiness?.eligible === true
+    )
+  ) {
     return "archive-required";
   }
   return eligible ? "ready" : "blocked";

@@ -97,6 +97,8 @@ export interface CleanupDecision {
 export interface CleanupEvidence {
   ancestorOfDefault: boolean | null;
   archiveCandidate?: PendingWorkProof;
+  /** Full decision with archival enabled, used only to explain the required next action. */
+  archiveReadiness?: CleanupDecision;
   branch: string | null;
   candidate: CleanupCandidate;
   /** Qualifying merged commit-associated PRs; null means the lookup failed. */
@@ -469,6 +471,7 @@ export async function collectCleanupEvidence(
     acceptPendingProof(readOnly, snapshot, pending, snapshot.head, snapshot.repository.defaultHead);
     if (snapshot.localBlock) {
       snapshot.localBlock = revalidateCleanupEvidence(runtime, snapshot) ?? snapshot.localBlock;
+      await inspectArchiveReadiness(runtime, snapshot, cache);
       return snapshot;
     }
     snapshot.committedWorkAttempted = true;
@@ -515,6 +518,25 @@ export async function collectCleanupEvidence(
     snapshot.localBlock ??= decision("unknown", "repository-changed-during-inspection");
   }
   return snapshot;
+}
+
+async function inspectArchiveReadiness(
+  runtime: Runtime,
+  snapshot: CleanupEvidence,
+  cache: CleanupEvidenceCache
+) {
+  if (
+    snapshot.localBlock?.code === "dirty-worktree" &&
+    snapshot.archiveCandidate &&
+    !snapshot.candidate.archiveUntracked
+  ) {
+    const archived = await collectCleanupEvidence(
+      runtime,
+      { ...snapshot.candidate, archiveUntracked: true },
+      cache
+    );
+    snapshot.archiveReadiness = decideCleanupEligibility(archived);
+  }
 }
 
 function acceptArchiveCandidate(snapshot: CleanupEvidence, pending: PendingWork | null) {

@@ -62,6 +62,7 @@ describe("Session cleanup explanations", () => {
       paths: ["notes.md"],
       witness: null
     };
+    root.evidence.pendingWork = root.evidence.archiveCandidate;
     expect(createSessionCleanupReport(snapshot).readiness).toBe("archive-required");
     snapshot.blockers.push("held");
     expect(createSessionCleanupReport(snapshot).readiness).toBe("blocked");

@@ -11,8 +11,8 @@ import {
   retainedHeadAction
 } from "./cleanup-retained-head.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
-import { listWorktrees, resolveRepoContext } from "./git.ts";
-import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
+import { resolveRepoContext } from "./git.ts";
+import { containsPath, samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLockAsync } from "./runtime.ts";
 import type { OperationLock } from "./runtime.ts";
 import { inspectSessionCleanup, revalidateSessionMember } from "./session-cleanup-eligibility.ts";
@@ -33,6 +33,7 @@ import {
   stopStaleWorktreeProcesses
 } from "./worktree-processes.ts";
 import type { WorktreeProcessScan } from "./worktree-processes.ts";
+import { assertNoOverlappingCheckouts } from "./worktree-safety.ts";
 
 class GlobalCleanupError extends MonkeError {
   constructor(message: string) {
@@ -88,7 +89,7 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
         validateTargets(inventory);
         assertGlobalSafety(lock, inventory);
         // One process-table pass for the whole run; members index it before removal.
-        const processes = scanWorktreeProcesses(runtime, home);
+        const processes = scanWorktreeProcesses(runtime, [path.join(home, "worktrees")]);
         await executeInventory(runtime, home, lock, inventory, sessions, processes, options);
         await ordinary(inventory, lock);
       });
@@ -179,7 +180,13 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
     const selected = inventory.unownedWorktrees.filter(
       (repo) => (targets?.length ?? 0) === 0 || targets?.includes(repo.worktreePath)
     );
-    const results = await cleanupOrdinaryWorktrees(runtime, home, selected, options, lock);
+    const results = await cleanupOrdinaryWorktrees(
+      runtime,
+      home,
+      selected,
+      { ...options, sourceRoots: inventory.sourceRoots },
+      lock
+    );
     inventory.unownedWorktrees = inventory.unownedWorktrees.map(
       (repo) => results.find((result) => result.worktreePath === repo.worktreePath) ?? repo
     );
@@ -224,6 +231,7 @@ async function executeInventory(
     const fresh = await inspectSessionCleanup(runtime, home, [], {
       archiveUntracked: options.archiveUntracked,
       discovered: {
+        sourceRoots: inventory.sourceRoots,
         unavailableSources: inventory.unavailableSources,
         unownedWorktrees: inventory.unownedWorktrees
       },
@@ -434,15 +442,7 @@ function executeSession(
   const readOnly = readOnlyCleanupRuntime(runtime);
   const scan = scanSessionStates(home);
   const states = scan.records.flatMap((record) => (record.state ? [record.state] : []));
-  // Match the inspector's discovery scope. An unavailable or missing unrelated Source is
-  // reported separately; a previously available Source failing revalidation blocks removal.
-  const sources = [
-    ...new Set(states.flatMap((retained) => retained.repos.map((repo) => repo.sourceRoot)))
-  ].filter(
-    (source) =>
-      existsSync(source) &&
-      !inventory.unavailableSources.some((unavailable) => samePath(source, unavailable))
-  );
+  const sources = inventory.sourceRoots;
   function guard() {
     assertGlobalSafety(lock, inventory);
     if (scanSessionStates(home).fingerprint !== inventory.stateFingerprint) {
@@ -457,7 +457,7 @@ function executeSession(
       throw new MonkeError(`Missing member evidence: ${repo.worktreePath}`);
     }
     revalidateSessionMember(runtime, readOnly, home, state, repo, member);
-    assertNoNewOverlaps(readOnly, sources, repo.worktreePath);
+    assertNoOverlappingCheckouts(readOnly, sources, repo.worktreePath);
   };
   try {
     guard();
@@ -644,22 +644,6 @@ function assertFinalizationReady(runtime: Runtime, home: string, state: SessionS
   for (const repo of state.repos) {
     if (inspectSessionRepoRegistration(runtime, home, state, repo).mode !== "gone") {
       throw new MonkeError(`Session member reappeared before finalization: ${repo.worktreePath}`);
-    }
-  }
-}
-
-function assertNoNewOverlaps(runtime: Runtime, sources: string[], worktreePath: string) {
-  for (const source of sources) {
-    for (const worktree of listWorktrees(runtime, source)) {
-      if (
-        !samePath(worktree.path, source) &&
-        !samePath(worktree.path, worktreePath) &&
-        worktreePathsOverlap(worktree.path, worktreePath)
-      ) {
-        throw new MonkeError(
-          `Worktree ${worktreePath} overlaps registered worktree ${worktree.path}`
-        );
-      }
     }
   }
 }
