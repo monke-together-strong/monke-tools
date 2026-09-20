@@ -1,3 +1,4 @@
+import { ok } from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
   existsSync,
@@ -180,11 +181,11 @@ describe("global Session cleanup", () => {
           : { default_branch: "main", full_name: `owner/${name}` };
       return { exitCode: 0, stderr: "", stdout: JSON.stringify(value) };
     };
-    async function run(dryRun = false, invocationCwd = runtime.cwd) {
+    async function run(dryRun = false, invocationCwd = runtime.cwd, extra: string[] = []) {
       stdout = "";
       let failure: unknown;
       try {
-        await runCliAsync(["cleanup", "--json", ...(dryRun ? ["--dry-run"] : [])], {
+        await runCliAsync(["cleanup", "--json", ...(dryRun ? ["--dry-run"] : []), ...extra], {
           ...runtime,
           cwd: invocationCwd
         });
@@ -195,6 +196,175 @@ describe("global Session cleanup", () => {
     }
     return { addSession, cwd, home, root, run, runtime, sources };
   }
+
+  test.each([
+    ["", "nonempty recovery command"],
+    ["   ", "nonempty recovery command"],
+    ["true", "explicit worktree targets"]
+  ])("rejects unscoped or empty recovery commands: %j", async (command, message) => {
+    const f = fixture();
+    const state = f.addSession("feature/keep-resources");
+    await expect(runCliAsync(["cleanup", "--recover-with", command], f.runtime)).rejects.toThrow(
+      message
+    );
+    expect(state.repos.every((repo) => existsSync(repo.worktreePath))).toBeTruthy();
+  });
+
+  test("reports missing cleanup worktrees and runs explicitly selected recovery with saved resources", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/recover");
+    const root = state.repos.at(-1);
+    ok(root);
+    root.cleanupCommand = "exit 99";
+    root.resourceValues = [{ env: "RESOURCE_ID", value: "owned-resource" }];
+    saveSessionState(f.home, state);
+    git(root.sourceRoot, ["worktree", "remove", root.worktreePath]);
+    const preview = await f.run(true);
+    expect(preview.report.sessions[0]).toMatchObject({
+      outcome: "skipped",
+      reasons: [{ code: "resource-recovery-required" }]
+    });
+    const command =
+      'test "$RESOURCE_ID" != "owned-resource" || printf "%s" "$MONKE_WORKTREE_PATH" > recovery.txt';
+    const result = await f.run(false, f.cwd, [root.worktreePath, "--recover-with", command]);
+    expect(result.error).toBeUndefined();
+    expect(result.report.sessions[0]?.outcome).toBe("cleaned");
+    expect(readFileSync(path.join(root.sourceRoot, "recovery.txt"), "utf-8")).toBe(
+      root.worktreePath
+    );
+    expect(existsSync(state.repos[0]?.worktreePath ?? "")).toBeFalsy();
+  });
+
+  test("archives untracked files before removal and keeps tracked edits blocked", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/notes");
+    const [member] = state.repos;
+    ok(member);
+    write(member.worktreePath, "notes/research.md", "unique research\n");
+    const blocked = f.addSession("feature/unfinished");
+    const [blockedMember] = blocked.repos;
+    ok(blockedMember);
+    write(blockedMember.worktreePath, "tracked.txt", "unfinished tracked edit\n");
+    const before = files(f.cwd);
+    const preview = await f.run(true, f.cwd, ["--archive-untracked"]);
+    expect(preview.report.sessions.find((s) => s.session === state.session)?.outcome).toBe(
+      "would-clean"
+    );
+    expect(files(f.cwd)).toStrictEqual(before);
+    const result = await f.run(false, f.cwd, ["--archive-untracked"]);
+    expect(result.error).toBeUndefined();
+    expect(existsSync(member.worktreePath)).toBeFalsy();
+    expect(existsSync(blockedMember.worktreePath)).toBeTruthy();
+    const archives = path.join(f.home, "archives", "cleanup");
+    const manifests = readdirSync(archives).map((name) => path.join(archives, name));
+    expect(manifests).toHaveLength(1);
+    const [archive] = manifests;
+    ok(archive);
+    expect(readFileSync(path.join(archive, "files", "notes/research.md"), "utf-8")).toBe(
+      "unique research\n"
+    );
+    expect(JSON.parse(readFileSync(path.join(archive, "manifest.json"), "utf-8"))).toMatchObject({
+      worktreePath: member.worktreePath
+    });
+  }, 15_000);
+
+  test("selectively removes audited ordinary worktrees and retains detached HEADs", async () => {
+    const f = fixture();
+    f.addSession("feature/keep");
+    const selected = path.join(f.cwd, "selected");
+    const untouched = path.join(f.cwd, "untouched");
+    git(f.root, ["worktree", "add", "--detach", selected]);
+    git(f.root, ["worktree", "add", "-b", "ordinary", untouched]);
+    ageWorktree(selected);
+    const head = git(selected, ["rev-parse", "HEAD"]);
+    const result = await f.run(false, f.cwd, [
+      selected,
+      "--include-unowned",
+      "--recover-with",
+      "true"
+    ]);
+    expect(result.error).toBeUndefined();
+    expect(existsSync(selected)).toBeFalsy();
+    expect(existsSync(untouched)).toBeTruthy();
+    expect(git(f.root, ["rev-parse", `refs/monke/retained/${head}`])).toBe(head);
+    expect(result.report.unownedWorktrees).toStrictEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ outcome: "cleaned", worktreePath: selected })
+      ])
+    );
+  }, 15_000);
+
+  test.each(["remove", "mode"])(
+    "retains worktrees when a cleanup hook corrupts their required archive: %s",
+    async (corruption) => {
+      const f = fixture();
+      const state = f.addSession("feature/archive-failure");
+      const [member] = state.repos;
+      const root = state.repos.at(-1);
+      ok(member && root);
+      write(member.worktreePath, "notes.md", "must survive\n");
+      root.cleanupCommand =
+        corruption === "remove"
+          ? `rm -rf '${path.join(f.home, "archives")}'`
+          : `chmod +x '${path.join(f.home, "archives", "cleanup")}'/archive-*/files/notes.md`;
+      saveSessionState(f.home, state);
+      const result = await f.run(false, f.cwd, ["--archive-untracked"]);
+      expect(result.report.sessions[0]?.outcome).toBe("failed");
+      expect(readFileSync(path.join(member.worktreePath, "notes.md"), "utf-8")).toBe(
+        "must survive\n"
+      );
+      expect(existsSync(root.worktreePath)).toBeTruthy();
+      expect(
+        existsSync(getSessionStateFilePath(f.home, state.rootSourceRoot, state.session))
+      ).toBeTruthy();
+    },
+    15_000
+  );
+
+  test("dirty ordinary worktrees are settled skips", async () => {
+    const f = fixture();
+    const selected = path.join(f.cwd, "dirty-ordinary");
+    git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
+    write(selected, "unfinished.txt", "keep me");
+    const result = await f.run(false, f.cwd, [
+      selected,
+      "--include-unowned",
+      "--recover-with",
+      "true"
+    ]);
+    expect(result.error).toBeUndefined();
+    expect(result.report.unownedWorktrees).toContainEqual(
+      expect.objectContaining({
+        outcome: "skipped",
+        reason: "dirty-worktree",
+        worktreePath: selected
+      })
+    );
+    expect(readFileSync(path.join(selected, "unfinished.txt"), "utf-8")).toBe("keep me");
+  });
+
+  test.each(["exit 23", 'printf "new work" > "$MONKE_WORKTREE_PATH/new.txt"'])(
+    "retains ordinary worktrees after unsuccessful recovery: %s",
+    async (command) => {
+      const f = fixture();
+      const selected = path.join(f.cwd, "ordinary-recovery");
+      git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
+      ageWorktree(selected);
+      const result = await f.run(false, f.cwd, [
+        selected,
+        "--include-unowned",
+        "--recover-with",
+        command
+      ]);
+      expect(existsSync(selected)).toBeTruthy();
+      expect(result.report.unownedWorktrees).toStrictEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ outcome: "failed", worktreePath: selected })
+        ])
+      );
+    },
+    15_000
+  );
 
   function files(directory: string) {
     return Object.fromEntries(

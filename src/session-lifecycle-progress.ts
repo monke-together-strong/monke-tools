@@ -2,12 +2,14 @@ import { containsPath, samePath } from "./path-identity.ts";
 import type { SessionRepoState, SessionState } from "./types.ts";
 
 export interface SessionAction {
+  archivePath?: string;
   command?: string;
   recoveryCommand?: string;
   retainedRef?: string;
   sourceRoot: string;
   step:
     | "revalidation"
+    | "file-archive"
     | "head-preservation"
     | "process-stop"
     | "worktree-removal"
@@ -28,12 +30,15 @@ export interface SessionLifecycleObserver {
   revalidateMember?: (repo: SessionRepoState) => void;
 }
 
-export function cleanupCommandActions(state: SessionState): SessionAction[] {
+export function cleanupCommandActions(
+  state: SessionState,
+  recoveryCommand?: string
+): SessionAction[] {
   return [...state.repos].toReversed().flatMap((repo) =>
-    repo.cleanupEligible && repo.cleanupCommand
+    repo.cleanupEligible && (recoveryCommand ?? repo.cleanupCommand)
       ? [
           {
-            command: repo.cleanupCommand,
+            command: recoveryCommand ?? repo.cleanupCommand,
             sourceRoot: repo.sourceRoot,
             step: "cleanup-command" as const,
             worktreePath: repo.worktreePath

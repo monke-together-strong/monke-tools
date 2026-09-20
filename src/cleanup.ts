@@ -1,14 +1,17 @@
 import { existsSync } from "node:fs";
+import path from "node:path";
 
 import { teardownSession } from "./chop.ts";
+import { archiveCleanupFiles, assertCleanupArchive } from "./cleanup-archive.ts";
 import { readOnlyCleanupRuntime } from "./cleanup-eligibility.ts";
+import { cleanupOrdinaryWorktrees } from "./cleanup-ordinary.ts";
 import {
   assertRetainedHead,
   preserveDetachedHead,
   retainedHeadAction
 } from "./cleanup-retained-head.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
-import { listWorktrees } from "./git.ts";
+import { listWorktrees, resolveRepoContext } from "./git.ts";
 import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLockAsync } from "./runtime.ts";
 import type { OperationLock } from "./runtime.ts";
@@ -41,31 +44,53 @@ type Inventory = Awaited<ReturnType<typeof inspectSessionCleanup>>;
 type SessionReport = ReturnType<typeof createSessionCleanupReport>;
 
 export interface CleanupOptions {
+  archiveUntracked?: boolean;
   dryRun: boolean;
   /** Hide skipped Sessions in human output. JSON always includes every inspected Session. */
   eligibleOnly: boolean;
+  includeUnowned?: boolean;
   json: boolean;
+  recoveryCommand?: string;
+  targets?: string[];
 }
 
 /** Both modes use the same eligibility policy. Only execution acquires the operation lock. */
 export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
-  const home = getMonkeHome(runtime);
+  const { home, inspectionOptions, knownSources, ordinary, validateTargets } = prepareCleanup(
+    runtime,
+    options
+  );
   let inventory: Inventory | undefined;
   const sessions: SessionReport[] = [];
   let globalFailure: string | null = null;
   try {
     if (options.dryRun) {
-      inventory = await inspectSessionCleanup(runtime, home);
+      inventory = await inspectSessionCleanup(runtime, home, [...knownSources], inspectionOptions);
+      validateTargets(inventory);
       for (const row of inventory.sessions) {
-        sessions.push(reportSession(row, { outcome: "not-attempted" }, true, runtime.cwd));
+        sessions.push(
+          reportSession(
+            row,
+            { outcome: "not-attempted" },
+            true,
+            runtime.cwd,
+            options.recoveryCommand
+          )
+        );
       }
+      await ordinary(inventory);
     } else {
       await withGlobalLockAsync(home, async (lock) => {
-        inventory = await inspectSessionCleanup(runtime, home, [], { operationLock: lock });
+        inventory = await inspectSessionCleanup(runtime, home, [...knownSources], {
+          ...inspectionOptions,
+          operationLock: lock
+        });
+        validateTargets(inventory);
         assertGlobalSafety(lock, inventory);
         // One process-table pass for the whole run; members index it before removal.
         const processes = scanWorktreeProcesses(runtime, home);
-        await executeInventory(runtime, home, lock, inventory, sessions, processes);
+        await executeInventory(runtime, home, lock, inventory, sessions, processes, options);
+        await ordinary(inventory, lock);
       });
     }
   } catch (error) {
@@ -103,6 +128,65 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
   }
 }
 
+function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
+  const home = getMonkeHome(runtime);
+  const targets = options.targets?.map((target) => path.resolve(runtime.cwd, target));
+  if (options.recoveryCommand !== undefined) {
+    if (options.recoveryCommand.trim().length === 0) {
+      throw new MonkeError("--recover-with requires a nonempty recovery command");
+    }
+    if ((targets?.length ?? 0) === 0) {
+      throw new MonkeError("--recover-with requires explicit worktree targets");
+    }
+  }
+  const inspectionOptions = {
+    archiveUntracked: options.archiveUntracked,
+    recoveryCommand: options.recoveryCommand,
+    targets
+  };
+  const knownSources = new Set<string>();
+  for (const candidate of [runtime.cwd, ...(targets ?? [])]) {
+    if (!existsSync(candidate)) {
+      continue;
+    }
+    try {
+      knownSources.add(
+        resolveRepoContext(runtime, candidate, null, { inferSessionName: false }).sourceRoot
+      );
+    } catch {
+      // Discovery also works from outside a checkout.
+    }
+  }
+  const validateTargets = (inventory: Inventory) => {
+    for (const target of targets ?? []) {
+      const owned = inventory.sessions.some(
+        (row) =>
+          row.snapshot.filePath === target ||
+          row.state?.repos.some((repo) => samePath(repo.worktreePath, target))
+      );
+      const unowned = inventory.unownedWorktrees.some((repo) =>
+        samePath(repo.worktreePath, target)
+      );
+      if (!owned && !(options.includeUnowned && unowned)) {
+        throw new MonkeError(`Cleanup target not found or requires --include-unowned: ${target}`);
+      }
+    }
+  };
+  const ordinary = async (inventory: Inventory, lock?: OperationLock) => {
+    if (!options.includeUnowned) {
+      return;
+    }
+    const selected = inventory.unownedWorktrees.filter(
+      (repo) => (targets?.length ?? 0) === 0 || targets?.includes(repo.worktreePath)
+    );
+    const results = await cleanupOrdinaryWorktrees(runtime, home, selected, options, lock);
+    inventory.unownedWorktrees = inventory.unownedWorktrees.map(
+      (repo) => results.find((result) => result.worktreePath === repo.worktreePath) ?? repo
+    );
+  };
+  return { home, inspectionOptions, knownSources, ordinary, validateTargets };
+}
+
 function cleanupExitCode(
   sessions: SessionReport[],
   inventory: Inventory | undefined,
@@ -112,6 +196,9 @@ function cleanupExitCode(
     sessions.some((session) => session.inspectionFailed) ||
     (inventory?.unavailableSources.length ?? 0) > 0;
   return globalFailure ||
+    inventory?.unownedWorktrees.some(
+      (repo) => repo.outcome === "failed" || repo.inspectionFailed
+    ) ||
     inspectionError ||
     sessions.some(
       (session) => session.outcome === "failed" || session.execution.outcome === "skipped"
@@ -126,7 +213,8 @@ async function executeInventory(
   lock: OperationLock,
   inventory: Inventory,
   sessions: SessionReport[],
-  processes: WorktreeProcessScan
+  processes: WorktreeProcessScan,
+  options: CleanupOptions
 ) {
   for (const original of inventory.sessions) {
     // Earlier Cleanup commands may change later Sessions, Git refs, or provider evidence.
@@ -134,11 +222,13 @@ async function executeInventory(
     // Reuse the global unowned-worktree discovery; revalidateMember rechecks overlaps live.
     // oxlint-disable-next-line no-await-in-loop
     const fresh = await inspectSessionCleanup(runtime, home, [], {
+      archiveUntracked: options.archiveUntracked,
       discovered: {
         unavailableSources: inventory.unavailableSources,
         unownedWorktrees: inventory.unownedWorktrees
       },
       operationLock: lock,
+      recoveryCommand: options.recoveryCommand,
       sessionFile: original.snapshot.filePath
     });
     assertGlobalSafety(lock, fresh);
@@ -149,10 +239,18 @@ async function executeInventory(
       );
     }
     if (!row.decision.eligible) {
-      sessions.push(reportSession(row, { outcome: "not-attempted" }, false, runtime.cwd));
+      sessions.push(
+        reportSession(
+          row,
+          { outcome: "not-attempted" },
+          false,
+          runtime.cwd,
+          options.recoveryCommand
+        )
+      );
       continue;
     }
-    const result = executeSession(runtime, home, lock, fresh, row, processes);
+    const result = executeSession(runtime, home, lock, fresh, row, processes, options);
     sessions.push(result.report);
     if (result.globalFailure) {
       throw new GlobalCleanupError(result.globalFailure);
@@ -183,7 +281,7 @@ function writeCleanupReport(
     }
     for (const worktree of report.unownedWorktrees) {
       runtime.writeStdout(
-        `Unowned (untouched): ${worktree.sourceRoot} — ${worktree.worktreePath}\n`
+        `Unowned (${worktree.outcome ?? "untouched"}): ${worktree.sourceRoot} — ${worktree.worktreePath}${worktree.reason ? `: ${worktree.reason}` : ""}\n`
       );
     }
     for (const source of report.unavailableSources) {
@@ -221,7 +319,7 @@ function summarizeCleanup(report: {
   const notes = [
     inspectionErrors > 0 ? `${inspectionErrors} with inspection errors` : null,
     report.unownedWorktrees.length > 0
-      ? `${report.unownedWorktrees.length} unowned worktrees untouched`
+      ? `${report.unownedWorktrees.length} unowned worktrees reported`
       : null,
     report.unavailableSources.length > 0
       ? `${report.unavailableSources.length} Sources unavailable`
@@ -258,7 +356,8 @@ function reportSession(
   row: Inventory["sessions"][number],
   execution: SessionCleanupExecution,
   dryRun: boolean,
-  cwd: string
+  cwd: string,
+  recoveryCommand?: string
 ) {
   const { snapshot } = row;
   const state = row.decision.eligible ? row.state : null;
@@ -274,7 +373,14 @@ function reportSession(
             const head = detachedMemberHead(member);
             return head ? [retainedHeadAction(member.sourceRoot, member.worktreePath, head)] : [];
           }),
-        ...cleanupCommandActions(state),
+        ...snapshot.members
+          .filter((member) => member.evidence?.pendingWork?.kind === "untracked-archive")
+          .map((member) => ({
+            sourceRoot: member.sourceRoot,
+            step: "file-archive" as const,
+            worktreePath: member.worktreePath
+          })),
+        ...cleanupCommandActions(state, recoveryCommand),
         ...state.repos
           .filter((repo) =>
             snapshot.members.some(
@@ -305,15 +411,23 @@ function executeSession(
   lock: OperationLock,
   inventory: Inventory,
   row: Inventory["sessions"][number],
-  processes: WorktreeProcessScan
+  processes: WorktreeProcessScan,
+  options: CleanupOptions
 ) {
   const { snapshot } = row;
   const { state } = row;
   if (!state) {
     throw new GlobalCleanupError("Eligible Session has no retained state");
   }
-  const planned = reportSession(row, { outcome: "not-attempted" }, false, runtime.cwd);
+  const planned = reportSession(
+    row,
+    { outcome: "not-attempted" },
+    false,
+    runtime.cwd,
+    options.recoveryCommand
+  );
   const completedActions: SessionAction[] = [];
+  const archives = new Map<string, string>();
   let current: SessionAction = { sourceRoot: state.rootSourceRoot, step: "revalidation" };
   let attemptedAction: SessionAction | undefined;
   let started = false;
@@ -347,13 +461,41 @@ function executeSession(
   };
   try {
     guard();
+    for (const member of snapshot.members) {
+      if (member.evidence?.pendingWork?.kind === "untracked-archive") {
+        guard();
+        const repo = state.repos.find((candidate) =>
+          samePath(candidate.worktreePath, member.worktreePath)
+        );
+        if (!repo) {
+          throw new MonkeError("Missing archive member");
+        }
+        revalidateMember(repo);
+        current = {
+          sourceRoot: member.sourceRoot,
+          step: "file-archive",
+          worktreePath: member.worktreePath
+        };
+        attemptedAction = current;
+        started = true;
+        const archivePath = archiveCleanupFiles(runtime, home, member.evidence);
+        archives.set(member.worktreePath, archivePath);
+        attemptedAction = undefined;
+        completedActions.push({
+          archivePath,
+          sourceRoot: member.sourceRoot,
+          step: "file-archive",
+          worktreePath: member.worktreePath
+        });
+      }
+    }
     const invocation = state.repos.find((repo) => containsPath(repo.worktreePath, runtime.cwd));
     teardownSession(
       { ...runtime, writeStdout: runtime.writeStderr },
       home,
       invocation?.worktreePath ?? runtime.cwd,
       { allStates: states, kind: "session", state },
-      { force: false },
+      { force: false, recoveryCommand: options.recoveryCommand },
       {
         authorizePreservedWork(repo) {
           revalidateMember(repo);
@@ -376,6 +518,13 @@ function executeSession(
             const member = snapshot.members.find((candidate) =>
               samePath(candidate.worktreePath, repo.worktreePath)
             );
+            const archive = archives.get(repo.worktreePath);
+            if (member?.evidence?.pendingWork?.kind === "untracked-archive") {
+              if (!archive) {
+                throw new MonkeError("Missing required file archive");
+              }
+              assertCleanupArchive(runtime, archive, member.evidence);
+            }
             const head = detachedMemberHead(member);
             if (head) {
               assertRetainedHead(runtime, repo.sourceRoot, repo.worktreePath, head);
@@ -478,7 +627,7 @@ function executeSession(
       message,
       outcome: started ? "failed" : "skipped",
       remainingActions,
-      retryCleanupCommands: cleanupCommandActions(state),
+      retryCleanupCommands: cleanupCommandActions(state, options.recoveryCommand),
       sourceRoot: current.sourceRoot,
       step: current.step
     };

@@ -50,6 +50,7 @@ type ChopTarget = OrdinaryChopTarget | SessionChopTarget;
 interface ChopOptions {
   cleanupFromSource?: boolean;
   force: boolean;
+  recoveryCommand?: string;
 }
 
 interface SessionRepoPreflight {
@@ -304,7 +305,8 @@ export function teardownSession(
         observer.beforeEffect?.(action);
       }
     },
-    options.cleanupFromSource === true
+    options.cleanupFromSource === true,
+    options.recoveryCommand
   );
   // Shutdown and cleanup commands can modify any sibling. Recheck the whole Session
   // before removing its first worktree, then recheck each member at removal.

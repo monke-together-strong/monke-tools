@@ -21,7 +21,7 @@ export interface PendingWork {
 }
 export interface PendingWorkProof {
   fingerprint: string;
-  kind: "forward-bundle" | "pnpm-bootstrap";
+  kind: "forward-bundle" | "pnpm-bootstrap" | "untracked-archive";
   paths: string[];
   witness: string | null;
 }

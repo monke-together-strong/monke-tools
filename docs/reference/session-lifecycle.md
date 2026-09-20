@@ -141,6 +141,7 @@ one of these proofs against the verified default branch:
 | Proof             | Requirement                                                                                                                                                           |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Current-branch PR | Exact same-repository PR HEAD, merged into default.                                                                                                                   |
+| PR ancestor       | HEAD precedes the same-branch merged PR HEAD, whose merge remains in verified default history; requires one day of age.                                               |
 | Ancestry          | Member HEAD is an ancestor of default HEAD.                                                                                                                           |
 | Cross-branch PR   | Exact PR HEAD, both repositories match Source, default base, and merge commit reachable from default HEAD. Intermediate-commit association is insufficient.           |
 | Complete diff     | The nonempty change from HEAD's sole merge base exactly matches a qualifying PR merge's change from its first parent: paths, modes, and full before/after object IDs. |
@@ -166,12 +167,16 @@ Only verified retained Session members may use these pending-work exceptions:
   disk; unchanged entries may equal HEAD. Historical-only or per-path witnesses,
   split staged/unstaged edits, conflicts, hidden index flags, dirty submodules,
   and unsupported filesystem states do not qualify.
+- **Untracked archive:** `--archive-untracked` preserves an untracked-only bundle
+  under `$(mt home)/archives/cleanup/` before removal. Each private archive contains
+  original bytes, symlinks, executable modes, and a manifest identifying its checkout.
+  Restore files from its `files/` directory; tracked edits still need another proof.
 - **pnpm bootstrap residue:** the sole dirty path is `pnpm-lock.yaml`, matching
   the reproduced pnpm 12.1.0 native-bootstrap deletion in its first YAML document.
   The `packageManager` pin must match, application-document bytes and file modes
   must be unchanged, and index/disk states must agree. Inspection never runs pnpm.
 
-Both exceptions still require committed-work proof and at least one day of age,
+These exceptions still require committed-work proof and at least one day of age,
 even with an exact merged PR. They authorize Git force only for the proven member.
 
 Detached members qualify only by ancestry or complete-tree equality. An open
@@ -183,7 +188,18 @@ survives success or partial failure. Reports include its recovery command.
 ### Ownership and execution
 
 Use recorded membership and commands, never today's dependency config or
-name-matching unowned paths. Unowned worktrees are listed and left untouched.
+name-matching unowned paths. Unowned worktrees stay untouched by default.
+`--include-unowned` inspects ordinary worktrees with the same committed-work and
+age checks; they must be clean and require explicit resource recovery to remove.
+Detached ordinary worktrees receive the same retained HEAD ref as Session members.
+
+Optional positional worktree paths restrict cleanup to matching Sessions or ordinary
+worktrees. `--recover-with '<command>'` requires explicit paths and replaces recorded
+cleanup commands with an audited recovery command, run from each canonical Source.
+It receives saved resources and `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and
+`MONKE_WORKTREE_PATH`. Verify resource ownership and make recovery safe to rerun.
+A missing worktree with required cleanup blocks eligibility until recovery is supplied.
+
 Nested/overlapping registrations block removal, including Ordinary Chop with
 force. Corrupt records block affected Sessions; unbounded ownership blocks all.
 Verified absent members count as removed; fully absent Sessions can finalize.

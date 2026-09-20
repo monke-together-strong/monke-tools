@@ -95,15 +95,32 @@ function createProgram(runtime: Runtime) {
 
   program
     .command("cleanup")
+    .argument("[targets...]", "Only inspect these session-member or unowned worktree paths")
     .description("Clean eligible retained Sessions across all Roots; preserve local branches")
     .option("--dry-run", "Inspect without changes; report Sessions that would clean")
     .option("--json", "Write a versioned JSON report to stdout")
     .option("--eligible", "Hide skipped Sessions in human output")
-    .action((options) =>
+    .option(
+      "--include-unowned",
+      "Inspect ordinary worktrees; removal requires audited --recover-with"
+    )
+    .option(
+      "--archive-untracked",
+      "Archive untracked-only changes before eligible worktree removal"
+    )
+    .option(
+      "--recover-with <command>",
+      "Run an audited resource recovery command from each Source; requires targets"
+    )
+    .action((targets, options) =>
       runCleanup(runtime, {
+        archiveUntracked: options.archiveUntracked === true,
         dryRun: options.dryRun === true,
         eligibleOnly: options.eligible === true,
-        json: options.json === true
+        includeUnowned: options.includeUnowned === true,
+        json: options.json === true,
+        recoveryCommand: options.recoverWith,
+        targets
       })
     );
 

@@ -43,6 +43,8 @@ const messages: Record<SessionCleanupReason, string> = {
   "member-identity-unverified":
     "A member's Source checkout, recorded path, or registration could not be verified.",
   "member-missing-or-unverified": "The member has no usable worktree evidence.",
+  "merged-pr-ancestor":
+    "The current commit is contained in the same branch’s merged PR, whose merge remains in default history.",
   "merged-pr-head":
     "The current commit matches a merged PR head under another branch, and its merge remains in the default branch.",
   "missing-worktree": "The worktree path is missing; ownership must be verified.",
@@ -60,6 +62,8 @@ const messages: Record<SessionCleanupReason, string> = {
     "Ancestry or matching merged work provides completion evidence, but the worktree must have a verified age of at least one day.",
   "repository-changed-during-inspection": "The repository remote changed during inspection.",
   "repository-unavailable": "The repository or its default branch could not be verified.",
+  "resource-recovery-required":
+    "A required cleanup worktree is missing; restore it or select an audited --recover-with command.",
   "source-checkout": "Source checkouts cannot be removed.",
   "source-missing":
     "A member's recorded Source checkout no longer exists; Chop cannot run and the state is retained.",
@@ -192,6 +196,26 @@ function memberReport(snapshot: SessionCleanupEvidence, member: SessionCleanupMe
   };
 }
 
+function cleanupReadiness(snapshot: SessionCleanupEvidence, eligible: boolean) {
+  const membersReady = snapshot.members.every((member) => {
+    const decision = decideSessionCleanupMember(snapshot.rootSourceRoot, member);
+    return (
+      decision.eligible ||
+      (decision.code === "dirty-worktree" && member.evidence?.archiveCandidate !== undefined)
+    );
+  });
+  if (!membersReady || snapshot.blockers.some((code) => code !== "resource-recovery-required")) {
+    return "blocked";
+  }
+  if (snapshot.blockers.includes("resource-recovery-required")) {
+    return "resource-recovery-required";
+  }
+  if (snapshot.members.some((member) => member.evidence?.archiveCandidate)) {
+    return "archive-required";
+  }
+  return eligible ? "ready" : "blocked";
+}
+
 /** JSON and text share this projection, including checks skipped by the collector. */
 export function createSessionCleanupReport(
   snapshot: SessionCleanupEvidence,
@@ -222,6 +246,7 @@ export function createSessionCleanupReport(
         : execution.outcome,
     plannedActions: options.plannedActions ?? [],
     problems: snapshot.problems ?? [],
+    readiness: cleanupReadiness(snapshot, eligibility.eligible),
     reasons: eligibility.reasons.map((code) => ({ code, message: messages[code] })),
     rootSourceRoot: snapshot.rootSourceRoot,
     session: snapshot.session,
@@ -239,7 +264,7 @@ export function formatSessionCleanupReport(report: ReturnType<typeof createSessi
     skipped: "Skipped",
     "would-clean": "Would clean"
   };
-  const lines = [`${labels[report.outcome]}: ${root} / ${label}`];
+  const lines = [`${labels[report.outcome]}: ${root} / ${label} (${report.readiness})`];
   if (report.execution.outcome === "failed" || report.execution.outcome === "skipped") {
     lines.push(
       `  ${report.execution.step} failed in ${report.execution.sourceRoot}: ${report.execution.message}`
@@ -293,5 +318,5 @@ function formatProgress(report: ReturnType<typeof createSessionCleanupReport>) {
 }
 
 function formatAction(action: SessionAction) {
-  return `${action.step} ${action.sourceRoot}${action.worktreePath ? ` (${action.worktreePath})` : ""}${action.command ? `: ${action.command}` : ""}${action.retainedRef ? `; retained HEAD: ${action.retainedRef}` : ""}${action.recoveryCommand ? `; recover: ${action.recoveryCommand}` : ""}`;
+  return `${action.step} ${action.sourceRoot}${action.worktreePath ? ` (${action.worktreePath})` : ""}${action.archivePath ? `; archive: ${action.archivePath}` : ""}${action.command ? `: ${action.command}` : ""}${action.retainedRef ? `; retained HEAD: ${action.retainedRef}` : ""}${action.recoveryCommand ? `; recover: ${action.recoveryCommand}` : ""}`;
 }
