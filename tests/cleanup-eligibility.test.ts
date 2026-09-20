@@ -247,6 +247,48 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(eligibleForCleanup(snapshot)).toBeTruthy();
   });
 
+  test.each(["identical", "changed", "missing", "shallow"])(
+    "checks the complete merge tree after a history rewrite: %s",
+    async (kind) => {
+      const fixture = createCommitPrFixture();
+      const { sourceRoot, worktreePath } = fixture.candidate;
+      // The landed tree includes unrelated work absent from the PR head.
+      write(sourceRoot, "unrelated.txt", "other landed work\n");
+      git(sourceRoot, ["add", "."]);
+      git(sourceRoot, ["commit", "--amend", "-m", "original merge"]);
+      const originalMerge = git(sourceRoot, ["rev-parse", "HEAD"]);
+      fixture.commitPr.merge_commit_sha = originalMerge;
+      if (kind === "changed") {
+        write(sourceRoot, "feature.txt", "different implementation\n");
+        git(sourceRoot, ["add", "."]);
+      }
+      git(sourceRoot, ["commit", "--amend", "-m", "rewritten merge"]);
+      const rewrittenMerge = git(sourceRoot, ["rev-parse", "HEAD"]);
+      expect(rewrittenMerge).not.toBe(originalMerge);
+      expect(git(sourceRoot, ["rev-parse", "HEAD^{tree}"])).not.toBe(
+        git(worktreePath, ["rev-parse", "HEAD^{tree}"])
+      );
+      if (kind === "missing") {
+        fixture.commitPr.merge_commit_sha = OTHER_HEAD;
+      }
+      if (kind === "shallow") {
+        write(sourceRoot, ".git/shallow", `${rewrittenMerge}\n`);
+      }
+      const snapshot = await collectCleanupEvidence(fixture.runtime, {
+        ...fixture.candidate,
+        sessionBranch: BRANCH
+      });
+      expect(snapshot.commitPullRequests?.[0]?.ancestorOfDefault).not.toBeTruthy();
+      expect(decideCleanupEligibility(snapshot).eligible).toBe(kind === "identical");
+      expect(
+        decideCleanupEligibility(snapshot).evidence.includes(
+          `complete merge tree ${git(sourceRoot, ["rev-parse", "HEAD^{tree}"])} equals ${rewrittenMerge} reachable from verified default HEAD ${rewrittenMerge}`
+        )
+      ).toBe(kind === "identical");
+    },
+    15_000
+  );
+
   test("finds an exact squash-merged HEAD on another branch, including later API pages", async () => {
     const fixture = createCommitPrFixture();
     const cache = createCleanupEvidenceCache();
@@ -318,7 +360,9 @@ describe("cleanup evidence from real Git worktrees", () => {
         break;
       }
       case "rewritten": {
-        pr.merge_commit_sha = pr.head.sha;
+        write(fixture.candidate.sourceRoot, "feature.txt", "changed during rewrite\n");
+        git(fixture.candidate.sourceRoot, ["add", "."]);
+        git(fixture.candidate.sourceRoot, ["commit", "--amend", "-m", "different merge tree"]);
         break;
       }
       default: {

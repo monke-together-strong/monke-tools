@@ -5,6 +5,7 @@ import {
   revalidateCleanupEvidence
 } from "./cleanup-eligibility.ts";
 import { assertRetainedHead, preserveDetachedHead } from "./cleanup-retained-head.ts";
+import { inspectStaleRegistration } from "./cleanup-stale-registration.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
 import type { OperationLock } from "./runtime.ts";
@@ -31,6 +32,22 @@ export async function cleanupOrdinaryWorktrees(
     let attempted = false;
     try {
       assertUnowned(runtime, home, worktree, options.sourceRoots);
+      const stale = inspectStaleRegistration(runtime, worktree.sourceRoot, worktree.worktreePath);
+      if (stale) {
+        if (!options.dryRun) {
+          removeStaleRegistration(runtime, home, worktree, options.sourceRoots, stale, lock, () => {
+            attempted = true;
+          });
+        }
+        result.push({
+          ...worktree,
+          eligible: true,
+          outcome: options.dryRun ? "would-clean" : "cleaned",
+          reason: "stale-registration"
+        });
+        continue;
+      }
+      validateRegisteredWorktreeForRemoval(runtime, worktree.sourceRoot, worktree.worktreePath);
       // oxlint-disable-next-line no-await-in-loop
       const evidence = await collectCleanupEvidence(
         runtime,
@@ -65,6 +82,7 @@ export async function cleanupOrdinaryWorktrees(
           throw new MonkeError("Session ownership changed during ordinary cleanup");
         }
         assertUnowned(runtime, home, worktree, options.sourceRoots);
+        validateRegisteredWorktreeForRemoval(runtime, worktree.sourceRoot, worktree.worktreePath);
         const changed = revalidateCleanupEvidence(runtime, evidence);
         if (changed) {
           throw new MonkeError(`Ordinary worktree changed: ${changed.code}`);
@@ -161,5 +179,37 @@ function assertUnowned(
     throw new MonkeError("Cannot remove a Source checkout or the Monke home");
   }
   assertNoOverlappingCheckouts(runtime, sources, worktree.worktreePath);
-  validateRegisteredWorktreeForRemoval(runtime, worktree.sourceRoot, worktree.worktreePath);
+}
+
+function removeStaleRegistration(
+  runtime: Runtime,
+  home: string,
+  worktree: UnownedWorktree,
+  sources: string[],
+  stale: string,
+  lock: OperationLock | undefined,
+  beforeRemove: () => void
+) {
+  const { fingerprint } = scanSessionStates(home);
+  if (
+    scanWorktreeProcesses(runtime, [worktree.worktreePath]).treesUnder(worktree.worktreePath)
+      .length > 0
+  ) {
+    throw new MonkeError("Stale registration still has running processes");
+  }
+  if (!lock) {
+    throw new MonkeError("Ordinary cleanup requires the operation lock");
+  }
+  lock.assertHeld();
+  assertUnowned(runtime, home, worktree, sources);
+  if (
+    scanSessionStates(home).fingerprint !== fingerprint ||
+    inspectStaleRegistration(runtime, worktree.sourceRoot, worktree.worktreePath) !== stale
+  ) {
+    throw new MonkeError("Stale registration changed before removal");
+  }
+  beforeRemove();
+  runtime.exec("git", ["worktree", "remove", worktree.worktreePath], {
+    cwd: worktree.sourceRoot
+  });
 }

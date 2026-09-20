@@ -325,6 +325,107 @@ describe("global Session cleanup", () => {
     );
   }, 15_000);
 
+  test("prunes only selected stale registrations, preserving their unmerged branches", async () => {
+    const f = fixture();
+    const selected = path.join(f.cwd, "stale");
+    const untouched = path.join(f.cwd, "other-stale");
+    git(f.root, ["worktree", "add", "-b", "unmerged", selected]);
+    write(selected, "unique.txt", "committed work must survive\n");
+    git(selected, ["add", "."]);
+    git(selected, ["commit", "-m", "unfinished task"]);
+    const head = git(selected, ["rev-parse", "HEAD"]);
+    git(f.root, ["worktree", "add", "-b", "untouched", untouched]);
+    rmSync(selected, { recursive: true });
+    rmSync(untouched, { recursive: true });
+    const before = files(f.cwd);
+    const args = [selected, "--include-unowned"];
+    const preview = await f.run(true, f.root, args);
+    expect(preview.error).toBeUndefined();
+    expect(preview.report.unownedWorktrees).toContainEqual(
+      expect.objectContaining({
+        outcome: "would-clean",
+        reason: "stale-registration",
+        worktreePath: selected
+      })
+    );
+    expect(files(f.cwd)).toStrictEqual(before);
+    const result = await f.run(false, f.root, args);
+    expect(result.error).toBeUndefined();
+    expect(result.report.unownedWorktrees).toContainEqual(
+      expect.objectContaining({
+        outcome: "cleaned",
+        reason: "stale-registration",
+        worktreePath: selected
+      })
+    );
+    expect(git(f.root, ["worktree", "list", "--porcelain"])).not.toContain(selected);
+    expect(git(f.root, ["worktree", "list", "--porcelain"])).toContain(untouched);
+    expect(git(f.root, ["rev-parse", "unmerged"])).toBe(head);
+  }, 15_000);
+
+  test.each([
+    "staged",
+    "intent-to-add",
+    "hidden-index",
+    "locked",
+    "missing-index",
+    "detached",
+    "operation",
+    "reappeared"
+  ])(
+    "retains unsafe stale registrations: %s",
+    async (kind) => {
+      const f = fixture();
+      const selected = path.join(f.cwd, "stale");
+      git(f.root, ["worktree", "add", "-b", "unfinished", selected]);
+      const admin = git(selected, ["rev-parse", "--absolute-git-dir"]);
+      if (kind === "staged") {
+        write(selected, "tracked.txt", "unique staged work\n");
+        git(selected, ["add", "."]);
+      }
+      if (kind === "intent-to-add") {
+        write(selected, "new.txt", "pending work\n");
+        git(selected, ["add", "--intent-to-add", "new.txt"]);
+      }
+      if (kind === "hidden-index") {
+        git(selected, ["update-index", "--assume-unchanged", "tracked.txt"]);
+      }
+      if (kind === "operation") {
+        write(admin, "MERGE_HEAD", `${git(selected, ["rev-parse", "HEAD"])}\n`);
+      }
+      if (kind === "locked") {
+        git(f.root, ["worktree", "lock", selected]);
+      }
+      if (kind === "detached") {
+        git(selected, ["checkout", "--detach"]);
+      }
+      rmSync(selected, { recursive: true });
+      if (kind === "missing-index") {
+        rmSync(path.join(admin, "index"));
+      }
+      if (kind === "reappeared") {
+        const original = f.runtime.exec;
+        f.runtime.exec = (command, args, options) => {
+          const result = original(command, args, options);
+          if (command === "git" && args?.includes("diff") && args.includes("--cached")) {
+            write(selected, "new.txt", "a new checkout owns this path\n");
+          }
+          return result;
+        };
+      }
+      await f.run(false, f.root, [selected, "--include-unowned"]);
+      expect(git(f.root, ["worktree", "list", "--porcelain"])).toContain(selected);
+      expect(existsSync(admin)).toBeTruthy();
+      const staged =
+        kind === "staged" ? git(f.root, [`--git-dir=${admin}`, "show", ":tracked.txt"]) : null;
+      expect(staged).toBe(kind === "staged" ? "unique staged work" : null);
+      const reappeared =
+        kind === "reappeared" ? readFileSync(path.join(selected, "new.txt"), "utf-8") : null;
+      expect(reappeared).toBe(kind === "reappeared" ? "a new checkout owns this path\n" : null);
+    },
+    15_000
+  );
+
   test.each(["remove", "mode"])(
     "retains worktrees when a cleanup hook corrupts their required archive: %s",
     async (corruption) => {

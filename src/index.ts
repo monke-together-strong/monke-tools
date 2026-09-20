@@ -102,7 +102,7 @@ function createProgram(runtime: Runtime) {
     .option("--eligible", "Hide skipped Sessions in human output")
     .option(
       "--include-unowned",
-      "Inspect ordinary worktrees; removal requires audited --recover-with"
+      "Inspect ordinary worktrees and stale registrations; live removal requires --recover-with"
     )
     .option(
       "--archive-untracked",

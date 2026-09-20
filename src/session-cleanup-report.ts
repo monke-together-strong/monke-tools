@@ -46,7 +46,7 @@ const messages: Record<SessionCleanupReason, string> = {
   "merged-pr-ancestor":
     "The current commit is contained in the same branch’s merged PR, whose merge remains in default history.",
   "merged-pr-head":
-    "The current commit matches a merged PR head under another branch, and its merge remains in the default branch.",
+    "The current commit matches a merged PR head; its merge commit or complete merge tree is in verified default history.",
   "missing-worktree": "The worktree path is missing; ownership must be verified.",
   "no-merged-pr":
     "No qualifying merged pull request proves this work is complete, and the branch has commits outside the default branch.",
