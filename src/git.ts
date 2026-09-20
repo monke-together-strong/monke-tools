@@ -30,6 +30,25 @@ export interface DefaultBranchRef {
   source: "origin" | "local";
 }
 
+/** A checkout supplying commits and edits, distinct from canonical repository identity. */
+export interface CheckoutSource {
+  checkoutRoot: string;
+  headCommit: string;
+  headRef?: string;
+}
+
+export function resolveCheckoutSource(runtime: Runtime, checkoutRoot: string): CheckoutSource {
+  const ref = runtime.exec("git", ["symbolic-ref", "--quiet", "HEAD"], {
+    allowFailure: true,
+    cwd: checkoutRoot
+  });
+  return {
+    checkoutRoot,
+    headCommit: runGit(runtime, checkoutRoot, ["rev-parse", "HEAD"]).trim(),
+    headRef: ref.exitCode === 0 ? ref.stdout.trim() : undefined
+  };
+}
+
 interface ResolveRepoContextOptions {
   allowExternalSessionWorktree?: boolean;
   allowSessionBranchMismatch?: boolean;
@@ -255,7 +274,11 @@ export function resolveDefaultBranchRef(
   throw new MonkeError(`Could not resolve a default branch ref for ${sourceRoot}`);
 }
 
-export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string) {
+export function ensureCleanCheckout(
+  runtime: Runtime,
+  sourceRoot: string,
+  label = "Source checkout"
+) {
   const status = runGit(runtime, sourceRoot, [
     "status",
     "--porcelain",
@@ -263,7 +286,7 @@ export function ensureCleanCheckout(runtime: Runtime, sourceRoot: string) {
   ]).trim();
   if (status) {
     throw new MonkeError(
-      `Source checkout is dirty: ${sourceRoot}. Commit or stash the changes, or drop --no-dirty to carry them into the new Session worktree.`
+      `${label} is dirty: ${sourceRoot}. Commit or stash the changes, or drop --no-dirty to carry them into the new Session worktree.`
     );
   }
 }
@@ -291,7 +314,7 @@ export async function ensureSessionWorktreeAsync(
   home: string,
   sourceRoot: string,
   session: string,
-  options: { skipCleanCheck?: boolean } = {}
+  options: { checkoutSource?: CheckoutSource; skipCleanCheck?: boolean } = {}
 ) {
   const prepared = prepareSessionWorktree(runtime, home, sourceRoot, session, options);
   if (prepared.addArguments) {
@@ -305,7 +328,7 @@ function prepareSessionWorktree(
   home: string,
   sourceRoot: string,
   session: string,
-  options: { skipCleanCheck?: boolean }
+  options: { checkoutSource?: CheckoutSource; skipCleanCheck?: boolean }
 ) {
   validateSessionBranchName(runtime, sourceRoot, session);
 
@@ -353,9 +376,9 @@ function prepareSessionWorktree(
 
   if (!branchExists(runtime, sourceRoot, session)) {
     if (options.skipCleanCheck !== true) {
-      ensureCleanCheckout(runtime, sourceRoot);
+      ensureCleanCheckout(runtime, options.checkoutSource?.checkoutRoot ?? sourceRoot);
     }
-    runGit(runtime, sourceRoot, ["branch", session, "HEAD"]);
+    runGit(runtime, sourceRoot, ["branch", session, options.checkoutSource?.headCommit ?? "HEAD"]);
   }
 
   mkdirSync(path.dirname(expectedPath), { recursive: true });

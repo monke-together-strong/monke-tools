@@ -65,6 +65,26 @@ inputs and checkpoint capabilities from the store rather than reading state.
 
 ## Preparation and materialization
 
+Current-HEAD Spawn accepts a Source checkout, Session worktree, or Ordinary
+worktree, including a detached checkout. The invoking checkout supplies the Root
+repo's new branch base and combined tracked edits plus non-ignored untracked
+files. The original files and index remain untouched; the destination does not
+preserve the staged/unstaged split. Dependency repos continue to supply commits
+and edits from their Source checkouts.
+
+Canonical Source checkouts still own Session identity, configuration, relative
+dependency paths, resources, and Seed material. An invoking worktree's changed
+`monke.yml` is carried as file content but does not configure the Spawn.
+Existing branches keep their tips; dirty carry requires the tip to match the
+content checkout's HEAD. Existing destination worktrees retain their edits and
+warn when dirty carry is skipped. Interrupted dirty carry records its checkout
+and base commit; retry from that checkout at that HEAD. A diverged destination
+branch also blocks resumed carry.
+
+`--no-dirty` requires the invoking checkout and dependency Source checkouts to be
+clean, even when reusing an existing destination. `--main` (also `-m` or `--master`)
+skips dirty carry and takes precedence over `--no-dirty`.
+
 Default branch spawn mode prefers fetched remote `main` or `master`, falling back
 to local refs. New Sessions require fresh branches; incomplete ones resume pinned
 refs and retained worktrees. Tracked content and configuration come from those

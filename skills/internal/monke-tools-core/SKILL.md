@@ -5,7 +5,7 @@ description: Use mt for worktree creation, navigation, diff review, teardown, mo
 
 # monke-tools Core
 
-Use `mt spawn <session>` from the source checkout for new isolated work in a monke-tools repo. Follow the repo's branch naming rules and work in the resulting session checkout.
+Use `mt spawn <session>` from the source checkout or a linked worktree for new isolated work in a monke-tools repo. Follow the repo's branch naming rules and work in the resulting session checkout.
 
 ## Commands
 
@@ -22,7 +22,9 @@ Use `mt spawn <session>` from the source checkout for new isolated work in a mon
 
 ## Usage notes
 
-Spawn creates a branch from source `HEAD` or reuses an existing branch at its tip. Dirty source changes carry into newly created worktrees only when that tip equals source `HEAD`; existing worktrees keep their contents. Use `--no-dirty` to reject dirty sources, or `-m` (`--main`, `--master`) for a fresh session from the default branch without carrying changes.
+Spawn creates a branch from the invoking checkout's `HEAD` or reuses an existing branch at its tip. Its combined tracked edits and non-ignored untracked files carry into newly created worktrees only when that tip equals the invoking `HEAD`; existing worktrees keep their contents. The original checkout and index remain untouched. Dependencies still supply commits and edits from their source checkouts; canonical source checkouts supply configuration, seed material, and repository identity. Retry interrupted dirty carry from its recorded checkout at the recorded `HEAD`.
+
+Use `--no-dirty` to require clean content checkouts, or `-m` (`--main`, `--master`) for a fresh session from the default branch without carrying changes. Combining `--no-dirty` with `-m` behaves like `-m`.
 
 Explicit PR navigation fetches the PR head and creates a session if needed; diverged local heads block navigation. Stored targets and picker selections do not revalidate PR heads. Fork PRs are unsupported.
 

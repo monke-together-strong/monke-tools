@@ -12,7 +12,7 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
-import { spawnSessionFromSourceRootLocked } from "../src/monke.ts";
+import { spawnSessionLocked } from "../src/monke.ts";
 import {
   getSessionStateFilePath,
   loadSessionState,
@@ -2505,15 +2505,23 @@ apps:
       onStderr() {},
       onStdout() {}
     });
-    await spawnSessionFromSourceRootLocked(runtime, home, repoRoot, "respawned", {
-      mode: "session-branch"
+    await spawnSessionLocked({
+      home,
+      rootSourceRoot: repoRoot,
+      runtime,
+      session: "respawned",
+      spawnOptions: { mode: "session-branch" }
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "respawned");
     git(repoRoot, ["worktree", "remove", "--force", worktreeRoot]);
 
-    await spawnSessionFromSourceRootLocked(runtime, home, repoRoot, "respawned", {
-      mode: "session-branch"
+    await spawnSessionLocked({
+      home,
+      rootSourceRoot: repoRoot,
+      runtime,
+      session: "respawned",
+      spawnOptions: { mode: "session-branch" }
     });
 
     expect(read(worktreeRoot, "apps/api/.env.local")).toBe("PORT=10000\n");
