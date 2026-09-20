@@ -38,7 +38,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Diff base**: The Git branch ref used as the committed side of a Diff, resolved through its merge-base with the reviewed checkout. A Session repo may remember one in Session state.
 
-**Diff picker**: The interactive Diff mode that selects the committed **Diff base** from local **Swing targets** without changing the reviewed checkout or navigating the shell.
+**Diff picker**: The interactive Diff mode that selects a committed **Diff base** or local changes only, without changing the reviewed checkout or navigating the shell. Comparison bases need not have an attached worktree.
 
 **Codex workspace launch**: An optional **Spawn** or **Swing** behavior selected with `--codex` that opens the resolved checkout as a Codex workspace. It does not create a thread.
 
@@ -301,10 +301,27 @@ reports no target.
 
 ## Diff
 
-For a Session repo without a remembered base, Diff may infer a distinct local or
-remote-tracking `main` or `master` only if the current branch is neither, the ref
-is unambiguous with one merge-base, and no non-default branch has nearer or
-incomparable shared history. Remember that base only after Codiff launches.
+Plain Diff uses the same base inference in Source checkouts, Ordinary worktrees,
+and Sessions. On `main`/`master`, or at an unambiguous default-branch tip, it shows
+local changes directly and prints `No changes.` when clean. Other worktrees do
+not force a picker in these cases.
+
+Without a remembered base, Diff may infer local or remote-tracking `main` or
+`master` when its shared history is unambiguous with one merge-base, and no
+non-default branch has nearer or incomparable shared history. A remembered base
+is reused unless a default branch has unambiguously newer shared history. Diff
+uses locally available refs without fetching.
+
+`--pick` always opens the picker. Choices include the remembered base, default
+refs even without worktrees, other worktree bases, and local changes only.
+Repeated representations of one ref appear once; distinct refs remain separate
+even at the same commit. A ref that disappears during selection causes the
+picker to refresh.
+
+Sessions remember inferred bases and every explicitly selected branch base only
+after Codiff launches successfully. Local-only and detached-commit selections
+leave the remembered base unchanged. Source and Ordinary checkouts infer afresh
+without persisting a base.
 
 Warn when the Session branch is attached elsewhere and the current worktree does
 not carry it; the current checkout remains the reviewed side.
