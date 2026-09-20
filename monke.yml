@@ -1,0 +1,2 @@
+apps: {}
+bootstrapCommand: vp install --frozen-lockfile
