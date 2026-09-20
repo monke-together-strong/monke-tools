@@ -62,9 +62,11 @@ selects the output names; each receives a deduplicated array, empty when nothing
 is remembered. The contract does not promise sorted order. There is no separate
 resource-command index.
 
-Spawn and Materialize reuse complete remembered outputs, execute commands for
-missing or incomplete outputs, and prune outputs no longer declared for the
-current repo and Session. Validated outputs are persisted immediately so retries
+Spawn and Materialize reuse complete remembered outputs and execute automatic
+commands for missing or incomplete outputs. Explicit commands retain remembered
+outputs without executing; `mt resources acquire` acquires missing commands for
+the current repo, including explicit commands. Outputs no longer declared are
+pruned for the current repo and Session. Validated outputs are persisted immediately so retries
 can reuse them. Removing Session state ends its contribution to later inputs.
 
 Each repo/command-name pair has a separate Command lock covering input reads,
@@ -77,6 +79,8 @@ Cleanup runs in the Session worktree with saved resources, command outputs,
 `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment.
 Missing worktrees block required commands. Only deliberate
 `mt chop <session> --cleanup-from-source` recovery permits using the Source
-checkout instead. Failed cleanup retains state for retry;
+checkout instead. `mt resources release` uses the same recorded cleanup for the current repo and
+keeps its worktree. After success it clears dynamic outputs and their root `.env`
+entries, retaining ports and deterministic values for reuse. Failed cleanup retains state for retry;
 [session finalization](session-lifecycle.md#removal-and-finalization) owns ordering
 and removal.

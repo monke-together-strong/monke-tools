@@ -345,7 +345,10 @@ function resolveCleanupAuthority(
 }
 
 function repoHasMaterializationExternalEffect(context: RepoMaterializationContext) {
-  return context.hasBootstrapCommand || context.repoConfig.resourceCommandsInOrder.length > 0;
+  return (
+    context.hasBootstrapCommand ||
+    context.repoConfig.resourceCommandsInOrder.some((command) => command.acquire !== "explicit")
+  );
 }
 
 function repoHasBootstrapCommand(repoConfig: RepoConfig) {

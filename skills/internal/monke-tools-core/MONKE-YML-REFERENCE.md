@@ -67,6 +67,21 @@ export default function ({ previous }: { previous: { SLOT_ID: string[] } }) {
 
 Return exactly the declared output names as nonempty strings; stdout/stderr are diagnostic logs. The timeout defaults to 60 seconds. Literal values and outputs must use distinct env names. Matching commands are serialized across sessions, and outputs cannot reuse remembered values for the same name. Complete saved outputs are reused on materialization.
 
+### Explicit acquisition
+
+Resource commands default to `acquire: automatic`. Set `acquire: explicit` on a
+command to defer it until `mt resources acquire`, run inside its Session worktree.
+That command acquires all missing commands for the current repo, reuses complete
+allocations, and persists each success for retry. Spawn and Materialize preserve
+remembered explicit allocations without executing missing explicit commands.
+
+`mt resources release` runs the current repo's recorded `cleanupCommand`, including
+any infrastructure teardown it contains, using the same cleanup implementation as
+Chop. Success clears dynamic allocations and their root `.env` entries while
+keeping the worktree, ports, and deterministic resource values. Failure retains
+allocations for retry. Repeated release skips completed cleanup; acquire can then
+allocate again. Both commands serialize with other Monke lifecycle operations.
+
 ## Cleanup
 
 `cleanupCommand` runs root-first before any Session worktree is removed, from each repo's Session worktree. It receives saved resources, command outputs, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH`. A failure stops teardown and retains state and remaining worktrees. Commands must be safe to retry; successful commands may rerun.

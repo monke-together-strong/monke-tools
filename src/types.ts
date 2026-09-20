@@ -142,6 +142,7 @@ export interface ResourceValueConfig {
 
 /** A dynamic Resource command declared by one repo in monke.yml. */
 export interface ResourceCommandConfig {
+  acquire?: "automatic" | "explicit";
   /** Lowercase command label used as the Resource command namespace. */
   name: string;
   /** Uppercase environment variable names the function must return. */

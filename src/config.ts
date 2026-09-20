@@ -60,6 +60,7 @@ const ExternalRepoSchema = z.strictObject({
   pathEnv: EnvNameSchema
 });
 const ResourceCommandSchema = z.strictObject({
+  acquire: z.enum(["automatic", "explicit"]).optional(),
   outputs: z
     .array(EnvNameSchema, { error: "must be a non-empty array" })
     .min(1, { error: "must be a non-empty array" }),
@@ -456,6 +457,7 @@ function parseResources(resources: RawResources | undefined, configPath: string)
         configPath
       );
       resourceCommandsInOrder.push({
+        ...(commandValue.acquire ? { acquire: commandValue.acquire } : {}),
         name,
         outputs,
         run: requireResourceCommandRunPath(
