@@ -5,6 +5,8 @@ import {
   findInitialDefaultBranchBase,
   findNewerDefaultBranchBase,
   hasWorkingTreeChanges,
+  isDefaultBranchCheckout,
+  listDefaultBranchRefs,
   planBranchComparison,
   planWorkingTreeComparison
 } from "./comparison-plan.ts";
@@ -48,7 +50,7 @@ export async function runDiffInteractive(runtime: Runtime, options: DiffOptions 
   if (launchAutomaticDiff(runtime, executable, remembered, options)) {
     return;
   }
-  await selectAndLaunchDiff(runtime, executable, remembered);
+  await selectAndLaunchDiff(runtime, executable, remembered, options);
 }
 
 function launchAutomaticDiff(
@@ -59,6 +61,10 @@ function launchAutomaticDiff(
 ) {
   if (options.pick === true) {
     return false;
+  }
+  if (isDefaultBranchCheckout(runtime, remembered.context)) {
+    launchLocalChanges(runtime, executable, remembered.context);
+    return true;
   }
   const baseRef = resolveAutomaticBase(runtime, remembered);
   if (baseRef === undefined) {
@@ -78,9 +84,7 @@ function launchAutomaticDiff(
 
 function resolveAutomaticBase(runtime: Runtime, remembered: RememberedDiff) {
   if (remembered.baseRef === undefined) {
-    return remembered.owner === undefined
-      ? undefined
-      : findInitialDefaultBranchBase(runtime, remembered.context);
+    return findInitialDefaultBranchBase(runtime, remembered.context);
   }
   return (
     findNewerDefaultBranchBase(runtime, remembered.context, remembered.baseRef) ??
@@ -91,11 +95,12 @@ function resolveAutomaticBase(runtime: Runtime, remembered: RememberedDiff) {
 async function selectAndLaunchDiff(
   runtime: Runtime,
   executable: string,
-  remembered: RememberedDiff
+  remembered: RememberedDiff,
+  options: DiffOptions
 ) {
-  let choices = buildDiffChoices(remembered);
+  let choices = buildDiffChoices(runtime, remembered);
   while (true) {
-    if (choices.length === 1) {
+    if (choices.length === 1 && options.pick !== true) {
       launchLocalChanges(runtime, executable, remembered.context);
       return;
     }
@@ -135,7 +140,7 @@ async function selectAndLaunchDiff(
         `Selected Diff base ${choice.label} is no longer valid; choose another Diff base.\n`
       );
       remembered.getTargets(true);
-      choices = buildDiffChoices(remembered);
+      choices = buildDiffChoices(runtime, remembered);
       continue;
     }
 
@@ -147,27 +152,45 @@ async function selectAndLaunchDiff(
       warnDirtyRememberedBase(runtime, remembered, plan.baseRef);
     }
     launchCodiff(runtime, executable, plan);
-    if (refreshedTarget?.kind === "session" && refreshedTarget.branch !== null) {
+    if (plan.baseRef.startsWith("refs/heads/") || plan.baseRef.startsWith("refs/remotes/")) {
       persistDiffBase(runtime, remembered, plan.baseRef);
     }
     return;
   }
 }
 
-function buildDiffChoices(remembered: RememberedDiff) {
-  const targets = remembered
-    .getTargets()
-    .filter((target) => !samePath(target.path, remembered.context.worktreeRoot));
-  const choices: DiffChoice[] = targets.map((target) => ({
-    label: formatDiffTargetLabel(target),
-    target,
-    value: `worktree:${target.path}`
-  }));
+function buildDiffChoices(runtime: Runtime, remembered: RememberedDiff) {
+  const choices: DiffChoice[] = [];
+  const refs = new Set<string>();
   if (remembered.baseRef) {
-    choices.unshift({
+    refs.add(remembered.baseRef);
+    choices.push({
       baseRef: remembered.baseRef,
       label: `${remembered.baseRef} (current Diff base)`,
       value: `remembered:${remembered.baseRef}`
+    });
+  }
+  for (const baseRef of listDefaultBranchRefs(runtime, remembered.context)) {
+    if (!refs.has(baseRef)) {
+      refs.add(baseRef);
+      choices.push({ baseRef, label: `${baseRef} (default branch base)`, value: `ref:${baseRef}` });
+    }
+  }
+  for (const target of remembered.getTargets()) {
+    if (samePath(target.path, remembered.context.worktreeRoot)) {
+      continue;
+    }
+    if (target.branch !== null) {
+      const ref = `refs/heads/${target.branch}`;
+      if (refs.has(ref)) {
+        continue;
+      }
+      refs.add(ref);
+    }
+    choices.push({
+      label: formatDiffTargetLabel(target),
+      target,
+      value: `worktree:${target.path}`
     });
   }
   choices.push({ label: "Local changes only", value: "local" });
@@ -245,9 +268,7 @@ function warnDirtyRememberedBase(runtime: Runtime, remembered: RememberedDiff, b
 
 function launchLocalChanges(runtime: Runtime, executable: string, context: RepoContext) {
   if (!hasWorkingTreeChanges(runtime, context.worktreeRoot)) {
-    runtime.writeStdout(
-      `No Diff base or local changes found for ${path.basename(context.sourceRoot)}.\n`
-    );
+    runtime.writeStdout("No changes.\n");
     return;
   }
   launchCodiff(runtime, executable, planWorkingTreeComparison(context));

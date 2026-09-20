@@ -63,7 +63,7 @@ export function findInitialDefaultBranchBase(runtime: Runtime, context: RepoCont
   const candidates: DefaultBranchCandidate[] = [];
   for (const ref of listDefaultBranchRefs(runtime, context)) {
     const commit = resolveCommit(runtime, context, ref);
-    if (commit === undefined || commit === head) {
+    if (commit === undefined) {
       continue;
     }
     const mergeBases = resolveMergeBases(runtime, context, ref);
@@ -86,6 +86,21 @@ export function findInitialDefaultBranchBase(runtime: Runtime, context: RepoCont
     return;
   }
   return selected.ref;
+}
+
+/** Default branches and unambiguous default tips have only local changes to review. */
+export function isDefaultBranchCheckout(runtime: Runtime, context: RepoContext) {
+  if (isDefaultBranchRef(`refs/heads/${context.currentBranch}`)) {
+    return true;
+  }
+  const head = resolveCommit(runtime, context, "HEAD");
+  return (
+    head !== undefined &&
+    listDefaultBranchRefs(runtime, context).some(
+      (ref) => resolveCommit(runtime, context, ref) === head
+    ) &&
+    findInitialDefaultBranchBase(runtime, context) !== undefined
+  );
 }
 
 /** Find an unambiguous main/master ref with newer shared history than a remembered base. */
@@ -193,7 +208,8 @@ function listBranchRefs(runtime: Runtime, context: RepoContext) {
     .filter(Boolean);
 }
 
-function listDefaultBranchRefs(runtime: Runtime, context: RepoContext) {
+/** List default comparison refs independently of attached worktrees. */
+export function listDefaultBranchRefs(runtime: Runtime, context: RepoContext) {
   return listBranchRefs(runtime, context).filter(isDefaultBranchRef);
 }
 

@@ -11,7 +11,7 @@ Use `mt spawn <session>` from the source checkout or a linked worktree for new i
 
 - `mt spawn <session> [--codex]`: create or update a session worktree and its dependency worktrees. Use `--codex` when follow-up threads will use it; the flag opens the root session checkout as a Codex workspace.
 - `mt swing [target] [--codex]`: navigate to a session or linked-worktree branch, `^` for the source checkout, `-` for the previous target, or a same-repo PR (`pr:123` or URL). Omit the target for a picker. Use `--codex` when follow-up threads will use that checkout; the flag opens it as a Codex workspace.
-- `mt diff [-p|--pick]`: open Codiff for the current checkout using a remembered or inferred base, or a picker. Use `--pick` to choose explicitly. Bases contribute committed state; the current checkout includes staged, unstaged, and untracked changes.
+- `mt diff [-p|--pick]`: review any checkout using a remembered or inferred base. On main/master or an unambiguous default tip, show local changes only (`No changes.` when clean). `--pick` always opens choices including default refs without worktrees. Sessions remember any selected branch after successful launch; other checkouts infer afresh. Bases contribute committed state; the current checkout includes staged, unstaged, and untracked changes.
 - `mt home`: print the resolved absolute monke home path without creating it, honoring `MONKE_HOME` and defaulting to `~/.monke`.
 - `mt materialize`: refresh env/path rewrites, resources, and bootstrap inside a session, reusing assigned ports.
 - `mt setup`: write dependency paths into the source checkout's root `.env`.
