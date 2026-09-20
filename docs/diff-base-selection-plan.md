@@ -1,6 +1,6 @@
 # Checkout-independent Diff base selection
 
-Status: implemented; closeout review pending.
+Status: implemented; closeout review passed with no findings.
 
 ## Problem
 
@@ -89,6 +89,6 @@ Review fixed point: `2cbe890d48b7adb1432d8712041def35e4ec520d`.
   the repository config and includes these three files and their dependencies.
 - The real crypto-trading checkout passed `runDiffInteractive` with real Git reads
   and only the Codiff launch intercepted: no picker, launch arguments
-  `--branch refs/remotes/origin/main /Users/hoangbn/Documents/projects/crypto-trading`.
+  `--branch refs/remotes/origin/main <checkout path>`.
 
 No repo-wide checks were run locally. No tracker target or comment target was supplied.
