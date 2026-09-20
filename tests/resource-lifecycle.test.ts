@@ -121,3 +121,47 @@ describe("resource ownership", () => {
     expect(read(second, ".env")).toContain("SLOT=1");
   });
 });
+
+describe("cleanup authority", () => {
+  test("acquire preserves unreleased inputs when configuration removes resources", () => {
+    const sandbox = makeTempDir("resource-authority");
+    const home = path.join(sandbox, "home");
+    const root = createRepo(path.join(sandbox, "repo"), {
+      ".gitignore": ".env\nreleased\n",
+      "monke.yml":
+        'apps: {}\ncleanupCommand: \'test "$SLOT" = one && test "$OWNER" = original && echo done > released\'\nresources:\n  values:\n    OWNER: original\n  commands:\n    slot:\n      acquire: explicit\n      run: slot.ts\n      outputs: [SLOT]\n',
+      "slot.ts": 'export default function () { return { SLOT: "one" }; }'
+    });
+    runMonke({ args: ["spawn", "feature"], cwd: root, monkeHome: home });
+    const cwd = getExpectedWorktreePath(home, root, "feature");
+    const run = (...args: string[]) => runMonke({ args, cwd, monkeHome: home });
+    run("resources", "acquire");
+    write(root, "monke.yml", "apps: {}\n");
+    run("resources", "acquire");
+    expect(read(cwd, ".env")).toContain("SLOT=one");
+    expect(read(cwd, ".env")).toContain("OWNER=original");
+    run("resources", "release");
+    expect(read(cwd, "released")).toBe("done\n");
+  });
+
+  test("new acquisition uses current cleanup after release", () => {
+    const sandbox = makeTempDir("resource-new-cleanup");
+    const home = path.join(sandbox, "home");
+    const config = (label: string) =>
+      `apps: {}\ncleanupCommand: echo ${label} >> released\nresources:\n  commands:\n    slot:\n      acquire: explicit\n      run: slot.ts\n      outputs: [SLOT]\n`;
+    const root = createRepo(path.join(sandbox, "repo"), {
+      ".gitignore": ".env\nreleased\n",
+      "monke.yml": config("old"),
+      "slot.ts": 'export default function () { return { SLOT: "one" }; }'
+    });
+    runMonke({ args: ["spawn", "feature"], cwd: root, monkeHome: home });
+    const cwd = getExpectedWorktreePath(home, root, "feature");
+    const run = (...args: string[]) => runMonke({ args, cwd, monkeHome: home });
+    run("resources", "acquire");
+    run("resources", "release");
+    write(root, "monke.yml", config("new"));
+    run("resources", "acquire");
+    run("resources", "release");
+    expect(read(cwd, "released")).toBe("old\nnew\n");
+  });
+});

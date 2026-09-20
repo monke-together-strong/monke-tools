@@ -56,10 +56,11 @@ export async function runResources(runtime: Runtime, operation: "acquire" | "rel
       session: state.session,
       store
     });
-    syncRootEnvFileWithRemovals(repo.worktreePath, values.values, values.removedEnvNames);
+    let acquired = false;
     const persist = (commands: NonNullable<typeof repo.resourceCommandOutputs>) => {
+      acquired = true;
       repo.cleanupEligible = true;
-      repo.cleanupCommand ??= config.cleanupCommand;
+      repo.cleanupCommand = config.cleanupCommand;
       repo.resourceValues = values.values;
       repo.resourceCommandOutputs = commands;
       store.checkpoint(state);
@@ -77,10 +78,18 @@ export async function runResources(runtime: Runtime, operation: "acquire" | "rel
       store,
       worktreePath: repo.worktreePath
     });
+    // A no-effect refresh cannot retire inputs still owned by recorded cleanup.
+    if (!acquired && repo.cleanupEligible) {
+      syncRootEnvFileWithRemovals(repo.worktreePath, [
+        ...(repo.resourceValues ?? []),
+        ...(repo.resourceCommandOutputs ?? []).flatMap((command) => command.outputs)
+      ]);
+      return;
+    }
     syncRootEnvFileWithRemovals(
       repo.worktreePath,
-      result.commands.flatMap((command) => command.outputs),
-      result.removedEnvNames
+      [...values.values, ...result.commands.flatMap((command) => command.outputs)],
+      [...values.removedEnvNames, ...result.removedEnvNames]
     );
     repo.resourceValues = values.values;
     repo.resourceCommandOutputs = result.commands;
