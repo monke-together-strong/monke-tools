@@ -28,7 +28,7 @@ mt materialize           # Refresh the session's env and bootstrap
 
 Spawn from the source checkout or any linked worktree to copy its `HEAD` and edits into a new session, leaving the original untouched. `--no-dirty` requires clean checkouts; `-m` uses default branches and resumes pinned refs on retry. Add `--codex` to open the session in Codex. See [Spawn behavior](docs/reference/session-lifecycle.md#preparation-and-materialization) for details.
 
-When finished, `mt chop banana` removes the session's worktrees and runs its recorded cleanup commands, preserving local branches. Dirty files block removal; ignored files are deleted with the worktrees. Preview eligible Sessions across all Roots with `mt cleanup --dry-run`, then run `mt cleanup` to execute. Both commands work outside a repository and accept `--json`. Global scope never bypasses whole-Session eligibility.
+When finished, `mt chop banana` removes the session's worktrees and runs its recorded cleanup commands, preserving local branches. Dirty files block removal; ignored files are deleted with the worktrees. Preview eligible Sessions across all Roots with `mt cleanup --dry-run`, then run `mt cleanup` to execute. Both commands work outside a repository and accept `--json`. Optional worktree paths restrict scope. Use `--archive-untracked` to preserve untracked notes before removal; see the reference below for missing-worktree recovery and `--include-unowned`. Global scope never bypasses whole-Session eligibility.
 
 The [session command reference](skills/internal/monke-tools-core/SKILL.md) covers branch reuse, PR navigation, diff bases, and cleanup recovery. Use `mt <command> --help` for available flags.
 

@@ -52,6 +52,30 @@ function fixture(): SessionCleanupEvidence {
 }
 
 describe("Session cleanup explanations", () => {
+  test("archive readiness does not hide a blocking sibling or hold", () => {
+    const snapshot = fixture();
+    const [dependency, root] = snapshot.members;
+    ok(dependency?.evidence && root?.evidence);
+    root.evidence.archiveCandidate = {
+      fingerprint: "saved",
+      kind: "untracked-archive",
+      paths: ["notes.md"],
+      witness: null
+    };
+    root.evidence.pendingWork = root.evidence.archiveCandidate;
+    expect(createSessionCleanupReport(snapshot).readiness).toBe("archive-required");
+    snapshot.blockers.push("held");
+    expect(createSessionCleanupReport(snapshot).readiness).toBe("blocked");
+    snapshot.blockers = [];
+    dependency.evidence.localBlock = {
+      code: "dirty-worktree",
+      eligible: false,
+      evidence: ["tracked.ts"],
+      status: "ineligible"
+    };
+    expect(createSessionCleanupReport(snapshot).readiness).toBe("blocked");
+  });
+
   test.each(["merged-pr-head", "matching-merged-diff"] as const)(
     "reports %s proof while a dirty sibling still retains the Session",
     (code) => {

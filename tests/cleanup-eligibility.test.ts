@@ -333,6 +333,35 @@ describe("cleanup evidence from real Git worktrees", () => {
     });
   });
 
+  test("accepts an older checkout of the same merged PR, but rejects a post-merge commit", async () => {
+    const fixture = createCommitPrFixture();
+    const { sourceRoot, worktreePath } = fixture.candidate;
+    const oldHead = git(worktreePath, ["rev-parse", "HEAD"]);
+    write(worktreePath, "revision.txt", "final PR revision\n");
+    git(worktreePath, ["add", "."]);
+    git(worktreePath, ["commit", "-m", "review revision"]);
+    fixture.commitPr.head = {
+      ...fixture.commitPr.head,
+      ref: BRANCH,
+      sha: git(worktreePath, ["rev-parse", "HEAD"])
+    };
+    write(sourceRoot, "revision.txt", "final PR revision\n");
+    git(sourceRoot, ["add", "."]);
+    git(sourceRoot, ["commit", "-m", "land final revision"]);
+    fixture.commitPr.merge_commit_sha = git(sourceRoot, ["rev-parse", "HEAD"]);
+    git(worktreePath, ["reset", "--hard", oldHead]);
+    expect(
+      decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
+    ).toMatchObject({ code: "merged-pr-ancestor", eligible: true });
+    write(worktreePath, "unique.txt", "unmerged work\n");
+    git(worktreePath, ["add", "."]);
+    git(worktreePath, ["commit", "-m", "unique local work"]);
+    expect(
+      decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
+        .eligible
+    ).toBeFalsy();
+  });
+
   test.each([
     "unavailable",
     "malformed",

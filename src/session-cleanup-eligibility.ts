@@ -29,6 +29,7 @@ export type SessionCleanupBlocker =
   | "invalid-state-overlap"
   | "ownership-conflict"
   | "member-identity-unverified"
+  | "resource-recovery-required"
   | "source-missing"
   | "held"
   | "operation-lock-present"
@@ -75,13 +76,17 @@ export interface SessionCleanupEvidence {
 
 export interface UnownedWorktree {
   branch: string | null;
-  eligible: false;
+  eligible: boolean;
+  inspectionFailed?: boolean;
+  outcome?: "skipped" | "would-clean" | "cleaned" | "failed";
+  reason?: string;
   sourceRoot: string;
   worktreePath: string;
 }
 
 /** Unowned-worktree discovery from an earlier pass; re-inspection reuses it instead of rescanning. */
 export interface SessionCleanupDiscovery {
+  sourceRoots: string[];
   unavailableSources: string[];
   unownedWorktrees: UnownedWorktree[];
 }
@@ -99,7 +104,8 @@ export interface SessionCleanupDecision {
  */
 export const SETTLED_BLOCKERS: ReadonlySet<SessionCleanupBlocker> = new Set([
   "held",
-  "source-missing"
+  "source-missing",
+  "resource-recovery-required"
 ]);
 
 export function eligibleForSessionCleanup(snapshot: SessionCleanupEvidence) {
@@ -199,9 +205,12 @@ export async function inspectSessionCleanup(
   home: string,
   knownSourceRoots: string[] = [],
   options: {
+    archiveUntracked?: boolean;
     discovered?: SessionCleanupDiscovery;
     operationLock?: OperationLock;
+    recoveryCommand?: string;
     sessionFile?: string;
+    targets?: string[];
   } = {}
 ) {
   const readOnly = readOnlyCleanupRuntime(runtime);
@@ -224,7 +233,16 @@ export async function inspectSessionCleanup(
   const operationAtStart = lockPresent();
   const snapshots = await Promise.all(
     scan.records
-      .filter((record) => !options.sessionFile || record.filePath === options.sessionFile)
+      .filter(
+        (record) =>
+          (!options.sessionFile || samePath(record.filePath, options.sessionFile)) &&
+          ((options.targets?.length ?? 0) === 0 ||
+            options.targets?.some(
+              (target) =>
+                samePath(target, record.filePath) ||
+                record.state?.repos.some((repo) => samePath(target, repo.worktreePath))
+            ))
+      )
       .map(async (record) => {
         const { state } = record;
         const snapshot: SessionCleanupEvidence = {
@@ -280,6 +298,14 @@ export async function inspectSessionCleanup(
                   state,
                   repo
                 );
+                if (
+                  registration.mode !== "live" &&
+                  repo.cleanupEligible &&
+                  repo.cleanupCommand &&
+                  !options.recoveryCommand
+                ) {
+                  snapshot.blockers.push("resource-recovery-required");
+                }
                 member.mode = registration.mode;
                 member.registeredBranch = registration.registeredBranch;
               } catch (error) {
@@ -295,6 +321,7 @@ export async function inspectSessionCleanup(
                 member.evidence = await collectCleanupEvidence(
                   collector,
                   {
+                    archiveUntracked: options.archiveUntracked,
                     role: samePath(repo.sourceRoot, state.rootSourceRoot) ? "root" : "dependency",
                     sessionBranch: state.session,
                     sourceRoot: repo.sourceRoot,
@@ -342,7 +369,7 @@ export async function inspectSessionCleanup(
       }
     }
   }
-  const { unavailableSources, unownedWorktrees } =
+  const { sourceRoots, unavailableSources, unownedWorktrees } =
     options.discovered ?? discoverUnownedWorktrees(readOnly, states, knownSourceRoots);
   blockUnownedOverlaps(snapshots, unownedWorktrees);
   const changed = scanSessionStates(home).fingerprint !== scan.fingerprint;
@@ -385,6 +412,7 @@ export async function inspectSessionCleanup(
             state.session === snapshot.session && state.rootSourceRoot === snapshot.rootSourceRoot
         ) ?? null
     })),
+    sourceRoots,
     stateFingerprint: scan.fingerprint,
     unavailableSources,
     unboundedOwnership: scan.records.some(
@@ -434,7 +462,13 @@ function discoverUnownedWorktrees(
       unavailableSources.push(sourceRoot);
     }
   }
-  return { unavailableSources, unownedWorktrees };
+  return {
+    sourceRoots: [...sources].filter(
+      (source) => existsSync(source) && !unavailableSources.includes(source)
+    ),
+    unavailableSources,
+    unownedWorktrees
+  };
 }
 
 function blockUnownedOverlaps(

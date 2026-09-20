@@ -360,14 +360,14 @@ apps:
     const worktree = getExpectedWorktreePath(home, root, "clean-command");
     git(root, ["worktree", "remove", worktree, "--force"]);
 
-    const missing = runMonkeCapturingFailure({
+    const missing = runMonke({
       args: ["cleanup"],
       binDirectory,
       cwd: root,
       monkeHome: home
     });
-    expect(missing.error).toBeInstanceOf(Error);
-    expect(missing.stdout).toContain("Session worktree is missing");
+    expect(missing.stdout).toContain("Skipped:");
+    expect(missing.stdout).toContain("resource-recovery-required");
     expect(existsSync(path.join(root, "cleanup.log"))).toBeFalsy();
     expect(existsSync(getSessionStateFilePath(home, root, "clean-command"))).toBeTruthy();
     runMonke({
@@ -535,17 +535,17 @@ apps:
     rmSync(getExpectedWorktreePath(home, root, "retry-one"), { force: true, recursive: true });
     rmSync(getExpectedWorktreePath(home, root, "retry-two"), { force: true, recursive: true });
 
-    const failure = runMonkeCapturingFailure({
+    const result = runMonke({
       args: ["cleanup"],
       binDirectory,
       cwd: root,
       monkeHome: home
     });
-    expect(failure.error).toBeInstanceOf(Error);
-    expect(failure.stdout).toContain("retry-one");
-    expect(failure.stdout).toContain("retry-two");
+    expect(result.stdout).toContain("Skipped:");
+    expect(result.stdout).toContain("retry-one");
+    expect(result.stdout).toContain("retry-two");
     expect(existsSync(path.join(root, "cleanup-attempts.log"))).toBeFalsy();
-    expect(failure.stdout).toContain("Session worktree is missing");
+    expect(result.stdout).toContain("resource-recovery-required");
     expect(existsSync(getSessionStateFilePath(home, root, "retry-one"))).toBeTruthy();
     expect(existsSync(getSessionStateFilePath(home, root, "retry-two"))).toBeTruthy();
   });

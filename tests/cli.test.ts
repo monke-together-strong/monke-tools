@@ -72,7 +72,7 @@ describe("CLI", () => {
   });
 
   test.each([
-    ["main", "src/index.ts", ["cleanup", "extra"]],
+    ["main", "src/index.ts", ["chop", "first", "second"]],
     ["skill import", "scripts/import-skills.ts", []],
     ["skill update", "scripts/update-skills.ts", ["extra"]]
   ])("%s CLI reports one concise process failure", (_name, script, args) => {

@@ -4,8 +4,32 @@ import path from "node:path";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees, resolveRepoContext } from "./git.ts";
 import type { WorktreeEntry } from "./git.ts";
-import { samePath, worktreePathsOverlap } from "./path-identity.ts";
+import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
 import type { Runtime } from "./types.ts";
+
+/** Recheck all discovered repositories before a checkout can be removed. */
+export function assertNoOverlappingCheckouts(
+  runtime: Runtime,
+  sources: string[],
+  worktreePath: string
+) {
+  for (const source of sources) {
+    if (containsPath(worktreePath, source)) {
+      throw new MonkeError(`Worktree ${worktreePath} contains Source checkout ${source}`);
+    }
+    for (const worktree of listWorktrees(runtime, source)) {
+      if (
+        !samePath(worktree.path, source) &&
+        !samePath(worktree.path, worktreePath) &&
+        worktreePathsOverlap(worktree.path, worktreePath)
+      ) {
+        throw new MonkeError(
+          `Worktree ${worktreePath} overlaps registered worktree ${worktree.path}`
+        );
+      }
+    }
+  }
+}
 
 /** Reject a locked Git worktree registration. */
 export function assertWorktreeUnlocked(entry: WorktreeEntry) {
