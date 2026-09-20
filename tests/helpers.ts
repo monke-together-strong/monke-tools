@@ -30,8 +30,6 @@ const NEUTRALIZED_WORKER_ENV = {
   GIT_AUTHOR_NAME: undefined,
   GIT_COMMITTER_EMAIL: undefined,
   GIT_COMMITTER_NAME: undefined,
-  GIT_CONFIG_GLOBAL: undefined,
-  GIT_CONFIG_SYSTEM: undefined,
   GIT_DIR: undefined,
   GIT_EDITOR: undefined,
   GIT_INDEX_FILE: undefined,
