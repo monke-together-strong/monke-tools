@@ -18,7 +18,7 @@ import path from "node:path";
 import * as z from "zod";
 
 import type { CleanupEvidence } from "./cleanup-eligibility.ts";
-import { inspectPendingWork } from "./cleanup-pending-work.ts";
+import { gitBlobOid, inspectPendingWork } from "./cleanup-pending-work.ts";
 import { MonkeError } from "./errors.ts";
 import { containsPath } from "./path-identity.ts";
 import type { Runtime } from "./types.ts";
@@ -58,10 +58,7 @@ export function archiveCleanupFiles(runtime: Runtime, home: string, evidence: Cl
     }
     const link = entry.disk?.mode === "120000";
     const bytes = link ? readlinkSync(source, { encoding: "buffer" }) : readFileSync(source);
-    const oid = new Bun.CryptoHasher("sha1")
-      .update(`blob ${bytes.length}\0`)
-      .update(bytes)
-      .digest("hex");
+    const oid = gitBlobOid(bytes);
     if (oid !== entry.disk?.oid) {
       throw new MonkeError(`Untracked file changed during archival: ${source}`);
     }
@@ -172,10 +169,7 @@ function assertArchivedFile(
     throw new MonkeError("Cleanup archive executable mode changed");
   }
   const bytes = link ? readlinkSync(file, { encoding: "buffer" }) : readFileSync(file);
-  const oid = new Bun.CryptoHasher("sha1")
-    .update(`blob ${bytes.length}\0`)
-    .update(bytes)
-    .digest("hex");
+  const oid = gitBlobOid(bytes);
   if (oid !== expected?.oid) {
     throw new MonkeError("Cleanup archive content changed");
   }

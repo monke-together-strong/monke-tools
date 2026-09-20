@@ -29,7 +29,7 @@ const oid = /^[\da-f]{40}$/u;
 const MAX_PENDING_FILE_BYTES = 32 * 1024 * 1024;
 const MAX_PENDING_PATHS = 1000;
 
-function gitBlobOid(bytes: Uint8Array) {
+export function gitBlobOid(bytes: Uint8Array) {
   return new Bun.CryptoHasher("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
 }
 
