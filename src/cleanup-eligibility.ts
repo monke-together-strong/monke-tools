@@ -119,6 +119,8 @@ export interface CommitPullRequestEvidence {
   headContainsCurrent?: boolean;
   /** Only attempted for non-exact heads with a verified landed merge. */
   matchingDiff?: MatchingMergeDiff | false | null;
+  /** Exact PR heads may survive a rewrite as an identical complete merge tree. */
+  mergeTree?: { tree: string; witness: string } | false | null;
   pullRequest: z.output<typeof CommitPullRequestSchema>;
 }
 
@@ -331,11 +333,19 @@ function decideCommitPullRequests(
     return decision("unknown", "ambiguous-pr");
   }
   const [match] = matches;
-  if (!match || match.ancestorOfDefault === false) {
+  if (!match) {
     return null;
   }
-  if (match.ancestorOfDefault === null) {
-    return decision("unknown", "ancestry-unavailable");
+  const mergeTree =
+    match.pullRequest.head.sha === head &&
+    match.mergeTree !== undefined &&
+    match.mergeTree !== false
+      ? match.mergeTree
+      : null;
+  if (match.ancestorOfDefault !== true && mergeTree === null) {
+    return match.ancestorOfDefault === null || match.mergeTree === null
+      ? decision("unknown", "ancestry-unavailable")
+      : null;
   }
   const ageBlock = recentWorktreeDecision(snapshot.worktreeAgeMs);
   if (ageBlock) {
@@ -348,7 +358,9 @@ function decideCommitPullRequests(
     pr.head.sha === head
       ? `HEAD equals merged PR head: ${head}`
       : `HEAD ${head} is an ancestor of merged PR head ${pr.head.sha}`,
-    `merge commit ${pr.merge_commit_sha} is an ancestor of verified default HEAD ${repository.defaultHead}`,
+    mergeTree === null
+      ? `merge commit ${pr.merge_commit_sha} is an ancestor of verified default HEAD ${repository.defaultHead}`
+      : `complete merge tree ${mergeTree.tree} equals ${mergeTree.witness} reachable from verified default HEAD ${repository.defaultHead}`,
     "worktree is at least one day old",
     "member proof only; whole-Session eligibility is still required"
   ]);
@@ -917,6 +929,10 @@ async function inspectCommitPullRequests(
                 defaultHead: pr.head.sha
               })) === true
             : false;
+        const mergeTree =
+          ancestorOfDefault !== true && pr.head.sha === head && pr.merge_commit_sha !== null
+            ? inspectDefaultTree(runtime, sourceRoot, pr.merge_commit_sha, repository.defaultHead)
+            : undefined;
         const matchingDiff =
           ancestorOfDefault === true && pr.head.sha !== head && pr.merge_commit_sha !== null
             ? inspectMatchingMergeDiff(
@@ -927,7 +943,7 @@ async function inspectCommitPullRequests(
                 pr.merge_commit_sha
               )
             : undefined;
-        return { ancestorOfDefault, headContainsCurrent, matchingDiff, pullRequest: pr };
+        return { ancestorOfDefault, headContainsCurrent, matchingDiff, mergeTree, pullRequest: pr };
       })
     );
   } catch (error) {

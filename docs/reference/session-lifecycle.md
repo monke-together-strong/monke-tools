@@ -147,6 +147,10 @@ one of these proofs against the verified default branch:
 | Complete diff     | The nonempty change from HEAD's sole merge base exactly matches a qualifying PR merge's change from its first parent: paths, modes, and full before/after object IDs. |
 | Complete tree     | HEAD's full tree ID equals a commit's tree reachable from default HEAD, including modes and submodule commits.                                                        |
 
+An exact cross-branch PR head also qualifies after a history rewrite when its
+original merge's complete tree appears in verified default history. Missing
+objects, shallow history, or a changed tree cannot establish this proof.
+
 All proofs except a clean current-branch merged PR require a worktree age of at
 least one day, measured from its `.git` file. Complete-diff proof rejects divergent
 merges, shallow history, and missing objects; it never normalizes whitespace or
@@ -193,6 +197,11 @@ name-matching unowned paths. Unowned worktrees stay untouched by default.
 age checks; they must be clean and require explicit resource recovery to remove.
 Detached ordinary worktrees receive the same retained HEAD ref as Session members.
 Ordinary removal waits if a known Source’s registrations cannot be inspected.
+
+With `--include-unowned`, a missing ordinary worktree's stale registration needs
+no resource recovery. Cleanup preserves its branch and requires an unlocked
+registration with a clean saved index. Detached HEADs, unfinished Git operations,
+and unverified metadata remain for manual recovery.
 
 Optional positional worktree paths restrict cleanup to matching Sessions or ordinary
 worktrees. `--recover-with '<command>'` requires explicit paths and replaces recorded
