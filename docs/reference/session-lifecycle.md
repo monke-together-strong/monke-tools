@@ -192,6 +192,7 @@ name-matching unowned paths. Unowned worktrees stay untouched by default.
 `--include-unowned` inspects ordinary worktrees with the same committed-work and
 age checks; they must be clean and require explicit resource recovery to remove.
 Detached ordinary worktrees receive the same retained HEAD ref as Session members.
+Ordinary removal waits if a known Source’s registrations cannot be inspected.
 
 Optional positional worktree paths restrict cleanup to matching Sessions or ordinary
 worktrees. `--recover-with '<command>'` requires explicit paths and replaces recorded

@@ -333,53 +333,74 @@ describe("global Session cleanup", () => {
     15_000
   );
 
-  test.each(["worktree", "source", "worktree-after-recovery"])(
-    "ordinary cleanup retains a cross-repository nested %s",
-    async (kind) => {
-      const f = fixture();
-      const selected = path.join(f.cwd, "ordinary-parent");
-      const nested = path.join(selected, "nested");
-      const [dependency] = f.sources;
-      ok(dependency);
-      write(f.root, ".git/info/exclude", "nested/\n");
-      git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
-      ageWorktree(selected);
-      const createNested = () => {
-        if (kind === "source") {
-          createRepo(nested, { "tracked.txt": "nested source" });
-        } else {
-          git(dependency, ["worktree", "add", "-b", "nested", nested]);
-        }
-        write(nested, "unfinished.txt", "unique work");
-      };
-      if (kind === "worktree-after-recovery") {
-        const original = f.runtime.exec;
-        f.runtime.exec = (command, args, options) => {
-          const result = original(command, args, options);
-          if (command === "sh" && args?.[1] === "true") {
-            createNested();
-          }
-          return result;
-        };
+  test.each([
+    "worktree",
+    "source",
+    "worktree-after-recovery",
+    "source-unavailable",
+    "worktree-unavailable"
+  ])("ordinary cleanup retains a cross-repository nested %s", async (kind) => {
+    const f = fixture();
+    const selected = path.join(f.cwd, "ordinary-parent");
+    const nested = path.join(selected, "nested");
+    const [dependency] = f.sources;
+    ok(dependency);
+    write(f.root, ".git/info/exclude", "nested/\n");
+    git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
+    ageWorktree(selected);
+    const createNested = () => {
+      if (kind.startsWith("source")) {
+        createRepo(nested, { "tracked.txt": "nested source" });
       } else {
-        createNested();
+        git(dependency, ["worktree", "add", "-b", "nested", nested]);
       }
-      const result = await f.run(false, kind === "source" ? nested : dependency, [
-        selected,
-        "--include-unowned",
-        "--recover-with",
-        "true"
-      ]);
-      expect(existsSync(selected)).toBeTruthy();
-      expect(readFileSync(path.join(nested, "unfinished.txt"), "utf-8")).toBe("unique work");
-      expect(result.report.unownedWorktrees).not.toContainEqual(
-        expect.objectContaining({
-          outcome: "cleaned",
-          worktreePath: selected
-        })
-      );
+      write(nested, "unfinished.txt", "unique work");
+    };
+    if (kind === "worktree-after-recovery") {
+      const original = f.runtime.exec;
+      f.runtime.exec = (command, args, options) => {
+        const result = original(command, args, options);
+        if (command === "sh" && args?.[1] === "true") {
+          createNested();
+        }
+        return result;
+      };
+    } else {
+      createNested();
     }
-  );
+    const invocation = kind.startsWith("source") ? nested : dependency;
+    if (kind.endsWith("unavailable")) {
+      const original = f.runtime.exec;
+      f.runtime.exec = (command, args, options) => {
+        if (
+          command === "git" &&
+          options?.cwd === invocation &&
+          args?.includes("worktree") &&
+          args.includes("list")
+        ) {
+          throw new Error("Known Source registration inspection failed");
+        }
+        return original(command, args, options);
+      };
+    }
+    const result = await f.run(false, invocation, [
+      selected,
+      "--include-unowned",
+      "--recover-with",
+      "true"
+    ]);
+    expect(result.report.unavailableSources).toStrictEqual(
+      kind.endsWith("unavailable") ? [invocation] : []
+    );
+    expect(existsSync(selected)).toBeTruthy();
+    expect(readFileSync(path.join(nested, "unfinished.txt"), "utf-8")).toBe("unique work");
+    expect(result.report.unownedWorktrees).not.toContainEqual(
+      expect.objectContaining({
+        outcome: "cleaned",
+        worktreePath: selected
+      })
+    );
+  });
 
   test.each(["before", "after"])(
     "ordinary cleanup outside Monke home retains a recent process started %s recovery",

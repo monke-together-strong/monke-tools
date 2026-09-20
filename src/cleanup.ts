@@ -184,7 +184,11 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
       runtime,
       home,
       selected,
-      { ...options, sourceRoots: inventory.sourceRoots },
+      {
+        ...options,
+        // Failed discovery still leaves known ownership that removal must recheck.
+        sourceRoots: [...inventory.sourceRoots, ...inventory.unavailableSources]
+      },
       lock
     );
     inventory.unownedWorktrees = inventory.unownedWorktrees.map(
