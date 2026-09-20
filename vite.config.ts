@@ -50,6 +50,7 @@ export default defineConfig({
     fileParallelism: true,
     include: ["tests/**/*.test.ts"],
     maxConcurrency: 1,
-    maxWorkers: 2
+    maxWorkers: 2,
+    setupFiles: ["./tests/setup-git.ts"]
   }
 });
