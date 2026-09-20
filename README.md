@@ -26,7 +26,7 @@ mt swing banana          # Return to the session
 mt materialize           # Refresh the session's env and bootstrap
 ```
 
-Use `mt spawn banana --codex` to also open the session as a Codex workspace. Run spawn from the source checkout or any linked worktree: new branches start at the invoking checkout’s `HEAD` and carry its uncommitted file contents without changing that checkout. `--no-dirty` requires it and dependency source checkouts to be clean; use `-m` to create a new session from default-branch content instead. For an incomplete session, `-m` resumes retained worktrees and pinned session refs.
+Spawn from the source checkout or any linked worktree to copy its `HEAD` and edits into a new session, leaving the original untouched. `--no-dirty` requires clean checkouts; `-m` uses default branches and resumes pinned refs on retry. Add `--codex` to open the session in Codex. See [Spawn behavior](docs/reference/session-lifecycle.md#preparation-and-materialization) for details.
 
 When finished, `mt chop banana` removes the session's worktrees and runs its recorded cleanup commands, preserving local branches. Dirty files block removal; ignored files are deleted with the worktrees. Preview eligible Sessions across all Roots with `mt cleanup --dry-run`, then run `mt cleanup` to execute. Both commands work outside a repository and accept `--json`. Global scope never bypasses whole-Session eligibility.
 

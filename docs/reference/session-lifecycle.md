@@ -65,25 +65,20 @@ inputs and checkpoint capabilities from the store rather than reading state.
 
 ## Preparation and materialization
 
-Current-HEAD Spawn accepts a Source checkout, Session worktree, or Ordinary
-worktree, including a detached checkout. The invoking checkout supplies the Root
-repo's new branch base and combined tracked edits plus non-ignored untracked
-files. The original files and index remain untouched; the destination does not
-preserve the staged/unstaged split. Dependency repos continue to supply commits
-and edits from their Source checkouts.
+Current-HEAD Spawn accepts any checkout, including detached worktrees. New
+branches start at its HEAD and carry combined tracked edits and non-ignored
+untracked files. Original files and index remain unchanged; staging boundaries
+are not copied. Dependencies use their Source checkouts. Canonical Source checkouts supply
+configuration, repository identity, resources, and Seed material. Carried
+`monke.yml` edits do not configure the Spawn.
 
-Canonical Source checkouts still own Session identity, configuration, relative
-dependency paths, resources, and Seed material. An invoking worktree's changed
-`monke.yml` is carried as file content but does not configure the Spawn.
-Existing branches keep their tips; dirty carry requires the tip to match the
-content checkout's HEAD. Existing destination worktrees retain their edits and
-warn when dirty carry is skipped. Interrupted dirty carry records its checkout
-and base commit; retry from that checkout at that HEAD. A diverged destination
-branch also blocks resumed carry.
+Existing branches keep their tips; dirty carry requires a matching donor HEAD.
+Existing worktrees retain their contents and warn when carry is skipped.
+Interrupted carry must resume from its recorded checkout and HEAD onto an
+undiverged destination branch.
 
-`--no-dirty` requires the invoking checkout and dependency Source checkouts to be
-clean, even when reusing an existing destination. `--main` (also `-m` or `--master`)
-skips dirty carry and takes precedence over `--no-dirty`.
+`--no-dirty` requires clean invoking and dependency Source checkouts. `--main`
+(`-m`, `--master`) skips dirty carry and takes precedence over `--no-dirty`.
 
 Default branch spawn mode prefers fetched remote `main` or `master`, falling back
 to local refs. New Sessions require fresh branches; incomplete ones resume pinned

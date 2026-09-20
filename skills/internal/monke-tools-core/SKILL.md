@@ -22,9 +22,9 @@ Use `mt spawn <session>` from the source checkout or a linked worktree for new i
 
 ## Usage notes
 
-Spawn creates a branch from the invoking checkout's `HEAD` or reuses an existing branch at its tip. Its combined tracked edits and non-ignored untracked files carry into newly created worktrees only when that tip equals the invoking `HEAD`; existing worktrees keep their contents. The original checkout and index remain untouched. Dependencies still supply commits and edits from their source checkouts; canonical source checkouts supply configuration, seed material, and repository identity. Retry interrupted dirty carry from its recorded checkout at the recorded `HEAD`.
+Spawn branches from the invoking checkout's `HEAD` and copies its edits, leaving the original untouched. Existing branches must match that HEAD to receive edits; existing worktrees keep their contents. Dependencies, configuration, and seeds use canonical source checkouts. Retry interrupted carry from its recorded checkout and HEAD.
 
-Use `--no-dirty` to require clean content checkouts, or `-m` (`--main`, `--master`) for a fresh session from the default branch without carrying changes. Combining `--no-dirty` with `-m` behaves like `-m`.
+`--no-dirty` requires clean invoking and dependency checkouts. `-m` (`--main`, `--master`) uses default branches without dirty carry and takes precedence over `--no-dirty`.
 
 Explicit PR navigation fetches the PR head and creates a session if needed; diverged local heads block navigation. Stored targets and picker selections do not revalidate PR heads. Fork PRs are unsupported.
 

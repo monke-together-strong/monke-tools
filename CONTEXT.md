@@ -73,7 +73,7 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 
 ## Operations
 
-**Spawn**: The operation that creates or updates all required session worktrees, using the invoking checkout’s current `HEAD` unless **Default branch spawn mode** is requested. Repository identity remains anchored to the **Source checkout**.
+**Spawn**: The operation that creates or updates all required session worktrees, using the invoking checkout’s current `HEAD` unless **Default branch spawn mode** is requested.
 
 **Materialize**: The operation that schedules **Worktree preparation** and **Repo materialization** across the Session dependency graph. _Avoid_: Refresh, rebuild
 
