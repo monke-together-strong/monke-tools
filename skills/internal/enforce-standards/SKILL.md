@@ -18,21 +18,25 @@ exact `path:line` evidence, occurrence/file counts, and `structural` or `non-str
 group is structural when its fix needs an architectural, product, compatibility, schema, migration,
 or public-API decision.
 
-Rank non-structural groups by confidence, severity, then impact. Select at most three
-high-confidence groups that are bounded and safe to fix. Selected groups must have disjoint file
-scopes, share no dependency/generated/migration/lockfile changes, have no ordering dependency, and
-apply independently to `BASE_SHA`. Keep only the highest-ranked conflicting group.
+Rank non-structural groups by confidence, severity, then impact. Select only high-confidence,
+bounded, safe fixes:
 
-For each selected group:
+- When substantive findings exist, select at most three substantive groups, one PR per group.
+- When all findings are cosmetic, combine the fixes into one bounded, behavior-preserving cleanup PR.
+
+Separate PRs must have disjoint file scopes, share no dependency/generated/migration/lockfile
+changes, have no ordering dependency, and apply independently to `BASE_SHA`. Keep only the
+highest-ranked conflicting group. Fixes within the single cleanup PR may share files.
+
+For each planned PR:
 
 1. Start a fresh branch and isolated worktree at `BASE_SHA`. If reusing the automation's worktree,
-   reset it to `BASE_SHA` and switch to a fresh branch before processing the group. Verify that no
-   changes from earlier groups remain.
+   reset it to `BASE_SHA` and switch to a fresh branch. Verify that no changes from earlier PRs remain.
 2. Run focused and repository-required checks.
-3. Create PR
+3. Create the PR.
 
-Create at most three PRs. If isolation or the environment blocks a batch, preserve the work and
-report the blocker. If no group qualifies, make no changes.
+If isolation or the environment blocks a PR, preserve the work and report the blocker.
+If no fixes qualify, make no changes.
 
 Report the base, grouped findings and ranking, fixed groups, changed files, checks, blockers, PRs,
 and remaining findings. When no high-confidence non-structural group remains, group structural
