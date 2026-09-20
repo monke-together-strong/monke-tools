@@ -15,7 +15,7 @@ import {
   validateWorktreeForSession
 } from "./git.ts";
 import { createLogger } from "./logger.ts";
-import { assertSpawnSourcePolicy, spawnSessionFromSourceRootLocked } from "./monke.ts";
+import { assertSpawnSourcePolicy, spawnSessionLocked } from "./monke.ts";
 import { samePath } from "./path-identity.ts";
 import { getMonkeHome, hashKey, withGlobalLockAsync } from "./runtime.ts";
 import { requestShellDirectory } from "./shell.ts";
@@ -311,8 +311,12 @@ async function resolveStoredTarget(
 
     if (options.createIfMissing === true) {
       options.prepareCreate?.();
-      await spawnSessionFromSourceRootLocked(runtime, home, rootSourceRoot, target.session, {
-        mode: "session-branch"
+      await spawnSessionLocked({
+        home,
+        rootSourceRoot,
+        runtime,
+        session: target.session,
+        spawnOptions: { mode: "session-branch" }
       });
       createLogger(runtime).success(`Spawned or updated session ${target.session}`);
     } else {

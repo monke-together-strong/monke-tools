@@ -42,6 +42,12 @@ const SessionRepoStateFieldsSchema = z.strictObject({
   cleanupCommand: NonEmptyStringSchema.optional(),
   cleanupEligible: z.boolean(),
   diffBaseRef: NonEmptyStringSchema.optional(),
+  dirtyCarrySource: z
+    .strictObject({
+      checkoutRoot: NonEmptyStringSchema,
+      headCommit: GitObjectIdSchema
+    })
+    .optional(),
   dirtyCarryStatus: z.enum(["pending", "complete"]).optional(),
   failure: MaterializationFailureSchema.optional(),
   materializationStatus: z.enum(["pending", "materialized", "failed", "blocked"]),

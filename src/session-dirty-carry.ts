@@ -12,26 +12,21 @@ import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
 import { branchExists, getExpectedWorktreePath, runGit } from "./git.ts";
+import type { CheckoutSource } from "./git.ts";
 import { copyMissingEntries } from "./non-clobbering-copy.ts";
 import type { CopyConflict } from "./non-clobbering-copy.ts";
-import type { RepoConfig, Runtime } from "./types.ts";
+import { samePath } from "./path-identity.ts";
+import type { Runtime, SessionRepoState } from "./types.ts";
 
-/** The permitted Source-checkout changes carried into a Session worktree during preparation. */
+/** The permitted content-checkout changes carried into a Session worktree during preparation. */
 export interface DirtySnapshot {
+  source: CheckoutSource;
   trackedPatch: string;
   untrackedPaths: string[];
 }
 
-export function captureDirtySnapshots(runtime: Runtime, reposInOrder: RepoConfig[]) {
-  return new Map(
-    reposInOrder.map((repoConfig) => [
-      repoConfig.sourceRoot,
-      captureDirtySnapshot(runtime, repoConfig.sourceRoot)
-    ])
-  );
-}
-
-export function captureDirtySnapshot(runtime: Runtime, sourceRoot: string) {
+export function captureDirtySnapshot(runtime: Runtime, source: CheckoutSource) {
+  const sourceRoot = source.checkoutRoot;
   const untrackedOutput = runGit(runtime, sourceRoot, [
     "ls-files",
     "--others",
@@ -40,7 +35,13 @@ export function captureDirtySnapshot(runtime: Runtime, sourceRoot: string) {
   ]);
 
   return {
-    trackedPatch: runGit(runtime, sourceRoot, ["diff", "HEAD", "--binary", "--no-ext-diff"]),
+    source,
+    trackedPatch: runGit(runtime, sourceRoot, [
+      "diff",
+      source.headCommit,
+      "--binary",
+      "--no-ext-diff"
+    ]),
     untrackedPaths: untrackedOutput.split("\0").filter((entry) => entry.length > 0)
   };
 }
@@ -49,46 +50,76 @@ export function dirtySnapshotHasContent(snapshot: DirtySnapshot) {
   return snapshot.trackedPatch.length > 0 || snapshot.untrackedPaths.length > 0;
 }
 
+/** An interrupted carry must not silently switch donor checkout or base commit. */
+export function assertDirtyCarrySource(source: CheckoutSource, state?: SessionRepoState) {
+  if (state?.dirtyCarryStatus !== "pending" || !state.dirtyCarrySource) {
+    return;
+  }
+  const retained = state.dirtyCarrySource;
+  if (
+    !samePath(source.checkoutRoot, retained.checkoutRoot) ||
+    source.headCommit !== retained.headCommit
+  ) {
+    throw new MonkeError(
+      `Cannot resume dirty carry: retry from content checkout ${retained.checkoutRoot} at HEAD ${retained.headCommit}; the checkout or HEAD changed.`
+    );
+  }
+}
+
+export function dirtyCarrySource(snapshot: DirtySnapshot | undefined) {
+  return snapshot === undefined
+    ? undefined
+    : {
+        checkoutRoot: snapshot.source.checkoutRoot,
+        headCommit: snapshot.source.headCommit
+      };
+}
+
 /** Refuse dirty carry when it would apply HEAD-relative patches onto a diverged Session branch. */
 export function assertDirtyCarryBoundary(
   runtime: Runtime,
   home: string,
   sourceRoot: string,
   session: string,
-  snapshot: DirtySnapshot
+  snapshot: DirtySnapshot,
+  resumesDirtyCarry = false
 ) {
   if (!dirtySnapshotHasContent(snapshot) || !branchExists(runtime, sourceRoot, session)) {
     return;
   }
 
-  if (existsSync(getExpectedWorktreePath(home, sourceRoot, session))) {
+  if (!resumesDirtyCarry && existsSync(getExpectedWorktreePath(home, sourceRoot, session))) {
     return;
   }
 
   const branchTip = runGit(runtime, sourceRoot, ["rev-parse", `refs/heads/${session}`]).trim();
-  const headTip = runGit(runtime, sourceRoot, ["rev-parse", "HEAD"]).trim();
+  const headTip = snapshot.source.headCommit;
   if (branchTip !== headTip) {
     throw new MonkeError(
-      `Session branch "${session}" already exists at ${branchTip.slice(0, 8)} but the Source checkout HEAD is ${headTip.slice(0, 8)}; carrying dirty changes onto a diverged branch is unsafe. Re-run with --no-dirty, or align the branch with HEAD first.`
+      `Session branch "${session}" already exists at ${branchTip.slice(0, 8)} but the content checkout HEAD is ${headTip.slice(0, 8)}; carrying dirty changes onto a diverged branch is unsafe. Re-run with --no-dirty, or align the branch with HEAD first.`
     );
   }
 }
 
-export function warnDirtyStateNotCarried(runtime: Runtime, sourceRoot: string, session: string) {
+export function warnDirtyStateNotCarried(
+  runtime: Runtime,
+  sourceRoot: string,
+  session: string,
+  checkoutRoot = sourceRoot
+) {
   runtime.writeStderr(
-    `Warning: Session worktree for ${session} at ${sourceRoot} already exists; dirty Source checkout changes were not carried into it.\n`
+    `Warning: Session worktree for ${session} at ${sourceRoot} already exists; dirty ${checkoutRoot === sourceRoot ? "Source checkout" : `content checkout (${checkoutRoot})`} changes were not carried into it.\n`
   );
 }
 
 export async function applyDirtySnapshot(
   runtime: Runtime,
   home: string,
-  sourceRoot: string,
   worktreePath: string,
   snapshot: DirtySnapshot
 ) {
   await applyPatchAsync(runtime, worktreePath, snapshot.trackedPatch);
-  copyUntrackedPaths(home, sourceRoot, worktreePath, snapshot.untrackedPaths);
+  copyUntrackedPaths(home, snapshot.source.checkoutRoot, worktreePath, snapshot.untrackedPaths);
 }
 
 async function applyPatchAsync(runtime: Runtime, worktreePath: string, patch: string) {

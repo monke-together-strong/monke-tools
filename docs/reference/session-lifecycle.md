@@ -65,6 +65,21 @@ inputs and checkpoint capabilities from the store rather than reading state.
 
 ## Preparation and materialization
 
+Current-HEAD Spawn accepts any checkout, including detached worktrees. New
+branches start at its HEAD and carry combined tracked edits and non-ignored
+untracked files. Original files and index remain unchanged; staging boundaries
+are not copied. Dependencies use their Source checkouts. Canonical Source checkouts supply
+configuration, repository identity, resources, and Seed material. Carried
+`monke.yml` edits do not configure the Spawn.
+
+Existing branches keep their tips; dirty carry requires a matching donor HEAD.
+Existing worktrees retain their contents and warn when carry is skipped.
+Interrupted carry must resume from its recorded checkout and HEAD onto an
+undiverged destination branch.
+
+`--no-dirty` requires clean invoking and dependency Source checkouts. `--main`
+(`-m`, `--master`) skips dirty carry and takes precedence over `--no-dirty`.
+
 Default branch spawn mode prefers fetched remote `main` or `master`, falling back
 to local refs. New Sessions require fresh branches; incomplete ones resume pinned
 refs and retained worktrees. Tracked content and configuration come from those
