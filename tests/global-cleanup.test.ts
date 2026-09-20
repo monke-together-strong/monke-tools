@@ -522,6 +522,101 @@ describe("global Session cleanup", () => {
     );
   });
 
+  test.each(["staged", "detached", "operation", "clean"])(
+    "Session cleanup preserves recovery metadata for a %s stale registration",
+    async (kind) => {
+      const f = fixture();
+      const state = f.addSession("feature/stale-recovery", f.root);
+      const [repo] = state.repos;
+      ok(repo);
+      const admin = git(repo.worktreePath, ["rev-parse", "--absolute-git-dir"]);
+      if (kind === "staged") {
+        write(repo.worktreePath, "unique.txt", "recoverable work");
+        git(repo.worktreePath, ["add", "unique.txt"]);
+      } else if (kind === "detached") {
+        git(repo.worktreePath, ["checkout", "--detach"]);
+      } else if (kind === "operation") {
+        write(admin, "MERGE_HEAD", git(repo.worktreePath, ["rev-parse", "HEAD"]));
+      }
+      rmSync(repo.worktreePath, { recursive: true });
+      const result = await f.run();
+      const retained = kind !== "clean";
+      expect(existsSync(admin)).toBe(retained);
+      expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBe(retained);
+      expect(result.report.sessions[0]?.outcome).toBe(retained ? "skipped" : "cleaned");
+    }
+  );
+
+  test("a stale Session index changed by recovery is retained", async () => {
+    const f = fixture();
+    const state = f.addSession("feature/stale-index-race");
+    const [repo] = state.repos;
+    ok(repo);
+    const admin = git(repo.worktreePath, ["rev-parse", "--absolute-git-dir"]);
+    write(repo.sourceRoot, "recovery.txt", "recoverable work");
+    const blob = git(repo.sourceRoot, ["hash-object", "-w", "recovery.txt"]);
+    rmSync(repo.worktreePath, { recursive: true });
+    const original = f.runtime.exec;
+    f.runtime.exec = (command, args, options) => {
+      const result = original(command, args, options);
+      if (command === "sh" && args?.[1] === "true") {
+        git(repo.sourceRoot, [
+          `--git-dir=${admin}`,
+          "update-index",
+          "--add",
+          "--cacheinfo",
+          `100644,${blob},unique.txt`
+        ]);
+      }
+      return result;
+    };
+    const result = await f.run(false, f.cwd, [repo.worktreePath, "--recover-with", "true"]);
+    expect(result.report.sessions[0]?.outcome).toBe("failed");
+    expect(git(repo.sourceRoot, [`--git-dir=${admin}`, "show", ":unique.txt"])).toBe(
+      "recoverable work"
+    );
+    expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeTruthy();
+    expect(existsSync(state.repos.at(-1)?.worktreePath ?? "")).toBeTruthy();
+  });
+
+  test.each(["source", "worktree"])(
+    "Session cleanup retains a nested %s when its Source cannot be inspected",
+    async (kind) => {
+      const f = fixture();
+      const state = f.addSession("feature/unknown-overlap");
+      state.repos = state.repos.filter((repo) => repo.sourceRoot === f.root);
+      saveSessionState(f.home, state);
+      const root = state.repos.at(-1);
+      const [dependency] = f.sources;
+      ok(root && dependency);
+      const nested = path.join(root.worktreePath, "nested");
+      write(f.root, ".git/info/exclude", "nested/\n");
+      if (kind === "source") {
+        createRepo(nested, { "tracked.txt": "nested source" });
+      } else {
+        git(dependency, ["worktree", "add", "-b", "nested", nested]);
+      }
+      write(nested, "unfinished.txt", "unique work");
+      const invocation = kind === "source" ? nested : dependency;
+      const original = f.runtime.exec;
+      f.runtime.exec = (command, args, options) => {
+        if (
+          command === "git" &&
+          options?.cwd === invocation &&
+          args?.includes("worktree") &&
+          args.includes("list")
+        ) {
+          throw new Error("Known Source registration inspection failed");
+        }
+        return original(command, args, options);
+      };
+      const result = await f.run(false, invocation, [root.worktreePath]);
+      expect(readFileSync(path.join(nested, "unfinished.txt"), "utf-8")).toBe("unique work");
+      expect(result.report.sessions[0]?.outcome).toBe("skipped");
+      expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeTruthy();
+    }
+  );
+
   test.each(["before", "after"])(
     "ordinary cleanup outside Monke home retains a recent process started %s recovery",
     async (when) => {
@@ -866,6 +961,68 @@ describe("global Session cleanup", () => {
     30_000
   );
 
+  test.each(["lsof", "ps"])(
+    "failed %s inspection retains Session and ordinary worktrees",
+    async (failedCommand) => {
+      const f = fixture();
+      const state = f.addSession("feature/scan-failure");
+      const root = state.repos.at(-1);
+      ok(root);
+      const ordinary = path.join(f.cwd, "ordinary-scan-failure");
+      git(f.root, ["worktree", "add", "-b", "ordinary", ordinary]);
+      ageWorktree(ordinary);
+      const pids = [processIn(root.worktreePath, true), processIn(ordinary, true)];
+      await expect.poll(() => pids.every(alive)).toBeTruthy();
+      const original = f.runtime.exec;
+      f.runtime.exec = (command, args, options) =>
+        command === failedCommand
+          ? { exitCode: 1, stderr: "Process inspection failed", stdout: "" }
+          : original(command, args, options);
+      const result = await f.run(false, f.cwd, [
+        root.worktreePath,
+        ordinary,
+        "--include-unowned",
+        "--recover-with",
+        "true"
+      ]);
+      expect(result.report.exitCode).toBe(1);
+      for (const candidate of [...state.repos.map((repo) => repo.worktreePath), ordinary]) {
+        expect(existsSync(candidate)).toBeTruthy();
+      }
+      expect(pids.every(alive)).toBeTruthy();
+      expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeTruthy();
+    },
+    30_000
+  );
+
+  test.each(["root", "dependency"])(
+    "a recent process started by recovery retains every Session member: %s",
+    async (member) => {
+      const f = fixture();
+      const state = f.addSession("feature/recovery-process");
+      const repo = member === "root" ? state.repos.at(-1) : state.repos[0];
+      ok(repo);
+      let pid: number | undefined;
+      const original = f.runtime.exec;
+      f.runtime.exec = (command, args, options) => {
+        const result = original(command, args, options);
+        if (command === "sh" && args?.[1] === "true" && pid === undefined) {
+          pid = processIn(repo.worktreePath, true);
+        }
+        return result;
+      };
+      const result = await f.run(false, f.cwd, [repo.worktreePath, "--recover-with", "true"]);
+      ok(pid !== undefined);
+      expect(alive(pid)).toBeTruthy();
+      expect(result.report.sessions[0]?.outcome).toBe("failed");
+      for (const candidate of state.repos) {
+        expect(existsSync(candidate.worktreePath)).toBeTruthy();
+      }
+      expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeTruthy();
+    },
+    30_000
+  );
+
   test("an old process merely inside the worktree is left running and does not block", async () => {
     const f = fixture();
     const state = f.addSession("feature/visited");
@@ -1088,7 +1245,7 @@ describe("global Session cleanup", () => {
     ).toBeTruthy();
   }, 30_000);
 
-  test("an unavailable independent Source does not prevent cleaning an eligible Session", async () => {
+  test("an unavailable Source retains Sessions until overlap can be ruled out", async () => {
     const f = fixture();
     const state = f.addSession("feature/available");
     const [missing] = f.sources;
@@ -1104,7 +1261,7 @@ describe("global Session cleanup", () => {
     rmSync(path.join(missing, ".git"), { force: true, recursive: true });
     const result = await f.run();
     expect(result.report.sessions.find((row) => row.session === state.session)?.outcome).toBe(
-      "cleaned"
+      "skipped"
     );
     expect(result.report.sessions.find((row) => row.session === unavailable.session)?.outcome).toBe(
       "skipped"

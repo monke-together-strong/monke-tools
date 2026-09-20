@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { teardownSession } from "./chop.ts";
 import { archiveCleanupFiles, assertCleanupArchive } from "./cleanup-archive.ts";
-import { readOnlyCleanupRuntime } from "./cleanup-eligibility.ts";
+import { RECENT_WORKTREE_MS, readOnlyCleanupRuntime } from "./cleanup-eligibility.ts";
 import { cleanupOrdinaryWorktrees } from "./cleanup-ordinary.ts";
 import {
   assertRetainedHead,
@@ -32,7 +32,6 @@ import {
   scanWorktreeProcesses,
   stopStaleWorktreeProcesses
 } from "./worktree-processes.ts";
-import type { WorktreeProcessScan } from "./worktree-processes.ts";
 import { assertNoOverlappingCheckouts } from "./worktree-safety.ts";
 
 class GlobalCleanupError extends MonkeError {
@@ -88,9 +87,7 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
         });
         validateTargets(inventory);
         assertGlobalSafety(lock, inventory);
-        // One process-table pass for the whole run; members index it before removal.
-        const processes = scanWorktreeProcesses(runtime, [path.join(home, "worktrees")]);
-        await executeInventory(runtime, home, lock, inventory, sessions, processes, options);
+        await executeInventory(runtime, home, lock, inventory, sessions, options);
         await ordinary(inventory, lock);
       });
     }
@@ -226,7 +223,6 @@ async function executeInventory(
   lock: OperationLock,
   inventory: Inventory,
   sessions: SessionReport[],
-  processes: WorktreeProcessScan,
   options: CleanupOptions
 ) {
   for (const original of inventory.sessions) {
@@ -264,7 +260,7 @@ async function executeInventory(
       );
       continue;
     }
-    const result = executeSession(runtime, home, lock, fresh, row, processes, options);
+    const result = executeSession(runtime, home, lock, fresh, row, options);
     sessions.push(result.report);
     if (result.globalFailure) {
       throw new GlobalCleanupError(result.globalFailure);
@@ -425,7 +421,6 @@ function executeSession(
   lock: OperationLock,
   inventory: Inventory,
   row: Inventory["sessions"][number],
-  processes: WorktreeProcessScan,
   options: CleanupOptions
 ) {
   const { snapshot } = row;
@@ -448,7 +443,7 @@ function executeSession(
   const readOnly = readOnlyCleanupRuntime(runtime);
   const scan = scanSessionStates(home);
   const states = scan.records.flatMap((record) => (record.state ? [record.state] : []));
-  const sources = inventory.sourceRoots;
+  const sources = [...inventory.sourceRoots, ...inventory.unavailableSources];
   function guard() {
     assertGlobalSafety(lock, inventory);
     if (scanSessionStates(home).fingerprint !== inventory.stateFingerprint) {
@@ -465,8 +460,32 @@ function executeSession(
     revalidateSessionMember(runtime, readOnly, home, state, repo, member);
     assertNoOverlappingCheckouts(readOnly, sources, repo.worktreePath);
   };
+  const inspectProcesses = (afterCleanup = false) => {
+    const processes = scanWorktreeProcesses(
+      runtime,
+      state.repos.map((repo) => repo.worktreePath)
+    );
+    for (const repo of state.repos) {
+      const active = processes
+        .treesUnder(repo.worktreePath)
+        .filter((tree) => tree.ageMs < RECENT_WORKTREE_MS || (afterCleanup && tree.attached));
+      if (active.length > 0) {
+        current = {
+          sourceRoot: repo.sourceRoot,
+          step: "process-stop",
+          worktreePath: repo.worktreePath
+        };
+        throw new MonkeError(
+          `Worktree ${repo.worktreePath} is in use: ${active.map(describeTree).join("; ")}`
+        );
+      }
+    }
+    return processes;
+  };
   try {
     guard();
+    // Check every member before archives, process shutdown, or resource effects.
+    const processes = inspectProcesses();
     for (const member of snapshot.members) {
       if (member.evidence?.pendingWork?.kind === "untracked-archive") {
         guard();
@@ -513,6 +532,10 @@ function executeSession(
         },
         beforeEffect(action) {
           guard();
+          if (action.step === "cleanup-command" || action.step === "worktree-removal") {
+            // Commands may activate any sibling; refresh before the next destructive effect.
+            inspectProcesses(true);
+          }
           if (action.step === "worktree-removal") {
             const repo = state.repos.find((candidate) =>
               samePath(candidate.worktreePath, action.worktreePath ?? "")
