@@ -51,7 +51,7 @@ export interface WorktreeProcessTree {
   roots: WorktreeProcess[];
 }
 
-/** One scan per Cleanup run; index by worktree afterwards. Only cwd is inspected, never open files. */
+/** A process snapshot indexed by worktree. Only cwd is inspected, never open files. */
 export interface WorktreeProcessScan {
   scannedAt: number;
   treesUnder: (worktreePath: string) => WorktreeProcessTree[];
@@ -67,6 +67,11 @@ export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): Worktr
   const scannedAt = Date.now();
   const cwdByPid = new Map<number, string>();
   const lsof = runtime.exec("lsof", ["-a", "-d", "cwd", "-F", "pn"], { allowFailure: true });
+  if (lsof.exitCode !== 0) {
+    throw new MonkeError(
+      `Cannot inspect worktree process directories: ${lsof.stderr.trim() || `lsof exited ${lsof.exitCode}`}`
+    );
+  }
   let pid: number | null = null;
   for (const line of lsof.stdout.split("\n")) {
     if (line.startsWith("p")) {
@@ -83,6 +88,11 @@ export function scanWorktreeProcesses(runtime: Runtime, roots: string[]): Worktr
     const ps = runtime.exec("ps", ["-axo", "pid=,ppid=,lstart=,command="], {
       allowFailure: true
     });
+    if (ps.exitCode !== 0) {
+      throw new MonkeError(
+        `Cannot inspect worktree processes: ${ps.stderr.trim() || `ps exited ${ps.exitCode}`}`
+      );
+    }
     for (const line of ps.stdout.split("\n")) {
       const record = parsePsLine(line);
       const cwd = record === null ? undefined : cwdByPid.get(record.pid);
@@ -213,16 +223,13 @@ function survivors(runtime: Runtime, processes: WorktreeProcess[]) {
   if (processes.length === 0) {
     return [];
   }
-  const states = runtime.exec(
-    "ps",
-    [
-      "-o",
-      "pid=,stat=,lstart=",
-      "-p",
-      processes.map((candidate) => String(candidate.pid)).join(",")
-    ],
-    { allowFailure: true }
-  );
+  // A successful full table distinguishes exited PIDs from a failed targeted query.
+  const states = runtime.exec("ps", ["-axo", "pid=,stat=,lstart="], { allowFailure: true });
+  if (states.exitCode !== 0) {
+    throw new MonkeError(
+      `Cannot verify process shutdown: ${states.stderr.trim() || `ps exited ${states.exitCode}`}`
+    );
+  }
   const live = new Map<number, string>();
   for (const line of states.stdout.split("\n")) {
     const match = /^\s*(?<pid>\d+)\s+(?<stat>\S+)\s+(?<started>.+?)\s*$/u.exec(line);

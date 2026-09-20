@@ -196,12 +196,16 @@ name-matching unowned paths. Unowned worktrees stay untouched by default.
 `--include-unowned` inspects ordinary worktrees with the same committed-work and
 age checks; they must be clean and require explicit resource recovery to remove.
 Detached ordinary worktrees receive the same retained HEAD ref as Session members.
-Ordinary removal waits if a known Source’s registrations cannot be inspected.
+Removal waits if any known Source’s registrations cannot be inspected; unavailable
+registrations cannot prove that another checkout is independent.
 
 With `--include-unowned`, a missing ordinary worktree's stale registration needs
 no resource recovery. Cleanup preserves its branch and requires an unlocked
 registration with a clean saved index. Detached HEADs, unfinished Git operations,
 and unverified metadata remain for manual recovery.
+
+Stale Session registrations need the same saved-index and recovery-metadata checks;
+missing directories alone do not authorize deleting their Git metadata.
 
 Optional positional worktree paths restrict cleanup to matching Sessions or ordinary
 worktrees. `--recover-with '<command>'` requires explicit paths and replaces recorded
@@ -228,7 +232,9 @@ disk bytes, and modes; recheck at preflight, after process/resource effects, and
 immediately before removal. Worktree listings and repository structure may be
 memoized per Source during collection; branch, HEAD, cleanliness, and revalidation
 are fresh reads. Reuse initial unowned discovery but check overlaps live before
-removal. Monke's lock cannot make external editor or Git writes atomic.
+removal. Process inspection failures retain targets. Session process checks refresh before
+effects and before each removal, including after resource commands. Monke's lock
+cannot make external editor or Git writes atomic.
 
 ### Reports
 
@@ -273,9 +279,10 @@ effects; report all preflight failures together. Revalidate after commands/proce
 stops and before each removal. Failure stops later removals and retains state.
 Remove the invoking member last, otherwise the Root last.
 
-Cleanup scans managed-area working directories once per run, grouping processes
-by parent. A tree is attached if any command line names a worktree path; its age
-is its oldest member's age. Any tree under one day old blocks the Session and is
+Cleanup scans each Session's worktree directories before effects and refreshes
+process state before cleanup commands and worktree removals. Each scan groups
+processes by parent. A tree is attached if any command line names a worktree path;
+its age is its oldest member's age. Any tree under one day old blocks the Session and is
 listed. Before Cleanup commands, old attached roots receive SIGTERM, then SIGKILL
 after a grace period; completed stops are reported. Old unattached trees, such as
 idle shells, remain running and are reported. Chop does not stop processes.

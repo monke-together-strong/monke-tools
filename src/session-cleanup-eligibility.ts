@@ -12,6 +12,7 @@ import {
   revalidateCleanupEvidence
 } from "./cleanup-eligibility.ts";
 import type { CleanupCode, CleanupDecision, CleanupEvidence } from "./cleanup-eligibility.ts";
+import { inspectStaleRegistration } from "./cleanup-stale-registration.ts";
 import { errorMessage, ThrownValueSchema } from "./errors.ts";
 import { listWorktrees } from "./git.ts";
 import { containsPath, samePath, worktreePathsOverlap } from "./path-identity.ts";
@@ -61,6 +62,7 @@ export interface SessionCleanupMember {
   mode: "live" | "gone" | "stale" | "unverified";
   registeredBranch?: string | null;
   sourceRoot: string;
+  staleRegistration?: string;
   worktreePath: string;
 }
 
@@ -306,6 +308,17 @@ export async function inspectSessionCleanup(
                 ) {
                   snapshot.blockers.push("resource-recovery-required");
                 }
+                if (registration.mode === "stale") {
+                  const stale = inspectStaleRegistration(
+                    collectorReadOnly,
+                    repo.sourceRoot,
+                    repo.worktreePath
+                  );
+                  if (!stale) {
+                    throw new Error("Stale worktree reappeared during inspection");
+                  }
+                  member.staleRegistration = stale;
+                }
                 member.mode = registration.mode;
                 member.registeredBranch = registration.registeredBranch;
               } catch (error) {
@@ -503,6 +516,13 @@ export function revalidateSessionMember(
   const current = inspectSessionRepoRegistration(readOnly, home, state, repo);
   if (current.mode !== member.mode || current.registeredBranch !== member.registeredBranch) {
     throw new Error("Member presence or registered branch changed");
+  }
+  if (
+    current.mode === "stale" &&
+    inspectStaleRegistration(readOnly, repo.sourceRoot, repo.worktreePath) !==
+      member.staleRegistration
+  ) {
+    throw new Error("Stale registration changed after inspection");
   }
   if (member.evidence) {
     const invalidation = revalidateCleanupEvidence(runtime, member.evidence);
