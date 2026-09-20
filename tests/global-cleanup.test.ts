@@ -961,6 +961,31 @@ describe("global Session cleanup", () => {
     30_000
   );
 
+  test("failed process shutdown inspection prevents ordinary resource recovery", async () => {
+    const f = fixture();
+    const selected = path.join(f.cwd, "ordinary-shutdown-failure");
+    git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
+    ageWorktree(selected);
+    const pid = processIn(selected, true);
+    await expect.poll(() => alive(pid)).toBeTruthy();
+    ageProcess(f.runtime, pid, 2);
+    const original = f.runtime.exec;
+    f.runtime.exec = (command, args, options) =>
+      command === "ps" && args?.some((arg) => arg.includes("stat="))
+        ? { exitCode: 2, stderr: "Process inspection failed", stdout: "" }
+        : original(command, args, options);
+    const result = await f.run(false, f.cwd, [
+      selected,
+      "--include-unowned",
+      "--recover-with",
+      "touch recovery-started"
+    ]);
+    expect(existsSync(path.join(f.root, "recovery-started"))).toBeFalsy();
+    expect(existsSync(selected)).toBeTruthy();
+    expect(alive(pid)).toBeTruthy();
+    expect(result.report.exitCode).toBe(1);
+  }, 30_000);
+
   test.each(["lsof", "ps"])(
     "failed %s inspection retains Session and ordinary worktrees",
     async (failedCommand) => {

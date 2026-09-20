@@ -223,16 +223,13 @@ function survivors(runtime: Runtime, processes: WorktreeProcess[]) {
   if (processes.length === 0) {
     return [];
   }
-  const states = runtime.exec(
-    "ps",
-    [
-      "-o",
-      "pid=,stat=,lstart=",
-      "-p",
-      processes.map((candidate) => String(candidate.pid)).join(",")
-    ],
-    { allowFailure: true }
-  );
+  // A successful full table distinguishes exited PIDs from a failed targeted query.
+  const states = runtime.exec("ps", ["-axo", "pid=,stat=,lstart="], { allowFailure: true });
+  if (states.exitCode !== 0) {
+    throw new MonkeError(
+      `Cannot verify process shutdown: ${states.stderr.trim() || `ps exited ${states.exitCode}`}`
+    );
+  }
   const live = new Map<number, string>();
   for (const line of states.stdout.split("\n")) {
     const match = /^\s*(?<pid>\d+)\s+(?<stat>\S+)\s+(?<started>.+?)\s*$/u.exec(line);
