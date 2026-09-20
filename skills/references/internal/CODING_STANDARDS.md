@@ -1,5 +1,3 @@
-# Team Coding Standards Baseline
-
 ## Typescript
 - Prefer inferred return types. Annotate only when required for a contract or correct inference.
 - Fix type and lint issues at the abstraction that owns the behavior. Avoid duplicating data structures or logic to satisfy a check. Types must describe what the implementation guarantees, including changes made by transformations.
@@ -8,3 +6,11 @@
 - Use a Standard Schema-compatible validation library (e.g. zod) for complete validation of untrusted payloads, persisted data, configuration, and external responses.
 - Follow non-conflicting rules in the [Ultracite coding standards](../imported/ultracite/references/code-standards.md).
 - Do not wrap code in `try/catch` just to rethrow; use `try/catch` only for meaningful handling, cleanup, logging, fallback, or preserving `cause`.
+
+## Documentation
+
+When reviewing documentation:
+
+- Keep only reusable guidance, ownership, behavior contracts, and rationale for costly decisions.
+- Keep each fact in one authoritative home; link instead of repeating source, configuration, or other docs.
+- Delete unnecessary content rather than polishing or relocating it. No documentation change is a valid outcome.
