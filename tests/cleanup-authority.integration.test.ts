@@ -54,6 +54,33 @@ describe("Cleanup authority", () => {
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe("A|old-value|old-output\n");
   });
 
+  test.each(["materialize", "acquire"])(
+    "%s retains deterministic inputs required by pending infrastructure cleanup",
+    (operation) => {
+      const sandbox = makeTempDir("cleanup-static-authority");
+      const home = path.join(sandbox, "home");
+      const root = createRepo(path.join(sandbox, "root"), {
+        "monke.yml":
+          'apps: {}\nbootstrapCommand: true\ncleanupCommand: test "$OWNER" = original\nresources:\n  values:\n    OWNER: original\n'.replace(
+            "bootstrapCommand: true",
+            "bootstrapCommand: 'true'"
+          )
+      });
+      runMonke({ args: ["spawn", "retained"], cwd: root, monkeHome: home });
+      const cwd = getExpectedWorktreePath(home, root, "retained");
+      write(root, "monke.yml", "apps: {}\n");
+      write(cwd, "monke.yml", "apps: {}\n");
+      runMonke({
+        args: operation === "materialize" ? ["materialize"] : ["resources", "acquire"],
+        cwd,
+        monkeHome: home
+      });
+      expect(() =>
+        runMonke({ args: ["chop", "retained", "--force"], cwd: root, monkeHome: home })
+      ).not.toThrow();
+    }
+  );
+
   test("all-reused Resource command outputs retain Cleanup authority A", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-reuse");
     runMonke({

@@ -54,8 +54,8 @@ proof of ownership.
 
 The checkout lock stays held for the foreground command's lifetime. Concurrent
 release, acquisition, materialization and Chop of that checkout fail while it is
-in use; commands in other checkouts can proceed. The lock records the child PID,
-so a surviving child remains protected if the MT wrapper is killed. Commands must
+in use; commands in other checkouts can proceed. The lock records the child process group,
+so surviving children remain protected if the MT wrapper is killed. Commands must
 keep resource use within their foreground lifetime rather than detach work.
 
 ## Persistence and recovery

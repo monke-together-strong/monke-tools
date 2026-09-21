@@ -115,6 +115,66 @@ describe("checkout resources", () => {
     expect(JSON.parse(read(cwd, "released"))).toStrictEqual({ AUX: "two", SLOT: "one" });
   });
 
+  test("exec uses current declarations while retaining retired outputs for release", () => {
+    const sandbox = makeTempDir("checkout-resource-replacement");
+    const home = path.join(sandbox, "home");
+    const config = (name: string) =>
+      `apps: {}\nresources:\n  commands:\n    ${name}:\n      run: ${name}.ts\n      outputs: [SLOT]\n`;
+    const cwd = createRepo(path.join(sandbox, "repo"), {
+      "current.ts": 'export function acquire() { return {SLOT: "current"}; }',
+      "monke.yml": config("old"),
+      "old.ts": 'export function acquire() { return {SLOT: "old"}; }'
+    });
+    const run = (...args: string[]) => runMonke({ args, cwd, monkeHome: home });
+    run("resources", "acquire");
+    write(cwd, "monke.yml", config("current"));
+    run("resources", "acquire");
+    expect(run("resources", "exec", "--", "printenv", "SLOT").stdout.trim()).toBe("current");
+  });
+
+  test("terminating exec stops a shell's waiting descendants before releasing resources", async () => {
+    const sandbox = makeTempDir("checkout-resource-shell-signal");
+    const home = path.join(sandbox, "home");
+    const cwd = createRepo(path.join(sandbox, "repo"), {
+      "monke.yml": "apps: {}\n",
+      "wait.ts":
+        'process.on("SIGTERM", () => {}); await Bun.write("started", String(process.pid)); await new Promise(() => {});'
+    });
+    const child = spawnMonkeWorker({
+      args: ["resources", "exec", "--", "sh", "-c", "bun wait.ts & wait"],
+      cwd,
+      monkeHome: home
+    });
+    let pid: number | undefined;
+    const alive = () => {
+      if (pid === undefined) {
+        return false;
+      }
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    try {
+      await expect.poll(() => existsSync(path.join(cwd, "started"))).toBe(true);
+      pid = Number(read(cwd, "started"));
+      child.kill("SIGTERM");
+      await child.exited;
+      await expect.poll(alive).toBe(false);
+      runMonke({ args: ["resources", "release"], cwd, monkeHome: home });
+    } finally {
+      if (alive() && pid !== undefined) {
+        process.kill(pid, "SIGKILL");
+      }
+      if (child.exitCode === null) {
+        child.kill("SIGKILL");
+        await child.exited;
+      }
+    }
+  });
+
   test("an active exec blocks release and chop but leaves other checkouts usable", async () => {
     const sandbox = makeTempDir("checkout-resource-use");
     const home = path.join(sandbox, "home");

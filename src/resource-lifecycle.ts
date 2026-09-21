@@ -56,13 +56,20 @@ function resolveCheckout(runtime: Runtime) {
         return readFileSync(path.join(root, "monke.yml"), "utf-8");
       }
     }).reposByRoot.get(context.sourceRoot);
-  return { home, loadConfig, owner, store };
+  const sessionRepo = session?.repos.find((repo) =>
+    samePath(repo.worktreePath, owner.checkoutPath)
+  );
+  const pendingInfrastructureCleanup = Boolean(
+    sessionRepo?.cleanupEligible && sessionRepo.cleanupCommand
+  );
+  return { home, loadConfig, owner, pendingInfrastructureCleanup, store };
 }
 
 /** Acquire or release current-checkout resources, without tearing down its infrastructure. */
 export async function runResources(runtime: Runtime, operation: "acquire" | "release") {
   await withGlobalLockAsync(getMonkeHome(runtime), async () => {
-    const { home, loadConfig, owner, store } = resolveCheckout(runtime);
+    const { home, loadConfig, owner, pendingInfrastructureCleanup, store } =
+      resolveCheckout(runtime);
     const unlock = acquireCheckoutResourceLock(home, owner.checkoutPath);
     try {
       const record = store.get(owner);
@@ -78,6 +85,7 @@ export async function runResources(runtime: Runtime, operation: "acquire" | "rel
       const values = resolveResourceValues({
         env: runtime.env,
         existingRepoState: record,
+        preserveValues: Boolean(record.legacyCleanupCommand || pendingInfrastructureCleanup),
         repoConfig: config,
         rootSourceRoot: owner.sourceRoot,
         session: owner.session ?? "",
@@ -149,12 +157,15 @@ export async function runResourcesExec(runtime: Runtime, command: string, args: 
           `Missing resources: ${[...missing.map((entry) => entry.name), ...missingValues.map((entry) => entry.env)].join(", ")}. Run mt resources acquire (or your repository's e2e:setup) first.`
         );
       }
-      const env = Object.fromEntries(
-        [
-          ...record.resourceValues,
-          ...record.resourceCommandOutputs.flatMap((entry) => entry.outputs)
-        ].map((entry) => [entry.env, entry.value])
-      );
+      const env: Record<string, string | undefined> = {};
+      for (const entry of config.resourceValuesInOrder) {
+        env[entry.env] = recordedValues.get(entry.env);
+      }
+      for (const entry of config.resourceCommandsInOrder) {
+        for (const name of entry.outputs) {
+          env[name] = outputs.get(entry.name)?.get(name);
+        }
+      }
       return { env, unlock };
     } catch (error) {
       unlock();

@@ -58,7 +58,8 @@ let parentExitScheduled = false;
 let terminationEscalated = false;
 const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
-  pid: z.unknown().optional()
+  pid: z.unknown().optional(),
+  processGroup: z.boolean().optional()
 });
 const LockPidSchema = z.number().int().positive();
 const LockTimestampSchema = z.number();
@@ -320,6 +321,7 @@ async function executeForeground(
     const spawned = Bun.spawn({
       cmd: [command, ...args],
       cwd: options.cwd ?? cwd,
+      detached: process.platform !== "win32",
       env,
       stderr: "inherit",
       stdin: "inherit",
@@ -336,6 +338,10 @@ async function executeForeground(
       throw error;
     }
     const exitCode = await spawned.exited;
+    // A foreground shell can exit before its children. End its group before releasing resources.
+    terminateChildProcessTree(spawned.pid, "SIGKILL", () => {
+      // The direct child has already exited; only its remaining process group needs termination.
+    });
     return { exitCode, stderr: "", stdout: "" };
   } finally {
     if (child) {
@@ -870,7 +876,11 @@ function tryAcquireLockPath(lockPath: string) {
       ownership,
       protectProcess(pid: number) {
         ownership.assertHeld();
-        contents = JSON.stringify({ acquiredAt: Date.now(), pid });
+        contents = JSON.stringify({
+          acquiredAt: Date.now(),
+          pid,
+          processGroup: process.platform !== "win32"
+        });
         writeFileSync(lockPath, contents, "utf-8");
       }
     }
@@ -976,7 +986,7 @@ function evictStaleLockUnderClaim(lockPath: string) {
       }
 
       if (pid.success) {
-        isStale = !isProcessRunning(pid.data);
+        isStale = !isProcessRunning(metadata.processGroup === true ? -pid.data : pid.data);
       }
     }
   } catch {

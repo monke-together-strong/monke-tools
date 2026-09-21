@@ -58,6 +58,7 @@ export function resolveResourceValues(options: {
   existingRepoState:
     | Pick<SessionRepoState, "resourceValues" | "resourceCommandOutputs">
     | undefined;
+  preserveValues?: boolean;
   repoConfig: RepoConfig;
   rootSourceRoot: string;
   session: string;
@@ -99,7 +100,10 @@ export function resolveResourceValues(options: {
   });
 
   // Retain teardown inputs for allocations whose declaration was removed.
-  if ((options.existingRepoState?.resourceCommandOutputs?.length ?? 0) > 0) {
+  if (
+    options.preserveValues ||
+    (options.existingRepoState?.resourceCommandOutputs?.length ?? 0) > 0
+  ) {
     values.push(...existingValues.filter((entry) => !declaredEnvNames.has(entry.env)));
   }
 

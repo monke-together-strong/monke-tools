@@ -128,6 +128,10 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
     resolvedResourceValues: resolveResourceValues({
       env: options.runtime.env,
       existingRepoState: resources,
+      preserveValues: Boolean(
+        resources.legacyCleanupCommand ||
+        (options.existingState?.cleanupEligible && options.existingState.cleanupCommand)
+      ),
       repoConfig: options.repoConfig,
       rootSourceRoot: options.rootSourceRoot,
       session: options.session,
