@@ -108,7 +108,7 @@ Dynamic outputs stay in MT's resource store. Use
 `mt resources exec -- bun run <script>` to validate ownership and inject recorded
 values into a foreground command. Missing allocations fail before it starts.
 `mt resources release` releases those allocations and keeps the checkout and
-infrastructure. See the [resource lifecycle](../../../docs/reference/resources.md)
+infrastructure. See the [resource lifecycle](../../references/internal/RESOURCES.md)
 for collision checks, locking, migration and retry behavior.
 
 ## Cleanup
