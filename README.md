@@ -26,7 +26,7 @@ mt swing banana          # Return to the session
 mt materialize           # Refresh the session's env and bootstrap
 ```
 
-Spawn from the source checkout or any linked worktree to copy its `HEAD` and edits into a new session, leaving the original untouched. `--no-dirty` requires clean checkouts; `-m` uses default branches and resumes pinned refs on retry. Add `--codex` to open the session in Codex. See [Spawn behavior](docs/reference/session-lifecycle.md#preparation-and-materialization) for details.
+Spawn from the source checkout or any linked worktree to copy its `HEAD` and edits into a new session, leaving the original untouched. `--no-dirty` requires clean checkouts; `-m` uses default branches and resumes pinned refs on retry. Add `--codex` to open the session in Codex. See [Spawn usage](skills/internal/monke-tools-core/SKILL.md#create-and-resume-work) for details.
 
 When finished, `mt chop banana` removes the session's worktrees and runs its recorded cleanup commands, preserving local branches. Dirty files block removal; ignored files are deleted with the worktrees. Preview eligible Sessions across all Roots with `mt cleanup --dry-run`, then run `mt cleanup` to execute. Both commands work outside a repository and accept `--json`. Optional worktree paths restrict scope. Use `--archive-untracked` to preserve untracked notes before removal; see the reference below for missing-worktree recovery and `--include-unowned`. Global scope never bypasses whole-Session eligibility.
 
@@ -45,8 +45,7 @@ mt resources exec -- <command>  # Run with the recorded resource values
 mt resources release            # Release allocations after use
 ```
 
-See [checkout resources](docs/reference/resources.md) for ownership, cleanup,
-and recovery. Release keeps the checkout and infrastructure; `mt chop` removes
+See [resource commands](skills/references/internal/RESOURCES.md) for execution and recovery. Release keeps the checkout and infrastructure; `mt chop` removes
 the whole Session.
 
 ## Configure a repo
@@ -68,7 +67,7 @@ The [configuration reference](skills/internal/monke-tools-core/MONKE-YML-REFEREN
 
 Run `mt skills configure` to select agents or change the saved targets. Codex and Claude also receive shared global instructions; existing guidance outside the managed section is preserved.
 
-The [monke-tools-core skill](skills/internal/monke-tools-core/SKILL.md) guides agents through session work, configuration, and installation. Other workflows live in [internal skills](skills/internal) and [imported skills](skills/imported). See [agent guidance distribution](docs/reference/agent-guidance.md) for target layouts and ownership.
+The [monke-tools-core skill](skills/internal/monke-tools-core/SKILL.md) guides agents through session work, configuration, and installation. Other workflows live in [internal skills](skills/internal) and [imported skills](skills/imported). See [agent guidance distribution](docs/reference/agent-guidance.md) for domain terminology and ownership.
 
 ## Update
 
@@ -92,4 +91,4 @@ Rerun the local install after CLI changes before testing from another repo. Loca
 
 Run `vp check <changed-files>` for scoped formatting, lint, and type checks. Use `vpr test -- <test-file>` for focused tests: the package script runs Vitest under Bun. PR CI owns the full suite. Build the standalone executable through `install:local`.
 
-For implementation details, see [CONTEXT.md](CONTEXT.md) and [installation and releases](docs/reference/installation.md). Track work in [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues).
+For domain terminology, start with [CONTEXT.md](CONTEXT.md). Track work in [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues).

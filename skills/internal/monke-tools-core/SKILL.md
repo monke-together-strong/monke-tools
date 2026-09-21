@@ -5,45 +5,59 @@ description: Use mt for worktree creation, navigation, diff review, teardown, mo
 
 # monke-tools Core
 
-Use `mt spawn <session>` from the source checkout or a linked worktree for new isolated work in a monke-tools repo. Follow the repo's branch naming rules and work in the resulting session checkout.
+Use `mt spawn <session>` for isolated repo work, following the repo's branch naming
+rules. Run subsequent commands from the returned checkout. Use `mt <command> --help`
+for flags.
 
-## Commands
+## Choose the command
 
-- `mt spawn <session> [--codex]`: create or update a session worktree and its dependency worktrees. Use `--codex` when follow-up threads will use it; the flag opens the root session checkout as a Codex workspace.
-- `mt swing [target] [--codex]`: navigate to a session or linked-worktree branch, `^` for the source checkout, `-` for the previous target, or a same-repo PR (`pr:123` or URL). Omit the target for a picker. Use `--codex` when follow-up threads will use that checkout; the flag opens it as a Codex workspace.
-- `mt diff [-p|--pick]`: review any checkout using a remembered or inferred base. On main/master or an unambiguous default tip, show local changes only (`No changes.` when clean). `--pick` always opens choices including default refs without worktrees. Sessions remember any selected branch after successful launch; other checkouts infer afresh. Bases contribute committed state; the current checkout includes staged, unstaged, and untracked changes.
-- `mt home`: print the resolved absolute monke home path without creating it, honoring `MONKE_HOME` and defaulting to `~/.monke`.
-- `mt materialize`: refresh env/path rewrites, resources, and bootstrap inside a session, reusing assigned ports.
-- `mt resources acquire|release`: acquire missing checkout resources or release recorded allocations; supports Source checkouts and Session worktrees.
-- `mt resources exec -- <command> [args...]`: run with validated recorded allocations, protecting them from release until the command exits. See [resource lifecycle](../../references/internal/RESOURCES.md) for migration and cleanup behavior.
-- `mt setup`: prepare dependency paths and deterministic resource values in a Source checkout or Session worktree before starting infrastructure; runs no resource commands.
-- `mt chop [target]`: remove the current or selected session/worktree and run recorded session cleanup, preserving local branches. A session member selects the whole session; supply a target from the source checkout.
-- `mt cleanup`: clean eligible retained Sessions across all Roots, including partially removed Sessions and those awaiting finalization. Preview without changes with `--dry-run`; both modes accept `--json` and `--eligible` (hide skipped Sessions in human output) and work outside a repository. Every member must pass eligibility. Optional worktree paths restrict scope; unowned worktrees stay untouched unless included explicitly. Process trees whose command line names a path inside a worktree, such as a dev server started there, are stopped before removal once a day old; any process under a day old skips the Session and is listed.
-- `mt update [--check]`: activate the latest stable release, or check without changing the install. Read [installation and updates](INSTALLATION.md) before updating, especially from a local build or customized release.
-- `mt skills configure`: change saved agent skill targets or reconcile their links and instructions.
+| Command | Use |
+| --- | --- |
+| `mt spawn <session>` | Create the repo and dependency worktrees. |
+| `mt materialize` | Resume or refresh a Session's environment and bootstrap. |
+| `mt swing <target>` | Navigate to a Session, worktree, or same-repo PR. `^` selects source; `-` selects the previous target. |
+| `mt diff` | Review the current checkout; `--pick` chooses a comparison base. |
+| `mt setup` | Prepare static checkout values and dependency paths before infrastructure starts. |
+| `mt resources acquire` | Acquire missing resources for the current checkout. |
+| `mt resources exec -- <command> [args...]` | Run with validated saved resource values. |
+| `mt resources release` | Release allocations while retaining the checkout and infrastructure. |
+| `mt chop [target]` | Remove one Session or ordinary worktree, preserving branches. |
+| `mt cleanup --dry-run` | Preview eligible Sessions across all repos. |
+| `mt home` | Print the Monke home path. |
+| `mt skills configure` | Select skill targets or reconcile installed guidance. |
 
-## Usage notes
+## Create and resume work
 
-Spawn branches from the invoking checkout's `HEAD` and copies its edits, leaving the original untouched. Existing branches must match that HEAD to receive edits; existing worktrees keep their contents. Dependencies, configuration, and seeds use canonical source checkouts. Retry interrupted carry from its recorded checkout and HEAD.
+Spawn starts from the invoking checkout's `HEAD` and carries its edits; dependencies
+use their source checkouts. `--no-dirty` requires clean checkouts. `-m` starts from
+default branches without carrying edits. Existing worktrees retain their contents.
+Source checkouts provide configuration and seed files.
 
-`--no-dirty` requires clean invoking and dependency checkouts. `-m` (`--main`, `--master`) uses default branches without dirty carry and takes precedence over `--no-dirty`.
+After failure, use the reported retry command from the recorded checkout. A created
+worktree is not ready until materialization succeeds. Add `--codex` to Spawn or Swing
+to open the checkout in Codex. Shell navigation requires the installed shell adapter.
 
-Explicit PR navigation fetches the PR head and creates a session if needed; diverged local heads block navigation. Stored targets and picker selections do not revalidate PR heads. Fork PRs are unsupported.
+Use `mt swing pr:<number>` or a PR URL for same-repo PRs. Diverged local heads block
+navigation; resolve the divergence without discarding work. Fork PRs are unsupported.
 
-Run subsequent agent commands with the resolved checkout as their working directory. Shell navigation requires an active shell adapter; `--codex` opens a workspace without creating a thread.
+## Release and remove
 
-A session is ready after dependencies, env/path rewrites, resources, and bootstrap succeed. On failure, report the failing repo and retry command; a created worktree alone is incomplete.
+For acquisition prerequisites, foreground execution, or partial failures, read
+[resource commands](../../references/internal/RESOURCES.md).
 
-## Remove and recover
+A Session member selects the whole Session for Chop. From source, provide an explicit
+target. Dirty files block removal; ignored files are deleted with the worktree.
+Use `--force` only when discarding that work is authorized. Preserve local branches.
 
-Resolve the target scope before removal. Dirty files block `chop`; use `--force` only when discarding them is authorized. Ignored files are always deleted with removed worktrees. Ordinary worktrees accept registered branches or paths; detached worktrees require current-location or path selection. Source checkouts are not removal targets.
-
-Cleanup commands run before any Session worktrees are removed; failure retains the remaining worktrees and Session state. Earlier commands may already have removed resources. Diagnose the reported repository/step and completed actions, then retry `mt cleanup` for eligible Sessions or `mt chop <session>` for an explicit target; recorded cleanup commands run root-first and may rerun. A missing worktree blocks required commands; restore it, or explicitly use `mt chop <session> --cleanup-from-source` only after verifying those commands are safe from the source checkout. Preserve session state for recovery. Teardown is complete when removal and finalization succeed.
-
-For archived notes, missing worktrees, or ordinary worktree cleanup, read the [cleanup recovery contract](../../references/internal/CLEANUP_RECOVERY.md#ownership-and-execution). `--archive-untracked` saves untracked-only bundles before removal. Live ordinary worktrees require audited resource recovery; `--recover-with '<command>'` requires explicit worktree paths and runs from canonical Sources with saved resources.
+Preview global Cleanup before running `mt cleanup`; optional paths restrict its scope.
+Cleanup may stop old attached processes and skips Sessions with recently active ones.
+For archives, missing or ordinary worktrees, and failed teardown, read
+[cleanup recovery](../../references/internal/CLEANUP_RECOVERY.md).
 
 ## Configuration and installation
 
-When creating, editing, or diagnosing `monke.yml`, including Docker teardown, read the [configuration reference](MONKE-YML-REFERENCE.md).
+For `monke.yml`, resource modules, or Docker teardown, read the
+[configuration reference](MONKE-YML-REFERENCE.md).
 
-For missing or stale mt, local builds, release updates, skill targets, shell integration, or Codiff dependencies, read [installation and updates](INSTALLATION.md).
+For installation, updates, shell integration, or Codiff dependencies, read
+[installation and updates](INSTALLATION.md).

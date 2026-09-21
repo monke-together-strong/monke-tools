@@ -1,26 +1,19 @@
 # monke-tools
 
-monke-tools manages workspace sessions across a root repo and its dependencies.
-This glossary defines the shared language. References explain usage and behavior.
+monke-tools manages workspace Sessions across a root repo and its dependencies.
+This file and the references below form one glossary, split by domain area.
+They contain terms and relationships; tool usage belongs in the
+[Core skill](skills/internal/monke-tools-core/SKILL.md).
 
-## References
+## Domain references
 
-Read the relevant reference when working on these areas:
+- [Session lifecycle](docs/reference/session-lifecycle.md): preparation, materialization, removal, and navigation.
+- [Resources](docs/reference/resources.md): checkout ownership, values, and allocations.
+- [Installation](docs/reference/installation.md): installs, releases, activation, and provenance.
+- [Agent guidance](docs/reference/agent-guidance.md): skills, imports, targets, and projections.
+- [Retrospective](docs/reference/retrospective.md): transcripts, PR evidence, and fix proposals.
 
-- [Session lifecycle](docs/reference/session-lifecycle.md): preparation,
-  materialization retries, state ownership, Chop safety, Swing, Diff, and shell navigation.
-- [Resources](docs/reference/resources.md): resource values, command contracts,
-  remembered outputs, collision rules, and locking.
-- [Installation](docs/reference/installation.md): local and release installs,
-  activation, provenance, updates, and recovery.
-- [Agent guidance](docs/reference/agent-guidance.md): skill ownership, import
-  recipes, target preferences, projections, and managed global instructions.
-- [Retrospective](docs/reference/retrospective.md): transcript and PR evidence,
-  repo membership, and durable fix proposals.
-
-Use [README.md](README.md) for usage and
-[the configuration reference](skills/internal/monke-tools-core/MONKE-YML-REFERENCE.md)
-for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
+Historical decisions live in [docs/adr](docs/adr).
 
 ## Session topology
 
@@ -30,7 +23,7 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 
 **Source checkout**: The original working copy in a Git clone, shared as the source for its linked worktrees. A **Session** is created from one. _Avoid_: Main worktree, root worktree
 
-**Session worktree**: A linked Git worktree created for a specific repo inside a session, stored under the **Monke home** worktree area as `worktrees/<repo-name>/<session>`.
+**Session worktree**: A linked Git worktree owned by one **Session** for one participating repo.
 
 **Ordinary worktree**: A linked Git worktree that is not owned by a **Session**. _Avoid_: Non-Monke worktree, external worktree, unmanaged Session
 
@@ -42,7 +35,7 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 
 **Consumer repo**: A repo whose developer or agent uses monke-tools as a local workflow tool.
 
-**Monke home**: The machine-local directory where monke-tools keeps state, preferences, and owned **Session worktrees** shared across **Consumer repos**. Defaults to `~/.monke`; Session worktrees live under `worktrees/<repo-name>/<session>` within this directory.
+**Monke home**: The machine-local directory where monke-tools keeps state, preferences, and owned **Session worktrees** shared across **Consumer repos**.
 
 ## Repo configuration
 
@@ -72,21 +65,9 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 
 **Baseline port**: A numeric port already present in a repo's managed env files that should not be reallocated.
 
-## Resources
-
-**Checkout resource**: A deterministic value or acquired allocation owned by one Source checkout or Session worktree.
-
-**Resource value**: A configured, deterministic value retained for its owning checkout.
-
-**Resource command**: A repo-defined provider of dynamic allocations and their release behavior.
-
-**Resource command output**: A value returned by acquisition and retained until its allocation is released.
-
-**Cleanup command**: A repo-defined operation for Session infrastructure teardown after resource release.
-
 ## Operations
 
-**Spawn**: The operation that creates or updates all required session worktrees, using the invoking checkout’s current `HEAD` unless **Default branch spawn mode** is requested.
+**Spawn**: The operation that creates or completes a **Session** and its participating worktrees.
 
 **Materialize**: The operation that schedules **Worktree preparation** and **Repo materialization** across the Session dependency graph. _Avoid_: Refresh, rebuild
 
@@ -112,7 +93,6 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
   keys; External mappings consume dependency-owned keys.
 - Each Assigned port belongs to one Port key in a Session. A repo's Port
   reservation survives Session cleanup for future allocations.
-- Use Dependency repo in prose; `external` is the configuration section name.
 - Setup prepares static checkout wiring; Materialize also prepares Session
   worktrees and runs bootstrap. Consumer repo describes tool usage, while Root repo and
   Dependency repo describe membership in a particular Session.

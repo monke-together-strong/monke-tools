@@ -20,10 +20,6 @@ external:
 seedPaths:
   - scripts/bootstrap.sh
 bootstrapCommand: pnpm install
-resources:
-  values:
-    COMPOSE_PROJECT_NAME: myapp-${id}
-cleanupCommand: docker compose --profile '*' down
 ```
 
 ## Env and dependencies
@@ -97,19 +93,9 @@ values arrive through env during acquisition; release receives them explicitly a
 A module without a `release` export is suitable for allocations with no external
 cleanup. Acquisition and release must be safe to retry.
 
-### Explicit acquisition and execution
-
-Commands default to `acquire: automatic`, so Spawn and Materialize acquire them
-after bootstrap. `acquire: explicit` defers acquisition until `mt resources acquire`.
-Run that command in a Source checkout or Session worktree to acquire all missing
-commands, including automatic ones, and reuse complete allocations.
-
-Dynamic outputs stay in MT's resource store. Use
-`mt resources exec -- bun run <script>` to validate ownership and inject recorded
-values into a foreground command. Missing allocations fail before it starts.
-`mt resources release` releases those allocations and keeps the checkout and
-infrastructure. See the [resource lifecycle](../../references/internal/RESOURCES.md)
-for collision checks, locking, migration and retry behavior.
+Commands default to `acquire: automatic`, which runs after Session bootstrap.
+Use `acquire: explicit` for resources that need additional setup. For acquisition,
+execution, and retry commands, read [resource commands](../../references/internal/RESOURCES.md).
 
 ## Cleanup
 
