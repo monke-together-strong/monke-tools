@@ -165,3 +165,30 @@ describe("cleanup authority", () => {
     expect(read(cwd, "released")).toBe("old\nnew\n");
   });
 });
+
+describe("recorded cleanup outputs", () => {
+  test("cleanup metadata excludes inherited outputs and cannot be overridden by the shell", () => {
+    const sandbox = makeTempDir("resource-cleanup-metadata");
+    const home = path.join(sandbox, "home");
+    const root = createRepo(path.join(sandbox, "repo"), {
+      ".gitignore": ".env\nreleased\n",
+      "monke.yml":
+        "apps: {}\nbootstrapCommand: 'true'\ncleanupCommand: 'printf %s \"$MONKE_RESOURCE_OUTPUTS\" > released'\nresources:\n  commands:\n    slot:\n      acquire: explicit\n      run: slot.ts\n      outputs: [SLOT]\n",
+      "slot.ts": 'export default function () { return { SLOT: "owned" }; }'
+    });
+    runMonke({ args: ["spawn", "feature"], cwd: root, monkeHome: home });
+    const cwd = getExpectedWorktreePath(home, root, "feature");
+    const release = () =>
+      runMonke({
+        args: ["resources", "release"],
+        cwd,
+        extraEnv: { MONKE_RESOURCE_OUTPUTS: '{"SLOT":"unowned"}', SLOT: "unowned" },
+        monkeHome: home
+      });
+    release();
+    expect(read(cwd, "released")).toBe("{}");
+    runMonke({ args: ["resources", "acquire"], cwd, monkeHome: home });
+    release();
+    expect(JSON.parse(read(cwd, "released"))).toStrictEqual({ SLOT: "owned" });
+  });
+});
