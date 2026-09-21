@@ -84,7 +84,9 @@ allocate again. Both commands serialize with other Monke lifecycle operations.
 
 ## Cleanup
 
-`cleanupCommand` runs root-first before any Session worktree is removed, from each repo's Session worktree. It receives saved resources, command outputs, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH`. A failure stops teardown and retains state and remaining worktrees. Commands must be safe to retry; successful commands may rerun.
+`cleanupCommand` runs root-first before any Session worktree is removed, from each repo's Session worktree. It receives saved resources, command outputs, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH`. `MONKE_RESOURCE_OUTPUTS` is a JSON object containing only
+recorded dynamic outputs; use it to distinguish owned resources from inherited
+shell variables. A failure stops teardown and retains state and remaining worktrees. Commands must be safe to retry; successful commands may rerun.
 
 If a worktree with a required command is missing, no cleanup commands run. Restore it and retry. For deliberate recovery only, `mt chop <session> --cleanup-from-source` permits running the recorded command from a source checkout when its worktree is missing. Check every command first: a source checkout has different code, env files, and Compose configuration. Automatic Cleanup never makes this substitution.
 

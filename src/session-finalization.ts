@@ -70,6 +70,7 @@ export function cleanupSessionResources(
         env: {
           ...resourceEnv,
           ...resourceCommandEnv,
+          MONKE_RESOURCE_OUTPUTS: JSON.stringify(resourceCommandEnv),
           MONKE_SESSION: state.session,
           MONKE_SOURCE_ROOT: repoState.sourceRoot,
           MONKE_WORKTREE_PATH: repoState.worktreePath
