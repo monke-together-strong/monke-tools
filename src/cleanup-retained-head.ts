@@ -1,5 +1,6 @@
 import { MonkeError } from "./errors.ts";
 import type { SessionAction } from "./session-lifecycle-progress.ts";
+import { shellQuote } from "./shell-quote.ts";
 import type { Runtime } from "./types.ts";
 
 function git(runtime: Runtime, root: string, args: string[], allowFailure = false) {
@@ -18,10 +19,6 @@ function assertDetachedHead(runtime: Runtime, worktree: string, head: string) {
   }
 }
 
-function quote(value: string) {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
 export function retainedHeadAction(
   sourceRoot: string,
   worktreePath: string,
@@ -32,7 +29,7 @@ export function retainedHeadAction(
   }
   const retainedRef = `refs/monke/retained/${head}`;
   return {
-    recoveryCommand: `git -C ${quote(sourceRoot)} worktree add --detach ${quote(worktreePath)} ${quote(retainedRef)}`,
+    recoveryCommand: `git -C ${shellQuote(sourceRoot)} worktree add --detach ${shellQuote(worktreePath)} ${shellQuote(retainedRef)}`,
     retainedRef,
     sourceRoot,
     step: "head-preservation",
