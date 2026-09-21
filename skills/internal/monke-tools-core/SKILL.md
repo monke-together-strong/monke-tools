@@ -34,8 +34,13 @@ default branches without carrying edits. Existing worktrees retain their content
 Source checkouts provide configuration and seed files.
 
 After failure, use the reported retry command from the recorded checkout. A created
-worktree is not ready until materialization succeeds. Add `--codex` to Spawn or Swing
-to open the checkout in Codex. Shell navigation requires the installed shell adapter.
+worktree is not ready until materialization succeeds. Shell navigation requires the
+installed shell adapter.
+
+When Codex needs to create follow-up tasks in the new checkout, use
+`mt spawn <session> --codex` or `mt swing <target> --codex` first. Opening the checkout
+in Codex makes that directory available for task creation; creating the worktree
+alone does not.
 
 Use `mt swing pr:<number>` or a PR URL for same-repo PRs. Diverged local heads block
 navigation; resolve the divergence without discarding work. Fork PRs are unsupported.
