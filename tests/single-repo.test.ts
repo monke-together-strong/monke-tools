@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
 import { spawnSessionLocked } from "../src/monke.ts";
 import {
@@ -1800,8 +1801,9 @@ apps:
       "API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\nSTATIC_HANDLE=fixed-banana\n"
     );
 
-    const initialState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
-    expect(initialState.repos[0]?.resourceValues).toStrictEqual([
+    const resources = new CheckoutResourceStore(home);
+    const owner = resourceOwner(repoRoot, worktreeRoot, "banana");
+    expect(resources.get(owner).resourceValues).toStrictEqual([
       { env: "DISCORD_CHANNEL", value: "mt-ada-banana" },
       { env: "STATIC_HANDLE", value: "fixed-banana" }
     ]);
@@ -1832,8 +1834,7 @@ apps:
 
     expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\n");
 
-    const nextState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
-    expect(nextState.repos[0]?.resourceValues).toStrictEqual([
+    expect(resources.get(owner).resourceValues).toStrictEqual([
       { env: "DISCORD_CHANNEL", value: "mt-ada-banana" }
     ]);
   });

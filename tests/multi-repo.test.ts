@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
+import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath, saveSessionState } from "../src/session-state-store.ts";
 import { SessionStateSchema } from "../src/state-schema.ts";
@@ -652,9 +653,12 @@ external:
     expect(existsSync(path.join(home, "worktrees", "root", "collision"))).toBeFalsy();
   });
 
-  test.each(["alpha", "beta"])(
-    "resource command retained inputs span root graphs when the second Session is %s",
-    (secondSession) => {
+  test.each([
+    { previous: [], secondSession: "alpha", symbol: "SOL/USDT:USDT" },
+    { previous: ["SOL/USDT:USDT"], secondSession: "beta", symbol: "LINK/USDT:USDT" }
+  ])(
+    "resource commands share checkout ownership across root graphs when the second Session is $secondSession",
+    ({ previous, secondSession, symbol }) => {
       const sandbox = makeTempDir("multi-repo-resource-command-declaring-scope");
       const binDirectory = path.join(sandbox, "bin");
       installShShim(binDirectory);
@@ -675,9 +679,10 @@ apps:
       - port: DEP_POSTGRES_PORT
         env: PORT
 `,
-        "scripts/e2e-symbols.ts": `import { writeFileSync } from "node:fs";
+        "scripts/e2e-symbols.ts": `import { appendFileSync, writeFileSync } from "node:fs";
 
 export default function ({ previous }) {
+  appendFileSync("command-runs.log", "run\\n");
   writeFileSync("command-stdin.json", JSON.stringify(previous));
   const value = previous.E2E_FLOW1_SYMBOL.includes("SOL/USDT:USDT")
     ? "LINK/USDT:USDT"
@@ -738,9 +743,16 @@ external:
 
       const secondDepWorktree = getExpectedWorktreePath(home, depRoot, secondSession);
       expect(JSON.parse(read(secondDepWorktree, "command-stdin.json"))).toStrictEqual({
-        E2E_FLOW1_SYMBOL: ["SOL/USDT:USDT"]
+        E2E_FLOW1_SYMBOL: previous
       });
-      expect(read(secondDepWorktree, ".env")).toContain("E2E_FLOW1_SYMBOL=LINK/USDT:USDT\n");
+      expect(read(secondDepWorktree, "command-runs.log")).toBe("run\n");
+      expect(read(secondDepWorktree, ".env")).not.toContain("E2E_FLOW1_SYMBOL=");
+      const record = new CheckoutResourceStore(home).get(
+        resourceOwner(depRoot, secondDepWorktree, secondSession)
+      );
+      expect(record.resourceCommandOutputs).toMatchObject([
+        { name: "e2e-symbols", outputs: [{ env: "E2E_FLOW1_SYMBOL", value: symbol }] }
+      ]);
     }
   );
 
@@ -832,8 +844,14 @@ external:
     });
 
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\nE2E_CHANNEL_ID=123\n`
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\n`
     );
+    const record = new CheckoutResourceStore(home).get(
+      resourceOwner(root, rootWorktree, "partial")
+    );
+    expect(record.resourceCommandOutputs).toMatchObject([
+      { name: "e2e-channel", outputs: [{ env: "E2E_CHANNEL_ID", value: "123" }] }
+    ]);
   });
 
   test("spawn fans out one dependency-owned port to multiple local targets", () => {
