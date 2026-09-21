@@ -128,6 +128,14 @@ Harness-specific skills by harness. Currently Codex is the only harness-specific
 scope: only the built-in Codex target receives Codex-only skills. All targets
 receive Shared skills and references.
 
+Relative Markdown file links in distributed guidance must resolve within the
+Release bundle's guidance files. Put references shared with repository docs in
+`skills/references/internal/` and link to that authoritative copy from both
+consumers; repository-level `docs/` does not ship. PR and mainline CI check these
+links, including supporting Markdown and imported guidance. The check ignores
+code examples, absolute paths, remote URLs, and heading fragments; it validates
+packaged file availability rather than heading existence or network reachability.
+
 The Core skill uses `monke-tools-core` for both slug and agent name; these may
 differ for other skills. Imports preserve upstream agent names by default.
 Each imported item has one owner recipe and one Import kind. Changing kind

@@ -23,3 +23,6 @@ jobs:
       - name: Check
         # Issue #130 keeps the full unit suite in PR CI and deliberately avoids repeating it here.
         run: vp check
+
+      - name: Check packaged skill links
+        run: vpr skills:check-links
