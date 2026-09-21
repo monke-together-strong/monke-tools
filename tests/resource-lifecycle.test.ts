@@ -36,6 +36,27 @@ describe("checkout resources", () => {
     expect(() => run("resources", "exec", "--", "bun", "consume.ts")).toThrow(/acquire/u);
   });
 
+  test("setup establishes source infrastructure identity before live acquisition", () => {
+    const sandbox = makeTempDir("checkout-resource-static-setup");
+    const home = path.join(sandbox, "home");
+    const cwd = createRepo(path.join(sandbox, "repo"), {
+      "live.ts":
+        'export async function acquire() { await Bun.write("acquired", "yes"); return {LIVE: "allocated"}; }',
+      "monke.yml":
+        // oxlint-disable-next-line no-template-curly-in-string -- MT interpolates this YAML literal.
+        "apps: {}\nresources:\n  values:\n    COMPOSE_PROJECT_NAME: project-${id}\n  commands:\n    live:\n      acquire: explicit\n      run: live.ts\n      outputs: [LIVE]\n"
+    });
+    const run = (...args: string[]) => runMonke({ args, cwd, monkeHome: home });
+    run("setup");
+    const staticEnv = read(cwd, ".env");
+    expect(staticEnv).toMatch(/COMPOSE_PROJECT_NAME=project-[a-f0-9]{32}/u);
+    expect(existsSync(path.join(cwd, "acquired"))).toBeFalsy();
+    expect(() => run("resources", "exec", "--", "true")).toThrow(/acquire/u);
+    run("resources", "acquire");
+    expect(read(cwd, ".env")).toBe(staticEnv);
+    expect(read(cwd, "acquired")).toBe("yes");
+  });
+
   test("source and Session allocations share collision protection and chop releases before teardown", () => {
     const sandbox = makeTempDir("checkout-resource-sessions");
     const home = path.join(sandbox, "home");

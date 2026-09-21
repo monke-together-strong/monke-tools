@@ -34,6 +34,11 @@ for placeholders and the module contract.
 
 ## Acquire, execute, release
 
+Run `mt setup` before starting infrastructure in a Source checkout. It prepares
+dependency paths and deterministic values such as `COMPOSE_PROJECT_NAME`, without
+acquiring live resources. The same command works in Session worktrees using their
+recorded dependency paths. Spawn already prepares those values for Sessions.
+
 - `mt resources acquire` acquires every missing command for the current repo,
   including explicit commands, and reuses complete recorded allocations. Spawn
   and Materialize acquire automatic commands only.
@@ -54,8 +59,8 @@ proof of ownership.
 
 The checkout lock stays held for the foreground command's lifetime. Concurrent
 release, acquisition, materialization and Chop of that checkout fail while it is
-in use; commands in other checkouts can proceed. The lock records the child process group,
-so surviving children remain protected if the MT wrapper is killed. Commands must
+in use; commands in other checkouts can proceed. The lock records the foreground command PID and any descendants observed during
+termination, so those processes remain protected if the MT wrapper is killed. Commands must
 keep resource use within their foreground lifetime rather than detach work.
 
 ## Persistence and recovery

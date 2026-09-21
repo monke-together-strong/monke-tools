@@ -2390,7 +2390,7 @@ external:
     expect(read(root, ".env")).toBe("KEEP_ME=1\nDEP_DIR=../dep\n");
   });
 
-  test("setup must run from the source checkout", () => {
+  test("setup in a Session preserves its dependency checkout paths", () => {
     const sandbox = makeTempDir("setup-source-checkout-only");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -2430,14 +2430,12 @@ external:
       monkeHome: home
     });
 
-    expect(() =>
-      runMonke({
-        args: ["setup"],
-        binDirectory,
-        cwd: getExpectedWorktreePath(home, root, "banana"),
-        monkeHome: home
-      })
-    ).toThrow(/must run from the source checkout/u);
+    const cwd = getExpectedWorktreePath(home, root, "banana");
+    runMonke({ args: ["setup"], binDirectory, cwd, monkeHome: home });
+    expect(read(cwd, ".env")).toContain(
+      `DEP_DIR=${path.relative(cwd, getExpectedWorktreePath(home, path.join(sandbox, "dep"), "banana"))}`
+    );
+    expect(existsSync(path.join(root, ".env"))).toBeFalsy();
   });
 
   test("spawn -m seeds untracked env files and seedPaths from the source checkout", () => {

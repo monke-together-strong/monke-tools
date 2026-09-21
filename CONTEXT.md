@@ -77,7 +77,7 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 
 **Materialize**: The operation that schedules **Worktree preparation** and **Repo materialization** across the Session dependency graph. _Avoid_: Refresh, rebuild
 
-**Setup**: The operation that updates the source checkout root `.env` with dependency path env values. _Avoid_: Materialize, bootstrap
+**Setup**: The operation that prepares a Source checkout or Session worktree root `.env` with dependency paths and deterministic Resource values, without acquiring live resources. _Avoid_: Materialize, bootstrap
 
 **Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target removes every recorded Session worktree and performs **Session finalization**; an Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
 
@@ -98,6 +98,6 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 - Each Assigned port belongs to one Port key in a Session. A repo's Port
   reservation survives Session cleanup for future allocations.
 - Use Dependency repo in prose; `external` is the configuration section name.
-- Distinguish Source checkout root `.env` (Setup) from session root `.env`
-  (materialization). Consumer repo describes tool usage, while Root repo and
+- Setup prepares static checkout wiring; Materialize also prepares Session
+  worktrees and runs bootstrap. Consumer repo describes tool usage, while Root repo and
   Dependency repo describe membership in a particular Session.

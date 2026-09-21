@@ -7,6 +7,7 @@ import { loadResolvedGraph } from "./config.ts";
 import { syncRootEnvFileWithRemovals } from "./env.ts";
 import { MonkeError } from "./errors.ts";
 import { resolveRepoContext, validateWorktreeForSession } from "./git.ts";
+import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
 import {
   resolveResourceCommands,
@@ -62,7 +63,63 @@ function resolveCheckout(runtime: Runtime) {
   const pendingInfrastructureCleanup = Boolean(
     sessionRepo?.cleanupEligible && sessionRepo.cleanupCommand
   );
-  return { home, loadConfig, owner, pendingInfrastructureCleanup, store };
+  const dependencyCheckout = (sourceRoot: string) => {
+    if (!session) {
+      return sourceRoot;
+    }
+    const dependency = session.repos.find((repo) => samePath(repo.sourceRoot, sourceRoot));
+    if (!dependency) {
+      throw new MonkeError(`Missing Session dependency ${sourceRoot}; run mt materialize first.`);
+    }
+    return dependency.worktreePath;
+  };
+  return { dependencyCheckout, home, loadConfig, owner, pendingInfrastructureCleanup, store };
+}
+
+/** Prepare static checkout wiring before local infrastructure; never run acquisition modules. */
+export function runCheckoutSetup(runtime: Runtime) {
+  withGlobalLock(getMonkeHome(runtime), () => {
+    const { dependencyCheckout, home, loadConfig, owner, pendingInfrastructureCleanup, store } =
+      resolveCheckout(runtime);
+    const unlock = acquireCheckoutResourceLock(home, owner.checkoutPath);
+    try {
+      const config = loadConfig();
+      if (!config) {
+        throw new MonkeError("Missing repository resource configuration");
+      }
+      const record = store.get(owner);
+      const values = resolveResourceValues({
+        env: runtime.env,
+        existingRepoState: record,
+        preserveValues: Boolean(record.legacyCleanupCommand || pendingInfrastructureCleanup),
+        repoConfig: config,
+        rootSourceRoot: owner.sourceRoot,
+        session: owner.session ?? "",
+        store,
+        worktreePath: owner.checkoutPath
+      });
+      const paths = config.externalInOrder.map((dependency) => ({
+        env: dependency.pathEnv,
+        value:
+          path.relative(owner.checkoutPath, dependencyCheckout(dependency.absoluteRepoRoot)) || "."
+      }));
+      record.resourceValues = values.values;
+      store.save(record);
+      syncRootEnvFileWithRemovals(
+        owner.checkoutPath,
+        [...paths, ...values.values],
+        [
+          ...values.removedEnvNames,
+          ...config.resourceCommandsInOrder.flatMap((command) => command.outputs)
+        ]
+      );
+      createLogger(runtime).success(
+        `Updated checkout root .env for ${path.basename(owner.sourceRoot)}`
+      );
+    } finally {
+      unlock();
+    }
+  });
 }
 
 /** Acquire or release current-checkout resources, without tearing down its infrastructure. */
@@ -177,8 +234,8 @@ export async function runResourcesExec(runtime: Runtime, command: string, args: 
       allowFailure: true,
       env: prepared.env,
       inheritStdio: true,
-      onSpawn: (pid) => {
-        prepared.unlock.protectProcess(pid);
+      protectProcesses: (pids) => {
+        prepared.unlock.protectProcesses(pids);
       }
     });
     return result.exitCode;
