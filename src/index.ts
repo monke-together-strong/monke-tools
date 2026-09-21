@@ -14,6 +14,7 @@ import {
   runActivateReleaseInstall
 } from "./installation.ts";
 import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
+import { runResources } from "./resource-lifecycle.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
@@ -72,6 +73,12 @@ function createProgram(runtime: Runtime) {
     .action((options) => runDiffInteractive(runtime, options));
 
   program.command("materialize").action(() => runMaterialize(runtime));
+
+  const resources = program
+    .command("resources")
+    .description("Acquire or release current repository Session resources");
+  resources.command("acquire").action(() => runResources(runtime, "acquire"));
+  resources.command("release").action(() => runResources(runtime, "release"));
 
   program
     .command("chop")

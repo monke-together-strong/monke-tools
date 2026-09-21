@@ -1075,7 +1075,7 @@ function assertNoGlobalWorktreePathStateCollisions(
   }
 }
 
-function loadResolvedGraphForSession(
+export function loadResolvedGraphForSession(
   runtime: Runtime,
   rootSourceRoot: string,
   sessionState: SessionState | undefined

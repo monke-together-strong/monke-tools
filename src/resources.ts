@@ -114,6 +114,7 @@ export function resolveResourceValues(options: {
 
 /** Resolve, reuse, prune, execute, and validate Resource command outputs. */
 export async function resolveResourceCommands(options: {
+  acquireExplicit?: boolean;
   existingRepoState: SessionRepoState | undefined;
   onCommandExecutionStarting?: (commands: ResourceCommandState[]) => void;
   onResolvedCommandOutputs: (commands: ResourceCommandState[]) => void;
@@ -130,14 +131,20 @@ export async function resolveResourceCommands(options: {
   const currentByName = new Map<string, ResourceCommandState>();
 
   for (const command of options.repoConfig.resourceCommandsInOrder) {
-    const reusable = getReusableResourceCommand(command, existingByName.get(command.name));
+    const reusable =
+      command.acquire === "explicit" && !options.acquireExplicit
+        ? existingByName.get(command.name)
+        : getReusableResourceCommand(command, existingByName.get(command.name));
     if (reusable) {
       currentByName.set(command.name, reusable);
     }
   }
 
   for (const command of options.repoConfig.resourceCommandsInOrder) {
-    if (currentByName.has(command.name)) {
+    if (
+      currentByName.has(command.name) ||
+      (command.acquire === "explicit" && !options.acquireExplicit)
+    ) {
       continue;
     }
     // oxlint-disable-next-line no-await-in-loop -- Commands in one repo are intentionally ordered; sibling repos remain concurrent.
