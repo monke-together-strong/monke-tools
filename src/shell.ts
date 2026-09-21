@@ -5,6 +5,7 @@ import { MonkeError } from "./errors.ts";
 import { createLogger } from "./logger.ts";
 import { findExecutable, getHomeDirectory } from "./runtime.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
+import { shellQuote } from "./shell-quote.ts";
 import type { Runtime } from "./types.ts";
 
 export { SHELL_DIRECTORY_DIRECTIVE_ENV } from "./shell-directive.ts";
@@ -213,8 +214,4 @@ function getStartupFilePath(runtime: Runtime, home: string, shell: SupportedShel
   const startupRoot =
     shell === "zsh" && runtime.env.ZDOTDIR ? path.resolve(runtime.cwd, runtime.env.ZDOTDIR) : home;
   return path.join(startupRoot, shell === "zsh" ? ".zshrc" : ".bashrc");
-}
-
-function shellQuote(value: string) {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
