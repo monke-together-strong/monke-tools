@@ -62,7 +62,7 @@ export interface ExecOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
   inheritStdio?: boolean;
-  protectProcesses?: (pids: number[]) => void;
+  protectProcessGroup?: (pid: number) => void;
   /** Text passed to the child process on stdin. */
   stdin?: string;
   /** Positive timeout in seconds before the child process is terminated. */

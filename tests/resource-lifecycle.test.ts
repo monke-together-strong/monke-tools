@@ -153,48 +153,65 @@ describe("checkout resources", () => {
     expect(run("resources", "exec", "--", "printenv", "SLOT").stdout.trim()).toBe("current");
   });
 
-  test("terminating exec stops a shell's waiting descendants before releasing resources", async () => {
-    const sandbox = makeTempDir("checkout-resource-shell-signal");
-    const home = path.join(sandbox, "home");
-    const cwd = createRepo(path.join(sandbox, "repo"), {
-      "monke.yml": "apps: {}\n",
-      "wait.ts":
-        'process.on("SIGTERM", () => {}); await Bun.write("started", String(process.pid)); await new Promise(() => {});'
-    });
-    const child = spawnMonkeWorker({
-      args: ["resources", "exec", "--", "sh", "-c", "bun wait.ts & wait"],
-      cwd,
-      monkeHome: home
-    });
-    let pid: number | undefined;
-    const alive = () => {
-      if (pid === undefined) {
-        return false;
-      }
+  test.each(["wrapper", "group"])(
+    "terminating the %s stops shell descendants before releasing resources",
+    async (target) => {
+      const sandbox = makeTempDir("checkout-resource-shell-signal");
+      const home = path.join(sandbox, "home");
+      const cwd = createRepo(path.join(sandbox, "repo"), {
+        "monke.yml": "apps: {}\n",
+        "wait.ts":
+          'process.on("SIGTERM", () => {}); await Bun.write("started", String(process.pid)); await new Promise(() => {});'
+      });
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          new URL("run-monke-worker.ts", import.meta.url).pathname,
+          "resources",
+          "exec",
+          "--",
+          "sh",
+          "-c",
+          "bun wait.ts & wait"
+        ],
+        {
+          cwd,
+          detached: true,
+          env: { ...process.env, MONKE_HOME: home },
+          stderr: "ignore",
+          stdout: "ignore"
+        }
+      );
+      let pid: number | undefined;
+      const alive = () => {
+        if (pid === undefined) {
+          return false;
+        }
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      };
       try {
-        process.kill(pid, 0);
-        return true;
-      } catch {
-        return false;
-      }
-    };
-    try {
-      await expect.poll(() => existsSync(path.join(cwd, "started"))).toBe(true);
-      pid = Number(read(cwd, "started"));
-      child.kill("SIGTERM");
-      await child.exited;
-      await expect.poll(alive).toBe(false);
-      runMonke({ args: ["resources", "release"], cwd, monkeHome: home });
-    } finally {
-      if (alive() && pid !== undefined) {
-        process.kill(pid, "SIGKILL");
-      }
-      if (child.exitCode === null) {
-        child.kill("SIGKILL");
+        await expect.poll(() => existsSync(path.join(cwd, "started"))).toBe(true);
+        pid = Number(read(cwd, "started"));
+        process.kill(target === "group" ? -child.pid : child.pid, "SIGTERM");
         await child.exited;
+        await expect.poll(alive).toBe(false);
+        runMonke({ args: ["resources", "release"], cwd, monkeHome: home });
+      } finally {
+        if (alive() && pid !== undefined) {
+          process.kill(pid, "SIGKILL");
+        }
+        if (child.exitCode === null) {
+          child.kill("SIGKILL");
+          await child.exited;
+        }
       }
     }
-  });
+  );
 
   test("an active exec blocks release and chop but leaves other checkouts usable", async () => {
     const sandbox = makeTempDir("checkout-resource-use");

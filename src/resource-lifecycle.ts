@@ -234,8 +234,8 @@ export async function runResourcesExec(runtime: Runtime, command: string, args: 
       allowFailure: true,
       env: prepared.env,
       inheritStdio: true,
-      protectProcesses: (pids) => {
-        prepared.unlock.protectProcesses(pids);
+      protectProcessGroup: (pid) => {
+        prepared.unlock.protectProcessGroup(pid);
       }
     });
     return result.exitCode;

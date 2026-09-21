@@ -21,7 +21,7 @@ import * as z from "zod";
 
 import { DEFAULT_TOOL_BUILD_IDENTITY } from "./build-identity.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
-import { stopForegroundProcesses } from "./foreground-processes.ts";
+import { prepareForegroundCommand } from "./foreground-command.ts";
 import { ReleaseCatalogPageSchema } from "./release-catalog-schema.ts";
 import { sha256 } from "./sha256.ts";
 import type {
@@ -42,7 +42,7 @@ const STALE_LOCK_AGE_MS = 60_000;
 type AsyncChildProcess = Bun.PipedSubprocess;
 type ManagedChild = Pick<Bun.Subprocess, "pid" | "kill">;
 const activeAsyncChildren = new Set<ManagedChild>();
-const foregroundChildren = new Map<ManagedChild, (signal: NodeJS.Signals) => void>();
+const foregroundChildren = new Set<ManagedChild>();
 const timedOutProcessGroups = new Map<number, ManagedChild>();
 const PARENT_TERMINATION_SIGNALS = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
 // Stable handler identities, so detaching removes exactly what attaching added.
@@ -62,6 +62,7 @@ const LockMetadataSchema = z.object({
   acquiredAt: z.unknown().optional(),
   pid: z.unknown().optional(),
   processGroup: z.boolean().optional(),
+  protectedGroup: LockPidSchema.optional(),
   protectedPids: z.array(LockPidSchema).optional()
 });
 const LockTimestampSchema = z.number();
@@ -319,38 +320,38 @@ async function executeForeground(
     attachParentTerminationHandlers();
   }
   let child: ManagedChild | undefined;
+  const foreground = prepareForegroundCommand(command, args);
   try {
     const spawned = Bun.spawn({
-      cmd: [command, ...args],
+      cmd: [foreground.command, ...foreground.args],
       cwd: options.cwd ?? cwd,
       env,
+      ipc() {
+        /* The launcher waits for our start acknowledgement. */
+      },
       stderr: "inherit",
       stdin: "inherit",
       stdout: "inherit"
     });
     child = spawned;
-    let shutdown: Promise<void> | undefined;
-    foregroundChildren.set(child, (signal) => {
-      shutdown ??= stopForegroundProcesses(
-        (executable, argv, execOptions) =>
-          executeCommand(env, cwd, executable, argv ?? [], execOptions),
-        spawned.pid,
-        signal,
-        options.protectProcesses
-      );
-    });
+    foregroundChildren.add(child);
     registerAsyncChild(child);
     try {
-      options.protectProcesses?.([spawned.pid]);
+      options.protectProcessGroup?.(spawned.pid);
+      spawned.send("start");
     } catch (error) {
       spawned.kill("SIGKILL");
       await spawned.exited;
       throw error;
     }
     const exitCode = await spawned.exited;
-    await shutdown;
+    // The leader can exit on a terminal signal while a descendant ignores it.
+    terminateChildProcessTree(spawned.pid, "SIGKILL", () => {
+      // The direct child has exited; only surviving group members need termination.
+    });
     return { exitCode, stderr: "", stdout: "" };
   } finally {
+    foreground.restore();
     if (child) {
       unregisterAsyncChild(child);
     }
@@ -604,17 +605,23 @@ function terminateActiveChild(
   child: ManagedChild,
   signal: NodeJS.Signals
 ) {
-  const foreground = foregroundChildren.get(child);
-  if (foreground) {
-    foreground(signal);
-    return;
-  }
   terminateChildProcessTree(pid, signal, () => {
     child.kill(signal);
   });
-  terminateChildProcessTree(pid, "SIGKILL", () => {
-    child.kill("SIGKILL");
-  });
+  if (!foregroundChildren.has(child)) {
+    terminateChildProcessTree(pid, "SIGKILL", () => {
+      child.kill("SIGKILL");
+    });
+    return;
+  }
+  const escalation = setTimeout(() => {
+    if (activeAsyncChildren.has(child)) {
+      terminateChildProcessTree(pid, "SIGKILL", () => {
+        child.kill("SIGKILL");
+      });
+    }
+  }, ASYNC_TERMINATION_GRACE_MS);
+  escalation.unref();
 }
 
 function terminateChildProcessTree(
@@ -705,7 +712,7 @@ export interface OperationLock {
 
 type LockRelease = (() => void) & {
   ownership: OperationLock;
-  protectProcesses: (pids: number[]) => void;
+  protectProcessGroup: (pid: number) => void;
 };
 
 export async function withGlobalLockAsync<T>(
@@ -822,7 +829,7 @@ function tryAcquireLockPath(lockPath: string) {
     return { wait: true };
   }
   let fileDescriptor: number | null = null;
-  const protectedPids = new Set<number>();
+  let protectedGroup: number | undefined;
   let contents = JSON.stringify({
     acquiredAt: Date.now(),
     pid: process.pid
@@ -870,21 +877,24 @@ function tryAcquireLockPath(lockPath: string) {
         closeSync(fileDescriptor);
         fileDescriptor = null;
       }
-      if (held && ![...protectedPids].some(isProcessRunning)) {
+      if (
+        held &&
+        (protectedGroup === undefined ||
+          (!isProcessRunning(protectedGroup) && !isProcessRunning(-protectedGroup)))
+      ) {
         rmSync(lockPath, { force: true });
       }
     },
     {
       ownership,
-      protectProcesses(pids: number[]) {
+      protectProcessGroup(pid: number) {
         ownership.assertHeld();
-        for (const pid of pids) {
-          protectedPids.add(pid);
-        }
+        protectedGroup = pid;
         contents = JSON.stringify({
           acquiredAt: Date.now(),
           pid: process.pid,
-          protectedPids: [...protectedPids]
+          protectedGroup: pid,
+          protectedPids: [pid]
         });
         writeFileSync(lockPath, contents, "utf-8");
       }
@@ -993,7 +1003,8 @@ function evictStaleLockUnderClaim(lockPath: string) {
       if (pid.success) {
         isStale =
           !isProcessRunning(metadata.processGroup === true ? -pid.data : pid.data) &&
-          !(metadata.protectedPids ?? []).some(isProcessRunning);
+          !(metadata.protectedPids ?? []).some(isProcessRunning) &&
+          !(metadata.protectedGroup !== undefined && isProcessRunning(-metadata.protectedGroup));
       }
     }
   } catch {
