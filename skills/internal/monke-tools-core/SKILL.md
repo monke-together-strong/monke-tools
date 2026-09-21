@@ -38,7 +38,7 @@ Resolve the target scope before removal. Dirty files block `chop`; use `--force`
 
 Cleanup commands run before any Session worktrees are removed; failure retains the remaining worktrees and Session state. Earlier commands may already have removed resources. Diagnose the reported repository/step and completed actions, then retry `mt cleanup` for eligible Sessions or `mt chop <session>` for an explicit target; recorded cleanup commands run root-first and may rerun. A missing worktree blocks required commands; restore it, or explicitly use `mt chop <session> --cleanup-from-source` only after verifying those commands are safe from the source checkout. Preserve session state for recovery. Teardown is complete when removal and finalization succeed.
 
-For archived notes, missing worktrees, or ordinary worktree cleanup, read the [cleanup recovery contract](../../../docs/reference/session-lifecycle.md#ownership-and-execution). `--archive-untracked` saves untracked-only bundles before removal. Live ordinary worktrees require audited resource recovery; `--recover-with '<command>'` requires explicit worktree paths and runs from canonical Sources with saved resources.
+For archived notes, missing worktrees, or ordinary worktree cleanup, read the [cleanup recovery contract](../../references/internal/CLEANUP_RECOVERY.md#ownership-and-execution). `--archive-untracked` saves untracked-only bundles before removal. Live ordinary worktrees require audited resource recovery; `--recover-with '<command>'` requires explicit worktree paths and runs from canonical Sources with saved resources.
 
 ## Configuration and installation
 
