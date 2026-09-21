@@ -1,6 +1,9 @@
 # Checkout resources
 
-See [CONTEXT.md](../../CONTEXT.md) for shared checkout and Session terminology.
+Resources belong to one checkout: either the original Source checkout or one
+Session worktree. A Session can contain several worktrees, each with its own
+resources. Ordinary worktrees are not supported by resource commands.
+See [CONTEXT.md](../../CONTEXT.md) for the full glossary.
 
 ## Language
 
@@ -12,14 +15,13 @@ See [CONTEXT.md](../../CONTEXT.md) for shared checkout and Session terminology.
 
 **Resource command output**: A declared nonempty string returned by acquisition and retained until release succeeds.
 
-**Resource command input**: Recorded outputs from other checkouts of the same repo and command, grouped by output name under `previous`.
+**Resource command input**: The owning checkout's identity under `owner` and recorded outputs from other checkouts of the same repo and command, grouped by output name under `previous`.
 
 **Cleanup command**: The repo's recorded `cleanupCommand` for Session infrastructure teardown after resource release.
 
 ## Ownership and configuration
 
-Source checkouts and owned Session worktrees use the same resource store and
-collision checks. Ordinary worktrees are not supported by resource commands.
+Source checkouts and Session worktrees share collision checks within each repo.
 The current checkout's `monke.yml` configures explicit acquisition and execution;
 Spawn and Materialize use the canonical Source configuration.
 
@@ -42,8 +44,8 @@ recorded dependency paths. Spawn already prepares those values for Sessions.
 - `mt resources acquire` acquires every missing command for the current repo,
   including explicit commands, and reuses complete recorded allocations. Spawn
   and Materialize acquire automatic commands only.
-- `mt resources exec -- <command> [args...]` requires recorded outputs for every
-  declared resource command. It injects recorded values into the child's
+- `mt resources exec -- <command> [args...]` requires recorded deterministic values
+  and outputs for every declared resource command. It injects them into the child's
   environment, overriding inherited values, and forwards stdio, exit status and
   termination signals. It never acquires resources or changes env files.
 - `mt resources release` invokes recorded release modules in reverse order,
@@ -52,15 +54,16 @@ recorded dependency paths. Spawn already prepares those values for Sessions.
   for retry; completed releases are skipped.
 
 Credentials and static wiring stay in normal env files. Dynamic outputs are
-recorded in Monke home, not exported to root `.env`. Acquire and Materialize remove
+recorded in Monke home, not exported to root `.env`. Setup, Acquire and Materialize remove
 managed dynamic keys left by older versions; release removes recorded keys.
 Commands requiring allocations must run through `exec`: an env file alone is not
 proof of ownership.
 
 The checkout lock stays held for the foreground command's lifetime. Concurrent
 release, acquisition, materialization and Chop of that checkout fail while it is
-in use; commands in other checkouts can proceed. The lock records the foreground command PID and process group before the command
-starts, so surviving group members remain protected if the MT wrapper is killed.
+in use; commands in other checkouts can proceed. The lock records the foreground
+command PID and process group before the command starts, so surviving group
+members remain protected if the MT wrapper is killed.
 The command keeps its controlling terminal; group termination covers descendants
 when the foreground leader exits on a signal. Commands must
 keep resource use within their foreground lifetime rather than detach work.

@@ -32,6 +32,27 @@ When finished, `mt chop banana` removes the session's worktrees and runs its rec
 
 The [session command reference](skills/internal/monke-tools-core/SKILL.md) covers branch reuse, PR navigation, diff bases, and cleanup recovery. Use `mt <command> --help` for available flags.
 
+## Use checkout resources
+
+A **checkout** is one local working copy of a repo. A **Session** groups the
+worktrees MT creates for a repo and its dependencies. Resource commands work in
+the original source checkout and in each Session worktree.
+
+For a repo with resources configured in `monke.yml`, run from that checkout:
+
+```bash
+mt setup                        # Write dependency paths and static resource values
+# Start any infrastructure required by the repo's resource modules.
+mt resources acquire            # Acquire missing allocations; reuse existing ones
+mt resources exec -- <command>  # Run with the recorded resource values
+mt resources release            # Release allocations after use
+```
+
+Dynamic allocations stay in MT's state and are passed to the command by `exec`.
+Release keeps the checkout and infrastructure; Session removal uses `mt chop`.
+See [checkout resources](docs/reference/resources.md) for module contracts,
+recovery, and the legacy cleanup exception.
+
 ## Configure a repo
 
 Add `monke.yml` at the repo root. For example, this maps an assigned session port into `PORT` in `apps/api/.env`:
@@ -45,7 +66,7 @@ apps:
         env: PORT
 ```
 
-The [configuration reference](skills/internal/monke-tools-core/MONKE-YML-REFERENCE.md) covers dependency repos, custom env files, bootstrap, seed files, and session resources.
+The [configuration reference](skills/internal/monke-tools-core/MONKE-YML-REFERENCE.md) covers dependency repos, custom env files, bootstrap, seed files, and checkout resources.
 
 ## Agent skills
 

@@ -1,6 +1,6 @@
 # monke.yml Reference
 
-Each participating repo declares its session behavior in a root `monke.yml`.
+Each repo declares its Session behavior and checkout resources in a root `monke.yml`.
 
 ```yaml
 apps:
@@ -22,8 +22,8 @@ seedPaths:
 bootstrapCommand: pnpm install
 resources:
   values:
-    DISCORD_CHANNEL: mt-${user}-${session}
-cleanupCommand: bun run cleanup:e2e
+    COMPOSE_PROJECT_NAME: myapp-${id}
+cleanupCommand: docker compose --profile '*' down
 ```
 
 ## Env and dependencies
@@ -99,9 +99,10 @@ cleanup. Acquisition and release must be safe to retry.
 
 ### Explicit acquisition and execution
 
-Commands default to `acquire: automatic`. `acquire: explicit` defers acquisition
-until `mt resources acquire` in the Source checkout or owned Session worktree.
-That command acquires all missing resources and reuses complete allocations.
+Commands default to `acquire: automatic`, so Spawn and Materialize acquire them
+after bootstrap. `acquire: explicit` defers acquisition until `mt resources acquire`.
+Run that command in a Source checkout or Session worktree to acquire all missing
+commands, including automatic ones, and reuse complete allocations.
 
 Dynamic outputs stay in MT's resource store. Use
 `mt resources exec -- bun run <script>` to validate ownership and inject recorded
@@ -130,7 +131,7 @@ Automatic Cleanup never makes this substitution.
 
 ### Docker cleanup
 
-Give each repo and Session its own Compose project before starting containers:
+Give each checkout its own Compose project before starting containers:
 
 ```yaml
 resources:
@@ -139,7 +140,15 @@ resources:
 cleanupCommand: docker compose --profile '*' down
 ```
 
-Compose reads the persisted project name from the Session root `.env`; cleanup receives that same saved value. Match startup's Compose files and env loading, and ensure startup does not override the project name with `-p` or a different environment value. Enable the profiles the repo uses (`'*'` enables all). Preserve volumes by default. Avoid `--remove-orphans` unless all containers in the project belong to this repo and Session.
+Run `mt setup` before starting containers; Spawn already prepares the Session
+worktree's values. Compose reads the project name from the checkout's root `.env`.
+Session cleanup receives that same saved value. Source infrastructure teardown
+remains a repo command; `mt resources release` only releases resource allocations.
+
+Match startup's Compose files and env loading, and ensure startup does not override
+the project name with `-p` or a different environment value. Enable the profiles
+the repo uses (`'*'` enables all). Preserve volumes by default. Use `--remove-orphans`
+only when all containers in the project belong to this checkout.
 
 Put application resource cleanup in resource modules, and reuse a package script for infrastructure teardown with `cleanupCommand: bun run session:cleanup`. MT releases resources before invoking that script.
 

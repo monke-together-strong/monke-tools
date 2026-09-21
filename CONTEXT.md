@@ -25,9 +25,11 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 
 ## Session topology
 
+**Checkout**: One local working copy of a repo: a Source checkout, Session worktree, or Ordinary worktree.
+
 **Session**: A named local workspace instance that spans one source repo and any dependency repos using the same branch-aligned identity. _Avoid_: Branch, environment, sandbox
 
-**Source checkout**: The original Git checkout that any working directory resolves to: the canonical non-worktree root and parent of all the repo's linked worktrees. A **Session** is created from one. _Avoid_: Main worktree, root worktree
+**Source checkout**: The original working copy in a Git clone, shared as the source for its linked worktrees. A **Session** is created from one. _Avoid_: Main worktree, root worktree
 
 **Session worktree**: A linked Git worktree created for a specific repo inside a session, stored under the **Monke home** worktree area as `worktrees/<repo-name>/<session>`.
 
@@ -89,6 +91,8 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 
 ## Relationships and distinctions
 
+- A Checkout is one repo's working copy. A Session groups Session worktrees across
+  repos. Resources belong to each participating checkout independently.
 - A Session belongs to one Root repo. Each participating repo contributes one
   Session worktree and one Session-state entry. The Session uses a shared branch
   name across repos; it is the workspace instance, not the Git ref.
