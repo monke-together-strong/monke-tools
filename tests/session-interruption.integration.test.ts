@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath, loadSessionState } from "../src/session-state-store.ts";
 import type { SessionMaterializationCheckpoint } from "../src/types.ts";
@@ -130,7 +131,11 @@ export default function () {
     expect(partialRepo?.materializationStatus).toBe(interruption.expectedMaterialization);
     expect(partialRepo?.preparationStatus).toBe(interruption.expectedPreparation);
     expect(partialRepo?.cleanupEligible).toBe(interruption.expectedCleanupEligible);
-    expect(partialRepo?.resourceCommandOutputs).toStrictEqual(
+    expect(
+      new CheckoutResourceStore(home).get(
+        resourceOwner(repoRoot, getExpectedWorktreePath(home, repoRoot, "interrupted"))
+      ).resourceCommandOutputs
+    ).toMatchObject(
       interruption.expectedResourceOutputs
         ? [
             {
@@ -138,7 +143,7 @@ export default function () {
               outputs: [{ env: "TEST_RESOURCE_ID", value: "stable-id" }]
             }
           ]
-        : undefined
+        : []
     );
 
     const retried = runMonke({

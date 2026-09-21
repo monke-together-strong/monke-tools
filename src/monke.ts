@@ -4,7 +4,7 @@ import path from "node:path";
 import { openCodexWorkspace } from "./codex.ts";
 import { reconcileCodiff } from "./codiff.ts";
 import { loadResolvedGraph } from "./config.ts";
-import { syncRootEnvFileWithRemovals, seedWorktreeFiles } from "./env.ts";
+import { seedWorktreeFiles } from "./env.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import {
   assertFreshSessionWorktreeAvailable,
@@ -32,6 +32,7 @@ import {
   materializeRepo,
   toRepoMaterializationResult
 } from "./repo-materialization.ts";
+import { runCheckoutSetup } from "./resource-lifecycle.ts";
 import { getMonkeHome, withGlobalLockAsync } from "./runtime.ts";
 import {
   applyDirtySnapshot,
@@ -1259,29 +1260,7 @@ function toPreparedMaterializeWorktree(
 }
 
 export function runSetup(runtime: Runtime) {
-  const home = getMonkeHome(runtime);
-  const context = resolveRepoContext(runtime, runtime.cwd, home);
-  if (!context.isSourceCheckout) {
-    throw new MonkeError("mt setup must run from the source checkout");
-  }
-
-  const graph = loadResolvedGraph(runtime, context.sourceRoot);
-  const repoConfig = graph.reposByRoot.get(context.sourceRoot);
-  if (!repoConfig) {
-    throw new MonkeError(`Missing repo config for ${context.sourceRoot}`);
-  }
-
-  syncRootEnvFileWithRemovals(
-    context.sourceRoot,
-    repoConfig.externalInOrder.map((externalRepo) => ({
-      env: externalRepo.pathEnv,
-      value: path.relative(context.sourceRoot, externalRepo.absoluteRepoRoot) || "."
-    }))
-  );
-
-  createLogger(runtime).success(
-    `Updated Source checkout root .env for ${path.basename(context.sourceRoot)}`
-  );
+  runCheckoutSetup(runtime);
 }
 
 function prepareRepoWorktree(runtime: Runtime, repoConfig: RepoConfig, worktreePath: string) {

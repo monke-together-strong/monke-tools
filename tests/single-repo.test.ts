@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { inferSessionName, getExpectedWorktreePath } from "../src/git.ts";
 import { spawnSessionLocked } from "../src/monke.ts";
 import {
@@ -1800,8 +1801,9 @@ apps:
       "API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\nSTATIC_HANDLE=fixed-banana\n"
     );
 
-    const initialState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
-    expect(initialState.repos[0]?.resourceValues).toStrictEqual([
+    const resources = new CheckoutResourceStore(home);
+    const owner = resourceOwner(repoRoot, worktreeRoot, "banana");
+    expect(resources.get(owner).resourceValues).toStrictEqual([
       { env: "DISCORD_CHANNEL", value: "mt-ada-banana" },
       { env: "STATIC_HANDLE", value: "fixed-banana" }
     ]);
@@ -1832,8 +1834,7 @@ apps:
 
     expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nDISCORD_CHANNEL=mt-ada-banana\n");
 
-    const nextState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
-    expect(nextState.repos[0]?.resourceValues).toStrictEqual([
+    expect(resources.get(owner).resourceValues).toStrictEqual([
       { env: "DISCORD_CHANNEL", value: "mt-ada-banana" }
     ]);
   });
@@ -2390,7 +2391,7 @@ external:
     expect(read(root, ".env")).toBe("KEEP_ME=1\nDEP_DIR=../dep\n");
   });
 
-  test("setup must run from the source checkout", () => {
+  test("setup in a Session preserves its dependency checkout paths", () => {
     const sandbox = makeTempDir("setup-source-checkout-only");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -2430,14 +2431,12 @@ external:
       monkeHome: home
     });
 
-    expect(() =>
-      runMonke({
-        args: ["setup"],
-        binDirectory,
-        cwd: getExpectedWorktreePath(home, root, "banana"),
-        monkeHome: home
-      })
-    ).toThrow(/must run from the source checkout/u);
+    const cwd = getExpectedWorktreePath(home, root, "banana");
+    runMonke({ args: ["setup"], binDirectory, cwd, monkeHome: home });
+    expect(read(cwd, ".env")).toContain(
+      `DEP_DIR=${path.relative(cwd, getExpectedWorktreePath(home, path.join(sandbox, "dep"), "banana"))}`
+    );
+    expect(existsSync(path.join(root, ".env"))).toBeFalsy();
   });
 
   test("spawn -m seeds untracked env files and seedPaths from the source checkout", () => {

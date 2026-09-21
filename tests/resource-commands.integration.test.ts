@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 import * as z from "zod";
 
+import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { hashKey } from "../src/runtime.ts";
 import { loadSessionState, saveSessionState } from "../src/session-state-store.ts";
@@ -29,6 +30,9 @@ interface ResourceCommandScenario {
   materialize: (session: string) => { stderr: string; stdout: string };
   readSessionState: () => SessionState;
   readWorktree: (session: string, relativePath: string) => string;
+  recordedCommands: (
+    session: string
+  ) => ReturnType<CheckoutResourceStore["get"]>["resourceCommandOutputs"];
   repoRoot: string;
   sandbox: string;
   spawn: (
@@ -83,10 +87,13 @@ export default function () {
       clearTimeout(release);
     }
 
-    expect(scenario.readWorktree("locked", ".env")).toContain("E2E_FLOW1_SYMBOL=SOL/USDT:USDT");
+    expect(scenario.recordedCommands("locked")[0]?.outputs).toContainEqual({
+      env: "E2E_FLOW1_SYMBOL",
+      value: "SOL/USDT:USDT"
+    });
   });
 
-  test("spawn runs Resource commands from the Session worktree and writes outputs to the session root .env and Session state", () => {
+  test("spawn records Resource outputs without exporting them to dotenv or Session state", () => {
     const scenario = createResourceCommandScenario({
       module: `import { writeFileSync } from "node:fs";
 
@@ -113,13 +120,23 @@ export default function ({ previous }) {
       E2E_FLOW1_SYMBOL: [],
       E2E_FLOW2_SYMBOL: []
     });
-    expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n"
-    );
+    expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
     expect(scenario.readWorktree("banana", "apps/api/.env.local")).toBe("PORT=10000\n");
+    const executed = runMonke({
+      args: [
+        "resources",
+        "exec",
+        "--",
+        "sh",
+        "-c",
+        'printf "%s:%s" "$E2E_FLOW1_SYMBOL" "$E2E_FLOW2_SYMBOL"'
+      ],
+      cwd: worktreeRoot,
+      monkeHome: scenario.home
+    });
+    expect(executed.stdout).toBe("SOL/USDT:USDT:LINK/USDT:USDT");
 
-    const sessionState = scenario.readSessionState();
-    expect(sessionState.repos[0]?.resourceCommandOutputs).toStrictEqual([
+    expect(scenario.recordedCommands("banana")).toMatchObject([
       {
         name: "e2e-symbols",
         outputs: [
@@ -163,7 +180,7 @@ export default function () {
     });
 
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "fresh");
-    expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n");
+    expect(read(worktreeRoot, ".env")).toBe("API_PORT=10000\n");
   });
 
   test("materialize removes stale resource command env before bootstrap", () => {
@@ -195,9 +212,7 @@ resources:
     scenario.materialize("banana");
 
     expect(scenario.readWorktree("banana", "bootstrap-saw-command-env")).toBe("");
-    expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n"
-    );
+    expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
   });
 
   test("spawn builds resource command stdin from retained command outputs only", () => {
@@ -483,9 +498,7 @@ export default function ({ previous }) {
 
     scenario.spawn("second");
 
-    expect(scenario.readWorktree("second", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n"
-    );
+    expect(scenario.readWorktree("second", ".env")).toBe("API_PORT=10000\n");
   });
 
   test("resource command renames establish a new retained input namespace", () => {
@@ -645,16 +658,13 @@ export default function () {
     scenario.materialize("banana");
 
     expect(scenario.readWorktree("banana", "command-runs")).toBe("1");
-    expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW2_SYMBOL=LINK/USDT:USDT\n"
-    );
+    expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
 
     scenario.writeRoot("monke.yml", appOnlyMonkeYml());
     scenario.materialize("banana");
 
     expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
-    const sessionState = scenario.readSessionState();
-    expect(sessionState.repos[0]?.resourceCommandOutputs).toBeUndefined();
+    expect(scenario.recordedCommands("banana")[0]?.outputs).toHaveLength(2);
   });
 
   test("materialize reruns resource commands when remembered outputs are incomplete", () => {
@@ -698,9 +708,7 @@ export default function () {
     scenario.materialize("banana");
 
     expect(scenario.readWorktree("banana", "command-runs")).toBe("2");
-    expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=LINK/USDT:USDT\nE2E_FLOW2_SYMBOL=ATOM/USDT:USDT\n"
-    );
+    expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
   });
 
   test("spawn persists resource command outputs before later materialization failures", () => {
@@ -720,7 +728,7 @@ export default function () {
     expect(() => scenario.spawn("banana")).toThrow(/Missing mapped env vars/u);
 
     const partialState = scenario.readSessionState();
-    expect(partialState.repos[0]?.resourceCommandOutputs).toStrictEqual([
+    expect(scenario.recordedCommands("banana")).toMatchObject([
       {
         name: "e2e-symbols",
         outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
@@ -734,9 +742,7 @@ export default function () {
     scenario.spawn("banana");
 
     expect(scenario.readWorktree("banana", "command-runs")).toBe("1");
-    expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n"
-    );
+    expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
   });
 
   test("materialize can prune stale resource command env after a failed rerun retry", () => {
@@ -774,8 +780,7 @@ export default function () {
 
     expect(() => scenario.materialize("banana")).toThrow(/Missing mapped env vars/u);
 
-    const partialState = scenario.readSessionState();
-    expect(partialState.repos[0]?.resourceCommandOutputs?.[0]?.outputs).toStrictEqual([
+    expect(scenario.recordedCommands("banana")[0]?.outputs).toStrictEqual([
       { env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" },
       { env: "E2E_FLOW3_SYMBOL", value: "ATOM/USDT:USDT" },
       { env: "E2E_FLOW2_SYMBOL", value: "LINK/USDT:USDT" }
@@ -784,9 +789,7 @@ export default function () {
     scenario.writeWorktree("banana", "apps/api/.env.local", "PORT=3000\n");
     scenario.materialize("banana");
 
-    expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\nE2E_FLOW3_SYMBOL=ATOM/USDT:USDT\n"
-    );
+    expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
   });
 
   test.each([
@@ -842,13 +845,13 @@ export default function () {
 
   test.each([
     {
-      expected: /must export a default function/u,
+      expected: /must export acquire/u,
       module: `export const allocate = () => ({ E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" });
 `,
       name: "missing default export"
     },
     {
-      expected: /default export must be a function/u,
+      expected: /must export acquire/u,
       module: `export default { E2E_FLOW1_SYMBOL: "SOL/USDT:USDT" };
 `,
       name: "default export not a function"
@@ -905,9 +908,7 @@ export default function () {
 
     scenario.spawn("banana");
 
-    expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n"
-    );
+    expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
   });
 
   test("spawn accepts resource command run paths whose first segment starts with two dots", () => {
@@ -922,9 +923,7 @@ export default function () {
 
     scenario.spawn("banana");
 
-    expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n"
-    );
+    expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
   });
 
   test("spawn imports resource modules without triggering direct execution guards", () => {
@@ -949,9 +948,7 @@ function isDirectExecution(importMetaUrl) {
 
     scenario.spawn("banana");
 
-    expect(scenario.readWorktree("banana", ".env")).toBe(
-      "API_PORT=10000\nE2E_FLOW1_SYMBOL=SOL/USDT:USDT\n"
-    );
+    expect(scenario.readWorktree("banana", ".env")).toBe("API_PORT=10000\n");
   });
 
   test("spawn reports thrown resource command failures with stderr and omits stdout", () => {
@@ -1049,6 +1046,10 @@ function createResourceCommandScenario(options: {
     },
     readWorktree(session, relativePath) {
       return read(worktree(session), relativePath);
+    },
+    recordedCommands(session) {
+      return new CheckoutResourceStore(home).get(resourceOwner(repoRoot, worktree(session)))
+        .resourceCommandOutputs;
     },
     repoRoot,
     sandbox,

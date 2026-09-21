@@ -66,58 +66,6 @@ describe("Session state store", () => {
     expect(store.get("/repo", "atomic")?.copyDirty).toBeFalsy();
   });
 
-  test("cross-session resource queries observe checkpoints and removals in the opened store", () => {
-    const home = makeTempDir("session-state-store-resource-view");
-    const store = new SessionStateStore(home);
-    const retained = completeSessionState({
-      repos: [
-        materializedRepoState({
-          cleanupEligible: true,
-          resourceCommandOutputs: [
-            { name: "identity", outputs: [{ env: "OUTPUT", value: "first" }] }
-          ],
-          resourceValues: [{ env: "VALUE", value: "owned" }],
-          sourceRoot: "/repo",
-          worktreePath: "/worktree"
-        })
-      ],
-      rootSourceRoot: "/repo",
-      session: "first"
-    });
-    const command = {
-      name: "identity",
-      outputs: ["OUTPUT"],
-      run: "identity.ts",
-      timeoutSeconds: 60
-    };
-    const current = { rootSourceRoot: "/repo", session: "second", sourceRoot: "/repo" };
-    const values = {
-      ...current,
-      values: [{ env: "VALUE", value: "owned" }]
-    };
-    expect(store.resourceCommandInput({ ...current, command })).toStrictEqual({ OUTPUT: [] });
-    expect(store.resourceValueCollision(values)).toBeNull();
-
-    store.checkpoint(retained);
-    expect(store.resourceCommandInput({ ...current, command })).toStrictEqual({
-      OUTPUT: ["first"]
-    });
-    expect(store.resourceCommandInput({ ...current, command, session: "first" })).toStrictEqual({
-      OUTPUT: []
-    });
-    expect(store.resourceValueCollision(values)).toStrictEqual({
-      env: "VALUE",
-      session: "first",
-      value: "owned"
-    });
-    expect(store.resourceValueCollision({ ...values, session: "first" })).toBeNull();
-
-    store.remove(retained);
-    expect(store.resourceCommandInput({ ...current, command })).toStrictEqual({ OUTPUT: [] });
-    expect(store.resourceValueCollision(values)).toBeNull();
-    expect(store.get("/repo", "first")).toBeUndefined();
-  });
-
   test("loadSessionState accepts strict v2 repo lifecycle state without an optional Diff base", () => {
     const sandbox = makeTempDir("session-state-store-v2-diff-base");
     const home = path.join(sandbox, "home");

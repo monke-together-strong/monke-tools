@@ -4,12 +4,12 @@ import path from "node:path";
 
 import * as z from "zod";
 
+import { resourceOwner } from "./checkout-resource-store.ts";
+import type { CheckoutResourceStore, CheckoutResources } from "./checkout-resource-store.ts";
 import { describeRedactedValue } from "./env.ts";
 import { MonkeError } from "./errors.ts";
 import { containsPath } from "./path-identity.ts";
 import { withScopedLockAsync } from "./runtime.ts";
-import type { SessionStateStore } from "./session-state-store.ts";
-import { sha256 } from "./sha256.ts";
 import type {
   RepoConfig,
   ResourceCommandConfig,
@@ -32,22 +32,21 @@ try {
     throw new Error("Missing resource command runner arguments");
   }
   const previousText = await Bun.stdin.text();
-  const previous = previousText.trim() ? JSON.parse(previousText) : {};
+  const input = previousText.trim() ? JSON.parse(previousText) : {};
   const resourceModule = await import(pathToFileURL(modulePath).href);
-  if (typeof resourceModule !== "object" || resourceModule === null || !("default" in resourceModule)) {
-    throw new Error("Resource command module " + modulePath + " must export a default function");
-  }
-  if (typeof resourceModule.default !== "function") {
-    throw new TypeError("Resource command module " + modulePath + " default export must be a function");
-  }
-  const value = await resourceModule.default({ previous });
-  await Bun.write(outputPath, JSON.stringify({ value }));
+  const acquire = resourceModule.acquire ?? resourceModule.default;
+  if (typeof acquire !== "function") throw new TypeError("Resource module must export acquire");
+  const value = await acquire(input);
+  await Bun.write(outputPath, JSON.stringify({ value, legacy: typeof resourceModule.acquire !== "function" }));
 } catch (error) {
   await Bun.write(Bun.stderr, (error instanceof Error && error.stack ? error.stack : String(error)) + "\n");
   process.exit(1);
 }
 `;
-const ResourceCommandRunnerEnvelopeSchema = z.strictObject({ value: z.unknown() });
+const ResourceCommandRunnerEnvelopeSchema = z.strictObject({
+  legacy: z.boolean().optional(),
+  value: z.unknown()
+});
 const ResourceCommandReturnSchema = z.record(
   z.string(),
   z.string().refine((value) => value.trim().length > 0)
@@ -56,11 +55,15 @@ const ResourceCommandReturnSchema = z.record(
 /** Resolve, reuse, prune, and collision-check deterministic Resource values. */
 export function resolveResourceValues(options: {
   env: Record<string, string | undefined>;
-  existingRepoState: SessionRepoState | undefined;
+  existingRepoState:
+    | Pick<SessionRepoState, "resourceValues" | "resourceCommandOutputs">
+    | undefined;
+  preserveValues?: boolean;
   repoConfig: RepoConfig;
   rootSourceRoot: string;
   session: string;
-  store: SessionStateStore;
+  store: CheckoutResourceStore;
+  worktreePath: string;
 }) {
   const declaredEnvNames = new Set(
     options.repoConfig.resourceValuesInOrder.map((resource) => resource.env)
@@ -77,7 +80,7 @@ export function resolveResourceValues(options: {
     const value =
       remembered ??
       interpolateResourceLiteral({
-        id: sha256(JSON.stringify([options.repoConfig.sourceRoot, options.session])).slice(0, 32),
+        id: resourceOwner(options.repoConfig.sourceRoot, options.worktreePath).id,
         literal: resource.literal,
         location: `${options.repoConfig.configPath}#resources.values.${resource.env}`,
         session: options.session,
@@ -96,12 +99,19 @@ export function resolveResourceValues(options: {
     };
   });
 
+  // Retain teardown inputs for allocations whose declaration was removed.
+  if (
+    options.preserveValues ||
+    (options.existingRepoState?.resourceCommandOutputs?.length ?? 0) > 0
+  ) {
+    values.push(...existingValues.filter((entry) => !declaredEnvNames.has(entry.env)));
+  }
+
   rejectResourceValueCollisions({
-    rootSourceRoot: options.rootSourceRoot,
-    session: options.session,
     sourceRoot: options.repoConfig.sourceRoot,
     store: options.store,
-    values
+    values,
+    worktreePath: options.worktreePath
   });
 
   return {
@@ -115,7 +125,9 @@ export function resolveResourceValues(options: {
 /** Resolve, reuse, prune, execute, and validate Resource command outputs. */
 export async function resolveResourceCommands(options: {
   acquireExplicit?: boolean;
-  existingRepoState: SessionRepoState | undefined;
+  existingRepoState:
+    | Pick<SessionRepoState, "resourceValues" | "resourceCommandOutputs">
+    | undefined;
   onCommandExecutionStarting?: (commands: ResourceCommandState[]) => void;
   onResolvedCommandOutputs: (commands: ResourceCommandState[]) => void;
   repoConfig: RepoConfig;
@@ -123,7 +135,7 @@ export async function resolveResourceCommands(options: {
   rootSourceRoot: string;
   runtime: Runtime;
   session: string;
-  store: SessionStateStore;
+  store: CheckoutResourceStore;
   worktreePath: string;
 }) {
   const existingCommands = options.existingRepoState?.resourceCommandOutputs ?? [];
@@ -147,6 +159,12 @@ export async function resolveResourceCommands(options: {
     ) {
       continue;
     }
+    const existing = existingByName.get(command.name);
+    if (existing?.legacy === false) {
+      throw new MonkeError(
+        `Resource command ${command.name} has an allocation with different outputs. Run mt resources release before acquiring the changed declaration.`
+      );
+    }
     // oxlint-disable-next-line no-await-in-loop -- Commands in one repo are intentionally ordered; sibling repos remain concurrent.
     await withResourceCommandLock(
       options.store.home,
@@ -155,9 +173,8 @@ export async function resolveResourceCommands(options: {
       async () => {
         const stdin = options.store.resourceCommandInput({
           command,
-          rootSourceRoot: options.rootSourceRoot,
-          session: options.session,
-          sourceRoot: options.repoConfig.sourceRoot
+          sourceRoot: options.repoConfig.sourceRoot,
+          worktreePath: options.worktreePath
         });
         options.onCommandExecutionStarting?.(
           toImmediateResourceCommandStates(
@@ -172,6 +189,8 @@ export async function resolveResourceCommands(options: {
             command,
             resourceValues: options.resourceValues,
             runtime: options.runtime,
+            session: options.session,
+            sourceRoot: options.repoConfig.sourceRoot,
             stdin,
             worktreePath: options.worktreePath
           })
@@ -220,20 +239,23 @@ function getReusableResourceCommand(
     outputs.push({ env, value });
   }
 
-  return {
-    name: command.name,
-    outputs
-  };
+  // Keep the complete release payload even when configuration removes an output.
+  return existing.legacy === false ? existing : { ...existing, name: command.name, outputs };
 }
 
-async function runResourceCommand(options: {
+export async function runResourceCommand(options: {
   command: ResourceCommandConfig;
   resourceValues: ResourceValueState[];
   runtime: Runtime;
+  session: string;
+  sourceRoot: string;
   stdin: ResourceCommandInput;
   worktreePath: string;
 }) {
-  const stdin = JSON.stringify(options.stdin);
+  const stdin = JSON.stringify({
+    owner: resourceOwner(options.sourceRoot, options.worktreePath, options.session || undefined),
+    previous: options.stdin
+  });
   const outputDirectory = mkdtempSync(path.join(tmpdir(), "monke-resource-command-"));
   const outputPath = path.join(outputDirectory, "output.json");
   const modulePath = resolveResourceCommandRunPath(options.worktreePath, options.command);
@@ -273,18 +295,55 @@ async function runResourceCommand(options: {
       stdout: result.stdout
     });
     return {
+      legacy: returned.legacy,
       name: options.command.name,
       outputs: validateResourceCommandReturn(
         options.command,
-        returned,
+        returned.outputs,
         result.stdout,
         result.stderr,
         options.stdin
-      )
+      ),
+      run: options.command.run,
+      timeoutSeconds: options.command.timeoutSeconds
     };
   } finally {
     rmSync(outputDirectory, { force: true, recursive: true });
   }
+}
+
+/** Invoke repo-owned release with explicit saved outputs; configuration is not cleanup authority. */
+export function releaseResourceCommand(
+  runtime: Runtime,
+  record: CheckoutResources,
+  command: ResourceCommandState,
+  cwd: string
+) {
+  // Legacy value-only allocations without a cleanup hook.
+  if (!command.run) {
+    return;
+  }
+  const modulePath = resolveResourceCommandRunPath(cwd, {
+    ...command,
+    outputs: command.outputs.map((entry) => entry.env),
+    run: command.run,
+    timeoutSeconds: command.timeoutSeconds ?? 60
+  });
+  const script = `const input = JSON.parse(await Bun.stdin.text());
+const module = await import(process.argv.at(-1));
+if (typeof module.release === "function") await module.release(input);`;
+  runtime.exec("bun", ["--eval", script, "--", modulePath], {
+    cwd,
+    env: Object.fromEntries(
+      [...record.resourceValues, ...command.outputs].map((entry) => [entry.env, entry.value])
+    ),
+    stdin: JSON.stringify({
+      outputs: Object.fromEntries(command.outputs.map((entry) => [entry.env, entry.value])),
+      owner: record.owner,
+      values: Object.fromEntries(record.resourceValues.map((entry) => [entry.env, entry.value]))
+    }),
+    timeoutSeconds: command.timeoutSeconds ?? 60
+  });
 }
 
 function resolveResourceCommandRunner(worktreePath: string) {
@@ -379,7 +438,7 @@ function readResourceCommandRunnerOutput(options: {
       stdout: options.stdout
     });
   }
-  return value.data;
+  return { legacy: envelope.data.legacy, outputs: value.data };
 }
 
 function validateResourceCommandReturn(
@@ -424,7 +483,10 @@ function validateResourceCommandReturn(
   });
 }
 
-function resolveResourceCommandRunPath(worktreePath: string, command: ResourceCommandConfig) {
+export function resolveResourceCommandRunPath(
+  worktreePath: string,
+  command: ResourceCommandConfig
+) {
   const resolved = path.resolve(worktreePath, command.run);
   if (!containsPath(worktreePath, resolved)) {
     throw new MonkeError(
@@ -477,6 +539,7 @@ function toImmediateResourceCommandStates(
       existing?.outputs.filter((output) => !declaredEnvNames.has(output.env)) ?? [];
     return [
       {
+        ...current,
         name: command.name,
         outputs: [...current.outputs, ...staleOutputs]
       }
@@ -502,6 +565,11 @@ function interpolateResourceLiteral(options: {
         return options.id;
       }
       if (name === "session") {
+        if (!options.session) {
+          throw new MonkeError(
+            `${options.location}: use \${id} for resources shared with source checkouts; \${session} requires a Session.`
+          );
+        }
         return options.session;
       }
       if (name === "user") {
@@ -533,11 +601,10 @@ function resolveResourceUser(env: Record<string, string | undefined>) {
 }
 
 function rejectResourceValueCollisions(options: {
-  rootSourceRoot: string;
-  session: string;
   sourceRoot: string;
-  store: SessionStateStore;
+  store: CheckoutResourceStore;
   values: ResourceValueState[];
+  worktreePath: string;
 }) {
   const collision = options.store.resourceValueCollision(options);
   if (collision) {

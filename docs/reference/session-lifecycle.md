@@ -1,330 +1,68 @@
 # Session lifecycle
 
-See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminology.
-
-## Language
-
-**Session state store**: The module that owns **Session state** for one operation: opened under the global lock, it scans retained session states once, serves cross-session queries, and persists repo checkpoints.
-
-**Session finalization**: The targeted lifecycle step that removes **Session state** after Cleanup commands succeed and all recorded worktrees are logically gone.
-
-**Dead worktree**: A session worktree recorded in session state whose filesystem path no longer exists.
-
-**Merged PR**: A pull request whose GitHub `mergedAt` value is set.
-
-**Merge-cleanable Session**: A Session whose live members each pass committed-work proof and local-work checks. Committed work qualifies by an exact **Merged PR**, default-branch ancestry, a complete change matching a qualifying landed PR, or complete-tree equality in verified default history. Local work must be clean or satisfy one of the narrow pending-work checks below. All Session-level safety gates still apply.
-
-**Default branch spawn mode**: A **Spawn** mode selected by `mt spawn <session> -m`, `--main`, or `--master`. It creates a new Session from each participating repo's resolved default branch content, or resumes an incomplete Session from retained worktrees and pinned Session refs.
-
-**Worktree preparation**: The dependency-independent phase that creates or validates one participating **Session worktree**, carries permitted source changes, and non-clobberingly projects **Seed material**. Preparation is initiated for every participating repo without waiting for dependency materialization.
-
-**Prepared worktree**: A **Session worktree** whose **Worktree preparation** completed but whose dependency-ordered repo materialization may still be pending. _Avoid_: Complete worktree, failed worktree
-
-**Preparation warning**: A non-fatal **Worktree preparation** result that identifies missing optional **Seed material** while leaving the worktree prepared. Copy failures are preparation failures, not warnings.
-
-**Repo materialization**: The phase that resolves session values, rewrites env, runs repo commands, and produces the results consumed by dependent repos. It begins only after the repo's own **Worktree preparation** and every dependency's **Repo materialization** complete.
-
-**Blocked repo materialization**: A repo materialization that cannot begin because a dependency's materialization failed. It is a consequence of another repo's failure, not a failure of the blocked repo. _Avoid_: Failed materialization, cancelled materialization
-
-**Cleanup eligibility**: The persisted indication that **Repo materialization** reached an externally relevant side effect and the repo's **Cleanup command** must run before its Session state can be removed. A **Prepared worktree** alone is not cleanup-eligible. _Avoid_: Prepared state, worktree existence
-
-**Materialization generation**: One retained attempt to materialize every repo in a Session dependency graph. An incomplete generation resumes by reusing completed repo materializations; a new generation begins only after the previous generation completes. _Avoid_: Command invocation, retry run
-
-**Chop target**: The **Session** or **Ordinary worktree** selected for one **Chop** invocation.
-
-**Swing target**: A user-provided **Session**, **Ordinary worktree** branch, navigation shortcut, or pull request identifier that **Swing** resolves to a local checkout path.
-
-**Swing picker**: The interactive **Swing** mode used when `mt swing` is run without a **Swing target**, letting a user choose from the current **Root repo**'s existing local **Swing targets**.
-
-**Diff base**: The Git branch ref used as the committed side of a Diff, resolved through its merge-base with the reviewed checkout. A Session repo may remember one in Session state.
-
-**Diff picker**: The interactive Diff mode that selects a committed **Diff base** or local changes only, without changing the reviewed checkout or navigating the shell. Comparison bases need not have an attached worktree.
-
-**Codex workspace launch**: An optional **Spawn** or **Swing** behavior selected with `--codex` that opens the resolved checkout as a Codex workspace. It does not create a thread.
-
-**Previous Swing target**: The last different **Swing target** remembered for one **Root repo**, used by `mt swing -` to return to a previous source, Session, or Ordinary-worktree checkout.
-
-**Shell directory request**: A CLI-side request for an active shell adapter to move the user's current shell into a resolved **Source checkout** or **Session worktree** after the operation establishes that the target is navigation-ready. A prepared-only Session worktree is not navigation-ready and a failed operation does not issue a request.
-
-**Shell adapter**: The human-shell function installed by monke-tools that can honor **Shell directory requests** after an `mt` command exits.
-
-**Active shell adapter**: A **Shell adapter** that is intercepting the current `mt` invocation and has provided a writable **Shell directory directive**.
-
-**Shell directory directive**: The file-backed path handoff from the `mt` process to an active **Shell adapter** for one **Shell directory request**.
-
-**Shell integration install**: The operation that installs the shell adapter needed to honor **Shell directory requests** for supported human interactive shells.
-
-**Shell integration init**: The operation that emits the shell adapter source for one supported shell.
-
-## State ownership
-
-Spawn, Materialize, and Cleanup each open one Session state store under the global
-lock. It owns state reads and writes, scans retained states once, and serves port
-usage, remembered outputs, and resource-collision queries. Resource commands get
-inputs and checkpoint capabilities from the store rather than reading state.
+Part of the [domain glossary](../../CONTEXT.md).
 
 ## Preparation and materialization
 
-Current-HEAD Spawn accepts any checkout, including detached worktrees. New
-branches start at its HEAD and carry combined tracked edits and non-ignored
-untracked files. Original files and index remain unchanged; staging boundaries
-are not copied. Dependencies use their Source checkouts. Canonical Source checkouts supply
-configuration, repository identity, resources, and Seed material. Carried
-`monke.yml` edits do not configure the Spawn.
+**Default branch spawn mode**: A **Spawn** mode whose starting content comes from each participating repo's default branch.
 
-Existing branches keep their tips; dirty carry requires a matching donor HEAD.
-Existing worktrees retain their contents and warn when carry is skipped.
-Interrupted carry must resume from its recorded checkout and HEAD onto an
-undiverged destination branch.
+**Worktree preparation**: Creation or validation of one **Session worktree**, including its permitted source changes and **Seed material**.
 
-`--no-dirty` requires clean invoking and dependency Source checkouts. `--main`
-(`-m`, `--master`) skips dirty carry and takes precedence over `--no-dirty`.
+**Prepared worktree**: A **Session worktree** whose preparation is complete but whose **Repo materialization** may still be pending. _Avoid_: Complete worktree, failed worktree
 
-Default branch spawn mode prefers fetched remote `main` or `master`, falling back
-to local refs. New Sessions require fresh branches; incomplete ones resume pinned
-refs and retained worktrees. Tracked content and configuration come from those
-refs; Seed material comes from the Source checkout.
+**Preparation warning**: A non-fatal preparation result identifying missing optional **Seed material**.
 
-Preparation runs independently across repos and fills missing Seed material
-without overwriting Session-local content. Missing configured paths produce
-warnings; copy errors fail preparation. Repo materialization waits for its own
-preparation and all dependencies. A failure blocks dependents while independent
-work continues until no work is runnable.
+**Repo materialization**: Preparation of a repo's configured environment, dependencies, and resources for use within a **Session**.
 
-An incomplete generation reuses completed repo materializations. After completion,
-Materialize starts another persisted attempt over the recorded worktrees.
-Materialization updates ports, managed env, path env, resources, and command
-outputs, reusing remembered values. See [resources](resources.md) for persistence
-and collision rules.
+**Blocked repo materialization**: Materialization that cannot begin because a dependency's materialization failed. _Avoid_: Failed materialization, cancelled materialization
 
-Cleanup eligibility is recorded immediately before materialization may create an
-external side effect. Prepared-only repos are removed without cleanup commands.
+**Materialization generation**: One retained attempt to materialize every repo in a **Session** dependency graph. _Avoid_: Command invocation, retry run
 
-## Chop targets
+## Removal
 
-| Invocation                              | Target                                                      |
-| --------------------------------------- | ----------------------------------------------------------- |
-| No argument inside a Session            | Current Session                                             |
-| No argument inside an Ordinary worktree | That worktree                                               |
-| From a Source checkout                  | Explicit target required                                    |
-| Explicit Session name                   | Named Session within the current Root repo scope            |
-| Registered branch or path               | Owning Session if managed; otherwise that Ordinary worktree |
+**Cleanup eligibility**: A repo's retained obligation to run its **Cleanup command** before its **Session state** can be removed. _Avoid_: Prepared state, worktree existence
 
-Resolve Session names before Ordinary targets. A managed path or branch selects
-the whole owning Session only with valid state and matching Root repo scope.
-Missing/invalid state or a managed target outside that scope fails validation
-even with `--force`. Detached or branch-mismatched retained members produce a
-warning. Managed paths never fall back to Ordinary targets.
+**Session finalization**: Completion of Session removal after its cleanup obligations are satisfied and all recorded worktrees are gone.
 
-Ordinary targets must be registered to the invoking repo. A detached worktree can
-be selected by current location or registered absolute/relative path. An exact
-unlocked stale registration can be pruned when its directory is absent; locked
-registrations and missing targets without a registration fail. Source checkouts
-and bare local branches are never targets. Ordinary removal preserves the branch
-and does not finalize a Session.
+**Dead worktree**: A recorded **Session worktree** whose directory no longer exists.
 
-A partially materialized Session remains a valid target. Use only repos and
-resources recorded in its state, not inferred worktrees from today's config.
+**Merged PR**: A pull request accepted into its base branch through a recorded merge.
 
-## Session cleanup
+**Merge-cleanable Session**: A **Session** whose committed and local work is proven preserved and whose members all satisfy removal safety checks.
 
-Cleanup inspects all retained Sessions across all Roots from Monke home, even
-outside a repository. Every live member must pass local-work and committed-work
-checks; the whole Session must pass ownership, identity, hold, and operation
-checks. Actual member branches may differ from the Session name.
+**Chop target**: The **Session** or **Ordinary worktree** selected for one **Chop** operation.
 
-### Committed work
+## Navigation and review
 
-An open PR on the current branch blocks removal. Otherwise, committed work needs
-one of these proofs against the verified default branch:
+**Swing target**: A **Source checkout**, **Session worktree**, or **Ordinary worktree** selected for navigation.
 
-| Proof             | Requirement                                                                                                                                                           |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current-branch PR | Exact same-repository PR HEAD, merged into default.                                                                                                                   |
-| PR ancestor       | HEAD precedes the same-branch merged PR HEAD, whose merge remains in verified default history; requires one day of age.                                               |
-| Ancestry          | Member HEAD is an ancestor of default HEAD.                                                                                                                           |
-| Cross-branch PR   | Exact PR HEAD, both repositories match Source, default base, and merge commit reachable from default HEAD. Intermediate-commit association is insufficient.           |
-| Complete diff     | The nonempty change from HEAD's sole merge base exactly matches a qualifying PR merge's change from its first parent: paths, modes, and full before/after object IDs. |
-| Complete tree     | HEAD's full tree ID equals a commit's tree reachable from default HEAD, including modes and submodule commits.                                                        |
+**Swing picker**: The interactive choice among existing **Swing targets** within one **Root repo** scope.
 
-An exact cross-branch PR head also qualifies after a history rewrite when its
-original merge's complete tree appears in verified default history. Missing
-objects, shallow history, or a changed tree cannot establish this proof.
+**Previous Swing target**: The last different **Swing target** remembered for one **Root repo**.
 
-All proofs except a clean current-branch merged PR require a worktree age of at
-least one day, measured from its `.git` file. Complete-diff proof rejects divergent
-merges, shallow history, and missing objects; it never normalizes whitespace or
-ignores binary/submodule changes. Inspection does not fetch missing objects.
+**Diff base**: The Git revision used as the committed comparison point for **Diff**.
 
-Unique commits without qualifying evidence are a settled skip. GitHub compare
-404 for an unpushed commit means not-an-ancestor; provider/inspection failures
-remain unknown. Commit lookups share a per-inspection cache keyed by Source,
-repository, HEAD, and verified default HEAD.
+**Diff picker**: The interactive choice of a **Diff base** or local changes only.
 
-### Pending and detached work
+**Codex workspace launch**: Opening a checkout as a Codex workspace alongside **Spawn** or **Swing**.
 
-Only verified retained Session members may use these pending-work exceptions:
+**Shell adapter**: The shell integration that applies monke-tools navigation to the user's current shell.
 
-- **Forward preservation:** one strict descendant of member HEAD, reachable from
-  verified default HEAD, contains the entire pending bundle together: exact raw
-  disk blobs and modes, with deletions absent. Changed index entries must equal
-  disk; unchanged entries may equal HEAD. Historical-only or per-path witnesses,
-  split staged/unstaged edits, conflicts, hidden index flags, dirty submodules,
-  and unsupported filesystem states do not qualify.
-- **Untracked archive:** `--archive-untracked` preserves an untracked-only bundle
-  under `$(mt home)/archives/cleanup/` before removal. Each private archive contains
-  original bytes, symlinks, executable modes, and a manifest identifying its checkout.
-  Restore files from its `files/` directory; tracked edits still need another proof.
-- **pnpm bootstrap residue:** the sole dirty path is `pnpm-lock.yaml`, matching
-  the reproduced pnpm 12.1.0 native-bootstrap deletion in its first YAML document.
-  The `packageManager` pin must match, application-document bytes and file modes
-  must be unchanged, and index/disk states must agree. Inspection never runs pnpm.
+**Active shell adapter**: A **Shell adapter** participating in the current command invocation.
 
-These exceptions still require committed-work proof and at least one day of age,
-even with an exact merged PR. They authorize Git force only for the proven member.
+**Shell directory request**: A request to move the user's current shell to a resolved checkout.
 
-Detached members qualify only by ancestry or complete-tree equality. An open
-same-repository PR on the retained Session branch or exact HEAD blocks removal.
-Before removal, Cleanup compare-and-sets `refs/monke/retained/<HEAD>` and verifies
-the ref and worktree HEAD. A failure or collision retains the worktree; the ref
-survives success or partial failure. Reports include its recovery command.
+**Shell directory directive**: The destination passed to a **Shell adapter** for one **Shell directory request**.
 
-### Ownership and execution
+**Shell integration install**: Configuration of a user's shell to load the **Shell adapter**.
 
-Read the shared [cleanup recovery contract](../../skills/references/internal/CLEANUP_RECOVERY.md#ownership-and-execution)
-for ownership checks, ordinary and missing worktree recovery, execution, and
-revalidation. This reference also ships with the Core skill.
+**Shell integration init**: Provision of the **Shell adapter** for a supported shell.
 
-### Reports
+## Relationships
 
-Both modes accept `--json`, emitting one object with `schemaVersion: 1`,
-`dryRun`, `inspectedAt`, `sessions`, `unownedWorktrees`, `unavailableSources`,
-`globalFailure`, and `exitCode`. Command output is captured separately.
-Human output starts with outcome/error/unowned/unavailable counts and shows up
-to five dirty paths per member. `--eligible` filters human output only; JSON
-always includes all Sessions. Neither `--merged` nor `--all` is supported.
-
-- **Exit 0:** inspection/execution completed, including settled skips.
-- **Exit 1:** unavailable evidence, execution failure, or a global safety stop.
-  Details remain in the report, with a short stderr error.
-- **Member checks:** local and committed-work checks are passed, blocked, unknown,
-  not-checked, or not-needed. A dirty member may prevent provider lookup.
-  Older evidence with unknown coverage stays unknown; retained repository/PR
-  proof may establish coverage, and invalidation must not erase it.
-- **Actions:** planned, completed this attempt, and remaining. Inspection reports
-  eligible or skipped; execution reports cleaned, skipped before any effect
-  attempt, or failed after an attempt starts. Failures identify the member and
-  phase: revalidation, process-stop, teardown, removal, or finalization.
-
-Reports preserve ownership conflicts, stale-registration branch identities, and
-partial effects; a failed command may have external effects despite unverified
-completion. `createSessionCleanupReport` supplies the same explanations to JSON
-and `formatSessionCleanupReport`. Bounded failures allow independent Sessions
-to continue. Lost lock ownership, changed retained state, or unbounded corrupt
-ownership stops execution and reports remaining Sessions as skipped.
-
-The audit command
-`scripts/audit-session-cleanup-eligibility.ts <expected.json> <report.json> [report.txt]`
-compares live results with independent labels. Input contains `capturedAt`,
-`rows: [{ file, expected }]` (state filename and boolean), and optional
-`knownSourceRoots` for additional unowned discovery. It uses `MONKE_HOME`, writes
-JSON and optional text explanations, and fails on mismatches or added/missing
-Sessions.
-
-## Removal and finalization
-
-Validate all Session state, Source identities, and recorded worktrees before
-effects; report all preflight failures together. Revalidate after commands/process
-stops and before each removal. Failure stops later removals and retains state.
-Remove the invoking member last, otherwise the Root last.
-
-Cleanup scans each Session's worktree directories before effects and refreshes
-process state before cleanup commands and worktree removals. Each scan groups
-processes by parent. A tree is attached if any command line names a worktree path;
-its age is its oldest member's age. Any tree under one day old blocks the Session and is
-listed. Before Cleanup commands, old attached roots receive SIGTERM, then SIGKILL
-after a grace period; completed stops are reported. Old unattached trees, such as
-idle shells, remain running and are reported. Chop does not stop processes.
-
-Run only recorded Cleanup commands, before any removals, in reverse
-materialization order (Root toward dependencies). Commands run in their Session
-worktree; a missing required-command worktree blocks all commands unless explicit
-Chop recovery uses `--cleanup-from-source`. Stop at the first failure and retain
-full state/resources. Retries restart all commands, including earlier successes;
-individual successes are not checkpointed.
-
-An absent path counts as removed only with valid path/Source identity, no live
-Session branch elsewhere, and no locked registration. Prune only exact unlocked
-stale registrations. Clean initialized submodules permit internal Git removal
-`--force` after an immediate cleanliness recheck; this does not broaden user
-`mt chop --force` semantics.
-
-Finalize state only after required commands succeed and all recorded worktrees
-are gone. Retained state keeps a named Session choppable, including after all
-worktrees disappear. Restore missing required-command worktrees or deliberately
-use `mt chop <session> --cleanup-from-source`. After finalization, named Chop
-reports no target.
-
-## Diff
-
-Plain Diff uses the same base inference in Source checkouts, Ordinary worktrees,
-and Sessions. On `main`/`master`, or at an unambiguous default-branch tip, it shows
-local changes directly and prints `No changes.` when clean. Other worktrees do
-not force a picker in these cases.
-
-Without a remembered base, Diff may infer local or remote-tracking `main` or
-`master` when its shared history is unambiguous with one merge-base, and no
-non-default branch has nearer or incomparable shared history. A remembered base
-is reused unless a default branch has unambiguously newer shared history. Diff
-uses locally available refs without fetching.
-
-`--pick` always opens the picker. Choices include the remembered base, default
-refs even without worktrees, other worktree bases, and local changes only.
-Repeated representations of one ref appear once; distinct refs remain separate
-even at the same commit. A ref that disappears during selection causes the
-picker to refresh.
-
-Sessions remember inferred bases and every explicitly selected branch base only
-after Codiff launches successfully. Local-only and detached-commit selections
-leave the remembered base unchanged. Source and Ordinary checkouts infer afresh
-without persisting a base.
-
-Warn when the Session branch is attached elsewhere and the current worktree does
-not carry it; the current checkout remains the reviewed side.
-
-## Navigation readiness
-
-Spawn requests navigation only after Root repo materialization succeeds. A
-config-less prepared Root fails with a retry receipt. Swing navigates only after
-resolving a ready Source checkout, Session worktree, or Ordinary worktree; embedded
-PR Spawn failures do not navigate. `--codex` additionally opens
-`codex://threads/new` with the absolute checkout path after success. A prepared-only
-failure does not launch it.
-
-## Swing
-
-Ordinary Session and worktree targets must exist; Swing neither creates them nor
-changes their checked-out branch. Targets include Session names, Ordinary branches,
-`^` for the Root repo Source checkout, `-` for the previous target, `pr:<number>`,
-and PR URLs. History is scoped to one Root repo and includes `^`; source navigation
-runs no setup or materialization.
-
-Explicit PR navigation fetches the same-repo PR head, uses a matching existing
-Session or Ordinary worktree, or creates the Session when neither exists. Refuse
-diverged local heads. Stored navigation, picker selections, and `-` do not
-revalidate PR heads. Fork PRs and merge requests are unsupported.
-
-## Shell integration
-
-The adapter consumes a file-backed directory directive, never arbitrary shell
-commands. It honors a non-empty directive even after a nonzero CLI exit and
-preserves that exit status. Successful navigation reports the new checkout. With
-no active adapter, report the target path and whether integration is configured
-but inactive or needs installing. Chop can remove the invoking worktree without
-an adapter, but reports the Source checkout destination and warns that the parent
-shell could not move.
-
-Install and init support bash and zsh. Install targets the user's current supported
-`$SHELL`, reports the startup file even when unchanged, and is idempotent. It runs
-during local refresh and interactive release installation, or independently when
-requested. Unsupported shells receive manual instructions without startup edits.
+- Each **Session** has one participating worktree per repo. **Worktree preparation** can complete independently; **Repo materialization** depends on that repo's preparation and its dependencies' materialization.
+- An incomplete **Materialization generation** retains completed work for resumption. A completed generation may be followed by another.
+- A **Prepared worktree** alone creates no cleanup obligation. **Cleanup eligibility** records obligations incurred during materialization.
+- **Chop** selects a whole Session or one Ordinary worktree. Only Session removal includes **Session finalization**.
+- A **Dead worktree** can still have cleanup obligations. Missing directories do not imply finalization.
+- **Swing** changes the working location; **Diff** changes neither the checkout nor its branch. A **Shell adapter** connects navigation to the user's shell.

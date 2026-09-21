@@ -1,89 +1,22 @@
-# Session resources
+# Checkout resources
 
-See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminology.
+Part of the [domain glossary](../../CONTEXT.md).
 
 ## Language
 
-**Session resource**: A per-session string value resolved for a repo, persisted in session state, written to the session root `.env`, and optionally used during cleanup.
+**Checkout resource**: A deterministic value or acquired allocation owned by one **Source checkout** or **Session worktree**.
 
-**Resource value**: The configured literal string that becomes a session resource value, with `${session}` available as the session-name placeholder `${user}` available as the machine-user placeholder, and `${id}` as a stable repo-and-Session identifier safe for resource names. _Avoid_: Provider acquisition, allocator, command output
+**Resource value**: A configured, deterministic value retained for its owning checkout.
 
-**Resource values**: The repo configuration section for deterministic literal session resources.
+**Resource command**: A repo-defined provider of dynamic allocations and their release behavior.
 
-**Resource cleanup**: A repo-scoped shell command run during cleanup with the session's resolved resources, resource command outputs, and session metadata available in its environment.
+**Resource command output**: A value returned by acquisition and retained until its allocation is released.
 
-**Cleanup command**: The `monke.yml` field that configures resource cleanup for one repo.
+**Cleanup command**: A repo-defined operation for **Session** infrastructure teardown after resource release.
 
-**Resource command**: A named repo-scoped default-export JS/TS module run from a session worktree to choose dynamic session values while monke-tools coordinates concurrent runs.
+## Relationships
 
-**Declaring repo**: The repo whose `monke.yml` defines a resource command.
-
-**Resource command output**: The exact required non-empty env-style string values returned by a resource command for one session worktree and remembered as inputs to later matching resource command runs. _Avoid_: Claim, provider result, pool item
-
-**Resource command input**: The remembered values from other retained session states for previous runs of the same resource command, grouped by required resource command output name.
-
-**Resource command contract**: The machine-readable function contract for a resource command: remembered values are passed as the `previous` argument field, and resource command output is returned from the default-export function.
-
-**Command lock**: The exclusive concurrency boundary for one declaring repo and one resource command name, preventing matching resource commands from running at the same time across multiple session worktrees. _Avoid_: Claim, resource value, cleanup handle
-
-**Resource command timeout**: The maximum duration a resource command may run while holding its command lock.
-
-## Values and ownership
-
-Resources belong to one repo within one Session state. The nested `resources`
-section contains deterministic Resource values, Resource commands, or both, and
-must be non-empty. Literal values and command outputs cannot share an env name
-within a repo.
-
-Session resources using the same name must have distinct resolved values across
-Session worktrees. Command outputs cannot reuse a remembered value for the same
-output name. Equal values under different names are allowed; cross-output
-uniqueness is repo-owned.
-
-## Command execution
-
-Commands run in configuration order from the target Session worktree. Each has a
-lowercase configuration label, a non-empty `run` module path, and one or more
-required outputs. Returned non-empty string values must match those names exactly
-and are written to the session root `.env`. The timeout defaults to 60 seconds.
-See the [configuration reference](../../skills/internal/monke-tools-core/MONKE-YML-REFERENCE.md)
-for the module interface and examples.
-
-Deterministic resources arrive through process env; remembered outputs arrive
-only through the `previous` function argument. Stdout and stderr are diagnostic
-logs, not the result protocol. Failures identify the command, failure kind, and
-both output streams.
-
-## Remembered inputs and persistence
-
-Session state groups remembered outputs by command name. Inputs come from other
-retained Sessions with the same Declaring repo and command name. Current config
-selects the output names; each receives a deduplicated array, empty when nothing
-is remembered. The contract does not promise sorted order. There is no separate
-resource-command index.
-
-Spawn and Materialize reuse complete remembered outputs and execute automatic
-commands for missing or incomplete outputs. Explicit commands retain remembered
-outputs without executing; `mt resources acquire` acquires missing commands for
-the current repo, including explicit commands. Outputs no longer declared are
-pruned for the current repo and Session. If acquisition runs no command while
-recorded cleanup remains eligible, saved values and outputs are retained for
-cleanup until release succeeds or a new acquisition establishes replacement
-cleanup authority. Validated outputs are persisted immediately so retries can
-reuse them. Removing Session state ends its contribution to later inputs.
-
-Each repo/command-name pair has a separate Command lock covering input reads,
-execution, validation, and persistence across Session worktrees. Renaming a
-command creates a new input and lock namespace.
-
-## Cleanup
-
-Cleanup runs in the Session worktree with saved resources, command outputs,
-`MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH` in its environment.
-Missing worktrees block required commands. Only deliberate
-`mt chop <session> --cleanup-from-source` recovery permits using the Source
-checkout instead. `mt resources release` uses the same recorded cleanup for the current repo and
-keeps its worktree. After success it clears dynamic outputs and their root `.env`
-entries, retaining ports and deterministic values for reuse. Failed cleanup retains state for retry;
-[session finalization](session-lifecycle.md#removal-and-finalization) owns ordering
-and removal.
+- Each **Checkout resource** has one owning checkout. Resources are independent across the worktrees in a **Session**.
+- A **Resource value** exists independently of live acquisition. A **Resource command output** represents an acquired allocation.
+- Releasing an allocation ends its ownership obligation; it preserves the checkout and its deterministic values.
+- Resource release precedes **Cleanup commands** during Session removal.

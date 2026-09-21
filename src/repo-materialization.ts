@@ -1,5 +1,7 @@
 import path from "node:path";
 
+import { CheckoutResourceStore, resourceOwner } from "./checkout-resource-store.ts";
+import type { CheckoutResources } from "./checkout-resource-store.ts";
 import {
   collectBaselinePortsFromRoot,
   rewriteManagedEnvFiles,
@@ -8,6 +10,7 @@ import {
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { createLogger } from "./logger.ts";
 import { resolveResourceCommands, resolveResourceValues } from "./resources.ts";
+import { acquireCheckoutResourceLock } from "./runtime.ts";
 import {
   allocateLocalPorts,
   getOrCreateReservation,
@@ -47,6 +50,8 @@ interface RepoMaterializationContext extends MaterializeRepoOptions {
   hasBootstrapCommand: boolean;
   replacementCleanupAuthorityEstablished: boolean;
   resolvedResourceValues: ReturnType<typeof resolveResourceValues>;
+  resources: CheckoutResources;
+  resourceStore: CheckoutResourceStore;
 }
 
 interface RepoMaterializationAssignments {
@@ -75,6 +80,15 @@ type RepoMaterializationProgressCheckpoint = Exclude<
 >;
 
 export async function materializeRepo(options: MaterializeRepoOptions) {
+  const unlock = acquireCheckoutResourceLock(options.store.home, options.worktreePath);
+  try {
+    return await materializeRepoLocked(options);
+  } finally {
+    unlock();
+  }
+}
+
+async function materializeRepoLocked(options: MaterializeRepoOptions) {
   const context = beginRepoMaterialization(options);
   const commandsBeforeAssignments = await resolveCommandsBeforeAssignments(context);
   const assignments = resolveRepoAssignments(context);
@@ -102,6 +116,10 @@ export async function materializeRepo(options: MaterializeRepoOptions) {
 }
 
 function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterializationContext {
+  const resourceStore = new CheckoutResourceStore(options.store.home, options.store.list());
+  const resources = resourceStore.get(
+    resourceOwner(options.repoConfig.sourceRoot, options.worktreePath, options.session)
+  );
   const context = {
     ...options,
     diffBaseRef: options.diffBaseRef || options.existingState?.diffBaseRef,
@@ -109,19 +127,28 @@ function beginRepoMaterialization(options: MaterializeRepoOptions): RepoMaterial
     replacementCleanupAuthorityEstablished: false,
     resolvedResourceValues: resolveResourceValues({
       env: options.runtime.env,
-      existingRepoState: options.existingState,
+      existingRepoState: resources,
+      preserveValues: Boolean(
+        resources.legacyCleanupCommand ||
+        (options.existingState?.cleanupEligible && options.existingState.cleanupCommand)
+      ),
       repoConfig: options.repoConfig,
       rootSourceRoot: options.rootSourceRoot,
       session: options.session,
-      store: options.store
-    })
+      store: resourceStore,
+      worktreePath: options.worktreePath
+    }),
+    resources,
+    resourceStore
   };
+  resources.resourceValues = context.resolvedResourceValues.values;
+  resourceStore.save(resources);
   persistRepoMaterializationState(
     context,
     {
       assignedPorts: options.existingState?.assignedPorts ?? [],
       cleanupEligible: options.existingState?.cleanupEligible ?? false,
-      resourceCommandOutputs: options.existingState?.resourceCommandOutputs ?? []
+      resourceCommandOutputs: resources.resourceCommandOutputs
     },
     "repo-progress"
   );
@@ -176,7 +203,7 @@ async function runRepoMaterializationCommands(
   assignments: RepoMaterializationAssignments,
   resolvedCommands: Awaited<ReturnType<typeof resolveResourceCommands>> | undefined
 ) {
-  const { existingState, repoConfig, resolvedResourceValues, worktreePath } = context;
+  const { repoConfig, resolvedResourceValues, worktreePath } = context;
   let commands = resolvedCommands;
   const rootEnvAssignmentsBeforeCommands = [
     ...assignments.externalPathAssignments,
@@ -184,9 +211,12 @@ async function runRepoMaterializationCommands(
     ...toRootEnvAssignments(dedupeAssignedPorts(assignments.externalAssignments)),
     ...resolvedResourceValues.values
   ];
-  const existingResourceCommandEnvNames = toResourceCommandEnvNames(
-    existingState?.resourceCommandOutputs ?? []
-  );
+  const existingResourceCommandEnvNames = [
+    ...new Set([
+      ...toResourceCommandEnvNames(context.resources.resourceCommandOutputs),
+      ...repoConfig.resourceCommandsInOrder.flatMap((command) => command.outputs)
+    ])
+  ];
 
   if (context.hasBootstrapCommand) {
     syncRootEnvFileWithRemovals(worktreePath, rootEnvAssignmentsBeforeCommands, [
@@ -196,8 +226,10 @@ async function runRepoMaterializationCommands(
     establishReplacementCleanupAuthority(
       context,
       assignments.localAssignedPorts,
-      existingState?.resourceCommandOutputs ?? []
+      context.resources.resourceCommandOutputs
     );
+    delete context.resources.releasedLegacyCleanup;
+    context.resourceStore.save(context.resources);
     await runBootstrapCommand(
       context.runtime,
       repoConfig,
@@ -214,8 +246,12 @@ async function runRepoMaterializationCommands(
 
   syncRootEnvFileWithRemovals(
     worktreePath,
-    [...rootEnvAssignmentsBeforeCommands, ...toResourceCommandEnvAssignments(commands.commands)],
-    [...resolvedResourceValues.removedEnvNames, ...commands.removedEnvNames]
+    [...rootEnvAssignmentsBeforeCommands],
+    [
+      ...resolvedResourceValues.removedEnvNames,
+      ...commands.removedEnvNames,
+      ...repoConfig.resourceCommandsInOrder.flatMap((command) => command.outputs)
+    ]
   );
   return commands;
 }
@@ -225,11 +261,20 @@ function resolveRepoResourceCommands(
   assignedPorts: AssignedPort[]
 ) {
   return resolveResourceCommands({
-    existingRepoState: context.existingState,
+    existingRepoState: context.resources,
     onCommandExecutionStarting(resourceCommandOutputs) {
       establishReplacementCleanupAuthority(context, assignedPorts, resourceCommandOutputs);
     },
     onResolvedCommandOutputs(resourceCommandOutputs) {
+      context.resources.resourceCommandOutputs = resourceCommandOutputs;
+      delete context.resources.releasedLegacyCleanup;
+      if (
+        resourceCommandOutputs.some((command) => command.legacy) &&
+        context.repoConfig.cleanupCommand
+      ) {
+        context.resources.legacyCleanupCommand ??= context.repoConfig.cleanupCommand;
+      }
+      context.resourceStore.save(context.resources);
       persistRepoMaterializationState(
         context,
         {
@@ -245,7 +290,7 @@ function resolveRepoResourceCommands(
     rootSourceRoot: context.rootSourceRoot,
     runtime: context.runtime,
     session: context.session,
-    store: context.store,
+    store: context.resourceStore,
     worktreePath: context.worktreePath
   });
 }
@@ -417,10 +462,6 @@ function dedupeAssignedPorts(assignments: AssignedPort[]) {
   return [...deduped.values()];
 }
 
-function toResourceCommandEnvAssignments(commands: ResourceCommandState[]) {
-  return commands.flatMap((command) => command.outputs);
-}
-
 function toResourceCommandEnvNames(commands: ResourceCommandState[]) {
   return [...new Set(commands.flatMap((command) => command.outputs.map((output) => output.env)))];
 }
@@ -459,17 +500,9 @@ function buildSessionRepoState(options: {
     delete state.diffBaseRef;
   }
 
-  if (options.resourceValues.length > 0) {
-    state.resourceValues = options.resourceValues;
-  } else {
-    delete state.resourceValues;
-  }
-
-  if (options.resourceCommandOutputs.length > 0) {
-    state.resourceCommandOutputs = options.resourceCommandOutputs;
-  } else {
-    delete state.resourceCommandOutputs;
-  }
+  // Resource records are authoritative; never copy legacy arrays back into Session state.
+  delete state.resourceValues;
+  delete state.resourceCommandOutputs;
 
   return state;
 }

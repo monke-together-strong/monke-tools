@@ -12,18 +12,12 @@ import path from "node:path";
 import { parseDocument, stringify, visit } from "yaml";
 import * as z from "zod";
 
+import { checkoutResourceFile } from "./checkout-resource-store.ts";
 import { MonkeError } from "./errors.ts";
 import { samePath } from "./path-identity.ts";
 import { hashKey, isPortAvailable } from "./runtime.ts";
 import { RepoReservationSchema, SessionStateSchema } from "./state-schema.ts";
-import type {
-  RepoConfig,
-  RepoReservation,
-  ResourceCommandConfig,
-  ResourceValueState,
-  SessionRepoState,
-  SessionState
-} from "./types.ts";
+import type { RepoConfig, RepoReservation, SessionRepoState, SessionState } from "./types.ts";
 import { unwrapBoundaryResult, parseOwnedYamlFile, parseOwnedYamlText } from "./validation.ts";
 
 const GLOBAL_PORT_FLOOR = 10_000;
@@ -161,7 +155,14 @@ export class SessionStateStore {
   }
 
   checkpoint(state: SessionState) {
-    const committed = saveSessionState(this.home, state);
+    const updated = structuredClone(state);
+    for (const repo of updated.repos) {
+      if (existsSync(checkoutResourceFile(this.home, repo.sourceRoot, repo.worktreePath))) {
+        delete repo.resourceValues;
+        delete repo.resourceCommandOutputs;
+      }
+    }
+    const committed = saveSessionState(this.home, updated);
     this.#states.set(this.key(committed), committed);
   }
 
@@ -187,73 +188,6 @@ export class SessionStateStore {
       }
     }
     return ports;
-  }
-
-  resourceCommandInput(options: {
-    command: ResourceCommandConfig;
-    rootSourceRoot: string;
-    session: string;
-    sourceRoot: string;
-  }) {
-    const valuesByEnv = new Map(options.command.outputs.map((env) => [env, new Set<string>()]));
-
-    for (const state of this.#states.values()) {
-      if (this.key(state) === this.key(options)) {
-        continue;
-      }
-
-      for (const repoState of state.repos) {
-        if (repoState.sourceRoot !== options.sourceRoot) {
-          continue;
-        }
-
-        const rememberedCommand = (repoState.resourceCommandOutputs ?? []).find(
-          (command) => command.name === options.command.name
-        );
-        if (!rememberedCommand) {
-          continue;
-        }
-
-        const rememberedByEnv = new Map(
-          rememberedCommand.outputs.map((output) => [output.env, output.value])
-        );
-        for (const env of options.command.outputs) {
-          const remembered = rememberedByEnv.get(env);
-          if (remembered !== undefined && remembered.trim() !== "") {
-            valuesByEnv.get(env)?.add(remembered);
-          }
-        }
-      }
-    }
-
-    return Object.fromEntries(
-      options.command.outputs.map((env) => [env, [...(valuesByEnv.get(env) ?? [])].toSorted()])
-    );
-  }
-
-  resourceValueCollision(options: {
-    rootSourceRoot: string;
-    session: string;
-    sourceRoot: string;
-    values: ResourceValueState[];
-  }) {
-    if (options.values.length === 0) {
-      return null;
-    }
-    for (const state of this.#states.values()) {
-      if (this.key(state) === this.key(options)) {
-        continue;
-      }
-      const repo = state.repos.find((candidate) => candidate.sourceRoot === options.sourceRoot);
-      const remembered = new Map(
-        (repo?.resourceValues ?? []).map((value) => [value.env, value.value])
-      );
-      const collision = options.values.find((value) => remembered.get(value.env) === value.value);
-      if (collision) {
-        return { ...collision, session: state.session };
-      }
-    }
-    return null;
   }
 
   private key(state: { rootSourceRoot: string; session: string }) {

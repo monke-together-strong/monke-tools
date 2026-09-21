@@ -1,12 +1,12 @@
 # Agent guidance distribution
 
-See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminology.
+Part of the [domain glossary](../../CONTEXT.md).
 
 ## Language
 
-**User PR guidance**: Machine-local PR authoring defaults stored as `instructions/PR.md` under the **Monke home** and applied by the `create-pr` skill when **Repo PR guidance** is absent.
+**User PR guidance**: Machine-local defaults for authoring PRs when **Repo PR guidance** is absent.
 
-**Repo PR guidance**: Optional agent-facing PR authoring instructions stored as `PR.md` at a **Consumer repo** root; these replace **User PR guidance** and complement the repo's reviewer-facing GitHub pull request template.
+**Repo PR guidance**: Repo-owned PR authoring instructions that replace **User PR guidance** and complement the reviewer-facing PR template.
 
 **Spec**: A durable work target that records agreed behavior, implementation decisions, testing decisions, and scope for an agent to execute. A PRD can serve as a Spec when it carries that implementation contract.
 
@@ -20,9 +20,9 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Agent harness**: A supported agent runtime family whose capabilities determine whether a **Harness-specific skill** applies, such as Codex.
 
-**Skill source tree**: The `skills/` directory in the monke-tools source checkout that packages **Distributed skills** and **Distributed references** for installation into **Agent skill roots**.
+**Skill source tree**: The source collection of **Distributed skills** and **Distributed references**.
 
-**Reference source tree**: The `references/` area inside the **Skill source tree** that stores **Distributed references**, separated into internal and imported ownership groups.
+**Reference source tree**: The portion of the **Skill source tree** containing **Distributed references**.
 
 **Skill slug**: The filesystem name of one **Distributed skill** inside the **Skill source tree**. _Avoid_: Skill name, package name, agent label
 
@@ -32,7 +32,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **User-invoked skill**: A **Distributed skill** whose agent metadata permits a human to invoke it explicitly. This capability is independent of whether the model may select the skill automatically. _Avoid_: Model-invoked skill, manual-only skill
 
-**Model invocation override**: The optional agent-neutral `disableModelInvocation` value in a **Skill import recipe**. An absent value preserves upstream metadata, `true` disables model invocation, and `false` enables it when the **Imported skill** is materialized.
+**Model invocation override**: A **Skill import recipe** choice that overrides whether the model may invoke imported guidance automatically.
 
 **Core distributed skill**: The monke-tools-owned **Distributed skill** covering the local install, consumer setup, session operations, and repo configuration.
 
@@ -52,7 +52,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Global agent instructions**: Team-owned agent guidance installed into selected **Agent harnesses** at user scope and loaded across **Consumer repos**. Repo guidance may specialize or override it.
 
-**Managed instruction section**: The marker-delimited portion of an **Agent harness** user-level instruction file owned and reconciled by monke-tools.
+**Managed instruction section**: The portion of user-level agent instructions owned by monke-tools.
 
 **Team coding baseline**: Minimum Team-owned coding guidance required across all **Consumer repos**; repo rules may add stricter or more specific guidance.
 
@@ -62,7 +62,7 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Skill import recipe**: A remembered description of one **Skill import** that can be rerun to refresh the same **Imported guidance** from the same outside source.
 
-**Skill import recipe store**: A repo-tracked file in the **Skill source tree** that records **Skill import recipes** shared by everyone maintaining monke-tools.
+**Skill import recipe store**: The shared collection of **Skill import recipes** maintained with monke-tools.
 
 **Skill import selector**: The upstream-facing skill identifier passed to a **Skill import** to choose one **Imported guidance** item from its outside source.
 
@@ -88,72 +88,13 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 **Skill install preference**: The remembered set of **Skill install targets** used by later local installs.
 
-**Skills Configure**: The interactive operation that lets a user choose one or more **Skill install targets** and saves the resulting **Skill install preference** in **Global monke config**.
+**Skills Configure**: Selection of **Skill install targets** as the user's **Skill install preference**.
 
-## Target preferences
+## Relationships
 
-Global monke config stores the current user-selected set of one or more targets,
-including at most one Custom target. Built-in selections store the target kind;
-a Custom selection stores an absolute Agent skill root path, not a namespace
-path. Input `~` resolves against the OS home, not Monke home.
-
-| Built-in target | Default Agent skill root | Projection        |
-| --------------- | ------------------------ | ----------------- |
-| Codex           | `~/.codex/skills`        | Managed namespace |
-| Claude          | `~/.claude/skills`       | Flat              |
-| Cursor          | `~/.cursor/skills`       | Managed namespace |
-
-Custom targets use a Managed namespace. Skills Configure starts with the saved
-selection, asks for targets before the custom path, retains that path while
-custom remains selected, and removes it when deselected. It saves the selection
-before reconciling targets.
-
-## Reconciliation
-
-Local install refresh includes skill installation using saved preferences or
-explicit replacement targets. With no saved preference it may run Skills Configure
-after installing `mt`. Reconciliation creates missing Agent skill roots and tries
-all selected targets; any target failure makes the overall refresh fail.
-
-Global instructions, skills, and references ship with the source version. Codex
-and Claude receive the shared Global agent instructions in managed sections,
-honoring `CODEX_HOME` and `CLAUDE_CONFIG_DIR`. Cursor and Custom targets receive no
-global instructions. User-owned content outside managed sections is preserved;
-repo guidance may specialize or override the global instructions.
-
-## Compatibility and ownership
-
-The source tree separates Shared skills by internal/imported ownership and
-Harness-specific skills by harness. Currently Codex is the only harness-specific
-scope: only the built-in Codex target receives Codex-only skills. All targets
-receive Shared skills and references.
-
-Relative Markdown file links in distributed guidance must resolve within the
-Release bundle's guidance files. Put references shared with repository docs in
-`skills/references/internal/` and link to that authoritative copy from both
-consumers; repository-level `docs/` does not ship. PR and mainline CI check these
-links, including supporting Markdown and imported guidance. The check ignores
-code examples, absolute paths, remote URLs, and heading fragments; it validates
-packaged file availability rather than heading existence or network reachability.
-
-The Core skill uses `monke-tools-core` for both slug and agent name; these may
-differ for other skills. Imports preserve upstream agent names by default.
-Each imported item has one owner recipe and one Import kind. Changing kind
-migrates the item instead of creating another managed copy. The tracked recipe
-store records selectors, kinds, and metadata needed to refresh each recipe's
-owned guidance.
-
-## Projections
-
-A namespace is named `monke-tools`; each Agent skill root may contain one.
-A managed namespace contains one projection of compatible skills and shared
-references. Only skills are discoverable. Claude projects skills directly into
-its root with separate ownership tracking. Local-install projections keep source
-changes live without copying skill contents. Release-install projections point
-into writable files in the active install, with original hashes retained in its
-manifest for update checks.
-
-Refresh may migrate a legacy namespace symlink or relink a projection to a new
-source tree. It preserves unrelated entries and refuses to overwrite non-symlinks
-at managed source-folder names. Deselecting a target removes only its managed
-namespace or flat projection, preserving unrelated skills.
+- A **Skill projection** exposes compatible skills and references in one **Agent skill root**. A **Managed skill namespace** groups them; a **Flat skill projection** exposes skills directly.
+- **Shared distributed skills** apply across compatible harnesses; **Harness-specific skills** apply only to their named harness.
+- Each **Imported guidance** item has one **Imported guidance owner** and one **Import kind**. Its recipe retains the source and choices needed to refresh it.
+- A skill may be both **Model-invoked** and **User-invoked**.
+- **Skill install preferences** select targets. Projections and managed instruction sections belong to monke-tools; unrelated agent guidance remains user-owned.
+- **Team coding baseline** applies across repos. **Repo coding standards** add repo-specific constraints.

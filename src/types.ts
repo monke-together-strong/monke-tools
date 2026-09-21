@@ -61,6 +61,8 @@ export interface ExecOptions {
   allowFailure?: boolean;
   cwd?: string;
   env?: Record<string, string | undefined>;
+  inheritStdio?: boolean;
+  protectProcessGroup?: (pid: number) => void;
   /** Text passed to the child process on stdin. */
   stdin?: string;
   /** Positive timeout in seconds before the child process is terminated. */

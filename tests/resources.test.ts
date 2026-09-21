@@ -3,9 +3,9 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { CheckoutResourceStore } from "../src/checkout-resource-store.ts";
 import { resolveResourceCommands } from "../src/resources.ts";
 import { hashKey } from "../src/runtime.ts";
-import { SessionStateStore } from "../src/session-state-store.ts";
 import type { RepoConfig, Runtime } from "../src/types.ts";
 import { makeTempDir } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
@@ -51,7 +51,9 @@ describe("resources", () => {
         expect(args?.[4]).toBe(path.join(sourceRoot, "scripts/allocate-symbols.ts"));
         expect(options?.cwd).toBe(sourceRoot);
         commandSawLock = existsSync(lockPath);
-        expect(JSON.parse(options?.stdin ?? "")).toStrictEqual({ E2E_FLOW1_SYMBOL: [] });
+        expect(JSON.parse(options?.stdin ?? "")).toMatchObject({
+          previous: { E2E_FLOW1_SYMBOL: [] }
+        });
         expect(options?.env).toStrictEqual({ E2E_CHANNEL_NAME: "banana" });
         writeFileSync(
           args?.[5] ?? "",
@@ -70,7 +72,7 @@ describe("resources", () => {
       existingRepoState: undefined,
       onResolvedCommandOutputs(commands) {
         persistenceSawLock = existsSync(lockPath);
-        expect(commands).toStrictEqual([
+        expect(commands).toMatchObject([
           {
             name: "e2e-symbols",
             outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
@@ -82,14 +84,14 @@ describe("resources", () => {
       rootSourceRoot: sourceRoot,
       runtime,
       session: "banana",
-      store: new SessionStateStore(home),
+      store: new CheckoutResourceStore(home),
       worktreePath: sourceRoot
     });
 
     expect(commandSawLock).toBeTruthy();
     expect(persistenceSawLock).toBeTruthy();
     expect(existsSync(lockPath)).toBeFalsy();
-    expect(resolved.commands).toStrictEqual([
+    expect(resolved.commands).toMatchObject([
       {
         name: "e2e-symbols",
         outputs: [{ env: "E2E_FLOW1_SYMBOL", value: "SOL/USDT:USDT" }]
@@ -148,7 +150,7 @@ describe("resources", () => {
       rootSourceRoot: sourceRoot,
       runtime,
       session: "current",
-      store: new SessionStateStore(home),
+      store: new CheckoutResourceStore(home),
       worktreePath: sourceRoot
     });
 

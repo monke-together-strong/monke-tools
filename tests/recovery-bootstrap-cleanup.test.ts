@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { getSessionStateFilePath } from "../src/session-state-store.ts";
 import { RepoReservationSchema, SessionStateSchema } from "../src/state-schema.ts";
@@ -591,9 +592,10 @@ apps:
     expect(failure.stderr).toMatch(/Cleanup command failed.*cleanup failed/su);
 
     expect(read(root, "cleanup-failure.log")).toBe("mt-retry-me\n");
-    const retainedState = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
-    expect(retainedState.repos[0]?.resourceValues).toStrictEqual([
-      { env: "DISCORD_CHANNEL", value: "mt-retry-me" }
-    ]);
+    expect(
+      new CheckoutResourceStore(home).get(
+        resourceOwner(root, getExpectedWorktreePath(home, root, "retry-me"))
+      ).resourceValues
+    ).toStrictEqual([{ env: "DISCORD_CHANNEL", value: "mt-retry-me" }]);
   });
 });

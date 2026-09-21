@@ -3,15 +3,84 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { hashKey } from "../src/runtime.ts";
-import { loadSessionState } from "../src/session-state-store.ts";
+import { loadSessionState, saveSessionState } from "../src/session-state-store.ts";
 import { createRepo, git, makeTempDir, runMonke, spawnMonkeWorker, write } from "./helpers.ts";
 
 const STATE_POLL_ATTEMPTS = 200;
 const STATE_POLL_DELAY_MS = 10;
 
 describe("Cleanup authority", () => {
+  test("a migrated release supersedes legacy snapshots and Chop does not repeat it", () => {
+    const fixture = createCleanupAuthorityFixture("cleanup-authority-migration");
+    runMonke({ args: ["spawn", "retained"], cwd: fixture.repoRoot, monkeHome: fixture.home });
+    const store = new CheckoutResourceStore(fixture.home);
+    const owner = resourceOwner(fixture.repoRoot, fixture.worktreeRoot, "retained");
+    const record = store.get(owner);
+    const legacy = loadSessionState(fixture.home, fixture.repoRoot, "retained");
+    const [repo] = legacy.repos;
+    if (!repo) {
+      throw new Error("Missing fixture repo");
+    }
+    Object.assign(repo, {
+      resourceCommandOutputs: record.resourceCommandOutputs.map(({ name, outputs }) => ({
+        name,
+        outputs
+      })),
+      resourceValues: record.resourceValues
+    });
+    store.remove(owner);
+    saveSessionState(fixture.home, legacy);
+    runMonke({
+      args: ["resources", "release"],
+      cwd: fixture.worktreeRoot,
+      monkeHome: fixture.home
+    });
+    // A stale Session snapshot left by interruption must not revive released allocations.
+    saveSessionState(fixture.home, legacy);
+    runMonke({
+      args: ["resources", "release"],
+      cwd: fixture.worktreeRoot,
+      monkeHome: fixture.home
+    });
+    expect(store.get(owner).resourceCommandOutputs).toStrictEqual([]);
+    runMonke({
+      args: ["chop", "retained", "--force"],
+      cwd: fixture.repoRoot,
+      monkeHome: fixture.home
+    });
+    expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe("A|old-value|old-output\n");
+  });
+
+  test.each(["materialize", "acquire"])(
+    "%s retains deterministic inputs required by pending infrastructure cleanup",
+    (operation) => {
+      const sandbox = makeTempDir("cleanup-static-authority");
+      const home = path.join(sandbox, "home");
+      const root = createRepo(path.join(sandbox, "root"), {
+        "monke.yml":
+          'apps: {}\nbootstrapCommand: true\ncleanupCommand: test "$OWNER" = original\nresources:\n  values:\n    OWNER: original\n'.replace(
+            "bootstrapCommand: true",
+            "bootstrapCommand: 'true'"
+          )
+      });
+      runMonke({ args: ["spawn", "retained"], cwd: root, monkeHome: home });
+      const cwd = getExpectedWorktreePath(home, root, "retained");
+      write(root, "monke.yml", "apps: {}\n");
+      write(cwd, "monke.yml", "apps: {}\n");
+      runMonke({
+        args: operation === "materialize" ? ["materialize"] : ["resources", "acquire"],
+        cwd,
+        monkeHome: home
+      });
+      expect(() =>
+        runMonke({ args: ["chop", "retained", "--force"], cwd: root, monkeHome: home })
+      ).not.toThrow();
+    }
+  );
+
   test("all-reused Resource command outputs retain Cleanup authority A", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-reuse");
     runMonke({
@@ -31,7 +100,13 @@ describe("Cleanup authority", () => {
     expect(readFileSync(path.join(fixture.worktreeRoot, "resource-runs"), "utf-8")).toBe("r");
     expect(state.repos[0]).toMatchObject({
       cleanupCommand: cleanupCommand("A", fixture.cleanupLog),
-      cleanupEligible: true,
+      cleanupEligible: true
+    });
+    expect(
+      new CheckoutResourceStore(fixture.home).get(
+        resourceOwner(fixture.repoRoot, fixture.worktreeRoot)
+      )
+    ).toMatchObject({
       resourceCommandOutputs: [
         {
           name: "identity",
