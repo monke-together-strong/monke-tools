@@ -11,6 +11,6 @@
 
 When reviewing documentation:
 
-- Keep only reusable guidance, ownership, behavior contracts, and rationale for costly decisions.
-- Keep each fact in one authoritative home; link instead of repeating source, configuration, or other docs.
-- Delete unnecessary content rather than polishing or relocating it. No documentation change is a valid outcome.
+- Keep documentation that helps its intended reader act or make a decision.
+- Delete implementation narration, repeated configuration, and facts already explained elsewhere; link to the authoritative source when needed.
+- Identify unnecessary passages for deletion before suggesting rewrites. Delete unnecessary explanations even when they are technically correct, rather than polishing or relocating them. No documentation change is a valid outcome.
