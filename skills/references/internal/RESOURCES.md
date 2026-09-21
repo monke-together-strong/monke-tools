@@ -1,23 +1,7 @@
 # Checkout resources
 
-Resources belong to one checkout: either the original Source checkout or one
-Session worktree. A Session can contain several worktrees, each with its own
-resources. Ordinary worktrees are not supported by resource commands.
-See [CONTEXT.md](https://github.com/monke-together-strong/monke-tools/blob/main/CONTEXT.md) for the full glossary.
-
-## Language
-
-**Checkout resource**: A deterministic value or acquired allocation owned by one Source checkout or Session worktree.
-
-**Resource value**: A configured literal string, with supported placeholders, retained for an owning checkout.
-
-**Resource command**: A named repo module that acquires dynamic resources and can release them using its recorded outputs.
-
-**Resource command output**: A declared nonempty string returned by acquisition and retained until release succeeds.
-
-**Resource command input**: The owning checkout's identity under `owner` and recorded outputs from other checkouts of the same repo and command, grouped by output name under `previous`.
-
-**Cleanup command**: The repo's recorded `cleanupCommand` for Session infrastructure teardown after resource release.
+Run resource commands in a Source checkout or Session worktree; Ordinary worktrees
+are unsupported. For terminology, see [CONTEXT.md](https://github.com/monke-together-strong/monke-tools/blob/main/CONTEXT.md#resources).
 
 ## Ownership and configuration
 

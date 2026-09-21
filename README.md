@@ -34,9 +34,8 @@ The [session command reference](skills/internal/monke-tools-core/SKILL.md) cover
 
 ## Use checkout resources
 
-A **checkout** is one repo's working copy; a **Session** groups worktrees across
-repos. With resources configured in `monke.yml`, use these commands in the source
-checkout or a Session worktree:
+With resources configured in `monke.yml`, run these commands in a
+[Source checkout or Session worktree](CONTEXT.md#session-topology):
 
 ```bash
 mt setup                        # Write dependency paths and static resource values

@@ -1,8 +1,7 @@
 # monke-tools
 
 monke-tools manages workspace sessions across a root repo and its dependencies.
-This glossary defines the shared language; subsystem references hold detailed
-terms and behavior.
+This glossary defines the shared language. References explain usage and behavior.
 
 ## References
 
@@ -73,13 +72,25 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 
 **Baseline port**: A numeric port already present in a repo's managed env files that should not be reallocated.
 
+## Resources
+
+**Checkout resource**: A deterministic value or acquired allocation owned by one Source checkout or Session worktree.
+
+**Resource value**: A configured, deterministic value retained for its owning checkout.
+
+**Resource command**: A repo-defined provider of dynamic allocations and their release behavior.
+
+**Resource command output**: A value returned by acquisition and retained until its allocation is released.
+
+**Cleanup command**: A repo-defined operation for Session infrastructure teardown after resource release.
+
 ## Operations
 
 **Spawn**: The operation that creates or updates all required session worktrees, using the invoking checkout’s current `HEAD` unless **Default branch spawn mode** is requested.
 
 **Materialize**: The operation that schedules **Worktree preparation** and **Repo materialization** across the Session dependency graph. _Avoid_: Refresh, rebuild
 
-**Setup**: The operation that prepares a Source checkout or Session worktree root `.env` with dependency paths and deterministic Resource values, without acquiring live resources. _Avoid_: Materialize, bootstrap
+**Setup**: Preparation of a Source checkout or Session worktree's static configuration, separate from live resource acquisition. _Avoid_: Materialize, bootstrap
 
 **Chop**: The explicit operation that removes one **Chop target** while preserving local branches. A Session target removes every recorded Session worktree and performs **Session finalization**; an Ordinary-worktree target removes only that worktree. _Avoid_: Cleanup, delete branch, prune
 
@@ -91,8 +102,8 @@ for `monke.yml`. Historical decisions remain in [docs/adr](docs/adr).
 
 ## Relationships and distinctions
 
-- A Checkout is one repo's working copy. A Session groups Session worktrees across
-  repos. Resources belong to each participating checkout independently.
+- Each Checkout resource belongs to one Source checkout or Session worktree,
+  independently of other checkouts in the same Session.
 - A Session belongs to one Root repo. Each participating repo contributes one
   Session worktree and one Session-state entry. The Session uses a shared branch
   name across repos; it is the workspace instance, not the Git ref.
