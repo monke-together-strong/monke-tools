@@ -39,8 +39,10 @@ const RELEASE_CATALOG_PAGE_SIZE = 100;
 const RELEASE_REQUEST_TIMEOUT_MS = 30_000;
 const STALE_LOCK_AGE_MS = 60_000;
 type AsyncChildProcess = Bun.PipedSubprocess;
-const activeAsyncChildren = new Set<AsyncChildProcess>();
-const timedOutProcessGroups = new Map<number, AsyncChildProcess>();
+type ManagedChild = Pick<Bun.Subprocess, "pid" | "kill">;
+const activeAsyncChildren = new Set<ManagedChild>();
+const foregroundChildren = new Set<ManagedChild>();
+const timedOutProcessGroups = new Map<number, ManagedChild>();
 const PARENT_TERMINATION_SIGNALS = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
 // Stable handler identities, so detaching removes exactly what attaching added.
 const PARENT_TERMINATION_HANDLERS = new Map<NodeJS.Signals, () => void>(
@@ -267,6 +269,10 @@ function executeCommandAsync(
     MONKE_SHELL_DIR_DIRECTIVE: undefined
   };
 
+  if (options?.inheritStdio) {
+    return executeForeground(command, args, options, childEnv, runtimeCwd);
+  }
+
   return new Promise((resolve, reject) => {
     // A detached child may run before spawn returns, so intercept signals first.
     if (activeAsyncChildren.size === 0 && timedOutProcessGroups.size === 0) {
@@ -297,6 +303,46 @@ function executeCommandAsync(
     }
     new AsyncCommandExecution(child, command, args, options, resolve, reject).start();
   });
+}
+
+async function executeForeground(
+  command: string,
+  args: string[],
+  options: ExecOptions,
+  env: Record<string, string | undefined>,
+  cwd: string
+): Promise<ExecResult> {
+  if (activeAsyncChildren.size === 0) {
+    attachParentTerminationHandlers();
+  }
+  let child: ManagedChild | undefined;
+  try {
+    const spawned = Bun.spawn({
+      cmd: [command, ...args],
+      cwd: options.cwd ?? cwd,
+      env,
+      stderr: "inherit",
+      stdin: "inherit",
+      stdout: "inherit"
+    });
+    child = spawned;
+    foregroundChildren.add(child);
+    registerAsyncChild(child);
+    try {
+      options.onSpawn?.(spawned.pid);
+    } catch (error) {
+      spawned.kill("SIGKILL");
+      await spawned.exited;
+      throw error;
+    }
+    const exitCode = await spawned.exited;
+    return { exitCode, stderr: "", stdout: "" };
+  } finally {
+    if (child) {
+      unregisterAsyncChild(child);
+    }
+    detachParentTerminationHandlersIfIdle();
+  }
 }
 
 class AsyncCommandExecution {
@@ -469,11 +515,12 @@ class AsyncCommandExecution {
   }
 }
 
-function registerAsyncChild(child: AsyncChildProcess) {
+function registerAsyncChild(child: ManagedChild) {
   activeAsyncChildren.add(child);
 }
 
-function unregisterAsyncChild(child: AsyncChildProcess) {
+function unregisterAsyncChild(child: ManagedChild) {
+  foregroundChildren.delete(child);
   if (!activeAsyncChildren.delete(child)) {
     return;
   }
@@ -541,15 +588,26 @@ function forwardParentTermination(signal: NodeJS.Signals) {
 
 function terminateActiveChild(
   pid: number | undefined,
-  child: AsyncChildProcess,
+  child: ManagedChild,
   signal: NodeJS.Signals
 ) {
   terminateChildProcessTree(pid, signal, () => {
     child.kill(signal);
   });
-  terminateChildProcessTree(pid, "SIGKILL", () => {
-    child.kill("SIGKILL");
-  });
+  if (!foregroundChildren.has(child)) {
+    terminateChildProcessTree(pid, "SIGKILL", () => {
+      child.kill("SIGKILL");
+    });
+    return;
+  }
+  const escalation = setTimeout(() => {
+    if (activeAsyncChildren.has(child)) {
+      terminateChildProcessTree(pid, "SIGKILL", () => {
+        child.kill("SIGKILL");
+      });
+    }
+  }, ASYNC_TERMINATION_GRACE_MS);
+  escalation.unref();
 }
 
 function terminateChildProcessTree(
@@ -638,7 +696,10 @@ export interface OperationLock {
   path: string;
 }
 
-type LockRelease = (() => void) & { ownership: OperationLock };
+type LockRelease = (() => void) & {
+  ownership: OperationLock;
+  protectProcess: (pid: number) => void;
+};
 
 export async function withGlobalLockAsync<T>(
   home: string,
@@ -669,6 +730,28 @@ function acquireLockPathAsync(lockPath: string) {
     };
     poll();
   });
+}
+
+/**
+ * Fail immediately when a checkout is running or mutating its resources. Caller releases in
+ * finally.
+ */
+export function acquireCheckoutResourceLock(home: string, checkoutPath: string) {
+  const lockPath = path.join(
+    home,
+    "locks",
+    `${hashKey(`checkout-resources\u0000${path.normalize(checkoutPath)}`)}.lock`
+  );
+  mkdirSync(path.dirname(lockPath), { recursive: true });
+  const attempt = tryAcquireLockPath(lockPath);
+  const release =
+    attempt.release ?? (!attempt.wait ? tryAcquireLockPath(lockPath).release : undefined);
+  if (!release) {
+    throw new MonkeError(
+      `Resources are in use at ${checkoutPath}; wait for the running command to exit.`
+    );
+  }
+  return release;
 }
 
 /** Run asynchronous work while holding a lock scoped inside the monke home directory. */
@@ -732,7 +815,7 @@ function tryAcquireLockPath(lockPath: string) {
     return { wait: true };
   }
   let fileDescriptor: number | null = null;
-  const contents = JSON.stringify({
+  let contents = JSON.stringify({
     acquiredAt: Date.now(),
     pid: process.pid
   });
@@ -783,7 +866,14 @@ function tryAcquireLockPath(lockPath: string) {
         rmSync(lockPath, { force: true });
       }
     },
-    { ownership }
+    {
+      ownership,
+      protectProcess(pid: number) {
+        ownership.assertHeld();
+        contents = JSON.stringify({ acquiredAt: Date.now(), pid });
+        writeFileSync(lockPath, contents, "utf-8");
+      }
+    }
   );
   return { release, wait: false };
 }

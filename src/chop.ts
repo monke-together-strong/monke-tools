@@ -11,7 +11,7 @@ import {
 } from "./git.ts";
 import { createLogger } from "./logger.ts";
 import { containsPath, samePath } from "./path-identity.ts";
-import { getMonkeHome, withGlobalLock } from "./runtime.ts";
+import { acquireCheckoutResourceLock, getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { cleanupSessionResources, finalizeSession } from "./session-finalization.ts";
 import { sessionRemovalRank } from "./session-lifecycle-progress.ts";
 import type { SessionAction, SessionLifecycleObserver } from "./session-lifecycle-progress.ts";
@@ -245,6 +245,27 @@ export function teardownSession(
   target: SessionChopTarget,
   options: ChopOptions,
   observer: SessionLifecycleObserver = {}
+): SessionChopResult {
+  const unlocks: (() => void)[] = [];
+  try {
+    for (const repo of target.state.repos) {
+      unlocks.push(acquireCheckoutResourceLock(home, repo.worktreePath));
+    }
+    return teardownSessionLocked(runtime, home, invocationWorktreePath, target, options, observer);
+  } finally {
+    for (const unlock of unlocks.toReversed()) {
+      unlock();
+    }
+  }
+}
+
+function teardownSessionLocked(
+  runtime: Runtime,
+  home: string,
+  invocationWorktreePath: string,
+  target: SessionChopTarget,
+  options: ChopOptions,
+  observer: SessionLifecycleObserver
 ): SessionChopResult {
   observer.beforeStep?.({ sourceRoot: target.state.rootSourceRoot, step: "revalidation" });
   const preflight = preflightSession(

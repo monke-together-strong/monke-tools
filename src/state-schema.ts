@@ -16,7 +16,7 @@ const AssignedPortSchema = z.strictObject({
   value: PortSchema
 });
 
-const ResourceValueStateSchema = z.strictObject({
+export const ResourceValueStateSchema = z.strictObject({
   env: NonEmptyStringSchema,
   value: NonEmptyStringSchema
 });
@@ -26,9 +26,12 @@ const ResourceCommandOutputStateSchema = z.strictObject({
   value: NonEmptyStringSchema
 });
 
-const ResourceCommandStateSchema = z.strictObject({
+export const ResourceCommandStateSchema = z.strictObject({
+  legacy: z.boolean().optional(),
   name: NonEmptyStringSchema,
-  outputs: z.array(ResourceCommandOutputStateSchema)
+  outputs: z.array(ResourceCommandOutputStateSchema),
+  run: NonEmptyStringSchema.optional(),
+  timeoutSeconds: z.number().positive().optional()
 });
 
 const MaterializationFailureSchema = z.strictObject({

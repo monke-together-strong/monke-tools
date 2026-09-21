@@ -14,7 +14,7 @@ import {
   runActivateReleaseInstall
 } from "./installation.ts";
 import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./monke.ts";
-import { runResources } from "./resource-lifecycle.ts";
+import { runResources, runResourcesExec } from "./resource-lifecycle.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
@@ -74,11 +74,23 @@ function createProgram(runtime: Runtime) {
 
   program.command("materialize").action(() => runMaterialize(runtime));
 
+  program.enablePositionalOptions();
   const resources = program
     .command("resources")
-    .description("Acquire or release current repository Session resources");
+    .description("Manage resources owned by the current checkout")
+    .enablePositionalOptions();
   resources.command("acquire").action(() => runResources(runtime, "acquire"));
   resources.command("release").action(() => runResources(runtime, "release"));
+  resources
+    .command("exec")
+    .description("Run a command with acquired resources, keeping them protected until it exits")
+    .argument("<command>")
+    .argument("[args...]")
+    .allowUnknownOption()
+    .passThroughOptions()
+    .action(async (command, args) => {
+      process.exitCode = await runResourcesExec(runtime, command, args);
+    });
 
   program
     .command("chop")

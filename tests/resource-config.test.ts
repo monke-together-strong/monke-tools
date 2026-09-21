@@ -2,10 +2,10 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { CheckoutResourceStore } from "../src/checkout-resource-store.ts";
 import { loadResolvedGraph } from "../src/config.ts";
 import { resolveResourceValues } from "../src/resources.ts";
 import { createRuntime } from "../src/runtime.ts";
-import { SessionStateStore } from "../src/session-state-store.ts";
 import { createFiles, makeTempDir } from "./helpers.ts";
 
 describe("resource configuration", () => {
@@ -41,7 +41,7 @@ apps:
 
   test("resource IDs are stable, name-safe, and distinct across repos and full Session names", () => {
     const sandbox = makeTempDir("resource-id");
-    const store = new SessionStateStore(path.join(sandbox, "home"));
+    const store = new CheckoutResourceStore(path.join(sandbox, "home"));
     const roots = ["first", "second"].map((name) =>
       createFiles(path.join(sandbox, name), {
         "monke.yml": `resources:
@@ -64,7 +64,8 @@ apps: {}
           repoConfig,
           rootSourceRoot: root,
           session,
-          store
+          store,
+          worktreePath: path.join(root, session)
         };
         const result = resolveResourceValues(options);
         expect(resolveResourceValues(options)).toStrictEqual(result);

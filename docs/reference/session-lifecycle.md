@@ -60,8 +60,9 @@ See [CONTEXT.md](../../CONTEXT.md) for shared session, repo, and port terminolog
 
 Spawn, Materialize, and Cleanup each open one Session state store under the global
 lock. It owns state reads and writes, scans retained states once, and serves port
-usage, remembered outputs, and resource-collision queries. Resource commands get
-inputs and checkpoint capabilities from the store rather than reading state.
+usage queries. The separate [checkout resource store](resources.md) owns allocations,
+remembered outputs, and resource collision checks for Source checkouts and Session
+worktrees. Legacy Session resource fields remain readable until migrated.
 
 ## Preparation and materialization
 

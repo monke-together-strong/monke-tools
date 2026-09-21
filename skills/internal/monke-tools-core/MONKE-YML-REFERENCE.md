@@ -42,53 +42,91 @@ Generate outputs for the actual worktree. If a generator embeds absolute paths, 
 
 ## Resources
 
-`resources.values` contains literal strings with `${session}`, `${user}`, and `${id}` placeholders. `${id}` is a stable 32-character lowercase hex identifier derived from the repo source path and full Session name, suitable for resource names that cannot contain branch slashes. Values are persisted and written to the session root `.env`.
-
-For dynamic values, add `resources.commands` under the same `resources` section:
+`resources.values` contains literal strings with `${user}`, `${id}`, and
+`${session}` placeholders. `${id}` is a stable 32-character lowercase hex
+identifier derived from canonical Source and checkout paths, suitable for both
+Source checkouts and Session worktrees. `${session}` requires a Session.
+Deterministic values are persisted and written to root `.env`.
 
 ```yaml
 resources:
+  values:
+    RESOURCE_NAME: test-${id}
   commands:
     slot:
-      run: scripts/session-slot.ts
+      acquire: explicit
+      run: scripts/slot.ts
       outputs: [SLOT_ID]
       timeoutSeconds: 60
 ```
 
-The repo-relative JS/TS module exports a function receiving remembered values from other retained sessions for this repo and command:
+A repo-relative JS/TS module exports `acquire` and, for external resources,
+`release`:
 
 ```ts
-export default function ({ previous }: { previous: { SLOT_ID: string[] } }) {
+type Owner = {
+  id: string;
+  sourceRoot: string;
+  checkoutPath: string;
+  session?: string;
+};
+
+export function acquire({ owner, previous }: {
+  owner: Owner;
+  previous: { SLOT_ID: string[] };
+}) {
   let slot = 1;
   while (previous.SLOT_ID.includes(String(slot))) slot += 1;
   return { SLOT_ID: String(slot) };
 }
+
+export async function release({ owner, outputs, values }: {
+  owner: Owner;
+  outputs: { SLOT_ID: string };
+  values: Record<string, string>;
+}) {
+  // Delete only the resource identified by outputs.SLOT_ID.
+  // Use values for deterministic context, such as RESOURCE_NAME.
+}
 ```
 
-Return exactly the declared output names as nonempty strings; stdout/stderr are diagnostic logs. The timeout defaults to 60 seconds. Literal values and outputs must use distinct env names. Matching commands are serialized across sessions, and outputs cannot reuse remembered values for the same name. Complete saved outputs are reused on materialization.
+Return exactly the declared output names as nonempty strings. `previous` contains
+other retained checkouts' outputs for the same repo and command. Deterministic
+values arrive through env during acquisition; release receives them explicitly as
+`values`. Stdout/stderr are diagnostic logs. The timeout defaults to 60 seconds.
+A module without a `release` export is suitable for allocations with no external
+cleanup. Acquisition and release must be safe to retry.
 
-### Explicit acquisition
+### Explicit acquisition and execution
 
-Resource commands default to `acquire: automatic`. Set `acquire: explicit` on a
-command to defer it until `mt resources acquire`, run inside its Session worktree.
-That command acquires all missing commands for the current repo, reuses complete
-allocations, and persists each success for retry. Spawn and Materialize preserve
-remembered explicit allocations without executing missing explicit commands.
+Commands default to `acquire: automatic`. `acquire: explicit` defers acquisition
+until `mt resources acquire` in the Source checkout or owned Session worktree.
+That command acquires all missing resources and reuses complete allocations.
 
-`mt resources release` runs the current repo's recorded `cleanupCommand`, including
-any infrastructure teardown it contains, using the same cleanup implementation as
-Chop. Success clears dynamic allocations and their root `.env` entries while
-keeping the worktree, ports, and deterministic resource values. Failure retains
-allocations for retry. Repeated release skips completed cleanup; acquire can then
-allocate again. Both commands serialize with other Monke lifecycle operations.
+Dynamic outputs stay in MT's resource store. Use
+`mt resources exec -- bun run <script>` to validate ownership and inject recorded
+values into a foreground command. Missing allocations fail before it starts.
+`mt resources release` releases those allocations and keeps the checkout and
+infrastructure. See the [resource lifecycle](../../../docs/reference/resources.md)
+for collision checks, locking, migration and retry behavior.
 
 ## Cleanup
 
-`cleanupCommand` runs root-first before any Session worktree is removed, from each repo's Session worktree. It receives saved resources, command outputs, `MONKE_SESSION`, `MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH`. `MONKE_RESOURCE_OUTPUTS` is a JSON object containing only
-recorded dynamic outputs; use it to distinguish owned resources from inherited
-shell variables. A failure stops teardown and retains state and remaining worktrees. Commands must be safe to retry; successful commands may rerun.
+`cleanupCommand` tears down Session infrastructure after resource release and
+before worktree removal. It receives saved deterministic values, `MONKE_SESSION`,
+`MONKE_SOURCE_ROOT`, and `MONKE_WORKTREE_PATH`. Keep external-resource teardown in
+the modules' `release` functions. A failure retains state and remaining worktrees.
+Commands must be safe to retry.
 
-If a worktree with a required command is missing, no cleanup commands run. Restore it and retry. For deliberate recovery only, `mt chop <session> --cleanup-from-source` permits running the recorded command from a source checkout when its worktree is missing. Check every command first: a source checkout has different code, env files, and Compose configuration. Automatic Cleanup never makes this substitution.
+Legacy default-export modules retain their recorded aggregate cleanup contract,
+including `MONKE_RESOURCE_OUTPUTS` (JSON of recorded dynamic outputs). Their
+cleanup may still tear down infrastructure during `mt resources release` until
+they are migrated to named exports.
+
+A missing worktree blocks required cleanup before any repo cleanup begins.
+Restore it, or deliberately use `mt chop <session> --cleanup-from-source` after
+checking that the Source checkout's code, env and Compose configuration are safe.
+Automatic Cleanup never makes this substitution.
 
 ### Docker cleanup
 
@@ -103,6 +141,6 @@ cleanupCommand: docker compose --profile '*' down
 
 Compose reads the persisted project name from the Session root `.env`; cleanup receives that same saved value. Match startup's Compose files and env loading, and ensure startup does not override the project name with `-p` or a different environment value. Enable the profiles the repo uses (`'*'` enables all). Preserve volumes by default. Avoid `--remove-orphans` unless all containers in the project belong to this repo and Session.
 
-For application cleanup followed by Docker teardown, put the sequence in a repo script and use `cleanupCommand: bun run session:cleanup`. Run application cleanup before stopping infrastructure it needs, joining required steps with `&&` so failures propagate. Worktree guards and absolute paths are unnecessary in normal cleanup.
+Put application resource cleanup in resource modules, and reuse a package script for infrastructure teardown with `cleanupCommand: bun run session:cleanup`. MT releases resources before invoking that script.
 
 Apply project naming to new Sessions. Existing Sessions keep recorded commands and resource values; adding a project name to an existing Session changes the container and volume namespace. Clean up or explicitly migrate its old project before materializing the new configuration. Never suppress Docker errors with `|| true` or use source recovery blindly: failed cleanup retains state for retry.
