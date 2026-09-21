@@ -34,11 +34,9 @@ The [session command reference](skills/internal/monke-tools-core/SKILL.md) cover
 
 ## Use checkout resources
 
-A **checkout** is one local working copy of a repo. A **Session** groups the
-worktrees MT creates for a repo and its dependencies. Resource commands work in
-the original source checkout and in each Session worktree.
-
-For a repo with resources configured in `monke.yml`, run from that checkout:
+A **checkout** is one repo's working copy; a **Session** groups worktrees across
+repos. With resources configured in `monke.yml`, use these commands in the source
+checkout or a Session worktree:
 
 ```bash
 mt setup                        # Write dependency paths and static resource values
@@ -48,10 +46,9 @@ mt resources exec -- <command>  # Run with the recorded resource values
 mt resources release            # Release allocations after use
 ```
 
-Dynamic allocations stay in MT's state and are passed to the command by `exec`.
-Release keeps the checkout and infrastructure; Session removal uses `mt chop`.
-See [checkout resources](docs/reference/resources.md) for module contracts,
-recovery, and the legacy cleanup exception.
+See [checkout resources](docs/reference/resources.md) for ownership, cleanup,
+and recovery. Release keeps the checkout and infrastructure; `mt chop` removes
+the whole Session.
 
 ## Configure a repo
 
