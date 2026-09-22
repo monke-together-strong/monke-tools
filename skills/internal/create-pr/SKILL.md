@@ -69,7 +69,7 @@ post-merge checks for evidence that requires the target environment.
 ## Write the body
 
 Lead with the problem and resulting behavior in one or two sentences. Add the
-chosen visual and material tradeoffs or risks. Link the source issue or PRD;
+chosen visual and material tradeoffs or risks. Link the source issue or Spec;
 the diff carries file details.
 
 Verification should records what CI cannot prove: a decisive
