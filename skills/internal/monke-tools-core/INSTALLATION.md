@@ -15,6 +15,18 @@ For automation, add `--targets codex claude cursor` and/or `--custom-target /abs
 
 `mt update --check` checks availability without changing installation state; successful checks exit zero whether current or outdated. `mt update` activates the highest stable official release without prompting. Both prefer nonempty `GH_TOKEN` over `GITHUB_TOKEN`, otherwise using anonymous access. Updating a local install switches to a release while preserving the source checkout; run `vpr install:local` there to resume local development.
 
+## Spec workflow agent limits
+
+`ship-spec` needs four nested subagent layers and five concurrent subagents for
+one slice. Configure globally before starting a session:
+
+- Claude: `env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` = `"4"` in `~/.claude/settings.json`.
+- Codex: set `agents.max_concurrent_threads_per_session` to `6` in
+  `~/.codex/config.toml` if unset or lower; preserve higher values. This excludes
+  the primary agent. Defaults are chosen by Codex; do not assume six slots.
+
+For parallel slices, allow four slots per worker plus the coordinator.
+
 ## Update recovery
 
 Modified, added, or removed installed release skills/references block both update forms before network access. Preserve every listed edit first. To stay on releases, restore those paths from the bundle identified by `releaseTag` in the active `install-manifest.json`, then retry. To keep authoring, copy edits into the source checkout and activate a local install. Local refresh does not migrate release edits automatically.

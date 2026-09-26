@@ -5,9 +5,10 @@ description: Use mt for worktree creation, navigation, diff review, teardown, mo
 
 # monke-tools Core
 
-Use `mt spawn <session>` for isolated repo work, following the repo's branch naming
-rules. Run subsequent commands from the returned checkout. Use `mt <command> --help`
-for flags.
+Use `mt spawn <session>` for isolated repo work. The session name is also its
+branch name: choose a name that follows repo rules before spawning, and keep it
+consistent with the session. Run subsequent commands from the returned checkout.
+Use `mt <command> --help` for flags.
 
 ## Choose the command
 
@@ -37,10 +38,9 @@ After failure, use the reported retry command from the recorded checkout. A crea
 worktree is not ready until materialization succeeds. Shell navigation requires the
 installed shell adapter.
 
-When Codex needs to create follow-up tasks in the new checkout, use
-`mt spawn <session> --codex` or `mt swing <target> --codex` first. Opening the checkout
-in Codex makes that directory available for task creation; creating the worktree
-alone does not.
+Use `mt spawn <session> --codex` or `mt swing <target> --codex` to open the checkout
+in the Codex app. Native subagents use their assigned checkout directly and need
+no app workspace registration.
 
 Use `mt swing pr:<number>` or a PR URL for same-repo PRs. Diverged local heads block
 navigation; resolve the divergence without discarding work. Fork PRs are unsupported.

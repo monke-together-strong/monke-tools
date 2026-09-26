@@ -1,7 +1,7 @@
 # Implement Closeout Gates
 
 The verifier inspects evidence and runs `$code-review`; it does not edit source,
-commit, or spawn another closeout verifier. The implementation thread owns fixes,
+commit, or spawn another closeout verifier. The implementation agent owns fixes,
 reruns, tracker closeout, and the final report.
 
 Inputs: Work target (Spec, issue, plan, direct request, or `none`), fixed review
@@ -27,7 +27,9 @@ Missing evidence blocks review; add it to the Spec closeout list when orchestrat
 
 Run `$code-review <fixed point> <work target>`, omitting the target when absent
 and reporting that Spec review may skip for lack of a source. Its review
-subagents are authorized.
+subagents are authorized; pass them the candidate's absolute checkout path and
+instructions to anchor every file access and command there. If delegation is
+unavailable, report `BLOCKED` rather than substituting self-review.
 
 Classify all findings by impact:
 
@@ -40,11 +42,11 @@ Classify all findings by impact:
 Report the fixed point, candidate, evidence, and classified findings. Keep one
 deduplicated advisory list across attempts.
 
-The verifier returns here; the implementation thread performs the remaining steps.
+The verifier returns here; the implementation agent performs the remaining steps.
 
 ## Resolve and finish
 
-For missing evidence or blockers, report `BLOCKED`. The implementation thread
+For missing evidence or blockers, report `BLOCKED`. The implementation agent
 fixes them, runs targeted verification, commits, records the new candidate, and
 reruns this procedure against the original fixed point.
 

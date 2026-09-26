@@ -18,8 +18,7 @@
     "scripts/**/*.mts",
     "tests/**/*.ts",
     "packages/**/*.ts",
-    "skills/internal/agent-session-retrospective/scripts/**/*.ts",
-    "skills/internal/betterstack-cli/scripts/**/*.ts",
+    "skills/internal/*/scripts/**/*.ts",
     "vite.config.ts"
   ]
 }

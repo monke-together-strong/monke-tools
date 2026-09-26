@@ -28,8 +28,11 @@ or falsify each remaining hypothesis.
 Choose the smallest discriminating check. Before running it, identify the evidence
 source, bounded window, expected observations, and how each result changes the
 next action. Run the check and record how its evidence changes a hypothesis,
-intervention classification, or next action. If no available check can advance
-the investigation, name the missing capability or event needed.
+intervention classification, or next action. When the result exposes another
+feasible discriminating check, run it too. Continue until the remaining
+uncertainty depends on evidence or access that is genuinely unavailable, an
+unapproved side effect, or a future event; verify that boundary before handing
+off a next check.
 
 Investigate and recommend for diagnosis requests. Implement a correction only
 when implementation is in scope.

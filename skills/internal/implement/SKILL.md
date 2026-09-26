@@ -9,6 +9,9 @@ Implement it.
 If the work is a Spec, run the Spec gate before branch creation, code
 exploration, or edits.
 
+When assigned a checkout, read its repo instructions, use absolute file paths,
+and anchor every command to it. Confirm its root and branch before editing.
+
 ## Spec gate
 
 A Spec is any issue or document produced by `$to-spec`, presented as an
@@ -65,20 +68,27 @@ Run targeted typechecking, linting, and single test files regularly.
 After implementation and verification, stage every checkout change, including
 untracked paths, and commit them; if already clean, use `HEAD`. Record the full
 `HEAD` SHA as the review candidate, then run a closeout verifier subagent in the
-same checkout with this prompt:
+same checkout with this prompt. Resolve the procedure path from this installed
+skill, not from the implementation checkout.
 
 ```text
 Run the implement closeout procedure in this checkout.
 
-Procedure: skills/internal/implement/CLOSEOUT-GATES.md
+Checkout: <absolute checkout path>
+Read this checkout's repo instructions, use absolute file paths, and anchor
+every command to it. Pass these checkout instructions to your reviewers.
+Procedure: <absolute path to this skill's CLOSEOUT-GATES.md>
 Work target: <Work target or "none">
 Review fixed point: <recorded fixed point>
 Review candidate: <recorded candidate>
 Background context: <parent Spec and supporting docs or "none">
 Orchestrated Spec: <yes/no>
+Spec closeout list: <deferred items or "none">
 
 Read the procedure file and follow it exactly. Report missing evidence,
-findings, and the review result back to the implementation thread.
+findings, and the review result back to the implementation agent.
 ```
 
-Follow `CLOSEOUT-GATES.md` through final `PASS` with a clean checkout.
+Wait through native notifications or the host's wait tool; resume incomplete
+work or report its blocker. Follow `CLOSEOUT-GATES.md` through final `PASS` with
+a clean checkout.

@@ -10,13 +10,13 @@ coverage against its current head commit.
 
 ## Observe
 
-On pickup and each heartbeat or re-entry, check PR state before CI or reviews:
+On pickup and each wake or re-entry, check PR state before CI or reviews:
 
 ```bash
 gh pr view <pr> --json state,mergedAt,closedAt,mergeCommit,headRefOid,baseRefName,isDraft
 ```
 
-If merged or closed, remove the heartbeat, report the terminal state and available
+If merged or closed, remove the wake, report the terminal state and available
 merge details, and stop.
 
 For an open draft, run `gh pr ready <pr>`. Fetch the live base and head. If the
@@ -42,10 +42,12 @@ triggering a missing review. Read mutable bot comment bodies and update times,
 command replies, and covered commits; a check context alone is insufficient.
 Processing text or an accepted trigger for this head means review has started.
 
-Use `$polling` with an eight-minute heartbeat until required reviews and all
-automatic reviews that started on this head finish. Triage complete feedback.
+Use `$polling` until required reviews and all automatic reviews that started
+on this head finish. The watcher is
+`scripts/pr-watch.sh <owner/repo> <pr> 60 <max-seconds>`, with max-seconds set
+to the next deadline below; a heartbeat runs every eight minutes. Triage complete feedback.
 
-Optional integrations are best-effort. After two heartbeats without a start,
+Optional integrations are best-effort. After sixteen minutes without a start,
 record an optional reviewer as unavailable and triage any existing comments.
 Avoid empty commits, PR-state toggles, and repeated triggers to wake reviewers.
 A required reviewer that cannot start is a blocker. On rate limits, keep polling
@@ -60,7 +62,9 @@ broad rewrites, and unrelated issues with a concrete reason. Low severity alone
 is not a reason to dismiss a useful fix.
 
 Commit and push fixes, then return to observation; the push normally triggers
-re-review. Inspect reviewer state before requesting anything manually.
+re-review. A reply to a reviewer's thread reopens it until the reviewer answers
+or five minutes pass without an answer. Inspect reviewer state before
+requesting anything manually.
 
 ## Finish
 
@@ -72,9 +76,11 @@ return to observation. For the current head, require all of the following:
   evidenced external cause.
 - Required reviews and automatic reviews that started have finished. Optional
   non-starters are recorded as unavailable, and existing feedback is triaged.
+- Every reviewer thread you replied to is closed by an answer or five quiet
+  minutes.
 - No required changes or meaningful findings remain, and the PR is mergeable.
 
-Remove the heartbeat when handing off. With explicit merge authorization,
+Remove the wake when handing off. With explicit merge authorization,
 including standing instructions such as “merge when ready,” run `$merge-pr`.
 Otherwise report merge-ready. Shepherding requests, acknowledgements, and green
 checks alone do not authorize merging.
