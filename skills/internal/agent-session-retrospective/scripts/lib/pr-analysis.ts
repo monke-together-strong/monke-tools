@@ -767,15 +767,16 @@ function comparePrLabels(
   return repoA.localeCompare(repoB) || (numberA ?? 0) - (numberB ?? 0);
 }
 
-export function extractSection(body: string, heading: string) {
-  const pattern = new RegExp(`^##\\s+${RegExp.escape(heading)}\\s*$`, "mu");
-  const match = body.match(pattern);
+export function extractSection(markdown: string, heading: string, level = 2) {
+  const prefix = "#".repeat(level);
+  const pattern = new RegExp(`^${prefix}\\s+${RegExp.escape(heading)}\\s*$`, "mu");
+  const match = markdown.match(pattern);
   if (!match || match.index === undefined) {
     return null;
   }
   const start = match.index + match[0].length;
-  const rest = body.slice(start);
-  const next = rest.search(/^##\s+/mu);
+  const rest = markdown.slice(start);
+  const next = rest.search(new RegExp(`^${prefix}\\s+`, "mu"));
   return (next === -1 ? rest : rest.slice(0, next)).trim();
 }
 
