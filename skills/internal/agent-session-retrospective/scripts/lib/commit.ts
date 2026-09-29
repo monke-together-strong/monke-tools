@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isNonEmptyString } from "@sindresorhus/is";
 import sanitizeHtml from "sanitize-html";
 
-import { readPrManifest } from "./pr-analysis.ts";
+import { extractSection, readPrManifest } from "./pr-analysis.ts";
 import type { PrAnalysisManifest, PrWorkItemSummary } from "./pr-analysis.ts";
 import {
   cleanRunDir,
@@ -513,7 +513,7 @@ export function validateSynthesis(content: string | null | undefined) {
     "Remaining Active Actions",
     "Resolved or Superseded"
   ]) {
-    const section = extractMarkdownSection(text, name, SYNTHESIS_HEADING_LEVEL);
+    const section = extractSection(text, name, SYNTHESIS_HEADING_LEVEL);
     if (!isNonEmptyString(section)) {
       continue;
     }
@@ -680,23 +680,10 @@ function sourceFileName(runTs: string, kind: "session" | "pr") {
 }
 
 function extractPrRepeatedPatterns(prAnalysis: string) {
-  const section = extractMarkdownSection(prAnalysis, "Recurring Corrective Patterns");
+  const section = extractSection(prAnalysis, "Recurring Corrective Patterns");
   return (
     section ?? "_No recurring corrective-change patterns were extracted from per-PR analyses._"
   );
-}
-
-function extractMarkdownSection(markdown: string, heading: string, level = 2) {
-  const prefix = "#".repeat(level);
-  const pattern = new RegExp(`^${prefix}\\s+${RegExp.escape(heading)}\\s*$`, "mu");
-  const match = markdown.match(pattern);
-  if (!match || match.index === undefined) {
-    return null;
-  }
-  const start = match.index + match[0].length;
-  const rest = markdown.slice(start);
-  const next = rest.search(new RegExp(`^${prefix}\\s+`, "mu"));
-  return (next === -1 ? rest : rest.slice(0, next)).trim();
 }
 
 /** Pull the leading `Target:` / `Confidence:` lines out of a free-form fix body. */
