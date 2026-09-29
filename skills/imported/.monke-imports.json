@@ -13,17 +13,6 @@
     {
       "skills": [
         {
-          "disableModelInvocation": true,
-          "kind": "skill",
-          "selector": "thermo-nuclear-code-quality-review",
-          "slug": "thermo-nuclear-code-quality-review"
-        }
-      ],
-      "source": "https://github.com/cursor/plugins/tree/main/cursor-team-kit/skills"
-    },
-    {
-      "skills": [
-        {
           "kind": "reference",
           "selector": "ultracite",
           "slug": "ultracite"

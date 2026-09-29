@@ -36,9 +36,9 @@ template determine which evidence and body sections are required.
 
 ## Choose the explanation
 
-Before drafting, if the diff changes interactions between components, processes,
-workers, services, or states, invoke `$show-me` and create one small
-GitHub-renderable view. It carries ownership, flow, or ordering; prose explains
+Before drafting, if the diff changes component interactions, state transitions,
+schemas, API contracts, or key data structures, invoke `$show-me` and create one
+small GitHub-renderable view. It carries structure, flow, or ordering; prose explains
 the problem and significance. Use prose alone for a local change that fits in
 two sentences.
 
@@ -69,8 +69,9 @@ post-merge checks for evidence that requires the target environment.
 ## Write the body
 
 Lead with the problem and resulting behavior in one or two sentences. Add the
-chosen visual and material tradeoffs or risks. Link the source issue or Spec;
-the diff carries file details.
+chosen visual and material tradeoffs or risks, including migrations, compatibility
+constraints, deliberate omissions, or surprising decisions. Link the source issue
+or Spec; the diff carries file details.
 
 Verification should records what CI cannot prove: a decisive
 behavior result, a benchmark, or a material limitation such as coverage the

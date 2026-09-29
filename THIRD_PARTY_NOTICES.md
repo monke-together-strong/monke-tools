@@ -11,13 +11,6 @@ monke-tools redistributes the Imported guidance listed below. Each upstream lice
 - Copyright: Copyright (c) 2026 Peter Yang
 - License: MIT; the upstream text is also preserved in `skills/imported/no-ai-slop/LICENSE`
 
-### Cursor plugins
-
-- Source: <https://github.com/cursor/plugins/tree/main/cursor-team-kit/skills>
-- Included material: `skills/imported/thermo-nuclear-code-quality-review`
-- Copyright: Copyright (c) 2026 Cursor
-- License: MIT
-
 ### Matt Pocock skills
 
 - Source: <https://github.com/mattpocock/skills>
