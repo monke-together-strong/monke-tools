@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { launchCodiff, verifyCodiffAsync } from "./codiff.ts";
+import { launchCodiff, verifyCodiffAsync, verifyCodiffSource } from "./codiff.ts";
 import {
   findInitialDefaultBranchBase,
   findNewerDefaultBranchBase,
@@ -10,7 +10,10 @@ import {
   planBranchComparison,
   planWorkingTreeComparison
 } from "./comparison-plan.ts";
+import type { ComparisonPlan } from "./comparison-plan.ts";
+import { MonkeError } from "./errors.ts";
 import { describeSessionBranchMismatch, resolveRepoContext } from "./git.ts";
+import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
 import { samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { listSessionStates, loadSessionState, saveSessionState } from "./session-state-store.ts";
@@ -23,7 +26,35 @@ import {
 import type { LocalWorktreeTarget } from "./worktree-targets.ts";
 
 export interface DiffOptions {
+  adapter?: string;
+  branch?: string;
+  commit?: string;
+  path?: string;
   pick?: boolean;
+  targets?: string[];
+  workingTree?: boolean;
+}
+
+function requireDesktopAdapter(adapter: string) {
+  if (adapter !== "codiff") {
+    throw new MonkeError(`Unsupported Diff adapter: ${adapter}. This build supports codiff.`);
+  }
+  return "codiff" as const;
+}
+
+export async function runDiffConfigure(runtime: Runtime, options: { adapter?: string }) {
+  const adapter = requireDesktopAdapter(
+    options.adapter ??
+      (await runtime.select({
+        message: "Diff adapter",
+        options: [{ label: "Codiff desktop", value: "codiff" }]
+      }))
+  );
+  const home = getMonkeHome(runtime);
+  withGlobalLock(home, () => {
+    saveGlobalMonkeConfig(home, { ...loadGlobalMonkeConfig(home), diffAdapter: adapter });
+  });
+  runtime.writeStdout(`Diff adapter: ${adapter}\n`);
 }
 
 interface DiffChoice {
@@ -42,15 +73,169 @@ interface RememberedDiff {
 
 /** Verify Codiff alongside repo discovery, then discover picker targets only when needed. */
 export async function runDiffInteractive(runtime: Runtime, options: DiffOptions = {}) {
-  const [executable, remembered] = await Promise.all([
-    verifyCodiffAsync(runtime),
-    Promise.try(() => resolveRememberedDiff(runtime))
-  ]);
-  warnSessionBranchElsewhere(runtime, remembered);
-  if (launchAutomaticDiff(runtime, executable, remembered, options)) {
+  requireDesktopAdapter(
+    options.adapter ?? loadGlobalMonkeConfig(getMonkeHome(runtime)).diffAdapter ?? "codiff"
+  );
+  const selectors =
+    Number(options.workingTree === true) +
+    Number(options.commit !== undefined) +
+    Number(options.branch !== undefined) +
+    Number((options.targets?.length ?? 0) > 0);
+  if (selectors > 1 || (selectors > 0 && options.pick)) {
+    throw new MonkeError(
+      "Choose exactly one Diff source; --pick cannot be combined with an explicit source."
+    );
+  }
+  const selectedRuntime =
+    options.path === undefined
+      ? runtime
+      : { ...runtime, cwd: path.resolve(runtime.cwd, options.path) };
+  if (selectors > 0) {
+    const context = resolveRepoContext(selectedRuntime, selectedRuntime.cwd, null, {
+      inferSessionName: false
+    });
+    const plan = resolveExplicitComparison(selectedRuntime, context, options);
+    const executable = await verifyCodiffAsync(selectedRuntime);
+    await verifyCodiffSource(selectedRuntime, executable, plan.kind);
+    launchCodiff(selectedRuntime, executable, plan);
     return;
   }
-  await selectAndLaunchDiff(runtime, executable, remembered, options);
+  const [executable, remembered] = await Promise.all([
+    verifyCodiffAsync(selectedRuntime),
+    Promise.try(() => resolveRememberedDiff(selectedRuntime))
+  ]);
+  warnSessionBranchElsewhere(selectedRuntime, remembered);
+  if (launchAutomaticDiff(selectedRuntime, executable, remembered, options)) {
+    return;
+  }
+  await selectAndLaunchDiff(selectedRuntime, executable, remembered, options);
+}
+
+function validateRevision(runtime: Runtime, context: RepoContext, ref: string) {
+  if (
+    !ref ||
+    ref.startsWith("-") ||
+    /[\s]|\.\./u.test(ref) ||
+    runtime.exec(
+      "git",
+      ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`],
+      { allowFailure: true, cwd: context.worktreeRoot }
+    ).exitCode !== 0
+  ) {
+    throw new MonkeError(`Invalid Diff revision: ${ref}`);
+  }
+}
+
+function resolveExplicitComparison(
+  runtime: Runtime,
+  context: RepoContext,
+  options: DiffOptions
+): ComparisonPlan {
+  const worktreePath = context.worktreeRoot;
+  if (options.workingTree) {
+    return { kind: "working-tree", worktreePath };
+  }
+  if (options.commit !== undefined) {
+    validateRevision(runtime, context, options.commit);
+    return { kind: "commit", ref: options.commit, worktreePath };
+  }
+  if (options.branch !== undefined) {
+    validateRevision(runtime, context, options.branch);
+    const plan = planBranchComparison(runtime, context, options.branch);
+    if (!plan) {
+      throw new MonkeError(`Diff branch ${options.branch} has no merge base with HEAD.`);
+    }
+    return plan;
+  }
+  const targets = options.targets ?? [];
+  const [target = "", providerValue] = targets;
+  if ((target === "pr" || target === "mr") && targets.length === 2) {
+    validateProviderTarget(target, providerValue);
+    return { kind: "pull-request", target: targets, worktreePath };
+  }
+  if (targets.length !== 1) {
+    throw new MonkeError("Expected one Diff ref, range, review URL, or pr/mr selector.");
+  }
+  if (/^#[1-9]\d*$/u.test(target) || isReviewUrl(target)) {
+    return { kind: "pull-request", target: [target], worktreePath };
+  }
+  if (target.includes("..")) {
+    return resolveRangeComparison(runtime, context, target);
+  }
+  validateRevision(runtime, context, target);
+  if (/^[\da-f]{4,64}$|^(?:HEAD|@)(?:$|[~^@])|[\^~]|@\{/iu.test(target)) {
+    return { kind: "commit", ref: target, worktreePath };
+  }
+  const branch =
+    runtime.exec("git", ["show-ref", "--verify", "--quiet", `refs/heads/${target}`], {
+      allowFailure: true,
+      cwd: worktreePath
+    }).exitCode === 0 ||
+    runtime.exec("git", ["show-ref", "--verify", "--quiet", `refs/remotes/${target}`], {
+      allowFailure: true,
+      cwd: worktreePath
+    }).exitCode === 0;
+  return resolveExplicitComparison(
+    runtime,
+    context,
+    branch ? { branch: target } : { commit: target }
+  );
+}
+
+function validateProviderTarget(provider: string, value: string | undefined) {
+  const positiveNumber = /^#?[1-9]\d*$/u;
+  if (
+    value === undefined ||
+    (/^#?\d+$/u.test(value) && !positiveNumber.test(value)) ||
+    !(provider === "pr" ? /^(?:#?[1-9]\d*|[\w./-]+(?::[\w./-]+)?)$/u : positiveNumber).test(
+      value
+    ) ||
+    value.startsWith("-")
+  ) {
+    throw new MonkeError(`Invalid Diff ${provider} target: ${value}`);
+  }
+}
+
+function resolveRangeComparison(
+  runtime: Runtime,
+  context: RepoContext,
+  target: string
+): ComparisonPlan {
+  const match = /^(?<base>[^.\s][^\s]*?)(?<separator>\.\.\.?)(?<head>[^.\s][^\s]*)$/u.exec(target);
+  const base = match?.groups?.base;
+  const head = match?.groups?.head;
+  if (!base || !head) {
+    throw new MonkeError(`Invalid Diff range: ${target}`);
+  }
+  validateRevision(runtime, context, base);
+  validateRevision(runtime, context, head);
+  const symmetric = match.groups?.separator === "...";
+  if (
+    symmetric &&
+    runtime.exec("git", ["merge-base", base, head], {
+      allowFailure: true,
+      cwd: context.worktreeRoot
+    }).exitCode !== 0
+  ) {
+    throw new MonkeError(`Diff range ${target} has no merge base.`);
+  }
+  return { base, head, kind: "range", symmetric, worktreePath: context.worktreeRoot };
+}
+
+function isReviewUrl(target: string) {
+  try {
+    const url = new URL(target);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      !url.username &&
+      !url.password &&
+      ((["github.com", "www.github.com"].includes(url.hostname) &&
+        /^\/[^/]+\/[^/]+\/pull\/[1-9]\d*(?:\/.*)?$/u.test(url.pathname)) ||
+        /^\/.+\/(?:-\/)?merge_requests\/[1-9]\d*(?:\/.*)?$/u.test(url.pathname))
+    );
+  } catch {
+    return false;
+  }
 }
 
 function launchAutomaticDiff(

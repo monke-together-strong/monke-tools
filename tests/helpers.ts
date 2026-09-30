@@ -282,8 +282,10 @@ printf '%s\\n' "$@" >> ${shellQuote(logPath)}
 export function installFakeCodiff(
   binDirectory: string,
   options: {
+    capabilities?: string;
     delayByBase?: Record<string, number>;
     exitCode?: number;
+    help?: string;
     version?: string;
     versionCoordination?: { discovery: string; started: string };
     waitForBases?: string[];
@@ -327,6 +329,14 @@ if [ "\${1:-}" = "--version" ]; then
   done`
   }
   printf '%s\\n' ${shellQuote(options.version ?? "codiff v1.9.0")}
+  exit 0
+fi
+if [ "\${1:-}" = "--help" ]; then
+  printf '%s\\n' ${shellQuote(options.help ?? "--capabilities Print desktop-source-v1 launch capabilities.")}
+  exit 0
+fi
+if [ "\${1:-}" = "--capabilities" ]; then
+  printf '%s\\n' ${shellQuote(options.capabilities ?? '{"version":1,"sources":["working-tree","commit","branch-working-tree","range","pull-request"]}')}
   exit 0
 fi
 mkdir -p ${shellQuote(coordinationDirectory)}
