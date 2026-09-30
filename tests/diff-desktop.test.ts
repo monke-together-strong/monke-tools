@@ -110,6 +110,12 @@ describe("Desktop Diff", () => {
     { args: ["HEAD..HEAD"], delivered: ["HEAD..HEAD"] },
     { args: ["HEAD...HEAD"], delivered: ["HEAD...HEAD"] },
     { args: ["HEAD..HEAD^{/..}"], delivered: ["HEAD..HEAD^{/..}"] },
+    { args: ["HEAD~1..HEAD^{/..}"], delivered: ["HEAD~1..HEAD^{/..}"] },
+    { args: ["HEAD~1..HEAD^{/.. }"], delivered: ["HEAD~1..HEAD^{/.. }"] },
+    { args: ["HEAD~1..HEAD^{/.*.. .*}"], delivered: ["HEAD~1..HEAD^{/.*.. .*}"] },
+    { args: ["HEAD~1...HEAD^{/..}"], delivered: ["HEAD~1...HEAD^{/..}"] },
+    { args: ["HEAD~1...HEAD^{/.. }"], delivered: ["HEAD~1...HEAD^{/.. }"] },
+    { args: ["HEAD~1...HEAD^{/.*.. .*}"], delivered: ["HEAD~1...HEAD^{/.*.. .*}"] },
     { args: ["HEAD"], delivered: ["--commit", "HEAD"] },
     { args: ["main"], delivered: ["--branch", "main"] },
     { args: ["#42"], delivered: ["#42"] },
@@ -137,6 +143,9 @@ describe("Desktop Diff", () => {
       const nested = path.join(selected, "nested");
       mkdirSync(nested);
       const before = git(selected, ["status", "--porcelain"]);
+      if (args[0]?.startsWith("HEAD~1..")) {
+        git(selected, ["rev-parse", "--symbolic", args[0]]);
+      }
       await runMonkeAsync({
         args: ["diff", ...args, "--path", nested],
         binDirectory,

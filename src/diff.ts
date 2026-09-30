@@ -215,7 +215,7 @@ function resolveRangeComparison(
   context: RepoContext,
   target: string
 ): ComparisonPlan {
-  const match = /^(?<base>[^.\s][^\s]*?)(?<separator>\.\.\.?)(?<head>[^.\s][^\s]*)$/u.exec(target);
+  const match = /^(?<base>[^.].*?)(?<separator>\.\.\.?)(?<head>[^.].*)$/su.exec(target);
   const base = match?.groups?.base;
   const head = match?.groups?.head;
   if (!base || !head) {
