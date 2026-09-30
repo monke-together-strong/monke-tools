@@ -66,6 +66,33 @@ describe("Desktop Diff", () => {
     expect(git(repo, ["branch", "--show-current"])).toBe("feature");
   });
 
+  test.each(["HEAD^{/..}", "HEAD^{/.. }", "HEAD^{/.*.. .*}"])(
+    "delivers single dotted revision %s as a commit in positional and explicit forms",
+    async (ref) => {
+      const { binDirectory, home, log, repo } = fixture();
+      expect(git(repo, ["rev-parse", "--verify", `${ref}^{commit}`])).toBe(
+        git(repo, ["rev-parse", "HEAD"])
+      );
+      writeFileSync(path.join(repo, "local.txt"), "not part of selected commit\n");
+      const before = git(repo, ["status", "--porcelain"]);
+      for (const targets of [[ref], ["--commit", ref]]) {
+        writeFileSync(log, "");
+        await runMonkeAsync({
+          args: ["diff", ...targets],
+          binDirectory,
+          cwd: repo,
+          monkeHome: home,
+          onSelect() {
+            throw new Error("explicit Diff prompted");
+          }
+        });
+        expect(readFileSync(log, "utf-8")).toBe(`--commit\n${ref}\n${repo}\n`);
+        expect(git(repo, ["status", "--porcelain"])).toBe(before);
+      }
+      expect(git(repo, ["branch", "--show-current"])).toBe("feature");
+    }
+  );
+
   test.each([
     { args: ["--working-tree"], delivered: [] },
     { args: ["--commit", "HEAD"], delivered: ["--commit", "HEAD"] },
@@ -82,6 +109,7 @@ describe("Desktop Diff", () => {
     { args: ["main...feature"], delivered: ["main...feature"] },
     { args: ["HEAD..HEAD"], delivered: ["HEAD..HEAD"] },
     { args: ["HEAD...HEAD"], delivered: ["HEAD...HEAD"] },
+    { args: ["HEAD..HEAD^{/..}"], delivered: ["HEAD..HEAD^{/..}"] },
     { args: ["HEAD"], delivered: ["--commit", "HEAD"] },
     { args: ["main"], delivered: ["--branch", "main"] },
     { args: ["#42"], delivered: ["#42"] },
@@ -129,6 +157,7 @@ describe("Desktop Diff", () => {
   test.each([
     ["--commit", "missing"],
     ["missing..HEAD"],
+    ["HEAD^{/..}..HEAD"],
     ["HEAD....main"],
     ["HEAD.."],
     ["--commit", "HEAD", "--branch", "main"],

@@ -111,16 +111,20 @@ export async function runDiffInteractive(runtime: Runtime, options: DiffOptions 
   await selectAndLaunchDiff(selectedRuntime, executable, remembered, options);
 }
 
-function validateRevision(runtime: Runtime, context: RepoContext, ref: string) {
-  if (
-    !ref ||
-    ref.startsWith("-") ||
+function isValidRevision(runtime: Runtime, context: RepoContext, ref: string) {
+  return (
+    Boolean(ref) &&
+    !ref.startsWith("-") &&
     runtime.exec(
       "git",
       ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`],
       { allowFailure: true, cwd: context.worktreeRoot }
-    ).exitCode !== 0
-  ) {
+    ).exitCode === 0
+  );
+}
+
+function validateRevision(runtime: Runtime, context: RepoContext, ref: string) {
+  if (!isValidRevision(runtime, context, ref)) {
     throw new MonkeError(`Invalid Diff revision: ${ref}`);
   }
 }
@@ -159,6 +163,9 @@ function resolveExplicitComparison(
     return { kind: "pull-request", target: [target], worktreePath };
   }
   if (target.includes("..")) {
+    if (isValidRevision(runtime, context, target)) {
+      return { kind: "commit", ref: target, worktreePath };
+    }
     return resolveRangeComparison(runtime, context, target);
   }
   validateRevision(runtime, context, target);
