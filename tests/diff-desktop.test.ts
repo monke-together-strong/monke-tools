@@ -23,14 +23,60 @@ describe("Desktop Diff", () => {
     git(repo, ["checkout", "-b", "feature", "HEAD~"]);
     writeFileSync(path.join(repo, "feature-only.txt"), "feature\n");
     git(repo, ["add", "."]);
-    git(repo, ["commit", "-m", "feature-only"]);
+    git(repo, ["commit", "-m", "feature-only change"]);
     const log = installFakeCodiff(binDirectory);
     return { binDirectory, home, log, repo, sandbox };
   }
 
+  test("keeps all branch capitalization variants of HEAD as branch reviews with local edits", async () => {
+    const { binDirectory, home, log, repo } = fixture();
+    writeFileSync(path.join(repo, "local.txt"), "local change\n");
+    for (const branch of [
+      "head",
+      "heaD",
+      "heAd",
+      "heAD",
+      "hEad",
+      "hEaD",
+      "hEAd",
+      "hEAD",
+      "Head",
+      "HeaD",
+      "HeAd",
+      "HeAD",
+      "HEad",
+      "HEaD",
+      "HEAd"
+    ]) {
+      git(repo, ["branch", branch, "main"]);
+      writeFileSync(log, "");
+      await runMonkeAsync({
+        args: ["diff", branch],
+        binDirectory,
+        cwd: repo,
+        monkeHome: home,
+        onSelect() {
+          throw new Error("explicit Diff prompted");
+        }
+      });
+      expect(readFileSync(log, "utf-8")).toBe(`--branch\n${branch}\n${repo}\n`);
+      expect(readFileSync(path.join(repo, "local.txt"), "utf-8")).toBe("local change\n");
+      git(repo, ["branch", "-D", branch]);
+    }
+    expect(git(repo, ["branch", "--show-current"])).toBe("feature");
+  });
+
   test.each([
     { args: ["--working-tree"], delivered: [] },
     { args: ["--commit", "HEAD"], delivered: ["--commit", "HEAD"] },
+    {
+      args: ["--commit", "HEAD^{/feature-only change}"],
+      delivered: ["--commit", "HEAD^{/feature-only change}"]
+    },
+    {
+      args: ["HEAD^{/feature-only change}"],
+      delivered: ["--commit", "HEAD^{/feature-only change}"]
+    },
     { args: ["--branch", "main"], delivered: ["--branch", "main"] },
     { args: ["main..feature"], delivered: ["main..feature"] },
     { args: ["main...feature"], delivered: ["main...feature"] },
@@ -41,6 +87,10 @@ describe("Desktop Diff", () => {
     { args: ["#42"], delivered: ["#42"] },
     { args: ["pr", "42"], delivered: ["pr", "42"] },
     { args: ["pr", "owner:feature"], delivered: ["pr", "owner:feature"] },
+    { args: ["pr", "feature+diff"], delivered: ["pr", "feature+diff"] },
+    { args: ["pr", "feature@review"], delivered: ["pr", "feature@review"] },
+    { args: ["pr", "feature/đánh-giá"], delivered: ["pr", "feature/đánh-giá"] },
+    { args: ["pr", "owner:feature+diff"], delivered: ["pr", "owner:feature+diff"] },
     { args: ["mr", "42"], delivered: ["mr", "42"] },
     {
       args: ["https://github.com/owner/repo/pull/42/files"],

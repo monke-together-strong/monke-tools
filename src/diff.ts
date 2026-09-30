@@ -115,7 +115,6 @@ function validateRevision(runtime: Runtime, context: RepoContext, ref: string) {
   if (
     !ref ||
     ref.startsWith("-") ||
-    /[\s]|\.\./u.test(ref) ||
     runtime.exec(
       "git",
       ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`],
@@ -150,7 +149,7 @@ function resolveExplicitComparison(
   const targets = options.targets ?? [];
   const [target = "", providerValue] = targets;
   if ((target === "pr" || target === "mr") && targets.length === 2) {
-    validateProviderTarget(target, providerValue);
+    validateProviderTarget(runtime, context, target, providerValue);
     return { kind: "pull-request", target: targets, worktreePath };
   }
   if (targets.length !== 1) {
@@ -163,7 +162,7 @@ function resolveExplicitComparison(
     return resolveRangeComparison(runtime, context, target);
   }
   validateRevision(runtime, context, target);
-  if (/^[\da-f]{4,64}$|^(?:HEAD|@)(?:$|[~^@])|[\^~]|@\{/iu.test(target)) {
+  if (/^[\da-f]{4,64}$/iu.test(target) || /^(?:HEAD|@)(?:$|[~^@])|[\^~]|@\{/u.test(target)) {
     return { kind: "commit", ref: target, worktreePath };
   }
   const branch =
@@ -182,15 +181,23 @@ function resolveExplicitComparison(
   );
 }
 
-function validateProviderTarget(provider: string, value: string | undefined) {
+function validateProviderTarget(
+  runtime: Runtime,
+  context: RepoContext,
+  provider: string,
+  value: string | undefined
+) {
   const positiveNumber = /^#?[1-9]\d*$/u;
   if (
-    value === undefined ||
-    (/^#?\d+$/u.test(value) && !positiveNumber.test(value)) ||
-    !(provider === "pr" ? /^(?:#?[1-9]\d*|[\w./-]+(?::[\w./-]+)?)$/u : positiveNumber).test(
-      value
-    ) ||
-    value.startsWith("-")
+    !value ||
+    value.startsWith("-") ||
+    (!positiveNumber.test(value) &&
+      (provider !== "pr" ||
+        /^#?\d+$/u.test(value) ||
+        runtime.exec("git", ["check-ref-format", "--branch", value.replace(":", "/")], {
+          allowFailure: true,
+          cwd: context.worktreeRoot
+        }).exitCode !== 0))
   ) {
     throw new MonkeError(`Invalid Diff ${provider} target: ${value}`);
   }
