@@ -65,13 +65,19 @@ directories; Diff never switches its branch or creates a worktree. Clean working
 trees and equal-endpoint ranges are honest empty reviews, not HEAD substitutions.
 Explicit sources cannot be combined with each other or `--pick`.
 
-Explicit delivery requires a corrected Codiff executable that advertises
-`desktop-source-v1` in `--help` and returns its version-1 source list from
-`--capabilities`. Monke probes the safe help entry before invoking the capability
-command: older helpers can treat unknown flags as a request to open local changes.
-A version string alone does not establish range compatibility. Invalid targets,
-incompatible helpers, and failed launches produce errors without another viewer,
-comparison, or picker. PR/MR access and normal provider refresh remain Codiff-owned.
+Stock Codiff 1.14 supports ordinary working-tree, commit, branch, and PR/MR
+commands; these do not require a custom fork or capability extension. PR/MR access
+and normal provider refresh remain Codiff-owned, including provider-reader failures.
+
+**Range-forwarding limitation:** the packaged macOS shell launcher in Codiff 1.14.0
+rewrites positional `main..feature` and `main...feature` into `--branch RANGE`,
+even though the Codiff engine supports native ranges. Monke therefore opens ranges
+only when the invoked launcher advertises `desktop-source-v1` in `--help` and a
+version-1 `--capabilities` response containing `range`. The help probe avoids
+invoking an unknown capability flag on stock launchers. An upstream-only source
+sync or a newer version string alone does not prove this launcher defect is fixed.
+Unsupported ranges, invalid targets, and failed launches report errors without
+substituting another viewer, comparison, or picker.
 
 ## Use checkout resources
 

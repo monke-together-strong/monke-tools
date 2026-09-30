@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { launchCodiff, verifyCodiffAsync, verifyCodiffSource } from "./codiff.ts";
+import { launchCodiff, verifyCodiffAsync, verifyCodiffRangeSupport } from "./codiff.ts";
 import {
   findInitialDefaultBranchBase,
   findNewerDefaultBranchBase,
@@ -96,7 +96,9 @@ export async function runDiffInteractive(runtime: Runtime, options: DiffOptions 
     });
     const plan = resolveExplicitComparison(selectedRuntime, context, options);
     const executable = await verifyCodiffAsync(selectedRuntime);
-    await verifyCodiffSource(selectedRuntime, executable, plan.kind);
+    if (plan.kind === "range") {
+      await verifyCodiffRangeSupport(selectedRuntime, executable);
+    }
     launchCodiff(selectedRuntime, executable, plan);
     return;
   }
@@ -169,7 +171,7 @@ function resolveExplicitComparison(
     return resolveRangeComparison(runtime, context, target);
   }
   validateRevision(runtime, context, target);
-  if (/^[\da-f]{4,64}$/iu.test(target) || /^(?:HEAD|@)(?:$|[~^@])|[\^~]|@\{/u.test(target)) {
+  if (/^(?:HEAD|@)(?:$|[~^@])|[\^~]|@\{/u.test(target)) {
     return { kind: "commit", ref: target, worktreePath };
   }
   const branch =

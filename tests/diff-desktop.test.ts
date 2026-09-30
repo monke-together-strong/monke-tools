@@ -28,10 +28,13 @@ describe("Desktop Diff", () => {
     return { binDirectory, home, log, repo, sandbox };
   }
 
-  test("keeps all branch capitalization variants of HEAD as branch reviews with local edits", async () => {
+  test("keeps hex-named branches and capitalization variants of HEAD as branch reviews with local edits", async () => {
     const { binDirectory, home, log, repo } = fixture();
     writeFileSync(path.join(repo, "local.txt"), "local change\n");
     for (const branch of [
+      "cafe",
+      "dead",
+      "abc123",
       "head",
       "heaD",
       "heAd",
@@ -65,6 +68,48 @@ describe("Desktop Diff", () => {
     }
     expect(git(repo, ["branch", "--show-current"])).toBe("feature");
   });
+
+  test.each([
+    { args: ["--working-tree"], delivered: [] },
+    { args: ["--commit", "HEAD"], delivered: ["--commit", "HEAD"] },
+    { args: ["--branch", "main"], delivered: ["--branch", "main"] },
+    { args: ["HEAD"], delivered: ["--commit", "HEAD"] },
+    { args: ["main"], delivered: ["--branch", "main"] },
+    { args: ["#42"], delivered: ["#42"] },
+    { args: ["pr", "42"], delivered: ["pr", "42"] },
+    { args: ["mr", "42"], delivered: ["mr", "42"] },
+    {
+      args: ["https://github.com/owner/repo/pull/42"],
+      delivered: ["https://github.com/owner/repo/pull/42"]
+    },
+    {
+      args: ["https://gitlab.example.com/group/repo/-/merge_requests/42"],
+      delivered: ["https://gitlab.example.com/group/repo/-/merge_requests/42"]
+    }
+  ])(
+    "delivers stock-supported selectors $args without range capabilities",
+    async ({ args, delivered }) => {
+      const { binDirectory, home, repo } = fixture();
+      const log = installFakeCodiff(binDirectory, {
+        capabilities: "unsupported",
+        help: "Usage: codiff [ref] [--commit <ref>] [--branch <ref>] [pr|mr] [path]",
+        version: "codiff v1.14.0"
+      });
+      const before = git(repo, ["status", "--porcelain"]);
+      await runMonkeAsync({
+        args: ["diff", ...args],
+        binDirectory,
+        cwd: repo,
+        monkeHome: home,
+        onSelect() {
+          throw new Error("explicit Diff prompted");
+        }
+      });
+      expect(readFileSync(log, "utf-8")).toBe([...delivered, repo, ""].join("\n"));
+      expect(git(repo, ["status", "--porcelain"])).toBe(before);
+      expect(git(repo, ["branch", "--show-current"])).toBe("feature");
+    }
+  );
 
   test.each(["HEAD^{/..}", "HEAD^{/.. }", "HEAD^{/.*.. .*}"])(
     "delivers single dotted revision %s as a commit in positional and explicit forms",
@@ -195,28 +240,30 @@ describe("Desktop Diff", () => {
     expect(git(repo, ["branch", "--show-current"])).toBe("feature");
   });
 
-  test.each([
-    { help: "Usage: codiff --commit <ref>" },
-    { capabilities: "not json" },
-    { capabilities: '{"version":2,"sources":["range"]}' },
-    { capabilities: '{"version":1,"sources":["working-tree"]}' }
-  ])(
-    "rejects incompatible executable contract $capabilities $help without an alternate launch",
-    async (contract) => {
-      const { binDirectory, home, repo } = fixture();
-      const log = installFakeCodiff(binDirectory, { ...contract, version: "codiff v9.0.0" });
-      await expect(
-        runMonkeAsync({
-          args: ["diff", "main..feature"],
-          binDirectory,
-          cwd: repo,
-          monkeHome: home,
-          onSelect() {
-            throw new Error("unexpected picker");
-          }
-        })
-      ).rejects.toThrow("corrected desktop source contract");
-      expect(existsSync(log)).toBeFalsy();
+  test.each(["main..feature", "main...feature"])(
+    "rejects %s without advertised range forwarding or an alternate launch",
+    async (range) => {
+      for (const contract of [
+        { help: "Usage: codiff --commit <ref>" },
+        { capabilities: "not json" },
+        { capabilities: '{"version":2,"sources":["range"]}' },
+        { capabilities: '{"version":1,"sources":["working-tree"]}' }
+      ]) {
+        const { binDirectory, home, repo } = fixture();
+        const log = installFakeCodiff(binDirectory, { ...contract, version: "codiff v9.0.0" });
+        await expect(
+          runMonkeAsync({
+            args: ["diff", range],
+            binDirectory,
+            cwd: repo,
+            monkeHome: home,
+            onSelect() {
+              throw new Error("unexpected picker");
+            }
+          })
+        ).rejects.toThrow("safe range forwarding");
+        expect(existsSync(log)).toBeFalsy();
+      }
     }
   );
 

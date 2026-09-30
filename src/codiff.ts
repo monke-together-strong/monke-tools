@@ -21,11 +21,7 @@ export async function verifyCodiffAsync(runtime: Runtime) {
   return executable;
 }
 
-export async function verifyCodiffSource(
-  runtime: Runtime,
-  executable: string,
-  source: ComparisonPlan["kind"]
-) {
+export async function verifyCodiffRangeSupport(runtime: Runtime, executable: string) {
   const help = await runtime.execAsync(executable, ["--help"], { allowFailure: true });
   if (
     help.exitCode !== 0 ||
@@ -33,7 +29,7 @@ export async function verifyCodiffSource(
     !help.stdout.includes("desktop-source-v1")
   ) {
     throw new MonkeError(
-      `Codiff at ${executable} does not advertise the corrected desktop source contract for ${source}. Install a corrected Codiff build; no comparison was opened.`
+      `Codiff at ${executable} does not advertise safe range forwarding. Use a launcher with desktop-source-v1 range support; no comparison was opened.`
     );
   }
   const result = await runtime.execAsync(executable, ["--capabilities"], { allowFailure: true });
@@ -46,9 +42,9 @@ export async function verifyCodiffSource(
   const parsed = z
     .object({ sources: z.array(z.string()), version: z.literal(1) })
     .safeParse(capabilities);
-  if (result.exitCode !== 0 || !parsed.success || !parsed.data.sources.includes(source)) {
+  if (result.exitCode !== 0 || !parsed.success || !parsed.data.sources.includes("range")) {
     throw new MonkeError(
-      `Codiff at ${executable} does not advertise the corrected desktop source contract for ${source}. Install a corrected Codiff build; no comparison was opened.`
+      `Codiff at ${executable} does not advertise safe range forwarding. Use a launcher with desktop-source-v1 range support; no comparison was opened.`
     );
   }
 }
