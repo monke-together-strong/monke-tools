@@ -43,7 +43,7 @@ if [ "\${1:-}" = "--prefix" ]; then
 fi
 if [ "\${1:-}" = "install" ] || [ "\${1:-}" = "upgrade" ]; then
   [ ${String(options.commandExit ?? 0)} -eq 0 ] || exit ${String(options.commandExit ?? 0)}
-  printf '%s\n' 'codiff v${options.afterVersion ?? "1.10.1"}' > '${options.versionFile}'
+  printf '%s\n' 'codiff v${options.afterVersion ?? "1.14.0"}' > '${options.versionFile}'
   /bin/cat > '${codiffPath}' <<'EOF'
 #!/bin/sh
 set -eu
@@ -84,7 +84,7 @@ describe("dependency installation", () => {
     const binDirectory = path.join(sandbox, "bin");
     const versionFile = path.join(sandbox, "codiff-version");
     const brewLog = path.join(sandbox, "brew.log");
-    writeFileSync(versionFile, "codiff v1.10.1\n", "utf-8");
+    writeFileSync(versionFile, "codiff v1.14.0\n", "utf-8");
     installCodiff(binDirectory, versionFile);
     installBrew({ binDirectory, logPath: brewLog, versionFile });
 
@@ -105,7 +105,7 @@ describe("dependency installation", () => {
     expect(readFileSync(brewLog, "utf-8")).toBe(
       "install --cask --require-sha nkzw-tech/tap/codiff\n"
     );
-    expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.10.1\n");
+    expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.14.0\n");
   });
 
   test("a successful Homebrew install resolves Codiff outside PATH from the prefix", async () => {
@@ -132,7 +132,7 @@ describe("dependency installation", () => {
     const binDirectory = path.join(sandbox, "bin");
     const versionFile = path.join(sandbox, "codiff-version");
     const brewLog = path.join(sandbox, "brew.log");
-    writeFileSync(versionFile, "codiff v1.8.9\n", "utf-8");
+    writeFileSync(versionFile, "codiff v1.13.9\n", "utf-8");
     installCodiff(binDirectory, versionFile);
     installBrew({ binDirectory, logPath: brewLog, versionFile });
 
@@ -141,7 +141,7 @@ describe("dependency installation", () => {
     expect(readFileSync(brewLog, "utf-8")).toBe(
       "list --cask nkzw-tech/tap/codiff\n--prefix\nupgrade --cask nkzw-tech/tap/codiff\n"
     );
-    expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.10.1\n");
+    expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.14.0\n");
   });
 
   test("the running Release manifest supplies the required Codiff minimum", async () => {
@@ -150,7 +150,7 @@ describe("dependency installation", () => {
     const versionFile = path.join(sandbox, "codiff-version");
     const brewLog = path.join(sandbox, "brew.log");
     const installRoot = path.join(sandbox, "install");
-    writeFileSync(versionFile, "codiff v1.10.1\n", "utf-8");
+    writeFileSync(versionFile, "codiff v1.14.0\n", "utf-8");
     installCodiff(binDirectory, versionFile);
     installBrew({
       afterVersion: "2.0.1",
@@ -217,7 +217,7 @@ describe("dependency installation", () => {
     const homebrewVersionFile = path.join(sandbox, "homebrew-version");
     const brewLog = path.join(sandbox, "brew.log");
     writeFileSync(shadowVersionFile, "codiff v1.8.9\n", "utf-8");
-    writeFileSync(homebrewVersionFile, "codiff v1.10.1\n", "utf-8");
+    writeFileSync(homebrewVersionFile, "codiff v1.14.0\n", "utf-8");
     installCodiff(shadowBin, shadowVersionFile);
     installCodiff(homebrewBin, homebrewVersionFile);
     installBrew({

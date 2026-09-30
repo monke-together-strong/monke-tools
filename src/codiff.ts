@@ -8,7 +8,7 @@ import { MonkeError } from "./errors.ts";
 import { findExecutable } from "./runtime.ts";
 import type { ExecResult, Runtime } from "./types.ts";
 
-const MINIMUM_CODIFF_VERSION = [1, 9, 0] as const;
+const MINIMUM_CODIFF_VERSION = [1, 14, 0] as const;
 export const MINIMUM_CODIFF_VERSION_TEXT = MINIMUM_CODIFF_VERSION.join(".");
 const CODIFF_CASK = "nkzw-tech/tap/codiff";
 const INSTALL_CODIFF = `brew install --cask --require-sha ${CODIFF_CASK}`;

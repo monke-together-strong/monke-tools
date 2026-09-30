@@ -469,7 +469,7 @@ describe("versioned installation lifecycle", () => {
       createdBy: "bun run install:local",
       installId: "local-first",
       installKind: "local",
-      minimumCodiffVersion: "1.9.0",
+      minimumCodiffVersion: "1.14.0",
       platform: "darwin-arm64",
       schemaVersion: 1,
       sourceCheckout,

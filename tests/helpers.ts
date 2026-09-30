@@ -328,7 +328,7 @@ if [ "\${1:-}" = "--version" ]; then
     /bin/sleep 0.01
   done`
   }
-  printf '%s\\n' ${shellQuote(options.version ?? "codiff v1.9.0")}
+  printf '%s\\n' ${shellQuote(options.version ?? "codiff v1.14.0")}
   exit 0
 fi
 if [ "\${1:-}" = "--help" ]; then

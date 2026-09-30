@@ -69,7 +69,14 @@ describe("Desktop Diff", () => {
     expect(git(repo, ["branch", "--show-current"])).toBe("feature");
   });
 
+  const providerReviewUrls = [
+    "https://github.com/owner/repo/pull/42/files",
+    "https://gitlab.example.com/group/repo/-/merge_requests/42/diffs",
+    "https://github.com/owner/repo/pull/42?tab=files"
+  ];
+
   test.each([
+    ...providerReviewUrls.map((target) => ({ args: [target], delivered: [target] })),
     { args: ["--working-tree"], delivered: [] },
     { args: ["--commit", "HEAD"], delivered: ["--commit", "HEAD"] },
     { args: ["--branch", "main"], delivered: ["--branch", "main"] },
@@ -108,6 +115,35 @@ describe("Desktop Diff", () => {
       expect(readFileSync(log, "utf-8")).toBe([...delivered, repo, ""].join("\n"));
       expect(git(repo, ["status", "--porcelain"])).toBe(before);
       expect(git(repo, ["branch", "--show-current"])).toBe("feature");
+    }
+  );
+
+  test.each(providerReviewUrls)(
+    "rejects older launchers before forwarding provider URL %s",
+    async (target) => {
+      const { binDirectory, home, repo } = fixture();
+      const before = git(repo, ["status", "--porcelain"]);
+      for (const version of ["1.9.0", "1.13.9"]) {
+        const log = installFakeCodiff(binDirectory, {
+          capabilities: "unsupported",
+          help: "Usage: codiff [ref] [--commit <ref>] [--branch <ref>] [pr|mr] [path]",
+          version: `codiff v${version}`
+        });
+        await expect(
+          runMonkeAsync({
+            args: ["diff", target],
+            binDirectory,
+            cwd: repo,
+            monkeHome: home,
+            onSelect() {
+              throw new Error("explicit Diff prompted");
+            }
+          })
+        ).rejects.toThrow(`Codiff 1.14.0 or newer is required; found ${version}.`);
+        expect(existsSync(log)).toBeFalsy();
+        expect(git(repo, ["status", "--porcelain"])).toBe(before);
+        expect(git(repo, ["branch", "--show-current"])).toBe("feature");
+      }
     }
   );
 

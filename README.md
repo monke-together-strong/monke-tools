@@ -65,9 +65,12 @@ directories; Diff never switches its branch or creates a worktree. Clean working
 trees and equal-endpoint ranges are honest empty reviews, not HEAD substitutions.
 Explicit sources cannot be combined with each other or `--pick`.
 
-Stock Codiff 1.14 supports ordinary working-tree, commit, branch, and PR/MR
-commands; these do not require a custom fork or capability extension. PR/MR access
-and normal provider refresh remain Codiff-owned, including provider-reader failures.
+Codiff **1.14.0 or newer is required** for desktop Diff. Stock 1.14.0 supports
+ordinary working-tree, commit, branch, and PR/MR commands without a custom fork or
+capability extension. Older launchers can misclassify provider URLs with trailing
+paths or query strings as branch requests; Monke rejects them before launching.
+PR/MR access and normal provider refresh remain Codiff-owned, including
+provider-reader failures.
 
 **Range-forwarding limitation:** the packaged macOS shell launcher in Codiff 1.14.0
 rewrites positional `main..feature` and `main...feature` into `--branch RANGE`,
