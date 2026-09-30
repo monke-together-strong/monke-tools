@@ -246,7 +246,7 @@ describe("Local install refresh script", () => {
     const binDirectory = path.join(sandbox, "bin");
     writeExecutable(
       path.join(binDirectory, "codiff"),
-      "#!/bin/sh\nprintf '%s\\n' 'codiff v1.10.1'\n"
+      "#!/bin/sh\nprintf '%s\\n' 'codiff v1.14.0'\n"
     );
 
     const install = spawnSync(

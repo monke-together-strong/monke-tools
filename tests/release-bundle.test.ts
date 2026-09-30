@@ -90,7 +90,7 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
           "skills/references/internal/example.md": hash("sha256", referenceContents, "hex")
         },
         installKind: "release",
-        minimumCodiffVersion: "1.9.0",
+        minimumCodiffVersion: "1.14.0",
         platform,
         releaseTag: `monke-tools-v${RELEASE_VERSION}`,
         releaseVersion: RELEASE_VERSION,
@@ -296,7 +296,7 @@ describe("Release bundle verifier", () => {
         sourceCommit: SOURCE_COMMIT,
         version: RELEASE_VERSION
       })
-    ).toThrow(/Codiff minimum does not match 1\.9\.0/u);
+    ).toThrow(/Codiff minimum does not match 1\.14\.0/u);
   });
 
   test("writes the verified stable Release catalog contract", () => {

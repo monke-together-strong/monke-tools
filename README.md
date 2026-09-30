@@ -20,7 +20,7 @@ From a repo with `monke.yml`:
 
 ```bash
 mt spawn banana          # Prepare this repo and its dependencies
-mt diff                  # Review the current checkout in Codiff
+mt diff                  # Review the current checkout through its machine-local adapter
 mt swing '^'             # Return to the source checkout
 mt swing banana          # Return to the session
 mt materialize           # Refresh the session's env and bootstrap
@@ -31,6 +31,56 @@ Spawn from the source checkout or any linked worktree to copy its `HEAD` and edi
 When finished, `mt chop banana` removes the session's worktrees and runs its recorded cleanup commands, preserving local branches. Dirty files block removal; ignored files are deleted with the worktrees. Preview eligible Sessions across all Roots with `mt cleanup --dry-run`, then run `mt cleanup` to execute. Both commands work outside a repository and accept `--json`. Optional worktree paths restrict scope. Use `--archive-untracked` to preserve untracked notes before removal; see the reference below for missing-worktree recovery and `--include-unowned`. Global scope never bypasses whole-Session eligibility.
 
 The [session command reference](skills/internal/monke-tools-core/SKILL.md) covers branch reuse, PR navigation, diff bases, and cleanup recovery. Use `mt <command> --help` for available flags.
+
+### Desktop Diff
+
+Desktop Codiff remains the default. `mt diff configure --adapter codiff` saves the
+machine-local preference in `$MONKE_HOME/config.yml`; `mt diff configure` offers a
+picker. `mt diff --adapter codiff` overrides delivery for that invocation without
+rewriting the preference. This desktop slice supports only Codiff; LFV is separate
+companion work, not a fallback.
+
+Bare `mt diff` retains its remembered-base selection, and `mt diff --pick` chooses
+another base or local changes only. Explicit sources bypass both automatic selection
+and the picker, and never replace the remembered base:
+
+```sh
+mt diff --working-tree                 # Staged, unstaged, and untracked changes only
+mt diff --commit HEAD                  # One commit, including its parent comparison
+mt diff --branch main                  # Branch contribution plus working-tree edits
+mt diff main..HEAD                     # Direct endpoint comparison
+mt diff main...HEAD                    # Merge base of main/HEAD against HEAD
+mt diff '#42'                          # GitHub PR in the selected repository
+mt diff pr 42                          # Alternate PR number form
+mt diff pr owner:feature               # Open GitHub PR for a branch
+mt diff mr 42                          # GitLab MR in the selected repository
+mt diff https://github.com/owner/repo/pull/42
+mt diff https://gitlab.example.com/group/repo/-/merge_requests/42
+mt diff --path /existing/checkout --commit HEAD
+```
+
+A positional branch or commit ref also follows Codiff's ref semantics. Use flags
+to disambiguate. `--path` accepts an existing Checkout or one of its nested
+directories; Diff never switches its branch or creates a worktree. Clean working
+trees and equal-endpoint ranges are honest empty reviews, not HEAD substitutions.
+Explicit sources cannot be combined with each other or `--pick`.
+
+Codiff **1.14.0 or newer is required** for desktop Diff. Stock 1.14.0 supports
+ordinary working-tree, commit, branch, and PR/MR commands without a custom fork or
+capability extension. Older launchers can misclassify provider URLs with trailing
+paths or query strings as branch requests; Monke rejects them before launching.
+PR/MR access and normal provider refresh remain Codiff-owned, including
+provider-reader failures.
+
+**Range-forwarding limitation:** the packaged macOS shell launcher in Codiff 1.14.0
+rewrites positional `main..feature` and `main...feature` into `--branch RANGE`,
+even though the Codiff engine supports native ranges. Monke therefore opens ranges
+only when the invoked launcher advertises `desktop-source-v1` in `--help` and a
+version-1 `--capabilities` response containing `range`. The help probe avoids
+invoking an unknown capability flag on stock launchers. An upstream-only source
+sync or a newer version string alone does not prove this launcher defect is fixed.
+Unsupported ranges, invalid targets, and failed launches report errors without
+substituting another viewer, comparison, or picker.
 
 ## Use checkout resources
 

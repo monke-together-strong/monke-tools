@@ -1,12 +1,14 @@
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
+import * as z from "zod";
+
 import type { ComparisonPlan } from "./comparison-plan.ts";
 import { MonkeError } from "./errors.ts";
 import { findExecutable } from "./runtime.ts";
 import type { ExecResult, Runtime } from "./types.ts";
 
-const MINIMUM_CODIFF_VERSION = [1, 9, 0] as const;
+const MINIMUM_CODIFF_VERSION = [1, 14, 0] as const;
 export const MINIMUM_CODIFF_VERSION_TEXT = MINIMUM_CODIFF_VERSION.join(".");
 const CODIFF_CASK = "nkzw-tech/tap/codiff";
 const INSTALL_CODIFF = `brew install --cask --require-sha ${CODIFF_CASK}`;
@@ -17,6 +19,34 @@ export async function verifyCodiffAsync(runtime: Runtime) {
   const result = await runtime.execAsync(executable, ["--version"], { allowFailure: true });
   validateCodiffVersion(result);
   return executable;
+}
+
+export async function verifyCodiffRangeSupport(runtime: Runtime, executable: string) {
+  const help = await runtime.execAsync(executable, ["--help"], { allowFailure: true });
+  if (
+    help.exitCode !== 0 ||
+    !help.stdout.includes("--capabilities") ||
+    !help.stdout.includes("desktop-source-v1")
+  ) {
+    throw new MonkeError(
+      `Codiff at ${executable} does not advertise safe range forwarding. Use a launcher with desktop-source-v1 range support; no comparison was opened.`
+    );
+  }
+  const result = await runtime.execAsync(executable, ["--capabilities"], { allowFailure: true });
+  let capabilities: unknown;
+  try {
+    capabilities = JSON.parse(result.stdout);
+  } catch {
+    capabilities = undefined;
+  }
+  const parsed = z
+    .object({ sources: z.array(z.string()), version: z.literal(1) })
+    .safeParse(capabilities);
+  if (result.exitCode !== 0 || !parsed.success || !parsed.data.sources.includes("range")) {
+    throw new MonkeError(
+      `Codiff at ${executable} does not advertise safe range forwarding. Use a launcher with desktop-source-v1 range support; no comparison was opened.`
+    );
+  }
 }
 
 /** Reconcile Codiff to a minimum-compatible version on supported Homebrew platforms. */
@@ -103,10 +133,17 @@ function sameExecutable(left: string, right: string) {
 
 /** Map one comparison plan to Codiff's public CLI contract. */
 export function launchCodiff(runtime: Runtime, executable: string, plan: ComparisonPlan) {
-  const args =
+  const sourceArgs =
     plan.kind === "branch-working-tree"
-      ? ["--branch", plan.baseRef, plan.worktreePath]
-      : [plan.worktreePath];
+      ? ["--branch", plan.baseRef]
+      : plan.kind === "commit"
+        ? ["--commit", plan.ref]
+        : plan.kind === "range"
+          ? [`${plan.base}${plan.symmetric ? "..." : ".."}${plan.head}`]
+          : plan.kind === "pull-request"
+            ? plan.target
+            : [];
+  const args = [...sourceArgs, plan.worktreePath];
   const result = runtime.exec(executable, args, {
     allowFailure: true,
     cwd: plan.worktreePath

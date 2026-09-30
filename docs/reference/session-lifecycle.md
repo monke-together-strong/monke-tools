@@ -40,6 +40,12 @@ Part of the [domain glossary](../../CONTEXT.md).
 
 **Previous Swing target**: The last different **Swing target** remembered for one **Root repo**.
 
+**Diff source**: The Git comparison requested by one **Diff**, identifying working-tree changes, a commit, a branch comparison, a commit range, or a pull request.
+
+**Diff adapter**: The selected way a **Diff** is presented, either through a local application or through a browser review identified by a **Diff link**.
+
+**Diff link**: The canonical URL supplied by a browser-based **Diff adapter** for one review.
+
 **Diff base**: The Git revision used as the committed comparison point for **Diff**.
 
 **Diff picker**: The interactive choice of a **Diff base** or local changes only.

@@ -5,7 +5,7 @@ import "zod/compile";
 import { runChop } from "./chop.ts";
 import { runCleanup } from "./cleanup.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
-import { runDiffInteractive } from "./diff.ts";
+import { runDiffConfigure, runDiffInteractive } from "./diff.ts";
 import { ThrownValueSchema } from "./errors.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
 import {
@@ -67,10 +67,27 @@ function createProgram(runtime: Runtime) {
     .option("--codex")
     .action((target, options) => runSwing(runtime, target, options));
 
-  program
+  const diff = program
     .command("diff")
+    .enablePositionalOptions()
+    .description("Review this Checkout; explicit sources bypass remembered-base selection")
+    .argument(
+      "[targets...]",
+      "ref, base..head, base...head, #PR, pr <number|branch>, mr <number>, or review URL"
+    )
     .option("-p, --pick")
-    .action((options) => runDiffInteractive(runtime, options));
+    .option("--adapter <adapter>", "one-off adapter selection (codiff)")
+    .option("--path <checkout>", "select an existing Checkout, including a nested directory")
+    .option("--working-tree", "review only staged, unstaged, and untracked changes")
+    .option("--commit <ref>", "review one commit")
+    .option("--branch <ref>", "review the branch contribution plus local changes")
+    .action((targets, options) => runDiffInteractive(runtime, { ...options, targets }));
+
+  diff
+    .command("configure")
+    .description("Save this machine's Diff adapter without launching a review")
+    .option("--adapter <adapter>", "noninteractive selection (codiff)")
+    .action((options) => runDiffConfigure(runtime, options));
 
   program.command("materialize").action(() => runMaterialize(runtime));
 

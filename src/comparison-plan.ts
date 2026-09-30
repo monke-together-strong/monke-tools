@@ -15,7 +15,12 @@ interface DefaultBranchCandidate {
   ref: string;
 }
 
-export type ComparisonPlan = { kind: "working-tree"; worktreePath: string } | BranchComparisonPlan;
+export type ComparisonPlan =
+  | { kind: "working-tree"; worktreePath: string }
+  | BranchComparisonPlan
+  | { kind: "commit"; ref: string; worktreePath: string }
+  | { base: string; head: string; kind: "range"; symmetric: boolean; worktreePath: string }
+  | { kind: "pull-request"; target: string[]; worktreePath: string };
 
 /** Plan a local-working-tree comparison without inspecting Codiff behavior. */
 export function planWorkingTreeComparison(context: RepoContext): ComparisonPlan {

@@ -79,7 +79,7 @@ Historical decisions live in [docs/adr](docs/adr).
 
 **Swing**: The operation that navigates the user's current shell to a **Source checkout**, **Session worktree**, or **Ordinary worktree** for the current **Root repo** scope. Ordinary targets must already exist; explicit pull request targets may materialize the matching **Session worktree** after validating the PR head.
 
-**Diff**: The operation that opens Codiff for the current checkout in one repo, showing either local changes alone or changes relative to a **Diff base**.
+**Diff**: The operation that presents a requested Git comparison for one checkout through its selected **Diff adapter**.
 
 ## Relationships and distinctions
 

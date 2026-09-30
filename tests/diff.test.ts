@@ -42,7 +42,7 @@ describe("Diff", () => {
         }
       })
     ).rejects.toThrow(
-      "Codiff 1.9.0 or newer is required. Install it with: brew install --cask --require-sha nkzw-tech/tap/codiff"
+      "Codiff 1.14.0 or newer is required. Install it with: brew install --cask --require-sha nkzw-tech/tap/codiff"
     );
     expect(prompt).toBeUndefined();
   });
@@ -50,19 +50,19 @@ describe("Diff", () => {
   test.each([
     {
       expected:
-        "Codiff 1.9.0 or newer is required; found 1.8.9. Upgrade it with: brew upgrade --cask nkzw-tech/tap/codiff",
+        "Codiff 1.14.0 or newer is required; found 1.8.9. Upgrade it with: brew upgrade --cask nkzw-tech/tap/codiff",
       name: "an old Codiff version",
       version: "codiff v1.8.9"
     },
     {
       expected:
-        "Codiff 1.9.0 or newer is required. Install it with: brew install --cask --require-sha nkzw-tech/tap/codiff",
+        "Codiff 1.14.0 or newer is required. Install it with: brew install --cask --require-sha nkzw-tech/tap/codiff",
       name: "an unrelated executable",
       version: "different v9.0.0"
     },
     {
       expected:
-        "Codiff 1.9.0 or newer is required. Install it with: brew install --cask --require-sha nkzw-tech/tap/codiff",
+        "Codiff 1.14.0 or newer is required. Install it with: brew install --cask --require-sha nkzw-tech/tap/codiff",
       name: "malformed version output",
       version: "codiff banana"
     }
@@ -141,14 +141,14 @@ touch "${discoveryReached}"`
     expect(existsSync(discoveryReached)).toBeTruthy();
   });
 
-  test("diff rejects positional targets and unsupported options", async () => {
+  test("diff rejects extra targets and unsupported options", async () => {
     const sandbox = makeTempDir("diff-cli-shape");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
 
     await expect(
-      runMonkeAsync({ args: ["diff", "main"], cwd: repoRoot, monkeHome: home })
-    ).rejects.toThrow(/too many arguments/u);
+      runMonkeAsync({ args: ["diff", "main", "HEAD", "extra"], cwd: repoRoot, monkeHome: home })
+    ).rejects.toThrow(/Expected one Diff/u);
     await expect(
       runMonkeAsync({ args: ["diff", "--against", "main"], cwd: repoRoot, monkeHome: home })
     ).rejects.toThrow(/unknown option '--against'/u);
@@ -168,6 +168,20 @@ touch "${discoveryReached}"`
 
     const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
     expect(state.repos[0]?.diffBaseRef).toBe("refs/heads/main");
+
+    await runMonkeAsync({
+      args: ["diff", "--commit", "HEAD"],
+      binDirectory,
+      cwd: nestedDirectory,
+      monkeHome: home,
+      onSelect() {
+        throw new Error("explicit source prompted");
+      }
+    });
+    expect(readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema)).toStrictEqual(
+      state
+    );
+    writeFileSync(codiffLog, "");
 
     await runMonkeAsync({
       args: ["diff"],
