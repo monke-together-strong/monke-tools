@@ -18,6 +18,4 @@ There is no explicit `--watch` flag. PR reviews fetch newly pushed commits throu
 
 ## Desktop range-forwarding limitation
 
-Stock Codiff 1.14 supports ordinary working-tree, commit, branch, and PR/MR commands without a custom fork. The packaged macOS shell launcher in 1.14.0 rewrites `main..feature` and `main...feature` into `--branch RANGE`; the native engine supports ranges, but that launcher does not forward them intact.
-
-Only range plans need additional executable-level assurance. Monke checks the invoked launcher's `--help` for `--capabilities` and `desktop-source-v1` before requesting a version-1 capability response containing `range`. Version numbers or an upstream-only source sync do not establish safe range forwarding. Other source plans use the existing version check and public CLI arguments. Invalid comparisons and launch failures remain errors, never alternate comparisons. Monke does not install a parser shim or modify the user's Codiff installation.
+Only range plans require additional executable-level assurance: native engine support and a version number alone do not prove a launcher forwards the requested comparison. Monke fails safely rather than substituting a comparison or adding a parser shim. See [Desktop Diff usage](../../README.md#desktop-diff) for the verified launcher limitation and capability contract.
