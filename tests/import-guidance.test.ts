@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "vite-plus/test";
 
 import { copyStagedGuidanceToManagedRoots } from "../scripts/import-guidance.ts";
 import { makeTempDir, read, write } from "./helpers.ts";

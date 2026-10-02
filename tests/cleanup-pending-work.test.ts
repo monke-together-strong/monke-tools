@@ -2,7 +2,7 @@ import { ok } from "node:assert/strict";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vite-plus/test";
 
 import { readOnlyCleanupRuntime } from "../src/cleanup-eligibility.ts";
 import {

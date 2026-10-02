@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "vite-plus/test";
 
 import { checkSkillLinks } from "../scripts/check-skill-links.ts";
 import { BUNDLED_GUIDANCE_FOLDERS } from "../src/release-guidance.ts";

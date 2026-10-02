@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { devNull, tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterAll } from "vitest";
+import { afterAll } from "vite-plus/test";
 
 const configDirectory = mkdtempSync(path.join(tmpdir(), "monke-test-git-"));
 const globalConfigPath = path.join(configDirectory, "config");

@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } f
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
