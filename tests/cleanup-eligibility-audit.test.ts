@@ -8,9 +8,11 @@ import {
 } from "../src/cleanup-eligibility.ts";
 import auditCases from "./fixtures/cleanup-eligibility-audit.json";
 
-// Expectations were frozen from Git + REST evidence before implementation, then
-// all 50 positives were cross-checked through individual PR / commit comparisons.
-// Paths, repositories, branches, and OIDs are anonymized without changing equality.
+// Representatives from the 364-worktree inventory frozen from Git + REST evidence
+// before implementation; all 50 original positives were independently cross-checked.
+// Removed rows differed only by consistently renamed identifiers, preserving every
+// distinct input shape and equality relationship. Original capture: commit 46d1594.
+// Paths, repositories, branches, and OIDs remain anonymized without changing equality.
 // These snapshots are evidence, never deletion authority.
 const AuditCaseSchema = z.object({
   expected: z.boolean(),

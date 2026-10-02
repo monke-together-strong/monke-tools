@@ -601,9 +601,17 @@ external:
 
     const rootWorktree = getExpectedWorktreePath(home, root, "mixed-defaults");
     const depWorktree = getExpectedWorktreePath(home, depRoot, "mixed-defaults");
-    expect(read(depWorktree, "services/db/.env.local")).toBe("PORT=10000\nMASTER_DEFAULT=1\n");
+    // Another worker can temporarily occupy the first port in the reservation.
+    const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+    const assignedPort = state.repos
+      .find((repo) => repo.sourceRoot === depRoot)
+      ?.assignedPorts.find((port) => port.key === "DEP_POSTGRES_PORT")?.value;
+    expect(assignedPort).toBeDefined();
+    expect(read(depWorktree, "services/db/.env.local")).toBe(
+      `PORT=${String(assignedPort)}\nMASTER_DEFAULT=1\n`
+    );
     expect(read(rootWorktree, ".env")).toBe(
-      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=10000\n`
+      `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nDEP_POSTGRES_PORT=${String(assignedPort)}\n`
     );
   });
 
