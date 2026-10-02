@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "vite-plus/test";
 
 import { CheckoutResourceStore } from "../src/checkout-resource-store.ts";
 import { loadResolvedGraph } from "../src/config.ts";

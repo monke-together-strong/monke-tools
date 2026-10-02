@@ -1,7 +1,7 @@
 import { existsSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "vite-plus/test";
 
 import { rewriteEnvFile, seedWorktreeFiles } from "../src/env.ts";
 import type { RepoConfig } from "../src/types.ts";

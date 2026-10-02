@@ -7,4 +7,4 @@ packages:
 
 ## Update Ultracite and Oxc compatibility
 
-Upgrade Ultracite from 7.10.8 to 7.11.1. Require Oxlint ^1.82.0 and Oxfmt ^0.67.0 so the shared presets use the rule names and formatter configuration types shipped with Vite+ 0.3.2. Existing shared rule overrides remain in place.
+Upgrade Ultracite from 7.10.8 to 7.11.1. Require Oxlint ^1.82.0 and require Oxfmt 0.70.0 or newer, matching the minimum bundled with Vite+ 1.0 and allowing future versions. Build the formatter preset against Oxfmt 0.70.0. Existing shared rule overrides remain in place.

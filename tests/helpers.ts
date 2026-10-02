@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach } from "vitest";
+import { afterEach } from "vite-plus/test";
 import { parse } from "yaml";
 import type * as z from "zod";
 

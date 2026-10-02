@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "vite-plus/test";
 import * as z from "zod";
 
 import { CleanupCodeSchema, CleanupRepositoryEvidenceSchema } from "../src/cleanup-eligibility.ts";
@@ -54,8 +54,10 @@ const SnapshotSchema = z.object({
   session: z.string().nullable()
 }) satisfies z.ZodType<SessionCleanupEvidence>;
 
-// 137 local Session expectations from an independent ownership audit. All 16
-// live positives were cross-checked with individual GitHub PR/compare requests.
+// Representatives from 137 local Session expectations in an independent ownership
+// audit. Removed rows differed only by consistently renamed identifiers, preserving
+// every distinct input shape and equality relationship. Original capture: d25878c.
+// All 16 live positives were cross-checked with individual GitHub PR/compare requests.
 // A seventeenth case is verified partial recovery, independently checked with
 // its retained Root branch/merged PR and remaining dependency comparison.
 // A corrected capture replaced the first audit's accidentally truncated PR cache;
