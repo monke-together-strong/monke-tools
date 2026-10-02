@@ -45,6 +45,18 @@ no app workspace registration.
 Use `mt swing pr:<number>` or a PR URL for same-repo PRs. Diverged local heads block
 navigation; resolve the divergence without discarding work. Fork PRs are unsupported.
 
+## Review links
+
+`mt diff` owns comparison selection. Use `--adapter lfv` for a review URL, or save
+it with `mt diff configure --adapter lfv`. Monke calls LFV internally; LFV owns
+authentication, rendering, Refresh, and expiry. The configured LFV CLI must exist.
+
+For “last N hours/days plus dirty changes”, resolve the oldest included first-parent
+commit's parent to an immutable base SHA, then run
+`mt diff --adapter lfv --branch <base-sha> --path <checkout>`. Return the printed URL
+unchanged. With no included commits, use `--working-tree`. Refresh keeps the base
+fixed while updating HEAD and dirty changes; it does not slide the time window.
+
 ## Release and remove
 
 For acquisition prerequisites, foreground execution, or partial failures, read

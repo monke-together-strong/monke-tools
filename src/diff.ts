@@ -6,6 +6,7 @@ import {
   findNewerDefaultBranchBase,
   hasWorkingTreeChanges,
   isDefaultBranchCheckout,
+  isReviewUrl,
   listDefaultBranchRefs,
   planBranchComparison,
   planWorkingTreeComparison
@@ -14,6 +15,7 @@ import type { ComparisonPlan } from "./comparison-plan.ts";
 import { MonkeError } from "./errors.ts";
 import { describeSessionBranchMismatch, resolveRepoContext } from "./git.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
+import { launchLfv, resolveLfv } from "./lfv.ts";
 import { samePath } from "./path-identity.ts";
 import { getMonkeHome, withGlobalLock } from "./runtime.ts";
 import { listSessionStates, loadSessionState, saveSessionState } from "./session-state-store.ts";
@@ -35,19 +37,43 @@ export interface DiffOptions {
   workingTree?: boolean;
 }
 
-function requireDesktopAdapter(adapter: string) {
-  if (adapter !== "codiff") {
-    throw new MonkeError(`Unsupported Diff adapter: ${adapter}. This build supports codiff.`);
+function requireDiffAdapter(adapter: string) {
+  if (adapter !== "codiff" && adapter !== "lfv") {
+    throw new MonkeError(
+      `Unsupported Diff adapter: ${adapter}. This build supports codiff and lfv.`
+    );
   }
-  return "codiff" as const;
+  return adapter;
+}
+
+type DiffPresenter = (plan: ComparisonPlan) => Promise<void>;
+
+async function prepareDiffPresenter(
+  runtime: Runtime,
+  adapter: "codiff" | "lfv"
+): Promise<DiffPresenter> {
+  if (adapter === "lfv") {
+    const executable = resolveLfv(runtime);
+    return (plan) => launchLfv(runtime, executable, plan);
+  }
+  const executable = await verifyCodiffAsync(runtime);
+  return async (plan) => {
+    if (plan.kind === "range") {
+      await verifyCodiffRangeSupport(runtime, executable);
+    }
+    launchCodiff(runtime, executable, plan);
+  };
 }
 
 export async function runDiffConfigure(runtime: Runtime, options: { adapter?: string }) {
-  const adapter = requireDesktopAdapter(
+  const adapter = requireDiffAdapter(
     options.adapter ??
       (await runtime.select({
         message: "Diff adapter",
-        options: [{ label: "Codiff desktop", value: "codiff" }]
+        options: [
+          { label: "Codiff desktop", value: "codiff" },
+          { label: "LFV review link", value: "lfv" }
+        ]
       }))
   );
   const home = getMonkeHome(runtime);
@@ -71,9 +97,9 @@ interface RememberedDiff {
   owner?: { rootSourceRoot: string; session: string };
 }
 
-/** Verify Codiff alongside repo discovery, then discover picker targets only when needed. */
+/** Prepare delivery alongside repo discovery, then discover picker targets only when needed. */
 export async function runDiffInteractive(runtime: Runtime, options: DiffOptions = {}) {
-  requireDesktopAdapter(
+  const adapter = requireDiffAdapter(
     options.adapter ?? loadGlobalMonkeConfig(getMonkeHome(runtime)).diffAdapter ?? "codiff"
   );
   const selectors =
@@ -95,22 +121,19 @@ export async function runDiffInteractive(runtime: Runtime, options: DiffOptions 
       inferSessionName: false
     });
     const plan = resolveExplicitComparison(selectedRuntime, context, options);
-    const executable = await verifyCodiffAsync(selectedRuntime);
-    if (plan.kind === "range") {
-      await verifyCodiffRangeSupport(selectedRuntime, executable);
-    }
-    launchCodiff(selectedRuntime, executable, plan);
+    const present = await prepareDiffPresenter(selectedRuntime, adapter);
+    await present(plan);
     return;
   }
-  const [executable, remembered] = await Promise.all([
-    verifyCodiffAsync(selectedRuntime),
+  const [present, remembered] = await Promise.all([
+    prepareDiffPresenter(selectedRuntime, adapter),
     Promise.try(() => resolveRememberedDiff(selectedRuntime))
   ]);
   warnSessionBranchElsewhere(selectedRuntime, remembered);
-  if (launchAutomaticDiff(selectedRuntime, executable, remembered, options)) {
+  if (await launchAutomaticDiff(selectedRuntime, present, remembered, options)) {
     return;
   }
-  await selectAndLaunchDiff(selectedRuntime, executable, remembered, options);
+  await selectAndLaunchDiff(selectedRuntime, present, remembered, options);
 }
 
 function isValidRevision(runtime: Runtime, context: RepoContext, ref: string) {
@@ -238,25 +261,9 @@ function resolveRangeComparison(
   return { base, head, kind: "range", symmetric, worktreePath: context.worktreeRoot };
 }
 
-function isReviewUrl(target: string) {
-  try {
-    const url = new URL(target);
-    return (
-      (url.protocol === "https:" || url.protocol === "http:") &&
-      !url.username &&
-      !url.password &&
-      ((["github.com", "www.github.com"].includes(url.hostname) &&
-        /^\/[^/]+\/[^/]+\/pull\/[1-9]\d*(?:\/.*)?$/u.test(url.pathname)) ||
-        /^\/.+\/(?:-\/)?merge_requests\/[1-9]\d*(?:\/.*)?$/u.test(url.pathname))
-    );
-  } catch {
-    return false;
-  }
-}
-
-function launchAutomaticDiff(
+async function launchAutomaticDiff(
   runtime: Runtime,
-  executable: string,
+  present: DiffPresenter,
   remembered: RememberedDiff,
   options: DiffOptions
 ) {
@@ -264,7 +271,7 @@ function launchAutomaticDiff(
     return false;
   }
   if (isDefaultBranchCheckout(runtime, remembered.context)) {
-    launchLocalChanges(runtime, executable, remembered.context);
+    await launchLocalChanges(runtime, present, remembered.context);
     return true;
   }
   const baseRef = resolveAutomaticBase(runtime, remembered);
@@ -276,7 +283,7 @@ function launchAutomaticDiff(
     return false;
   }
   warnDirtyRememberedBase(runtime, remembered, baseRef);
-  launchCodiff(runtime, executable, plan);
+  await present(plan);
   if (baseRef !== remembered.baseRef) {
     persistDiffBase(runtime, remembered, baseRef);
   }
@@ -295,14 +302,25 @@ function resolveAutomaticBase(runtime: Runtime, remembered: RememberedDiff) {
 
 async function selectAndLaunchDiff(
   runtime: Runtime,
-  executable: string,
+  present: DiffPresenter,
   remembered: RememberedDiff,
   options: DiffOptions
 ) {
+  const plan = await selectDiffPlan(runtime, remembered, options);
+  if (plan === undefined) {
+    await launchLocalChanges(runtime, present, remembered.context);
+    return;
+  }
+  await present(plan);
+  if (plan.baseRef.startsWith("refs/heads/") || plan.baseRef.startsWith("refs/remotes/")) {
+    persistDiffBase(runtime, remembered, plan.baseRef);
+  }
+}
+
+async function selectDiffPlan(runtime: Runtime, remembered: RememberedDiff, options: DiffOptions) {
   let choices = buildDiffChoices(runtime, remembered);
   while (true) {
     if (choices.length === 1 && options.pick !== true) {
-      launchLocalChanges(runtime, executable, remembered.context);
       return;
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- Recoverable target races reopen the picker.
@@ -313,7 +331,6 @@ async function selectAndLaunchDiff(
     });
     const choice = choices.find((candidate) => candidate.value === selected);
     if (choice?.value === "local" || choice === undefined) {
-      launchLocalChanges(runtime, executable, remembered.context);
       return;
     }
 
@@ -352,11 +369,7 @@ async function selectAndLaunchDiff(
       remembered.getTargets(true);
       warnDirtyRememberedBase(runtime, remembered, plan.baseRef);
     }
-    launchCodiff(runtime, executable, plan);
-    if (plan.baseRef.startsWith("refs/heads/") || plan.baseRef.startsWith("refs/remotes/")) {
-      persistDiffBase(runtime, remembered, plan.baseRef);
-    }
-    return;
+    return plan;
   }
 }
 
@@ -467,12 +480,12 @@ function warnDirtyRememberedBase(runtime: Runtime, remembered: RememberedDiff, b
   }
 }
 
-function launchLocalChanges(runtime: Runtime, executable: string, context: RepoContext) {
+async function launchLocalChanges(runtime: Runtime, present: DiffPresenter, context: RepoContext) {
   if (!hasWorkingTreeChanges(runtime, context.worktreeRoot)) {
     runtime.writeStdout("No changes.\n");
     return;
   }
-  launchCodiff(runtime, executable, planWorkingTreeComparison(context));
+  await present(planWorkingTreeComparison(context));
 }
 
 function resolveRememberedDiff(runtime: Runtime) {
