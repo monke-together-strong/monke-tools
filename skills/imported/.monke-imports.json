@@ -150,6 +150,16 @@
       "skills": [
         {
           "kind": "skill",
+          "selector": "test-audit",
+          "slug": "test-audit"
+        }
+      ],
+      "source": "https://github.com/openclaw/openclaw/tree/main"
+    },
+    {
+      "skills": [
+        {
+          "kind": "skill",
           "selector": "shadcn",
           "slug": "shadcn"
         }

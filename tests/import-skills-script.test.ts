@@ -508,6 +508,61 @@ describe("skill importing", () => {
     expect(stagingCwds.every((cwd) => !existsSync(cwd))).toBeTruthy();
   });
 
+  test("interactive skill import rejects an empty selection and submits a selected skill", async () => {
+    const sandbox = makeTempDir("skill-import-interactive");
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log")
+    });
+    const decoder = new TextDecoder();
+    let output = "";
+    let submittedEmptySelection = false;
+    let selectedSkill = false;
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        path.resolve(import.meta.dirname, "../scripts/import-skills.ts"),
+        "owner/repo"
+      ],
+      {
+        cwd: sandbox,
+        env: {
+          ...process.env,
+          ACCESSIBLE: "0",
+          PATH: [fakeBinDirectory, process.env.PATH].filter(Boolean).join(path.delimiter)
+        },
+        terminal: {
+          cols: 100,
+          data(terminal, data) {
+            output += decoder.decode(data, { stream: true });
+            if (!submittedEmptySelection && output.includes("Select skills to import")) {
+              submittedEmptySelection = true;
+              terminal.write("\r");
+            } else if (!selectedSkill && output.includes("Please select at least one skill.")) {
+              selectedSkill = true;
+              terminal.write(" \r");
+            }
+          },
+          rows: 24
+        },
+        timeout: 4000
+      }
+    );
+
+    try {
+      await expect(child.exited).resolves.toBe(0);
+      expect(output).toContain("Please select at least one skill.");
+      expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("new alpha");
+      expect(readImportRecipeStore(sandbox).recipes[0]?.skills).toStrictEqual([
+        { kind: "skill", selector: "alpha", slug: "alpha" }
+      ]);
+      expect(existsSync(path.join(sandbox, "skills/imported/bravo"))).toBeFalsy();
+    } finally {
+      child.kill();
+      child.terminal?.close();
+    }
+  });
+
   test("skills import --ref creates a non-discoverable Imported reference and records its kind", async () => {
     const sandbox = makeTempDir("skill-import-reference");
     const skillsLogPath = path.join(sandbox, "skills.log");

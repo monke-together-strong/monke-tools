@@ -912,7 +912,7 @@ ${pc.cyan("\u2514")}
     selectableGroups: false,
     validate(value) {
       const rawValue: unknown = value;
-      if (this.required === true && Array.isArray(rawValue) && rawValue.length === 0) {
+      if (options.required && Array.isArray(rawValue) && rawValue.length === 0) {
         return `Please select at least one skill.
 ${pc.reset(pc.dim(`Press ${pc.gray(pc.bgWhite(pc.inverse(" space ")))} to select, ${pc.gray(pc.bgWhite(pc.inverse(" enter ")))} to submit`))}`;
       }
