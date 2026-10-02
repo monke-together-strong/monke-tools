@@ -86,6 +86,15 @@ describe("LFV Diff", () => {
     { stdout: JSON.stringify({ ...JSON.parse(success), data: {} }) },
     { stdout: JSON.stringify({ ...JSON.parse(success), data: { url: "file:///tmp/review" } }) },
     { stdout: JSON.stringify({ ...JSON.parse(success), data: { url: `${reviewUrl}\n` } }) },
+    { stdout: JSON.stringify({ ...JSON.parse(success), data: { url: `${reviewUrl}\u0000` } }) },
+    {
+      stdout: JSON.stringify({
+        ...JSON.parse(success),
+        data: { url: `${reviewUrl}\u001B]52;c;AA==\u0007` }
+      })
+    },
+    { stdout: JSON.stringify({ ...JSON.parse(success), data: { url: `${reviewUrl}\u007F` } }) },
+    { stdout: JSON.stringify({ ...JSON.parse(success), data: { url: `${reviewUrl}\u009B2J` } }) },
     {
       stdout: JSON.stringify({
         ...JSON.parse(success),
@@ -127,6 +136,44 @@ describe("LFV Diff", () => {
     expect(result.stdout).toBe("");
     expect(existsSync(log)).toBeFalsy();
   });
+
+  test.each([
+    {
+      command: "gh",
+      response: { url: "https://github.com/owner/repo/pull/42/files\n" },
+      selector: "pr"
+    },
+    {
+      command: "gh",
+      response: { url: "https://github.com/owner/repo/pull/42/\u0000" },
+      selector: "pr"
+    },
+    {
+      command: "glab",
+      response: {
+        web_url: "https://gitlab.example.test/group/repo/-/merge_requests/42/diffs\u001B[2J"
+      },
+      selector: "mr"
+    }
+  ])(
+    "rejects raw controls in resolved $selector URLs before invoking LFV",
+    ({ command, response, selector }) => {
+      const { binDirectory, home, log, repo } = fixture();
+      writeExecutable(
+        path.join(binDirectory, command),
+        `#!/bin/sh\nprintf '%s\\n' ${shellQuote(JSON.stringify(response))}\n`
+      );
+      const result = runMonkeCapturingFailure({
+        args: ["diff", "--adapter", "lfv", selector, "42"],
+        binDirectory,
+        cwd: repo,
+        monkeHome: home
+      });
+      expect(result.error).not.toBeNull();
+      expect(result.stdout).toBe("");
+      expect(existsSync(log)).toBeFalsy();
+    }
+  );
 
   test("reports missing LFV without invoking a desktop fallback", async () => {
     const { binDirectory, home, repo } = fixture();

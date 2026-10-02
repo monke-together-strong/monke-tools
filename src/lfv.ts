@@ -1,19 +1,12 @@
 import * as z from "zod";
 
-import { isReviewUrl } from "./comparison-plan.ts";
+import { isHttpUrl, isReviewUrl } from "./comparison-plan.ts";
 import type { ComparisonPlan } from "./comparison-plan.ts";
 import { MonkeError } from "./errors.ts";
 import { findExecutable } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
 
-const ReviewUrlSchema = z
-  .string()
-  .refine((value) => !/\s/u.test(value))
-  .pipe(z.url({ protocol: /^https?$/u }))
-  .refine((value) => {
-    const url = new URL(value);
-    return !url.username && !url.password;
-  });
+const ReviewUrlSchema = z.string().refine(isHttpUrl);
 const ReviewResponseSchema = z.object({
   command: z.literal("review.create"),
   data: z.object({ url: ReviewUrlSchema }),

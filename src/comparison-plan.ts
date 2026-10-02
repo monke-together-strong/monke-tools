@@ -22,20 +22,30 @@ export type ComparisonPlan =
   | { base: string; head: string; kind: "range"; symmetric: boolean; worktreePath: string }
   | { kind: "pull-request"; target: string[]; worktreePath: string };
 
-export function isReviewUrl(target: string) {
+export function isHttpUrl(target: string) {
+  if (/[\s\p{Cc}]/u.test(target)) {
+    return false;
+  }
   try {
     const url = new URL(target);
     return (
-      (url.protocol === "https:" || url.protocol === "http:") &&
-      !url.username &&
-      !url.password &&
-      ((["github.com", "www.github.com"].includes(url.hostname) &&
-        /^\/[^/]+\/[^/]+\/pull\/[1-9]\d*(?:\/.*)?$/u.test(url.pathname)) ||
-        /^\/.+\/(?:-\/)?merge_requests\/[1-9]\d*(?:\/.*)?$/u.test(url.pathname))
+      (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password
     );
   } catch {
     return false;
   }
+}
+
+export function isReviewUrl(target: string) {
+  if (!isHttpUrl(target)) {
+    return false;
+  }
+  const url = new URL(target);
+  return (
+    (["github.com", "www.github.com"].includes(url.hostname) &&
+      /^\/[^/]+\/[^/]+\/pull\/[1-9]\d*(?:\/.*)?$/u.test(url.pathname)) ||
+    /^\/.+\/(?:-\/)?merge_requests\/[1-9]\d*(?:\/.*)?$/u.test(url.pathname)
+  );
 }
 
 /** Plan a local-working-tree comparison without inspecting Codiff behavior. */
