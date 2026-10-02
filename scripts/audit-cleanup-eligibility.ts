@@ -4,8 +4,7 @@ import * as z from "zod";
 import {
   collectCleanupEvidence,
   createCleanupEvidenceCache,
-  decideCleanupEligibility,
-  eligibleForCleanup
+  decideCleanupEligibility
 } from "../src/cleanup-eligibility.ts";
 import { createRuntime } from "../src/runtime.ts";
 
@@ -47,8 +46,8 @@ const results = await Promise.all(
         },
         cache
       );
-      const actual = eligibleForCleanup(snapshot);
       const decision = decideCleanupEligibility(snapshot);
+      const actual = decision.eligible;
       // A replay needs only this branch's PRs, not repeated copies of every repo's history.
       const repository = snapshot.repository
         ? {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import * as z from "zod";
 
 import { CleanupCodeSchema, CleanupRepositoryEvidenceSchema } from "../src/cleanup-eligibility.ts";
-import { eligibleForSessionCleanup } from "../src/session-cleanup-eligibility.ts";
+import { decideSessionCleanupEligibility } from "../src/session-cleanup-eligibility.ts";
 import type { SessionCleanupEvidence } from "../src/session-cleanup-eligibility.ts";
 import cases from "./fixtures/session-cleanup-eligibility-audit.json";
 
@@ -67,6 +67,6 @@ const inventory = z
 
 describe("local whole-Session evidence, 2026-09-06", () => {
   test.each(inventory)("Session $id returns $expected", ({ expected, snapshot }) => {
-    expect(eligibleForSessionCleanup(snapshot)).toBe(expected);
+    expect(decideSessionCleanupEligibility(snapshot).eligible).toBe(expected);
   });
 });

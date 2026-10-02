@@ -110,10 +110,6 @@ export const SETTLED_BLOCKERS: ReadonlySet<SessionCleanupBlocker> = new Set([
   "resource-recovery-required"
 ]);
 
-export function eligibleForSessionCleanup(snapshot: SessionCleanupEvidence) {
-  return decideSessionCleanupEligibility(snapshot).eligible;
-}
-
 /** All recorded members must pass together; missing proof always returns false. */
 export function decideSessionCleanupEligibility(
   snapshot: SessionCleanupEvidence
