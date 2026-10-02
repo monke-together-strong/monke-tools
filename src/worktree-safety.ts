@@ -130,7 +130,7 @@ export function validateRegisteredWorktreeForRemoval(
 }
 
 /** Reject staged, modified, or untracked files in a worktree. */
-export function assertCleanWorktree(runtime: Runtime, worktreePath: string) {
+function assertCleanWorktree(runtime: Runtime, worktreePath: string) {
   const status = runtime.exec(
     "git",
     ["status", "--porcelain", "--untracked-files=normal", "--ignore-submodules=none"],

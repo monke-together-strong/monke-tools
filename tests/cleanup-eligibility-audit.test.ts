@@ -4,7 +4,7 @@ import * as z from "zod";
 import {
   CleanupCodeSchema,
   CleanupRepositoryEvidenceSchema,
-  eligibleForCleanup
+  decideCleanupEligibility
 } from "../src/cleanup-eligibility.ts";
 import auditCases from "./fixtures/cleanup-eligibility-audit.json";
 
@@ -41,7 +41,7 @@ describe("independently labeled local worktree inventory, 2026-09-06", () => {
   test.each(z.array(AuditCaseSchema).parse(auditCases))(
     "worktree $id returns $expected",
     ({ expected, snapshot }) => {
-      expect(eligibleForCleanup(snapshot)).toBe(expected);
+      expect(decideCleanupEligibility(snapshot).eligible).toBe(expected);
     }
   );
 });

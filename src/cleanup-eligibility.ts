@@ -149,11 +149,6 @@ export function createCleanupEvidenceCache() {
 
 export type CleanupEvidenceCache = ReturnType<typeof createCleanupEvidenceCache>;
 
-/** True only for positively proven committed work and a clean, registered linked worktree. */
-export function eligibleForCleanup(evidence: CleanupEvidence): boolean {
-  return decideCleanupEligibility(evidence).eligible;
-}
-
 function allowsDetached(candidate: CleanupCandidate) {
   return Boolean(candidate.sessionBranch || candidate.allowDetached);
 }

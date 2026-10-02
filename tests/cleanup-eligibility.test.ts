@@ -8,12 +8,11 @@ import {
   collectCleanupEvidence,
   createCleanupEvidenceCache,
   decideCleanupEligibility,
-  eligibleForCleanup,
   RECENT_WORKTREE_MS
 } from "../src/cleanup-eligibility.ts";
 import type { CleanupEvidence, CleanupRepositoryEvidence } from "../src/cleanup-eligibility.ts";
 import type { Runtime } from "../src/types.ts";
-import { assertCleanWorktree } from "../src/worktree-safety.ts";
+import { preflightWorktreeRemoval } from "../src/worktree-safety.ts";
 import { ageWorktree, createRepo, git, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
@@ -86,7 +85,7 @@ describe("cleanup committed-work policy", () => {
       mergedPr(),
       { ...mergedPr(), head: { ...mergedPr().head, sha: OTHER_HEAD }, number: 2 }
     ]);
-    expect(eligibleForCleanup(snapshot)).toBeTruthy();
+    expect(decideCleanupEligibility(snapshot).eligible).toBeTruthy();
   });
 
   test("a new open PR on a reused branch blocks an older exact merged match", () => {
@@ -119,12 +118,12 @@ describe("cleanup committed-work policy", () => {
     const snapshot = withPrs([
       { ...mergedPr(), head: { ...mergedPr().head, repo: { full_name: "fork/repo" } } }
     ]);
-    expect(eligibleForCleanup(snapshot)).toBeFalsy();
+    expect(decideCleanupEligibility(snapshot).eligible).toBeFalsy();
   });
 
   test("a PR merged to a non-default base does not prove completion", () => {
     const snapshot = withPrs([{ ...mergedPr(), base: { ...mergedPr().base, ref: "release" } }]);
-    expect(eligibleForCleanup(snapshot)).toBeFalsy();
+    expect(decideCleanupEligibility(snapshot).eligible).toBeFalsy();
   });
 
   test.each([
@@ -234,7 +233,7 @@ describe("cleanup evidence from real Git worktrees", () => {
       }
       const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
       expect(snapshot.repository?.defaultHead).not.toBe(snapshot.head);
-      expect(eligibleForCleanup(snapshot)).toBeTruthy();
+      expect(decideCleanupEligibility(snapshot).eligible).toBeTruthy();
     }
   );
 
@@ -244,7 +243,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(snapshot.branch).toBe(BRANCH);
     expect(snapshot.committedWorkAttempted).toBeTruthy();
     expect(snapshot.repository?.defaultBranch).toBe("develop");
-    expect(eligibleForCleanup(snapshot)).toBeTruthy();
+    expect(decideCleanupEligibility(snapshot).eligible).toBeTruthy();
   });
 
   test.each(["identical", "changed", "missing", "shallow"])(
@@ -701,7 +700,7 @@ describe("cleanup evidence from real Git worktrees", () => {
       ...fixture.candidate,
       role: "dependency"
     });
-    expect(eligibleForCleanup(snapshot)).toBe(expected);
+    expect(decideCleanupEligibility(snapshot).eligible).toBe(expected);
     const expectedStatus =
       comparison === "unavailable" ? "unknown" : expected ? "eligible" : "ineligible";
     expect(decideCleanupEligibility(snapshot).status).toBe(expectedStatus);
@@ -795,13 +794,15 @@ describe("cleanup evidence from real Git worktrees", () => {
       write(worktreePath, "dep/sub.txt", "concealed edit\n");
       expect(git(worktreePath, ["status", "--porcelain", "--ignore-submodules=none"])).toBe("");
       const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
-      let chopAccepted = true;
-      try {
-        assertCleanWorktree(fixture.baseRuntime, worktreePath);
-      } catch {
-        chopAccepted = false;
-      }
-      expect([eligibleForCleanup(snapshot), chopAccepted]).toStrictEqual([false, false]);
+      expect(decideCleanupEligibility(snapshot)).toMatchObject({
+        code: "hidden-index-entries",
+        eligible: false
+      });
+      expect(() =>
+        preflightWorktreeRemoval(fixture.baseRuntime, fixture.candidate.sourceRoot, worktreePath, {
+          force: false
+        })
+      ).toThrow(/hidden index entries/u);
     }
   );
 
@@ -818,7 +819,7 @@ describe("cleanup evidence from real Git worktrees", () => {
           "git@github.com:different/repo.git"
         ]);
       const initial = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
-      expect(eligibleForCleanup(initial)).toBeTruthy();
+      expect(decideCleanupEligibility(initial).eligible).toBeTruthy();
       if (when === "between cached calls") {
         replaceRemote();
       } else {
@@ -831,7 +832,7 @@ describe("cleanup evidence from real Git worktrees", () => {
         };
       }
       const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
-      expect(eligibleForCleanup(snapshot)).toBeFalsy();
+      expect(decideCleanupEligibility(snapshot).eligible).toBeFalsy();
     }
   );
 
@@ -856,7 +857,7 @@ describe("cleanup evidence from real Git worktrees", () => {
         candidate.sourceRoot = createRepo(path.join(fixture.sandbox, "other"), { a: "a" });
       }
       expect(
-        eligibleForCleanup(await collectCleanupEvidence(fixture.runtime, candidate))
+        decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, candidate)).eligible
       ).toBeFalsy();
     }
   );
@@ -875,7 +876,8 @@ describe("cleanup evidence from real Git worktrees", () => {
     const fixture = createFixture();
     fixture.runtime.execAsync = async () => ({ exitCode: 0, stderr: "", stdout: "{}" });
     expect(
-      eligibleForCleanup(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
+      decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
+        .eligible
     ).toBeFalsy();
   });
 
@@ -898,9 +900,11 @@ describe("cleanup evidence from real Git worktrees", () => {
       };
       const cache = createCleanupEvidenceCache();
       const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
-      expect(eligibleForCleanup(snapshot)).toBeFalsy();
+      expect(decideCleanupEligibility(snapshot).eligible).toBeFalsy();
       expect(
-        eligibleForCleanup(await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache))
+        decideCleanupEligibility(
+          await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache)
+        ).eligible
       ).toBeFalsy();
     }
   );
