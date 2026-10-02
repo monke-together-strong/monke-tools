@@ -51,9 +51,16 @@ exit ${options.exitCode ?? 0}
 }
 
 describe("LFV Diff", () => {
-  test.each([0, 1])(
-    "remembers a picked LFV base only after successful delivery (exit %s)",
-    async (exitCode) => {
+  test.each([
+    { exitCode: 0, expectedError: null },
+    {
+      exitCode: 1,
+      expectedError:
+        "LFV review create failed or returned an invalid response; no review URL was returned."
+    }
+  ])(
+    "remembers a picked LFV base only after successful delivery (exit $exitCode)",
+    async ({ exitCode, expectedError }) => {
       const { binDirectory, home, repo, sandbox } = fixture({ exitCode });
       git(repo, ["restore", "README.md"]);
       runMonke({ args: ["spawn", "feature"], cwd: repo, monkeHome: home });
@@ -67,11 +74,13 @@ describe("LFV Diff", () => {
         monkeHome: home,
         selectValues: [`worktree:${baseWorktree}`]
       });
-      const delivered = await delivery.then(
-        () => true,
-        () => false
-      );
-      expect(delivered).toBe(exitCode === 0);
+      let deliveryError: string | null = null;
+      try {
+        await delivery;
+      } catch (error) {
+        deliveryError = error instanceof Error ? error.message : String(error);
+      }
+      expect(deliveryError).toBe(expectedError);
       const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
       expect(state.repos[0]?.diffBaseRef).toBe(
         exitCode === 0 ? "refs/heads/base" : "refs/heads/main"

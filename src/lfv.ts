@@ -1,4 +1,4 @@
-import * as z from "zod";
+import { z } from "zod";
 
 import { isHttpUrl, isReviewUrl } from "./comparison-plan.ts";
 import type { ComparisonPlan } from "./comparison-plan.ts";
@@ -64,7 +64,7 @@ export async function launchLfv(runtime: Runtime, executable: string, plan: Comp
   runtime.writeStdout(`${parsed.data.data.url}\n`);
 }
 
-async function resolveSourceArgs(runtime: Runtime, plan: ComparisonPlan): Promise<string[]> {
+async function resolveSourceArgs(runtime: Runtime, plan: ComparisonPlan) {
   switch (plan.kind) {
     case "working-tree": {
       return ["--source", "working-tree"];

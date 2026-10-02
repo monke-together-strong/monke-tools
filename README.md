@@ -40,8 +40,8 @@ machine-local preference in `$MONKE_HOME/config.yml`; `mt diff configure` offers
 picker. `mt diff --adapter codiff` or `--adapter lfv` overrides delivery for that
 invocation without rewriting the preference.
 
-The LFV adapter runs `lfv --json review create` internally and prints LFV's canonical
-review URL unchanged; diagnostics stay on stderr. It requires an installed LFV CLI
+The LFV adapter prints LFV's canonical review URL unchanged; diagnostics stay on
+stderr. It requires an installed LFV CLI
 with the version-1 review JSON contract and a configured viewer. LFV owns authentication,
 rendering, Refresh, and link expiry. PR/MR shorthand requires authenticated `gh` or
 `glab` to resolve a full review URL; full URLs need no Monke provider lookup. Diff never

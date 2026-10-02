@@ -48,7 +48,7 @@ navigation; resolve the divergence without discarding work. Fork PRs are unsuppo
 ## Review links
 
 `mt diff` owns comparison selection. Use `--adapter lfv` for a review URL, or save
-it with `mt diff configure --adapter lfv`. Monke calls LFV internally; LFV owns
+it with `mt diff configure --adapter lfv`. LFV owns
 authentication, rendering, Refresh, and expiry. The configured LFV CLI must exist.
 
 For “last N hours/days plus dirty changes”, resolve the oldest included first-parent
