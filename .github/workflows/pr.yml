@@ -14,7 +14,7 @@ permissions:
 jobs:
   verify:
     name: Check And Test
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
