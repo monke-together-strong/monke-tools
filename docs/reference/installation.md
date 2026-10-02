@@ -42,7 +42,7 @@ Part of the [domain glossary](../../CONTEXT.md).
 
 **Mainline release**: A stable monke-tools release published from validated mainline changes.
 
-**Codiff runtime dependency**: The separately versioned Codiff executable required by **Diff**.
+**Codiff runtime dependency**: The separately versioned Codiff executable required by desktop **Diff**; LFV delivery uses its own installed CLI.
 
 **Shared Oxc presets**: Team-owned lint and format policy distributed across **Consumer repos**.
 

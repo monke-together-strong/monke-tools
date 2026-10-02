@@ -32,13 +32,20 @@ When finished, `mt chop banana` removes the session's worktrees and runs its rec
 
 The [session command reference](skills/internal/monke-tools-core/SKILL.md) covers branch reuse, PR navigation, diff bases, and cleanup recovery. Use `mt <command> --help` for available flags.
 
-### Desktop Diff
+### Diff delivery
 
-Desktop Codiff remains the default. `mt diff configure --adapter codiff` saves the
+Desktop Codiff remains the default. `mt diff configure --adapter codiff` or
+`mt diff configure --adapter lfv` saves the
 machine-local preference in `$MONKE_HOME/config.yml`; `mt diff configure` offers a
-picker. `mt diff --adapter codiff` overrides delivery for that invocation without
-rewriting the preference. This desktop slice supports only Codiff; LFV is separate
-companion work, not a fallback.
+picker. `mt diff --adapter codiff` or `--adapter lfv` overrides delivery for that
+invocation without rewriting the preference.
+
+The LFV adapter prints LFV's canonical review URL unchanged; diagnostics stay on
+stderr. It requires an installed LFV CLI
+with the version-1 review JSON contract and a configured viewer. LFV owns authentication,
+rendering, Refresh, and link expiry. PR/MR shorthand requires authenticated `gh` or
+`glab` to resolve a full review URL; full URLs need no Monke provider lookup. Diff never
+installs LFV, changes its exposure, or falls back to another adapter on failure.
 
 Bare `mt diff` retains its remembered-base selection, and `mt diff --pick` chooses
 another base or local changes only. Explicit sources bypass both automatic selection
@@ -59,7 +66,7 @@ mt diff https://gitlab.example.com/group/repo/-/merge_requests/42
 mt diff --path /existing/checkout --commit HEAD
 ```
 
-A positional branch or commit ref also follows Codiff's ref semantics. Use flags
+A positional branch or commit ref follows the same semantics with either adapter. Use flags
 to disambiguate. `--path` accepts an existing Checkout or one of its nested
 directories; Diff never switches its branch or creates a worktree. Clean working
 trees and equal-endpoint ranges are honest empty reviews, not HEAD substitutions.

@@ -256,7 +256,7 @@ describe("Desktop Diff", () => {
     ["mr", "branch"],
     ["pr", "0"],
     ["https://example.com/owner/repo/pull/42"],
-    ["--adapter", "lfv", "--working-tree"]
+    ["--adapter", "unsupported", "--working-tree"]
   ])("rejects invalid selectors %s without launching or prompting", async (...args) => {
     const { binDirectory, home, log, repo } = fixture();
     const before = git(repo, ["status", "--porcelain"]);
