@@ -201,12 +201,13 @@ describe("locked skill command workflows", () => {
     }
   }, 30_000);
 
-  test("pins and restores exact published-importer content before deliberately updating a supporting file", async () => {
+  test("pins and restores a local Git subdirectory before deliberately updating a supporting file", async () => {
     const sandbox = makeTempDir("skill-lock-published");
     const monkeHome = path.join(sandbox, "home $USER `literal` $(printf expanded) 'quote'");
     const upstream = createRepo(path.join(sandbox, "upstream"), {
-      "alpha/references/details.md": "Reference one.\n",
-      "alpha/SKILL.md": "---\nname: alpha\ndescription: Fixture skill\n---\n\nVersion one.\n"
+      "vendor/guidance/skills/alpha/references/details.md": "Reference one.\n",
+      "vendor/guidance/skills/alpha/SKILL.md":
+        "---\nname: alpha\ndescription: Fixture skill\n---\n\nVersion one.\n"
     });
     const commit = git(upstream, ["rev-parse", "HEAD"]).trim();
     const originalCwd = process.cwd();
@@ -215,11 +216,16 @@ describe("locked skill command workflows", () => {
     try {
       process.chdir(sandbox);
       process.env.MONKE_HOME = monkeHome;
-      await runImportSkills([upstream], { selectSkills: () => ["alpha"], writeMessage() {} });
-      expect(readImportRecipeStore(sandbox).recipes[0]).toMatchObject({ lock: { commit } });
+      await runImportSkills(["./upstream/vendor/guidance/skills"], {
+        selectSkills: () => ["alpha"],
+        writeMessage() {}
+      });
+      expect(readImportRecipeStore(sandbox).recipes[0]).toMatchObject({
+        lock: { commit, repository: upstream, subpath: "vendor/guidance/skills" }
+      });
       expect(read(sandbox, "skills/imported/alpha/references/details.md")).toBe("Reference one.\n");
       const originalLock = read(sandbox, "skills.lock.json");
-      write(upstream, "alpha/references/details.md", "Reference two.\n");
+      write(upstream, "vendor/guidance/skills/alpha/references/details.md", "Reference two.\n");
       git(upstream, ["add", "."]);
       git(upstream, ["commit", "-m", "Supporting file update"]);
       rmSync(path.join(sandbox, "skills/imported"), { recursive: true });
@@ -298,7 +304,7 @@ describe("locked skill command workflows", () => {
         "--path",
         repository
       ]);
-      write(upstream, "alpha/references/details.md", "Reference three.\n");
+      write(upstream, "vendor/guidance/skills/alpha/references/details.md", "Reference three.\n");
       git(upstream, ["add", "."]);
       git(upstream, ["commit", "-m", "Next supporting-file update"]);
       writeFileSync(
@@ -320,7 +326,7 @@ describe("locked skill command workflows", () => {
       );
       chmodSync(path.join(viewer, "lfv"), 0o755);
       writeFileSync(path.join(monkeHome, "config.yml"), "version: 1\ndiffAdapter: lfv\n");
-      write(upstream, "alpha/references/details.md", "Reference four.\n");
+      write(upstream, "vendor/guidance/skills/alpha/references/details.md", "Reference four.\n");
       git(upstream, ["add", "."]);
       git(upstream, ["commit", "-m", "Configured LFV update"]);
       let lfvOutput = "";

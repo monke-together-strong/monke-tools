@@ -69,19 +69,25 @@ export function describeSkillSource(source: string, repoRoot: string) {
   }
   const fragment = source.lastIndexOf("#");
   const repository = fragment === -1 ? source : source.slice(0, fragment);
+  const updateRef = fragment === -1 ? "HEAD" : source.slice(fragment + 1);
+  if (/^(?:https?:|ssh:|git:|git@)/u.test(repository)) {
+    return { repository, subpath: "", updateRef };
+  }
+  const directory = realpathSync.native(path.resolve(repoRoot, repository));
+  const topLevel = createRuntime({ cwd: directory }).exec("git", ["rev-parse", "--show-toplevel"], {
+    allowFailure: true
+  });
+  const root = topLevel.exitCode === 0 ? topLevel.stdout.trim() : directory;
   return {
-    repository: /^(?:https?:|ssh:|git:|git@)/u.test(repository)
-      ? repository
-      : path.resolve(repoRoot, repository),
-    subpath: "",
-    updateRef: fragment === -1 ? "HEAD" : source.slice(fragment + 1)
+    repository: root,
+    subpath: path.relative(root, directory),
+    updateRef
   };
 }
 
 export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string) {
-  const description = describeSkillSource(recipe.source, repoRoot);
-  const source = recipe.lock ?? description;
-  const treePath = recipe.lock ? undefined : description.treePath;
+  const source = recipe.lock ?? describeSkillSource(recipe.source, repoRoot);
+  const treePath = "treePath" in source ? source.treePath : undefined;
   const requestedRefs = treePath
     ? treePath
         .split("/")
