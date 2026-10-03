@@ -29,6 +29,24 @@ import {
 
 export const MATERIALIZER_VERSION = 1;
 
+function resolveExplicitSkillCommit(repository: string, revision: string, repoRoot: string) {
+  if (path.isAbsolute(repository)) {
+    return createRuntime({ cwd: repository })
+      .exec("git", ["rev-parse", "--verify", "--end-of-options", `${revision}^{commit}`])
+      .stdout.trim();
+  }
+  const stagingDirectory = path.join(repoRoot, "tmp", `skill-pin-${crypto.randomUUID()}`);
+  mkdirSync(stagingDirectory, { recursive: true });
+  const runtime = createRuntime({ cwd: stagingDirectory });
+  try {
+    runtime.exec("git", ["init", "--quiet"]);
+    runtime.exec("git", ["fetch", "--quiet", "--depth", "1", "--", repository, revision]);
+    return runtime.exec("git", ["rev-parse", "--verify", "FETCH_HEAD^{commit}"]).stdout.trim();
+  } finally {
+    rmSync(stagingDirectory, { force: true, recursive: true });
+  }
+}
+
 /** Separates deliberate update discovery from the immutable accepted source revision. */
 export function describeSkillSource(source: string, repoRoot: string) {
   const github =
@@ -74,7 +92,7 @@ export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string
     revisions.find(([, ref]) => ref === `refs/heads/${source.updateRef}`) ??
     revisions.find(([, ref]) => ref === `refs/tags/${source.updateRef}`);
   const commit = /^[a-f\d]{40}$/u.test(source.updateRef)
-    ? source.updateRef
+    ? resolveExplicitSkillCommit(source.repository, source.updateRef, repoRoot)
     : (revisions.find(([, ref]) => ref === `${selected?.[1]}^{}`) ?? selected)?.[0];
   if (!commit || !/^[a-f\d]{40}$/u.test(commit)) {
     throw new MonkeError(

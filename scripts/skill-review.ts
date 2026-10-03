@@ -135,7 +135,6 @@ export async function saveSkillComparison(
       "* -text -filter -ident\n"
     );
     const reviews = readReviews(paths.index);
-    const previousHeadRef = git(["symbolic-ref", "HEAD"]);
     const replaceRetainedRefs = (from: typeof reviews, to: typeof reviews) => {
       const retainedIds = new Set(to.map((review) => review.id));
       git(
@@ -152,6 +151,29 @@ export async function saveSkillComparison(
         ].join("\n")
       );
     };
+    // An interrupted publisher can leave a newer ref transaction with the old
+    // ledger. Recover from the durable ledger before creating or pruning objects.
+    const recordedRefs = git([
+      "for-each-ref",
+      "--format=%(refname) %(objectname)",
+      "refs/heads/skill-review-*"
+    ]);
+    const actualReviews = recordedRefs
+      ? recordedRefs.split("\n").map((row) => {
+          const [ref, commit] = row.split(" ");
+          return ReviewSchema.parse({ commit, id: ref?.slice("refs/heads/skill-review-".length) });
+        })
+      : [];
+    replaceRetainedRefs(actualReviews, reviews);
+    const previousHeadRef = reviews.at(-1)
+      ? `refs/heads/skill-review-${reviews.at(-1)?.id}`
+      : "refs/heads/main";
+    git(["symbolic-ref", "HEAD", previousHeadRef]);
+    for (const entry of readdirSync(paths.root)) {
+      if (entry.startsWith(`${path.basename(paths.index)}.`) && entry.endsWith(".tmp")) {
+        rmSync(path.join(paths.root, entry), { force: true });
+      }
+    }
     const clearWorkingTree = () => {
       for (const entry of readdirSync(paths.repository)) {
         if (entry !== ".git") {

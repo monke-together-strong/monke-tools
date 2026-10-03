@@ -43,6 +43,7 @@ describe("locked skill command workflows", () => {
     const commit = git(upstream, ["rev-parse", "HEAD"]);
     git(upstream, ["tag", "--annotate", "release", "--message", "Accepted release"]);
     git(upstream, ["tag", "--annotate", "main", "--message", "Older tag sharing branch name"]);
+    const tagObject = git(upstream, ["rev-parse", "refs/tags/main"]);
     write(
       upstream,
       "alpha/SKILL.md",
@@ -58,7 +59,9 @@ describe("locked skill command workflows", () => {
       for (const [index, selection] of [
         { content: "Tagged content.", pin: commit, ref: "release" },
         { content: "Later content.", pin: branchCommit, ref: "main" },
-        { content: "Tagged content.", pin: commit, ref: "refs/tags/main" }
+        { content: "Tagged content.", pin: commit, ref: "refs/tags/main" },
+        { content: "Tagged content.", pin: commit, ref: tagObject },
+        { content: "Later content.", pin: branchCommit, ref: branchCommit }
       ].entries()) {
         const consumer = path.join(sandbox, `consumer-${index}`);
         mkdirSync(consumer);
@@ -377,6 +380,38 @@ describe("locked skill command workflows", () => {
       }
       expect(read(consumer, "skills/imported/alpha/references/details.md")).toBe("Details 6.\n");
       await runUpdateSkills([], { writeMessage() {} });
+      write(upstream, "alpha/references/details.md", "Details 7.\n");
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Applied update with interrupted review publication"]);
+      const interruptedBin = path.join(sandbox, "interrupted-git");
+      mkdirSync(interruptedBin);
+      const realGit = Bun.which("git");
+      ok(realGit);
+      writeFileSync(
+        path.join(interruptedBin, "git"),
+        `#!/bin/sh\nif [ "$1" = update-ref ] && [ "$2" = --stdin ]; then\n  transaction=$(cat)\n  printf '%s\\n' "$transaction" | '${realGit}' "$@" || exit $?\n  case "$transaction" in *'delete '*)\n    printf 'interrupted\\n' > '${path.join(sandbox, "interrupted-publication")}'\n    kill -KILL "$PPID"\n  esac\nelse\n  exec '${realGit}' "$@"\nfi\n`
+      );
+      chmodSync(path.join(interruptedBin, "git"), 0o755);
+      const interrupted = Bun.spawnSync(
+        [process.execPath, path.resolve(import.meta.dirname, "../scripts/update-skills.ts")],
+        {
+          cwd: consumer,
+          env: { ...process.env, PATH: `${interruptedBin}${path.delimiter}${process.env.PATH}` }
+        }
+      );
+      expect(interrupted.exitCode).not.toBe(0);
+      expect(read(sandbox, "interrupted-publication")).toBe("interrupted\n");
+      expect(read(consumer, "skills/imported/alpha/references/details.md")).toBe("Details 7.\n");
+      await runReviewSkills([beforeSourceCommit, beforeSourceCommit]);
+      expect(
+        git(first.repository, ["log", "--all", "--format=%H"]).split("\n").toSorted()
+      ).toStrictEqual(commitsBeforeFailure);
+      expect(
+        readdirSync(cacheRoot)
+          .map((entry) => path.join(cacheRoot, entry))
+          .filter((entry) => lstatSync(entry).isFile())
+          .toSorted()
+      ).toStrictEqual(cacheFiles.toSorted());
       for (const revision of sourceRevisions) {
         await runReviewSkills([revision, revision]);
       }
@@ -406,7 +441,7 @@ describe("locked skill command workflows", () => {
       await runReviewSkills(["clear"]);
       expect(existsSync(first.repository)).toBeFalsy();
       expect(read(consumer, "skills.lock.json")).toBe(lockBeforeClear);
-      expect(read(consumer, "skills/imported/alpha/references/details.md")).toBe("Details 6.\n");
+      expect(read(consumer, "skills/imported/alpha/references/details.md")).toBe("Details 7.\n");
       await runReviewSkills([beforeSourceCommit, afterSourceCommit]);
       const reconstructed = readDeliveredComparison(sandbox);
       expect(
