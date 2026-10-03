@@ -118,6 +118,48 @@ describe("locked skill command workflows", () => {
     }
   });
 
+  test.each([
+    { shorterRef: true, tag: false, updateRef: "feature/foo" },
+    { shorterRef: false, tag: false, updateRef: "feature/foo" },
+    { shorterRef: true, tag: true, updateRef: "release/foo" }
+  ])("GitHub tree import resolves $updateRef with shorter ref $shorterRef", async (selection) => {
+    const sandbox = makeTempDir("skill-lock-github-tree-ref");
+    const upstream = createRepo(path.join(sandbox, "upstream"), {
+      "skills/example/alpha/SKILL.md": "Initial source.\n"
+    });
+    if (selection.shorterRef) {
+      git(upstream, [selection.tag ? "branch" : "tag", selection.updateRef.split("/")[0] ?? ""]);
+    }
+    write(upstream, "skills/example/alpha/SKILL.md", "Selected source.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Advance selected slash-containing ref"]);
+    const commit = git(upstream, ["rev-parse", "HEAD"]);
+    git(
+      upstream,
+      selection.tag
+        ? ["tag", "--annotate", selection.updateRef, "--message", "Selected release"]
+        : ["branch", selection.updateRef]
+    );
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      gitRemote: upstream,
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log")
+    });
+    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
+      await runImportSkills(
+        [`https://github.com/owner/repo/tree/${selection.updateRef}/skills/example`],
+        { selectSkills: () => ["alpha"], writeMessage() {} }
+      );
+    });
+    expect(readImportRecipeStore(sandbox).recipes[0]?.lock).toMatchObject({
+      commit,
+      repository: "https://github.com/owner/repo.git",
+      subpath: "skills/example",
+      updateRef: selection.updateRef
+    });
+    expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("new alpha");
+  });
+
   test("rejects host-dependent upstream links before the published importer copies them", async () => {
     const sandbox = makeTempDir("skill-lock-source-links");
     const upstream = createRepo(path.join(sandbox, "upstream"), {
@@ -2900,6 +2942,7 @@ function installFakeNpx(
   options: {
     expectedGitRepository?: string;
     failInstallSources?: string[];
+    gitRemote?: string;
     mainCollisionSelector?: string;
     resolvedCommit?: string;
     skillsCwdLogPath: string;
@@ -2929,6 +2972,20 @@ if [ -n "$git_source" ] && [ "$git_source" != '${options.expectedGitRepository}'
   echo "Repository transport rejected: $git_source" >&2
   exit 42
 fi`
+    : ""
+}
+${
+  options.gitRemote
+    ? `if [ "$1" = ls-remote ]; then
+  shift
+  if [ "$1" = -- ]; then shift; fi
+  shift
+  exec '${realGit}' ls-remote -- '${options.gitRemote}' "$@"
+fi
+case "$PWD:$1" in
+  */upstream-validation:fetch) exec '${realGit}' fetch --quiet --depth 1 -- '${options.gitRemote}' "$7" ;;
+  */upstream-validation:checkout) exec '${realGit}' "$@" ;;
+esac`
     : ""
 }
 if [ "$1" = ls-remote ]; then printf '${options.resolvedCommit ?? "1".repeat(40)}\\tHEAD\\n'; else

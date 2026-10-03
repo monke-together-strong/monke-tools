@@ -63,6 +63,7 @@ export function describeSkillSource(source: string, repoRoot: string) {
     return {
       repository: `https://github.com/${owner}/${repo?.replace(/\.git$/u, "")}.git`,
       subpath: subpath ?? shorthandSubpath ?? "",
+      treePath: ref && !fragment ? `${ref}${subpath ? `/${subpath}` : ""}` : undefined,
       updateRef: fragment ?? ref ?? "HEAD"
     };
   }
@@ -78,7 +79,15 @@ export function describeSkillSource(source: string, repoRoot: string) {
 }
 
 export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string) {
-  const source = recipe.lock ?? describeSkillSource(recipe.source, repoRoot);
+  const description = describeSkillSource(recipe.source, repoRoot);
+  const source = recipe.lock ?? description;
+  const treePath = recipe.lock ? undefined : description.treePath;
+  const requestedRefs = treePath
+    ? treePath
+        .split("/")
+        .map((_, index, segments) => segments.slice(0, index + 1).join("/"))
+        .toReversed()
+    : [source.updateRef];
   const revisions = /^[a-f\d]{40}$/u.test(source.updateRef)
     ? []
     : createRuntime({ cwd: repoRoot })
@@ -86,16 +95,24 @@ export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string
           "ls-remote",
           "--",
           source.repository,
-          source.updateRef,
-          `${source.updateRef}^{}`
+          ...requestedRefs.flatMap((ref) => [ref, `${ref}^{}`])
         ])
         .stdout.trim()
         .split("\n")
         .map((row) => row.split(/\s+/u));
+  const updateRef =
+    requestedRefs.find((requestedRef) =>
+      revisions.some(
+        ([, ref]) =>
+          ref === requestedRef ||
+          ref === `refs/heads/${requestedRef}` ||
+          ref === `refs/tags/${requestedRef}`
+      )
+    ) ?? source.updateRef;
   const selected =
-    revisions.find(([, ref]) => ref === source.updateRef) ??
-    revisions.find(([, ref]) => ref === `refs/heads/${source.updateRef}`) ??
-    revisions.find(([, ref]) => ref === `refs/tags/${source.updateRef}`);
+    revisions.find(([, ref]) => ref === updateRef) ??
+    revisions.find(([, ref]) => ref === `refs/heads/${updateRef}`) ??
+    revisions.find(([, ref]) => ref === `refs/tags/${updateRef}`);
   const commit = /^[a-f\d]{40}$/u.test(source.updateRef)
     ? resolveExplicitSkillCommit(source.repository, source.updateRef, repoRoot)
     : (revisions.find(([, ref]) => ref === `${selected?.[1]}^{}`) ?? selected)?.[0];
@@ -109,8 +126,8 @@ export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string
     importerVersion: SKILLS_CLI_VERSION,
     materializerVersion: MATERIALIZER_VERSION,
     repository: source.repository,
-    subpath: source.subpath,
-    updateRef: source.updateRef
+    subpath: treePath ? treePath.slice(updateRef.length).replace(/^\//u, "") : source.subpath,
+    updateRef
   };
 }
 
