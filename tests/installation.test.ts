@@ -1,3 +1,4 @@
+import { ok } from "node:assert/strict";
 import {
   chmodSync,
   cpSync,
@@ -15,11 +16,13 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
+import { runImportSkills } from "../scripts/import-skills.ts";
+import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { loadToolInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
 import { writeCollisionRecovery } from "../src/install-recovery.ts";
-import { makeTempDir, write } from "./helpers.ts";
+import { createRepo, git, makeTempDir, write } from "./helpers.ts";
 import {
   activateLocal,
   activateRelease,
@@ -30,6 +33,82 @@ import {
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("versioned installation lifecycle", () => {
+  test("Local installation restores missing pins, synchronizes a reverted lock, and rejects incomplete guidance before activation", async () => {
+    const sandbox = makeTempDir("local-install-locked-imports");
+    const sourceCheckout = path.join(sandbox, "source");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    prepareSource(sourceCheckout);
+    const upstream = createRepo(path.join(sandbox, "upstream"), {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Lifecycle fixture\n---\n\nAccepted one.\n"
+    });
+    const originalCwd = process.cwd();
+    const originalMonkeHome = process.env.MONKE_HOME;
+    try {
+      process.chdir(sourceCheckout);
+      process.env.MONKE_HOME = monkeHome;
+      await runImportSkills([upstream], { selectSkills: () => ["alpha"], writeMessage() {} });
+      const acceptedLock = readFileSync(path.join(sourceCheckout, "skills.lock.json"), "utf-8");
+      rmSync(path.join(sourceCheckout, "skills/imported"), { recursive: true });
+      await activateLocal({ home, installId: "locked-one", monkeHome, sourceCheckout });
+      const projectedEntry = path.join(home, ".codex/skills/monke-tools/imported/alpha/SKILL.md");
+      expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted one.");
+      rmSync(path.join(sourceCheckout, "skills/imported"), { recursive: true });
+      await runCliAsync(
+        ["skills", "configure"],
+        createTestRuntime({
+          cwd: sourceCheckout,
+          env: { HOME: home, MONKE_HOME: monkeHome },
+          multiSelectValues: [["codex"]],
+          onStderr() {},
+          onStdout() {}
+        })
+      );
+      expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted one.");
+
+      write(
+        upstream,
+        "alpha/SKILL.md",
+        "---\nname: alpha\ndescription: Lifecycle fixture\n---\n\nAccepted two.\n"
+      );
+      write(
+        upstream,
+        "bravo/SKILL.md",
+        "---\nname: bravo\ndescription: Added lifecycle fixture\n---\n\nNew selection.\n"
+      );
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Next pin"]);
+      await runImportSkills([upstream], {
+        selectSkills: () => ["alpha", "bravo"],
+        writeMessage() {}
+      });
+      expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted two.");
+      expect(existsSync(path.join(sourceCheckout, "skills/imported/bravo/SKILL.md"))).toBeTruthy();
+      write(sourceCheckout, "skills.lock.json", acceptedLock);
+      await activateLocal({ home, installId: "locked-reverted", monkeHome, sourceCheckout });
+      expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted one.");
+      expect(existsSync(path.join(sourceCheckout, "skills/imported/bravo"))).toBeFalsy();
+      expect(existsSync(path.join(home, ".codex/skills/monke-tools/imported/bravo"))).toBeFalsy();
+      expect(readFileSync(path.join(sourceCheckout, "skills.lock.json"), "utf-8")).toBe(
+        acceptedLock
+      );
+
+      const invalid = readImportRecipeStore(sourceCheckout);
+      const invalidPin = invalid.recipes[0]?.lock;
+      ok(invalidPin);
+      invalidPin.digest = "0".repeat(64);
+      write(sourceCheckout, "skills.lock.json", JSON.stringify(invalid));
+      await expect(
+        activateLocal({ home, installId: "locked-invalid", monkeHome, sourceCheckout })
+      ).rejects.toThrow("digest mismatch");
+      expect(readlinkSync(path.join(monkeHome, "current"))).toBe("installs/locked-reverted");
+      expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted one.");
+    } finally {
+      process.chdir(originalCwd);
+      process.env.MONKE_HOME = originalMonkeHome;
+    }
+  }, 30_000);
+
   test("a verified bundle activates one complete Release install with writable projected guidance", async () => {
     const sandbox = makeTempDir("release-install-activation");
     const home = path.join(sandbox, "home");

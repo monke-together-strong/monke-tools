@@ -772,9 +772,12 @@ export function acquireCheckoutResourceLock(home: string, checkoutPath: string) 
 export async function withScopedLockAsync<T>(
   home: string,
   namespace: string,
-  callback: () => Promise<T>
+  callback: () => T | Promise<T>
 ) {
-  return await withLockPathAsync(path.join(home, "locks", `${hashKey(namespace)}.lock`), callback);
+  return await withLockPathAsync(
+    path.join(home, "locks", `${hashKey(namespace)}.lock`),
+    async () => await callback()
+  );
 }
 
 async function withLockPathAsync<T>(

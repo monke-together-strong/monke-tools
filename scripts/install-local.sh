@@ -112,6 +112,10 @@ trap release_installation_lock 0
 trap 'exit 1' 1 2 15
 acquire_installation_lock
 
+if [ -f "$ROOT_DIR/skills.lock.json" ]; then
+  (cd "$ROOT_DIR" && bun run scripts/restore-skills.ts)
+fi
+
 if ! capture_source_state; then
   printf 'Source checkout changed while Local provenance was being captured; rerun vpr install:local\n' >&2
   exit 1
@@ -144,6 +148,11 @@ bun build --compile \
   "$ROOT_DIR/src/index.ts"
 chmod +x "$STAGED_MT"
 cleanup_old_bun_builds
+
+# Generated imports are ignored by Git; validate them again before activation.
+if [ -f "$ROOT_DIR/skills.lock.json" ]; then
+  (cd "$ROOT_DIR" && bun run scripts/restore-skills.ts)
+fi
 
 if ! capture_source_state ||
   [ "$CAPTURED_SOURCE_COMMIT" != "$SOURCE_COMMIT" ] ||

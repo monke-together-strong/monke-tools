@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: vp install --frozen-lockfile -- --prefer-offline
 
+      - name: Restore locked guidance
+        run: vpr skills:restore
+
       - name: Detect relevant changes
         id: relevance
         env:

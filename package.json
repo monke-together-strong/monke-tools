@@ -21,6 +21,8 @@
     "skills:import": "bun run scripts/import-skills.ts",
     "skills:check-links": "bun run scripts/check-skill-links.ts",
     "skills:update": "bun run scripts/update-skills.ts",
+    "skills:restore": "bun run scripts/restore-skills.ts",
+    "skills:review": "bun run scripts/review-skills.ts",
     "tegami": "bun run scripts/tegami.mts",
     "test": "bun --bun vp test run",
     "prepare": "vp config"

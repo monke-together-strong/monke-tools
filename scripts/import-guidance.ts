@@ -20,7 +20,7 @@ import * as z from "zod";
 import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
 import { unwrapBoundaryResult } from "../src/validation.ts";
-import type { SkillImportRecipeSkill } from "./import-skills.ts";
+import type { SkillImportRecipeSkill } from "./skill-import-recipes.ts";
 
 export const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
 export const IMPORTED_REFERENCES_ROOT = path.join("skills", "references", "imported");
@@ -46,6 +46,7 @@ export function copyStagedGuidanceToManagedRoots(
     obsoleteGuidance?: readonly SkillImportRecipeSkill[];
     repoRoot: string;
     stagingDirectory: string;
+    validatePrepared?: (preparedRoot: string) => void;
   },
   move: (source: string, destination: string) => void = renameSync
 ) {
@@ -61,27 +62,9 @@ export function copyStagedGuidanceToManagedRoots(
   let retainRecovery = false;
 
   try {
-    for (const item of options.guidance) {
-      const sourcePath = path.join(stagedSkillsRoot, item.slug);
-      if (!existsSync(sourcePath)) {
-        throw new MonkeError(`Expected staged Skill directory at ${sourcePath}`);
-      }
-      if (!lstatSync(sourcePath).isDirectory()) {
-        throw new MonkeError(
-          `Expected staged Skill directory to be a regular directory at ${sourcePath}`
-        );
-      }
+    prepareStagedGuidance(options.guidance, stagedSkillsRoot, preparedRoot);
 
-      const preparedPath = path.join(preparedRoot, item.kind, item.slug);
-      mkdirSync(path.dirname(preparedPath), { recursive: true });
-      cpSync(sourcePath, preparedPath, { recursive: true, verbatimSymlinks: true });
-      if (item.kind === "reference") {
-        transformPreparedReference(preparedPath);
-      } else if (item.disableModelInvocation !== undefined) {
-        transformPreparedSkillInvocationPolicy(preparedPath, item.disableModelInvocation);
-      }
-    }
-
+    options.validatePrepared?.(preparedRoot);
     assertObsoleteReferencesAreUnconsumed(options.repoRoot, options.obsoleteGuidance ?? []);
     for (const { item, targetPath } of destinations) {
       if (affectedPaths.has(targetPath)) {
@@ -130,6 +113,33 @@ export function copyStagedGuidanceToManagedRoots(
   } finally {
     if (!retainRecovery) {
       rmSync(backupRoot, { force: true, recursive: true });
+    }
+  }
+}
+
+function prepareStagedGuidance(
+  guidance: readonly SkillImportRecipeSkill[],
+  stagedSkillsRoot: string,
+  preparedRoot: string
+) {
+  for (const item of guidance) {
+    const sourcePath = path.join(stagedSkillsRoot, item.slug);
+    if (!existsSync(sourcePath)) {
+      throw new MonkeError(`Expected staged Skill directory at ${sourcePath}`);
+    }
+    if (!lstatSync(sourcePath).isDirectory()) {
+      throw new MonkeError(
+        `Expected staged Skill directory to be a regular directory at ${sourcePath}`
+      );
+    }
+
+    const preparedPath = path.join(preparedRoot, item.kind, item.slug);
+    mkdirSync(path.dirname(preparedPath), { recursive: true });
+    cpSync(sourcePath, preparedPath, { recursive: true, verbatimSymlinks: true });
+    if (item.kind === "reference") {
+      transformPreparedReference(preparedPath);
+    } else if (item.disableModelInvocation !== undefined) {
+      transformPreparedSkillInvocationPolicy(preparedPath, item.disableModelInvocation);
     }
   }
 }
@@ -332,7 +342,7 @@ function contentContainsRelativePathInto(
   );
 }
 
-function importedGuidancePath(
+export function importedGuidancePath(
   repoRoot: string,
   guidance: Pick<SkillImportRecipeSkill, "kind" | "slug">
 ) {
