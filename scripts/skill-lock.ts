@@ -19,7 +19,11 @@ import {
   IMPORTED_REFERENCES_ROOT,
   IMPORTED_SKILLS_ROOT
 } from "./import-guidance.ts";
-import { readImportRecipeStore, SKILL_LOCK_PATH } from "./skill-import-recipes.ts";
+import {
+  compareSkillLockStrings,
+  readImportRecipeStore,
+  SKILL_LOCK_PATH
+} from "./skill-import-recipes.ts";
 import type { SkillImportRecipe, SkillImportRecipeSkill } from "./skill-import-recipes.ts";
 import {
   buildSkillsInstallArgs,
@@ -51,7 +55,7 @@ function resolveExplicitSkillCommit(repository: string, revision: string, repoRo
 /** Separates deliberate update discovery from the immutable accepted source revision. */
 export function describeSkillSource(source: string, repoRoot: string) {
   const github =
-    /^(?:https?:\/\/github\.com\/|git@github\.com:|)(?<owner>[^/\s:]+)\/(?<repo>[^/#\s]+)(?:\/tree\/(?<ref>[^/#]+)(?:\/(?<subpath>[^#]*))?|\/(?<shorthandSubpath>[^#]*))?(?:#(?<fragment>[^#]+))?$/u.exec(
+    /^(?:https?:\/\/github\.com\/)?(?<owner>[^/\s:]+)\/(?<repo>[^/#\s]+)(?:\/tree\/(?<ref>[^/#]+)(?:\/(?<subpath>[^#]*))?|\/(?<shorthandSubpath>[^#]*))?(?:#(?<fragment>[^#]+))?$/u.exec(
       source
     );
   if (github?.groups && !source.startsWith(".") && !path.isAbsolute(source)) {
@@ -205,7 +209,7 @@ export function guidanceDigest(
 ) {
   const hash = new Bun.CryptoHasher("sha256");
   for (const item of guidance.toSorted((a, b) =>
-    `${a.kind}/${a.slug}`.localeCompare(`${b.kind}/${b.slug}`)
+    compareSkillLockStrings(`${a.kind}/${a.slug}`, `${b.kind}/${b.slug}`)
   )) {
     const root = prepared
       ? path.join(repoRoot, item.kind, item.slug)

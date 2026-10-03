@@ -15,7 +15,7 @@ import {
 import path from "node:path";
 
 import pc from "picocolors";
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 import { parse } from "yaml";
 
 import {
@@ -30,6 +30,7 @@ import {
   readImportRecipeStore,
   writeImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
+import { restoreLockedImports } from "../scripts/skill-lock.ts";
 import { runUpdateSkills } from "../scripts/update-skills.ts";
 import { createRepo, git, makeTempDir, read, write } from "./helpers.ts";
 
@@ -75,6 +76,45 @@ describe("locked skill command workflows", () => {
     } finally {
       process.chdir(originalCwd);
       process.env.MONKE_HOME = originalHome;
+    }
+  }, 30_000);
+
+  test("locked imports retain accepted bytes across host collation locales", async () => {
+    const sandbox = makeTempDir("skill-lock-host-collation");
+    const fakeBinDirectory = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log")
+    });
+    const nativeLocaleCompare = String.prototype.localeCompare;
+    const compare = vi.spyOn(String.prototype, "localeCompare");
+    try {
+      compare.mockImplementation(function englishComparison(this: string, other: string) {
+        return nativeLocaleCompare.call(this, other, "en");
+      });
+      await withFakeNpx(sandbox, fakeBinDirectory, async () => {
+        await runImportSkills(["owner/aa"], {
+          selectSkills: () => ["aa", "z"],
+          writeMessage() {}
+        });
+        await runImportSkills(["owner/z"], {
+          selectSkills: () => ["other"],
+          writeMessage() {}
+        });
+        const acceptedLock = read(sandbox, "skills.lock.json");
+        compare.mockImplementation(function danishComparison(this: string, other: string) {
+          return nativeLocaleCompare.call(this, other, "da");
+        });
+        rmSync(path.join(sandbox, "skills/imported"), { recursive: true });
+        expect(() => {
+          restoreLockedImports(sandbox);
+        }).not.toThrow();
+        expect(read(sandbox, "skills/imported/aa/SKILL.md")).toBe("new aa");
+        expect(read(sandbox, "skills/imported/z/SKILL.md")).toBe("new z");
+        writeImportRecipeStore(sandbox, readImportRecipeStore(sandbox));
+        expect(read(sandbox, "skills.lock.json")).toBe(acceptedLock);
+      });
+    } finally {
+      compare.mockRestore();
     }
   });
 
@@ -930,14 +970,22 @@ describe("skill importing", () => {
     }).toThrow(/alpha is already owned by recipe owner\/first/u);
   });
 
-  test.each(["owner/repo", "owner/repo/skills"])(
-    "skills import preserves source %s while copying staged universal skills",
-    async (source) => {
+  test.each([
+    { repository: "https://github.com/owner/repo.git", source: "owner/repo" },
+    { repository: "https://github.com/owner/repo.git", source: "owner/repo/skills" },
+    { repository: "git@github.com:owner/repo.git", source: "git@github.com:owner/repo.git" }
+  ])(
+    "skills import preserves repository transport for $source while copying staged universal skills",
+    async ({ repository, source }) => {
       const sandbox = makeTempDir("skill-import-script");
       const skillsLogPath = path.join(sandbox, "skills.log");
       const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
       let stdout = "";
-      const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
+      const fakeBinDirectory = installFakeNpx(sandbox, {
+        expectedGitRepository: repository,
+        skillsCwdLogPath,
+        skillsLogPath
+      });
       write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
       await withFakeNpx(sandbox, fakeBinDirectory, async () => {
@@ -978,13 +1026,14 @@ describe("skill importing", () => {
       expect(existsSync(path.join(sandbox, "skills-lock.json"))).toBeFalsy();
 
       const skillsLog = readFileSync(skillsLogPath, "utf-8");
-      expect(skillsLog).toContain(`--yes skills@1.7.0 add ${source} -l`);
+      const importedSource = source.startsWith("git@") ? `${source}#${"1".repeat(40)}` : source;
+      expect(skillsLog).toContain(`--yes skills@1.7.0 add ${importedSource} -l`);
       expect(skillsLog).toContain(
-        `--yes skills@1.7.0 add ${source} --skill alpha --skill bravo --agent universal --copy --yes`
+        `--yes skills@1.7.0 add ${importedSource} --skill alpha --skill bravo --agent universal --copy --yes`
       );
       expect(readImportRecipeStore(sandbox).recipes[0]?.lock).toMatchObject({
-        repository: "https://github.com/owner/repo.git",
-        subpath: source === "owner/repo" ? "" : "skills"
+        repository,
+        subpath: source === "owner/repo/skills" ? "skills" : ""
       });
 
       const stagingCwds = readFileSync(skillsCwdLogPath, "utf-8")
@@ -2849,6 +2898,7 @@ function recipeChoices(sandbox: string) {
 function installFakeNpx(
   sandbox: string,
   options: {
+    expectedGitRepository?: string;
     failInstallSources?: string[];
     mainCollisionSelector?: string;
     resolvedCommit?: string;
@@ -2867,7 +2917,25 @@ function installFakeNpx(
   const realGit = Bun.which("git");
   writeFileSync(
     path.join(binDirectory, "git"),
-    `#!/bin/sh\nif [ "$1" = ls-remote ]; then printf '${options.resolvedCommit ?? "1".repeat(40)}\\tHEAD\\n'; else\n  case "$PWD:$1" in */upstream-validation:fetch|*/upstream-validation:checkout) exit 0 ;; esac\n  exec '${realGit}' "$@"\nfi\n`
+    `#!/bin/sh
+${
+  options.expectedGitRepository
+    ? `case "$1" in
+  ls-remote) git_source=$3 ;;
+  fetch) git_source=$6 ;;
+  *) git_source='' ;;
+esac
+if [ -n "$git_source" ] && [ "$git_source" != '${options.expectedGitRepository}' ]; then
+  echo "Repository transport rejected: $git_source" >&2
+  exit 42
+fi`
+    : ""
+}
+if [ "$1" = ls-remote ]; then printf '${options.resolvedCommit ?? "1".repeat(40)}\\tHEAD\\n'; else
+  case "$PWD:$1" in */upstream-validation:fetch|*/upstream-validation:checkout) exit 0 ;; esac
+  exec '${realGit}' "$@"
+fi
+`
   );
   chmodSync(path.join(binDirectory, "git"), 0o755);
   writeFileSync(

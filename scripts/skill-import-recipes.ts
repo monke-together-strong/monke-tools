@@ -99,6 +99,11 @@ export interface RecordImportedGuidanceInput {
   source: string;
 }
 
+/** Stable code-unit ordering for persisted lock data and guidance digests. */
+export function compareSkillLockStrings(left: string, right: string) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 /** Reads the repo-tracked Skill import recipe store, returning an empty store when absent. */
 export function readImportRecipeStore(repoRoot: string): SkillImportRecipeStore {
   const storePath = existsSync(path.join(repoRoot, SKILL_LOCK_PATH))
@@ -219,8 +224,8 @@ export function normalizeImportRecipeStore(input: SkillImportRecipeStore): Skill
     return {
       ...recipe,
       skills: recipe.skills.toSorted((left, right) => {
-        const slugOrder = left.slug.localeCompare(right.slug);
-        return slugOrder === 0 ? left.selector.localeCompare(right.selector) : slugOrder;
+        const slugOrder = compareSkillLockStrings(left.slug, right.slug);
+        return slugOrder === 0 ? compareSkillLockStrings(left.selector, right.selector) : slugOrder;
       })
     };
   });
@@ -229,7 +234,7 @@ export function normalizeImportRecipeStore(input: SkillImportRecipeStore): Skill
 
   return {
     recipes: recipes.toSorted((left, right) => {
-      const sourceOrder = left.source.localeCompare(right.source);
+      const sourceOrder = compareSkillLockStrings(left.source, right.source);
       if (sourceOrder !== 0) {
         return sourceOrder;
       }
