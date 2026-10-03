@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   readlinkSync,
+  realpathSync,
   rmSync
 } from "node:fs";
 import path from "node:path";
@@ -50,14 +51,14 @@ function resolveExplicitSkillCommit(repository: string, revision: string, repoRo
 /** Separates deliberate update discovery from the immutable accepted source revision. */
 export function describeSkillSource(source: string, repoRoot: string) {
   const github =
-    /^(?:https?:\/\/github\.com\/|git@github\.com:|)(?<owner>[^/\s:]+)\/(?<repo>[^/#\s]+)(?:\/tree\/(?<ref>[^/]+)(?:\/(?<subpath>.*))?)?(?:#(?<fragment>[^#]+))?$/u.exec(
+    /^(?:https?:\/\/github\.com\/|git@github\.com:|)(?<owner>[^/\s:]+)\/(?<repo>[^/#\s]+)(?:\/tree\/(?<ref>[^/#]+)(?:\/(?<subpath>[^#]*))?|\/(?<shorthandSubpath>[^#]*))?(?:#(?<fragment>[^#]+))?$/u.exec(
       source
     );
   if (github?.groups && !source.startsWith(".") && !path.isAbsolute(source)) {
-    const { fragment, owner, ref, repo, subpath } = github.groups;
+    const { fragment, owner, ref, repo, shorthandSubpath, subpath } = github.groups;
     return {
       repository: `https://github.com/${owner}/${repo?.replace(/\.git$/u, "")}.git`,
-      subpath: subpath ?? "",
+      subpath: subpath ?? shorthandSubpath ?? "",
       updateRef: fragment ?? ref ?? "HEAD"
     };
   }
@@ -124,13 +125,50 @@ export function pinnedSkillSource(
     const runtime = createRuntime({ cwd: stagingDirectory });
     runtime.exec("git", ["clone", "--quiet", "--no-checkout", "--", lock.repository, checkout]);
     runtime.exec("git", ["checkout", "--quiet", "--detach", lock.commit], { cwd: checkout });
+    validateUpstreamLinks(checkout);
     return path.join(checkout, lock.subpath);
   }
+  // Copy mode dereferences upstream links, so validate the exact tree before the importer.
+  // Keep remote source URLs intact for upstream discovery and security assessments.
+  const checkout = path.join(stagingDirectory, "upstream-validation");
+  mkdirSync(checkout, { recursive: true });
+  const runtime = createRuntime({ cwd: checkout });
+  runtime.exec("git", ["init", "--quiet"]);
+  runtime.exec("git", ["fetch", "--quiet", "--depth", "1", "--", lock.repository, lock.commit]);
+  runtime.exec("git", ["checkout", "--quiet", "--detach", lock.commit]);
+  validateUpstreamLinks(checkout);
   const github = /^https:\/\/github\.com\/(?<repository>.+)\.git$/u.exec(lock.repository);
   if (github?.groups?.repository) {
     return `https://github.com/${github.groups.repository}/tree/${lock.commit}${lock.subpath ? `/${lock.subpath}` : ""}`;
   }
   return `${lock.repository}#${lock.commit}`;
+}
+
+function validateUpstreamLinks(checkout: string) {
+  const root = realpathSync.native(checkout);
+  const gitDirectory = path.join(root, ".git");
+  const visit = (directory: string) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === ".git") {
+        continue;
+      }
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(file);
+      } else if (entry.isSymbolicLink()) {
+        const target = path.resolve(directory, readlinkSync(file));
+        const resolved = existsSync(target) ? realpathSync.native(target) : target;
+        if (
+          !containsPath(root, target) ||
+          !containsPath(root, resolved) ||
+          containsPath(gitDirectory, resolved)
+        ) {
+          throw new MonkeError(`Upstream symlink escapes versioned source: ${file}`);
+        }
+      }
+    }
+  };
+  visit(root);
 }
 
 export function stageLockedRecipe(recipe: SkillImportRecipe, stagingDirectory: string) {

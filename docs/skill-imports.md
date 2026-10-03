@@ -5,6 +5,9 @@ local roles and invocation policies. Imported directories are generated and igno
 Refresh them through the source-maintenance commands; local edits are replaced by
 restoration.
 
+Upstream links may reference shared files within the same Git checkout. Links to
+host files or generated Git metadata are rejected before importing.
+
 Run `vpr skills:update` to advance the recorded discovery refs. Successful sources
 replace their files and pins immediately. Failed sources retain their preceding
 versions; the command reports failure after opening one complete comparison of

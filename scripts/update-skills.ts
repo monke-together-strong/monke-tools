@@ -8,7 +8,7 @@ import { confirm, isCancel } from "@clack/prompts";
 import { Command } from "@commander-js/extra-typings";
 
 import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
-import { MonkeError, ThrownValueSchema } from "../src/errors.ts";
+import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
 import { createRuntime } from "../src/runtime.ts";
 import {
   copyStagedGuidanceToManagedRoots,
@@ -70,12 +70,27 @@ export async function runUpdateSkills(
   dependencies: UpdateSkillsDependencies = {}
 ) {
   const repoRoot = process.cwd();
-  const install = await withSkillImportMutation(repoRoot, () => updateSkills(argv, dependencies));
+  const { failure, install } = await withSkillImportMutation(repoRoot, () =>
+    updateSkills(argv, dependencies)
+  );
   if (install) {
     (dependencies.writeMessage ?? ((message: string) => process.stdout.write(message)))(
       "Installing imported skills into configured agent roots...\n"
     );
-    (dependencies.runInstallCommand ?? runInstallCommand)(repoRoot);
+    try {
+      (dependencies.runInstallCommand ?? runInstallCommand)(repoRoot);
+    } catch (error) {
+      if (failure) {
+        throw new MonkeError(
+          `${failure.message}\nSkill installation failed: ${errorMessage(ThrownValueSchema.parse(error))}`,
+          { cause: error }
+        );
+      }
+      throw error;
+    }
+  }
+  if (failure) {
+    throw failure;
   }
 }
 
@@ -182,18 +197,19 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
     rmSync(reviewDirectory, { force: true, recursive: true });
   }
 
-  if (failures.length > 0 || reviewFailure) {
-    throw new MonkeError(
-      [
-        ...(failures.length > 0
-          ? [`Skill update failed for ${failures.length} recipe(s):\n${failures.join("\n")}`]
-          : []),
-        ...(reviewFailure ? [reviewFailure] : [])
-      ].join("\n")
-    );
-  }
+  const failure =
+    failures.length > 0 || reviewFailure
+      ? new MonkeError(
+          [
+            ...(failures.length > 0
+              ? [`Skill update failed for ${failures.length} recipe(s):\n${failures.join("\n")}`]
+              : []),
+            ...(reviewFailure ? [reviewFailure] : [])
+          ].join("\n")
+        )
+      : undefined;
 
-  return install;
+  return { failure, install };
 }
 
 function parseCommand(argv: string[]) {

@@ -78,6 +78,47 @@ describe("locked skill command workflows", () => {
     }
   });
 
+  test("rejects host-dependent upstream links before the published importer copies them", async () => {
+    const sandbox = makeTempDir("skill-lock-source-links");
+    const upstream = createRepo(path.join(sandbox, "upstream"), {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Shared fixture\n---\n\nAlpha.\n",
+      "shared/details.md": "Shared checkout content.\n"
+    });
+    symlinkSync("../shared/details.md", path.join(upstream, "alpha/shared.md"));
+    symlinkSync("../shared", path.join(upstream, "alpha/assets"));
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Confined shared assets"]);
+    const originalCwd = process.cwd();
+    const originalHome = process.env.MONKE_HOME;
+    const originalPath = process.env.PATH;
+    try {
+      process.chdir(sandbox);
+      process.env.MONKE_HOME = path.join(sandbox, "home");
+      process.env.PATH = `${installReviewViewer(sandbox)}${path.delimiter}${originalPath}`;
+      await runImportSkills([upstream], { selectSkills: () => ["alpha"], writeMessage() {} });
+      expect(read(sandbox, "skills/imported/alpha/shared.md")).toBe("Shared checkout content.\n");
+      expect(read(sandbox, "skills/imported/alpha/assets/details.md")).toBe(
+        "Shared checkout content.\n"
+      );
+      const acceptedLock = read(sandbox, "skills.lock.json");
+      const outside = path.join(sandbox, "host-specific.txt");
+      writeFileSync(outside, "Host-dependent content.\n");
+      symlinkSync(outside, path.join(upstream, "alpha/host.md"));
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Escaping source link"]);
+      await expect(runUpdateSkills([], { writeMessage() {} })).rejects.toThrow(
+        /upstream symlink escapes/iu
+      );
+      expect(read(sandbox, "skills.lock.json")).toBe(acceptedLock);
+      expect(existsSync(path.join(sandbox, "skills/imported/alpha/host.md"))).toBeFalsy();
+      expect(read(sandbox, "skills/imported/alpha/shared.md")).toBe("Shared checkout content.\n");
+    } finally {
+      process.chdir(originalCwd);
+      process.env.MONKE_HOME = originalHome;
+      process.env.PATH = originalPath;
+    }
+  }, 30_000);
+
   test("pins and restores exact published-importer content before deliberately updating a supporting file", async () => {
     const sandbox = makeTempDir("skill-lock-published");
     const monkeHome = path.join(sandbox, "home $USER `literal` $(printf expanded) 'quote'");
@@ -889,62 +930,72 @@ describe("skill importing", () => {
     }).toThrow(/alpha is already owned by recipe owner\/first/u);
   });
 
-  test("skills import script wraps npx skills and copies staged universal skills", async () => {
-    const sandbox = makeTempDir("skill-import-script");
-    const skillsLogPath = path.join(sandbox, "skills.log");
-    const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    let stdout = "";
-    const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
-    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+  test.each(["owner/repo", "owner/repo/skills"])(
+    "skills import preserves source %s while copying staged universal skills",
+    async (source) => {
+      const sandbox = makeTempDir("skill-import-script");
+      const skillsLogPath = path.join(sandbox, "skills.log");
+      const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+      let stdout = "";
+      const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
+      write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
-    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
-      await runImportSkills(["owner/repo"], {
-        selectSkills(availableSkillGroups) {
-          expect(availableSkillGroups).toStrictEqual([
-            {
-              name: "Engineering",
-              skills: ["alpha"]
-            },
-            {
-              name: "Productivity",
-              skills: ["bravo"]
-            }
-          ]);
-          return ["alpha", "bravo"];
-        },
-        writeMessage(message) {
-          stdout += message;
-        }
+      await withFakeNpx(sandbox, fakeBinDirectory, async () => {
+        await runImportSkills([source], {
+          selectSkills(availableSkillGroups) {
+            expect(availableSkillGroups).toStrictEqual([
+              {
+                name: "Engineering",
+                skills: ["alpha"]
+              },
+              {
+                name: "Productivity",
+                skills: ["bravo"]
+              }
+            ]);
+            return ["alpha", "bravo"];
+          },
+          writeMessage(message) {
+            stdout += message;
+          }
+        });
       });
-    });
 
-    const plainStdout = stripAnsiForTest(stdout);
-    expect(plainStdout).toContain("Security Risk Assessments");
-    expect(plainStdout).toContain("alpha");
-    expect(plainStdout).toContain("Safe");
-    expect(plainStdout).toContain("0 alerts");
-    expect(plainStdout).toContain("Low Risk");
-    expect(stdout).toContain(pc.cyan("alpha"));
-    expect(stdout).toContain(pc.green("Safe"));
-    expect(stdout).not.toContain("Installation Summary");
-    expect(stdout).not.toContain("Installed 2 skills");
-    expect(stdout).not.toContain(".agents/skills");
-    expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("new alpha");
-    expect(read(sandbox, "skills/imported/bravo/SKILL.md")).toBe("new bravo");
-    expect(existsSync(path.join(sandbox, ".agents"))).toBeFalsy();
-    expect(existsSync(path.join(sandbox, "skills-lock.json"))).toBeFalsy();
+      const plainStdout = stripAnsiForTest(stdout);
+      expect(plainStdout).toContain("Security Risk Assessments");
+      expect(plainStdout).toContain("alpha");
+      expect(plainStdout).toContain("Safe");
+      expect(plainStdout).toContain("0 alerts");
+      expect(plainStdout).toContain("Low Risk");
+      expect(stdout).toContain(pc.cyan("alpha"));
+      expect(stdout).toContain(pc.green("Safe"));
+      expect(stdout).not.toContain("Installation Summary");
+      expect(stdout).not.toContain("Installed 2 skills");
+      expect(stdout).not.toContain(".agents/skills");
+      expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("new alpha");
+      expect(read(sandbox, "skills/imported/bravo/SKILL.md")).toBe("new bravo");
+      expect(existsSync(path.join(sandbox, ".agents"))).toBeFalsy();
+      expect(existsSync(path.join(sandbox, "skills-lock.json"))).toBeFalsy();
 
-    const skillsLog = readFileSync(skillsLogPath, "utf-8");
-    expect(skillsLog).toContain("--yes skills@1.7.0 add owner/repo -l");
-    expect(skillsLog).toContain(
-      "--yes skills@1.7.0 add owner/repo --skill alpha --skill bravo --agent universal --copy --yes"
-    );
+      const skillsLog = readFileSync(skillsLogPath, "utf-8");
+      expect(skillsLog).toContain(`--yes skills@1.7.0 add ${source} -l`);
+      expect(skillsLog).toContain(
+        `--yes skills@1.7.0 add ${source} --skill alpha --skill bravo --agent universal --copy --yes`
+      );
+      expect(readImportRecipeStore(sandbox).recipes[0]?.lock).toMatchObject({
+        repository: "https://github.com/owner/repo.git",
+        subpath: source === "owner/repo" ? "" : "skills"
+      });
 
-    const stagingCwds = readFileSync(skillsCwdLogPath, "utf-8").trim().split("\n").filter(Boolean);
-    expect(stagingCwds).toHaveLength(2);
-    expect(stagingCwds.every((cwd) => cwd !== sandbox)).toBeTruthy();
-    expect(stagingCwds.every((cwd) => !existsSync(cwd))).toBeTruthy();
-  });
+      const stagingCwds = readFileSync(skillsCwdLogPath, "utf-8")
+        .trim()
+        .split("\n")
+        .filter(Boolean);
+      expect(stagingCwds).toHaveLength(2);
+      expect(stagingCwds.every((cwd) => cwd !== sandbox)).toBeTruthy();
+      expect(stagingCwds.every((cwd) => !existsSync(cwd))).toBeTruthy();
+    }
+  );
 
   test("interactive skill import rejects an empty selection and submits a selected skill", async () => {
     const sandbox = makeTempDir("skill-import-interactive");
@@ -2687,41 +2738,55 @@ metadata: [unterminated
     });
   });
 
-  test("skills update can run local skill install after refreshing recipes", async () => {
-    const sandbox = makeTempDir("skill-update-script-install");
-    const skillsLogPath = path.join(sandbox, "skills.log");
-    const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
-    const installCalls: string[] = [];
-    const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
-    writeImportRecipeStore(sandbox, {
-      recipes: [
-        {
-          skills: [
-            {
-              kind: "skill",
-              selector: "alpha",
-              slug: "alpha"
-            }
-          ],
-          source: "owner/repo"
-        }
-      ],
-      version: 3
-    });
-    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
-
-    await withFakeNpx(sandbox, fakeBinDirectory, async () => {
-      await runUpdateSkills(["--install"], {
-        runInstallCommand(repoRoot) {
-          installCalls.push(repoRoot);
-          expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("new alpha");
-        },
-        writeMessage() {}
+  test.each([false, true])(
+    "skills update installs applied guidance when viewer failure is %s",
+    async (viewerFails) => {
+      const sandbox = makeTempDir("skill-update-script-install");
+      const skillsLogPath = path.join(sandbox, "skills.log");
+      const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
+      const installCalls: string[] = [];
+      const fakeBinDirectory = installFakeNpx(sandbox, { skillsCwdLogPath, skillsLogPath });
+      if (viewerFails) {
+        writeFileSync(
+          path.join(fakeBinDirectory, "codiff"),
+          "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'codiff v1.14.0'; else exit 9; fi\n"
+        );
+      }
+      writeImportRecipeStore(sandbox, {
+        recipes: [
+          {
+            skills: [
+              {
+                kind: "skill",
+                selector: "alpha",
+                slug: "alpha"
+              }
+            ],
+            source: "owner/repo"
+          }
+        ],
+        version: 3
       });
-    });
+      write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
 
-    expect(installCalls).toStrictEqual([sandbox]);
-  });
+      await withFakeNpx(sandbox, fakeBinDirectory, async () => {
+        const update = runUpdateSkills(["--install"], {
+          runInstallCommand(repoRoot) {
+            installCalls.push(repoRoot);
+            expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toBe("new alpha");
+          },
+          writeMessage() {}
+        });
+        const failed = await update.then(
+          () => false,
+          () => true
+        );
+        expect(failed).toBe(viewerFails);
+      });
+
+      expect(installCalls).toStrictEqual([sandbox]);
+    }
+  );
 
   test("skills update preserves recorded OpenClaw risk acceptance", async () => {
     const sandbox = makeTempDir("skill-update-script-openclaw");
@@ -2802,7 +2867,7 @@ function installFakeNpx(
   const realGit = Bun.which("git");
   writeFileSync(
     path.join(binDirectory, "git"),
-    `#!/bin/sh\nif [ "$1" = ls-remote ]; then printf '${options.resolvedCommit ?? "1".repeat(40)}\\tHEAD\\n'; else exec '${realGit}' "$@"; fi\n`
+    `#!/bin/sh\nif [ "$1" = ls-remote ]; then printf '${options.resolvedCommit ?? "1".repeat(40)}\\tHEAD\\n'; else\n  case "$PWD:$1" in */upstream-validation:fetch|*/upstream-validation:checkout) exit 0 ;; esac\n  exec '${realGit}' "$@"\nfi\n`
   );
   chmodSync(path.join(binDirectory, "git"), 0o755);
   writeFileSync(
