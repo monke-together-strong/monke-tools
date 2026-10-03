@@ -1,0 +1,284 @@
+{
+  "recipes": [
+    {
+      "lock": {
+        "commit": "000650b156983f5159695b441477f4e63b25dc85",
+        "digest": "08349c6615d655d32552af0324370d06bf291644c60382add43b0a39d16f455b",
+        "importerVersion": "1.7.0",
+        "materializerVersion": 1,
+        "repository": "https://github.com/petergyang/no-ai-slop.git",
+        "subpath": "",
+        "updateRef": "HEAD"
+      },
+      "skills": [
+        {
+          "kind": "skill",
+          "selector": "no-ai-slop",
+          "slug": "no-ai-slop"
+        }
+      ],
+      "source": "git@github.com:petergyang/no-ai-slop.git"
+    },
+    {
+      "lock": {
+        "commit": "5db75f0a43a904643dab06de0bd370a91d83b2cd",
+        "digest": "0bf1ce8f129dc8774442fb05e2905a0371a4538f8cc5dec0ea3e4f4119b4cc89",
+        "importerVersion": "1.7.0",
+        "materializerVersion": 1,
+        "repository": "https://github.com/haydenbleasel/ultracite.git",
+        "subpath": "skills/ultracite",
+        "updateRef": "main"
+      },
+      "skills": [
+        {
+          "kind": "reference",
+          "selector": "ultracite",
+          "slug": "ultracite"
+        }
+      ],
+      "source": "https://github.com/haydenbleasel/ultracite/tree/main/skills/ultracite"
+    },
+    {
+      "lock": {
+        "commit": "ca7c8088db69e315a8b2deea43820270457f8f3c",
+        "digest": "e5f0cca911ee72eb8478e3250d2a034d92ceefa5c25e52f9f4af18eb10b1a133",
+        "importerVersion": "1.7.0",
+        "materializerVersion": 1,
+        "repository": "https://github.com/humanlayer/skills.git",
+        "subpath": "plugins/show-me/skills/show-me",
+        "updateRef": "main"
+      },
+      "skills": [
+        {
+          "kind": "skill",
+          "selector": "show-me",
+          "slug": "show-me"
+        }
+      ],
+      "source": "https://github.com/humanlayer/skills/tree/main/plugins/show-me/skills/show-me"
+    },
+    {
+      "lock": {
+        "commit": "d81f3a183412e71a5b1e84ca21bc1a35eea03a60",
+        "digest": "f6478e29f7dd60cecb965e845ae1486f5a3546b12d2b20ffd9852011be1fdfd6",
+        "importerVersion": "1.7.0",
+        "materializerVersion": 1,
+        "repository": "https://github.com/mattpocock/skills.git",
+        "subpath": "",
+        "updateRef": "HEAD"
+      },
+      "skills": [
+        {
+          "kind": "reference",
+          "selector": "code-review",
+          "slug": "code-review"
+        },
+        {
+          "kind": "skill",
+          "selector": "codebase-design",
+          "slug": "codebase-design"
+        },
+        {
+          "kind": "skill",
+          "selector": "diagnosing-bugs",
+          "slug": "diagnosing-bugs"
+        },
+        {
+          "kind": "skill",
+          "selector": "domain-modeling",
+          "slug": "domain-modeling"
+        },
+        {
+          "kind": "skill",
+          "selector": "grill-with-docs",
+          "slug": "grill-with-docs"
+        },
+        {
+          "kind": "skill",
+          "selector": "grilling",
+          "slug": "grilling"
+        },
+        {
+          "kind": "skill",
+          "selector": "handoff",
+          "slug": "handoff"
+        },
+        {
+          "kind": "skill",
+          "selector": "improve-codebase-architecture",
+          "slug": "improve-codebase-architecture"
+        },
+        {
+          "kind": "skill",
+          "selector": "prototype",
+          "slug": "prototype"
+        },
+        {
+          "kind": "skill",
+          "selector": "research",
+          "slug": "research"
+        },
+        {
+          "kind": "skill",
+          "selector": "setup-matt-pocock-skills",
+          "slug": "setup-matt-pocock-skills"
+        },
+        {
+          "kind": "skill",
+          "selector": "tdd",
+          "slug": "tdd"
+        },
+        {
+          "kind": "skill",
+          "selector": "teach",
+          "slug": "teach"
+        },
+        {
+          "kind": "skill",
+          "selector": "to-questionnaire",
+          "slug": "to-questionnaire"
+        },
+        {
+          "kind": "skill",
+          "selector": "to-spec",
+          "slug": "to-spec"
+        },
+        {
+          "kind": "skill",
+          "selector": "to-tickets",
+          "slug": "to-tickets"
+        },
+        {
+          "kind": "skill",
+          "selector": "triage",
+          "slug": "triage"
+        },
+        {
+          "kind": "skill",
+          "selector": "wait-what",
+          "slug": "wait-what"
+        },
+        {
+          "kind": "skill",
+          "selector": "wayfinder",
+          "slug": "wayfinder"
+        },
+        {
+          "kind": "skill",
+          "selector": "wizard",
+          "slug": "wizard"
+        },
+        {
+          "disableModelInvocation": false,
+          "kind": "skill",
+          "selector": "writing-for-agents",
+          "slug": "writing-for-agents"
+        }
+      ],
+      "source": "https://github.com/mattpocock/skills"
+    },
+    {
+      "lock": {
+        "commit": "153fc1b93de6584562765cdce299324e1ff9e661",
+        "digest": "9ec6b87e0cd647a0428dbce537f479a9aa302c51944927f895aba76f8495a96e",
+        "importerVersion": "1.7.0",
+        "materializerVersion": 1,
+        "repository": "https://github.com/mattpocock/skills.git",
+        "subpath": "skills/engineering/resolving-merge-conflicts",
+        "updateRef": "153fc1b93de6584562765cdce299324e1ff9e661"
+      },
+      "skills": [
+        {
+          "kind": "skill",
+          "selector": "resolving-merge-conflicts",
+          "slug": "resolving-merge-conflicts"
+        }
+      ],
+      "source": "https://github.com/mattpocock/skills/tree/153fc1b93de6584562765cdce299324e1ff9e661/skills/engineering/resolving-merge-conflicts"
+    },
+    {
+      "lock": {
+        "commit": "c1aff547ca418e31a0769296563c73649862d429",
+        "digest": "37077e032e88047866b96ad2e808655c8f31d98875207d0b2ef188b5b9c22fba",
+        "importerVersion": "1.7.0",
+        "materializerVersion": 1,
+        "repository": "https://github.com/openclaw/openclaw.git",
+        "subpath": "",
+        "updateRef": "main"
+      },
+      "skills": [
+        {
+          "kind": "skill",
+          "selector": "test-audit",
+          "slug": "test-audit"
+        }
+      ],
+      "source": "https://github.com/openclaw/openclaw/tree/main"
+    },
+    {
+      "lock": {
+        "commit": "295a1f114a138f23b5dfee0e0c6812394dfeb90c",
+        "digest": "b24e5381443ab5a3b8157d10bfceb07a619db218c9fcdb91bcee4802e9a24cd4",
+        "importerVersion": "1.7.0",
+        "materializerVersion": 1,
+        "repository": "https://github.com/shadcn-ui/ui.git",
+        "subpath": "",
+        "updateRef": "HEAD"
+      },
+      "skills": [
+        {
+          "kind": "skill",
+          "selector": "shadcn",
+          "slug": "shadcn"
+        }
+      ],
+      "source": "https://github.com/shadcn-ui/ui"
+    },
+    {
+      "acceptOpenClawRisks": true,
+      "lock": {
+        "commit": "edf1e2f436fa2a5375c98052180a090a57223f9e",
+        "digest": "6c8e8ed3c268c1b0307b93ee6b42c642a62174c26575ce4dc2b25770e278b54b",
+        "importerVersion": "1.7.0",
+        "materializerVersion": 1,
+        "repository": "https://github.com/openclaw/agent-skills.git",
+        "subpath": "",
+        "updateRef": "HEAD"
+      },
+      "skills": [
+        {
+          "kind": "skill",
+          "selector": "autoreview",
+          "slug": "autoreview"
+        },
+        {
+          "kind": "skill",
+          "selector": "behavior-validator",
+          "slug": "behavior-validator"
+        }
+      ],
+      "source": "openclaw/agent-skills"
+    },
+    {
+      "lock": {
+        "commit": "cac56e1ebd3c279aa9153616cfeac7b174ab90f9",
+        "digest": "e896d416a7cae1a14caee184e48c62650112ca75775a5db8950392c7c1fa8c73",
+        "importerVersion": "1.7.0",
+        "materializerVersion": 1,
+        "repository": "https://github.com/shadcn/improve.git",
+        "subpath": "",
+        "updateRef": "HEAD"
+      },
+      "skills": [
+        {
+          "disableModelInvocation": true,
+          "kind": "skill",
+          "selector": "improve",
+          "slug": "improve"
+        }
+      ],
+      "source": "shadcn/improve"
+    }
+  ],
+  "version": 3
+}

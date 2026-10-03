@@ -126,6 +126,8 @@ Run `mt skills configure` to select agents or change the saved targets. Codex an
 
 The [monke-tools-core skill](skills/internal/monke-tools-core/SKILL.md) guides agents through session work, configuration, and installation. Other workflows live in [internal skills](skills/internal) and [imported skills](skills/imported). See [agent guidance distribution](docs/reference/agent-guidance.md) for domain terminology and ownership.
 
+Imported guidance is generated from the tracked skill lock. See [maintaining imported guidance](docs/skill-imports.md) for exact restoration, complete update review, and review-cache cleanup.
+
 ## Update
 
 ```bash

@@ -32,6 +32,11 @@ export const CODE_RABBIT_SYNC_INPUTS = new Set([
   "config/coderabbit/sources.yaml",
   "config/coderabbit/template.yaml",
   "package.json",
+  "skills.lock.json",
+  "scripts/skill-lock.ts",
+  "scripts/skill-import-recipes.ts",
+  "scripts/skills-cli.ts",
+  "scripts/import-guidance.ts",
   "scripts/generate-coderabbit-config.ts"
 ]);
 

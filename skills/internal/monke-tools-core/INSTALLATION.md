@@ -3,6 +3,8 @@
 
 Check availability with `command -v mt` and identity with `mt --version`. For local development, run `vp install` then `vpr install:local` in the monke-tools source checkout using [Vite+](https://viteplus.dev/guide/). Refresh after CLI changes before testing in a consumer repo. Local skill edits are immediately visible through source links; adding or removing skill directories requires `mt skills configure` to refresh links.
 
+Local installation automatically restores exact imported guidance from the Skill lock. After reverting the lock or switching its source version, rerun `vpr install:local` in the installed source checkout. For source-maintenance updates, complete content reviews, or review-cache cleanup, read [maintaining imported guidance](https://github.com/monke-together-strong/monke-tools/blob/main/docs/skill-imports.md).
+
 For the latest stable release on macOS arm64 or Linux x64:
 
 ```bash

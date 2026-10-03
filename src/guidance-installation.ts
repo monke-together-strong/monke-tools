@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
+import { restoreSkillImports } from "../scripts/skill-lock.ts";
 import { MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
 import type { GlobalMonkeConfig } from "./global-config.ts";
@@ -107,6 +108,7 @@ export function runLocalInstallSkills(
         `Skills Local Install checkout does not match the Active Local install: ${activeInstall.manifest.sourceCheckout}`
       );
     }
+    await restoreSkillImports(requestedCheckout);
     await runInstallSkillsLocked(runtime, requestedCheckout, explicitTargets);
   });
 }

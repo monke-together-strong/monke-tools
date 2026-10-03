@@ -433,6 +433,19 @@ reviews:
 
     expect(output).toBe("false\n");
 
+    write(repoRoot, "skills.lock.json", '{"version":3,"recipes":[]}\n');
+    git(repoRoot, ["add", "."]);
+    git(repoRoot, ["commit", "-m", "change locked guidance"]);
+    const afterLock = git(repoRoot, ["rev-parse", "HEAD"]);
+    output = "";
+    await runCodeRabbitConfigGenerator(
+      ["relevant", "--repo-root", repoRoot, "--before", afterIrrelevant, "--after", afterLock],
+      (message) => {
+        output += message;
+      }
+    );
+    expect(output).toBe("true\n");
+
     const fallbackBeforeCommits = [
       "0".repeat(beforeRelevant.length),
       "f".repeat(beforeRelevant.length)

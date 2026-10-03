@@ -64,6 +64,8 @@ Part of the [domain glossary](../../CONTEXT.md).
 
 **Skill import recipe store**: The shared collection of **Skill import recipes** maintained with monke-tools.
 
+**Skill lock**: The recorded upstream versions and import choices that identify one reproducible collection of **Imported guidance**. A **Skill import recipe** describes which guidance to select; a **Skill lock** identifies the selected versions.
+
 **Skill import selector**: The upstream-facing skill identifier passed to a **Skill import** to choose one **Imported guidance** item from its outside source.
 
 **Import kind**: The recipe choice that makes selected **Imported guidance** either an **Imported skill** or an **Imported reference**.

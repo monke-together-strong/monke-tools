@@ -17,3 +17,7 @@ runs:
     - name: Install deps
       shell: bash
       run: vp install --frozen-lockfile -- --prefer-offline
+
+    - name: Restore locked guidance
+      shell: bash
+      run: vpr skills:restore

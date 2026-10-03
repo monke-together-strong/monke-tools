@@ -9,3 +9,7 @@ logs/
 
 tmp/
 plans/
+
+# Reproduced from the tracked Skill lock.
+skills/imported/
+skills/references/imported/
