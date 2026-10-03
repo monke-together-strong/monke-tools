@@ -13,8 +13,8 @@ to review it. Keep the full investigation in the work records.
 Resolve the intended base from the existing PR, explicit task instructions, or
 repository default. Check the branch and worktree before rebasing; never rebase
 the base branch itself. Commit relevant changes and ask before touching unrelated
-work. Fetch and rebase onto the latest base before analyzing or verifying the PR;
-use `$resolving-merge-conflicts` if needed.
+work. Fetch and rebase onto the latest base, resolving conflicts, before analyzing
+or verifying the PR.
 
 Inspect the rebased commits and diff, and confirm the base is an ancestor of
 `HEAD`. Consolidate new ADRs where possible. Exclude research and exploration

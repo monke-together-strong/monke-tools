@@ -179,25 +179,6 @@
     },
     {
       "lock": {
-        "commit": "153fc1b93de6584562765cdce299324e1ff9e661",
-        "digest": "9ec6b87e0cd647a0428dbce537f479a9aa302c51944927f895aba76f8495a96e",
-        "importerVersion": "1.7.0",
-        "materializerVersion": 1,
-        "repository": "https://github.com/mattpocock/skills.git",
-        "subpath": "skills/engineering/resolving-merge-conflicts",
-        "updateRef": "153fc1b93de6584562765cdce299324e1ff9e661"
-      },
-      "skills": [
-        {
-          "kind": "skill",
-          "selector": "resolving-merge-conflicts",
-          "slug": "resolving-merge-conflicts"
-        }
-      ],
-      "source": "https://github.com/mattpocock/skills/tree/153fc1b93de6584562765cdce299324e1ff9e661/skills/engineering/resolving-merge-conflicts"
-    },
-    {
-      "lock": {
         "commit": "c1aff547ca418e31a0769296563c73649862d429",
         "digest": "37077e032e88047866b96ad2e808655c8f31d98875207d0b2ef188b5b9c22fba",
         "importerVersion": "1.7.0",

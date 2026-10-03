@@ -53,6 +53,18 @@ describe("versioned installation lifecycle", () => {
       await activateLocal({ home, installId: "locked-one", monkeHome, sourceCheckout });
       const projectedEntry = path.join(home, ".codex/skills/monke-tools/imported/alpha/SKILL.md");
       expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted one.");
+      rmSync(path.join(sourceCheckout, "skills/imported"), { recursive: true });
+      await runCliAsync(
+        ["skills", "configure"],
+        createTestRuntime({
+          cwd: sourceCheckout,
+          env: { HOME: home, MONKE_HOME: monkeHome },
+          multiSelectValues: [["codex"]],
+          onStderr() {},
+          onStdout() {}
+        })
+      );
+      expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted one.");
 
       write(
         upstream,

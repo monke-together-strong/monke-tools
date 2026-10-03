@@ -2,6 +2,7 @@ import { ok } from "node:assert/strict";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readlinkSync,
@@ -33,8 +34,40 @@ import { runUpdateSkills } from "../scripts/update-skills.ts";
 import { createRepo, git, makeTempDir, read, write } from "./helpers.ts";
 
 describe("locked skill command workflows", () => {
+  test("annotated discovery tags record their commit pin rather than the tag object", async () => {
+    const sandbox = makeTempDir("skill-lock-annotated-tag");
+    const upstream = createRepo(path.join(sandbox, "upstream"), {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Tagged fixture\n---\n\nTagged content.\n"
+    });
+    const commit = git(upstream, ["rev-parse", "HEAD"]);
+    git(upstream, ["tag", "--annotate", "release", "--message", "Accepted release"]);
+    write(
+      upstream,
+      "alpha/SKILL.md",
+      "---\nname: alpha\ndescription: Later fixture\n---\n\nLater content.\n"
+    );
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Advance branch beyond release"]);
+    const originalCwd = process.cwd();
+    const originalHome = process.env.MONKE_HOME;
+    try {
+      process.chdir(sandbox);
+      process.env.MONKE_HOME = path.join(sandbox, "home");
+      await runImportSkills([`${upstream}#release`], {
+        selectSkills: () => ["alpha"],
+        writeMessage() {}
+      });
+      expect(readImportRecipeStore(sandbox).recipes[0]?.lock?.commit).toBe(commit);
+      expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toContain("Tagged content.");
+    } finally {
+      process.chdir(originalCwd);
+      process.env.MONKE_HOME = originalHome;
+    }
+  });
+
   test("pins and restores exact published-importer content before deliberately updating a supporting file", async () => {
     const sandbox = makeTempDir("skill-lock-published");
+    const monkeHome = path.join(sandbox, "home $USER `literal` $(printf expanded) 'quote'");
     const upstream = createRepo(path.join(sandbox, "upstream"), {
       "alpha/references/details.md": "Reference one.\n",
       "alpha/SKILL.md": "---\nname: alpha\ndescription: Fixture skill\n---\n\nVersion one.\n"
@@ -45,7 +78,7 @@ describe("locked skill command workflows", () => {
     const originalPath = process.env.PATH;
     try {
       process.chdir(sandbox);
-      process.env.MONKE_HOME = path.join(sandbox, "home");
+      process.env.MONKE_HOME = monkeHome;
       await runImportSkills([upstream], { selectSkills: () => ["alpha"], writeMessage() {} });
       expect(readImportRecipeStore(sandbox).recipes[0]).toMatchObject({ lock: { commit } });
       expect(read(sandbox, "skills/imported/alpha/references/details.md")).toBe("Reference one.\n");
@@ -61,6 +94,15 @@ describe("locked skill command workflows", () => {
         );
       const restored = restore();
       expect(restored.exitCode).toBe(0);
+      expect(read(sandbox, "skills/imported/alpha/references/details.md")).toBe("Reference one.\n");
+      expect(read(sandbox, "skills.lock.json")).toBe(originalLock);
+
+      const imported = path.join(sandbox, "skills/imported/alpha");
+      const external = path.join(sandbox, "external-alpha");
+      renameSync(imported, external);
+      symlinkSync(external, imported);
+      expect(restore().exitCode).toBe(0);
+      expect(lstatSync(imported).isDirectory()).toBeTruthy();
       expect(read(sandbox, "skills/imported/alpha/references/details.md")).toBe("Reference one.\n");
       expect(read(sandbox, "skills.lock.json")).toBe(originalLock);
 
@@ -100,7 +142,26 @@ describe("locked skill command workflows", () => {
       expect(
         git(repository, ["show", `${candidate}:skills/imported/alpha/references/details.md`])
       ).toBe("Reference two.");
-      expect(output).toContain(`mt diff --commit ${candidate}`);
+      writeFileSync(
+        path.join(viewer, "mt"),
+        `#!/bin/sh\nprintf '%s\\n' "$@" > '${path.join(sandbox, "reopen-arguments")}'\n`
+      );
+      chmodSync(path.join(viewer, "mt"), 0o755);
+      const reopen = output
+        .split("\n")
+        .find((line) => line.startsWith("Complete skill review: "))
+        ?.slice("Complete skill review: ".length);
+      ok(reopen);
+      expect(Bun.spawnSync(["sh", "-c", reopen], { cwd: sandbox, env: process.env }).exitCode).toBe(
+        0
+      );
+      expect(read(sandbox, "reopen-arguments").trim().split("\n")).toStrictEqual([
+        "diff",
+        "--commit",
+        candidate,
+        "--path",
+        repository
+      ]);
       write(upstream, "alpha/references/details.md", "Reference three.\n");
       git(upstream, ["add", "."]);
       git(upstream, ["commit", "-m", "Next supporting-file update"]);
@@ -122,7 +183,7 @@ describe("locked skill command workflows", () => {
         `#!/bin/sh\nprintf '%s\\n' "$@" > '${path.join(sandbox, "lfv-delivery")}'\nprintf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"https://viewer.example.test/complete-skills"}}'\n`
       );
       chmodSync(path.join(viewer, "lfv"), 0o755);
-      write(sandbox, "home/config.yml", "version: 1\ndiffAdapter: lfv\n");
+      writeFileSync(path.join(monkeHome, "config.yml"), "version: 1\ndiffAdapter: lfv\n");
       write(upstream, "alpha/references/details.md", "Reference four.\n");
       git(upstream, ["add", "."]);
       git(upstream, ["commit", "-m", "Configured LFV update"]);
@@ -187,6 +248,7 @@ describe("locked skill command workflows", () => {
       git(consumer, ["add", "."]);
       git(consumer, ["commit", "-m", "Accept baseline lock"]);
       const beforeSourceCommit = git(consumer, ["rev-parse", "HEAD"]);
+      const sourceRevisions = [beforeSourceCommit];
       expect(git(consumer, ["ls-files", "skills/imported", "skills/references/imported"])).toBe("");
 
       write(
@@ -262,6 +324,7 @@ describe("locked skill command workflows", () => {
       git(consumer, ["add", "."]);
       git(consumer, ["commit", "-m", "Accept upgraded lock"]);
       const afterSourceCommit = git(consumer, ["rev-parse", "HEAD"]);
+      sourceRevisions.push(afterSourceCommit);
       await runReviewSkills([beforeSourceCommit, afterSourceCommit]);
       expect(readDeliveredComparison(sandbox)).toStrictEqual(first);
 
@@ -272,7 +335,14 @@ describe("locked skill command workflows", () => {
         git(upstream, ["commit", "-m", `Update ${version}`]);
         await runUpdateSkills([], { writeMessage() {} });
         retained.push(readDeliveredComparison(sandbox));
+        git(consumer, ["add", "skills.lock.json"]);
+        git(consumer, ["commit", "-m", `Accept version ${version}`]);
+        sourceRevisions.push(git(consumer, ["rev-parse", "HEAD"]));
       }
+      for (const revision of sourceRevisions) {
+        await runReviewSkills([revision, revision]);
+      }
+      expect(git(first.repository, ["fsck", "--no-reflogs", "--unreachable"])).toBe("");
       const oldest = Bun.spawnSync(["git", "cat-file", "-e", `${first.commit}^{commit}`], {
         cwd: first.repository
       });

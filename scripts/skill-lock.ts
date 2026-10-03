@@ -56,11 +56,22 @@ export function describeSkillSource(source: string, repoRoot: string) {
 
 export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string) {
   const source = recipe.lock ?? describeSkillSource(recipe.source, repoRoot);
+  const revisions = /^[a-f\d]{40}$/u.test(source.updateRef)
+    ? []
+    : createRuntime({ cwd: repoRoot })
+        .exec("git", [
+          "ls-remote",
+          "--",
+          source.repository,
+          source.updateRef,
+          `${source.updateRef}^{}`
+        ])
+        .stdout.trim()
+        .split("\n")
+        .map((row) => row.split(/\s+/u));
   const commit = /^[a-f\d]{40}$/u.test(source.updateRef)
     ? source.updateRef
-    : createRuntime({ cwd: repoRoot })
-        .exec("git", ["ls-remote", "--", source.repository, source.updateRef])
-        .stdout.split(/\s/u)[0];
+    : (revisions.find(([, ref]) => ref?.endsWith("^{}")) ?? revisions[0])?.[0];
   if (!commit || !/^[a-f\d]{40}$/u.test(commit)) {
     throw new MonkeError(
       `Cannot resolve ${recipe.source} at ${source.updateRef} to a full Git commit`
@@ -140,6 +151,9 @@ export function guidanceDigest(
     const root = prepared
       ? path.join(repoRoot, item.kind, item.slug)
       : importedGuidancePath(repoRoot, item);
+    if (!lstatSync(root, { throwIfNoEntry: false })?.isDirectory()) {
+      throw new MonkeError(`Imported ${item.kind} root must be a regular directory: ${root}`);
+    }
     const entry = path.join(root, item.kind === "reference" ? "MAIN.md" : "SKILL.md");
     if (!lstatSync(entry, { throwIfNoEntry: false })?.isFile()) {
       throw new MonkeError(`Missing or invalid Imported ${item.kind} entry at ${entry}`);

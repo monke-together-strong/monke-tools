@@ -35,10 +35,8 @@ while preserving generated guidance and the lock. Eviction or clearing invalidat
 the affected windows and LFV links; reconstruct a historical comparison to open
 a new review.
 
-The migration retains `resolving-merge-conflicts` in a separate recipe frozen at
-the latest revision before its upstream removal. The remaining Matt Pocock skills
-continue following their normal discovery ref. Retiring the preserved skill is
-a separate source-maintenance decision.
+The initial migration upgrades the selected guidance and retires
+`resolving-merge-conflicts` after its upstream removal.
 
 Published releases include complete generated guidance. Release installation and
 `mt update` consume those bundles without fetching upstream skill repositories.

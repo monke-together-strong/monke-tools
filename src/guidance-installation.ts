@@ -42,6 +42,9 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
   if (!guidanceSourceRoot) {
     throw new MonkeError("Active tool install is not configured; install monke-tools first");
   }
+  if (!guidanceSourceRootOverride && activeInstall?.manifest.installKind === "local") {
+    await restoreSkillImports(guidanceSourceRoot);
+  }
   resolveSkillSourceTree(guidanceSourceRoot);
 
   const previousPreference = config.skillInstallPreference ?? null;

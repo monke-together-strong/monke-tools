@@ -16,6 +16,7 @@ import { runDiffInteractive } from "../src/diff.ts";
 import { MonkeError } from "../src/errors.ts";
 import { createRuntime, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
 import { sha256 } from "../src/sha256.ts";
+import { shellQuote } from "../src/shell-quote.ts";
 import type { Runtime } from "../src/types.ts";
 import { IMPORTED_REFERENCES_ROOT, IMPORTED_SKILLS_ROOT } from "./import-guidance.ts";
 import { readImportRecipeStore, SKILL_LOCK_PATH } from "./skill-import-recipes.ts";
@@ -132,12 +133,16 @@ export async function saveSkillComparison(
       path.join(paths.repository, ".git", "info", "attributes"),
       "* -text -filter -ident\n"
     );
-    const tree = (snapshot: string) => {
+    const reviews = readReviews(paths.index);
+    const clearWorkingTree = () => {
       for (const entry of readdirSync(paths.repository)) {
         if (entry !== ".git") {
           rmSync(path.join(paths.repository, entry), { force: true, recursive: true });
         }
       }
+    };
+    const tree = (snapshot: string) => {
+      clearWorkingTree();
       for (const entry of readdirSync(snapshot)) {
         cpSync(path.join(snapshot, entry), path.join(paths.repository, entry), {
           recursive: true,
@@ -148,32 +153,45 @@ export async function saveSkillComparison(
       git(["add", "--all", "--force", "--", "."]);
       return git(["write-tree"]);
     };
-    const beforeTree = tree(before);
-    const afterTree = tree(after);
-    if (beforeTree === afterTree) {
-      return;
+    try {
+      const beforeTree = tree(before);
+      const afterTree = tree(after);
+      if (beforeTree === afterTree) {
+        return;
+      }
+      const id = sha256(`${beforeTree}\0${afterTree}`);
+      const previous = reviews.find((review) => review.id === id);
+      const baseline = previous
+        ? undefined
+        : git(["commit-tree", beforeTree], "Imported guidance before update\n");
+      const commit =
+        previous?.commit ??
+        git(["commit-tree", afterTree, "-p", baseline ?? ""], "Imported guidance update\n");
+      git(["update-ref", `refs/heads/skill-review-${id}`, commit]);
+      git(["symbolic-ref", "HEAD", `refs/heads/skill-review-${id}`]);
+      const retained = [...reviews.filter((review) => review.id !== id), { commit, id }].slice(-3);
+      for (const review of reviews.filter(
+        (prior) => !retained.some((item) => item.id === prior.id)
+      )) {
+        git(["update-ref", "-d", `refs/heads/skill-review-${review.id}`]);
+      }
+      writeFileSync(paths.index, `${JSON.stringify(retained, null, 2)}\n`);
+      return { ...paths, commit, id };
+    } finally {
+      // The index also keeps objects alive. Restore only the selected retained commit
+      // before reclaiming unpublished trees from no-op and failed comparisons.
+      clearWorkingTree();
+      git(["read-tree", "--empty"]);
+      const head = runtime.exec("git", ["rev-parse", "--verify", "HEAD"], {
+        allowFailure: true,
+        cwd: paths.repository
+      });
+      if (head.exitCode === 0) {
+        git(["reset", "--hard", "--quiet", head.stdout.trim()]);
+      }
+      git(["reflog", "expire", "--expire=now", "--all"]);
+      git(["gc", "--prune=now", "--quiet"]);
     }
-    const id = sha256(`${beforeTree}\0${afterTree}`);
-    const reviews = readReviews(paths.index);
-    const previous = reviews.find((review) => review.id === id);
-    const baseline = previous
-      ? undefined
-      : git(["commit-tree", beforeTree], "Imported guidance before update\n");
-    const commit =
-      previous?.commit ??
-      git(["commit-tree", afterTree, "-p", baseline ?? ""], "Imported guidance update\n");
-    git(["update-ref", `refs/heads/skill-review-${id}`, commit]);
-    git(["symbolic-ref", "HEAD", `refs/heads/skill-review-${id}`]);
-    const retained = [...reviews.filter((review) => review.id !== id), { commit, id }].slice(-3);
-    for (const review of reviews.filter(
-      (prior) => !retained.some((item) => item.id === prior.id)
-    )) {
-      git(["update-ref", "-d", `refs/heads/skill-review-${review.id}`]);
-    }
-    writeFileSync(paths.index, `${JSON.stringify(retained, null, 2)}\n`);
-    git(["reflog", "expire", "--expire=now", "--all"]);
-    git(["gc", "--prune=now", "--quiet"]);
-    return { ...paths, commit, id };
   });
 }
 
@@ -182,7 +200,7 @@ export async function openSkillComparison(
   options: { adapter?: string; writeMessage?: (message: string) => void } = {}
 ) {
   const runtime = createRuntime({ writeStdout: options.writeMessage });
-  const reopen = `mt diff --commit ${comparison.commit} --path ${JSON.stringify(comparison.repository)}${options.adapter ? ` --adapter ${options.adapter}` : ""}`;
+  const reopen = `mt diff --commit ${shellQuote(comparison.commit)} --path ${shellQuote(comparison.repository)}${options.adapter ? ` --adapter ${shellQuote(options.adapter)}` : ""}`;
   (options.writeMessage ?? runtime.writeStdout)(`Complete skill review: ${reopen}\n`);
   try {
     await runDiffInteractive(runtime, {
