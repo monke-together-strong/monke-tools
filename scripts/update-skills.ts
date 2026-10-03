@@ -112,7 +112,6 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
       const normalizedSource = pinnedSkillSource({ ...revision, digest: "" }, stagingDirectory);
       const installOutput = runSkillsCaptured(
         buildSkillsInstallArgs({
-          acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
           selectors: recipe.skills.map((skill) => skill.selector),
           source: normalizedSource
         }),
@@ -126,7 +125,6 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
       // Recipe updates are serial because each accepted replacement updates the store for the next.
       // oxlint-disable-next-line no-await-in-loop
       const slugReplacements = await resolveStagedSkillReplacements({
-        acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
         confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
         interactive,
         recipe,
@@ -238,7 +236,6 @@ function validateImportedGuidanceDirectoriesAreTracked(
 }
 
 async function resolveStagedSkillReplacements(options: {
-  acceptOpenClawRisks: boolean;
   confirmSlugReplacement: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
   interactive: boolean;
   recipe: SkillImportRecipe;
@@ -260,7 +257,6 @@ async function resolveStagedSkillReplacements(options: {
   }
 
   const selectorMappings = resolveSkillSelectorSlugMappings({
-    acceptOpenClawRisks: options.acceptOpenClawRisks,
     selectors: recipe.skills.map((skill) => skill.selector),
     source: options.source
   });

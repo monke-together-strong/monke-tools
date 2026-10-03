@@ -89,7 +89,7 @@ export type StagedSkillSelection = Omit<SkillImportRecipeSkill, "kind">;
 
 /** Input for recording newly imported skills in the recipe store. */
 export interface RecordImportedGuidanceInput {
-  /** Whether the dedicated OpenClaw risk acceptance flag was used. */
+  /** Whether OpenClaw risk acceptance was recorded for this recipe. */
   acceptOpenClawRisks: boolean;
   /** Import kind applied to every selection in this invocation. */
   kind: ImportedGuidanceKind;

@@ -140,7 +140,6 @@ export function stageLockedRecipe(recipe: SkillImportRecipe, stagingDirectory: s
   const source = pinnedSkillSource(recipe.lock, stagingDirectory);
   const output = runSkillsCaptured(
     buildSkillsInstallArgs({
-      acceptOpenClawRisks: recipe.acceptOpenClawRisks === true,
       importerVersion: recipe.lock.importerVersion,
       selectors: recipe.skills.map((skill) => skill.selector),
       source

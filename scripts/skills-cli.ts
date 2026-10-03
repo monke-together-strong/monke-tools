@@ -8,8 +8,6 @@ export const SKILLS_CLI_VERSION = "1.7.0";
 const NPX_COMMAND = process.platform === "win32" ? "npx.cmd" : "npx";
 /** Options for building an upstream staged Skill install command. */
 export interface BuildSkillsInstallArgsOptions {
-  /** Whether to pass the dedicated OpenClaw risk acceptance flag. */
-  acceptOpenClawRisks: boolean;
   importerVersion?: string;
   /** Upstream Skill import selectors to install. */
   selectors: readonly string[];

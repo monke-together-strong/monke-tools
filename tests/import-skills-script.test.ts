@@ -21,7 +21,6 @@ import { parse } from "yaml";
 import {
   buildGroupedSkillOptions,
   extractSecurityRiskAssessment,
-  normalizeSourceForStaging,
   parseAvailableSkillGroups,
   runImportSkills
 } from "../scripts/import-skills.ts";
@@ -574,13 +573,6 @@ describe("skill importing", () => {
     expect(assessment).not.toContain("Installation Summary");
     expect(assessment).not.toContain("Installed 1 skill");
     expect(assessment).not.toContain(".agents/skills");
-  });
-
-  test("normalizeSourceForStaging resolves local paths before running in temp staging", () => {
-    const cwd = makeTempDir("skill-import-source-cwd");
-
-    expect(normalizeSourceForStaging("./skills-source", cwd)).toBe(path.join(cwd, "skills-source"));
-    expect(normalizeSourceForStaging("vercel-labs/skills", cwd)).toBe("vercel-labs/skills");
   });
 
   test("skill import recipe store writes sorted deterministic output", () => {
@@ -1347,7 +1339,7 @@ name: outside-entry
     );
   });
 
-  test("skills import script passes and records explicit OpenClaw risk acceptance", async () => {
+  test("skills import script records explicit OpenClaw risk acceptance", async () => {
     const sandbox = makeTempDir("skill-import-openclaw");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");
@@ -2731,7 +2723,7 @@ metadata: [unterminated
     expect(installCalls).toStrictEqual([sandbox]);
   });
 
-  test("skills update passes recorded OpenClaw risk acceptance", async () => {
+  test("skills update preserves recorded OpenClaw risk acceptance", async () => {
     const sandbox = makeTempDir("skill-update-script-openclaw");
     const skillsLogPath = path.join(sandbox, "skills.log");
     const skillsCwdLogPath = path.join(sandbox, "skills-cwd.log");

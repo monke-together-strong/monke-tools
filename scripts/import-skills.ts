@@ -91,8 +91,6 @@ const CONTROL_RE = new RegExp(
 
 /** Options for resolving exact selector-to-slug mappings with isolated installs. */
 export interface ResolveSkillSelectorSlugMappingsOptions {
-  /** Whether to pass the dedicated OpenClaw risk acceptance flag. */
-  acceptOpenClawRisks: boolean;
   /** Upstream Skill import selectors to install one at a time. */
   selectors: readonly string[];
   /** Source string passed through to upstream `skills add`. */
@@ -142,15 +140,6 @@ export function parseAvailableSkillGroups(output: string) {
   }
 
   return groups;
-}
-
-/** Resolves local source paths before the upstream CLI runs from temp staging. */
-export function normalizeSourceForStaging(source: string, cwd: string) {
-  if (!isLocalPath(source)) {
-    return source;
-  }
-
-  return path.resolve(cwd, source);
 }
 
 /** Extracts and renders the upstream security assessment from noisy install output. */
@@ -268,7 +257,6 @@ async function importSkills(argv: string[], dependencies: ImportSkillsDependenci
 
     const installOutput = runSkillsCaptured(
       buildSkillsInstallArgs({
-        acceptOpenClawRisks,
         selectors: selectedSkills,
         source: normalizedSource
       }),
@@ -278,7 +266,6 @@ async function importSkills(argv: string[], dependencies: ImportSkillsDependenci
 
     const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
     const stagedSelections = mapSelectedSkillsToImportedSlugs({
-      acceptOpenClawRisks,
       importedSkillSlugs: stagedSlugs,
       selectors: selectedSkills,
       source: normalizedSource
@@ -314,7 +301,6 @@ async function importSkills(argv: string[], dependencies: ImportSkillsDependenci
       rmSync(path.join(stagingDirectory, ".agents"), { force: true, recursive: true });
       runSkillsCaptured(
         buildSkillsInstallArgs({
-          acceptOpenClawRisks,
           selectors: recordedRecipe.skills.map((skill) => skill.selector),
           source: normalizedSource
         }),
@@ -380,7 +366,7 @@ function parseCommand(argv: string[]): ImportCommandOptions {
     .argument("<source>")
     .option("-i, --install", "Run the monke-tools skill install command after importing")
     .option("--ref", "Import every selection as a non-discoverable reference")
-    .option("--accept-openclaw-risks", "Pass the upstream OpenClaw risk acceptance flag")
+    .option("--accept-openclaw-risks", "Record OpenClaw risk acceptance in the import recipe")
     .allowExcessArguments(false);
 
   configureCliParser(program);
@@ -867,7 +853,6 @@ function stepSymbol(state: string) {
 }
 
 function mapSelectedSkillsToImportedSlugs(options: {
-  acceptOpenClawRisks: boolean;
   importedSkillSlugs: readonly string[];
   selectors: readonly string[];
   source: string;
@@ -876,7 +861,6 @@ function mapSelectedSkillsToImportedSlugs(options: {
     return mapSelectedSkillsToImportedSlugsFromSet(options.selectors, options.importedSkillSlugs);
   } catch {
     const mappings = resolveSkillSelectorSlugMappings({
-      acceptOpenClawRisks: options.acceptOpenClawRisks,
       selectors: options.selectors,
       source: options.source
     });
@@ -957,7 +941,6 @@ function resolveSkillSelectorSlugMapping(
   try {
     runSkillsCaptured(
       buildSkillsInstallArgs({
-        acceptOpenClawRisks: options.acceptOpenClawRisks,
         selectors: [selector],
         source: options.source
       }),
@@ -1056,17 +1039,6 @@ function stripTerminalEscapes(value: string) {
     .replace(SIMPLE_ESC_RE, "")
     .replace(C1_RE, "")
     .replace(CONTROL_RE, "");
-}
-
-function isLocalPath(input: string) {
-  return (
-    path.isAbsolute(input) ||
-    input.startsWith("./") ||
-    input.startsWith("../") ||
-    input === "." ||
-    input === ".." ||
-    /^[a-zA-Z]:[/\\]/u.test(input)
-  );
 }
 
 if (import.meta.main) {
