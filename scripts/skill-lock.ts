@@ -69,9 +69,13 @@ export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string
         .stdout.trim()
         .split("\n")
         .map((row) => row.split(/\s+/u));
+  const selected =
+    revisions.find(([, ref]) => ref === source.updateRef) ??
+    revisions.find(([, ref]) => ref === `refs/heads/${source.updateRef}`) ??
+    revisions.find(([, ref]) => ref === `refs/tags/${source.updateRef}`);
   const commit = /^[a-f\d]{40}$/u.test(source.updateRef)
     ? source.updateRef
-    : (revisions.find(([, ref]) => ref?.endsWith("^{}")) ?? revisions[0])?.[0];
+    : (revisions.find(([, ref]) => ref === `${selected?.[1]}^{}`) ?? selected)?.[0];
   if (!commit || !/^[a-f\d]{40}$/u.test(commit)) {
     throw new MonkeError(
       `Cannot resolve ${recipe.source} at ${source.updateRef} to a full Git commit`

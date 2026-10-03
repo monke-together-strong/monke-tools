@@ -5,6 +5,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   readlinkSync,
   renameSync,
   rmSync,
@@ -34,13 +35,14 @@ import { runUpdateSkills } from "../scripts/update-skills.ts";
 import { createRepo, git, makeTempDir, read, write } from "./helpers.ts";
 
 describe("locked skill command workflows", () => {
-  test("annotated discovery tags record their commit pin rather than the tag object", async () => {
+  test("annotated discovery tags pin commits without overriding same-named branches", async () => {
     const sandbox = makeTempDir("skill-lock-annotated-tag");
     const upstream = createRepo(path.join(sandbox, "upstream"), {
       "alpha/SKILL.md": "---\nname: alpha\ndescription: Tagged fixture\n---\n\nTagged content.\n"
     });
     const commit = git(upstream, ["rev-parse", "HEAD"]);
     git(upstream, ["tag", "--annotate", "release", "--message", "Accepted release"]);
+    git(upstream, ["tag", "--annotate", "main", "--message", "Older tag sharing branch name"]);
     write(
       upstream,
       "alpha/SKILL.md",
@@ -48,17 +50,26 @@ describe("locked skill command workflows", () => {
     );
     git(upstream, ["add", "."]);
     git(upstream, ["commit", "-m", "Advance branch beyond release"]);
+    const branchCommit = git(upstream, ["rev-parse", "HEAD"]);
     const originalCwd = process.cwd();
     const originalHome = process.env.MONKE_HOME;
     try {
-      process.chdir(sandbox);
       process.env.MONKE_HOME = path.join(sandbox, "home");
-      await runImportSkills([`${upstream}#release`], {
-        selectSkills: () => ["alpha"],
-        writeMessage() {}
-      });
-      expect(readImportRecipeStore(sandbox).recipes[0]?.lock?.commit).toBe(commit);
-      expect(read(sandbox, "skills/imported/alpha/SKILL.md")).toContain("Tagged content.");
+      for (const [index, selection] of [
+        { content: "Tagged content.", pin: commit, ref: "release" },
+        { content: "Later content.", pin: branchCommit, ref: "main" },
+        { content: "Tagged content.", pin: commit, ref: "refs/tags/main" }
+      ].entries()) {
+        const consumer = path.join(sandbox, `consumer-${index}`);
+        mkdirSync(consumer);
+        process.chdir(consumer);
+        await runImportSkills([`${upstream}#${selection.ref}`], {
+          selectSkills: () => ["alpha"],
+          writeMessage() {}
+        });
+        expect(readImportRecipeStore(consumer).recipes[0]?.lock?.commit).toBe(selection.pin);
+        expect(read(consumer, "skills/imported/alpha/SKILL.md")).toContain(selection.content);
+      }
     } finally {
       process.chdir(originalCwd);
       process.env.MONKE_HOME = originalHome;
@@ -339,6 +350,33 @@ describe("locked skill command workflows", () => {
         git(consumer, ["commit", "-m", `Accept version ${version}`]);
         sourceRevisions.push(git(consumer, ["rev-parse", "HEAD"]));
       }
+      const cacheRoot = path.dirname(first.repository);
+      const cacheFiles = readdirSync(cacheRoot)
+        .map((entry) => path.join(cacheRoot, entry))
+        .filter((entry) => lstatSync(entry).isFile());
+      const commitsBeforeFailure = git(first.repository, ["log", "--all", "--format=%H"])
+        .split("\n")
+        .toSorted();
+      write(upstream, "alpha/references/details.md", "Details 6.\n");
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Applied update with failed review publication"]);
+      for (const entry of cacheFiles) {
+        chmodSync(entry, 0o400);
+      }
+      chmodSync(cacheRoot, 0o500);
+      try {
+        await expect(runUpdateSkills([], { writeMessage() {} })).rejects.toThrow(/EACCES/u);
+        expect(
+          git(first.repository, ["log", "--all", "--format=%H"]).split("\n").toSorted()
+        ).toStrictEqual(commitsBeforeFailure);
+      } finally {
+        chmodSync(cacheRoot, 0o755);
+        for (const entry of cacheFiles) {
+          chmodSync(entry, 0o644);
+        }
+      }
+      expect(read(consumer, "skills/imported/alpha/references/details.md")).toBe("Details 6.\n");
+      await runUpdateSkills([], { writeMessage() {} });
       for (const revision of sourceRevisions) {
         await runReviewSkills([revision, revision]);
       }
@@ -368,7 +406,7 @@ describe("locked skill command workflows", () => {
       await runReviewSkills(["clear"]);
       expect(existsSync(first.repository)).toBeFalsy();
       expect(read(consumer, "skills.lock.json")).toBe(lockBeforeClear);
-      expect(read(consumer, "skills/imported/alpha/references/details.md")).toBe("Details 5.\n");
+      expect(read(consumer, "skills/imported/alpha/references/details.md")).toBe("Details 6.\n");
       await runReviewSkills([beforeSourceCommit, afterSourceCommit]);
       const reconstructed = readDeliveredComparison(sandbox);
       expect(

@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -134,6 +135,23 @@ export async function saveSkillComparison(
       "* -text -filter -ident\n"
     );
     const reviews = readReviews(paths.index);
+    const previousHeadRef = git(["symbolic-ref", "HEAD"]);
+    const replaceRetainedRefs = (from: typeof reviews, to: typeof reviews) => {
+      const retainedIds = new Set(to.map((review) => review.id));
+      git(
+        ["update-ref", "--stdin"],
+        [
+          "start",
+          ...to.map((review) => `update refs/heads/skill-review-${review.id} ${review.commit}`),
+          ...from
+            .filter((review) => !retainedIds.has(review.id))
+            .map((review) => `delete refs/heads/skill-review-${review.id}`),
+          "prepare",
+          "commit",
+          ""
+        ].join("\n")
+      );
+    };
     const clearWorkingTree = () => {
       for (const entry of readdirSync(paths.repository)) {
         if (entry !== ".git") {
@@ -167,15 +185,26 @@ export async function saveSkillComparison(
       const commit =
         previous?.commit ??
         git(["commit-tree", afterTree, "-p", baseline ?? ""], "Imported guidance update\n");
-      git(["update-ref", `refs/heads/skill-review-${id}`, commit]);
-      git(["symbolic-ref", "HEAD", `refs/heads/skill-review-${id}`]);
       const retained = [...reviews.filter((review) => review.id !== id), { commit, id }].slice(-3);
-      for (const review of reviews.filter(
-        (prior) => !retained.some((item) => item.id === prior.id)
-      )) {
-        git(["update-ref", "-d", `refs/heads/skill-review-${review.id}`]);
+      const nextIndex = `${paths.index}.${crypto.randomUUID()}.tmp`;
+      let refsChanged = false;
+      try {
+        // Prepare metadata before changing retention. A failed publication leaves
+        // the previous ledger and all its commit pairs available for retry.
+        writeFileSync(nextIndex, `${JSON.stringify(retained, null, 2)}\n`);
+        replaceRetainedRefs(reviews, retained);
+        refsChanged = true;
+        git(["symbolic-ref", "HEAD", `refs/heads/skill-review-${id}`]);
+        renameSync(nextIndex, paths.index);
+      } catch (error) {
+        if (refsChanged) {
+          replaceRetainedRefs(retained, reviews);
+          git(["symbolic-ref", "HEAD", previousHeadRef]);
+        }
+        throw error;
+      } finally {
+        rmSync(nextIndex, { force: true });
       }
-      writeFileSync(paths.index, `${JSON.stringify(retained, null, 2)}\n`);
       return { ...paths, commit, id };
     } finally {
       // The index also keeps objects alive. Restore only the selected retained commit
