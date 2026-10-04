@@ -18,6 +18,7 @@ import {
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath
 } from "../scripts/import-guidance.ts";
+import { reportSecurityRiskAssessment } from "../scripts/import-skills.ts";
 import {
   normalizeImportRecipeStore,
   readImportRecipeStore,
@@ -80,8 +81,7 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
       try {
         await runUpdateSkills(
           [
-            "--adapter",
-            request.adapter ?? "codiff",
+            ...(request.adapter ? ["--adapter", request.adapter] : []),
             ...(request.interactive ? ["--interactive"] : [])
           ],
           {
@@ -360,13 +360,17 @@ async function addGitSkillSource(
   try {
     const revision = resolveSkillRevision(recipe, root);
     const normalized = pinnedSkillSource({ ...revision, digest: "" }, staging);
-    await runtime.execAsync(
+    const installOutput = await runtime.execAsync(
       runtime.platform === "win32" ? "npx.cmd" : "npx",
       buildSkillsInstallArgs({
         selectors: request.skills ?? previous?.skills.map((item) => item.selector) ?? ["*"],
         source: normalized
       }),
       { cwd: staging }
+    );
+    reportSecurityRiskAssessment(
+      `${installOutput.stdout}\n${installOutput.stderr}`,
+      runtime.writeStdout
     );
     const skills = listStagedSkillSlugs(staging).map((slug) => {
       const entry = path.join(staging, ".agents", "skills", slug, "SKILL.md");

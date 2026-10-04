@@ -7,8 +7,10 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
+  rmdirSync,
   symlinkSync,
   unlinkSync,
   writeFileSync
@@ -48,6 +50,8 @@ export function copyStagedGuidanceToManagedRoots(
   const backupRoot = mkdtempSync(path.join(options.repoRoot, ".monke-guidance-backup-"));
   const preparedRoot = path.join(backupRoot, "prepared");
   const affectedPaths = new Map<string, string | null>();
+  const invocationCopies = new Map<string, string | null>();
+  const newAgentsDirectories = new Set<string>();
   let retainRecovery = false;
 
   try {
@@ -78,18 +82,25 @@ export function copyStagedGuidanceToManagedRoots(
 
     for (const item of options.guidance) {
       const targetPath = importedGuidancePath(options.repoRoot, item);
+      const linkedSource = options.linkedSkills?.get(item.slug);
+      if (
+        linkedSource &&
+        (item.disableModelInvocation ?? options.defaultDisableModelInvocation) !== undefined
+      ) {
+        backupLinkedInvocation(linkedSource, backupRoot, invocationCopies, newAgentsDirectories);
+      }
       mkdirSync(path.dirname(targetPath), { recursive: true });
       publishPreparedGuidance(
         item,
         targetPath,
         preparedRoot,
-        options.linkedSkills?.get(item.slug),
+        linkedSource,
         options.defaultDisableModelInvocation
       );
     }
     options.commitState?.();
   } catch (error) {
-    const failures: string[] = [];
+    const failures = restoreLinkedInvocation(invocationCopies, newAgentsDirectories);
     for (const [targetPath, backupPath] of affectedPaths) {
       try {
         rmSync(targetPath, { force: true, recursive: true });
@@ -112,6 +123,66 @@ export function copyStagedGuidanceToManagedRoots(
   } finally {
     if (!retainRecovery) {
       rmSync(backupRoot, { force: true, recursive: true });
+    }
+  }
+}
+
+function restoreLinkedInvocation(
+  copies: Map<string, string | null>,
+  newAgentsDirectories: Set<string>
+) {
+  const failures: string[] = [];
+  for (const [metadataPath, copy] of copies) {
+    try {
+      rmSync(metadataPath, { force: true });
+      if (copy !== null) {
+        cpSync(copy, metadataPath, { verbatimSymlinks: true });
+      }
+    } catch (recoveryError) {
+      failures.push(`${metadataPath}: ${errorMessage(ThrownValueSchema.parse(recoveryError))}`);
+    }
+  }
+  for (const directory of newAgentsDirectories) {
+    try {
+      if (existsSync(directory)) {
+        rmdirSync(directory);
+      }
+    } catch (recoveryError) {
+      failures.push(`${directory}: ${errorMessage(ThrownValueSchema.parse(recoveryError))}`);
+    }
+  }
+  return failures;
+}
+
+/** Keep publication rollback separate from installer recovery and unrelated Skill assets. */
+function backupLinkedInvocation(
+  source: string,
+  backupRoot: string,
+  copies: Map<string, string | null>,
+  newAgentsDirectories: Set<string>
+) {
+  const physicalSource = realpathSync.native(source);
+  const metadataPaths = [path.join(physicalSource, "SKILL.md")];
+  const agentsPath = path.join(physicalSource, "agents");
+  const agents = lstatSync(agentsPath, { throwIfNoEntry: false });
+  // The invocation setter rejects directory aliases before changing their contents.
+  if (!agents || agents.isDirectory()) {
+    metadataPaths.push(path.join(agentsPath, "openai.yaml"), path.join(agentsPath, "openai.yml"));
+    if (!agents) {
+      newAgentsDirectories.add(agentsPath);
+    }
+  }
+  for (const metadataPath of metadataPaths) {
+    if (copies.has(metadataPath)) {
+      continue;
+    }
+    if (lstatSync(metadataPath, { throwIfNoEntry: false })) {
+      const copy = path.join(backupRoot, "invocation", String(copies.size));
+      mkdirSync(path.dirname(copy), { recursive: true });
+      cpSync(metadataPath, copy, { verbatimSymlinks: true });
+      copies.set(metadataPath, copy);
+    } else {
+      copies.set(metadataPath, null);
     }
   }
 }

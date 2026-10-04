@@ -1,12 +1,16 @@
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readlinkSync,
   realpathSync,
   rmSync,
-  statSync
+  rmdirSync,
+  statSync,
+  symlinkSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -20,43 +24,46 @@ import {
 import type { SkillImportRecipe, SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { containsPath } from "./path-identity.ts";
+import { getMonkeHome } from "./runtime.ts";
 import type { Runtime } from "./types.ts";
+
+const SKILL_SOURCE_CANDIDATES = [
+  ".agents/skills",
+  "skills",
+  ".claude/skills",
+  ".codex/skills",
+  ".cursor/skills"
+];
 
 /** Choose one skill source folder from a checkout or installer output. */
 export function resolveSkillSourceFolder(directory: string) {
   if (existsSync(path.join(directory, "SKILL.md"))) {
     return realpathSync.native(directory);
   }
-  const candidates = [
-    path.join(directory, ".agents", "skills"),
-    path.join(directory, "skills"),
-    path.join(directory, ".claude", "skills"),
-    path.join(directory, ".codex", "skills"),
-    path.join(directory, ".cursor", "skills")
-  ];
+  const candidates = SKILL_SOURCE_CANDIDATES.map((candidate) => path.join(directory, candidate));
   const root = candidates.find((candidate) => existsSync(candidate)) ?? directory;
   return existsSync(root) ? realpathSync.native(root) : root;
 }
 
-/** Discover Skills without asking which agent should receive them. */
-function discoverSourceSkills(root: string) {
+/** Scan Skill directories and their existing ancestors without following cycles. */
+function scanSkillSource(root: string, includeNestedSkills = false) {
   if (!existsSync(root)) {
     throw new MonkeError(`Skill source is missing: ${root}`);
   }
-  const skills = new Map<string, string>();
+  const skills: string[] = [];
+  const directories = new Set<string>();
   const ancestors = new Set<string>();
   function visit(directory: string) {
     const physicalDirectory = realpathSync.native(directory);
     if (ancestors.has(physicalDirectory)) {
       return;
     }
+    directories.add(directory);
     if (existsSync(path.join(directory, "SKILL.md"))) {
-      const slug = path.basename(directory);
-      if (skills.has(slug)) {
-        throw new MonkeError(`Duplicate Skill slug ${slug} in ${root}`);
+      skills.push(directory);
+      if (!includeNestedSkills) {
+        return;
       }
-      skills.set(slug, directory);
-      return;
     }
     ancestors.add(physicalDirectory);
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -75,7 +82,253 @@ function discoverSourceSkills(root: string) {
     ancestors.delete(physicalDirectory);
   }
   visit(root);
+  return { directories, skills };
+}
+
+/** Discover Skills without asking which agent should receive them. */
+function discoverSourceSkills(root: string) {
+  const skills = new Map<string, string>();
+  for (const directory of scanSkillSource(root).skills) {
+    const slug = path.basename(directory);
+    if (skills.has(slug)) {
+      throw new MonkeError(`Duplicate Skill slug ${slug} in ${root}`);
+    }
+    skills.set(slug, directory);
+  }
   return skills;
+}
+
+/** Back up Skill folders without treating an existing project as disposable installer output. */
+function backupSourceFolders(
+  previousPath: string,
+  workingDirectory: string,
+  staging: string,
+  recoveryCopies: Map<string, string | null>,
+  disposableWorkingDirectory: boolean
+) {
+  const scanRoots = [
+    ...new Set([
+      previousPath,
+      workingDirectory,
+      ...SKILL_SOURCE_CANDIDATES.map((candidate) => path.join(workingDirectory, candidate))
+    ])
+  ];
+  const directories = new Set<string>();
+  const links = new Map<string, string>();
+  const skills = new Set<string>();
+  const parents = new Map<string, string>();
+  const sourceSkills = new Set<string>();
+  for (const root of scanRoots) {
+    rememberSourceAncestors(root, directories, links);
+    if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
+      continue;
+    }
+    const scanned = scanSkillSource(root);
+    for (const directory of scanned.directories) {
+      rememberSourceAncestors(directory, directories, links);
+    }
+    for (const skill of scanned.skills) {
+      skills.add(skill);
+      if (root === previousPath) {
+        sourceSkills.add(skill);
+      }
+    }
+  }
+  for (const skill of sourceSkills) {
+    const backup = path.join(staging, "originals", String(recoveryCopies.size));
+    parents.set(skill, projectedRecoveryParent(skill));
+    cpSync(skill, backup, { recursive: true, verbatimSymlinks: true });
+    recoveryCopies.set(skill, backup);
+  }
+  if (disposableWorkingDirectory && !existsSync(workingDirectory)) {
+    parents.set(workingDirectory, projectedRecoveryParent(workingDirectory));
+    recoveryCopies.set(workingDirectory, null);
+  }
+  return {
+    directories,
+    links,
+    parents,
+    scanRoots,
+    skills,
+    sourceFolder: previousPath,
+    sourceSkills,
+    workingDirectory
+  };
+}
+
+/** Remember existing collection ancestors so cleanup only prunes new, empty directories. */
+function rememberSourceAncestors(
+  root: string,
+  directories: Set<string>,
+  links: Map<string, string>
+) {
+  let directory = root;
+  while (!directories.has(directory)) {
+    const entry = lstatSync(directory, { throwIfNoEntry: false });
+    if (entry?.isSymbolicLink()) {
+      links.set(directory, readlinkSync(directory));
+    }
+    if (statSync(directory, { throwIfNoEntry: false })?.isDirectory()) {
+      directories.add(directory);
+    }
+    const parent = path.dirname(directory);
+    if (parent === directory) {
+      return;
+    }
+    directory = parent;
+  }
+}
+
+/** Resolve a parent even when the installer removed part of its directory hierarchy. */
+function projectedRecoveryParent(source: string) {
+  const parent = path.dirname(source);
+  let ancestor = parent;
+  while (!existsSync(ancestor)) {
+    ancestor = path.dirname(ancestor);
+  }
+  return path.resolve(realpathSync.native(ancestor), path.relative(ancestor, parent));
+}
+
+/** Restore source namespace links without following newly introduced directory aliases. */
+function prepareRecoveryParents(
+  snapshot: ReturnType<typeof backupSourceFolders>,
+  directory: string
+) {
+  const boundary = containsPath(snapshot.workingDirectory, snapshot.sourceFolder)
+    ? snapshot.workingDirectory
+    : snapshot.sourceFolder;
+  if (!containsPath(boundary, directory)) {
+    return;
+  }
+  const parents: string[] = [];
+  for (let parent = directory; containsPath(boundary, parent); parent = path.dirname(parent)) {
+    parents.push(parent);
+    if (parent === boundary) {
+      break;
+    }
+  }
+  for (const parent of parents.toReversed()) {
+    if (!snapshot.directories.has(parent)) {
+      continue;
+    }
+    const current = lstatSync(parent, { throwIfNoEntry: false });
+    const originalLink = snapshot.links.get(parent);
+    if (originalLink !== undefined) {
+      if (current?.isSymbolicLink() && readlinkSync(parent) === originalLink) {
+        continue;
+      }
+      if (current && !current.isSymbolicLink()) {
+        throw new MonkeError(`Source recovery directory replaced an original link: ${parent}`);
+      }
+      rmSync(parent, { force: true });
+      symlinkSync(originalLink, parent, "dir");
+    } else {
+      if (current?.isSymbolicLink()) {
+        rmSync(parent, { force: true });
+      }
+      mkdirSync(parent, { recursive: true });
+    }
+  }
+}
+
+/** Record failed installer additions without removing preexisting project directories. */
+function recordNewSourceSkills(
+  snapshot: ReturnType<typeof backupSourceFolders> | undefined,
+  recoveryCopies: Map<string, string | null>
+) {
+  if (!snapshot) {
+    return;
+  }
+  const discovered = snapshot.scanRoots
+    .filter((root) => statSync(root, { throwIfNoEntry: false })?.isDirectory())
+    .flatMap((root) => scanSkillSource(root, true).skills);
+  for (const skillFolder of new Set(discovered)) {
+    if (
+      [...snapshot.skills].some((root) => containsPath(root, skillFolder)) ||
+      [...recoveryCopies.keys()].some((root) => containsPath(root, skillFolder))
+    ) {
+      continue;
+    }
+    const target = newSkillRecoveryPath(skillFolder, snapshot);
+    if (target) {
+      snapshot.parents.set(target, projectedRecoveryParent(target));
+      recoveryCopies.set(target, null);
+    }
+  }
+}
+
+/** Remove a new alias rather than deleting the existing directory it exposes. */
+function newSkillRecoveryPath(
+  skillFolder: string,
+  snapshot: ReturnType<typeof backupSourceFolders>
+) {
+  for (let directory = skillFolder; ; directory = path.dirname(directory)) {
+    if (lstatSync(directory, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      const original = snapshot.links.get(directory);
+      if (original === undefined) {
+        return directory;
+      }
+      if (readlinkSync(directory) !== original) {
+        return;
+      }
+    }
+    if (snapshot.directories.has(directory)) {
+      break;
+    }
+  }
+  return snapshot.directories.has(skillFolder) ? path.join(skillFolder, "SKILL.md") : skillFolder;
+}
+
+function pruneNewSourceParents(source: string, directories: Set<string>) {
+  let parent = path.dirname(source);
+  while (!directories.has(parent)) {
+    if (lstatSync(parent, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      return;
+    }
+    if (existsSync(parent)) {
+      if (readdirSync(parent).length > 0) {
+        return;
+      }
+      rmdirSync(parent);
+    }
+    parent = path.dirname(parent);
+  }
+}
+
+/** Delete rejected additions first, then restore the original Skill bytes. */
+function restoreSourceFolders(
+  snapshot: ReturnType<typeof backupSourceFolders> | undefined,
+  recoveryCopies: Map<string, string | null>
+) {
+  const failures: string[] = [];
+  if (!snapshot) {
+    return failures;
+  }
+  try {
+    prepareRecoveryParents(snapshot, snapshot.sourceFolder);
+    recordNewSourceSkills(snapshot, recoveryCopies);
+  } catch (error) {
+    failures.push(errorMessage(ThrownValueSchema.parse(error)));
+  }
+  for (const [source, copy] of [...recoveryCopies].toReversed()) {
+    try {
+      if (copy !== null) {
+        prepareRecoveryParents(snapshot, path.dirname(source));
+      }
+      if (projectedRecoveryParent(source) !== snapshot.parents.get(source)) {
+        throw new MonkeError(`Source recovery parent changed: ${source}`);
+      }
+      rmSync(source, { force: true, recursive: true });
+      if (copy === null) {
+        pruneNewSourceParents(source, snapshot.directories);
+      } else {
+        cpSync(copy, source, { recursive: true, verbatimSymlinks: true });
+      }
+    } catch (error) {
+      failures.push(`${source}: ${errorMessage(ThrownValueSchema.parse(error))}`);
+    }
+  }
+  return failures;
 }
 
 /** Refresh a command or linked source and publish it through the existing import materializer. */
@@ -94,28 +347,31 @@ export async function updateLocalSkillSource(options: {
   }
   const staging = mkdtempSync(path.join(tmpdir(), "monke-skill-source-"));
   const previous = store.recipes.find((item) => item.source === recipe.source);
-  const backup = path.join(staging, "original");
-  const previousPath = localSource.skillSourceFolder;
-  const hasBackup = existsSync(previousPath);
+  const workingDirectory = existsSync(localSource.workingDirectory)
+    ? realpathSync.native(localSource.workingDirectory)
+    : localSource.workingDirectory;
   const recoveryCopies = new Map<string, string | null>();
+  let snapshot: ReturnType<typeof backupSourceFolders> | undefined;
   let retainRecovery = false;
   function backupLinkedSkillTarget(sourcePath: string) {
     const physicalSource = realpathSync.native(sourcePath);
-    if (!containsPath(previousPath, physicalSource) && !recoveryCopies.has(physicalSource)) {
+    if (![...recoveryCopies.keys()].some((root) => containsPath(root, physicalSource))) {
       const physicalBackup = path.join(staging, "linked-originals", String(recoveryCopies.size));
       cpSync(physicalSource, physicalBackup, { recursive: true, verbatimSymlinks: true });
       recoveryCopies.set(physicalSource, physicalBackup);
+      snapshot?.parents.set(physicalSource, projectedRecoveryParent(physicalSource));
     }
   }
   try {
-    if (hasBackup) {
-      cpSync(previousPath, backup, { recursive: true, verbatimSymlinks: true });
-      recoveryCopies.set(previousPath, backup);
-      for (const sourcePath of discoverSourceSkills(previousPath).values()) {
-        backupLinkedSkillTarget(sourcePath);
-      }
-    } else {
-      recoveryCopies.set(previousPath, null);
+    snapshot = backupSourceFolders(
+      localSource.skillSourceFolder,
+      workingDirectory,
+      staging,
+      recoveryCopies,
+      containsPath(path.join(getMonkeHome(runtime), "skill-sources"), workingDirectory)
+    );
+    for (const sourcePath of snapshot.sourceSkills) {
+      backupLinkedSkillTarget(sourcePath);
     }
     if (localSource.command && options.executeCommand !== false) {
       mkdirSync(localSource.workingDirectory, { recursive: true });
@@ -135,7 +391,7 @@ export async function updateLocalSkillSource(options: {
       }
     }
     const root =
-      localSource.skillSourceFolder === localSource.workingDirectory
+      localSource.skillSourceFolder === workingDirectory
         ? resolveSkillSourceFolder(localSource.workingDirectory)
         : localSource.skillSourceFolder;
     const discovered = discoverSourceSkills(root);
@@ -148,7 +404,6 @@ export async function updateLocalSkillSource(options: {
       if (!sourcePath) {
         throw new MonkeError(`Selected Skill ${slug} is missing from ${root}`);
       }
-      backupLinkedSkillTarget(sourcePath);
       cpSync(sourcePath, path.join(staging, ".agents", "skills", slug), {
         dereference: true,
         recursive: true
@@ -187,17 +442,7 @@ export async function updateLocalSkillSource(options: {
     });
     return next;
   } catch (error) {
-    const failures: string[] = [];
-    for (const [source, recoveryCopy] of recoveryCopies) {
-      try {
-        rmSync(source, { force: true, recursive: true });
-        if (recoveryCopy !== null) {
-          cpSync(recoveryCopy, source, { recursive: true, verbatimSymlinks: true });
-        }
-      } catch (recoveryError) {
-        failures.push(`${source}: ${errorMessage(ThrownValueSchema.parse(recoveryError))}`);
-      }
-    }
+    const failures = restoreSourceFolders(snapshot, recoveryCopies);
     if (failures.length > 0) {
       retainRecovery = true;
       throw new MonkeError(
