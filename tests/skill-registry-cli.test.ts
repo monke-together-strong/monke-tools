@@ -126,15 +126,38 @@ cp -R ${shellQuote(upstream)} .claude/skills
   return { command: `sh ${shellQuote(script)}`, upstream };
 }
 
+function installGitImporter(fixture: ReturnType<typeof registryFixture>) {
+  writeExecutable(
+    path.join(fixture.bin, "npx"),
+    `#!/bin/sh
+set -eu
+source="$4"
+shift 4
+mkdir -p .agents/skills
+while [ "$1" = --skill ]; do
+  if [ "$2" = '*' ]; then
+    cp -R "$source/skills/"* .agents/skills/
+  else
+    cp -R "$source/skills/$2" .agents/skills/
+  fi
+  shift 2
+done
+`
+  );
+}
+
 describe("Skill import registry CLI", () => {
   test("linked imports use existing provider layouts and write learned changes back to their source", async () => {
     const fixture = registryFixture();
+    const actualSkill = path.join(fixture.sandbox, "skill-repo", "typography");
+    writeSkill(path.dirname(actualSkill), "typography", "Course instructions.\n");
+    rmSync(path.join(fixture.source, "typography"), { recursive: true });
+    symlinkSync(actualSkill, path.join(fixture.source, "typography"), "dir");
+    symlinkSync(fixture.source, path.join(fixture.source, "loop"), "dir");
     writeSkill(path.join(fixture.checkout, ".codex/skills"), "typography", "Separate copy.\n");
     await runCliAsync(["skills", "add", fixture.checkout, "--link"], fixture.runtime);
     for (const root of Object.values(fixture.installed)) {
-      expect(realpathSync(path.join(root, "typography"))).toBe(
-        path.join(fixture.source, "typography")
-      );
+      expect(realpathSync(path.join(root, "typography"))).toBe(actualSkill);
     }
     writeFileSync(
       path.join(fixture.installed.codex, "typography/SKILL.md"),
@@ -176,10 +199,7 @@ describe("Skill import registry CLI", () => {
     git(gitSource, ["add", "."]);
     git(gitSource, ["commit", "-m", "First skill"]);
     // Exercise the actual published-importer process boundary without network downloads.
-    writeExecutable(
-      path.join(fixture.bin, "npx"),
-      '#!/bin/sh\nset -eu\nmkdir -p .agents\ncp -R "$4/skills" .agents/skills\n'
-    );
+    installGitImporter(fixture);
     await runCliAsync(
       ["skills", "add", `${gitSource}#HEAD`, "--name", "git-source"],
       fixture.runtime
@@ -382,6 +402,11 @@ describe("Skill import registry CLI", () => {
         kind === "command"
       );
       expect(read(fixture.installed.claude, "personal/SKILL.md")).toContain("Updated personal.");
+      if (kind === "link") {
+        writeSkill(fixture.source, "typography", "Course instructions.\n");
+        await runCliAsync(["skills", "update"], fixture.runtime);
+      }
+      expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toHaveLength(3);
     }
   );
 
@@ -423,19 +448,7 @@ describe("Skill import registry CLI", () => {
     writeSkill(path.join(upstream, "skills"), "bravo", "Bravo instructions.\n");
     git(upstream, ["add", "."]);
     git(upstream, ["commit", "-m", "Skill source"]);
-    writeExecutable(
-      path.join(fixture.bin, "npx"),
-      `#!/bin/sh
-set -eu
-source="$4"
-shift 4
-mkdir -p .agents/skills
-while [ "$1" = --skill ]; do
-  cp -R "$source/skills/$2" .agents/skills/
-  shift 2
-done
-`
-    );
+    installGitImporter(fixture);
     const source = `${upstream}#HEAD`;
     write(fixture.guidance, "skills/references/imported/alpha/MAIN.md", "Alpha instructions.\n");
     writeImportRecipeStore(fixture.guidance, {
@@ -479,6 +492,27 @@ done
     expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
     expect(read(fixture.source, "typography/SKILL.md")).toBe(accepted);
     expect(read(fixture.installed.claude, "color/SKILL.md")).toBe("User-owned color.\n");
+  });
+
+  test("an unavailable Git pin does not block healthy local source updates", async () => {
+    const fixture = registryFixture();
+    installGitImporter(fixture);
+    const upstream = createRepo(path.join(fixture.sandbox, "git-source"), {
+      "README.md": "Git source.\n"
+    });
+    writeSkill(path.join(upstream, "skills"), "alpha", "Git skill.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Git skill"]);
+    await runCliAsync(["skills", "add", `${upstream}#HEAD`, "--name", "a-git"], fixture.runtime);
+    const later = path.join(fixture.sandbox, "z-personal");
+    writeSkill(later, "personal", "Original personal.\n");
+    await runCliAsync(["skills", "add", later], fixture.runtime);
+    rmSync(path.join(fixture.registry, "skills/imported/alpha"), { recursive: true });
+    rmSync(upstream, { recursive: true });
+    writeSkill(later, "personal", "Updated personal.\n");
+    await expect(runCliAsync(["skills", "update"], fixture.runtime)).rejects.toThrow(/git-source/u);
+    expect(read(fixture.installed.claude, "personal/SKILL.md")).toContain("Updated personal.");
+    expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toHaveLength(3);
   });
 
   test("an unrelated target blocks source publication before source policy or target changes", async () => {

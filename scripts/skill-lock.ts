@@ -293,6 +293,40 @@ export async function restoreSkillImports(repoRoot: string) {
   });
 }
 
+/** Restore one accepted Git source without blocking unrelated source updates. */
+export function restoreLockedRecipe(repoRoot: string, recipe: SkillImportRecipe) {
+  if (!recipe.lock) {
+    throw new MonkeError(`Unpinned Skill import recipe: ${recipe.source}`);
+  }
+  try {
+    if (guidanceDigest(repoRoot, recipe.skills) === recipe.lock?.digest) {
+      return;
+    }
+  } catch {
+    // Missing/stale local materialization is restored from the accepted pin.
+  }
+  const stagingDirectory = path.join(repoRoot, "tmp", `skill-restore-${crypto.randomUUID()}`);
+  mkdirSync(stagingDirectory, { recursive: true });
+  try {
+    stageLockedRecipe(recipe, stagingDirectory);
+    copyStagedGuidanceToManagedRoots({
+      defaultDisableModelInvocation: recipe.disableModelInvocation,
+      guidance: recipe.skills,
+      repoRoot,
+      stagingDirectory,
+      validatePrepared(preparedRoot) {
+        if (guidanceDigest(preparedRoot, recipe.skills, true) !== recipe.lock?.digest) {
+          throw new MonkeError(
+            `Skill lock digest mismatch for ${recipe.source}; accepted lock was not changed`
+          );
+        }
+      }
+    });
+  } finally {
+    rmSync(stagingDirectory, { force: true, recursive: true });
+  }
+}
+
 export function restoreLockedImports(repoRoot: string) {
   if (!existsSync(path.join(repoRoot, SKILL_LOCK_PATH))) {
     return;
@@ -314,35 +348,8 @@ export function restoreLockedImports(repoRoot: string) {
     }
   }
   for (const recipe of store.recipes) {
-    if (recipe.localSource) {
-      continue;
-    }
-    try {
-      if (guidanceDigest(repoRoot, recipe.skills) === recipe.lock?.digest) {
-        continue;
-      }
-    } catch {
-      // Missing/stale local materialization is restored from the accepted pin.
-    }
-    const stagingDirectory = path.join(repoRoot, "tmp", `skill-restore-${crypto.randomUUID()}`);
-    mkdirSync(stagingDirectory, { recursive: true });
-    try {
-      stageLockedRecipe(recipe, stagingDirectory);
-      copyStagedGuidanceToManagedRoots({
-        defaultDisableModelInvocation: recipe.disableModelInvocation,
-        guidance: recipe.skills,
-        repoRoot,
-        stagingDirectory,
-        validatePrepared(preparedRoot) {
-          if (guidanceDigest(preparedRoot, recipe.skills, true) !== recipe.lock?.digest) {
-            throw new MonkeError(
-              `Skill lock digest mismatch for ${recipe.source}; accepted lock was not changed`
-            );
-          }
-        }
-      });
-    } finally {
-      rmSync(stagingDirectory, { force: true, recursive: true });
+    if (!recipe.localSource) {
+      restoreLockedRecipe(repoRoot, recipe);
     }
   }
   for (const recipe of store.recipes) {

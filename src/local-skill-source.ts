@@ -5,7 +5,8 @@ import {
   mkdtempSync,
   readdirSync,
   realpathSync,
-  rmSync
+  rmSync,
+  statSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -42,7 +43,12 @@ function discoverSourceSkills(root: string) {
     throw new MonkeError(`Skill source is missing: ${root}`);
   }
   const skills = new Map<string, string>();
+  const ancestors = new Set<string>();
   function visit(directory: string) {
+    const physicalDirectory = realpathSync.native(directory);
+    if (ancestors.has(physicalDirectory)) {
+      return;
+    }
     if (existsSync(path.join(directory, "SKILL.md"))) {
       const slug = path.basename(directory);
       if (skills.has(slug)) {
@@ -51,15 +57,21 @@ function discoverSourceSkills(root: string) {
       skills.set(slug, directory);
       return;
     }
+    ancestors.add(physicalDirectory);
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (
-        entry.isDirectory() &&
+        (entry.isDirectory() ||
+          (entry.isSymbolicLink() &&
+            statSync(path.join(directory, entry.name), {
+              throwIfNoEntry: false
+            })?.isDirectory())) &&
         !entry.name.startsWith(".") &&
         !["node_modules", "references"].includes(entry.name)
       ) {
         visit(path.join(directory, entry.name));
       }
     }
+    ancestors.delete(physicalDirectory);
   }
   visit(root);
   if (skills.size === 0) {
