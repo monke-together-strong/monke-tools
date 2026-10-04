@@ -121,9 +121,11 @@ describe("skills CLI", () => {
       ["skills", "policy", "private-skills", "--model-invocation", "deny"],
       runtime
     );
+    const codexSkill = path.join(osHome, ".codex", "skills", "monke-tools/imported/typography");
+    expect(existsSync(codexSkill)).toBeTruthy();
     await runCliAsync(["skills", "configure"], runtime);
 
-    expect(existsSync(path.join(osHome, ".codex", "skills", "typography"))).toBeFalsy();
+    expect(existsSync(codexSkill)).toBeFalsy();
     expect(realpathSync(path.join(osHome, ".claude", "skills", "typography"))).toBe(
       path.join(source, "typography")
     );

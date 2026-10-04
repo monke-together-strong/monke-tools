@@ -33,6 +33,7 @@ const SkillImportRecipeSchema = z.strictObject(
       })
       .optional(),
     disableModelInvocation: z.boolean().optional(),
+    disableModelInvocationOverrides: z.record(z.string().min(1), z.boolean()).optional(),
     localSource: z
       .strictObject({
         command: z.string().min(1).optional(),
@@ -106,6 +107,29 @@ export type SkillImportRecipe = z.output<typeof SkillImportRecipeSchema>;
 
 /** Mapping between an upstream Skill import selector and local Skill slug. */
 export type SkillImportRecipeSkill = z.output<typeof SkillImportRecipeSkillSchema>;
+
+/** Keep invocation choices independently of the currently materialized selection. */
+export function replaceRecipeSkills(
+  recipe: SkillImportRecipe,
+  skills: SkillImportRecipeSkill[]
+): SkillImportRecipe {
+  const overrides = { ...recipe.disableModelInvocationOverrides };
+  for (const item of [...recipe.skills, ...skills]) {
+    if (item.disableModelInvocation !== undefined) {
+      overrides[item.selector] = item.disableModelInvocation;
+    }
+  }
+  return {
+    ...recipe,
+    ...(Object.keys(overrides).length > 0 ? { disableModelInvocationOverrides: overrides } : {}),
+    skills: skills.map((item) => ({
+      ...item,
+      ...(Object.hasOwn(overrides, item.selector)
+        ? { disableModelInvocation: overrides[item.selector] }
+        : {})
+    }))
+  };
+}
 
 /** Selector-to-slug mapping before an Import kind is assigned. */
 export type StagedSkillSelection = Omit<SkillImportRecipeSkill, "kind">;

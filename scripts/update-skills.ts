@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -416,11 +416,9 @@ function listGuidanceDirectories(root: string) {
     return [];
   }
 
-  return readdirSync(root)
-    .filter((entry) => {
-      const entryPath = path.join(root, entry);
-      return statSync(entryPath).isDirectory();
-    })
+  return readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+    .map((entry) => entry.name)
     .toSorted();
 }
 

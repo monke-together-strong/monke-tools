@@ -25,6 +25,7 @@ import {
   IMPORTED_SKILLS_ROOT
 } from "./import-guidance.ts";
 import { readImportRecipeStore, SKILL_LOCK_PATH } from "./skill-import-recipes.ts";
+import type { SkillImportRecipeSkill } from "./skill-import-recipes.ts";
 import { restoreSkillImports } from "./skill-lock.ts";
 
 const ReviewSchema = z.strictObject({
@@ -35,13 +36,41 @@ const ReviewsSchema = z.array(ReviewSchema).max(3);
 const ACCEPTED_GUIDANCE_DIRECTORY = ".monke-skill-baseline";
 
 /** Retain accepted bytes so externally edited linked Skills can also be reviewed. */
-export function rememberSkillGuidance(repoRoot: string) {
+export function rememberSkillGuidance(
+  repoRoot: string,
+  changedGuidance?: readonly SkillImportRecipeSkill[]
+) {
   const baseline = path.join(repoRoot, ACCEPTED_GUIDANCE_DIRECTORY);
   const next = `${baseline}.tmp`;
   rmSync(next, { force: true, recursive: true });
-  snapshotSkillGuidance(repoRoot, next);
+  if (changedGuidance && existsSync(baseline)) {
+    cpSync(baseline, next, { recursive: true, verbatimSymlinks: true });
+    for (const item of changedGuidance) {
+      const source = importedGuidancePath(repoRoot, item);
+      const target = importedGuidancePath(next, item);
+      rmSync(target, { force: true, recursive: true });
+      if (existsSync(source)) {
+        copyGuidanceSnapshot(source, target, true);
+      }
+    }
+    writeFileSync(
+      path.join(next, SKILL_LOCK_PATH),
+      `${JSON.stringify(readImportRecipeStore(repoRoot), null, 2)}\n`
+    );
+  } else {
+    snapshotSkillGuidance(repoRoot, next);
+  }
   rmSync(baseline, { force: true, recursive: true });
   renameSync(next, baseline);
+}
+
+function copyGuidanceSnapshot(source: string, target: string, dereference: boolean) {
+  cpSync(source, target, {
+    recursive: true,
+    ...(dereference
+      ? { dereference: true, filter: (entry) => existsSync(entry) }
+      : { verbatimSymlinks: true })
+  });
 }
 
 /** Capture complete guidance independently of source Git tracking and ignore rules. */
@@ -52,10 +81,7 @@ export function snapshotSkillGuidance(repoRoot: string, destination: string) {
   for (const root of [IMPORTED_SKILLS_ROOT, IMPORTED_REFERENCES_ROOT]) {
     if (existsSync(path.join(repoRoot, root))) {
       mkdirSync(path.dirname(path.join(destination, root)), { recursive: true });
-      cpSync(path.join(repoRoot, root), path.join(destination, root), {
-        recursive: true,
-        ...(dereference ? { dereference: true } : { verbatimSymlinks: true })
-      });
+      copyGuidanceSnapshot(path.join(repoRoot, root), path.join(destination, root), dereference);
     }
   }
   rmSync(path.join(destination, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
@@ -84,7 +110,7 @@ export function snapshotSkillUpdateBaseline(
           continue;
         }
         rmSync(target, { force: true, recursive: true });
-        cpSync(source, target, { dereference: true, recursive: true });
+        copyGuidanceSnapshot(source, target, true);
       }
     }
     return;

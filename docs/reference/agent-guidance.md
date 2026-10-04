@@ -123,7 +123,7 @@ Part of the [domain glossary](../../CONTEXT.md).
 - A **Skill import** selects a source collection. **Skill install preferences** select distribution targets; an installer's agent-specific output folder does not restrict those targets.
 - Linked and installer-backed **Imported skills** share editing authority with their **Skill source folder**. Their global **Skill projections** expose that same guidance; source refreshes may replace instruction edits.
 - A skill may be both **Model-invoked** and **User-invoked**.
-- A per-skill **Model invocation override** takes precedence over its source-wide default. Overrides survive source refreshes; without an override, upstream invocation metadata remains authoritative.
+- A per-skill **Model invocation override** takes precedence over its source-wide default. Overrides survive source refreshes and selection changes, including a skill disappearing and returning; without an override, upstream invocation metadata remains authoritative.
 - A **Skill source revision** may change without changing its **Guidance digest**. The resulting lock-only comparison is still a **Skill update review**.
 - **Skill install preferences** select targets. Projections and managed instruction sections belong to monke-tools; unrelated agent guidance remains user-owned.
 - **Team coding baseline** applies across repos. **Repo coding standards** add repo-specific constraints.

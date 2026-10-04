@@ -47,7 +47,7 @@ import { validateReleaseBundleRoot } from "./release-contract.ts";
 import type { ExpectedReleaseIdentity } from "./release-contract.ts";
 import { getHomeDirectory, getMonkeHome, isProcessRunning } from "./runtime.ts";
 import { runShellInstall } from "./shell.ts";
-import { preflightInstallGuidance } from "./skills.ts";
+import { preflightSkillRegistryInstall } from "./skill-registry.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 import { unwrapBoundaryResult } from "./validation.ts";
@@ -119,9 +119,9 @@ export async function runActivateReleaseInstall(
     sourceBundle,
     options.expectedReleaseIdentity
   );
-  preflightInstallGuidance(runtime, sourceBundle, options.explicitTargets);
+  preflightSkillRegistryInstall(runtime, sourceBundle, options.explicitTargets);
   const activate = async () => {
-    preflightInstallGuidance(runtime, sourceBundle, options.explicitTargets);
+    preflightSkillRegistryInstall(runtime, sourceBundle, options.explicitTargets);
     const stagingRoot = path.join(monkeHome, "install-staging");
     const stagedInstall = path.join(stagingRoot, `release-${crypto.randomUUID()}`);
     const stagingRootExisted = existsSync(stagingRoot);
@@ -134,7 +134,7 @@ export async function runActivateReleaseInstall(
       if (JSON.stringify(manifest) !== JSON.stringify(sourceManifest)) {
         throw new MonkeError("Release bundle changed while it was being staged");
       }
-      preflightInstallGuidance(runtime, stagedInstall, options.explicitTargets);
+      preflightSkillRegistryInstall(runtime, stagedInstall, options.explicitTargets);
     } catch (error) {
       rmSync(stagedInstall, { force: true, recursive: true });
       if (!stagingRootExisted && readdirSync(stagingRoot).length === 0) {
@@ -266,7 +266,7 @@ export async function runActivateLocalInstall(
   const homeDirectory = getHomeDirectory(runtime);
   const sourceCheckout = path.resolve(options.sourceCheckout);
   await restoreSkillImports(sourceCheckout);
-  preflightInstallGuidance(runtime, sourceCheckout, options.explicitTargets);
+  preflightSkillRegistryInstall(runtime, sourceCheckout, options.explicitTargets);
   const activate = async () => {
     const stagedInstall = path.resolve(options.stagedInstall);
     assertDirectChildPath(
@@ -299,7 +299,7 @@ export async function runActivateLocalInstall(
     if (!existsSync(path.join(sourceCheckout, "skills"))) {
       throw new MonkeError(`Skill source tree is missing: ${path.join(sourceCheckout, "skills")}`);
     }
-    preflightInstallGuidance(runtime, sourceCheckout, options.explicitTargets);
+    preflightSkillRegistryInstall(runtime, sourceCheckout, options.explicitTargets);
 
     const predecessor = resolveActiveInstallRoot(monkeHome);
     const installRoot = activateStagedInstall({

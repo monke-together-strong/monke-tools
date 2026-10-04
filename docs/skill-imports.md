@@ -1,9 +1,7 @@
 # Maintaining imported guidance
 
 For machine-local imports, including private linked collections and installer
-commands, use `mt skills add` and `mt skills update`. Their registry lives in
-`$MONKE_HOME/skill-registry/skills.lock.json`; it starts with the bundled imports
-and uses the same recipe and policy format. See
+commands, use `mt skills add` and `mt skills update`. See
 [Imported Skill registry](../skills/internal/monke-tools-core/IMPORTED-SKILLS.md).
 The commands below maintain the public repository's bundled collection.
 

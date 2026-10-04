@@ -12,7 +12,8 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 import { parse } from "yaml";
 
-import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { shellQuote } from "../src/shell-quote.ts";
@@ -166,6 +167,7 @@ describe("Skill import registry CLI", () => {
     const linked = path.join(fixture.sandbox, "personal");
     writeSkill(linked, "personal", "First personal version.\n");
     await runCliAsync(["skills", "add", linked, "--link"], fixture.runtime);
+    writeSkill(linked, "personal", "Second personal version.\n");
 
     const gitSource = createRepo(path.join(fixture.sandbox, "git-source"), {
       "README.md": "Skill source.\n"
@@ -246,6 +248,7 @@ describe("Skill import registry CLI", () => {
     expect(diff).toContain("-Learned local rule.");
     expect(diff).toContain("+Second installer version.");
     expect(diff).toContain("+Second personal version.");
+    expect(diff).toContain("-First personal version.");
     expect(diff).toContain("+Second Git version.");
     expect(git(reviewRepo, ["ls-tree", commit, "skills/imported/typography"])).toContain(
       "040000 tree"
@@ -318,6 +321,164 @@ describe("Skill import registry CLI", () => {
     expect(existsSync(path.join(fixture.installed.codex, "color"))).toBeFalsy();
     expect(read(fixture.source, "color/SKILL.md")).toContain("Color instructions.");
     expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+  });
+
+  test("local per-skill overrides survive disappearance and reintroduction", async () => {
+    const fixture = registryFixture();
+    writeSkill(fixture.source, "color", "Color instructions.\n");
+    await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
+    await runCliAsync(
+      ["skills", "policy", "private-course", "--model-invocation", "deny"],
+      fixture.runtime
+    );
+    await runCliAsync(
+      ["skills", "policy", "private-course", "color", "--model-invocation", "allow"],
+      fixture.runtime
+    );
+    rmSync(path.join(fixture.source, "color"), { recursive: true });
+    await runCliAsync(["skills", "update"], fixture.runtime);
+    expect(existsSync(path.join(fixture.installed.claude, "color"))).toBeFalsy();
+    writeSkill(fixture.source, "color", "Restored color.\n");
+    await runCliAsync(["skills", "update"], fixture.runtime);
+    expect(parse(read(fixture.source, "color/agents/openai.yaml"))).toMatchObject({
+      policy: { allow_implicit_invocation: true }
+    });
+    expect(read(fixture.source, "color/SKILL.md")).toContain("disable-model-invocation: false");
+  });
+
+  test.each(["link", "command"] as const)(
+    "a missing %s source does not prevent healthy sources updating",
+    async (kind) => {
+      const fixture = registryFixture();
+      const { command, upstream } = installer(fixture);
+      writeSkill(upstream, "typography", "Recovered installer.\n");
+      await runCliAsync(
+        [
+          "skills",
+          "add",
+          fixture.checkout,
+          "--name",
+          "a-course",
+          "--link",
+          ...(kind === "command" ? ["--command", command] : [])
+        ],
+        fixture.runtime
+      );
+      const later = path.join(fixture.sandbox, "z-personal");
+      writeSkill(later, "personal", "Original personal.\n");
+      await runCliAsync(["skills", "add", later], fixture.runtime);
+      rmSync(fixture.source, { recursive: true });
+      writeSkill(later, "personal", "Updated personal.\n");
+      let outcome = "updated";
+      try {
+        await runCliAsync(["skills", "update"], fixture.runtime);
+      } catch (error) {
+        outcome = errorMessage(ThrownValueSchema.parse(error));
+      }
+      expect(outcome).toMatch(
+        kind === "link" ? /a-course.*Skill source is missing/u : /^updated$/u
+      );
+      expect(existsSync(path.join(fixture.installed.claude, "typography"))).toBe(
+        kind === "command"
+      );
+      expect(read(fixture.installed.claude, "personal/SKILL.md")).toContain("Updated personal.");
+    }
+  );
+
+  test("re-adding a command with a new working directory publishes its new source", async () => {
+    const fixture = registryFixture();
+    const { command, upstream } = installer(fixture);
+    writeSkill(upstream, "typography", "First directory.\n");
+    await runCliAsync(["skills", "add", "--name", "course", "--command", command], fixture.runtime);
+    const cwd = path.join(fixture.sandbox, "moved-course");
+    writeSkill(upstream, "typography", "Second directory.\n");
+    await runCliAsync(
+      ["skills", "add", "--name", "course", "--command", command, "--cwd", cwd],
+      fixture.runtime
+    );
+    expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(
+      path.join(cwd, ".claude/skills/typography")
+    );
+    expect(read(fixture.installed.claude, "typography/SKILL.md")).toContain("Second directory.");
+  });
+
+  test("a failed first installer leaves no source or registered recipe", async () => {
+    const fixture = registryFixture();
+    const { command, upstream } = installer(fixture);
+    writeSkill(upstream, "typography", "Partial install.\n");
+    write(fixture.sandbox, "fail-installer", "fail\n");
+    await expect(
+      runCliAsync(["skills", "add", "--name", "course", "--command", command], fixture.runtime)
+    ).rejects.toThrow(/exited with code 42/u);
+    expect(existsSync(path.join(fixture.monkeHome, "skill-sources/course"))).toBeFalsy();
+    expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+  });
+
+  test("repeat Git add preserves references and overrides across selection replacement", async () => {
+    const fixture = registryFixture();
+    const upstream = createRepo(path.join(fixture.sandbox, "git-source"), {
+      "README.md": "Git skills.\n"
+    });
+    writeSkill(path.join(upstream, "skills"), "alpha", "Alpha instructions.\n");
+    writeSkill(path.join(upstream, "skills"), "bravo", "Bravo instructions.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Skill source"]);
+    writeExecutable(
+      path.join(fixture.bin, "npx"),
+      `#!/bin/sh
+set -eu
+source="$4"
+shift 4
+mkdir -p .agents/skills
+while [ "$1" = --skill ]; do
+  cp -R "$source/skills/$2" .agents/skills/
+  shift 2
+done
+`
+    );
+    const source = `${upstream}#HEAD`;
+    write(fixture.guidance, "skills/references/imported/alpha/MAIN.md", "Alpha instructions.\n");
+    writeImportRecipeStore(fixture.guidance, {
+      recipes: [{ skills: [{ kind: "reference", selector: "alpha", slug: "alpha" }], source }],
+      version: 3
+    });
+    await runCliAsync(["skills", "add", source, "--name", "git-source"], fixture.runtime);
+    expect(read(fixture.registry, "skills/references/imported/alpha/MAIN.md")).toContain(
+      "Alpha instructions."
+    );
+    expect(existsSync(path.join(fixture.installed.claude, "alpha"))).toBeFalsy();
+    await runCliAsync(["skills", "add", source, "--skill", "bravo"], fixture.runtime);
+    await runCliAsync(
+      ["skills", "policy", "git-source", "--model-invocation", "deny"],
+      fixture.runtime
+    );
+    await runCliAsync(
+      ["skills", "policy", "git-source", "bravo", "--model-invocation", "allow"],
+      fixture.runtime
+    );
+    await runCliAsync(["skills", "add", source, "--skill", "alpha"], fixture.runtime);
+    await runCliAsync(["skills", "add", source, "--skill", "bravo"], fixture.runtime);
+    expect(parse(read(fixture.installed.claude, "bravo/agents/openai.yaml"))).toMatchObject({
+      policy: { allow_implicit_invocation: true }
+    });
+  });
+
+  test("policy refresh rejects a newly occupied target before publishing policy or new skills", async () => {
+    const fixture = registryFixture();
+    await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
+    const previous = readImportRecipeStore(fixture.registry);
+    const accepted = read(fixture.source, "typography/SKILL.md");
+    writeSkill(fixture.source, "color", "New color.\n");
+    write(fixture.installed.claude, "color/SKILL.md", "User-owned color.\n");
+    await expect(
+      runCliAsync(
+        ["skills", "policy", "private-course", "--model-invocation", "deny"],
+        fixture.runtime
+      )
+    ).rejects.toThrow(/non-managed/u);
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(read(fixture.source, "typography/SKILL.md")).toBe(accepted);
+    expect(read(fixture.installed.claude, "color/SKILL.md")).toBe("User-owned color.\n");
   });
 
   test("an unrelated target blocks source publication before source policy or target changes", async () => {

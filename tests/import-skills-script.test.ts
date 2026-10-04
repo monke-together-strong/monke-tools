@@ -1730,21 +1730,23 @@ policy:
     expect(read(sandbox, "skills/imported/alpha/agents/openai.yaml")).toBe(openaiYaml);
   });
 
-  test("skills update disables model invocation on Claude and Codex when explicitly requested", async () => {
-    const sandbox = makeTempDir("skill-update-invocation-disabled");
-    const fakeBinDirectory = installFakeNpx(sandbox, {
-      skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
-      skillsLogPath: path.join(sandbox, "skills.log"),
-      stagedGuidance: {
-        alpha: {
-          "agents/openai.yaml": `interface:
+  test.each(["update", "reimport"] as const)(
+    "skills %s disables model invocation on Claude and Codex when explicitly requested",
+    async (operation) => {
+      const sandbox = makeTempDir("skill-update-invocation-disabled");
+      const fakeBinDirectory = installFakeNpx(sandbox, {
+        skillsCwdLogPath: path.join(sandbox, "skills-cwd.log"),
+        skillsLogPath: path.join(sandbox, "skills.log"),
+        stagedGuidance: {
+          alpha: {
+            "agents/openai.yaml": `interface:
   display_name: Alpha
   short_description: Upstream description
 policy:
   allow_implicit_invocation: true
   network: false
 `,
-          "SKILL.md": `---
+            "SKILL.md": `---
 name: alpha
 disable-model-invocation: false
 user-invocable: true
@@ -1754,45 +1756,51 @@ metadata:
 
 # Alpha
 `
+          }
         }
-      }
-    });
-    writeImportRecipeStore(sandbox, {
-      recipes: [
-        {
-          skills: [
-            {
-              disableModelInvocation: true,
-              kind: "skill",
-              selector: "alpha",
-              slug: "alpha"
-            }
-          ],
-          source: "owner/repo"
+      });
+      writeImportRecipeStore(sandbox, {
+        recipes: [
+          {
+            ...(operation === "reimport" ? { disableModelInvocation: true } : {}),
+            skills: [
+              {
+                ...(operation === "update" ? { disableModelInvocation: true } : {}),
+                kind: "skill",
+                selector: "alpha",
+                slug: "alpha"
+              }
+            ],
+            source: "owner/repo"
+          }
+        ],
+        version: 3
+      });
+      write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+
+      await withFakeNpx(sandbox, fakeBinDirectory, () =>
+        operation === "update"
+          ? runUpdateSkills([], { writeMessage() {} })
+          : runImportSkills(["owner/repo"], { selectSkills: () => ["alpha"], writeMessage() {} })
+      );
+
+      const skillMarkdown = read(sandbox, "skills/imported/alpha/SKILL.md");
+      expect(skillMarkdown).toContain("disable-model-invocation: true");
+      expect(skillMarkdown).toContain("user-invocable: true");
+      expect(skillMarkdown).toContain("owner: upstream");
+      expect(skillMarkdown).toContain("# Alpha");
+      expect(parse(read(sandbox, "skills/imported/alpha/agents/openai.yaml"))).toStrictEqual({
+        interface: {
+          display_name: "Alpha",
+          short_description: "Upstream description"
+        },
+        policy: {
+          allow_implicit_invocation: false,
+          network: false
         }
-      ],
-      version: 3
-    });
-    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
-
-    await withFakeNpx(sandbox, fakeBinDirectory, () => runUpdateSkills([], { writeMessage() {} }));
-
-    const skillMarkdown = read(sandbox, "skills/imported/alpha/SKILL.md");
-    expect(skillMarkdown).toContain("disable-model-invocation: true");
-    expect(skillMarkdown).toContain("user-invocable: true");
-    expect(skillMarkdown).toContain("owner: upstream");
-    expect(skillMarkdown).toContain("# Alpha");
-    expect(parse(read(sandbox, "skills/imported/alpha/agents/openai.yaml"))).toStrictEqual({
-      interface: {
-        display_name: "Alpha",
-        short_description: "Upstream description"
-      },
-      policy: {
-        allow_implicit_invocation: false,
-        network: false
-      }
-    });
-  });
+      });
+    }
+  );
 
   test("skills update enables model invocation on Claude and Codex when explicitly requested", async () => {
     const sandbox = makeTempDir("skill-update-invocation-enabled");

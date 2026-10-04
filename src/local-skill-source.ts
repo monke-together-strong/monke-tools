@@ -13,6 +13,7 @@ import path from "node:path";
 import { copyStagedGuidanceToManagedRoots } from "../scripts/import-guidance.ts";
 import {
   normalizeImportRecipeStore,
+  replaceRecipeSkills,
   writeImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
 import type { SkillImportRecipe, SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
@@ -130,11 +131,13 @@ export async function updateLocalSkillSource(options: {
         slug
       };
     });
-    const nextRecipe: SkillImportRecipe = {
-      ...recipe,
-      localSource: { ...localSource, skillSourceFolder: root },
+    const nextRecipe = replaceRecipeSkills(
+      {
+        ...recipe,
+        localSource: { ...localSource, skillSourceFolder: root }
+      },
       skills
-    };
+    );
     const next = normalizeImportRecipeStore({
       ...store,
       recipes: [...store.recipes.filter((item) => item.source !== recipe.source), nextRecipe]
@@ -143,10 +146,8 @@ export async function updateLocalSkillSource(options: {
       commitState() {
         writeImportRecipeStore(repoRoot, next);
       },
-      guidance: skills.map((item) => ({
-        ...item,
-        disableModelInvocation: item.disableModelInvocation ?? recipe.disableModelInvocation
-      })),
+      defaultDisableModelInvocation: recipe.disableModelInvocation,
+      guidance: nextRecipe.skills,
       linkedSkills: discovered,
       obsoleteGuidance: previous?.skills.filter((item) => !selected.includes(item.slug)),
       repoRoot,
@@ -157,17 +158,17 @@ export async function updateLocalSkillSource(options: {
     });
     return next;
   } catch (error) {
-    if (hasBackup) {
-      try {
-        rmSync(previousPath, { force: true, recursive: true });
+    try {
+      rmSync(previousPath, { force: true, recursive: true });
+      if (hasBackup) {
         cpSync(backup, previousPath, { recursive: true, verbatimSymlinks: true });
-      } catch (recoveryError) {
-        retainRecovery = true;
-        throw new MonkeError(
-          `${errorMessage(ThrownValueSchema.parse(error))}\nSource restoration failed: ${errorMessage(ThrownValueSchema.parse(recoveryError))}\nRecovery copy retained at ${backup}`,
-          { cause: error }
-        );
       }
+    } catch (recoveryError) {
+      retainRecovery = hasBackup;
+      throw new MonkeError(
+        `${errorMessage(ThrownValueSchema.parse(error))}\nSource restoration failed: ${errorMessage(ThrownValueSchema.parse(recoveryError))}${hasBackup ? `\nRecovery copy retained at ${backup}` : ""}`,
+        { cause: error }
+      );
     }
     throw error;
   } finally {

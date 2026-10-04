@@ -21,6 +21,7 @@ import {
 import {
   normalizeImportRecipeStore,
   readImportRecipeStore,
+  replaceRecipeSkills,
   SKILL_LOCK_PATH,
   writeImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
@@ -36,6 +37,7 @@ import { withInstallMutationLockAsync } from "./install-recovery.ts";
 import { resolveSkillSourceFolder, updateLocalSkillSource } from "./local-skill-source.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import { preflightInstallGuidance, reconcileSkillNamespaces } from "./skills.ts";
+import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 import { parseOwnedYamlText } from "./validation.ts";
 
@@ -105,10 +107,12 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
       }
       return;
     }
+    let changedSource: string;
     if (request.action === "add") {
-      await addSkillSource(runtime, root, store, request);
+      changedSource = await addSkillSource(runtime, root, store, request);
     } else {
       const recipe = findRecipe(store, request.source);
+      changedSource = recipe.source;
       if (request.action === "remove") {
         copyStagedGuidanceToManagedRoots({
           commitState() {
@@ -128,7 +132,13 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
       }
     }
     distributeRegistry(runtime, root);
-    rememberSkillGuidance(root);
+    const nextStore = readImportRecipeStore(root);
+    rememberSkillGuidance(
+      root,
+      [...store.recipes, ...nextStore.recipes]
+        .filter((recipe) => recipe.source === changedSource)
+        .flatMap((recipe) => recipe.skills)
+    );
   });
 }
 
@@ -231,7 +241,7 @@ async function addSkillSource(
       );
     }
     await addGitSkillSource(runtime, root, store, request.source, request);
-    return;
+    return request.source;
   }
   const recipe = localSourceRecipe(runtime, store, request, local ? suppliedPath : undefined);
   const previous = store.recipes.find((item) => item.source === recipe.source);
@@ -245,6 +255,42 @@ async function addSkillSource(
       preflightRegistryChange(runtime, root, prepared, nextRecipe.skills, previous?.skills ?? []);
     }
   });
+  return recipe.source;
+}
+
+/** Validate the retained imports together with a candidate install's owned guidance. */
+export function preflightSkillRegistryInstall(
+  runtime: Runtime,
+  guidance: string,
+  explicitTargets?: ExplicitSkillTargetSelection
+) {
+  const registry = path.join(getMonkeHome(runtime), "skill-registry");
+  if (!existsSync(path.join(registry, SKILL_LOCK_PATH))) {
+    preflightInstallGuidance(runtime, guidance, explicitTargets);
+    return;
+  }
+  const proposal = mkdtempSync(path.join(tmpdir(), "monke-install-guidance-"));
+  try {
+    for (const folder of [
+      "skills/internal",
+      "skills/codex",
+      "skills/references/internal",
+      "instructions",
+      "skills/imported",
+      "skills/references/imported"
+    ]) {
+      const owner = folder.endsWith("/imported") ? registry : guidance;
+      const source = path.join(owner, folder);
+      if (existsSync(source)) {
+        const target = path.join(proposal, folder);
+        mkdirSync(path.dirname(target), { recursive: true });
+        symlinkSync(source, target, "dir");
+      }
+    }
+    preflightInstallGuidance(runtime, proposal, explicitTargets);
+  } finally {
+    rmSync(proposal, { force: true, recursive: true });
+  }
 }
 
 function localSourceRecipe(
@@ -289,7 +335,9 @@ function localSourceOptions(
     kind: (request.command ?? previous?.command) ? "command" : "link",
     skillSourceFolder: directory
       ? resolveSkillSourceFolder(realpathSync.native(directory))
-      : (previous?.skillSourceFolder ?? resolveSkillSourceFolder(cwd)),
+      : request.cwd
+        ? resolveSkillSourceFolder(cwd)
+        : (previous?.skillSourceFolder ?? resolveSkillSourceFolder(cwd)),
     workingDirectory: cwd
   };
 }
@@ -320,7 +368,7 @@ async function addGitSkillSource(
       }),
       { cwd: staging }
     );
-    recipe.skills = listStagedSkillSlugs(staging).map((slug) => {
+    const skills = listStagedSkillSlugs(staging).map((slug) => {
       const entry = path.join(staging, ".agents", "skills", slug, "SKILL.md");
       const frontmatter = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
         readFileSync(entry, "utf-8")
@@ -333,16 +381,18 @@ async function addGitSkillSource(
         entry,
         z.looseObject({ name: z.string().optional() })
       );
+      const existing = previous?.skills.find((item) => item.slug === slug);
       return {
-        ...previous?.skills.find((item) => item.slug === slug),
-        kind: "skill" as const,
+        ...existing,
+        kind: existing?.kind ?? ("skill" as const),
         selector: metadata.name ?? slug,
         slug
       };
     });
+    const nextRecipe = replaceRecipeSkills(recipe, skills);
     const next = normalizeImportRecipeStore({
       ...store,
-      recipes: [...store.recipes.filter((item) => item !== previous), recipe]
+      recipes: [...store.recipes.filter((item) => item !== previous), nextRecipe]
     });
     const recorded = findRecipe(next, source);
     copyStagedGuidanceToManagedRoots({
@@ -350,18 +400,18 @@ async function addGitSkillSource(
         writeImportRecipeStore(root, next);
       },
       defaultDisableModelInvocation: recipe.disableModelInvocation,
-      guidance: recipe.skills,
+      guidance: nextRecipe.skills,
       obsoleteGuidance: previous?.skills.filter(
         (item) =>
-          !recipe.skills.some(
+          !nextRecipe.skills.some(
             (nextItem) => nextItem.kind === item.kind && nextItem.slug === item.slug
           )
       ),
       repoRoot: root,
       stagingDirectory: staging,
       validatePrepared(prepared) {
-        preflightRegistryChange(runtime, root, prepared, recipe.skills, previous?.skills ?? []);
-        recorded.lock = { ...revision, digest: guidanceDigest(prepared, recipe.skills, true) };
+        preflightRegistryChange(runtime, root, prepared, nextRecipe.skills, previous?.skills ?? []);
+        recorded.lock = { ...revision, digest: guidanceDigest(prepared, nextRecipe.skills, true) };
       }
     });
   } finally {
@@ -387,12 +437,12 @@ function setRecipePolicy(
   if (!recipe.skills.some((item) => item.kind === "skill" && item.slug === request.skill)) {
     throw new MonkeError(`Unknown Skill ${request.skill} in ${recipe.source}`);
   }
-  return {
-    ...recipe,
-    skills: recipe.skills.map((item) =>
+  return replaceRecipeSkills(
+    recipe,
+    recipe.skills.map((item) =>
       item.slug === request.skill ? { ...item, disableModelInvocation: request.disable } : item
     )
-  };
+  );
 }
 
 async function applyRecipePolicy(
@@ -407,7 +457,10 @@ async function applyRecipePolicy(
       recipe,
       repoRoot: root,
       runtime,
-      store
+      store,
+      validatePrepared(prepared, nextRecipe) {
+        preflightRegistryChange(runtime, root, prepared, nextRecipe.skills, recipe.skills);
+      }
     });
     return;
   }
@@ -434,6 +487,7 @@ async function applyRecipePolicy(
       repoRoot: root,
       stagingDirectory: staging,
       validatePrepared(prepared) {
+        preflightRegistryChange(runtime, root, prepared, recipe.skills, recipe.skills);
         for (const item of recipe.skills.filter((entry) => entry.kind === "reference")) {
           cpSync(importedGuidancePath(root, item), path.join(prepared, item.kind, item.slug), {
             recursive: true,

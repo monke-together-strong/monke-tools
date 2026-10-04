@@ -316,6 +316,7 @@ async function importSkills(argv: string[], dependencies: ImportSkillsDependenci
       commitState() {
         writeImportRecipeStore(repoRoot, nextRecipeStore);
       },
+      defaultDisableModelInvocation: recordedRecipe.disableModelInvocation,
       guidance: recordedRecipe.skills,
       obsoleteGuidance,
       repoRoot,
