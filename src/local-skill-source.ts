@@ -262,21 +262,24 @@ function newSkillRecoveryPath(
   skillFolder: string,
   snapshot: ReturnType<typeof backupSourceFolders>
 ) {
+  let newAlias: string | undefined;
   for (let directory = skillFolder; ; directory = path.dirname(directory)) {
     if (lstatSync(directory, { throwIfNoEntry: false })?.isSymbolicLink()) {
       const original = snapshot.links.get(directory);
       if (original === undefined) {
-        return directory;
-      }
-      if (readlinkSync(directory) !== original) {
+        newAlias = directory;
+      } else if (readlinkSync(directory) !== original) {
         return;
       }
     }
-    if (snapshot.directories.has(directory)) {
+    if (path.dirname(directory) === directory) {
       break;
     }
   }
-  return snapshot.directories.has(skillFolder) ? path.join(skillFolder, "SKILL.md") : skillFolder;
+  return (
+    newAlias ??
+    (snapshot.directories.has(skillFolder) ? path.join(skillFolder, "SKILL.md") : skillFolder)
+  );
 }
 
 function pruneNewSourceParents(source: string, directories: Set<string>) {

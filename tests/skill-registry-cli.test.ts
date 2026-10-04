@@ -577,22 +577,31 @@ describe("Skill import registry CLI", () => {
     }
   );
 
-  test("recovery restores a replaced collection link without changing the unrelated target", async () => {
-    const fixture = registryFixture();
-    const foreign = path.join(fixture.sandbox, "foreign-skills");
-    writeSkill(foreign, "typography", "Unrelated foreign instructions.\n");
-    const foreignBytes = read(foreign, "typography/SKILL.md");
-    const command = `rm -rf .claude/skills; ln -s ${shellQuote(foreign)} .claude/skills; exit 42`;
-    await runCliAsync(
-      ["skills", "add", fixture.checkout, "--link", "--command", command],
-      fixture.runtime
-    );
-    const accepted = read(fixture.source, "typography/SKILL.md");
-    await expect(runCliAsync(["skills", "update"], fixture.runtime)).rejects.toThrow(/code 42/u);
-    expect(read(foreign, "typography/SKILL.md")).toBe(foreignBytes);
-    expect(read(fixture.source, "typography/SKILL.md")).toBe(accepted);
-    expect(realpathSync(fixture.source)).toBe(fixture.source);
-  });
+  test.each(["collection", "nested"] as const)(
+    "recovery detaches a replaced %s alias without changing the unrelated target",
+    async (layout) => {
+      const fixture = registryFixture();
+      const foreign = path.join(fixture.sandbox, "foreign-skills");
+      const foreignSlug = layout === "nested" ? "notes" : "typography";
+      writeSkill(foreign, foreignSlug, "Unrelated foreign instructions.\n");
+      const foreignBytes = read(foreign, `${foreignSlug}/SKILL.md`);
+      const replaced = layout === "nested" ? ".claude/skills/group" : ".claude/skills";
+      if (layout === "nested") {
+        write(fixture.source, "group/notes/README.md", "Existing notes.\n");
+      }
+      const command = `rm -rf ${replaced}; ln -s ${shellQuote(foreign)} ${replaced}; exit 42`;
+      await runCliAsync(
+        ["skills", "add", fixture.checkout, "--link", "--command", command],
+        fixture.runtime
+      );
+      const accepted = read(fixture.source, "typography/SKILL.md");
+      await expect(runCliAsync(["skills", "update"], fixture.runtime)).rejects.toThrow(/code 42/u);
+      expect(read(foreign, `${foreignSlug}/SKILL.md`)).toBe(foreignBytes);
+      expect(read(fixture.source, "typography/SKILL.md")).toBe(accepted);
+      expect(realpathSync(fixture.source)).toBe(fixture.source);
+      expect(existsSync(path.join(fixture.source, "group"))).toBeFalsy();
+    }
+  );
 
   test.each([undefined, "codiff"])(
     "updates honor the configured LFV adapter unless overridden with %s",
