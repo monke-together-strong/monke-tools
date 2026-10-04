@@ -15,6 +15,7 @@ import { parse } from "yaml";
 import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
+import { runInstallSkillsLocked } from "../src/guidance-installation.ts";
 import { runCliAsync } from "../src/index.ts";
 import { shellQuote } from "../src/shell-quote.ts";
 import {
@@ -153,6 +154,39 @@ done
 }
 
 describe("Skill import registry CLI", () => {
+  test("explicit removal survives installation and explicit re-add enables a bundled source again", async () => {
+    const fixture = registryFixture();
+    const gitSource = createRepo(path.join(fixture.sandbox, "git-source"), {
+      "skills/git-skill/SKILL.md": "---\nname: git-skill\n---\nBundled Git instructions.\n"
+    });
+    const source = `${gitSource}#HEAD`;
+    installGitImporter(fixture);
+    writeSkill(
+      path.join(fixture.guidance, "skills/imported"),
+      "git-skill",
+      "Bundled Git instructions.\n"
+    );
+    writeImportRecipeStore(fixture.guidance, {
+      recipes: [{ skills: [{ kind: "skill", selector: "git-skill", slug: "git-skill" }], source }],
+      version: 3
+    });
+    await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
+    await runCliAsync(["skills", "remove", source], fixture.runtime);
+    await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+    for (const root of Object.values(fixture.installed)) {
+      expect(existsSync(path.join(root, "git-skill"))).toBeFalsy();
+      expect(realpathSync(path.join(root, "typography"))).toBe(
+        path.join(fixture.source, "typography")
+      );
+    }
+    await runCliAsync(["skills", "add", source], fixture.runtime);
+    await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+    for (const root of Object.values(fixture.installed)) {
+      expect(read(root, "git-skill/SKILL.md")).toContain("Bundled Git instructions.");
+    }
+    expect(readImportRecipeStore(fixture.registry).removedSources ?? []).toStrictEqual([]);
+  });
+
   test("linked imports use existing provider layouts and write learned changes back to their source", async () => {
     const fixture = registryFixture();
     const actualSkill = path.join(fixture.sandbox, "skill-repo", "typography");

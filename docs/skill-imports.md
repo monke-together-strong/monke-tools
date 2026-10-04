@@ -9,6 +9,12 @@ The [agent guidance glossary](reference/agent-guidance.md) defines the shared
 import model. [ADR 0013](adr/0013-keep-personal-skill-imports-in-a-machine-local-registry.md)
 records the boundary between the bundled collection and the machine-local registry.
 
+Installation and `mt skills configure` add bundled sources that are not yet
+registered. Existing registry sources keep their selections, content, and policies;
+personal installer commands run only through `mt skills add` or `mt skills update`.
+`mt skills remove` records the source in the registry lock's `removedSources` so
+later installations leave it removed. An explicit `mt skills add` clears that removal.
+
 `skills.lock.json` records exact upstream commits, importer versions, selections,
 local roles and invocation policies. Imported directories are generated and ignored.
 Refresh them through the source-maintenance commands; local edits are replaced by

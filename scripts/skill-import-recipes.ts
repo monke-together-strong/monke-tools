@@ -89,6 +89,7 @@ const SkillImportRecipeStoreSchema = z.strictObject(
     recipes: z.array(SkillImportRecipeSchema, {
       error: "Skill import recipe store recipes must be an array"
     }),
+    removedSources: z.array(z.string().min(1)).optional(),
     version: z.literal(SKILL_IMPORT_RECIPE_STORE_VERSION, {
       error: `Skill import recipe store version must be ${String(SKILL_IMPORT_RECIPE_STORE_VERSION)}`
     })
@@ -278,6 +279,10 @@ export function normalizeImportRecipeStore(input: SkillImportRecipeStore): Skill
   });
   assertUniqueRecipeSources(recipes);
   assertUniqueImportedSkillOwners({ recipes, version: SKILL_IMPORT_RECIPE_STORE_VERSION });
+  const activeSources = new Set(recipes.map((recipe) => recipe.source));
+  const removedSources = [...new Set(store.removedSources)]
+    .filter((source) => !activeSources.has(source))
+    .toSorted(compareSkillLockStrings);
 
   return {
     recipes: recipes.toSorted((left, right) => {
@@ -288,6 +293,7 @@ export function normalizeImportRecipeStore(input: SkillImportRecipeStore): Skill
 
       return Number(Boolean(left.acceptOpenClawRisks)) - Number(Boolean(right.acceptOpenClawRisks));
     }),
+    ...(removedSources.length > 0 ? { removedSources } : {}),
     version: SKILL_IMPORT_RECIPE_STORE_VERSION
   };
 }

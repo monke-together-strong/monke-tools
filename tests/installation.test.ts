@@ -17,7 +17,8 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { runImportSkills } from "../scripts/import-skills.ts";
-import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import { guidanceDigest } from "../scripts/skill-lock.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
@@ -937,6 +938,110 @@ skillInstallPreference:
       );
       expect(existsSync(path.join(monkeHome, "installs/local-collision"))).toBe(succeeds);
       expect(readFileSync(protectedEntry, "utf-8")).toBe(protectedBytes);
+    }
+  );
+
+  test.each(["retained imports", "provider collision", "registry collision"] as const)(
+    "Local refresh reconciles a newly bundled source with %s",
+    async (scenario) => {
+      const sandbox = makeTempDir("local-install-new-bundle");
+      const home = path.join(sandbox, "home");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const sourceCheckout = path.join(sandbox, "source");
+      prepareSource(sourceCheckout);
+      await activateLocal({ home, installId: "local-first", monkeHome, sourceCheckout });
+      const personal = path.join(sandbox, "personal-source");
+      write(personal, "personal/SKILL.md", "---\nname: personal\n---\nPersonal instructions.\n");
+      const runtime = createTestRuntime({
+        cwd: sandbox,
+        env: { HOME: home, MONKE_HOME: monkeHome },
+        onStderr() {},
+        onStdout() {}
+      });
+      await runCliAsync(["skills", "add", personal, "--link", "--command", "exit 42"], runtime);
+      await runCliAsync(
+        ["skills", "policy", "personal-source", "--model-invocation", "deny"],
+        runtime
+      );
+      const registry = path.join(monkeHome, "skill-registry");
+      const accepted = readImportRecipeStore(registry);
+      const slug = scenario === "registry collision" ? "personal" : "bundled";
+      const skills = [{ kind: "skill" as const, selector: slug, slug }];
+      write(
+        sourceCheckout,
+        `skills/imported/${slug}/SKILL.md`,
+        `---\nname: ${slug}\n---\nBundled instructions.\n`
+      );
+      writeImportRecipeStore(sourceCheckout, {
+        recipes: [
+          {
+            lock: {
+              commit: "0".repeat(40),
+              digest: guidanceDigest(sourceCheckout, skills),
+              importerVersion: "1.7.0",
+              materializerVersion: 1,
+              repository: "https://example.com/bundled.git",
+              subpath: "",
+              updateRef: "HEAD"
+            },
+            skills,
+            source: "https://example.com/bundled"
+          }
+        ],
+        version: 3
+      });
+      if (scenario === "provider collision") {
+        write(home, ".claude/skills/bundled/SKILL.md", "User-owned skill.\n");
+      }
+      let outcome = "activated";
+      try {
+        await activateLocal({
+          home,
+          installId: "local-second",
+          monkeHome,
+          sourceCheckout,
+          targetKinds: ["claude", "codex", "cursor"]
+        });
+      } catch (error) {
+        outcome = errorMessage(ThrownValueSchema.parse(error));
+      }
+      const succeeds = scenario === "retained imports";
+      expect(outcome).toMatch(
+        succeeds
+          ? /^activated$/u
+          : scenario === "provider collision"
+            ? /preflight failed/u
+            : /owned by both/u
+      );
+      const { recipes } = readImportRecipeStore(registry);
+      expect(
+        recipes.filter((recipe) => recipe.source !== "https://example.com/bundled")
+      ).toStrictEqual(accepted.recipes);
+      expect(recipes).toHaveLength(accepted.recipes.length + Number(succeeds));
+      expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+        succeeds ? "installs/local-second" : "installs/local-first"
+      );
+      expect(realpathSync(path.join(home, ".codex/skills/monke-tools/imported/personal"))).toBe(
+        path.join(personal, "personal")
+      );
+      expect(readFileSync(path.join(personal, "personal/SKILL.md"), "utf-8")).toContain(
+        "disable-model-invocation: true"
+      );
+      for (const relative of [
+        ".claude/skills",
+        ".codex/skills/monke-tools/imported",
+        ".cursor/skills/monke-tools/imported"
+      ]) {
+        const entry = path.join(home, relative, "bundled/SKILL.md");
+        const contents = existsSync(entry) ? readFileSync(entry, "utf-8") : "";
+        expect(contents).toBe(
+          succeeds
+            ? "---\nname: bundled\n---\nBundled instructions.\n"
+            : scenario === "provider collision" && relative === ".claude/skills"
+              ? "User-owned skill.\n"
+              : ""
+        );
+      }
     }
   );
 

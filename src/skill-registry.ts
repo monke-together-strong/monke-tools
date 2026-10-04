@@ -118,7 +118,8 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
           commitState() {
             writeImportRecipeStore(root, {
               ...store,
-              recipes: store.recipes.filter((item) => item !== recipe)
+              recipes: store.recipes.filter((item) => item !== recipe),
+              removedSources: [...(store.removedSources ?? []), recipe.source]
             });
           },
           guidance: [],
@@ -156,17 +157,26 @@ function activeGuidanceRoot(runtime: Runtime) {
 export function registryGuidanceRoot(runtime: Runtime, guidanceSourceRoot: string) {
   const root = path.join(getMonkeHome(runtime), "skill-registry");
   return existsSync(path.join(root, SKILL_LOCK_PATH))
-    ? initializeSkillRegistry(runtime, guidanceSourceRoot)
+    ? initializeSkillRegistry(runtime, guidanceSourceRoot, true)
     : guidanceSourceRoot;
 }
 
-function initializeSkillRegistry(runtime: Runtime, guidance: string) {
-  const root = path.join(getMonkeHome(runtime), "skill-registry");
-  mkdirSync(root, { recursive: true });
+function planRegistryImports(root: string, guidance: string, includeNewSources: boolean) {
   const store = readImportRecipeStore(root);
   const bundledRecipes = readImportRecipeStore(guidance);
-  const additions = existsSync(path.join(root, SKILL_LOCK_PATH)) ? [] : bundledRecipes.recipes;
+  const sources = new Set([
+    ...store.recipes.map((recipe) => recipe.source),
+    ...(store.removedSources ?? [])
+  ]);
+  const additions =
+    includeNewSources || !existsSync(path.join(root, SKILL_LOCK_PATH))
+      ? bundledRecipes.recipes.filter((recipe) => !sources.has(recipe.source))
+      : [];
   const next = normalizeImportRecipeStore({ ...store, recipes: [...store.recipes, ...additions] });
+  return { additions, next };
+}
+
+function copyBundledImports(root: string, guidance: string, additions: SkillImportRecipe[]) {
   for (const recipe of additions) {
     for (const item of recipe.skills) {
       const source = importedGuidancePath(guidance, item);
@@ -175,6 +185,13 @@ function initializeSkillRegistry(runtime: Runtime, guidance: string) {
       cpSync(source, target, { recursive: true, verbatimSymlinks: true });
     }
   }
+}
+
+function initializeSkillRegistry(runtime: Runtime, guidance: string, includeNewSources = false) {
+  const root = path.join(getMonkeHome(runtime), "skill-registry");
+  const { additions, next } = planRegistryImports(root, guidance, includeNewSources);
+  mkdirSync(root, { recursive: true });
+  copyBundledImports(root, guidance, additions);
   for (const folder of [
     "skills/internal",
     "skills/codex",
@@ -198,8 +215,11 @@ function initializeSkillRegistry(runtime: Runtime, guidance: string) {
   if (additions.length > 0 || !existsSync(path.join(root, SKILL_LOCK_PATH))) {
     writeImportRecipeStore(root, next);
   }
-  if (!existsSync(path.join(root, ".monke-skill-baseline"))) {
-    rememberSkillGuidance(root);
+  if (additions.length > 0 || !existsSync(path.join(root, ".monke-skill-baseline"))) {
+    rememberSkillGuidance(
+      root,
+      additions.length > 0 ? additions.flatMap((recipe) => recipe.skills) : undefined
+    );
   }
   return root;
 }
@@ -271,6 +291,7 @@ export function preflightSkillRegistryInstall(
   }
   const proposal = mkdtempSync(path.join(tmpdir(), "monke-install-guidance-"));
   try {
+    const { additions } = planRegistryImports(registry, guidance, true);
     for (const folder of [
       "skills/internal",
       "skills/codex",
@@ -284,9 +305,14 @@ export function preflightSkillRegistryInstall(
       if (existsSync(source)) {
         const target = path.join(proposal, folder);
         mkdirSync(path.dirname(target), { recursive: true });
-        symlinkSync(source, target, "dir");
+        if (owner === registry) {
+          cpSync(source, target, { recursive: true, verbatimSymlinks: true });
+        } else {
+          symlinkSync(source, target, "dir");
+        }
       }
     }
+    copyBundledImports(proposal, guidance, additions);
     preflightInstallGuidance(runtime, proposal, explicitTargets);
   } finally {
     rmSync(proposal, { force: true, recursive: true });
