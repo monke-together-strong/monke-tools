@@ -14,6 +14,7 @@ import { withInstallMutationLockAsync } from "./install-recovery.ts";
 import { createLogger } from "./logger.ts";
 import { resolveManagedDirectory } from "./path-boundary.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
+import { registryGuidanceRoot } from "./skill-registry.ts";
 import {
   explicitSkillInstallPreference,
   promptForSkillInstallPreference,
@@ -56,7 +57,7 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
   reconcileSkillNamespaces({
     cwd: runtime.cwd,
     environment: runtime.env,
-    guidanceSourceRoot,
+    guidanceSourceRoot: registryGuidanceRoot(runtime, guidanceSourceRoot),
     homeDirectory,
     nextPreference,
     previousPreference,
@@ -64,10 +65,12 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
       runtime.writeStderr(message);
     }
   });
-  saveGlobalMonkeConfig(monkeHome, {
+  const nextConfig: GlobalMonkeConfig = {
+    ...config,
     skillInstallPreference: nextPreference,
     version: 1
-  });
+  };
+  saveGlobalMonkeConfig(monkeHome, nextConfig);
   createLogger(runtime).success("Configured monke-tools skills");
 }
 
@@ -128,7 +131,7 @@ export async function runInstallSkillsLocked(
   const resolvedGuidanceSourceRoot = path.resolve(guidanceSourceRoot);
   const explicitPreference = explicitSkillInstallPreference(homeDirectory, explicitTargets);
   const nextPreference = explicitPreference ?? config.skillInstallPreference;
-  const nextConfig: GlobalMonkeConfig = { version: 1 };
+  const nextConfig: GlobalMonkeConfig = { ...config, version: 1 };
   if (nextPreference) {
     nextConfig.skillInstallPreference = nextPreference;
   }
@@ -141,7 +144,7 @@ export async function runInstallSkillsLocked(
   reconcileSkillNamespaces({
     cwd: runtime.cwd,
     environment: runtime.env,
-    guidanceSourceRoot: resolvedGuidanceSourceRoot,
+    guidanceSourceRoot: registryGuidanceRoot(runtime, resolvedGuidanceSourceRoot),
     homeDirectory,
     nextPreference,
     previousPreference: config.skillInstallPreference ?? null,

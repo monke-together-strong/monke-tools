@@ -32,6 +32,24 @@ const SkillImportRecipeSchema = z.strictObject(
         error: "Skill import recipe acceptOpenClawRisks must be true when present"
       })
       .optional(),
+    disableModelInvocation: z.boolean().optional(),
+    localSource: z
+      .strictObject({
+        command: z.string().min(1).optional(),
+        kind: z.enum(["command", "link"]),
+        skillSourceFolder: z.string().refine(path.isAbsolute),
+        workingDirectory: z.string().refine(path.isAbsolute)
+      })
+      .superRefine((localSource, context) => {
+        if (localSource.kind === "command" && !localSource.command) {
+          context.addIssue({
+            code: "custom",
+            message: "Command skill source requires a command",
+            path: ["command"]
+          });
+        }
+      })
+      .optional(),
     lock: z
       .strictObject({
         commit: z.string().regex(/^[a-f\d]{40}$/u),
@@ -49,6 +67,11 @@ const SkillImportRecipeSchema = z.strictObject(
         updateRef: z.string().min(1)
       })
       .optional(),
+    name: z
+      .string()
+      .regex(/^[a-z\d][a-z\d_-]*$/u)
+      .optional(),
+    selection: z.array(z.string().min(1)).min(1).optional(),
     skills: z
       .array(SkillImportRecipeSkillSchema, {
         error: "Skill import recipe skills must be a non-empty array"
@@ -72,7 +95,7 @@ const SkillImportRecipeStoreSchema = z.strictObject(
   { error: "Skill import recipe store must be a JSON object" }
 );
 
-/** Repo-tracked store for all Skill import recipes. */
+/** Recipes for one bundled or machine-local imported guidance collection. */
 export type SkillImportRecipeStore = z.output<typeof SkillImportRecipeStoreSchema>;
 
 /** Local role assigned to one selected upstream guidance item. */
@@ -104,7 +127,7 @@ export function compareSkillLockStrings(left: string, right: string) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-/** Reads the repo-tracked Skill import recipe store, returning an empty store when absent. */
+/** Reads a Skill import recipe store, returning an empty store when absent. */
 export function readImportRecipeStore(repoRoot: string): SkillImportRecipeStore {
   const storePath = existsSync(path.join(repoRoot, SKILL_LOCK_PATH))
     ? path.join(repoRoot, SKILL_LOCK_PATH)
@@ -247,12 +270,22 @@ export function normalizeImportRecipeStore(input: SkillImportRecipeStore): Skill
 
 function assertUniqueRecipeSources(recipes: readonly SkillImportRecipe[]) {
   const sources = new Set<string>();
+  const aliases = new Map<string, string>();
   for (const recipe of recipes) {
     if (sources.has(recipe.source)) {
       throw new MonkeError(`Duplicate skill import recipe source: ${recipe.source}`);
     }
 
     sources.add(recipe.source);
+    for (const alias of new Set(
+      [recipe.source, recipe.name].filter((name) => name !== undefined)
+    )) {
+      const owner = aliases.get(alias);
+      if (owner !== undefined && owner !== recipe.source) {
+        throw new MonkeError(`Duplicate Skill source name: ${alias}`);
+      }
+      aliases.set(alias, recipe.source);
+    }
   }
 }
 

@@ -13,6 +13,7 @@ import path from "node:path";
 import { MonkeError } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
 import { createRuntime, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
+import type { Runtime } from "../src/types.ts";
 import {
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath,
@@ -278,8 +279,11 @@ function hashDirectory(root: string, directory: string, prefix: string, hash: Bu
 }
 
 /** Restores exact accepted guidance without discovery or lock rewriting. */
-export async function withSkillImportMutation<T>(repoRoot: string, callback: () => T | Promise<T>) {
-  const runtime = createRuntime({ cwd: repoRoot });
+export async function withSkillImportMutation<T>(
+  repoRoot: string,
+  callback: () => T | Promise<T>,
+  runtime: Runtime = createRuntime({ cwd: repoRoot })
+) {
   return await withScopedLockAsync(getMonkeHome(runtime), `skill-import:${repoRoot}`, callback);
 }
 
@@ -294,7 +298,7 @@ export function restoreLockedImports(repoRoot: string) {
     return;
   }
   const store = readImportRecipeStore(repoRoot);
-  if (store.recipes.some((recipe) => !recipe.lock)) {
+  if (store.recipes.some((recipe) => !recipe.localSource && !recipe.lock)) {
     throw new MonkeError(
       "Skill lock is incomplete; run skills:update to pin every recipe before source installation"
     );
@@ -310,6 +314,9 @@ export function restoreLockedImports(repoRoot: string) {
     }
   }
   for (const recipe of store.recipes) {
+    if (recipe.localSource) {
+      continue;
+    }
     try {
       if (guidanceDigest(repoRoot, recipe.skills) === recipe.lock?.digest) {
         continue;
@@ -322,6 +329,7 @@ export function restoreLockedImports(repoRoot: string) {
     try {
       stageLockedRecipe(recipe, stagingDirectory);
       copyStagedGuidanceToManagedRoots({
+        defaultDisableModelInvocation: recipe.disableModelInvocation,
         guidance: recipe.skills,
         repoRoot,
         stagingDirectory,
@@ -338,7 +346,7 @@ export function restoreLockedImports(repoRoot: string) {
     }
   }
   for (const recipe of store.recipes) {
-    if (guidanceDigest(repoRoot, recipe.skills) !== recipe.lock?.digest) {
+    if (!recipe.localSource && guidanceDigest(repoRoot, recipe.skills) !== recipe.lock?.digest) {
       throw new MonkeError(`Invalid locked guidance for ${recipe.source}`);
     }
   }

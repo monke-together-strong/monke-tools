@@ -1,6 +1,7 @@
 # monke-tools
 
-monke-tools manages workspace Sessions across a root repo and its dependencies.
+monke-tools manages workspace Sessions across a root repo and its dependencies,
+and distributes shared and personal agent guidance across Consumer repos.
 This file and the references below form one glossary, split by domain area.
 They contain terms and relationships; tool usage belongs in the
 [Core skill](skills/internal/monke-tools-core/SKILL.md).
@@ -10,7 +11,7 @@ They contain terms and relationships; tool usage belongs in the
 - [Session lifecycle](docs/reference/session-lifecycle.md): preparation, materialization, removal, and navigation.
 - [Resources](docs/reference/resources.md): checkout ownership, values, and allocations.
 - [Installation](docs/reference/installation.md): installs, releases, activation, and provenance.
-- [Agent guidance](docs/reference/agent-guidance.md): skills, imports, targets, and projections.
+- [Agent guidance](docs/reference/agent-guidance.md): skills, import sources, registries, invocation overrides, projections, and reviews.
 - [Retrospective](docs/reference/retrospective.md): transcripts, PR evidence, and fix proposals.
 
 Historical decisions live in [docs/adr](docs/adr).

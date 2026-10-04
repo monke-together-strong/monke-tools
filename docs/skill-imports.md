@@ -1,5 +1,16 @@
 # Maintaining imported guidance
 
+For machine-local imports, including private linked collections and installer
+commands, use `mt skills add` and `mt skills update`. Their registry lives in
+`$MONKE_HOME/skill-registry/skills.lock.json`; it starts with the bundled imports
+and uses the same recipe and policy format. See
+[Imported Skill registry](../skills/internal/monke-tools-core/IMPORTED-SKILLS.md).
+The commands below maintain the public repository's bundled collection.
+
+The [agent guidance glossary](reference/agent-guidance.md) defines the shared
+import model. [ADR 0013](adr/0013-keep-personal-skill-imports-in-a-machine-local-registry.md)
+records the boundary between the bundled collection and the machine-local registry.
+
 `skills.lock.json` records exact upstream commits, importer versions, selections,
 local roles and invocation policies. Imported directories are generated and ignored.
 Refresh them through the source-maintenance commands; local edits are replaced by
@@ -18,6 +29,10 @@ The printed `mt diff` command reopens the fixed comparison. A viewer-launch fail
 leaves updates applied and prints that command. Committing the lock records the
 selected versions. GitHub content diffs contain the lock; the complete guidance
 comparison stays local.
+
+Update reviews include the lock as well as the guidance content. A source can
+advance to a newer Git commit while its selected skills have the same content
+digest; a comparison containing only those source revision changes is expected.
 
 `vpr install:local` restores and validates the selected lock automatically before
 installing source-backed guidance. Run it again after reverting the lock or
@@ -41,5 +56,5 @@ a new review.
 The initial migration upgrades the selected guidance and retires
 `resolving-merge-conflicts` after its upstream removal.
 
-Published releases include complete generated guidance. Release installation and
+Published releases include the recipe lock and complete generated guidance. Release installation and
 `mt update` consume those bundles without fetching upstream skill repositories.

@@ -1041,10 +1041,14 @@ function stripTerminalEscapes(value: string) {
     .replace(CONTROL_RE, "");
 }
 
-if (import.meta.main) {
+async function main() {
   try {
     await runImportSkills();
   } catch (error) {
     reportCliFailure(ThrownValueSchema.parse(error));
   }
+}
+
+if (import.meta.main) {
+  void main();
 }

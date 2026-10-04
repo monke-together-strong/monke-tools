@@ -9,17 +9,15 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
 
-import { parseDocument } from "yaml";
-import * as z from "zod";
-
 import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
-import { unwrapBoundaryResult } from "../src/validation.ts";
+import { setSkillModelInvocation } from "../src/skill-invocation.ts";
 import type { SkillImportRecipeSkill } from "./skill-import-recipes.ts";
 
 export const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
@@ -27,22 +25,13 @@ export const IMPORTED_REFERENCES_ROOT = path.join("skills", "references", "impor
 const CODEX_SKILLS_ROOT = path.join("skills", "codex");
 const INTERNAL_SKILLS_ROOT = path.join("skills", "internal");
 const INTERNAL_REFERENCES_ROOT = path.join("skills", "references", "internal");
-const SkillInvocationFrontmatterSchema = z.looseObject({
-  "disable-model-invocation": z.boolean().optional()
-});
-const CodexSkillMetadataSchema = z.looseObject({
-  policy: z
-    .looseObject({
-      allow_implicit_invocation: z.boolean().optional()
-    })
-    .optional()
-});
-
 /** Materializes staged upstream guidance using its recorded local Import kind. */
 export function copyStagedGuidanceToManagedRoots(
   options: {
     commitState?: () => void;
+    defaultDisableModelInvocation?: boolean;
     guidance: readonly SkillImportRecipeSkill[];
+    linkedSkills?: ReadonlyMap<string, string>;
     obsoleteGuidance?: readonly SkillImportRecipeSkill[];
     repoRoot: string;
     stagingDirectory: string;
@@ -62,7 +51,14 @@ export function copyStagedGuidanceToManagedRoots(
   let retainRecovery = false;
 
   try {
-    prepareStagedGuidance(options.guidance, stagedSkillsRoot, preparedRoot);
+    prepareStagedGuidance(
+      options.guidance.map((item) => ({
+        ...item,
+        disableModelInvocation: item.disableModelInvocation ?? options.defaultDisableModelInvocation
+      })),
+      stagedSkillsRoot,
+      preparedRoot
+    );
 
     options.validatePrepared?.(preparedRoot);
     assertObsoleteReferencesAreUnconsumed(options.repoRoot, options.obsoleteGuidance ?? []);
@@ -83,10 +79,13 @@ export function copyStagedGuidanceToManagedRoots(
     for (const item of options.guidance) {
       const targetPath = importedGuidancePath(options.repoRoot, item);
       mkdirSync(path.dirname(targetPath), { recursive: true });
-      cpSync(path.join(preparedRoot, item.kind, item.slug), targetPath, {
-        recursive: true,
-        verbatimSymlinks: true
-      });
+      publishPreparedGuidance(
+        item,
+        targetPath,
+        preparedRoot,
+        options.linkedSkills?.get(item.slug),
+        options.defaultDisableModelInvocation
+      );
     }
     options.commitState?.();
   } catch (error) {
@@ -117,6 +116,30 @@ export function copyStagedGuidanceToManagedRoots(
   }
 }
 
+function publishPreparedGuidance(
+  item: SkillImportRecipeSkill,
+  targetPath: string,
+  preparedRoot: string,
+  linkedSource?: string,
+  defaultDisableModelInvocation?: boolean
+) {
+  if (linkedSource) {
+    if (item.kind !== "skill") {
+      throw new MonkeError("Linked guidance must be a Skill");
+    }
+    const disable = item.disableModelInvocation ?? defaultDisableModelInvocation;
+    if (disable !== undefined) {
+      setSkillModelInvocation(linkedSource, disable);
+    }
+    symlinkSync(linkedSource, targetPath, "dir");
+  } else {
+    cpSync(path.join(preparedRoot, item.kind, item.slug), targetPath, {
+      recursive: true,
+      verbatimSymlinks: true
+    });
+  }
+}
+
 function prepareStagedGuidance(
   guidance: readonly SkillImportRecipeSkill[],
   stagedSkillsRoot: string,
@@ -139,95 +162,9 @@ function prepareStagedGuidance(
     if (item.kind === "reference") {
       transformPreparedReference(preparedPath);
     } else if (item.disableModelInvocation !== undefined) {
-      transformPreparedSkillInvocationPolicy(preparedPath, item.disableModelInvocation);
+      setSkillModelInvocation(preparedPath, item.disableModelInvocation);
     }
   }
-}
-
-function transformPreparedSkillInvocationPolicy(
-  skillPath: string,
-  disableModelInvocation: boolean
-) {
-  const skillEntryPath = path.join(skillPath, "SKILL.md");
-  if (!existsSync(skillEntryPath) || !lstatSync(skillEntryPath).isFile()) {
-    throw new MonkeError(
-      `Expected staged Skill entry document to be a regular file at ${skillEntryPath}`
-    );
-  }
-  const skillMarkdown = readFileSync(skillEntryPath, "utf-8");
-  const frontmatterMatch = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
-    skillMarkdown
-  );
-  if (!frontmatterMatch) {
-    throw new MonkeError(`Expected leading YAML frontmatter at ${skillEntryPath}`);
-  }
-
-  const frontmatterLabel = `Skill frontmatter at ${skillEntryPath}`;
-  const frontmatter = parseMutableYamlDocument(
-    frontmatterMatch.groups?.frontmatter ?? "",
-    frontmatterLabel
-  );
-  unwrapBoundaryResult(
-    SkillInvocationFrontmatterSchema.safeParse(frontmatter.toJS()),
-    frontmatterLabel
-  );
-  frontmatter.set("disable-model-invocation", disableModelInvocation);
-  writeFileSync(
-    skillEntryPath,
-    `---\n${frontmatter.toString()}---\n${skillMarkdown.slice(frontmatterMatch[0].length)}`,
-    "utf-8"
-  );
-
-  const agentsPath = path.join(skillPath, "agents");
-  const openaiMetadataPath = path.join(skillPath, "agents", "openai.yaml");
-  const legacyOpenaiMetadataPath = path.join(skillPath, "agents", "openai.yml");
-  if (existsSync(agentsPath) && !lstatSync(agentsPath).isDirectory()) {
-    throw new MonkeError(
-      `Expected staged Skill agents path to be a regular directory at ${agentsPath}`
-    );
-  }
-  for (const metadataPath of [openaiMetadataPath, legacyOpenaiMetadataPath]) {
-    if (existsSync(metadataPath) && !lstatSync(metadataPath).isFile()) {
-      throw new MonkeError(
-        `Expected staged Codex metadata to be a regular file at ${metadataPath}`
-      );
-    }
-  }
-  if (existsSync(legacyOpenaiMetadataPath)) {
-    if (existsSync(openaiMetadataPath)) {
-      unlinkSync(legacyOpenaiMetadataPath);
-    } else {
-      renameSync(legacyOpenaiMetadataPath, openaiMetadataPath);
-    }
-  }
-  const openaiMetadataLabel = `Codex metadata at ${openaiMetadataPath}`;
-  const openaiMetadata = parseMutableYamlDocument(
-    existsSync(openaiMetadataPath)
-      ? readFileSync(openaiMetadataPath, "utf-8")
-      : "policy:\n  allow_implicit_invocation: false\n",
-    openaiMetadataLabel
-  );
-  unwrapBoundaryResult(
-    CodexSkillMetadataSchema.safeParse(openaiMetadata.toJS()),
-    openaiMetadataLabel
-  );
-  openaiMetadata.setIn(["policy", "allow_implicit_invocation"], !disableModelInvocation);
-  mkdirSync(agentsPath, { recursive: true });
-  writeFileSync(openaiMetadataPath, openaiMetadata.toString(), "utf-8");
-}
-
-function parseMutableYamlDocument(text: string, label: string) {
-  const document = parseDocument(text, {
-    merge: false,
-    strict: true,
-    uniqueKeys: true
-  });
-  if (document.errors.length > 0) {
-    throw new MonkeError(
-      `Invalid ${label}:\n${document.errors.map((error) => error.message).join("\n")}`
-    );
-  }
-  return document;
 }
 
 function transformPreparedReference(referencePath: string) {

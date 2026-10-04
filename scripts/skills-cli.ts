@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { MonkeError } from "../src/errors.ts";
 import { createRuntime } from "../src/runtime.ts";
+import type { Runtime } from "../src/types.ts";
 
 export const SKILLS_CLI_VERSION = "1.7.0";
 const NPX_COMMAND = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -65,6 +66,10 @@ export function listStagedSkillSlugs(stagingDirectory: string) {
 }
 
 /** Runs upstream `skills` CLI arguments and returns captured output or throws on failure. */
-export function runSkillsCaptured(args: string[], cwd: string) {
-  return createRuntime({ cwd }).exec(NPX_COMMAND, args);
+export function runSkillsCaptured(
+  args: string[],
+  cwd: string,
+  runtime: Runtime = createRuntime({ cwd })
+) {
+  return runtime.exec(NPX_COMMAND, args, { cwd });
 }
