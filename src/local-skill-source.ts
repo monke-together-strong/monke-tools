@@ -75,9 +75,6 @@ function discoverSourceSkills(root: string) {
     ancestors.delete(physicalDirectory);
   }
   visit(root);
-  if (skills.size === 0) {
-    throw new MonkeError(`No skills found in ${root}`);
-  }
   return skills;
 }
 
@@ -100,14 +97,26 @@ export async function updateLocalSkillSource(options: {
   const backup = path.join(staging, "original");
   const previousPath = localSource.skillSourceFolder;
   const hasBackup = existsSync(previousPath);
-  const recoveryCopies = new Map<string, string | null>([
-    [previousPath, hasBackup ? backup : null]
-  ]);
+  const recoveryCopies = new Map<string, string | null>();
   let retainRecovery = false;
-  if (hasBackup) {
-    cpSync(previousPath, backup, { recursive: true, verbatimSymlinks: true });
+  function backupLinkedSkillTarget(sourcePath: string) {
+    const physicalSource = realpathSync.native(sourcePath);
+    if (!containsPath(previousPath, physicalSource) && !recoveryCopies.has(physicalSource)) {
+      const physicalBackup = path.join(staging, "linked-originals", String(recoveryCopies.size));
+      cpSync(physicalSource, physicalBackup, { recursive: true, verbatimSymlinks: true });
+      recoveryCopies.set(physicalSource, physicalBackup);
+    }
   }
   try {
+    if (hasBackup) {
+      cpSync(previousPath, backup, { recursive: true, verbatimSymlinks: true });
+      recoveryCopies.set(previousPath, backup);
+      for (const sourcePath of discoverSourceSkills(previousPath).values()) {
+        backupLinkedSkillTarget(sourcePath);
+      }
+    } else {
+      recoveryCopies.set(previousPath, null);
+    }
     if (localSource.command && options.executeCommand !== false) {
       mkdirSync(localSource.workingDirectory, { recursive: true });
       const shell = runtime.platform === "win32" ? "cmd.exe" : "sh";
@@ -130,18 +139,16 @@ export async function updateLocalSkillSource(options: {
         ? resolveSkillSourceFolder(localSource.workingDirectory)
         : localSource.skillSourceFolder;
     const discovered = discoverSourceSkills(root);
+    if (discovered.size === 0) {
+      throw new MonkeError(`No skills found in ${root}`);
+    }
     const selected = recipe.selection ?? [...discovered.keys()];
     const skills = selected.map((slug) => {
       const sourcePath = discovered.get(slug);
       if (!sourcePath) {
         throw new MonkeError(`Selected Skill ${slug} is missing from ${root}`);
       }
-      const physicalSource = realpathSync.native(sourcePath);
-      if (!containsPath(previousPath, physicalSource) && !recoveryCopies.has(physicalSource)) {
-        const physicalBackup = path.join(staging, "linked-originals", String(recoveryCopies.size));
-        cpSync(physicalSource, physicalBackup, { recursive: true, verbatimSymlinks: true });
-        recoveryCopies.set(physicalSource, physicalBackup);
-      }
+      backupLinkedSkillTarget(sourcePath);
       cpSync(sourcePath, path.join(staging, ".agents", "skills", slug), {
         dereference: true,
         recursive: true

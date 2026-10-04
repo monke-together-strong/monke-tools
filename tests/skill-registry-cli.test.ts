@@ -499,32 +499,64 @@ describe("Skill import registry CLI", () => {
     expect(read(fixture.installed.claude, "color/SKILL.md")).toBe("User-owned color.\n");
   });
 
-  test("failed policy publication restores bytes in external symlinked skill directories", async () => {
-    const fixture = registryFixture();
-    const actual = path.join(fixture.sandbox, "actual-skills");
-    writeSkill(actual, "typography", "External instructions.\n");
-    const metadata = path.join(fixture.sandbox, "agent-metadata");
-    write(metadata, "openai.yaml", "policy:\n  allow_implicit_invocation: true\n");
-    symlinkSync(metadata, path.join(actual, "typography/agents"), "dir");
-    rmSync(path.join(fixture.source, "typography"), { recursive: true });
-    symlinkSync(path.join(actual, "typography"), path.join(fixture.source, "typography"), "dir");
-    await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
-    const accepted = read(actual, "typography/SKILL.md");
-    const recipe = readImportRecipeStore(fixture.registry);
-    await expect(
-      runCliAsync(
+  test.each(["policy", "installer"] as const)(
+    "failed %s publication restores bytes in external symlinked skill directories",
+    async (operation) => {
+      const fixture = registryFixture();
+      const actual = path.join(fixture.sandbox, "actual-skills");
+      writeSkill(actual, "typography", "External instructions.\n");
+      write(
+        actual,
+        "typography/agents/openai.yaml",
+        "policy:\n  allow_implicit_invocation: true\n"
+      );
+      rmSync(path.join(fixture.source, "typography"), { recursive: true });
+      symlinkSync(path.join(actual, "typography"), path.join(fixture.source, "typography"), "dir");
+      const script = path.join(fixture.sandbox, "modify-linked-skill.sh");
+      writeExecutable(
+        script,
+        `#!/bin/sh
+set -eu
+cat > .claude/skills/typography/SKILL.md <<'SKILL'
+---
+name: typography
+description: A course skill.
+---
+New installer instructions.
+SKILL
+`
+      );
+      await runCliAsync(
+        ["skills", "add", fixture.checkout, "--link", "--command", `sh ${shellQuote(script)}`],
+        fixture.runtime
+      );
+      await runCliAsync(
         ["skills", "policy", "private-course", "--model-invocation", "deny"],
         fixture.runtime
-      )
-    ).rejects.toThrow(/agents path to be a regular directory/u);
-    expect(read(actual, "typography/SKILL.md")).toBe(accepted);
-    expect(read(metadata, "openai.yaml")).toBe("policy:\n  allow_implicit_invocation: true\n");
-    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(recipe);
-    expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(
-      path.join(actual, "typography")
-    );
-    expect(readlinkSync(path.join(actual, "typography/agents"))).toBe(metadata);
-  });
+      );
+      const metadata = path.join(fixture.sandbox, "agent-metadata");
+      write(metadata, "openai.yaml", "policy:\n  allow_implicit_invocation: false\n");
+      rmSync(path.join(actual, "typography/agents"), { recursive: true });
+      symlinkSync(metadata, path.join(actual, "typography/agents"), "dir");
+      const accepted = read(actual, "typography/SKILL.md");
+      const recipe = readImportRecipeStore(fixture.registry);
+      await expect(
+        runCliAsync(
+          operation === "policy"
+            ? ["skills", "policy", "private-course", "--model-invocation", "deny"]
+            : ["skills", "update"],
+          fixture.runtime
+        )
+      ).rejects.toThrow(/agents path to be a regular directory/u);
+      expect(read(actual, "typography/SKILL.md")).toBe(accepted);
+      expect(read(metadata, "openai.yaml")).toBe("policy:\n  allow_implicit_invocation: false\n");
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(recipe);
+      expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(
+        path.join(actual, "typography")
+      );
+      expect(readlinkSync(path.join(actual, "typography/agents"))).toBe(metadata);
+    }
+  );
 
   test("an unavailable Git pin does not block healthy local source updates", async () => {
     const fixture = registryFixture();
