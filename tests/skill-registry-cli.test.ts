@@ -196,6 +196,8 @@ describe("Skill import registry CLI", () => {
       "README.md": "Skill source.\n"
     });
     writeSkill(path.join(gitSource, "skills"), "git-skill", "First Git version.\n");
+    write(gitSource, "skills/git-skill/support.md", "Supporting Git content.\n");
+    symlinkSync("support.md", path.join(gitSource, "skills/git-skill/alias.md"));
     git(gitSource, ["add", "."]);
     git(gitSource, ["commit", "-m", "First skill"]);
     // Exercise the actual published-importer process boundary without network downloads.
@@ -272,6 +274,9 @@ describe("Skill import registry CLI", () => {
     expect(diff).toContain("+Second Git version.");
     expect(git(reviewRepo, ["ls-tree", commit, "skills/imported/typography"])).toContain(
       "040000 tree"
+    );
+    expect(git(reviewRepo, ["ls-tree", commit, "skills/imported/git-skill/alias.md"])).toContain(
+      "120000 blob"
     );
     await runCliAsync(["skills", "update"], fixture.runtime);
     expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toHaveLength(3);
@@ -492,6 +497,33 @@ describe("Skill import registry CLI", () => {
     expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
     expect(read(fixture.source, "typography/SKILL.md")).toBe(accepted);
     expect(read(fixture.installed.claude, "color/SKILL.md")).toBe("User-owned color.\n");
+  });
+
+  test("failed policy publication restores bytes in external symlinked skill directories", async () => {
+    const fixture = registryFixture();
+    const actual = path.join(fixture.sandbox, "actual-skills");
+    writeSkill(actual, "typography", "External instructions.\n");
+    const metadata = path.join(fixture.sandbox, "agent-metadata");
+    write(metadata, "openai.yaml", "policy:\n  allow_implicit_invocation: true\n");
+    symlinkSync(metadata, path.join(actual, "typography/agents"), "dir");
+    rmSync(path.join(fixture.source, "typography"), { recursive: true });
+    symlinkSync(path.join(actual, "typography"), path.join(fixture.source, "typography"), "dir");
+    await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
+    const accepted = read(actual, "typography/SKILL.md");
+    const recipe = readImportRecipeStore(fixture.registry);
+    await expect(
+      runCliAsync(
+        ["skills", "policy", "private-course", "--model-invocation", "deny"],
+        fixture.runtime
+      )
+    ).rejects.toThrow(/agents path to be a regular directory/u);
+    expect(read(actual, "typography/SKILL.md")).toBe(accepted);
+    expect(read(metadata, "openai.yaml")).toBe("policy:\n  allow_implicit_invocation: true\n");
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(recipe);
+    expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(
+      path.join(actual, "typography")
+    );
+    expect(readlinkSync(path.join(actual, "typography/agents"))).toBe(metadata);
   });
 
   test("an unavailable Git pin does not block healthy local source updates", async () => {

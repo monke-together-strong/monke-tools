@@ -19,6 +19,7 @@ import {
 } from "../scripts/skill-import-recipes.ts";
 import type { SkillImportRecipe, SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
+import { containsPath } from "./path-identity.ts";
 import type { Runtime } from "./types.ts";
 
 /** Choose one skill source folder from a checkout or installer output. */
@@ -99,6 +100,9 @@ export async function updateLocalSkillSource(options: {
   const backup = path.join(staging, "original");
   const previousPath = localSource.skillSourceFolder;
   const hasBackup = existsSync(previousPath);
+  const recoveryCopies = new Map<string, string | null>([
+    [previousPath, hasBackup ? backup : null]
+  ]);
   let retainRecovery = false;
   if (hasBackup) {
     cpSync(previousPath, backup, { recursive: true, verbatimSymlinks: true });
@@ -131,6 +135,12 @@ export async function updateLocalSkillSource(options: {
       const sourcePath = discovered.get(slug);
       if (!sourcePath) {
         throw new MonkeError(`Selected Skill ${slug} is missing from ${root}`);
+      }
+      const physicalSource = realpathSync.native(sourcePath);
+      if (!containsPath(previousPath, physicalSource) && !recoveryCopies.has(physicalSource)) {
+        const physicalBackup = path.join(staging, "linked-originals", String(recoveryCopies.size));
+        cpSync(physicalSource, physicalBackup, { recursive: true, verbatimSymlinks: true });
+        recoveryCopies.set(physicalSource, physicalBackup);
       }
       cpSync(sourcePath, path.join(staging, ".agents", "skills", slug), {
         dereference: true,
@@ -170,15 +180,21 @@ export async function updateLocalSkillSource(options: {
     });
     return next;
   } catch (error) {
-    try {
-      rmSync(previousPath, { force: true, recursive: true });
-      if (hasBackup) {
-        cpSync(backup, previousPath, { recursive: true, verbatimSymlinks: true });
+    const failures: string[] = [];
+    for (const [source, recoveryCopy] of recoveryCopies) {
+      try {
+        rmSync(source, { force: true, recursive: true });
+        if (recoveryCopy !== null) {
+          cpSync(recoveryCopy, source, { recursive: true, verbatimSymlinks: true });
+        }
+      } catch (recoveryError) {
+        failures.push(`${source}: ${errorMessage(ThrownValueSchema.parse(recoveryError))}`);
       }
-    } catch (recoveryError) {
-      retainRecovery = hasBackup;
+    }
+    if (failures.length > 0) {
+      retainRecovery = true;
       throw new MonkeError(
-        `${errorMessage(ThrownValueSchema.parse(error))}\nSource restoration failed: ${errorMessage(ThrownValueSchema.parse(recoveryError))}${hasBackup ? `\nRecovery copy retained at ${backup}` : ""}`,
+        `${errorMessage(ThrownValueSchema.parse(error))}\nSource restoration failed:\n${failures.join("\n")}\nRecovery copies retained at ${staging}`,
         { cause: error }
       );
     }

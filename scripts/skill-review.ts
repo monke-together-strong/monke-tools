@@ -45,14 +45,7 @@ export function rememberSkillGuidance(
   rmSync(next, { force: true, recursive: true });
   if (changedGuidance && existsSync(baseline)) {
     cpSync(baseline, next, { recursive: true, verbatimSymlinks: true });
-    for (const item of changedGuidance) {
-      const source = importedGuidancePath(repoRoot, item);
-      const target = importedGuidancePath(next, item);
-      rmSync(target, { force: true, recursive: true });
-      if (existsSync(source)) {
-        copyGuidanceSnapshot(source, target, true);
-      }
-    }
+    replaceSnapshotGuidance(repoRoot, next, changedGuidance);
     writeFileSync(
       path.join(next, SKILL_LOCK_PATH),
       `${JSON.stringify(readImportRecipeStore(repoRoot), null, 2)}\n`
@@ -62,6 +55,26 @@ export function rememberSkillGuidance(
   }
   rmSync(baseline, { force: true, recursive: true });
   renameSync(next, baseline);
+}
+
+function replaceSnapshotGuidance(
+  repoRoot: string,
+  destination: string,
+  guidance: readonly SkillImportRecipeSkill[]
+) {
+  const localSkills = new Set(
+    readImportRecipeStore(repoRoot)
+      .recipes.filter((recipe) => recipe.localSource)
+      .flatMap((recipe) => recipe.skills.map((item) => item.slug))
+  );
+  for (const item of guidance) {
+    const source = importedGuidancePath(repoRoot, item);
+    const target = importedGuidancePath(destination, item);
+    rmSync(target, { force: true, recursive: true });
+    if (existsSync(source)) {
+      copyGuidanceSnapshot(source, target, item.kind === "skill" && localSkills.has(item.slug));
+    }
+  }
 }
 
 function copyGuidanceSnapshot(source: string, target: string, dereference: boolean) {
@@ -76,14 +89,18 @@ function copyGuidanceSnapshot(source: string, target: string, dereference: boole
 /** Capture complete guidance independently of source Git tracking and ignore rules. */
 export function snapshotSkillGuidance(repoRoot: string, destination: string) {
   const store = readImportRecipeStore(repoRoot);
-  const dereference = store.recipes.some((recipe) => recipe.localSource !== undefined);
   mkdirSync(destination, { recursive: true });
   for (const root of [IMPORTED_SKILLS_ROOT, IMPORTED_REFERENCES_ROOT]) {
     if (existsSync(path.join(repoRoot, root))) {
       mkdirSync(path.dirname(path.join(destination, root)), { recursive: true });
-      copyGuidanceSnapshot(path.join(repoRoot, root), path.join(destination, root), dereference);
+      copyGuidanceSnapshot(path.join(repoRoot, root), path.join(destination, root), false);
     }
   }
+  replaceSnapshotGuidance(
+    repoRoot,
+    destination,
+    store.recipes.filter((recipe) => recipe.localSource).flatMap((recipe) => recipe.skills)
+  );
   rmSync(path.join(destination, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
   writeFileSync(path.join(destination, SKILL_LOCK_PATH), `${JSON.stringify(store, null, 2)}\n`);
 }
