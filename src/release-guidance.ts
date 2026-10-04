@@ -14,6 +14,14 @@ export function hashReleaseGuidance(bundleRoot: string) {
     throw new MonkeError(`Release guidance file is missing: ${globalInstructions}`);
   }
   const hashes = new Map([["instructions/GLOBAL.md", sha256(readFileSync(globalInstructions))]]);
+  const lock = path.join(bundleRoot, "skills.lock.json");
+  const lockStat = lstatSync(lock, { throwIfNoEntry: false });
+  if (lockStat) {
+    if (!lockStat.isFile() || lockStat.isSymbolicLink()) {
+      throw new MonkeError(`Release Skill lock must be a regular file: ${lock}`);
+    }
+    hashes.set("skills.lock.json", sha256(readFileSync(lock)));
+  }
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     const root = path.join(bundleRoot, "skills", folder);
     assertGuidanceDirectory(root);
@@ -54,6 +62,14 @@ export function findChangedReleaseGuidancePaths(
       ? sha256(readFileSync(globalInstructions))
       : null
   );
+  const lock = path.join(bundleRoot, "skills.lock.json");
+  const lockStat = lstatSync(lock, { throwIfNoEntry: false });
+  if (lockStat) {
+    actual.set(
+      "skills.lock.json",
+      lockStat.isFile() && !lockStat.isSymbolicLink() ? sha256(readFileSync(lock)) : null
+    );
+  }
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     collectGuidanceEntries(path.join(bundleRoot, "skills", folder), bundleRoot, actual);
   }

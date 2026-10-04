@@ -17,6 +17,7 @@ import { runSpawn, runInstallDependencies, runMaterialize, runSetup } from "./mo
 import { runResources, runResourcesExec } from "./resource-lifecycle.ts";
 import { createRuntime, getMonkeHome } from "./runtime.ts";
 import { runShellInit, runShellInstall } from "./shell.ts";
+import { runSkillsRegistry } from "./skill-registry.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import { runSwing } from "./swing.ts";
 import type { Runtime } from "./types.ts";
@@ -249,6 +250,69 @@ function createProgram(runtime: Runtime) {
   const skills = program.command("skills");
 
   skills.command("configure").action(() => runSkillsConfigure(runtime));
+
+  skills
+    .command("add")
+    .alias("import")
+    .description("Register imported skills from Git, a local link, or an installer command")
+    .argument("[source]", "Git source or local Skill collection")
+    .option("--command <command>", "Installer command to save and replay on update")
+    .option("--cwd <path>", "Installer working directory (defaults to a managed source directory)")
+    .option("--link", "Register existing files without running the installer now")
+    .option("--name <name>", "Source name (required for command-only imports)")
+    .option("--skill <slugs...>", "Only import the selected skills")
+    .action((source, options) =>
+      runSkillsRegistry(runtime, {
+        action: "add",
+        command: options.command,
+        cwd: options.cwd,
+        link: options.link,
+        name: options.name,
+        skills: options.skill,
+        source
+      })
+    );
+
+  skills
+    .command("list")
+    .description("List registered imported Skill sources")
+    .action(() => runSkillsRegistry(runtime, { action: "list" }));
+
+  skills
+    .command("update")
+    .description("Update all imported skills and open one complete comparison")
+    .addOption(new Option("--adapter <adapter>").choices(["codiff", "lfv"]))
+    .option("--interactive", "Prompt before accepting upstream Skill slug replacements")
+    .action((options) =>
+      runSkillsRegistry(runtime, {
+        action: "update",
+        adapter: options.adapter,
+        interactive: options.interactive
+      })
+    );
+
+  skills
+    .command("remove")
+    .description("Remove an import registration while preserving its external source")
+    .argument("<source>")
+    .action((source) => runSkillsRegistry(runtime, { action: "remove", source }));
+
+  skills
+    .command("policy")
+    .description("Set model invocation for one imported Skill or an entire source")
+    .argument("<source>")
+    .argument("[skill]", "Skill slug; omit to set the source default, including future skills")
+    .addOption(
+      new Option("--model-invocation <policy>").choices(["allow", "deny"]).makeOptionMandatory()
+    )
+    .action((source, skill, options) =>
+      runSkillsRegistry(runtime, {
+        action: "policy",
+        disable: options.modelInvocation === "deny",
+        skill,
+        source
+      })
+    );
 
   skills
     .command("local-install", { hidden: true })

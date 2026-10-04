@@ -19,8 +19,13 @@ import { createRuntime, getMonkeHome, withScopedLockAsync } from "../src/runtime
 import { sha256 } from "../src/sha256.ts";
 import { shellQuote } from "../src/shell-quote.ts";
 import type { Runtime } from "../src/types.ts";
-import { IMPORTED_REFERENCES_ROOT, IMPORTED_SKILLS_ROOT } from "./import-guidance.ts";
+import {
+  importedGuidancePath,
+  IMPORTED_REFERENCES_ROOT,
+  IMPORTED_SKILLS_ROOT
+} from "./import-guidance.ts";
 import { readImportRecipeStore, SKILL_LOCK_PATH } from "./skill-import-recipes.ts";
+import type { SkillImportRecipeSkill } from "./skill-import-recipes.ts";
 import { restoreSkillImports } from "./skill-lock.ts";
 
 const ReviewSchema = z.strictObject({
@@ -28,24 +33,76 @@ const ReviewSchema = z.strictObject({
   id: z.string().regex(/^[a-f\d]{64}$/u)
 });
 const ReviewsSchema = z.array(ReviewSchema).max(3);
+const ACCEPTED_GUIDANCE_DIRECTORY = ".monke-skill-baseline";
+
+/** Retain accepted bytes so externally edited linked Skills can also be reviewed. */
+export function rememberSkillGuidance(
+  repoRoot: string,
+  changedGuidance?: readonly SkillImportRecipeSkill[]
+) {
+  const baseline = path.join(repoRoot, ACCEPTED_GUIDANCE_DIRECTORY);
+  const next = `${baseline}.tmp`;
+  rmSync(next, { force: true, recursive: true });
+  if (changedGuidance && existsSync(baseline)) {
+    cpSync(baseline, next, { recursive: true, verbatimSymlinks: true });
+    replaceSnapshotGuidance(repoRoot, next, changedGuidance);
+    writeFileSync(
+      path.join(next, SKILL_LOCK_PATH),
+      `${JSON.stringify(readImportRecipeStore(repoRoot), null, 2)}\n`
+    );
+  } else {
+    snapshotSkillGuidance(repoRoot, next);
+  }
+  rmSync(baseline, { force: true, recursive: true });
+  renameSync(next, baseline);
+}
+
+function replaceSnapshotGuidance(
+  repoRoot: string,
+  destination: string,
+  guidance: readonly SkillImportRecipeSkill[]
+) {
+  const localSkills = new Set(
+    readImportRecipeStore(repoRoot)
+      .recipes.filter((recipe) => recipe.localSource)
+      .flatMap((recipe) => recipe.skills.map((item) => item.slug))
+  );
+  for (const item of guidance) {
+    const source = importedGuidancePath(repoRoot, item);
+    const target = importedGuidancePath(destination, item);
+    rmSync(target, { force: true, recursive: true });
+    if (existsSync(source)) {
+      copyGuidanceSnapshot(source, target, item.kind === "skill" && localSkills.has(item.slug));
+    }
+  }
+}
+
+function copyGuidanceSnapshot(source: string, target: string, dereference: boolean) {
+  cpSync(source, target, {
+    recursive: true,
+    ...(dereference
+      ? { dereference: true, filter: (entry) => existsSync(entry) }
+      : { verbatimSymlinks: true })
+  });
+}
 
 /** Capture complete guidance independently of source Git tracking and ignore rules. */
 export function snapshotSkillGuidance(repoRoot: string, destination: string) {
+  const store = readImportRecipeStore(repoRoot);
   mkdirSync(destination, { recursive: true });
   for (const root of [IMPORTED_SKILLS_ROOT, IMPORTED_REFERENCES_ROOT]) {
     if (existsSync(path.join(repoRoot, root))) {
       mkdirSync(path.dirname(path.join(destination, root)), { recursive: true });
-      cpSync(path.join(repoRoot, root), path.join(destination, root), {
-        recursive: true,
-        verbatimSymlinks: true
-      });
+      copyGuidanceSnapshot(path.join(repoRoot, root), path.join(destination, root), false);
     }
   }
-  rmSync(path.join(destination, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
-  writeFileSync(
-    path.join(destination, SKILL_LOCK_PATH),
-    `${JSON.stringify(readImportRecipeStore(repoRoot), null, 2)}\n`
+  replaceSnapshotGuidance(
+    repoRoot,
+    destination,
+    store.recipes.filter((recipe) => recipe.localSource).flatMap((recipe) => recipe.skills)
   );
+  rmSync(path.join(destination, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
+  writeFileSync(path.join(destination, SKILL_LOCK_PATH), `${JSON.stringify(store, null, 2)}\n`);
 }
 
 /** Every incomplete migration retry compares against the original committed imported tree. */
@@ -54,6 +111,27 @@ export function snapshotSkillUpdateBaseline(
   destination: string,
   migrating: boolean
 ) {
+  const accepted = path.join(repoRoot, ACCEPTED_GUIDANCE_DIRECTORY);
+  if (existsSync(accepted)) {
+    cpSync(accepted, destination, { recursive: true, verbatimSymlinks: true });
+    // Installer updates compare against current editable bytes, including learned changes.
+    // Plain links retain the accepted baseline so externally installed updates remain visible.
+    for (const recipe of readImportRecipeStore(repoRoot).recipes) {
+      if (!recipe.localSource?.command) {
+        continue;
+      }
+      for (const item of recipe.skills) {
+        const source = importedGuidancePath(repoRoot, item);
+        const target = importedGuidancePath(destination, item);
+        if (!existsSync(source)) {
+          continue;
+        }
+        rmSync(target, { force: true, recursive: true });
+        copyGuidanceSnapshot(source, target, true);
+      }
+    }
+    return;
+  }
   const runtime = createRuntime({ cwd: repoRoot });
   const trackedImports = migrating
     ? runtime.exec(
@@ -248,9 +326,9 @@ export async function saveSkillComparison(
 
 export async function openSkillComparison(
   comparison: { commit: string; repository: string },
-  options: { adapter?: string; writeMessage?: (message: string) => void } = {}
+  options: { adapter?: string; runtime?: Runtime; writeMessage?: (message: string) => void } = {}
 ) {
-  const runtime = createRuntime({ writeStdout: options.writeMessage });
+  const runtime = options.runtime ?? createRuntime({ writeStdout: options.writeMessage });
   const reopen = `mt diff --commit ${shellQuote(comparison.commit)} --path ${shellQuote(comparison.repository)}${options.adapter ? ` --adapter ${shellQuote(options.adapter)}` : ""}`;
   (options.writeMessage ?? runtime.writeStdout)(`Complete skill review: ${reopen}\n`);
   try {

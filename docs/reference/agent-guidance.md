@@ -10,7 +10,7 @@ Part of the [domain glossary](../../CONTEXT.md).
 
 **Spec**: A durable work target that records agreed behavior, implementation decisions, testing decisions, and scope for an agent to execute. A PRD can serve as a Spec when it carries that implementation contract.
 
-**Distributed skill**: Agent guidance distributed through the **Active tool install** so agents in a **Consumer repo** can use shared team workflows.
+**Distributed skill**: Agent guidance exposed through monke-tools **Skill projections** so agents in a **Consumer repo** can use shared or personal workflows.
 
 **Shared distributed skill**: A **Distributed skill** available to every selected compatible **Agent harness**.
 
@@ -32,13 +32,15 @@ Part of the [domain glossary](../../CONTEXT.md).
 
 **User-invoked skill**: A **Distributed skill** whose agent metadata permits a human to invoke it explicitly. This capability is independent of whether the model may select the skill automatically. _Avoid_: Model-invoked skill, manual-only skill
 
-**Model invocation override**: A **Skill import recipe** choice that overrides whether the model may invoke imported guidance automatically.
+**Explicit-only skill**: A **User-invoked skill** that the model may not select automatically.
+
+**Model invocation override**: A local choice recorded by a **Skill import recipe** that replaces an imported skill's upstream model-invocation setting. It may be a source-wide default or a per-skill choice.
 
 **Core distributed skill**: The monke-tools-owned **Distributed skill** covering the local install, consumer setup, session operations, and repo configuration.
 
 **Internal skill**: A monke-tools-owned **Distributed skill** distributed with the local install, whether it helps agents work on monke-tools itself or use monke-tools from a **Consumer repo**.
 
-**Imported guidance**: Agent guidance brought into monke-tools from outside and distributed as either an **Imported skill** or an **Imported reference**.
+**Imported guidance**: Agent guidance imported from a **Skill import source** and distributed as either an **Imported skill** or an **Imported reference**, whether bundled with monke-tools or registered personally.
 
 **Imported skill**: A discoverable **Imported guidance** item distributed as a **Distributed skill**.
 
@@ -58,13 +60,33 @@ Part of the [domain glossary](../../CONTEXT.md).
 
 **Repo coding standards**: Repository-owned coding guidance documented by a **Consumer repo**; it supplements the **Team coding baseline** and may override conflicting imported review guidance.
 
-**Skill import**: The operation that brings selected upstream skills into the **Skill source tree** as **Imported skills** or **Imported references**.
+**Skill import**: The operation that brings selected guidance from a **Skill import source** into the **Skill source tree** as **Imported skills** or **Imported references**.
 
-**Skill import recipe**: A remembered description of one **Skill import** that can be rerun to refresh the same **Imported guidance** from the same outside source.
+**Skill import source**: An outside collection from which a **Skill import** selects guidance. It may be a repository, an existing local collection, or a collection produced by a **Skill installer command**. _Avoid_: Skill install target, Dependency repo
 
-**Skill import recipe store**: The shared collection of **Skill import recipes** maintained with monke-tools.
+**Skill installer command**: A remembered command for acquiring or refreshing a **Skill import source**, independent of where its guidance is distributed.
 
-**Skill lock**: The recorded upstream versions and import choices that identify one reproducible collection of **Imported guidance**. A **Skill import recipe** describes which guidance to select; a **Skill lock** identifies the selected versions.
+**Skill source folder**: The folder containing the authoritative skill files for a linked or installer-backed **Skill import**. _Avoid_: Canonical skill collection, Agent skill root, Skill projection
+
+**Skill import recipe**: The remembered source, selection, import-kind, and invocation choices for refreshing **Imported guidance** from one **Skill import source**.
+
+**Skill import recipe store**: A collection of **Skill import recipes** for one imported guidance collection.
+
+**Bundled import recipes**: The repo-owned **Skill import recipes** for **Imported guidance** distributed with monke-tools. _Avoid_: Bundled skill import store, Skill registry
+
+**Skill registry**: The machine-local **Skill import recipe store** for a user's imported guidance collection, including bundled imports and personal or private sources. _Avoid_: Bundled import recipes, monke-tools repository
+
+**Skill lock**: The recorded source revisions, guidance identities, and import choices for accepted **Imported guidance**. Repository-backed entries identify reproducible versions; installer commands and linked collections record where guidance comes from without promising an immutable source version.
+
+**Skill source revision**: The accepted version of a repository-backed **Skill import source**, which may advance while its selected **Imported guidance** stays identical.
+
+**Guidance digest**: The content identity of selected **Imported guidance** after local import choices are applied.
+
+**Imported guidance snapshot**: A captured state of an **Imported guidance** collection, including its supporting files and **Skill lock**.
+
+**Skill update**: The operation that refreshes **Imported guidance** using its recorded import choices and **Model invocation overrides**.
+
+**Skill update review**: A comparison of **Imported guidance snapshots** before and after a **Skill update**, including both content and source provenance changes.
 
 **Skill import selector**: The upstream-facing skill identifier passed to a **Skill import** to choose one **Imported guidance** item from its outside source.
 
@@ -97,6 +119,11 @@ Part of the [domain glossary](../../CONTEXT.md).
 - A **Skill projection** exposes compatible skills and references in one **Agent skill root**. A **Managed skill namespace** groups them; a **Flat skill projection** exposes skills directly.
 - **Shared distributed skills** apply across compatible harnesses; **Harness-specific skills** apply only to their named harness.
 - Each **Imported guidance** item has one **Imported guidance owner** and one **Import kind**. Its recipe retains the source and choices needed to refresh it.
+- **Bundled import recipes** belong to monke-tools; a **Skill registry** belongs to one machine's user. A registry starts with bundled imports and then retains its own recipes and invocation choices independently.
+- A **Skill import** selects a source collection. **Skill install preferences** select distribution targets; an installer's agent-specific output folder does not restrict those targets.
+- Linked and installer-backed **Imported skills** share editing authority with their **Skill source folder**. Their global **Skill projections** expose that same guidance; source refreshes may replace instruction edits.
 - A skill may be both **Model-invoked** and **User-invoked**.
+- A per-skill **Model invocation override** takes precedence over its source-wide default. Overrides survive source refreshes and selection changes, including a skill disappearing and returning; without an override, upstream invocation metadata remains authoritative.
+- A **Skill source revision** may change without changing its **Guidance digest**. The resulting lock-only comparison is still a **Skill update review**.
 - **Skill install preferences** select targets. Projections and managed instruction sections belong to monke-tools; unrelated agent guidance remains user-owned.
 - **Team coding baseline** applies across repos. **Repo coding standards** add repo-specific constraints.

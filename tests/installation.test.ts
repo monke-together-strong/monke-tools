@@ -18,6 +18,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { runImportSkills } from "../scripts/import-skills.ts";
 import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { loadToolInstall, ReleaseInstallManifestSchema } from "../src/install-manifest.ts";
@@ -855,6 +856,89 @@ skillInstallPreference:
     );
     expect(existsSync(path.join(monkeHome, "installs", "local-collision"))).toBeFalsy();
   });
+
+  test.each(["personal target", "owned duplicate", "removed bundled import"] as const)(
+    "Local refresh preflights the retained registry for a %s",
+    async (scenario) => {
+      const sandbox = makeTempDir("local-install-registry-preflight");
+      const home = path.join(sandbox, "home");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const sourceCheckout = path.join(sandbox, "source");
+      prepareSource(sourceCheckout);
+      await activateLocal({
+        home,
+        installId: "local-first",
+        monkeHome,
+        sourceCheckout,
+        targetKinds: ["claude"]
+      });
+      const personal = path.join(sandbox, "personal");
+      write(
+        personal,
+        "personal/SKILL.md",
+        "---\nname: personal\ndescription: Personal skill\n---\nPersonal instructions.\n"
+      );
+      const runtime = createTestRuntime({
+        cwd: sandbox,
+        env: { HOME: home, MONKE_HOME: monkeHome },
+        onStderr() {},
+        onStdout() {}
+      });
+      await runCliAsync(["skills", "add", personal], runtime);
+      const registryLink = path.join(monkeHome, "skill-registry/skills/internal");
+      const previousLink = readlinkSync(registryLink);
+      const candidate = path.join(sandbox, "candidate");
+      prepareSource(candidate);
+      if (scenario === "removed bundled import") {
+        // The registry's selection is authoritative, even when the candidate still bundles this slug.
+        write(
+          candidate,
+          "skills/imported/obsolete/SKILL.md",
+          "---\nname: obsolete\n---\nBundled skill.\n"
+        );
+        write(home, ".claude/skills/obsolete/SKILL.md", "User-owned obsolete skill.\n");
+      }
+      if (scenario === "personal target") {
+        rmSync(path.join(home, ".claude/skills/personal"));
+        write(home, ".claude/skills/personal/SKILL.md", "User-owned personal skill.\n");
+      } else if (scenario === "owned duplicate") {
+        write(
+          candidate,
+          "skills/internal/personal/SKILL.md",
+          "---\nname: personal\n---\nNew owned skill.\n"
+        );
+      }
+      const protectedEntry = path.join(
+        home,
+        ".claude/skills",
+        scenario === "removed bundled import" ? "obsolete" : "personal",
+        "SKILL.md"
+      );
+      const protectedBytes = readFileSync(protectedEntry, "utf-8");
+      let outcome = "activated";
+      try {
+        await activateLocal({
+          home,
+          installId: "local-collision",
+          monkeHome,
+          sourceCheckout: candidate,
+          targetKinds: ["claude"]
+        });
+      } catch (error) {
+        outcome = errorMessage(ThrownValueSchema.parse(error));
+      }
+      const succeeds = scenario === "removed bundled import";
+      expect(outcome).toMatch(succeeds ? /^activated$/u : /preflight failed/u);
+      expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+        path.join("installs", succeeds ? "local-collision" : "local-first")
+      );
+      expect(readlinkSync(registryLink)).toBe(
+        succeeds ? path.join(candidate, "skills/internal") : previousLink
+      );
+      expect(existsSync(path.join(monkeHome, "installs/local-collision"))).toBe(succeeds);
+      expect(readFileSync(protectedEntry, "utf-8")).toBe(protectedBytes);
+    }
+  );
 
   test("Local activation completes guidance and reports both shell and Codiff failures", async () => {
     const sandbox = makeTempDir("local-install-codiff-failure");

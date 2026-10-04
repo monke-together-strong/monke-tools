@@ -1,8 +1,16 @@
-import { existsSync, lstatSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  symlinkSync
+} from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
+import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { saveGlobalMonkeConfig, loadGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import type { MultiSelectPrompt } from "../src/types.ts";
@@ -84,6 +92,56 @@ function selectActiveReleaseInstall(monkeHome: string) {
 }
 
 describe("skills CLI", () => {
+  test("target reconfiguration carries local sources and invocation policy into the new projection", async () => {
+    const sandbox = makeTempDir("skills-configure-local-sources");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const osHome = path.join(sandbox, "home");
+    const source = path.join(sandbox, "private-skills");
+    selectActiveReleaseInstall(monkeHome);
+    writeSkillSource(path.join(monkeHome, "installs", "release-1.2.3-linux-x64"));
+    write(
+      source,
+      "typography/SKILL.md",
+      "---\nname: typography\ndescription: Typography.\n---\nInstructions.\n"
+    );
+    saveGlobalMonkeConfig(monkeHome, {
+      diffAdapter: "lfv",
+      skillInstallPreference: { targets: [{ kind: "codex" }] },
+      version: 1
+    });
+    const runtime = createTestRuntime({
+      cwd: sandbox,
+      env: skillsEnvironment(osHome, monkeHome),
+      multiSelectValues: [["claude"]],
+      onStderr() {},
+      onStdout() {}
+    });
+    await runCliAsync(["skills", "add", source], runtime);
+    await runCliAsync(
+      ["skills", "policy", "private-skills", "--model-invocation", "deny"],
+      runtime
+    );
+    const codexSkill = path.join(osHome, ".codex", "skills", "monke-tools/imported/typography");
+    expect(existsSync(codexSkill)).toBeTruthy();
+    await runCliAsync(["skills", "configure"], runtime);
+
+    expect(existsSync(codexSkill)).toBeFalsy();
+    expect(realpathSync(path.join(osHome, ".claude", "skills", "typography"))).toBe(
+      path.join(source, "typography")
+    );
+    expect(loadGlobalMonkeConfig(monkeHome)).toMatchObject({
+      diffAdapter: "lfv",
+      skillInstallPreference: { targets: [{ kind: "claude" }] }
+    });
+    expect(readImportRecipeStore(path.join(monkeHome, "skill-registry")).recipes).toMatchObject([
+      {
+        disableModelInvocation: true,
+        localSource: { skillSourceFolder: source },
+        name: "private-skills"
+      }
+    ]);
+  });
+
   test("mt skills local-install rejects an Active Release install", async () => {
     const sandbox = makeTempDir("skills-local-install-release");
     const monkeHome = path.join(sandbox, "monke-home");

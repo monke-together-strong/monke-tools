@@ -13,6 +13,7 @@ import path from "node:path";
 import { MonkeError } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
 import { createRuntime, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
+import type { Runtime } from "../src/types.ts";
 import {
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath,
@@ -278,8 +279,11 @@ function hashDirectory(root: string, directory: string, prefix: string, hash: Bu
 }
 
 /** Restores exact accepted guidance without discovery or lock rewriting. */
-export async function withSkillImportMutation<T>(repoRoot: string, callback: () => T | Promise<T>) {
-  const runtime = createRuntime({ cwd: repoRoot });
+export async function withSkillImportMutation<T>(
+  repoRoot: string,
+  callback: () => T | Promise<T>,
+  runtime: Runtime = createRuntime({ cwd: repoRoot })
+) {
   return await withScopedLockAsync(getMonkeHome(runtime), `skill-import:${repoRoot}`, callback);
 }
 
@@ -289,12 +293,46 @@ export async function restoreSkillImports(repoRoot: string) {
   });
 }
 
+/** Restore one accepted Git source without blocking unrelated source updates. */
+export function restoreLockedRecipe(repoRoot: string, recipe: SkillImportRecipe) {
+  if (!recipe.lock) {
+    throw new MonkeError(`Unpinned Skill import recipe: ${recipe.source}`);
+  }
+  try {
+    if (guidanceDigest(repoRoot, recipe.skills) === recipe.lock?.digest) {
+      return;
+    }
+  } catch {
+    // Missing/stale local materialization is restored from the accepted pin.
+  }
+  const stagingDirectory = path.join(repoRoot, "tmp", `skill-restore-${crypto.randomUUID()}`);
+  mkdirSync(stagingDirectory, { recursive: true });
+  try {
+    stageLockedRecipe(recipe, stagingDirectory);
+    copyStagedGuidanceToManagedRoots({
+      defaultDisableModelInvocation: recipe.disableModelInvocation,
+      guidance: recipe.skills,
+      repoRoot,
+      stagingDirectory,
+      validatePrepared(preparedRoot) {
+        if (guidanceDigest(preparedRoot, recipe.skills, true) !== recipe.lock?.digest) {
+          throw new MonkeError(
+            `Skill lock digest mismatch for ${recipe.source}; accepted lock was not changed`
+          );
+        }
+      }
+    });
+  } finally {
+    rmSync(stagingDirectory, { force: true, recursive: true });
+  }
+}
+
 export function restoreLockedImports(repoRoot: string) {
   if (!existsSync(path.join(repoRoot, SKILL_LOCK_PATH))) {
     return;
   }
   const store = readImportRecipeStore(repoRoot);
-  if (store.recipes.some((recipe) => !recipe.lock)) {
+  if (store.recipes.some((recipe) => !recipe.localSource && !recipe.lock)) {
     throw new MonkeError(
       "Skill lock is incomplete; run skills:update to pin every recipe before source installation"
     );
@@ -310,35 +348,12 @@ export function restoreLockedImports(repoRoot: string) {
     }
   }
   for (const recipe of store.recipes) {
-    try {
-      if (guidanceDigest(repoRoot, recipe.skills) === recipe.lock?.digest) {
-        continue;
-      }
-    } catch {
-      // Missing/stale local materialization is restored from the accepted pin.
-    }
-    const stagingDirectory = path.join(repoRoot, "tmp", `skill-restore-${crypto.randomUUID()}`);
-    mkdirSync(stagingDirectory, { recursive: true });
-    try {
-      stageLockedRecipe(recipe, stagingDirectory);
-      copyStagedGuidanceToManagedRoots({
-        guidance: recipe.skills,
-        repoRoot,
-        stagingDirectory,
-        validatePrepared(preparedRoot) {
-          if (guidanceDigest(preparedRoot, recipe.skills, true) !== recipe.lock?.digest) {
-            throw new MonkeError(
-              `Skill lock digest mismatch for ${recipe.source}; accepted lock was not changed`
-            );
-          }
-        }
-      });
-    } finally {
-      rmSync(stagingDirectory, { force: true, recursive: true });
+    if (!recipe.localSource) {
+      restoreLockedRecipe(repoRoot, recipe);
     }
   }
   for (const recipe of store.recipes) {
-    if (guidanceDigest(repoRoot, recipe.skills) !== recipe.lock?.digest) {
+    if (!recipe.localSource && guidanceDigest(repoRoot, recipe.skills) !== recipe.lock?.digest) {
       throw new MonkeError(`Invalid locked guidance for ${recipe.source}`);
     }
   }

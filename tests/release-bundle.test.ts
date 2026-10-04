@@ -352,6 +352,13 @@ describe("Release bundle verifier", () => {
         expectedVersion: RELEASE_VERSION
       });
 
+      expect(manifest.guidanceHashes["skills.lock.json"]).toBe(
+        hash(
+          "sha256",
+          readFileSync(path.join(import.meta.dirname, "..", "skills.lock.json")),
+          "hex"
+        )
+      );
       expect(manifest.toolBuildIdentity).toBe(RELEASE_VERSION);
       expect(manifest.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
       expect(Date.parse(manifest.createdAt)).not.toBeNaN();

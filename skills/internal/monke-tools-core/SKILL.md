@@ -26,6 +26,8 @@ Use `mt <command> --help` for flags.
 | `mt cleanup --dry-run` | Preview eligible Sessions across all repos. |
 | `mt home` | Print the Monke home path. |
 | `mt skills configure` | Select skill targets or reconcile installed guidance. |
+| `mt skills add [source]` | Register imported skills from Git, a local link, or an installer command. |
+| `mt skills update` | Update all registered imports and review the complete collection. |
 
 ## Create and resume work
 
@@ -72,6 +74,9 @@ For archives, missing or ordinary worktrees, and failed teardown, read
 [cleanup recovery](../../references/internal/CLEANUP_RECOVERY.md).
 
 ## Configuration and installation
+
+For private or personal imports, installer commands, invocation policies, or
+collection updates, read [imported Skill registry](IMPORTED-SKILLS.md).
 
 For `monke.yml`, resource modules, or Docker teardown, read the
 [configuration reference](MONKE-YML-REFERENCE.md).

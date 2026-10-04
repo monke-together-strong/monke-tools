@@ -1,5 +1,9 @@
 # Import skills through a skills CLI wrapper
 
+The source-only restriction below is superseded by
+[ADR 0013](./0013-keep-personal-skill-imports-in-a-machine-local-registry.md).
+The repository's bundled Git import and reference-materialization rules remain in force.
+
 Skill import is a monke-tools source-maintenance script, not an `mt` runtime command. `bun run skills:import -- <source>` wraps the upstream `skills` CLI for discovery, grouped selection, staging, and security assessment. Ordinary imports remain discoverable Imported skills under `skills/imported/`. Passing `--ref` applies one Import kind to the whole invocation and instead creates Imported references under `skills/references/imported/`: the selected root `SKILL.md` becomes `MAIN.md`, its complete leading YAML frontmatter is removed, and supporting files are preserved.
 
 The repo-tracked Skill import recipe store records each selector's Import kind so `bun run skills:update` refreshes both forms through one lifecycle. A source selector owns exactly one Import kind; re-importing it with the opposite kind performs a staged migration and removes the former managed copy only after the replacement and recipe are valid. Skill and reference slug ownership are independent, while selector ownership remains exclusive. A pre-existing upstream `MAIN.md` fails before any selected managed directory or recipe changes.

@@ -12,6 +12,12 @@ curl -fsSL https://raw.githubusercontent.com/monke-together-strong/monke-tools/m
 
 The installer asks which agents should receive skills and configures your current Bash or Zsh shell. Follow its shell instructions before starting a session. To choose skill targets later, run `mt skills configure`.
 
+Import private or personal skills with `mt skills add /path/to/skill-repo --link`,
+`mt skills add owner/repo`, or `mt skills add --name course --command 'installer --project --yes'`.
+`mt skills update` updates all registered imports and opens one Codiff comparison.
+Recipes, invocation policies, and private content stay outside monke's repository.
+See [imported Skill registry](skills/internal/monke-tools-core/IMPORTED-SKILLS.md).
+
 For unattended installation, replace the trailing `sh` with `sh -s -- --targets codex claude cursor`. See the [installation guide](skills/internal/monke-tools-core/INSTALLATION.md) for custom targets, local builds, and recovery.
 
 ## Start a session

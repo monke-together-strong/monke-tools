@@ -1,0 +1,795 @@
+import {
+  existsSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from "node:fs";
+import path from "node:path";
+
+import { describe, expect, test } from "vite-plus/test";
+import { parse } from "yaml";
+
+import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
+import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
+import { runCliAsync } from "../src/index.ts";
+import { shellQuote } from "../src/shell-quote.ts";
+import {
+  createRepo,
+  git,
+  installFakeCodiff,
+  makeTempDir,
+  read,
+  write,
+  writeExecutable,
+  writeGlobalInstructionsSource
+} from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
+
+function registryFixture() {
+  const sandbox = makeTempDir("skill-registry");
+  const monkeHome = path.join(sandbox, "monke-home");
+  const home = path.join(sandbox, "home");
+  const guidance = path.join(monkeHome, "installs", "release-fixture");
+  const checkout = path.join(sandbox, "private-course");
+  const source = path.join(checkout, ".claude", "skills");
+  const registry = path.join(monkeHome, "skill-registry");
+  const bin = path.join(sandbox, "bin");
+  const codiffLog = installFakeCodiff(bin);
+  let stdout = "";
+  const runtime = createTestRuntime({
+    cwd: sandbox,
+    env: { HOME: home, MONKE_HOME: monkeHome, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    onStderr() {},
+    onStdout(message) {
+      stdout += message;
+    }
+  });
+  write(
+    guidance,
+    "install-manifest.json",
+    JSON.stringify({
+      artifactDigest: "0".repeat(64),
+      artifactName: "monke-tools-v1.2.3-macos-arm64.tar.gz",
+      createdAt: "2026-08-20T12:34:56.000Z",
+      guidanceHashes: {},
+      installKind: "release",
+      minimumCodiffVersion: "1.14.0",
+      platform: "macos-arm64",
+      releaseTag: "monke-tools-v1.2.3",
+      releaseVersion: "1.2.3",
+      schemaVersion: 1,
+      sourceCommit: "0".repeat(40),
+      toolBuildIdentity: "1.2.3"
+    })
+  );
+  symlinkSync(path.join("installs", "release-fixture"), path.join(monkeHome, "current"), "dir");
+  writeSkill(
+    path.join(guidance, "skills/internal"),
+    "monke-tools-core",
+    "Internal instructions.\n"
+  );
+  writeGlobalInstructionsSource(guidance, "Team instructions.\n");
+  saveGlobalMonkeConfig(monkeHome, {
+    diffAdapter: "codiff",
+    skillInstallPreference: {
+      targets: [{ kind: "claude" }, { kind: "codex" }, { kind: "cursor" }]
+    },
+    version: 1
+  });
+  writeSkill(source, "typography", "Course instructions.\n");
+  const installed = {
+    claude: path.join(home, ".claude", "skills"),
+    codex: path.join(home, ".codex", "skills", "monke-tools", "imported"),
+    cursor: path.join(home, ".cursor", "skills", "monke-tools", "imported")
+  };
+  return {
+    bin,
+    checkout,
+    codiffLog,
+    guidance,
+    installed,
+    monkeHome,
+    registry,
+    runtime,
+    sandbox,
+    source,
+    stdout: () => stdout
+  };
+}
+
+function writeSkill(source: string, slug: string, body: string) {
+  write(
+    source,
+    `${slug}/SKILL.md`,
+    `---\nname: ${slug}\ndescription: A course skill.\n---\n${body}`
+  );
+}
+
+function installer(fixture: ReturnType<typeof registryFixture>) {
+  const upstream = path.join(fixture.sandbox, "installer-output");
+  const script = path.join(fixture.sandbox, "install-course.sh");
+  writeExecutable(
+    script,
+    `#!/bin/sh
+set -eu
+printf '%s\\n' "$PWD" >> ${shellQuote(path.join(fixture.sandbox, "installer-cwd"))}
+rm -rf .claude/skills
+mkdir -p .claude
+cp -R ${shellQuote(upstream)} .claude/skills
+[ ! -f ${shellQuote(path.join(fixture.sandbox, "fail-installer"))} ] || exit 42
+`
+  );
+  return { command: `sh ${shellQuote(script)}`, upstream };
+}
+
+function installGitImporter(fixture: ReturnType<typeof registryFixture>) {
+  writeExecutable(
+    path.join(fixture.bin, "npx"),
+    `#!/bin/sh
+set -eu
+source="$4"
+shift 4
+cat <<'OUT'
+Security Risk Assessments
+git-skill Safe 0 alerts Low Risk
+Details: https://skills.sh/owner/repo
+Installation complete
+OUT
+mkdir -p .agents/skills
+while [ "$1" = --skill ]; do
+  if [ "$2" = '*' ]; then
+    cp -R "$source/skills/"* .agents/skills/
+  else
+    cp -R "$source/skills/$2" .agents/skills/
+  fi
+  shift 2
+done
+`
+  );
+}
+
+describe("Skill import registry CLI", () => {
+  test("linked imports use existing provider layouts and write learned changes back to their source", async () => {
+    const fixture = registryFixture();
+    const actualSkill = path.join(fixture.sandbox, "skill-repo", "typography");
+    writeSkill(path.dirname(actualSkill), "typography", "Course instructions.\n");
+    rmSync(path.join(fixture.source, "typography"), { recursive: true });
+    symlinkSync(actualSkill, path.join(fixture.source, "typography"), "dir");
+    symlinkSync(fixture.source, path.join(fixture.source, "loop"), "dir");
+    writeSkill(path.join(fixture.checkout, ".codex/skills"), "typography", "Separate copy.\n");
+    await runCliAsync(["skills", "add", fixture.checkout, "--link"], fixture.runtime);
+    for (const root of Object.values(fixture.installed)) {
+      expect(realpathSync(path.join(root, "typography"))).toBe(actualSkill);
+    }
+    writeFileSync(
+      path.join(fixture.installed.codex, "typography/SKILL.md"),
+      "Learned instruction.\n"
+    );
+    expect(read(fixture.source, "typography/SKILL.md")).toBe("Learned instruction.\n");
+    expect(read(fixture.installed.claude, "typography/SKILL.md")).toBe("Learned instruction.\n");
+    expect(readImportRecipeStore(fixture.registry).recipes).toMatchObject([
+      { localSource: { kind: "link", skillSourceFolder: fixture.source }, name: "private-course" }
+    ]);
+    expect(loadGlobalMonkeConfig(fixture.monkeHome)).toMatchObject({ diffAdapter: "codiff" });
+    expect(existsSync(path.join(fixture.guidance, "skills/imported/typography"))).toBeFalsy();
+  });
+
+  test("one update replays command and Git imports, reapplies policies, and reviews linked file bytes", async () => {
+    const fixture = registryFixture();
+    const { command, upstream } = installer(fixture);
+    writeSkill(upstream, "typography", "First installer version.\n");
+    writeSkill(upstream, "color", "First color.\n");
+    await runCliAsync(["skills", "add", "--name", "course", "--command", command], fixture.runtime);
+    const skillSourceFolder = path.join(fixture.monkeHome, "skill-sources/course/.claude/skills");
+    await runCliAsync(
+      ["skills", "policy", "course", "--model-invocation", "deny"],
+      fixture.runtime
+    );
+    await runCliAsync(
+      ["skills", "policy", "course", "color", "--model-invocation", "allow"],
+      fixture.runtime
+    );
+    const linked = path.join(fixture.sandbox, "personal");
+    writeSkill(linked, "personal", "First personal version.\n");
+    await runCliAsync(["skills", "add", linked, "--link"], fixture.runtime);
+    writeSkill(linked, "personal", "Second personal version.\n");
+
+    const gitSource = createRepo(path.join(fixture.sandbox, "git-source"), {
+      "README.md": "Skill source.\n"
+    });
+    writeSkill(path.join(gitSource, "skills"), "git-skill", "First Git version.\n");
+    write(gitSource, "skills/git-skill/support.md", "Supporting Git content.\n");
+    symlinkSync("support.md", path.join(gitSource, "skills/git-skill/alias.md"));
+    git(gitSource, ["add", "."]);
+    git(gitSource, ["commit", "-m", "First skill"]);
+    // Exercise the actual published-importer process boundary without network downloads.
+    installGitImporter(fixture);
+    await runCliAsync(
+      ["skills", "add", `${gitSource}#HEAD`, "--name", "git-source"],
+      fixture.runtime
+    );
+    expect(fixture.stdout()).toContain("Security Risk Assessments");
+    expect(fixture.stdout()).toContain("git-skill");
+    expect(fixture.stdout()).toContain("https://skills.sh/owner/repo");
+    writeSkill(path.join(gitSource, "skills"), "git-skill", "Second Git version.\n");
+    git(gitSource, ["add", "."]);
+    git(gitSource, ["commit", "-m", "Update skill"]);
+    const expectedCommit = git(gitSource, ["rev-parse", "HEAD"]).trim();
+
+    for (const slug of ["typography", "color", "animation"]) {
+      writeSkill(upstream, slug, "Second installer version.\n");
+      write(
+        upstream,
+        `${slug}/agents/openai.yaml`,
+        "interface:\n  display_name: Course\npolicy:\n  allow_implicit_invocation: true\n"
+      );
+    }
+    writeSkill(linked, "personal", "Second personal version.\n");
+    writeFileSync(
+      path.join(fixture.installed.codex, "typography/SKILL.md"),
+      `${read(skillSourceFolder, "typography/SKILL.md")}Learned local rule.\n`
+    );
+    await runCliAsync(["skills", "update"], fixture.runtime);
+
+    for (const [slug, disable] of [
+      ["typography", true],
+      ["color", false],
+      ["animation", true]
+    ] as const) {
+      expect(
+        parse(read(skillSourceFolder, `${slug}/SKILL.md`).split("---")[1] ?? "")
+      ).toMatchObject({
+        "disable-model-invocation": disable
+      });
+      expect(parse(read(skillSourceFolder, `${slug}/agents/openai.yaml`))).toMatchObject({
+        interface: { display_name: "Course" },
+        policy: { allow_implicit_invocation: !disable }
+      });
+      expect(read(fixture.installed.codex, `${slug}/SKILL.md`)).toContain(
+        "Second installer version."
+      );
+    }
+    const { recipes } = readImportRecipeStore(fixture.registry);
+    expect(recipes.find((recipe) => recipe.name === "course")).toMatchObject({
+      disableModelInvocation: true,
+      skills: [
+        { slug: "animation" },
+        { disableModelInvocation: false, slug: "color" },
+        { slug: "typography" }
+      ]
+    });
+    expect(recipes.find((recipe) => recipe.name === "git-source")?.lock?.commit).toBe(
+      expectedCommit
+    );
+    expect(read(fixture.sandbox, "installer-cwd").trim().split("\n")).toStrictEqual([
+      path.join(fixture.monkeHome, "skill-sources/course"),
+      path.join(fixture.monkeHome, "skill-sources/course")
+    ]);
+    const launch = readFileSync(fixture.codiffLog, "utf-8").trim().split("\n");
+    expect(launch).toHaveLength(3);
+    expect(launch[0]).toBe("--commit");
+    const reviewRepo = launch[2] ?? "";
+    const commit = launch[1] ?? "";
+    const diff = git(reviewRepo, ["diff", `${commit}^`, commit]);
+    expect(diff).toContain("-First installer version.");
+    expect(diff).toContain("-Learned local rule.");
+    expect(diff).toContain("+Second installer version.");
+    expect(diff).toContain("+Second personal version.");
+    expect(diff).toContain("-First personal version.");
+    expect(diff).toContain("+Second Git version.");
+    expect(git(reviewRepo, ["ls-tree", commit, "skills/imported/typography"])).toContain(
+      "040000 tree"
+    );
+    expect(git(reviewRepo, ["ls-tree", commit, "skills/imported/git-skill/alias.md"])).toContain(
+      "120000 blob"
+    );
+    await runCliAsync(["skills", "update"], fixture.runtime);
+    expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toHaveLength(3);
+    expect(fixture.stdout()).toContain("No skill changes.");
+  });
+
+  test.each(["exit", "collision", "metadata"] as const)(
+    "an installer %s failure restores source bytes and symlinks while later sources still update",
+    async (failure) => {
+      const fixture = registryFixture();
+      const { command, upstream } = installer(fixture);
+      writeSkill(upstream, "typography", "Accepted version.\n");
+      write(fixture.source, "typography/reference.md", "Reference content.\n");
+      symlinkSync("reference.md", path.join(fixture.source, "typography/alias.md"));
+      await runCliAsync(
+        ["skills", "add", fixture.checkout, "--name", "a-course", "--link", "--command", command],
+        fixture.runtime
+      );
+      await runCliAsync(
+        ["skills", "policy", "a-course", "--model-invocation", "deny"],
+        fixture.runtime
+      );
+      const accepted = read(fixture.source, "typography/SKILL.md");
+      const [recipe] = readImportRecipeStore(fixture.registry).recipes;
+      const later = path.join(fixture.sandbox, "z-personal");
+      writeSkill(later, "personal", "Original personal.\n");
+      await runCliAsync(["skills", "add", later], fixture.runtime);
+      writeSkill(later, "personal", "Updated personal.\n");
+      if (failure === "exit") {
+        write(fixture.sandbox, "fail-installer", "fail\n");
+      }
+      if (failure === "collision") {
+        writeSkill(upstream, "monke-tools-core", "Conflicts with internal guidance.\n");
+      }
+      if (failure === "metadata") {
+        write(upstream, "typography/agents/openai.yaml", "policy: null\n");
+      }
+      await expect(runCliAsync(["skills", "update"], fixture.runtime)).rejects.toThrow(/a-course/u);
+      expect(read(fixture.source, "typography/SKILL.md")).toBe(accepted);
+      expect(existsSync(path.join(fixture.source, "monke-tools-core"))).toBeFalsy();
+      expect(readlinkSync(path.join(fixture.source, "typography/alias.md"))).toBe("reference.md");
+      expect(
+        readImportRecipeStore(fixture.registry).recipes.find((item) => item.name === "a-course")
+      ).toStrictEqual(recipe);
+      expect(read(fixture.installed.codex, "personal/SKILL.md")).toContain("Updated personal.");
+      expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toHaveLength(3);
+    }
+  );
+
+  test("selection replacement and removal retire managed projections while keeping the external source", async () => {
+    const fixture = registryFixture();
+    writeSkill(fixture.source, "color", "Color instructions.\n");
+    await runCliAsync(
+      ["skills", "add", fixture.checkout, "--skill", "typography"],
+      fixture.runtime
+    );
+    await runCliAsync(["skills", "add", fixture.checkout, "--skill", "color"], fixture.runtime);
+    for (const root of Object.values(fixture.installed)) {
+      expect(existsSync(path.join(root, "typography"))).toBeFalsy();
+      expect(realpathSync(path.join(root, "color"))).toBe(path.join(fixture.source, "color"));
+    }
+    const repurposed = path.join(fixture.installed.claude, "color");
+    rmSync(repurposed);
+    writeFileSync(repurposed, "User-owned file.\n");
+    await runCliAsync(["skills", "remove", "private-course"], fixture.runtime);
+    await runCliAsync(["skills", "list"], fixture.runtime);
+    expect(readFileSync(repurposed, "utf-8")).toBe("User-owned file.\n");
+    expect(existsSync(path.join(fixture.installed.codex, "color"))).toBeFalsy();
+    expect(read(fixture.source, "color/SKILL.md")).toContain("Color instructions.");
+    expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+  });
+
+  test("local per-skill overrides survive disappearance and reintroduction", async () => {
+    const fixture = registryFixture();
+    writeSkill(fixture.source, "color", "Color instructions.\n");
+    await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
+    await runCliAsync(
+      ["skills", "policy", "private-course", "--model-invocation", "deny"],
+      fixture.runtime
+    );
+    await runCliAsync(
+      ["skills", "policy", "private-course", "color", "--model-invocation", "allow"],
+      fixture.runtime
+    );
+    rmSync(path.join(fixture.source, "color"), { recursive: true });
+    await runCliAsync(["skills", "update"], fixture.runtime);
+    expect(existsSync(path.join(fixture.installed.claude, "color"))).toBeFalsy();
+    writeSkill(fixture.source, "color", "Restored color.\n");
+    await runCliAsync(["skills", "update"], fixture.runtime);
+    expect(parse(read(fixture.source, "color/agents/openai.yaml"))).toMatchObject({
+      policy: { allow_implicit_invocation: true }
+    });
+    expect(read(fixture.source, "color/SKILL.md")).toContain("disable-model-invocation: false");
+  });
+
+  test.each(["link", "command"] as const)(
+    "a missing %s source does not prevent healthy sources updating",
+    async (kind) => {
+      const fixture = registryFixture();
+      const { command, upstream } = installer(fixture);
+      writeSkill(upstream, "typography", "Recovered installer.\n");
+      await runCliAsync(
+        [
+          "skills",
+          "add",
+          fixture.checkout,
+          "--name",
+          "a-course",
+          "--link",
+          ...(kind === "command" ? ["--command", command] : [])
+        ],
+        fixture.runtime
+      );
+      const later = path.join(fixture.sandbox, "z-personal");
+      writeSkill(later, "personal", "Original personal.\n");
+      await runCliAsync(["skills", "add", later], fixture.runtime);
+      rmSync(fixture.source, { recursive: true });
+      writeSkill(later, "personal", "Updated personal.\n");
+      let outcome = "updated";
+      try {
+        await runCliAsync(["skills", "update"], fixture.runtime);
+      } catch (error) {
+        outcome = errorMessage(ThrownValueSchema.parse(error));
+      }
+      expect(outcome).toMatch(
+        kind === "link" ? /a-course.*Skill source is missing/u : /^updated$/u
+      );
+      expect(existsSync(path.join(fixture.installed.claude, "typography"))).toBe(
+        kind === "command"
+      );
+      expect(read(fixture.installed.claude, "personal/SKILL.md")).toContain("Updated personal.");
+      if (kind === "link") {
+        writeSkill(fixture.source, "typography", "Course instructions.\n");
+        await runCliAsync(["skills", "update"], fixture.runtime);
+      }
+      expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toHaveLength(3);
+    }
+  );
+
+  test("re-adding a command with a new working directory publishes its new source", async () => {
+    const fixture = registryFixture();
+    const { command, upstream } = installer(fixture);
+    writeSkill(upstream, "typography", "First directory.\n");
+    await runCliAsync(["skills", "add", "--name", "course", "--command", command], fixture.runtime);
+    const cwd = path.join(fixture.sandbox, "moved-course");
+    writeSkill(upstream, "typography", "Second directory.\n");
+    await runCliAsync(
+      ["skills", "add", "--name", "course", "--command", command, "--cwd", cwd],
+      fixture.runtime
+    );
+    expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(
+      path.join(cwd, ".claude/skills/typography")
+    );
+    expect(read(fixture.installed.claude, "typography/SKILL.md")).toContain("Second directory.");
+  });
+
+  test("a failed first installer leaves no source or registered recipe", async () => {
+    const fixture = registryFixture();
+    const { command, upstream } = installer(fixture);
+    writeSkill(upstream, "typography", "Partial install.\n");
+    write(fixture.sandbox, "fail-installer", "fail\n");
+    await expect(
+      runCliAsync(["skills", "add", "--name", "course", "--command", command], fixture.runtime)
+    ).rejects.toThrow(/exited with code 42/u);
+    expect(existsSync(path.join(fixture.monkeHome, "skill-sources/course"))).toBeFalsy();
+    expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+  });
+
+  test.each([
+    "empty",
+    "flat",
+    "symlink",
+    "provider",
+    "candidate",
+    "new_collection",
+    "alias",
+    "root_entry"
+  ] as const)(
+    "a failed installer in an existing %s project preserves unrelated edits and restores only skills",
+    async (layout) => {
+      const fixture = registryFixture();
+      const project = createRepo(path.join(fixture.sandbox, "existing-project"), {
+        "notes/README.md": "Unrelated notes.\n",
+        "README.md": "Original project.\n"
+      });
+      const cwd = layout === "symlink" ? path.join(fixture.sandbox, "project-link") : project;
+      if (layout === "symlink") {
+        symlinkSync(project, cwd, "dir");
+      }
+      if (layout === "flat") {
+        writeSkill(project, "typography", "Original skill.\n");
+        write(project, "typography/assets/icon.svg", "Original supporting asset.\n");
+      }
+      const { command, upstream } = installer(fixture);
+      writeSkill(upstream, "typography", "Partial install.\n");
+      const failFlag = path.join(fixture.sandbox, "fail-installer");
+      const partialOutput = [
+        "printf 'Edited during installation.\\n' > README.md",
+        "mkdir -p notes/generated/partial-skill",
+        "printf '%s\\n' '---' 'name: partial-skill' 'description: Partial skill.' '---' > notes/generated/partial-skill/SKILL.md",
+        "printf 'New generated docs.\\n' > notes/generated/README.md",
+        ...(layout === "root_entry"
+          ? [
+              "printf '%s\\n' '---' 'name: root-skill' 'description: Partial root skill.' '---' > SKILL.md"
+            ]
+          : []),
+        ...(layout === "alias" ? ["ln -s typography skills/beta"] : []),
+        ...(layout === "flat"
+          ? [
+              "rm typography/SKILL.md",
+              "printf '%s\\n' '---' 'name: asset-skill' 'description: Partial asset skill.' '---' > typography/assets/SKILL.md"
+            ]
+          : []),
+        "if [ -f skills/README.md ]; then printf 'Edited unrelated docs.\\n' > skills/README.md; printf 'New unrelated file.\\n' > skills/new.txt; fi"
+      ].join("; ");
+      const failingCommand = `if [ -f ${shellQuote(failFlag)} ]; then ${partialOutput}; fi; ${command}; installer_status=$?; ${layout === "new_collection" ? "printf 'New collection docs.\\n' > .claude/skills/README.md; " : ""}exit "$installer_status"`;
+      if (layout === "provider") {
+        await runCliAsync(
+          ["skills", "add", "--name", "course", "--command", failingCommand, "--cwd", cwd],
+          fixture.runtime
+        );
+        write(project, "skills/README.md", "Unrelated project docs.\n");
+      }
+      if (["candidate", "alias"].includes(layout)) {
+        writeSkill(path.join(project, "skills"), "typography", "Original candidate skill.\n");
+        write(project, "skills/README.md", "Unrelated project docs.\n");
+      }
+      const accepted = readImportRecipeStore(fixture.registry);
+      write(fixture.sandbox, "fail-installer", "fail\n");
+      await expect(
+        runCliAsync(
+          layout === "provider"
+            ? ["skills", "update"]
+            : ["skills", "add", "--name", "course", "--command", failingCommand, "--cwd", cwd],
+          fixture.runtime
+        )
+      ).rejects.toThrow(/exited with code 42/u);
+      const collectionDocs = existsSync(path.join(project, ".claude/skills/README.md"))
+        ? read(project, ".claude/skills/README.md")
+        : "";
+      expect(collectionDocs).toBe(layout === "new_collection" ? "New collection docs.\n" : "");
+      expect(existsSync(path.join(project, "skills/beta"))).toBeFalsy();
+      expect(existsSync(path.join(project, "SKILL.md"))).toBeFalsy();
+      expect(read(project, "README.md")).toBe("Edited during installation.\n");
+      expect(read(project, "notes/README.md")).toBe("Unrelated notes.\n");
+      expect(existsSync(path.join(project, "notes/generated/partial-skill"))).toBeFalsy();
+      expect(read(project, "notes/generated/README.md")).toBe("New generated docs.\n");
+      expect(git(project, ["rev-parse", "--show-toplevel"]).trim()).toBe(project);
+      expect(existsSync(path.join(project, ".claude/skills"))).toBe(
+        ["provider", "new_collection"].includes(layout)
+      );
+      expect(existsSync(path.join(project, ".claude/skills/typography"))).toBe(
+        layout === "provider"
+      );
+      const restoredSkill = existsSync(path.join(project, "typography/SKILL.md"))
+        ? read(project, "typography/SKILL.md")
+        : "";
+      expect(restoredSkill.includes("Original skill.")).toBe(layout === "flat");
+      const restoredAsset = existsSync(path.join(project, "typography/assets/icon.svg"))
+        ? read(project, "typography/assets/icon.svg")
+        : "";
+      expect(restoredAsset).toBe(layout === "flat" ? "Original supporting asset.\n" : "");
+      expect(existsSync(path.join(project, "typography/assets/SKILL.md"))).toBeFalsy();
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(accepted);
+      const unrelatedDocs = existsSync(path.join(project, "skills/README.md"))
+        ? read(project, "skills/README.md")
+        : "";
+      expect(unrelatedDocs).toBe(
+        ["provider", "candidate", "alias"].includes(layout) ? "Edited unrelated docs.\n" : ""
+      );
+      expect(existsSync(path.join(project, "skills/new.txt"))).toBe(
+        ["provider", "candidate", "alias"].includes(layout)
+      );
+      rmSync(failFlag);
+      await runCliAsync(
+        layout === "provider"
+          ? ["skills", "update"]
+          : ["skills", "add", "--name", "course", "--command", command, "--cwd", cwd],
+        fixture.runtime
+      );
+      expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(
+        path.join(
+          project,
+          ["candidate", "alias"].includes(layout)
+            ? "skills/typography"
+            : ".claude/skills/typography"
+        )
+      );
+    }
+  );
+
+  test.each(["collection", "nested"] as const)(
+    "recovery detaches a replaced %s alias without changing the unrelated target",
+    async (layout) => {
+      const fixture = registryFixture();
+      const foreign = path.join(fixture.sandbox, "foreign-skills");
+      const foreignSlug = layout === "nested" ? "notes" : "typography";
+      writeSkill(foreign, foreignSlug, "Unrelated foreign instructions.\n");
+      const foreignBytes = read(foreign, `${foreignSlug}/SKILL.md`);
+      const replaced = layout === "nested" ? ".claude/skills/group" : ".claude/skills";
+      if (layout === "nested") {
+        write(fixture.source, "group/notes/README.md", "Existing notes.\n");
+      }
+      const command = `rm -rf ${replaced}; ln -s ${shellQuote(foreign)} ${replaced}; exit 42`;
+      await runCliAsync(
+        ["skills", "add", fixture.checkout, "--link", "--command", command],
+        fixture.runtime
+      );
+      const accepted = read(fixture.source, "typography/SKILL.md");
+      await expect(runCliAsync(["skills", "update"], fixture.runtime)).rejects.toThrow(/code 42/u);
+      expect(read(foreign, `${foreignSlug}/SKILL.md`)).toBe(foreignBytes);
+      expect(read(fixture.source, "typography/SKILL.md")).toBe(accepted);
+      expect(realpathSync(fixture.source)).toBe(fixture.source);
+      expect(existsSync(path.join(fixture.source, "group"))).toBeFalsy();
+    }
+  );
+
+  test.each([undefined, "codiff"])(
+    "updates honor the configured LFV adapter unless overridden with %s",
+    async (adapter) => {
+      const fixture = registryFixture();
+      const config = loadGlobalMonkeConfig(fixture.monkeHome);
+      saveGlobalMonkeConfig(fixture.monkeHome, { ...config, diffAdapter: "lfv" });
+      const log = path.join(fixture.bin, "lfv.log");
+      writeExecutable(
+        path.join(fixture.bin, "lfv"),
+        `#!/bin/sh
+set -eu
+printf '%s\\n' "$@" > ${shellQuote(log)}
+printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"https://lfv.example/review/123"}}'
+`
+      );
+      await runCliAsync(["skills", "add", fixture.checkout, "--link"], fixture.runtime);
+      writeSkill(fixture.source, "typography", "Updated skill.\n");
+      await runCliAsync(
+        ["skills", "update", ...(adapter ? ["--adapter", adapter] : [])],
+        fixture.runtime
+      );
+      expect(readFileSync(adapter ? fixture.codiffLog : log, "utf-8")).toContain(
+        adapter ? "--commit" : "--source\ncommit\n--ref\n"
+      );
+      expect(existsSync(adapter ? log : fixture.codiffLog)).toBeFalsy();
+      expect(fixture.stdout().includes("https://lfv.example/review/123")).toBe(
+        adapter === undefined
+      );
+      expect(read(fixture.installed.claude, "typography/SKILL.md")).toContain("Updated skill.");
+    }
+  );
+
+  test("repeat Git add preserves references and overrides across selection replacement", async () => {
+    const fixture = registryFixture();
+    const upstream = createRepo(path.join(fixture.sandbox, "git-source"), {
+      "README.md": "Git skills.\n"
+    });
+    writeSkill(path.join(upstream, "skills"), "alpha", "Alpha instructions.\n");
+    writeSkill(path.join(upstream, "skills"), "bravo", "Bravo instructions.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Skill source"]);
+    installGitImporter(fixture);
+    const source = `${upstream}#HEAD`;
+    write(fixture.guidance, "skills/references/imported/alpha/MAIN.md", "Alpha instructions.\n");
+    writeImportRecipeStore(fixture.guidance, {
+      recipes: [{ skills: [{ kind: "reference", selector: "alpha", slug: "alpha" }], source }],
+      version: 3
+    });
+    await runCliAsync(["skills", "add", source, "--name", "git-source"], fixture.runtime);
+    expect(read(fixture.registry, "skills/references/imported/alpha/MAIN.md")).toContain(
+      "Alpha instructions."
+    );
+    expect(existsSync(path.join(fixture.installed.claude, "alpha"))).toBeFalsy();
+    await runCliAsync(["skills", "add", source, "--skill", "bravo"], fixture.runtime);
+    await runCliAsync(
+      ["skills", "policy", "git-source", "--model-invocation", "deny"],
+      fixture.runtime
+    );
+    await runCliAsync(
+      ["skills", "policy", "git-source", "bravo", "--model-invocation", "allow"],
+      fixture.runtime
+    );
+    await runCliAsync(["skills", "add", source, "--skill", "alpha"], fixture.runtime);
+    await runCliAsync(["skills", "add", source, "--skill", "bravo"], fixture.runtime);
+    expect(parse(read(fixture.installed.claude, "bravo/agents/openai.yaml"))).toMatchObject({
+      policy: { allow_implicit_invocation: true }
+    });
+  });
+
+  test("policy refresh rejects a newly occupied target before publishing policy or new skills", async () => {
+    const fixture = registryFixture();
+    await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
+    const previous = readImportRecipeStore(fixture.registry);
+    const accepted = read(fixture.source, "typography/SKILL.md");
+    writeSkill(fixture.source, "color", "New color.\n");
+    write(fixture.installed.claude, "color/SKILL.md", "User-owned color.\n");
+    await expect(
+      runCliAsync(
+        ["skills", "policy", "private-course", "--model-invocation", "deny"],
+        fixture.runtime
+      )
+    ).rejects.toThrow(/non-managed/u);
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(read(fixture.source, "typography/SKILL.md")).toBe(accepted);
+    expect(read(fixture.installed.claude, "color/SKILL.md")).toBe("User-owned color.\n");
+  });
+
+  test.each(["policy", "installer", "new linked target"] as const)(
+    "failed %s publication restores bytes in external symlinked skill directories",
+    async (operation) => {
+      const fixture = registryFixture();
+      const actual = path.join(fixture.sandbox, "actual-skills");
+      writeSkill(actual, "typography", "External instructions.\n");
+      write(
+        actual,
+        "typography/agents/openai.yaml",
+        "policy:\n  allow_implicit_invocation: true\n"
+      );
+      rmSync(path.join(fixture.source, "typography"), { recursive: true });
+      symlinkSync(path.join(actual, "typography"), path.join(fixture.source, "typography"), "dir");
+      const script = path.join(fixture.sandbox, "modify-linked-skill.sh");
+      writeExecutable(
+        script,
+        `#!/bin/sh
+set -eu
+cat > .claude/skills/typography/SKILL.md <<'SKILL'
+---
+name: typography
+description: A course skill.
+---
+New installer instructions.
+SKILL
+`
+      );
+      await runCliAsync(
+        ["skills", "add", fixture.checkout, "--link", "--command", `sh ${shellQuote(script)}`],
+        fixture.runtime
+      );
+      await runCliAsync(
+        ["skills", "policy", "private-course", "--model-invocation", "deny"],
+        fixture.runtime
+      );
+      const brokenSlug = operation === "new linked target" ? "color" : "typography";
+      if (operation === "new linked target") {
+        writeSkill(actual, "color", "External color instructions.\n");
+        writeFileSync(
+          script,
+          `${readFileSync(script, "utf-8")}ln -s ${shellQuote(path.join(actual, "color"))} .claude/skills/color\n`
+        );
+      }
+      const metadata = path.join(fixture.sandbox, "agent-metadata");
+      write(metadata, "openai.yaml", "policy:\n  allow_implicit_invocation: false\n");
+      rmSync(path.join(actual, brokenSlug, "agents"), { force: true, recursive: true });
+      symlinkSync(metadata, path.join(actual, brokenSlug, "agents"), "dir");
+      const accepted = read(actual, "typography/SKILL.md");
+      const externalAccepted = read(actual, `${brokenSlug}/SKILL.md`);
+      const recipe = readImportRecipeStore(fixture.registry);
+      await expect(
+        runCliAsync(
+          operation === "policy"
+            ? ["skills", "policy", "private-course", "--model-invocation", "deny"]
+            : ["skills", "update"],
+          fixture.runtime
+        )
+      ).rejects.toThrow(/agents path to be a regular directory/u);
+      expect(read(actual, "typography/SKILL.md")).toBe(accepted);
+      expect(read(actual, `${brokenSlug}/SKILL.md`)).toBe(externalAccepted);
+      expect(read(metadata, "openai.yaml")).toBe("policy:\n  allow_implicit_invocation: false\n");
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(recipe);
+      expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(
+        path.join(actual, "typography")
+      );
+      expect(readlinkSync(path.join(actual, brokenSlug, "agents"))).toBe(metadata);
+      expect(existsSync(path.join(fixture.source, "color"))).toBeFalsy();
+    }
+  );
+
+  test("an unavailable Git pin does not block healthy local source updates", async () => {
+    const fixture = registryFixture();
+    installGitImporter(fixture);
+    const upstream = createRepo(path.join(fixture.sandbox, "git-source"), {
+      "README.md": "Git source.\n"
+    });
+    writeSkill(path.join(upstream, "skills"), "alpha", "Git skill.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Git skill"]);
+    await runCliAsync(["skills", "add", `${upstream}#HEAD`, "--name", "a-git"], fixture.runtime);
+    const later = path.join(fixture.sandbox, "z-personal");
+    writeSkill(later, "personal", "Original personal.\n");
+    await runCliAsync(["skills", "add", later], fixture.runtime);
+    rmSync(path.join(fixture.registry, "skills/imported/alpha"), { recursive: true });
+    rmSync(upstream, { recursive: true });
+    writeSkill(later, "personal", "Updated personal.\n");
+    await expect(runCliAsync(["skills", "update"], fixture.runtime)).rejects.toThrow(/git-source/u);
+    expect(read(fixture.installed.claude, "personal/SKILL.md")).toContain("Updated personal.");
+    expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toHaveLength(3);
+  });
+
+  test("an unrelated target blocks source publication before source policy or target changes", async () => {
+    const fixture = registryFixture();
+    const occupied = path.join(fixture.installed.claude, "typography");
+    write(occupied, "SKILL.md", "Unrelated skill.\n");
+    await expect(runCliAsync(["skills", "add", fixture.checkout], fixture.runtime)).rejects.toThrow(
+      /non-managed/u
+    );
+    expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+    expect(readFileSync(path.join(occupied, "SKILL.md"), "utf-8")).toBe("Unrelated skill.\n");
+    expect(existsSync(path.join(fixture.installed.codex, "typography"))).toBeFalsy();
+  });
+});

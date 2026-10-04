@@ -316,6 +316,7 @@ async function importSkills(argv: string[], dependencies: ImportSkillsDependenci
       commitState() {
         writeImportRecipeStore(repoRoot, nextRecipeStore);
       },
+      defaultDisableModelInvocation: recordedRecipe.disableModelInvocation,
       guidance: recordedRecipe.skills,
       obsoleteGuidance,
       repoRoot,
@@ -1041,10 +1042,14 @@ function stripTerminalEscapes(value: string) {
     .replace(CONTROL_RE, "");
 }
 
-if (import.meta.main) {
+async function main() {
   try {
     await runImportSkills();
   } catch (error) {
     reportCliFailure(ThrownValueSchema.parse(error));
   }
+}
+
+if (import.meta.main) {
+  void main();
 }

@@ -58,6 +58,8 @@ const RELEASE_INPUTS = [
   "scripts/restore-skills.ts",
   "scripts/skill-lock.ts",
   "scripts/skill-import-recipes.ts",
+  "scripts/skill-review.ts",
+  "scripts/update-skills.ts",
   "scripts/skills-cli.ts",
   "skills.lock.json",
   "src/",
@@ -272,6 +274,7 @@ async function compileExecutable(
 }
 
 function copyBundleInputs(bundleRoot: string) {
+  cpSync(path.join(repositoryRoot, "skills.lock.json"), path.join(bundleRoot, "skills.lock.json"));
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     cpSync(path.join(repositoryRoot, "skills", folder), path.join(bundleRoot, "skills", folder), {
       recursive: true
