@@ -376,6 +376,85 @@ describe("Skill import registry CLI", () => {
     }
   );
 
+  test.each(["Markdown", "symlink"] as const)(
+    "adoption refuses an internal %s reference tied to its original parent",
+    async (reference) => {
+      const fixture = registryFixture();
+      const collection = path.join(fixture.sandbox, "original-collection");
+      const original = path.join(collection, "alpha");
+      writeSkill(
+        collection,
+        "alpha",
+        reference === "Markdown"
+          ? "[Guide](../../original-collection/alpha/guide.md)\n"
+          : "Alpha instructions.\n"
+      );
+      write(original, "guide.md", "Original guide.\n");
+      if (reference === "symlink") {
+        symlinkSync("../../original-collection/alpha/guide.md", path.join(original, "resource.md"));
+      }
+      await expect(runCliAsync(["skills", "adopt", original], fixture.runtime)).rejects.toThrow(
+        /relocation.*cannot preserve|symlink would not remain/u
+      );
+      expect(read(original, "guide.md")).toBe("Original guide.\n");
+      expect(existsSync(fixture.registry)).toBeFalsy();
+      expect(existsSync(path.join(fixture.monkeHome, "skill-sources/alpha"))).toBeFalsy();
+    }
+  );
+
+  test.each(["absolute", "physical-name"] as const)(
+    "adoption protects a logical alias with a %s source-bound symlink",
+    async (kind) => {
+      const fixture = registryFixture();
+      const owner = path.join(fixture.sandbox, "external/physical-owner");
+      writeSkill(path.dirname(owner), "physical-owner", "Physical instructions.\n");
+      write(owner, "guide.md", "Physical guide.\n");
+      const target =
+        kind === "absolute" ? path.join(owner, "guide.md") : "../physical-owner/guide.md";
+      symlinkSync(target, path.join(owner, "resource.md"));
+      const alias = path.join(fixture.source, "logical-alias");
+      symlinkSync(owner, alias, "dir");
+      expect(read(alias, "resource.md")).toBe("Physical guide.\n");
+      await expect(runCliAsync(["skills", "adopt", alias], fixture.runtime)).rejects.toThrow(
+        /symlink would not remain/u
+      );
+      expect(read(alias, "resource.md")).toBe("Physical guide.\n");
+      expect(readlinkSync(alias)).toBe(owner);
+      expect(existsSync(fixture.registry)).toBeFalsy();
+      expect(existsSync(path.join(fixture.monkeHome, "skill-sources/logical-alias"))).toBeFalsy();
+      await runCliAsync(["skills", "add", owner, "--name", "retained", "--link"], fixture.runtime);
+      const previous = readImportRecipeStore(fixture.registry);
+      await runCliAsync(
+        ["skills", "adopt", path.join(fixture.installed.claude, "physical-owner")],
+        fixture.runtime
+      );
+      expect(fixture.stdout()).toContain("Unchanged: physical-owner");
+      expect(read(owner, "resource.md")).toBe("Physical guide.\n");
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    }
+  );
+
+  test("adoption protects registered owner dependencies when harness projections are absent", async () => {
+    const fixture = registryFixture();
+    const collection = path.join(fixture.sandbox, "external-collection");
+    const owner = path.join(collection, "alpha");
+    writeSkill(collection, "alpha", "[Guide](../beta/guide.md)\n");
+    writeSkill(collection, "beta", "Supporting skill.\n");
+    write(collection, "beta/guide.md", "Supporting guide.\n");
+    await runCliAsync(["skills", "add", owner, "--name", "existing", "--link"], fixture.runtime);
+    const previous = readImportRecipeStore(fixture.registry);
+    rmSync(path.join(fixture.installed.claude, "alpha"));
+    rmSync(path.resolve(fixture.installed.codex, ".."), { recursive: true });
+    rmSync(path.resolve(fixture.installed.cursor, ".."), { recursive: true });
+    await expect(
+      runCliAsync(["skills", "adopt", path.join(collection, "beta")], fixture.runtime)
+    ).rejects.toThrow(/alpha: .*would break after removing .*beta/u);
+    expect(read(collection, "beta/guide.md")).toBe("Supporting guide.\n");
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(existsSync(path.join(fixture.installed.claude, "alpha"))).toBeFalsy();
+    expect(existsSync(path.join(fixture.monkeHome, "skill-sources/beta"))).toBeFalsy();
+  });
+
   test.each([false, true])(
     "publication failure restores the whole batch or retains recovery when restoration is obstructed (%s)",
     async (obstructRecovery) => {

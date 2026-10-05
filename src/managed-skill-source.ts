@@ -130,10 +130,12 @@ function relocationFailures(original: string, destination: string, reusesOwner: 
     if (preservesExistingDependency(root, resolved, proposed, reusesOwner)) {
       continue;
     }
+    const resolution = existsSync(resolved) ? resolveDependency(resolved, root) : undefined;
     if (
       (dependency.symlink && path.isAbsolute(dependency.destination)) ||
-      !existsSync(resolved) ||
-      !containsPath(root, resolveDependency(resolved).resolved)
+      !resolution ||
+      !containsPath(root, resolution.resolved) ||
+      resolution.escaped
     ) {
       failures.push(
         dependency.symlink
@@ -276,38 +278,47 @@ function registeredOwnerLayoutFailures(
 }
 
 /** Follow native component order, recording aliases before dereferencing them or processing `..`. */
-function resolveDependency(entry: string) {
+function resolveDependency(entry: string, boundary?: string) {
   const paths = new Set<string>();
-  const visited = new Set<string>();
-  let current = path.isAbsolute(entry) ? entry : `${process.cwd()}${path.sep}${entry}`;
-  while (!visited.has(current)) {
-    visited.add(current);
-    const { root } = path.parse(current);
-    let ancestor = root;
-    let followedAlias = false;
-    const parts = current.slice(root.length).split(path.sep);
-    for (const [index, part] of parts.entries()) {
-      if (!part || part === ".") {
-        continue;
-      }
-      if (part === "..") {
-        ancestor = path.dirname(ancestor);
-        continue;
-      }
-      ancestor = path.join(ancestor, part);
-      paths.add(ancestor);
-      if (lstatSync(ancestor).isSymbolicLink()) {
-        const target = readlinkSync(ancestor);
-        current = `${path.isAbsolute(target) ? target : `${path.dirname(ancestor)}${path.sep}${target}`}${path.sep}${parts.slice(index + 1).join(path.sep)}`;
-        followedAlias = true;
-        break;
-      }
+  const absolute = path.isAbsolute(entry) ? entry : `${process.cwd()}${path.sep}${entry}`;
+  const { root } = path.parse(absolute);
+  const pending = absolute.slice(root.length).split(path.sep);
+  let ancestor = root;
+  let reachedBoundary = false;
+  let escaped = false;
+  let aliases = 0;
+  while (pending.length > 0) {
+    const part = pending.shift();
+    if (!part || part === ".") {
+      continue;
     }
-    if (!followedAlias) {
-      return { paths, resolved: ancestor };
+    ancestor = part === ".." ? path.dirname(ancestor) : path.join(ancestor, part);
+    paths.add(ancestor);
+    if (boundary && containsPath(boundary, ancestor)) {
+      reachedBoundary = true;
+    } else if (reachedBoundary) {
+      escaped = true;
+    }
+    if (part === ".." || !lstatSync(ancestor).isSymbolicLink()) {
+      continue;
+    }
+    aliases += 1;
+    if (aliases > 64) {
+      throw new MonkeError(`Cyclic or excessive Skill dependency aliases: ${entry}`);
+    }
+    const target = readlinkSync(ancestor);
+    if (path.isAbsolute(target)) {
+      ancestor = path.parse(target).root;
+      if (reachedBoundary) {
+        escaped = true;
+      }
+      pending.unshift(...target.slice(ancestor.length).split(path.sep));
+    } else {
+      ancestor = path.dirname(ancestor);
+      pending.unshift(...target.split(path.sep));
     }
   }
-  throw new MonkeError(`Cyclic Skill dependency: ${entry}`);
+  return { escaped, paths, resolved: ancestor };
 }
 
 function canonicalEntry(entry: string) {
@@ -335,7 +346,12 @@ function unselectedAliasFailures(plans: AdoptionPlan[], copies: string[], select
 }
 
 /** Retained skills must not depend on any entry the batch will remove. */
-function retainedDependencyFailures(plans: AdoptionPlan[], copies: string[], selected: string[]) {
+function retainedDependencyFailures(
+  options: AdoptionOptions,
+  plans: AdoptionPlan[],
+  copies: string[],
+  selected: string[]
+) {
   const failures: string[] = [];
   const removed = plans
     .flatMap((plan) => plan.copies.filter((entry) => !plan.preservedCopies.includes(entry)))
@@ -347,6 +363,12 @@ function retainedDependencyFailures(plans: AdoptionPlan[], copies: string[], sel
     return failures;
   }
   const retained = new Set([
+    ...options.store.recipes
+      .flatMap((recipe) => recipe.skills)
+      .filter((skill) => skill.kind === "skill")
+      .map((skill) => importedGuidancePath(options.registryRoot, skill))
+      .filter((owner) => existsSync(owner))
+      .map((owner) => realpathSync.native(owner)),
     ...plans.filter((plan) => plan.registered).map((plan) => plan.destination),
     ...copies
       .filter((copy) => !selected.includes(path.basename(copy)))
@@ -514,7 +536,7 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
   }
   failures.push(
     ...unselectedAliasFailures(plans, copies, selected),
-    ...retainedDependencyFailures(plans, copies, selected)
+    ...retainedDependencyFailures(options, plans, copies, selected)
   );
   if (failures.length > 0) {
     throw new MonkeError(
