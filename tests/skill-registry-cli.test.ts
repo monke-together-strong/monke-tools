@@ -568,6 +568,79 @@ describe("Skill import registry CLI", () => {
     );
   });
 
+  test("adoption preserves native symlink traversal before parent components", async () => {
+    const fixture = registryFixture();
+    const original = path.join(fixture.source, "typography");
+    write(original, "references/guide.md", "Native internal guide.\n");
+    mkdirSync(path.join(original, "references/nested"));
+    symlinkSync("references/nested", path.join(original, "jump"), "dir");
+    symlinkSync("jump/../guide.md", path.join(original, "resource.md"));
+    write(original, "SKILL.md", `${read(original, "SKILL.md")}\n[Guide](jump/../guide.md)\n`);
+    expect(read(original, "resource.md")).toBe("Native internal guide.\n");
+    expect(existsSync(path.join(original, "guide.md"))).toBeFalsy();
+    await runCliAsync(["skills", "adopt", original], fixture.runtime);
+    const owner = path.join(fixture.monkeHome, "skill-sources/typography/typography");
+    expect(read(owner, "resource.md")).toBe("Native internal guide.\n");
+    expect(realpathSync(path.join(owner, "resource.md"))).toBe(
+      path.join(owner, "references/guide.md")
+    );
+    expect(readlinkSync(path.join(owner, "resource.md"))).toBe("jump/../guide.md");
+  });
+
+  test.each([false, true])(
+    "adoption preserves same-owner replacement projections (Claude configured=%s)",
+    async (configured) => {
+      const fixture = registryFixture();
+      saveGlobalMonkeConfig(fixture.monkeHome, {
+        ...loadGlobalMonkeConfig(fixture.monkeHome),
+        skillInstallPreference: {
+          targets: [{ kind: "codex" }, ...(configured ? [{ kind: "claude" as const }] : [])]
+        }
+      });
+      const owner = path.join(fixture.sandbox, "external/beta");
+      writeSkill(path.dirname(owner), "beta", "Beta instructions.\n");
+      write(owner, "guide.md", "Retained external guide.\n");
+      await runCliAsync(["skills", "add", owner, "--name", "existing", "--link"], fixture.runtime);
+      const bridge = path.join(fixture.sandbox, "beta-bridge");
+      symlinkSync(owner, bridge, "dir");
+      const projection = path.join(fixture.installed.claude, "beta");
+      mkdirSync(fixture.installed.claude, { recursive: true });
+      rmSync(projection, { force: true });
+      symlinkSync(bridge, projection, "dir");
+      writeSkill(fixture.installed.claude, "alpha", "[Guide](../beta/guide.md)\n");
+      symlinkSync("../beta/guide.md", path.join(fixture.installed.claude, "alpha/resource.md"));
+      symlinkSync("beta", path.join(fixture.installed.claude, "alpha-alias"), "dir");
+      await runCliAsync(["skills", "adopt", projection], fixture.runtime);
+      expect(realpathSync(projection)).toBe(owner);
+      expect(readlinkSync(projection)).toBe(path.join(fixture.registry, "skills/imported/beta"));
+      expect(read(fixture.installed.claude, "alpha/resource.md")).toBe(
+        "Retained external guide.\n"
+      );
+      expect(realpathSync(path.join(fixture.installed.claude, "alpha-alias"))).toBe(owner);
+      expect(readlinkSync(bridge)).toBe(owner);
+    }
+  );
+
+  test("native symlink parent traversal still protects removed supporting entries", async () => {
+    const fixture = registryFixture();
+    const owner = path.join(fixture.sandbox, "external/alpha");
+    writeSkill(path.dirname(owner), "alpha", "Retained owner.\n");
+    const collection = path.join(owner, "references");
+    writeSkill(collection, "beta", "Supporting skill.\n");
+    write(collection, "beta/guide.md", "Supporting guide.\n");
+    mkdirSync(path.join(collection, "nested"));
+    symlinkSync("references/nested", path.join(owner, "jump"), "dir");
+    symlinkSync("jump/../beta/guide.md", path.join(owner, "resource.md"));
+    await runCliAsync(["skills", "add", owner, "--name", "existing", "--link"], fixture.runtime);
+    const previous = readImportRecipeStore(fixture.registry);
+    await expect(
+      runCliAsync(["skills", "adopt", collection, "--skill", "beta"], fixture.runtime)
+    ).rejects.toThrow(/alpha: .*would break after removing .*beta/u);
+    expect(read(owner, "resource.md")).toBe("Supporting guide.\n");
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(existsSync(path.join(fixture.monkeHome, "skill-sources/references"))).toBeFalsy();
+  });
+
   test("identical copies reuse a registered owner and repeat adoption reports unchanged", async () => {
     const fixture = registryFixture();
     await runCliAsync(["skills", "add", fixture.checkout, "--link"], fixture.runtime);

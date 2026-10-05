@@ -36,6 +36,7 @@ interface AdoptionPlan {
   copies: string[];
   destination: string;
   original: string;
+  preservedCopies: string[];
   registered: boolean;
   slug: string;
 }
@@ -110,8 +111,8 @@ function preservesExistingDependency(
     reusesOwner &&
     existsSync(original) &&
     existsSync(proposed) &&
-    !containsPath(root, realpathSync.native(original)) &&
-    realpathSync.native(original) === realpathSync.native(proposed)
+    !containsPath(root, resolveDependency(original).resolved) &&
+    resolveDependency(original).resolved === resolveDependency(proposed).resolved
   );
 }
 
@@ -119,20 +120,20 @@ function relocationFailures(original: string, destination: string, reusesOwner: 
   const root = realpathSync.native(original);
   const failures: string[] = [];
   for (const dependency of skillDependencies(root)) {
-    const resolved = path.resolve(path.dirname(dependency.file), dependency.destination);
-    const proposed = path.resolve(
-      destination,
-      path.relative(root, path.dirname(dependency.file)),
-      dependency.destination
-    );
+    // Resolve the link itself: native traversal follows a symlink before a subsequent `..`.
+    const resolved = dependency.symlink
+      ? dependency.file
+      : `${path.dirname(dependency.file)}${path.sep}${dependency.destination}`;
+    const proposed = dependency.symlink
+      ? path.join(destination, path.relative(root, dependency.file))
+      : `${path.join(destination, path.relative(root, path.dirname(dependency.file)))}${path.sep}${dependency.destination}`;
     if (preservesExistingDependency(root, resolved, proposed, reusesOwner)) {
       continue;
     }
     if (
       (dependency.symlink && path.isAbsolute(dependency.destination)) ||
-      !containsPath(root, resolved) ||
       !existsSync(resolved) ||
-      !containsPath(root, realpathSync.native(resolved))
+      !containsPath(root, resolveDependency(resolved).resolved)
     ) {
       failures.push(
         dependency.symlink
@@ -274,43 +275,53 @@ function registeredOwnerLayoutFailures(
   return [];
 }
 
-/** Follow only the supplied entry's resolution, recording each alias before dereferencing it. */
-function aliasResolutionPaths(entry: string) {
+/** Follow native component order, recording aliases before dereferencing them or processing `..`. */
+function resolveDependency(entry: string) {
   const paths = new Set<string>();
-  let current = path.resolve(entry);
-  while (!paths.has(current)) {
-    paths.add(current);
+  const visited = new Set<string>();
+  let current = path.isAbsolute(entry) ? entry : `${process.cwd()}${path.sep}${entry}`;
+  while (!visited.has(current)) {
+    visited.add(current);
     const { root } = path.parse(current);
     let ancestor = root;
     let followedAlias = false;
-    for (const part of path.relative(root, current).split(path.sep)) {
+    const parts = current.slice(root.length).split(path.sep);
+    for (const [index, part] of parts.entries()) {
+      if (!part || part === ".") {
+        continue;
+      }
+      if (part === "..") {
+        ancestor = path.dirname(ancestor);
+        continue;
+      }
       ancestor = path.join(ancestor, part);
+      paths.add(ancestor);
       if (lstatSync(ancestor).isSymbolicLink()) {
-        paths.add(path.join(realpathSync.native(path.dirname(ancestor)), path.basename(ancestor)));
-        current = path.resolve(
-          path.dirname(ancestor),
-          readlinkSync(ancestor),
-          path.relative(ancestor, current)
-        );
+        const target = readlinkSync(ancestor);
+        current = `${path.isAbsolute(target) ? target : `${path.dirname(ancestor)}${path.sep}${target}`}${path.sep}${parts.slice(index + 1).join(path.sep)}`;
         followedAlias = true;
         break;
       }
     }
     if (!followedAlias) {
-      break;
+      return { paths, resolved: ancestor };
     }
   }
-  return paths;
+  throw new MonkeError(`Cyclic Skill dependency: ${entry}`);
+}
+
+function canonicalEntry(entry: string) {
+  return path.join(realpathSync.native(path.dirname(entry)), path.basename(entry));
 }
 
 function unselectedAliasFailures(plans: AdoptionPlan[], copies: string[], selected: string[]) {
   const failures: string[] = [];
   const unselectedCopies = copies
     .filter((item) => !selected.includes(path.basename(item)))
-    .map((entry) => ({ entry, resolution: aliasResolutionPaths(entry) }));
+    .map((entry) => ({ entry, resolution: resolveDependency(entry).paths }));
   for (const plan of plans) {
-    for (const copy of plan.copies) {
-      const removed = path.join(realpathSync.native(path.dirname(copy)), path.basename(copy));
+    for (const copy of plan.copies.filter((entry) => !plan.preservedCopies.includes(entry))) {
+      const removed = canonicalEntry(copy);
       for (const { entry, resolution } of unselectedCopies) {
         if ([...resolution].some((resolved) => containsPath(removed, resolved))) {
           failures.push(
@@ -327,9 +338,9 @@ function unselectedAliasFailures(plans: AdoptionPlan[], copies: string[], select
 function retainedDependencyFailures(plans: AdoptionPlan[], copies: string[], selected: string[]) {
   const failures: string[] = [];
   const removed = plans
-    .flatMap((plan) => plan.copies)
+    .flatMap((plan) => plan.copies.filter((entry) => !plan.preservedCopies.includes(entry)))
     .map((entry) => ({
-      canonical: path.join(realpathSync.native(path.dirname(entry)), path.basename(entry)),
+      canonical: canonicalEntry(entry),
       entry
     }));
   if (removed.length === 0) {
@@ -343,11 +354,13 @@ function retainedDependencyFailures(plans: AdoptionPlan[], copies: string[], sel
   ]);
   for (const root of retained) {
     for (const dependency of skillDependencies(root)) {
-      const target = path.resolve(path.dirname(dependency.file), dependency.destination);
+      const target = dependency.symlink
+        ? dependency.file
+        : `${path.dirname(dependency.file)}${path.sep}${dependency.destination}`;
       if (!existsSync(target)) {
         continue;
       }
-      const resolution = aliasResolutionPaths(target);
+      const resolution = resolveDependency(target).paths;
       for (const removal of removed) {
         if ([...resolution].some((resolved) => containsPath(removal.canonical, resolved))) {
           failures.push(
@@ -461,11 +474,40 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
       );
     }
     const recorded = skill?.adoptedPaths ?? [];
+    // Only exact projections recreated with the same retained physical owner preserve traversal.
+    const projections = owner
+      ? [
+          ...[...recorded, ...adoptedPaths].filter(
+            (entry) =>
+              !configured.some(
+                (target) =>
+                  target.kind !== "claude" && path.dirname(entry) === target.agentSkillRoot
+              )
+          ),
+          ...configured.map((target) =>
+            target.kind === "claude"
+              ? path.join(target.agentSkillRoot, slug)
+              : path.join(
+                  target.namespacePath,
+                  skill
+                    ? "imported"
+                    : path.dirname(path.relative(path.join(options.guidanceRoot, "skills"), owner)),
+                  slug
+                )
+          )
+        ]
+          .filter((entry) => existsSync(path.dirname(entry)))
+          .map(canonicalEntry)
+      : [];
     plans.push({
       adoptedPaths: adoptedPaths.filter((item) => !recorded.includes(item)),
       copies: disposable,
       destination,
       original,
+      preservedCopies: disposable.filter(
+        (copy) =>
+          projections.includes(canonicalEntry(copy)) && realpathSync.native(copy) === destination
+      ),
       registered: Boolean(owner),
       slug
     });
