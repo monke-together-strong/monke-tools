@@ -70,7 +70,22 @@ function skillInventory(root: string) {
  * Detect literal packaged dependencies; dynamic script and plain-text references are outside this
  * check.
  */
-function relocationFailures(original: string, destination: string) {
+function preservesExistingDependency(
+  root: string,
+  original: string,
+  proposed: string,
+  reusesOwner: boolean
+) {
+  return (
+    reusesOwner &&
+    existsSync(original) &&
+    existsSync(proposed) &&
+    !containsPath(root, realpathSync.native(original)) &&
+    realpathSync.native(original) === realpathSync.native(proposed)
+  );
+}
+
+function relocationFailures(original: string, destination: string, reusesOwner: boolean) {
   const root = realpathSync.native(original);
   const failures: string[] = [];
   function visit(directory: string) {
@@ -83,11 +98,13 @@ function relocationFailures(original: string, destination: string) {
       if (stat.isSymbolicLink()) {
         const target = readlinkSync(file);
         const resolved = path.resolve(path.dirname(file), target);
+        const proposed = path.resolve(destination, path.relative(root, path.dirname(file)), target);
         if (
-          path.isAbsolute(target) ||
-          !containsPath(root, resolved) ||
-          !existsSync(file) ||
-          !containsPath(root, realpathSync.native(file))
+          !preservesExistingDependency(root, resolved, proposed, reusesOwner) &&
+          (path.isAbsolute(target) ||
+            !containsPath(root, resolved) ||
+            !existsSync(file) ||
+            !containsPath(root, realpathSync.native(file)))
         ) {
           failures.push(
             `${file} -> ${target}: symlink would not remain self-contained at ${destination}`
@@ -96,10 +113,16 @@ function relocationFailures(original: string, destination: string) {
       } else if (stat.isFile() && file.endsWith(".md")) {
         for (const link of relativeMarkdownLinks(readFileSync(file, "utf-8"))) {
           const resolved = path.resolve(path.dirname(file), link.destination);
+          const proposed = path.resolve(
+            destination,
+            path.relative(root, path.dirname(file)),
+            link.destination
+          );
           if (
-            !containsPath(root, resolved) ||
-            !existsSync(resolved) ||
-            !containsPath(root, realpathSync.native(resolved))
+            !preservesExistingDependency(root, resolved, proposed, reusesOwner) &&
+            (!containsPath(root, resolved) ||
+              !existsSync(resolved) ||
+              !containsPath(root, realpathSync.native(resolved)))
           ) {
             failures.push(
               `${file}:${link.line}: ${link.raw} resolves outside the Skill or is missing; relocation to ${destination} cannot preserve it`
@@ -135,7 +158,7 @@ function inspectCopies(options: {
     }
     if (physical !== options.destination) {
       failures.push(
-        ...relocationFailures(copy, options.destination).map(
+        ...relocationFailures(copy, options.destination, Boolean(options.owner)).map(
           (failure) => `${options.slug}: ${failure}`
         )
       );

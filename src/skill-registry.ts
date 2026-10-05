@@ -38,6 +38,7 @@ import { withInstallMutationLockAsync } from "./install-recovery.ts";
 import { resolveSkillSourceFolder, updateLocalSkillSource } from "./local-skill-source.ts";
 import { acquireManagedSkillSource } from "./managed-skill-source.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
+import { withSkillPublicationTransaction } from "./skill-publication-transaction.ts";
 import {
   preflightAdoptedSkillLinks,
   preflightInstallGuidance,
@@ -75,97 +76,102 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
     ) {
       throw new MonkeError("Select targets first with: mt skills configure");
     }
-    const root = initializeSkillRegistry(runtime, guidance);
-    const store = readImportRecipeStore(root);
-    if (request.action === "list") {
-      for (const recipe of store.recipes) {
-        runtime.writeStdout(
-          `${recipe.name ?? recipe.source}\t${recipe.localSource?.kind ?? "git"}\t${recipe.skills.length} skills\n`
-        );
-      }
+    const registry = path.join(getMonkeHome(runtime), "skill-registry");
+    if (request.action === "adopt" && !lstatSync(registry, { throwIfNoEntry: false })) {
+      await withSkillPublicationTransaction(getMonkeHome(runtime), [registry], () =>
+        runSkillsRegistryLocked(runtime, request, guidance)
+      );
       return;
     }
-    if (request.action === "update") {
-      try {
-        await runUpdateSkills(
-          [
-            ...(request.adapter ? ["--adapter", request.adapter] : []),
-            ...(request.interactive ? ["--interactive"] : [])
-          ],
-          {
-            repoRoot: root,
-            runtime,
-            validatePrepared(prepared, recipe) {
-              const previous = readImportRecipeStore(root).recipes.find(
-                (item) => item.source === recipe.source
-              );
-              preflightRegistryChange(
-                runtime,
-                root,
-                prepared,
-                recipe.skills,
-                previous?.skills ?? []
-              );
-            },
-            writeMessage: runtime.writeStdout
-          }
-        );
-      } finally {
-        retireAdoptedSkillLinks(root, store);
-        distributeRegistry(runtime, root);
-      }
-      return;
-    }
-    let changedSource: string;
-    if (request.action === "create" || request.action === "adopt") {
-      await acquireManagedSkillSource({
-        guidanceRoot: guidance,
-        async publish(source, name) {
-          await addSkillSource(runtime, root, store, { action: "add", link: true, name, source });
-        },
-        reconcile() {
-          distributeRegistry(runtime, root);
-        },
-        registryRoot: root,
-        request,
-        runtime,
-        store
-      });
-      return;
-    } else if (request.action === "add") {
-      changedSource = await addSkillSource(runtime, root, store, request);
-    } else {
-      const recipe = findRecipe(store, request.source);
-      changedSource = recipe.source;
-      if (request.action === "remove") {
-        copyStagedGuidanceToManagedRoots({
-          commitState() {
-            writeImportRecipeStore(root, {
-              ...store,
-              recipes: store.recipes.filter((item) => item !== recipe),
-              removedSources: [...(store.removedSources ?? []), recipe.source]
-            });
-          },
-          guidance: [],
-          obsoleteGuidance: recipe.skills,
-          repoRoot: root,
-          stagingDirectory: root
-        });
-      } else {
-        const nextRecipe = setRecipePolicy(recipe, request);
-        await applyRecipePolicy(runtime, root, store, nextRecipe);
-      }
-    }
-    retireAdoptedSkillLinks(root, store);
-    distributeRegistry(runtime, root);
-    const nextStore = readImportRecipeStore(root);
-    rememberSkillGuidance(
-      root,
-      [...store.recipes, ...nextStore.recipes]
-        .filter((recipe) => recipe.source === changedSource)
-        .flatMap((recipe) => recipe.skills)
-    );
+    await runSkillsRegistryLocked(runtime, request, guidance);
   });
+}
+
+async function runSkillsRegistryLocked(runtime: Runtime, request: SkillsRequest, guidance: string) {
+  const root = initializeSkillRegistry(runtime, guidance);
+  const store = readImportRecipeStore(root);
+  if (request.action === "list") {
+    for (const recipe of store.recipes) {
+      runtime.writeStdout(
+        `${recipe.name ?? recipe.source}\t${recipe.localSource?.kind ?? "git"}\t${recipe.skills.length} skills\n`
+      );
+    }
+    return;
+  }
+  if (request.action === "update") {
+    try {
+      await runUpdateSkills(
+        [
+          ...(request.adapter ? ["--adapter", request.adapter] : []),
+          ...(request.interactive ? ["--interactive"] : [])
+        ],
+        {
+          repoRoot: root,
+          runtime,
+          validatePrepared(prepared, recipe) {
+            const previous = readImportRecipeStore(root).recipes.find(
+              (item) => item.source === recipe.source
+            );
+            preflightRegistryChange(runtime, root, prepared, recipe.skills, previous?.skills ?? []);
+          },
+          writeMessage: runtime.writeStdout
+        }
+      );
+    } finally {
+      retireAdoptedSkillLinks(root, store);
+      distributeRegistry(runtime, root);
+    }
+    return;
+  }
+  let changedSource: string;
+  if (request.action === "create" || request.action === "adopt") {
+    await acquireManagedSkillSource({
+      guidanceRoot: guidance,
+      async publish(source, name) {
+        await addSkillSource(runtime, root, store, { action: "add", link: true, name, source });
+      },
+      reconcile() {
+        distributeRegistry(runtime, root);
+      },
+      registryRoot: root,
+      request,
+      runtime,
+      store
+    });
+    return;
+  } else if (request.action === "add") {
+    changedSource = await addSkillSource(runtime, root, store, request);
+  } else {
+    const recipe = findRecipe(store, request.source);
+    changedSource = recipe.source;
+    if (request.action === "remove") {
+      copyStagedGuidanceToManagedRoots({
+        commitState() {
+          writeImportRecipeStore(root, {
+            ...store,
+            recipes: store.recipes.filter((item) => item !== recipe),
+            removedSources: [...(store.removedSources ?? []), recipe.source]
+          });
+        },
+        guidance: [],
+        obsoleteGuidance: recipe.skills,
+        repoRoot: root,
+        stagingDirectory: root
+      });
+    } else {
+      const nextRecipe = setRecipePolicy(recipe, request);
+      await applyRecipePolicy(runtime, root, store, nextRecipe);
+    }
+  }
+  retireAdoptedSkillLinks(root, store);
+  distributeRegistry(runtime, root);
+  const nextStore = readImportRecipeStore(root);
+  rememberSkillGuidance(
+    root,
+    [...store.recipes, ...nextStore.recipes]
+      .filter((recipe) => recipe.source === changedSource)
+      .flatMap((recipe) => recipe.skills)
+  );
 }
 
 function activeGuidanceRoot(runtime: Runtime) {

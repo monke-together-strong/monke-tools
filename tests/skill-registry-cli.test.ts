@@ -491,6 +491,42 @@ describe("Skill import registry CLI", () => {
     }
   );
 
+  test("a cold adoption conflict restores the absent registry including bundled registrations", async () => {
+    const fixture = registryFixture();
+    writeSkill(
+      path.join(fixture.guidance, "skills/imported"),
+      "bundled",
+      "Bundled instructions.\n"
+    );
+    writeImportRecipeStore(fixture.guidance, {
+      recipes: [
+        {
+          skills: [{ kind: "skill", selector: "bundled", slug: "bundled" }],
+          source: "example/bundled"
+        }
+      ],
+      version: 3
+    });
+    writeSkill(fixture.source, "healthy", "Healthy instructions.\n");
+    writeSkill(fixture.installed.claude, "typography", "Divergent instructions.\n");
+    const preference = loadGlobalMonkeConfig(fixture.monkeHome);
+    expect(existsSync(fixture.registry)).toBeFalsy();
+    await expect(
+      runCliAsync(
+        ["skills", "adopt", fixture.checkout, "--skill", "typography", "healthy"],
+        fixture.runtime
+      )
+    ).rejects.toThrow(/differing copies/u);
+    expect(existsSync(fixture.registry)).toBeFalsy();
+    expect(read(fixture.source, "typography/SKILL.md")).toContain("Course instructions.");
+    expect(read(fixture.source, "healthy/SKILL.md")).toContain("Healthy instructions.");
+    expect(read(fixture.installed.claude, "typography/SKILL.md")).toContain(
+      "Divergent instructions."
+    );
+    expect(loadGlobalMonkeConfig(fixture.monkeHome)).toStrictEqual(preference);
+    expect(existsSync(path.join(fixture.monkeHome, "skill-sources/private-course"))).toBeFalsy();
+  });
+
   test("adoption preserves scripts and internal aliases and keeps differently named skills separate", async () => {
     const fixture = registryFixture();
     const custom = path.join(fixture.sandbox, "custom-skills");
@@ -557,6 +593,44 @@ describe("Skill import registry CLI", () => {
     expect(read(fixture.source, "typography/SKILL.md")).toContain("Course instructions.");
     expect(read(path.dirname(raw), "typography/SKILL.md")).toContain("Divergent leftover.");
   });
+
+  test.each([
+    { error: /^$/u, preservesLeftover: false, sameResource: true },
+    {
+      error: /relocation.*cannot preserve|symlink would not remain/u,
+      preservesLeftover: true,
+      sameResource: false
+    }
+  ])(
+    "adoption compares external reference resolution for an existing owner (same resource=$sameResource)",
+    async ({ error: pattern, preservesLeftover, sameResource }) => {
+      const fixture = registryFixture();
+      const shared = path.join(fixture.sandbox, "shared-dependencies");
+      const other = path.join(fixture.sandbox, "different-dependencies");
+      write(shared, "shared.md", "Shared resource.\n");
+      write(other, "shared.md", "Different resource.\n");
+      const owner = path.join(shared, "a/typography");
+      writeSkill(path.dirname(owner), "typography", "[Shared](../../shared.md)\n");
+      symlinkSync("../../shared.md", path.join(owner, "resource.md"));
+      await runCliAsync(["skills", "add", owner, "--name", "existing", "--link"], fixture.runtime);
+      const previous = readImportRecipeStore(fixture.registry);
+      const leftover = path.join(sameResource ? shared : other, "b/typography");
+      cpSync(owner, leftover, { recursive: true, verbatimSymlinks: true });
+      let report = "";
+      try {
+        await runCliAsync(["skills", "adopt", leftover], fixture.runtime);
+      } catch (error) {
+        report = errorMessage(ThrownValueSchema.parse(error));
+      }
+      expect(report).toMatch(pattern);
+      expect(existsSync(leftover)).toBe(preservesLeftover);
+      expect(read(owner, "resource.md")).toBe("Shared resource.\n");
+      expect(read(shared, "shared.md")).toBe("Shared resource.\n");
+      expect(read(other, "shared.md")).toBe("Different resource.\n");
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+      expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(owner);
+    }
+  );
 
   test("adoption consolidates identical global copies without enabling an unconfigured harness", async () => {
     const fixture = registryFixture();
