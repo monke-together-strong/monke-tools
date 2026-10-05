@@ -66,10 +66,40 @@ function skillInventory(root: string) {
   return entries;
 }
 
-/**
- * Detect literal packaged dependencies; dynamic script and plain-text references are outside this
- * check.
- */
+/** Detect literal packaged dependencies without inferring script or plain-text references. */
+function skillDependencies(root: string) {
+  const dependencies: { destination: string; file: string; location: string; symlink: boolean }[] =
+    [];
+  function visit(directory: string) {
+    for (const name of readdirSync(directory)) {
+      const file = path.join(directory, name);
+      const stat = lstatSync(file);
+      if (stat.isDirectory()) {
+        visit(file);
+      } else if (stat.isSymbolicLink()) {
+        const destination = readlinkSync(file);
+        dependencies.push({
+          destination,
+          file,
+          location: `${file} -> ${destination}`,
+          symlink: true
+        });
+      } else if (stat.isFile() && file.endsWith(".md")) {
+        for (const link of relativeMarkdownLinks(readFileSync(file, "utf-8"))) {
+          dependencies.push({
+            destination: link.destination,
+            file,
+            location: `${file}:${link.line}: ${link.raw}`,
+            symlink: false
+          });
+        }
+      }
+    }
+  }
+  visit(root);
+  return dependencies;
+}
+
 function preservesExistingDependency(
   root: string,
   original: string,
@@ -88,51 +118,29 @@ function preservesExistingDependency(
 function relocationFailures(original: string, destination: string, reusesOwner: boolean) {
   const root = realpathSync.native(original);
   const failures: string[] = [];
-  function visit(directory: string) {
-    for (const name of readdirSync(directory)) {
-      const file = path.join(directory, name);
-      const stat = lstatSync(file);
-      if (stat.isDirectory()) {
-        visit(file);
-      }
-      if (stat.isSymbolicLink()) {
-        const target = readlinkSync(file);
-        const resolved = path.resolve(path.dirname(file), target);
-        const proposed = path.resolve(destination, path.relative(root, path.dirname(file)), target);
-        if (
-          !preservesExistingDependency(root, resolved, proposed, reusesOwner) &&
-          (path.isAbsolute(target) ||
-            !containsPath(root, resolved) ||
-            !existsSync(file) ||
-            !containsPath(root, realpathSync.native(file)))
-        ) {
-          failures.push(
-            `${file} -> ${target}: symlink would not remain self-contained at ${destination}`
-          );
-        }
-      } else if (stat.isFile() && file.endsWith(".md")) {
-        for (const link of relativeMarkdownLinks(readFileSync(file, "utf-8"))) {
-          const resolved = path.resolve(path.dirname(file), link.destination);
-          const proposed = path.resolve(
-            destination,
-            path.relative(root, path.dirname(file)),
-            link.destination
-          );
-          if (
-            !preservesExistingDependency(root, resolved, proposed, reusesOwner) &&
-            (!containsPath(root, resolved) ||
-              !existsSync(resolved) ||
-              !containsPath(root, realpathSync.native(resolved)))
-          ) {
-            failures.push(
-              `${file}:${link.line}: ${link.raw} resolves outside the Skill or is missing; relocation to ${destination} cannot preserve it`
-            );
-          }
-        }
-      }
+  for (const dependency of skillDependencies(root)) {
+    const resolved = path.resolve(path.dirname(dependency.file), dependency.destination);
+    const proposed = path.resolve(
+      destination,
+      path.relative(root, path.dirname(dependency.file)),
+      dependency.destination
+    );
+    if (preservesExistingDependency(root, resolved, proposed, reusesOwner)) {
+      continue;
+    }
+    if (
+      (dependency.symlink && path.isAbsolute(dependency.destination)) ||
+      !containsPath(root, resolved) ||
+      !existsSync(resolved) ||
+      !containsPath(root, realpathSync.native(resolved))
+    ) {
+      failures.push(
+        dependency.symlink
+          ? `${dependency.location}: symlink would not remain self-contained at ${destination}`
+          : `${dependency.location} resolves outside the Skill or is missing; relocation to ${destination} cannot preserve it`
+      );
     }
   }
-  visit(root);
   return failures;
 }
 
@@ -315,6 +323,43 @@ function unselectedAliasFailures(plans: AdoptionPlan[], copies: string[], select
   return failures;
 }
 
+/** Retained skills must not depend on any entry the batch will remove. */
+function retainedDependencyFailures(plans: AdoptionPlan[], copies: string[], selected: string[]) {
+  const failures: string[] = [];
+  const removed = plans
+    .flatMap((plan) => plan.copies)
+    .map((entry) => ({
+      canonical: path.join(realpathSync.native(path.dirname(entry)), path.basename(entry)),
+      entry
+    }));
+  if (removed.length === 0) {
+    return failures;
+  }
+  const retained = new Set([
+    ...plans.filter((plan) => plan.registered).map((plan) => plan.destination),
+    ...copies
+      .filter((copy) => !selected.includes(path.basename(copy)))
+      .map((copy) => realpathSync.native(copy))
+  ]);
+  for (const root of retained) {
+    for (const dependency of skillDependencies(root)) {
+      const target = path.resolve(path.dirname(dependency.file), dependency.destination);
+      if (!existsSync(target)) {
+        continue;
+      }
+      const resolution = aliasResolutionPaths(target);
+      for (const removal of removed) {
+        if ([...resolution].some((resolved) => containsPath(removal.canonical, resolved))) {
+          failures.push(
+            `${path.basename(root)}: ${dependency.location} would break after removing ${removal.entry}; preserve or reconcile this supporting dependency outside adoption before rerunning`
+          );
+        }
+      }
+    }
+  }
+  return failures;
+}
+
 function planAdoption(options: AdoptionOptions, source: string, selection?: string[]) {
   const root = existsSync(path.join(source, "SKILL.md"))
     ? source
@@ -425,7 +470,10 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
       slug
     });
   }
-  failures.push(...unselectedAliasFailures(plans, copies, selected));
+  failures.push(
+    ...unselectedAliasFailures(plans, copies, selected),
+    ...retainedDependencyFailures(plans, copies, selected)
+  );
   if (failures.length > 0) {
     throw new MonkeError(
       `Skill adoption preflight failed:\n${failures.join("\n")}\nReconcile these paths outside adoption, then rerun. Use mt skills add <source> --link to keep external dependencies. Checks cover Markdown links and symlinks, not dynamic script dependencies or plain-text references.`

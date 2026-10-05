@@ -632,6 +632,61 @@ describe("Skill import registry CLI", () => {
     }
   );
 
+  test.each([
+    { alias: false, reference: "Markdown", selectedOwner: true },
+    { alias: false, reference: "symlink", selectedOwner: false },
+    { alias: true, reference: "symlink", selectedOwner: true },
+    { alias: true, reference: "Markdown", selectedOwner: false }
+  ] as const)(
+    "batch removal preserves a retained owner's $reference dependency (alias=$alias, selected owner=$selectedOwner)",
+    async ({ alias, reference, selectedOwner }) => {
+      const fixture = registryFixture();
+      const collection = path.join(fixture.sandbox, "dependent-batch");
+      const owner = path.join(collection, "alpha");
+      const resource = path.join(collection, "beta");
+      writeSkill(
+        collection,
+        "alpha",
+        reference === "Markdown" ? "[Guide](../beta/guide.md)\n" : "Owner instructions.\n"
+      );
+      writeSkill(collection, "beta", "Supporting skill.\n");
+      write(resource, "guide.md", "Supporting guide.\n");
+      if (reference === "symlink") {
+        symlinkSync("../beta/guide.md", path.join(owner, "resource.md"));
+      }
+      const external = path.join(fixture.sandbox, "external/beta");
+      if (alias) {
+        cpSync(resource, external, { recursive: true });
+        rmSync(resource, { recursive: true });
+        symlinkSync(external, resource, "dir");
+      }
+      await runCliAsync(["skills", "add", owner, "--name", "existing", "--link"], fixture.runtime);
+      const previous = readImportRecipeStore(fixture.registry);
+      const preference = loadGlobalMonkeConfig(fixture.monkeHome);
+      await expect(
+        runCliAsync(
+          [
+            "skills",
+            "adopt",
+            collection,
+            "--skill",
+            ...(selectedOwner ? ["alpha", "beta"] : ["beta"])
+          ],
+          fixture.runtime
+        )
+      ).rejects.toThrow(/alpha: .*would break after removing .*beta/u);
+      expect(read(resource, "guide.md")).toBe("Supporting guide.\n");
+      expect(realpathSync(resource)).toBe(alias ? external : resource);
+      expect(read(owner, "SKILL.md")).toContain(
+        reference === "Markdown" ? "../beta/guide.md" : "Owner instructions."
+      );
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+      expect(loadGlobalMonkeConfig(fixture.monkeHome)).toStrictEqual(preference);
+      expect(realpathSync(path.join(fixture.installed.codex, "alpha"))).toBe(owner);
+      expect(existsSync(path.join(fixture.monkeHome, "skill-sources/dependent-batch"))).toBeFalsy();
+    }
+  );
+
   test("adoption consolidates identical global copies without enabling an unconfigured harness", async () => {
     const fixture = registryFixture();
     const config = loadGlobalMonkeConfig(fixture.monkeHome);
