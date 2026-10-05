@@ -363,13 +363,23 @@ function retainedDependencyFailures(
     return failures;
   }
   const registeredOwners = [
-    ...options.store.recipes
-      .flatMap((recipe) => recipe.skills)
-      .filter((skill) => skill.kind === "skill")
-      .map((skill) => ({
-        entry: importedGuidancePath(options.registryRoot, skill),
-        slug: skill.slug
-      })),
+    ...options.store.recipes.flatMap((recipe) => {
+      const owners = recipe.skills
+        .filter((skill) => skill.kind === "skill")
+        .map((skill) => ({ entry: importedGuidancePath(options.registryRoot, skill), skill }));
+      const source = recipe.localSource?.skillSourceFolder;
+      const backingCopies =
+        source && existsSync(source) && owners.some(({ entry }) => !existsSync(entry))
+          ? discoverSourceSkillCopies(source)
+          : [];
+      return owners.flatMap(({ entry, skill }) =>
+        existsSync(entry)
+          ? [{ entry, slug: skill.slug }]
+          : backingCopies
+              .filter((copy) => path.basename(copy) === skill.selector)
+              .map((copy) => ({ entry: copy, slug: skill.slug }))
+      );
+    }),
     ...plans
       .filter((plan) => plan.registered)
       .map((plan) => ({ entry: plan.destination, slug: plan.slug }))
