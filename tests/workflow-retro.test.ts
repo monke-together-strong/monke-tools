@@ -9,12 +9,12 @@ import {
   decideEligibility,
   resolveSessionMembership,
   runCollect
-} from "../skills/internal/agent-session-retrospective/scripts/lib/collect.ts";
-import type { EligibleSession } from "../skills/internal/agent-session-retrospective/scripts/lib/collect.ts";
+} from "../skills/internal/workflow-retro/scripts/lib/collect.ts";
+import type { EligibleSession } from "../skills/internal/workflow-retro/scripts/lib/collect.ts";
 import {
   parseClaudeSession,
   parseCodexSession
-} from "../skills/internal/agent-session-retrospective/scripts/lib/collectors.ts";
+} from "../skills/internal/workflow-retro/scripts/lib/collectors.ts";
 import {
   buildReportArtifacts,
   parseFixHeader,
@@ -23,18 +23,18 @@ import {
   validatePrAnalysis,
   validateFindings,
   validateSynthesis
-} from "../skills/internal/agent-session-retrospective/scripts/lib/commit.ts";
-import { summarizeOutput } from "../skills/internal/agent-session-retrospective/scripts/lib/normalize.ts";
+} from "../skills/internal/workflow-retro/scripts/lib/commit.ts";
+import { summarizeOutput } from "../skills/internal/workflow-retro/scripts/lib/normalize.ts";
 import {
   prManifestPath,
   readPrManifest,
   runPrAggregate,
   runPrCollect
-} from "../skills/internal/agent-session-retrospective/scripts/lib/pr-analysis.ts";
+} from "../skills/internal/workflow-retro/scripts/lib/pr-analysis.ts";
 import type {
   CommandRunner,
   PrAnalysisManifest
-} from "../skills/internal/agent-session-retrospective/scripts/lib/pr-analysis.ts";
+} from "../skills/internal/workflow-retro/scripts/lib/pr-analysis.ts";
 import {
   cleanRunDir,
   findingsPath,
@@ -46,13 +46,13 @@ import {
   withRetroLock,
   writeReport,
   writeReportArtifact
-} from "../skills/internal/agent-session-retrospective/scripts/lib/store.ts";
+} from "../skills/internal/workflow-retro/scripts/lib/store.ts";
 import type {
   CanonicalSession,
   FrozenSessionRecord,
   RepoBundle,
   RepoFindings
-} from "../skills/internal/agent-session-retrospective/scripts/lib/types.ts";
+} from "../skills/internal/workflow-retro/scripts/lib/types.ts";
 
 let dir: string;
 
@@ -106,6 +106,7 @@ function writeWindow(root: string, runTs = "ts") {
     path.join(runDir, "window.json"),
     JSON.stringify(
       {
+        mode: "periodic",
         since: "2026-05-18T00:00:00.000Z",
         sinceSource: "first-run-default",
         until: "2026-06-01T00:00:00.000Z",
@@ -127,6 +128,7 @@ function writeEmptyPrManifest(root: string, runTs: string) {
     runTs,
     version: 1,
     window: {
+      mode: "periodic",
       since: "2026-05-18T00:00:00.000Z",
       sinceSource: "first-run-default",
       until: "2026-06-01T00:00:00.000Z",
@@ -214,7 +216,7 @@ describe("agent session retrospective", () => {
         {
           payload: {
             call_id: "c1",
-            output: "Process exited with code 1\nboom",
+            output: `HEAD-DIAGNOSTIC\n${"x".repeat(700)}\nProcess exited with code 1\nTAIL-DIAGNOSTIC`,
             type: "function_call_output"
           },
           timestamp: "2026-05-26T10:00:04Z",
@@ -222,7 +224,11 @@ describe("agent session retrospective", () => {
         }
       ]);
 
+      writeFileSync(filePath, `\nmalformed-json\n${readFileSync(filePath, "utf-8")}`);
       const session = parseCodexSession(filePath);
+      if (!session) {
+        throw new Error("expected the Codex transcript to parse");
+      }
       expect(session?.sessionId).toBe("sess-1");
       expect(session?.turns.map((turn) => turn.kind)).toStrictEqual([
         "user",
@@ -234,6 +240,43 @@ describe("agent session retrospective", () => {
       const tool = session?.turns[2];
       expect(tool?.kind === "tool_call" && tool.exitCode).toBe(1);
       expect(tool?.kind === "tool_call" && tool.error).toBe("exit 1");
+      expect(tool?.kind === "tool_call" && tool.outputHeadTail).toContain("HEAD-DIAGNOSTIC");
+      expect(tool?.kind === "tool_call" && tool.outputHeadTail).toContain("TAIL-DIAGNOSTIC");
+      expect(session?.turns.map((turn) => turn.sourceLine)).toStrictEqual([6, 7, 8]);
+      expect(tool?.kind === "tool_call" && tool.outputSourceLine).toBe(9);
+      const [bundle] = buildBundles(
+        "raw-source",
+        [
+          {
+            firstNewTurnIndex: 0,
+            primaryRepo: dir,
+            priorFindingCount: 0,
+            secondaryRepos: [],
+            session
+          }
+        ],
+        []
+      );
+      expect(bundle?.sessions[0]?.sourcePath).toBe(filePath);
+      if (!bundle) {
+        throw new Error("expected a collected bundle");
+      }
+      const validated = validateFindings(
+        {
+          durableFixProposals: [],
+          frictionEpisodes: [
+            { body: "The command failed", citedTurnRefs: ["t2"], id: "e1", sessionId: "sess-1" }
+          ],
+          repeatedAsks: [],
+          repoKey: dir
+        },
+        bundle
+      );
+      const { sessionSources } = buildReportArtifacts("raw-source", "", [{ bundle, validated }]);
+      expect(sessionSources).toContain(`[raw line 8](<${filePath}:8>)`);
+      expect(sessionSources).toContain(`[raw line 9](<${filePath}:9>)`);
+      expect(sessionSources).toContain(`SHA-256: \`${session.contentHash}\``);
+      expect(readFileSync(filePath, "utf-8").split("\n")[8]).toContain("x".repeat(700));
     });
 
     test("drops a tool result that appears before its matching call", () => {
@@ -417,6 +460,8 @@ describe("agent session retrospective", () => {
       const tool = parseClaudeSession(filePath)?.turns[0];
       expect(tool?.kind).toBe("tool_call");
       expect(tool?.kind === "tool_call" && tool.outputHeadTail).toBe("already finished");
+      expect(tool?.sourceLine).toBe(2);
+      expect(tool?.kind === "tool_call" && tool.outputSourceLine).toBe(1);
     });
 
     test("keeps metadata and activity from unknown record kinds", () => {
@@ -522,7 +567,13 @@ describe("agent session retrospective", () => {
     ]);
     const claudeSession = parseClaudeSession(claudeFile);
 
-    expect(claudeSession?.turns).toStrictEqual(codexSession?.turns);
+    const comparableTurns = (session: CanonicalSession | null) =>
+      session?.turns.map((turn) => ({
+        ...turn,
+        sourceLine: undefined,
+        ...(turn.kind === "tool_call" ? { outputSourceLine: undefined } : {})
+      }));
+    expect(comparableTurns(claudeSession)).toStrictEqual(comparableTurns(codexSession));
     expect(claudeSession?.rawUserMessages).toStrictEqual(codexSession?.rawUserMessages);
   });
 
@@ -632,6 +683,49 @@ describe("agent session retrospective", () => {
   });
 
   describe("runCollect window", () => {
+    test("collects a deferred transcript after a completed report advances the window", () => {
+      const root = path.join(dir, "store");
+      const codexRoot = path.join(dir, "codex");
+      mkdirSync(path.join(codexRoot, "sessions"), { recursive: true });
+      writeFileSync(
+        path.join(codexRoot, "sessions", "deferred.jsonl"),
+        [
+          {
+            payload: { cwd: dir, id: "deferred" },
+            timestamp: "2026-06-01T11:50:00Z",
+            type: "session_meta"
+          },
+          {
+            payload: { message: "A recent request", type: "user_message" },
+            timestamp: "2026-06-01T11:50:00Z",
+            type: "event_msg"
+          }
+        ]
+          .map((record) => JSON.stringify(record))
+          .join("\n")
+      );
+      const options = { claudeRoot: path.join(dir, "no-claude"), codexRoot, retroRoot: root };
+      const first = runCollect({
+        ...options,
+        nowMs: Date.parse("2026-06-01T12:00:00Z"),
+        runTs: "first"
+      });
+      expect(first.skipped).toStrictEqual({ "not-idle": 1 });
+      writeReport(
+        root,
+        "2026-06-01T12-00-00-000Z",
+        `Window: ${first.window.since} to ${first.window.until}\n`
+      );
+      const next = runCollect({
+        ...options,
+        nowMs: Date.parse("2026-06-01T13:00:00Z"),
+        runTs: "next"
+      });
+      expect(next.bundles).toHaveLength(1);
+      const repoHash = next.bundles[0]?.repoHash ?? "";
+      expect(readBundle(root, "next", repoHash).sessions[0]?.sessionId).toBe("deferred");
+    });
+
     test("resolves the first-run default window and writes it to the run directory", () => {
       const root = path.join(dir, "store");
       const result = runCollect({
@@ -644,6 +738,7 @@ describe("agent session retrospective", () => {
       });
 
       expect(result.window).toStrictEqual({
+        mode: "periodic",
         since: "2026-05-18T00:00:00.000Z",
         sinceSource: "first-run-default",
         until: "2026-06-01T00:00:00.000Z",
@@ -679,6 +774,7 @@ describe("agent session retrospective", () => {
       });
 
       expect(result.window).toStrictEqual({
+        mode: "periodic",
         since: "2026-05-20T12:00:00.000Z",
         sinceSource: "previous-report",
         until: "2026-06-01T00:00:00.000Z",
@@ -730,7 +826,7 @@ describe("agent session retrospective", () => {
       expect(result.dropped.episodes).toBe(1);
     });
 
-    test("filters unknown session ids out of repeated-ask clusters", () => {
+    test("reports unknown session ids in repeated-ask clusters for repair", () => {
       const bundle = bundleWith(["t0"]);
       const findings: RepoFindings = {
         durableFixProposals: [],
@@ -740,6 +836,7 @@ describe("agent session retrospective", () => {
       };
       const result = validateFindings(findings, bundle);
       expect(result.repeatedAsks[0]?.exampleSessionIds).toStrictEqual(["s1"]);
+      expect(result.errors).toHaveLength(1);
     });
   });
 
@@ -796,25 +893,12 @@ describe("agent session retrospective", () => {
         "",
         "#### A1 — Reviews can approve the wrong tree",
         "Problem: Review approval can describe different code than the delivered commit.",
-        "Impact: Unreviewed changes can ship despite a passing verdict.",
-        "Cause: The workflows do not share an immutable pre-commit snapshot.",
         "Proposed fix: Review one fingerprinted Git tree and verify the final commit matches it.",
         "",
-        "Next step: fix",
-        "Why now: Observed delivery risk; effort unknown.",
         "Done when: Delivered code matches reviewed code.",
-        "Uncertainty: Effectiveness is unmeasured.",
-        "Change since last report: new",
-        "Target: agent-skill",
-        "Standards disposition: not-a-standard",
-        "Workflow disposition: update review workflow",
         "Confidence: high",
         "Resolution: unresolved",
-        "Checked-at: 2026-08-10T00:00:00Z",
-        "Checked-against: current skill sources",
-        "Current-state evidence: Each workflow still identifies candidates differently.",
-        "Remaining gap: No shared snapshot or final identity check exists.",
-        "Session evidence: repo e1",
+        "Evidence: repo e1",
         "",
         "### Remaining Active Actions",
         "",
@@ -897,6 +981,203 @@ describe("agent session retrospective", () => {
   });
 
   describe(buildReportArtifacts, () => {
+    test("keeps rejected findings repairable and accepts direct evidence without friction", () => {
+      const root = path.join(dir, "store");
+      const runTs = "repair";
+      writeWindow(root, runTs);
+      writeEmptyPrManifest(root, runTs);
+      const runDir = path.join(root, "runs", runTs);
+      writeFileSync(
+        path.join(runDir, "pr-analysis.md"),
+        "## Recurring Corrective Patterns\n\n_None._"
+      );
+      const bundle = bundleWith(["t0", "t1"]);
+      const [session] = bundle.sessions;
+      if (!session) {
+        throw new Error("Expected fixture session");
+      }
+      session.turns[0] = { kind: "user", ref: "t0", text: "t0\nSECOND-LINE-EVIDENCE" };
+      session.turns[1] = {
+        exitCode: 0,
+        inputSummary: "guard rules.md",
+        kind: "tool_call",
+        name: "rg",
+        outputHeadTail: "DECISIVE-DIAGNOSTIC\nTAIL-DIAGNOSTIC",
+        ref: "t1"
+      };
+      bundle.runTs = runTs;
+      writeFileSync(path.join(runDir, "rh.json"), JSON.stringify(bundle));
+      const repairedFindingsPath = path.join(runDir, "rh.findings.json");
+      writeFileSync(
+        repairedFindingsPath,
+        JSON.stringify({
+          durableFixProposals: [{ body: "A dependent fix", citedEpisodeRefs: ["e1"] }],
+          frictionEpisodes: [
+            { body: "An invalid reference", citedTurnRefs: ["t999"], id: "e1", sessionId: "s1" }
+          ],
+          repoKey: bundle.repoKey
+        })
+      );
+      const synthesisPath = path.join(dir, "synthesis.md");
+      writeFileSync(
+        synthesisPath,
+        [
+          "### Recommended Decisions",
+          "_None._",
+          "### Remaining Active Actions",
+          "_None._",
+          "### Resolved or Superseded",
+          "_None._",
+          "### Supporting Evidence",
+          "_None._"
+        ].join("\n\n")
+      );
+      const options = { nowIso: "2026-06-01T13:00:00Z", retroRoot: root, runTs, synthesisPath };
+      expect(() => runCommit(options)).toThrow("repair findings");
+      expect(loadFrozenSession(root, "codex", "s1")).toBeNull();
+      expect(existsSync(repairedFindingsPath)).toBeTruthy();
+      const rulesPath = path.join(dir, "rules.md");
+      writeFileSync(rulesPath, "A documented guard is missing");
+      writeFileSync(
+        repairedFindingsPath,
+        JSON.stringify({
+          durableFixProposals: [
+            {
+              body: "Target: hook\nConfidence: high\nTranscript-backed improvement",
+              citedTurns: [{ citedTurnRefs: ["t0", "t1"], sessionId: "s1" }]
+            },
+            {
+              body: "Target: rules\nConfidence: high\nRepository-backed improvement",
+              repositoryEvidence: [
+                {
+                  excerpt: "A documented guard is missing",
+                  path: rulesPath,
+                  revision: "working tree"
+                }
+              ]
+            }
+          ],
+          repoKey: bundle.repoKey
+        })
+      );
+      const result = runCommit(options);
+      const sources = readFileSync(result.sourcePaths.session, "utf-8");
+      expect(sources).toContain("Transcript-backed improvement");
+      expect(sources).toContain("codex/s1 t0: **user:** t0");
+      expect(sources).toContain("SECOND-LINE-EVIDENCE");
+      expect(sources).toContain("DECISIVE-DIAGNOSTIC");
+      expect(sources).toContain("TAIL-DIAGNOSTIC");
+      expect(sources).toContain("[exit 0]");
+      expect(sources).toContain("#### Proposal rh-1");
+      expect(sources).toContain("Repository-backed improvement");
+      expect(sources).toContain("A documented guard is missing");
+      expect(loadFrozenSession(root, "codex", "s1")?.lastTurnIndex).toBe(2);
+      expect(existsSync(runDir)).toBeFalsy();
+    });
+
+    test("focused collection reanalyzes one transcript without PRs or advancing periodic state", () => {
+      const root = path.join(dir, "store");
+      const codexRoot = path.join(dir, "codex");
+      mkdirSync(path.join(codexRoot, "sessions"), { recursive: true });
+      for (const sessionId of ["selected", "other"]) {
+        writeFileSync(
+          path.join(codexRoot, "sessions", `${sessionId}.jsonl`),
+          [
+            {
+              payload: { cwd: dir, id: sessionId },
+              timestamp: "2026-01-01T11:50:00Z",
+              type: "session_meta"
+            },
+            {
+              payload: { message: "Review this request", type: "user_message" },
+              timestamp: "2026-01-01T11:50:00Z",
+              type: "event_msg"
+            }
+          ]
+            .map((record) => JSON.stringify(record))
+            .join("\n")
+        );
+      }
+      const selectedPath = path.join(codexRoot, "sessions", "selected.jsonl");
+      const session = parseCodexSession(selectedPath);
+      if (!session) {
+        throw new Error("Expected fixture transcript");
+      }
+      const prior: FrozenSessionRecord = {
+        agent: "codex",
+        analyzedAt: "2026-06-01T11:55:00Z",
+        contentHash: session.contentHash,
+        friction: [],
+        lastTurnIndex: 1,
+        rawUserMessages: [],
+        repoKey: dir,
+        secondary: [],
+        sessionId: "selected",
+        version: 1
+      };
+      saveFrozenSession(root, prior);
+      writeReport(
+        root,
+        "2026-06-01T12-00-00-000Z",
+        "Window: 2026-05-18T00:00:00Z to 2026-06-01T12:00:00Z\n"
+      );
+      const options = { claudeRoot: path.join(dir, "no-claude"), codexRoot, retroRoot: root };
+      const focused = runCollect({
+        ...options,
+        nowMs: Date.parse("2026-06-01T12:05:00Z"),
+        runTs: "2026-06-01T12-05-00-000Z",
+        sessionId: "selected"
+      });
+      expect(focused.bundles).toHaveLength(1);
+      expect(focused.window.since).toBe("2026-01-01T11:50:00.000Z");
+      expect(focused.window.until).toBe("2026-01-01T11:50:00.000Z");
+      const bundle = readBundle(root, focused.runTs, focused.bundles[0]?.repoHash ?? "");
+      expect(bundle.sessions.map((entry) => entry.sessionId)).toStrictEqual(["selected"]);
+      expect(bundle.sessions[0]?.firstNewTurnIndex).toBe(0);
+      writeFileSync(
+        findingsPath(root, focused.runTs, bundle.repoHash),
+        JSON.stringify({ repoKey: bundle.repoKey })
+      );
+      const synthesisPath = path.join(dir, "focused-synthesis.md");
+      writeFileSync(
+        synthesisPath,
+        [
+          "### Recommended Decisions",
+          "_None._",
+          "### Remaining Active Actions",
+          "_None._",
+          "### Resolved or Superseded",
+          "_None._",
+          "### Supporting Evidence",
+          "_None._"
+        ].join("\n\n")
+      );
+      const result = runCommit({
+        nowIso: "2026-06-01T12:05:00Z",
+        retroRoot: root,
+        runTs: focused.runTs,
+        synthesisPath
+      });
+      expect(result.prAnalysis.present).toBeFalsy();
+      expect(readFileSync(result.reportPath, "utf-8")).toContain("Mode: focused");
+      expect(readFileSync(result.reportPath, "utf-8")).toContain("PR analysis was not requested");
+      expect(loadFrozenSession(root, "codex", "selected")).toStrictEqual(prior);
+      const periodic = runCollect({
+        ...options,
+        nowMs: Date.parse("2026-06-01T14:00:00Z"),
+        runTs: "periodic"
+      });
+      expect(periodic.window.since).toBe("2026-06-01T12:00:00.000Z");
+      expect(() =>
+        runCollect({
+          ...options,
+          nowMs: Date.parse("2026-06-01T14:00:00Z"),
+          runTs: "unknown",
+          sessionId: "missing"
+        })
+      ).toThrow("missing");
+    });
+
     test("keeps the main report problem-focused and moves evidence to session sources", () => {
       const bundle = bundleWith(["t0"]);
       const synthesis = [
@@ -927,6 +1208,7 @@ describe("agent session retrospective", () => {
               episodes: [
                 { body: "episode body", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" }
               ],
+              errors: [],
               fixes: [
                 { body: "Target: hook\nConfidence: high\nfix body", citedEpisodeRefs: ["e1"] }
               ],
@@ -1021,25 +1303,12 @@ describe("agent session retrospective", () => {
           "",
           "#### A1 — A global problem",
           "Problem: The global workflow has a problem.",
-          "Impact: The problem affects delivery.",
-          "Cause: The workflow lacks a durable guard.",
           "Proposed fix: Add the durable guard.",
           "",
-          "Next step: fix",
-          "Why now: Observed delivery risk; effort unknown.",
           "Done when: The guard prevents the observed failure.",
-          "Uncertainty: Effectiveness is unmeasured.",
-          "Change since last report: new",
-          "Target: preflight",
-          "Standards disposition: not-a-standard",
-          "Workflow disposition: no-skill",
           "Confidence: medium",
           "Resolution: unresolved",
-          "Checked-at: 2026-06-01T00:00:00.000Z",
-          "Checked-against: current workflow",
-          "Current-state evidence: The guard is absent.",
-          "Remaining gap: The workflow remains unguarded.",
-          "Session evidence: repo e1",
+          "Evidence: repo e1",
           "",
           "### Remaining Active Actions",
           "",
@@ -1173,6 +1442,7 @@ describe("agent session retrospective", () => {
               { body: "a", citedTurnRefs: ["t0"], id: "e1", sessionId: "s1" },
               { body: "b", citedTurnRefs: ["t1"], id: "e2", sessionId: "s1" }
             ],
+            errors: [],
             fixes: [
               {
                 body: "Target: skill\nConfidence: medium\nmerge me",
@@ -1401,7 +1671,7 @@ describe("agent session retrospective", () => {
           "## Post-Opening Delta",
           "Final head `bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb` added verification.",
           "## Corrective Patterns",
-          "- Added missing verification before merge.",
+          "- Verification was absent from the opening implementation.",
           "## Ignored Feature Scope",
           "_None._",
           "## Commit Message Reference",
@@ -1426,6 +1696,22 @@ describe("agent session retrospective", () => {
         "utf-8"
       );
 
+      const patternsPath = path.join(root, "runs", "ts", "pr-analysis", "patterns.json");
+      writeFileSync(
+        patternsPath,
+        JSON.stringify({
+          patterns: [
+            {
+              prs: [
+                "monke-together-strong/alpha#7",
+                "monke-together-strong/alpha#10",
+                "monke-together-strong/alpha#7"
+              ],
+              summary: "Added missing verification before merge."
+            }
+          ]
+        })
+      );
       const aggregate = runPrAggregate({ retroRoot: root, runTs: "ts" });
       const report = readFileSync(aggregate.path, "utf-8");
       expect(report).toContain("## Recurring Corrective Patterns");
@@ -1434,6 +1720,14 @@ describe("agent session retrospective", () => {
       );
       expect(report).not.toContain("post-opening delta unavailable");
       expect(report).toContain("### monke-together-strong/alpha#7");
+      writeFileSync(
+        patternsPath,
+        JSON.stringify({
+          patterns: [{ prs: ["monke-together-strong/alpha#99"], summary: "Unsupported pattern" }]
+        })
+      );
+      expect(() => runPrAggregate({ retroRoot: root, runTs: "ts" })).toThrow("alpha#99");
+      expect(readFileSync(aggregate.path, "utf-8")).toBe(report);
     });
 
     test("manifest-backed PR validation checks headings, refs, and cited SHAs", () => {
@@ -1445,6 +1739,7 @@ describe("agent session retrospective", () => {
         runTs: "ts",
         version: 1,
         window: {
+          mode: "periodic",
           since: "2026-05-18T00:00:00.000Z",
           sinceSource: "first-run-default",
           until: "2026-06-01T00:00:00.000Z",
@@ -1511,6 +1806,7 @@ describe("agent session retrospective", () => {
         runTs: "ts",
         version: 1,
         window: {
+          mode: "periodic",
           since: "2026-05-18T00:00:00.000Z",
           sinceSource: "first-run-default",
           until: "2026-06-01T00:00:00.000Z",
@@ -1673,7 +1969,7 @@ describe("agent session retrospective", () => {
   describe("retrospective lock", () => {
     const storeScript = path.resolve(
       import.meta.dirname,
-      "../skills/internal/agent-session-retrospective/scripts/lib/store.ts"
+      "../skills/internal/workflow-retro/scripts/lib/store.ts"
     );
 
     test("releases the lock when an operation throws", () => {
@@ -1758,7 +2054,7 @@ describe("agent session retrospective", () => {
   describe("retrospective CLI parsing", () => {
     const cliScript = path.resolve(
       import.meta.dirname,
-      "../skills/internal/agent-session-retrospective/scripts/run-retrospective.ts"
+      "../skills/internal/workflow-retro/scripts/run-retrospective.ts"
     );
 
     test("rejects an empty equals-form run identifier while preserving unrelated evidence", () => {

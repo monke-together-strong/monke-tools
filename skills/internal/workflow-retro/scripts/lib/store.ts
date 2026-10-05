@@ -53,6 +53,25 @@ export function saveFrozenSession(root: string, record: FrozenSessionRecord) {
   const filePath = sessionPath(root, record.agent, record.sessionId);
   mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, stringify(record), "utf-8");
+  const deferred = loadDeferredSessionHashes(root);
+  if (deferred.delete(sessionHashKey(record.agent, record.sessionId))) {
+    saveDeferredSessionHashes(root, deferred);
+  }
+}
+
+/** Sessions that were in the collection window but still active. */
+export function loadDeferredSessionHashes(root: string) {
+  const filePath = path.join(root, "deferred-sessions.json");
+  return new Set(existsSync(filePath) ? parseJsonFile(filePath, z.array(z.string())) : []);
+}
+
+export function saveDeferredSessionHashes(root: string, hashes: Set<string>) {
+  mkdirSync(root, { recursive: true });
+  writeFileSync(
+    path.join(root, "deferred-sessions.json"),
+    JSON.stringify([...hashes].toSorted(), null, 2),
+    "utf-8"
+  );
 }
 
 export function listFrozenSessions(root: string) {

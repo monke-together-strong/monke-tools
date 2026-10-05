@@ -103,9 +103,19 @@ export interface RunPrCollectOptions {
 
 export interface RunPrAggregateOptions {
   home?: string;
+  patternsPath?: string;
   retroRoot?: string;
   runTs: string;
 }
+
+const PrPatternsSchema = strictObject({
+  patterns: array(
+    strictObject({
+      prs: array(string().trim().min(1)).min(1),
+      summary: string().trim().min(1)
+    })
+  )
+});
 
 const GhRepoSchema = object({
   isArchived: boolean().optional(),
@@ -155,7 +165,6 @@ const DEFAULT_ORG = "monke-together-strong";
 const PR_LIST_LIMIT = 100;
 const REPOSITORY_LIST_LIMIT = 1000;
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
-const CORRECTIVE_PATTERN_LIMIT = 8;
 const WORK_ITEM_ID_HASH_LENGTH = 12;
 const ISO_DATE_LENGTH = 10;
 const MAX_DELTA_LENGTH = 100_000;
@@ -394,22 +403,27 @@ export function runPrAggregate(options: RunPrAggregateOptions) {
     body: existsSync(item.analysisPath) ? readFileSync(item.analysisPath, "utf-8").trim() : "",
     item
   }));
-  const groupedPatterns = groupCorrectivePatterns(analyses);
-  const recurringPatterns = groupedPatterns.filter((pattern) => pattern.items.length > 1);
+  const patternsPath =
+    options.patternsPath ?? path.join(runDir(root, options.runTs), "pr-analysis", "patterns.json");
+  const analyzedPrs = new Set(
+    analyses.filter(({ body }) => body).map(({ item }) => formatPrLabel(item))
+  );
+  const groupedPatterns = readPatternGroups(patternsPath, analyzedPrs);
+  const recurringPatterns = groupedPatterns.filter((pattern) => pattern.prs.length > 1);
   if (recurringPatterns.length === 0) {
     out.push("_No recurring corrective-change patterns were extracted from per-PR analyses._");
   } else {
     for (const pattern of recurringPatterns) {
-      out.push(`- ${pattern.label} (${pattern.items.length} PRs: ${pattern.items.join(", ")})`);
+      out.push(`- ${pattern.summary} (${pattern.prs.length} PRs: ${pattern.prs.join(", ")})`);
     }
   }
   out.push("", "## Observed One-Off Corrective Patterns", "");
-  const oneOffPatterns = groupedPatterns.filter((pattern) => pattern.items.length === 1);
+  const oneOffPatterns = groupedPatterns.filter((pattern) => pattern.prs.length === 1);
   if (oneOffPatterns.length === 0) {
     out.push("_No one-off corrective-change patterns were extracted._");
   } else {
     for (const pattern of oneOffPatterns) {
-      out.push(`- \`${pattern.items[0]}\` — ${pattern.label}`);
+      out.push(`- \`${pattern.prs[0]}\` — ${pattern.summary}`);
     }
   }
   out.push("");
@@ -704,48 +718,25 @@ function prInWindow(pr: GhPr, window: RetrospectiveWindow) {
   );
 }
 
-function extractCorrectivePatternLines(body: string) {
-  const section = extractSection(body, "Corrective Patterns");
-  if (!isNonEmptyString(section)) {
-    return [];
-  }
-  return section
-    .split("\n")
-    .map((line) => line.trim().replace(/^[-*]\s+/u, ""))
-    .filter(Boolean)
-    .filter((line) => !line.startsWith("##"))
-    .slice(0, CORRECTIVE_PATTERN_LIMIT);
-}
-
-function groupCorrectivePatterns(analyses: { body: string; item: PrWorkItemSummary }[]) {
-  const byPattern = new Map<string, { items: string[]; label: string }>();
-  for (const { body, item } of analyses) {
-    if (!body) {
-      continue;
+function readPatternGroups(filePath: string, analyzedPrs: Set<string>) {
+  if (!existsSync(filePath)) {
+    if (analyzedPrs.size === 0) {
+      return [];
     }
-    for (const line of extractCorrectivePatternLines(body)) {
-      const key = normalizePattern(line);
-      if (!key) {
-        continue;
+    throw new Error(`Write semantic PR pattern groups to ${filePath} before aggregation`);
+  }
+  const { patterns } = parseJson(readFileSync(filePath, "utf-8"), PrPatternsSchema);
+  return patterns.map((pattern) => {
+    const prs = [...new Set(pattern.prs)];
+    for (const pr of prs) {
+      if (!analyzedPrs.has(pr)) {
+        throw new Error(
+          `Pattern ${JSON.stringify(pattern.summary)} cites PR ${pr} without an analysis in this run`
+        );
       }
-      const existing = byPattern.get(key) ?? { items: [], label: line };
-      existing.items.push(`${item.repo}#${item.number}`);
-      byPattern.set(key, existing);
     }
-  }
-  return [...byPattern.values()].toSorted(
-    (a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label)
-  );
-}
-
-function normalizePattern(value: string) {
-  return value
-    .toLowerCase()
-    .replaceAll(/`[^`]+`/gu, "")
-    .replaceAll(/#[0-9]+/gu, "")
-    .replaceAll(/[0-9a-f]{7,40}/gu, "")
-    .replaceAll(/[^a-z0-9]+/gu, " ")
-    .trim();
+    return { ...pattern, prs };
+  });
 }
 
 function dedupeGaps(gaps: PrAnalysisGap[]) {
@@ -780,7 +771,7 @@ export function extractSection(markdown: string, heading: string, level = 2) {
   return (next === -1 ? rest : rest.slice(0, next)).trim();
 }
 
-function formatPrLabel(gap: PrAnalysisGap) {
+function formatPrLabel(gap: Pick<PrAnalysisGap, "repo" | "number">) {
   return gap.number === undefined ? gap.repo : `${gap.repo}#${gap.number}`;
 }
 

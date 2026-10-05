@@ -19,13 +19,19 @@ The main report has a report title, a `Window:` line showing the resolved retros
    Resolved or Superseded, and Supporting Evidence. Each action has one home; detailed audits are
    disclosed beneath the decisions.
 2. **PR Repeated Corrective Patterns** — only recurring corrective-change patterns from the
-   required PR analysis lane, plus a short pointer when explicit PR gaps exist.
+   PR analysis lane, plus a short pointer when explicit PR gaps exist. Focused runs may instead
+   state that PR analysis was not requested.
 
 The source files hold the bulky evidence:
 
 - **Session sources** — per-repo proposals, repeated asks, inline cited-turn evidence, and the audit
   appendix of frozen friction episodes. Link an episode as
   `<runTs>-session-sources.md#evidence-<repoHash>-<episodeId>` using its bundle identifiers.
+  Proposals with direct evidence have generated headings linked as
+  `<runTs>-session-sources.md#proposal-<repoHash>-<1-based-proposal-number>`.
+  Cited transcript turns retain their agent/session identity and tool diagnostics.
+  Raw-source links point to the original JSONL lines, including separate tool-result lines. A
+  transcript source index records paths and collection hashes so clipped evidence can be recovered.
 - **PR sources** — the full PR trajectory aggregate, including one-off patterns, explicit gaps, and
   per-PR analyses.
 
@@ -67,7 +73,9 @@ Keep the section order above stable so cross-referencing prior report sets stays
   `repoKey`, `secondary[]`, `friction[]`, `rawUserMessages[]`.
 - `repos/<hash(repoKey)>.yml` — repo meta (first seen, last analyzed).
 - `runs/<runTs>/window.json` — resolved retrospective window with `since`, `until`, `sinceSource`,
-  and `untilSource` (transient; embedded in the final report).
+  `untilSource`, and `mode` (`periodic` or `focused`; transient; embedded in the final report).
+- `deferred-sessions.json` — identities of recently active transcripts awaiting periodic analysis;
+  removed from this set only after successful freezing.
 - `runs/<runTs>/<repoHash>.json` — per-repo bundle (transient; removed by commit).
 - `runs/<runTs>/<repoHash>.findings.json` — subagent findings (transient; removed by commit).
 - `runs/<runTs>/pr-analysis/manifest.json` — PR lane manifest with expected PRs, work-item paths,
@@ -75,6 +83,9 @@ Keep the section order above stable so cross-referencing prior report sets stays
 - `runs/<runTs>/pr-analysis/prs/*.json` — one per-PR work item handed to a subagent.
 - `runs/<runTs>/pr-analysis/prs/*.analysis.md` — one per-PR Markdown analysis written by a
   subagent.
+- `runs/<runTs>/pr-analysis/patterns.json` — semantic groups authored by the host from the per-PR
+  observations, each with a summary and cited PR identities. Aggregation validates identities and
+  distinct recurrence counts; the host owns the grouping judgment.
 - `runs/<runTs>/pr-analysis.md` — aggregate PR analysis report for the trajectory window
   (transient; embedded or summarized in the final report; content contract in
   [pr-analysis.md](pr-analysis.md)).

@@ -1,29 +1,29 @@
 ---
-name: agent-session-retrospective
-description: Review agent sessions and merged PR trajectories for recurring friction, standards gaps, and durable fixes.
+name: workflow-retro
+description: Review agent transcripts and PR history for workflow improvements, with cited evidence, current-state checks, and persistent reports.
 disable-model-invocation: true
 ---
 
-# Agent session retrospective
+# Workflow retrospective
 
-Run a report-only audit of two evidence lanes:
+Run a report-only retrospective in one of two modes:
 
-- **Session evidence** — friction episodes plus repeated user asks about how code should be written
-  or changed.
+- **Periodic** — audit eligible transcript deltas and merged PR trajectories across projects.
+- **Focused** — review one full transcript selected by native session id; PR analysis is optional.
+  Focused reports leave periodic transcript cursors and the periodic time window unchanged.
+
+The evidence lanes are:
+
+- **Session evidence** — friction episodes, direct transcript or repository observations, and
+  repeated user asks about how code should be written or changed.
 - **PR trajectories** — corrective changes between a PR's opening snapshot and merged outcome.
 
 Group recurring evidence into **durable fixes**, audit whether each problem still exists, and rank
 active candidates using the synthesis contract’s prioritization. Keep session actions and PR
-corrective patterns in separate report lanes. Complete both lanes before synthesis; a PR lane with explicit gaps is
-complete, while a transcript-only result is degraded and must name the missing PR evidence.
+corrective patterns in separate report lanes. Periodic runs complete both lanes before synthesis;
+a PR lane with explicit gaps is complete. Focused runs may omit the PR lane intentionally.
 Let the verified gap, rather than its landing surface, decide the fix: code, tooling, setup, and
 infrastructure are first-class alongside skill and workflow changes.
-
-A repeated code-shape, design, or quality ask is evidence even when no task failed and the agent
-hit no blocker. Treat it as a standards candidate, then check both the Team coding baseline and the
-repo's coding standards. Propose a Team-baseline change when the rule is generally applicable
-across repos, and a repo-standard change when it depends on that repo's stack, architecture, or
-domain. Generality decides scope; recurrence supplies evidence.
 
 Keep the run report-only: inspect, verify, and propose. The human owns every resulting change.
 
@@ -41,15 +41,20 @@ that boundary remains eligible. Keep collection unchanged so the frozen evidence
 
 ```bash
 bun scripts/run-retrospective.ts collect [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--idle-minutes N]
+bun scripts/run-retrospective.ts collect --session <native-session-id>
 ```
 
 For a normal run, omit `--since` and `--until`; the collector resumes after the newest committed
 report, or uses the previous two weeks on a first run. Reserve explicit bounds for backfills and
-replays.
+replays. Use `--session` for a focused replay, including an already analyzed or active transcript.
+The collector reports an unknown or ambiguous session id instead of broadening the selection.
+Focused runs default to the selected transcript's start and last activity for optional PR context;
+explicit date bounds change that PR window while the full transcript remains the analysis input.
 
-Collect freezes eligible transcript deltas and emits `runTs`, the resolved window, and one bundle
+Collect snapshots eligible transcript evidence and emits `runTs`, the resolved window and mode, and one bundle
 path per source checkout. When no bundles exist, continue with the organization-scoped PR lane;
-stop with "nothing eligible" only when neither lane has evidence available.
+stop with "nothing eligible" only when neither lane has evidence available. Recently active
+transcripts are deferred until idle; their identities survive an advancing periodic window.
 
 **Done when** the emitted values, including an empty bundle list, are captured and
 `runs/<runTs>/window.json` exists.
@@ -66,11 +71,12 @@ captured accepted entries in every prompt; the contract defines how workers appl
 
 ## 3. Analyze PR trajectories
 
-Load [the PR analysis contract](references/pr-analysis.md) and execute it for the same `runTs` and
+For periodic runs, load [the PR analysis contract](references/pr-analysis.md) and execute it for the same `runTs` and
 resolved window. Follow its scope, evidence model, fan-out, aggregation, and gap rules exactly.
+For focused runs, execute this lane only when PR context is requested.
 
 **Done when** `runs/<runTs>/pr-analysis.md` exists and every in-scope merged PR is represented by
-an analysis or an explicit gap, as defined by the contract.
+an analysis or an explicit gap, as defined by the contract, or the focused run intentionally omits PR analysis.
 
 ## 4. Group recurrence
 
@@ -81,7 +87,7 @@ and the frozen session evidence remains unchanged.
 
 Read the remaining findings and group transcript-derived proposals and repeated asks into
 run-local candidates with stable ids (`A1`, `A2`, …). Read `runs/<runTs>/pr-analysis.md` for
-context, while keeping PR-only observations out of Session Actions.
+context when that file exists, while keeping PR-only observations out of Session Actions.
 
 Treat every repeated ask about code shape, design, quality, or working method as a standards
 candidate even when it has no associated friction episode. Correlate these candidates across repo
@@ -124,7 +130,7 @@ contract’s workflow disposition. Write the contract's decision-first, four-sec
 Markdown shape to a synthesis file in the run directory.
 
 **Done when** every candidate appears exactly once in an active or resolved section, every active
-candidate has co-located standards and workflow dispositions, a next step, and a closure condition. Every
+candidate has a concrete fix, a closure condition, evidence, confidence, and resolution. Every
 recommendation retains session and resolution evidence.
 
 ## 7. Commit the report
@@ -135,16 +141,17 @@ Refresh mutable current-state evidence for active candidates, then run:
 bun scripts/run-retrospective.ts commit --run-ts <runTs> --synthesis <synthesisFile>
 ```
 
-Commit validates citations and required report mechanics, freezes accepted session friction, and
-writes the Markdown, HTML, and supporting sources.
+Commit validates citations and required report mechanics and writes the Markdown, HTML, and
+supporting sources. Periodic commits also freeze accepted session friction and advance transcript
+cursors. Invalid findings block commit with repair instructions; fix the findings file and retry
+the same run. Its evidence and cursors stay intact until validation succeeds.
 
-**Done when** the printed report path exists and the dropped citation counts have been surfaced; a
-high count means subagents cited evidence absent from their bundles.
+**Done when** validation succeeds and the printed report path exists.
 
 ## 8. Hand back decisions
 
 Inspect the generated HTML and Markdown,
-and present the recommended decisions, coverage gaps, and dropped citation counts.
+and present the recommended decisions and coverage gaps.
 Each proposal must remain named, evidenced, current-state-checked, and confidence-tagged so the
 human can decide what to implement.
 

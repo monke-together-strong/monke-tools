@@ -45,28 +45,16 @@ never both. There is no minimum quota; write `_No recommended decisions._` when 
 Put other unresolved, partially resolved, or unknown candidates here using the same action shape.
 Write `_No remaining active actions._` when empty.
 
-Each active entry starts with `#### <id> — <plain-language problem>` and these fields in order:
+Each active entry starts with `#### <id> — <plain-language problem>` and `Problem:`. Require only
+these six fields; the other five may appear in any order:
 
 ```text
-Problem: <observable mismatch>
-Impact: <observed cost or explicitly identified risk>
-Cause: <supported mechanism; identify a hypothesis as such>
-Proposed fix: <concrete remaining change or investigation>
-Next step: <fix | finish landing | investigate | watch>
-Why now: <priority rationale, independent recurrence, benefit and effort where known>
+Problem: <observable mismatch and its consequence>
+Proposed fix: <concrete remaining change or investigation and its owner>
 Done when: <one observable closure condition>
-Uncertainty: <what remains unestablished, including confidence in the proposed remedy>
-Change since last report: <new | continuing | regressed; new incidents and prior finding link>
-Target: <actual owner and landing surface; existing issue or PR when available>
-Standards disposition: <add-team-baseline | add-repo-standard | update-team-baseline | update-repo-standard | already-covered | not-a-standard; short reason>
-Workflow disposition: <create-skill | create-workflow | update | combine | no-skill; named owner and short reason>
-Confidence: <high | medium | low; state which claim this assesses>
+Evidence: <source links plus current-state inspection, revision or installed surface, and time checked>
+Confidence: <high | medium | low; identify the assessed claim and remaining uncertainty>
 Resolution: <unresolved | partially-resolved | unknown>
-Checked-at: <timestamp>
-Checked-against: <paths and refs, issues, PRs, or commands>
-Current-state evidence: <what the inspection proves>
-Remaining gap: <what remains>
-Session evidence: <direct source links and decisive excerpt or refs>
 ```
 
 Keep the problem understandable without metadata. Give each field its own Markdown paragraph
@@ -91,11 +79,12 @@ An already-covered ask calls for investigating execution or enforcement, not ano
 
 For each active action, inspect relevant skills/workflows before choosing its disposition. Name
 existing owners; a new skill or workflow needs a reusable boundary and trigger. Keep this reasoning
-in the audit, with only the decision in the action. Retain source-only candidate dispositions here
+in the audit; mention the chosen owner in the proposed fix. Retain source-only candidate dispositions here
 or in linked session sources so low-signal evidence remains available to later runs.
 
 ## Completion
 
-Every candidate has one active or resolved entry, current-state evidence, and linked session
-support. Every active action has one standards and one workflow disposition, an observable closure
-condition, and explicit uncertainty. Refresh mutable evidence immediately before commit.
+Every candidate has one active or resolved entry, current-state evidence, and linked transcript or
+repository support. Every active action has an observable closure condition and explicit
+uncertainty. Put standards and workflow reasoning in its supporting audit when relevant. Refresh
+mutable evidence immediately before commit.

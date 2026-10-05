@@ -11,13 +11,16 @@ const CanonicalToolCallSchema = z.strictObject({
   kind: z.literal("tool_call"),
   name: z.string(),
   outputHeadTail: z.string().optional(),
-  ref: z.string()
+  outputSourceLine: z.number().int().positive().optional(),
+  ref: z.string(),
+  sourceLine: z.number().int().positive().optional()
 });
 
 /** A normalized prose turn (genuine human input or assistant text). */
 const CanonicalProseSchema = z.strictObject({
   kind: z.enum(["user", "assistant"]),
   ref: z.string(),
+  sourceLine: z.number().int().positive().optional(),
   text: z.string()
 });
 
@@ -35,6 +38,7 @@ const BundleSessionSchema = z.strictObject({
   role: z.enum(["primary", "secondary"]),
   sessionHash: z.string(),
   sessionId: z.string(),
+  sourcePath: z.string().optional(),
   threadSource: z.string().nullable(),
   turns: z.array(CanonicalTurnSchema)
 });
@@ -63,7 +67,19 @@ export type FrictionEpisode = z.output<typeof FrictionEpisodeSchema>;
 
 const DurableFixProposalSchema = z.object({
   body: z.string(),
-  citedEpisodeRefs: z.array(z.string()).default([])
+  citedEpisodeRefs: z.array(z.string()).default([]),
+  citedTurns: z
+    .array(z.object({ citedTurnRefs: z.array(z.string()), sessionId: z.string() }))
+    .optional(),
+  repositoryEvidence: z
+    .array(
+      z.object({
+        excerpt: z.string(),
+        path: z.string(),
+        revision: z.string().optional()
+      })
+    )
+    .optional()
 });
 export type DurableFixProposal = z.output<typeof DurableFixProposalSchema>;
 
@@ -83,12 +99,18 @@ export const RepoFindingsSchema = z.object({
 });
 export type RepoFindings = z.output<typeof RepoFindingsSchema>;
 
-const RetrospectiveSinceSourceSchema = z.enum(["explicit", "previous-report", "first-run-default"]);
+const RetrospectiveSinceSourceSchema = z.enum([
+  "explicit",
+  "previous-report",
+  "first-run-default",
+  "transcript"
+]);
 
-const RetrospectiveUntilSourceSchema = z.enum(["explicit", "now"]);
+const RetrospectiveUntilSourceSchema = z.enum(["explicit", "now", "transcript"]);
 
 /** Resolved once by collect, then read by PR analysis and commit. */
 export const RetrospectiveWindowSchema = z.strictObject({
+  mode: z.enum(["periodic", "focused"]).default("periodic"),
   since: z.string(),
   sinceSource: RetrospectiveSinceSourceSchema,
   until: z.string(),

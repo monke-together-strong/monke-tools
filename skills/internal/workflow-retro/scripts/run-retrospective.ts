@@ -46,6 +46,7 @@ function main() {
   program
     .command("collect")
     .description("Collect eligible transcripts into repo bundles")
+    .option("--session <id>", "Analyze one entire transcript by exact native session id")
     .option("--since <date>", "Beginning of the retrospective window", parseDateMs)
     .option("--until <date>", "End of the retrospective window", parseDateMs)
     .option("--idle-minutes <minutes>", "Minimum transcript idle time", parseIdleMinutes)
@@ -56,6 +57,7 @@ function main() {
           idleMinutes: options.idleMinutes,
           retroRoot: root,
           runTs: options.runTs ?? new Date().toISOString().replaceAll(/[:.]/gu, "-"),
+          sessionId: options.session,
           sinceMs: options.since,
           untilMs: options.until
         })
@@ -82,8 +84,14 @@ function main() {
     .command("pr-aggregate")
     .description("Aggregate completed PR analyses")
     .requiredOption("--run-ts <timestamp>", "Run identifier")
+    .option(
+      "--patterns <file>",
+      "Agent-authored pattern groups (defaults to pr-analysis/patterns.json in the run)"
+    )
     .action((options) => {
-      runOperation((root) => runPrAggregate({ retroRoot: root, runTs: options.runTs }));
+      runOperation((root) =>
+        runPrAggregate({ patternsPath: options.patterns, retroRoot: root, runTs: options.runTs })
+      );
     });
 
   program

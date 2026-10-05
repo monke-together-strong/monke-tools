@@ -1,5 +1,5 @@
 /**
- * Canonical model + on-disk record shapes for the agent-session-retrospective skill.
+ * Canonical model + on-disk record shapes for the workflow-retro skill.
  *
  * The script owns everything deterministic: identity, the canonical normalized session, the
  * per-repo bundle, citation validation, and the frozen record. The LLM only writes free-form

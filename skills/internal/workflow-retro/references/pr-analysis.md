@@ -1,7 +1,7 @@
 # PR analysis contract
 
-This is the single source of truth for the required PR analysis lane in
-`agent-session-retrospective`. Load it when `SKILL.md` reaches "PR trajectory analysis".
+This is the single source of truth for PR analysis in `workflow-retro`, required for
+periodic runs and optional for focused runs. Load it when `SKILL.md` reaches "PR trajectory analysis".
 
 ## Completion bar
 
@@ -13,14 +13,15 @@ The deterministic brackets are:
 
 ```bash
 bun scripts/run-retrospective.ts pr-collect --run-ts <runTs> [--repo-cache tmp/agent-retrospective-pr-analysis]
-bun scripts/run-retrospective.ts pr-aggregate --run-ts <runTs>
+bun scripts/run-retrospective.ts pr-aggregate --run-ts <runTs> [--patterns <file>]
 ```
 
 `pr-collect` uses a `tmp/agent-retrospective-pr-analysis` repo cache for local git diffs unless
 `--repo-cache` overrides it, writes `runs/<runTs>/pr-analysis/manifest.json`, and writes one
 `runs/<runTs>/pr-analysis/prs/*.json` work item per PR. The host agent fans out one subagent per
-work item, and each subagent writes Markdown to that work item's `analysisPath`. `pr-aggregate`
-then writes `runs/<runTs>/pr-analysis.md`.
+work item, and each subagent writes Markdown to that work item's `analysisPath`. The host groups
+their observations by meaning, then `pr-aggregate` validates the cited PR identities and writes
+`runs/<runTs>/pr-analysis.md`.
 
 ## Window
 
@@ -100,7 +101,33 @@ Per-PR agents produce observations and corrective-change patterns, not final dur
 
 ## Aggregate report
 
-The orchestrator aggregates per-PR Markdown into:
+Read the completed per-PR analyses and group corrective observations by their shared mechanism.
+Different wording can describe the same pattern; similar wording alone does not establish one.
+Keep distinct causes separate and preserve one-off observations. Account for the observations in
+the supplied analyses without inventing fixes or recurrence.
+
+Write `runs/<runTs>/pr-analysis/patterns.json` before aggregation:
+
+```json
+{
+  "patterns": [
+    {
+      "summary": "External input validation was added after PR opening.",
+      "prs": ["owner/repo#12", "owner/repo#19"]
+    }
+  ]
+}
+```
+
+Order groups by significance. A group with two or more distinct PRs is recurring; a single PR is
+a one-off. Use `{"patterns": []}` when the completed analyses contain no corrective observations.
+The file is optional when no per-PR analyses are available. `--patterns` accepts an alternate path.
+
+`pr-aggregate` checks that every cited PR has an analysis in this run, counts each PR once per
+group, and preserves the host's summaries and ordering. Invalid references leave the preceding
+aggregate untouched. The host owns whether the cited evidence supports the shared mechanism.
+
+The resulting aggregate is written to:
 
 ```text
 ~/.monke/agent-retrospectives/runs/<runTs>/pr-analysis.md

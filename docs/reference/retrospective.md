@@ -1,10 +1,12 @@
-# Agent retrospective
+# Workflow retrospective
 
 Part of the [domain glossary](../../CONTEXT.md).
 
 ## Language
 
-**Retrospective**: A read-only analysis of agent and PR evidence that produces **Durable fix proposals**.
+**Retrospective**: A read-only analysis of agent evidence and, when included, PR evidence that produces **Durable fix proposals**.
+
+**Focused retrospective**: A replay of one selected **Agent transcript**, with optional **PR analysis**. It leaves periodic collection cursors unchanged.
 
 **Implementation trajectory**: A pull request lifecycle analyzed from the state when the PR was opened to the merged outcome.
 
@@ -53,5 +55,5 @@ Part of the [domain glossary](../../CONTEXT.md).
 - Each **Agent transcript** has one **Primary repo** and zero or more **Secondary repos**. This observed membership is independent of a Session's declared dependency graph.
 - A resumed conversation remains one **Agent transcript**; a subagent conversation is a distinct child transcript.
 - A **PR opening snapshot** and **Merged outcome** bound the **Post-opening delta** of an **Implementation trajectory**.
-- **Friction episodes**, **Repeated asks**, and **Corrective changes** provide evidence for **Durable fix proposals**.
+- **Friction episodes**, direct transcript or repository observations, **Repeated asks**, and **Corrective changes** provide evidence for **Durable fix proposals**.
 - A **Standards opportunity** is missing or inadequate guidance. Failure to follow an existing standard is an execution or enforcement gap.

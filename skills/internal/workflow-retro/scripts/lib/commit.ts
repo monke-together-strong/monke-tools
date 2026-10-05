@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
 import { isNonEmptyString } from "@sindresorhus/is";
 import sanitizeHtml from "sanitize-html";
@@ -35,6 +36,7 @@ import type {
 export interface ValidatedFindings {
   dropped: { episodes: number; fixes: number };
   episodes: FrictionEpisode[];
+  errors: string[];
   fixes: DurableFixProposal[];
   repeatedAsks: RepeatedAskCluster[];
   repoKey: string;
@@ -43,10 +45,13 @@ export interface ValidatedFindings {
 /**
  * Validate the LLM's citations against the bundle the script handed it: every cited turn ref must
  * exist in its session; every cited episode ref must name a surviving episode. Offending items are
- * dropped and counted (commit stays the deterministic gate; a hallucinated ref never reaches the
- * frozen record).
+ * excluded and counted; commit requires their repair before advancing the analysis cursor.
  */
 export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
+  const errors: string[] = [];
+  if (findings.repoKey !== bundle.repoKey) {
+    errors.push(`repoKey must match ${bundle.repoKey}`);
+  }
   // A session's friction is authored once, by its PRIMARY repo's subagent. Refs
   // are validated against that same session's turns, so a surviving episode can
   // never render as a missing citation.
@@ -67,6 +72,9 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
       refs !== undefined && citedTurnRefs.length > 0 && citedTurnRefs.every((ref) => refs.has(ref));
     if (!isNonEmptyString(episode.id) || seenIds.has(episode.id) || !refsValid) {
       droppedEpisodes += 1;
+      errors.push(
+        `episode ${episode.id || "(missing id)"}: invalid identity or turn references (${episode.sessionId}: ${citedTurnRefs.join(", ")})`
+      );
       continue;
     }
     seenIds.add(episode.id);
@@ -75,24 +83,57 @@ export function validateFindings(findings: RepoFindings, bundle: RepoBundle) {
 
   const fixes: DurableFixProposal[] = [];
   let droppedFixes = 0;
-  for (const fix of findings.durableFixProposals) {
+  const refsBySession = new Map(
+    bundle.sessions.map((session) => [
+      session.sessionId,
+      new Set(session.turns.map((turn) => turn.ref))
+    ])
+  );
+  for (const [index, fix] of findings.durableFixProposals.entries()) {
     const { citedEpisodeRefs } = fix;
-    if (citedEpisodeRefs.length > 0 && citedEpisodeRefs.every((ref) => seenIds.has(ref))) {
+    const citedTurns = fix.citedTurns ?? [];
+    const repositoryEvidence = fix.repositoryEvidence ?? [];
+    const hasEvidence = citedEpisodeRefs.length + citedTurns.length + repositoryEvidence.length > 0;
+    const episodesValid = citedEpisodeRefs.every((ref) => seenIds.has(ref));
+    const turnsValid = citedTurns.every(
+      (citation) =>
+        citation.citedTurnRefs.length > 0 &&
+        citation.citedTurnRefs.every((ref) => refsBySession.get(citation.sessionId)?.has(ref))
+    );
+    const filesValid = repositoryEvidence.every(
+      (evidence) =>
+        isNonEmptyString(evidence.path) &&
+        isNonEmptyString(evidence.excerpt) &&
+        statSync(path.resolve(bundle.repoKey, evidence.path), { throwIfNoEntry: false })?.isFile()
+    );
+    if (hasEvidence && episodesValid && turnsValid && filesValid) {
       fixes.push(fix);
     } else {
       droppedFixes += 1;
+      errors.push(
+        `proposal ${index + 1}: provide valid episode references, transcript turns, or existing repository files with excerpts`
+      );
     }
   }
 
   const bundleSessionIds = new Set(bundle.sessions.map((session) => session.sessionId));
-  const repeatedAsks = findings.repeatedAsks.map((cluster) => ({
-    ...cluster,
-    exampleSessionIds: cluster.exampleSessionIds.filter((id) => bundleSessionIds.has(id))
-  }));
+  const repeatedAsks = findings.repeatedAsks.map((cluster) => {
+    if (
+      cluster.exampleSessionIds.length === 0 ||
+      cluster.exampleSessionIds.some((id) => !bundleSessionIds.has(id))
+    ) {
+      errors.push(`repeated ask ${cluster.label}: cite session ids from the bundle`);
+    }
+    return {
+      ...cluster,
+      exampleSessionIds: cluster.exampleSessionIds.filter((id) => bundleSessionIds.has(id))
+    };
+  });
 
   return {
     dropped: { episodes: droppedEpisodes, fixes: droppedFixes },
     episodes,
+    errors,
     fixes,
     repeatedAsks,
     repoKey: findings.repoKey
@@ -121,6 +162,7 @@ export interface RunCommitOptions {
 function readCompletedFindings(root: string, runTs: string) {
   const slices: RepoSlice[] = [];
   const missingFindings: string[] = [];
+  const invalidFindings: string[] = [];
   for (const repoHash of listBundleHashes(root, runTs)) {
     const bundle = readBundle(root, runTs, repoHash);
     const findings = readFindings(root, runTs, repoHash);
@@ -128,37 +170,52 @@ function readCompletedFindings(root: string, runTs: string) {
       missingFindings.push(repoHash);
       continue;
     }
-    slices.push({ bundle, validated: validateFindings(findings, bundle) });
+    const validated = validateFindings(findings, bundle);
+    invalidFindings.push(...validated.errors.map((error) => `${repoHash}.findings.json: ${error}`));
+    slices.push({ bundle, validated });
   }
   if (missingFindings.length > 0) {
     throw new Error(
       `commit requires findings for every bundle; missing: ${missingFindings.join(", ")}`
     );
   }
+  if (invalidFindings.length > 0) {
+    throw new Error(
+      `repair findings before commit; the run and session cursors are unchanged:\n${invalidFindings.join("\n")}`
+    );
+  }
   return slices;
+}
+
+function readCompletedPrAnalysis(root: string, runTs: string, focused: boolean) {
+  const prAnalysis = readPrAnalysis(root, runTs);
+  const hasPrAnalysis = isNonEmptyString(prAnalysis?.trim());
+  const manifest = readPrManifest(root, runTs);
+  if (!hasPrAnalysis && (!focused || manifest !== null)) {
+    throw new Error(
+      `commit requires runs/${runTs}/pr-analysis.md from the required PR analysis lane`
+    );
+  }
+  if ((hasPrAnalysis || !focused) && (!manifest || manifest.runTs !== runTs)) {
+    throw new Error(`commit requires a PR manifest for run ${runTs}`);
+  }
+  const prAnalysisValidation =
+    hasPrAnalysis && manifest ? validatePrAnalysis(prAnalysis, manifest) : { warnings: [] };
+  return { prAnalysis, warnings: prAnalysisValidation.warnings };
 }
 
 export function runCommit(options: RunCommitOptions) {
   const root = options.retroRoot ?? retroHome(options.home);
   const slices = readCompletedFindings(root, options.runTs);
+  const window = readRunWindow(root, options.runTs);
+  const focused = window?.mode === "focused";
+  const { prAnalysis, warnings } = readCompletedPrAnalysis(root, options.runTs, focused);
 
   const dropped = { episodes: 0, fixes: 0 };
   for (const slice of slices) {
     dropped.episodes += slice.validated.dropped.episodes;
     dropped.fixes += slice.validated.dropped.fixes;
   }
-
-  const prAnalysis = readPrAnalysis(root, options.runTs);
-  if (!isNonEmptyString(prAnalysis?.trim())) {
-    throw new Error(
-      `commit requires runs/${options.runTs}/pr-analysis.md from the required PR analysis lane`
-    );
-  }
-  const manifest = readPrManifest(root, options.runTs);
-  if (!manifest || manifest.runTs !== options.runTs) {
-    throw new Error(`commit requires a PR manifest for run ${options.runTs}`);
-  }
-  const prAnalysisValidation = validatePrAnalysis(prAnalysis, manifest);
 
   if (!isNonEmptyString(options.synthesisPath) || !existsSync(options.synthesisPath)) {
     throw new Error("commit requires a synthesis file matching references/synthesis-contract.md");
@@ -174,7 +231,7 @@ export function runCommit(options: RunCommitOptions) {
   let appendedSessions = 0;
   for (const slice of slices) {
     for (const session of slice.bundle.sessions) {
-      if (session.role !== "primary") {
+      if (session.role !== "primary" || focused) {
         continue;
       }
       const prior = loadFrozenSession(root, session.agent, session.sessionId);
@@ -215,8 +272,8 @@ export function runCommit(options: RunCommitOptions) {
 
   const artifacts = buildReportArtifacts(options.runTs, synthesis, slices, {
     prAnalysis,
-    prAnalysisWarnings: prAnalysisValidation.warnings,
-    window: readRunWindow(root, options.runTs)
+    prAnalysisWarnings: warnings,
+    window
   });
   const reportPath = writeReport(root, options.runTs, artifacts.report);
   const htmlPath = reportPath.replace(/\.md$/u, ".html");
@@ -237,7 +294,7 @@ export function runCommit(options: RunCommitOptions) {
     htmlPath,
     prAnalysis: {
       present: Boolean(prAnalysis?.trim()),
-      warnings: prAnalysisValidation.warnings
+      warnings
     },
     reportPath,
     sourcePaths: {
@@ -276,9 +333,11 @@ export function buildReportArtifacts(
   context: ReportContext = {}
 ) {
   const out: string[] = [
-    `# Agent session retrospective — ${runTs}`,
+    `# Workflow retrospective — ${runTs}`,
     "",
     formatWindowLine(context.window, runTs),
+    "",
+    `Mode: ${context.window?.mode ?? "periodic"}`,
     "",
     `Sources: [session sources](${sourceFileName(runTs, "session")}) · [PR sources](${sourceFileName(runTs, "pr")})`,
     "",
@@ -294,7 +353,9 @@ export function buildReportArtifacts(
     out.push(extractPrRepeatedPatterns(prAnalysis), "");
   } else {
     out.push(
-      `_PR analysis missing: no \`runs/${runTs}/pr-analysis.md\` was available at commit time. Transcript-only synthesis is degraded._`,
+      context.window?.mode === "focused"
+        ? "_PR analysis was not requested for this focused retrospective._"
+        : `_PR analysis missing: no \`runs/${runTs}/pr-analysis.md\` was available at commit time. Transcript-only synthesis is degraded._`,
       ""
     );
   }
@@ -338,7 +399,7 @@ export function renderReportHtml(markdown: string) {
   );
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent session retrospective</title>
+<title>Workflow retrospective</title>
 <style>
 :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f3f6f5;color:#182a32;font:16px/1.6 system-ui,sans-serif}
 main{max-width:1000px;margin:auto;padding:32px;background:white}a{color:#076b68}h2,h3{margin-top:2em}h4{border-left:4px solid #076b68;padding:12px;background:#eef5f2}
@@ -359,10 +420,24 @@ function buildSessionSources(
     formatWindowLine(window, runTs),
     "",
     `Main report: [${runTs}-retrospective.md](${runTs}-retrospective.md)`,
-    "",
-    "## Per-repo proposals",
     ""
   ];
+  const sources = new Map(
+    slices.flatMap(({ bundle }) =>
+      bundle.sessions.map((session) => [session.sessionHash, session] as const)
+    )
+  );
+  const sourceSessions = [...sources.values()].filter((session) => session.sourcePath);
+  if (sourceSessions.length > 0) {
+    out.push("## Transcript sources", "");
+    for (const session of sourceSessions) {
+      out.push(
+        `- ${session.agent}/${session.sessionId}: [raw JSONL](<${session.sourcePath}>); SHA-256: \`${session.contentHash}\``
+      );
+    }
+    out.push("");
+  }
+  out.push("## Per-repo proposals", "");
   const reposWithSignal = slices.filter(
     (slice) => slice.validated.fixes.length > 0 || slice.validated.repeatedAsks.length > 0
   );
@@ -371,12 +446,25 @@ function buildSessionSources(
   }
   for (const slice of reposWithSignal) {
     out.push(`### ${slice.validated.repoKey}`, "");
-    for (const fix of slice.validated.fixes) {
+    for (const [index, fix] of slice.validated.fixes.entries()) {
       const { confidence, rest, target } = parseFixHeader(fix.body);
-      out.push(`- Target: ${target}; Confidence: ${confidence} — ${indentBody(rest)}`);
+      out.push(
+        `#### Proposal ${slice.bundle.repoHash}-${index + 1}`,
+        "",
+        `- Target: ${target}; Confidence: ${confidence} — ${indentBody(rest)}`
+      );
       const evidence = episodesFor(fix, slice.validated.episodes).flatMap((episode) =>
         renderEvidence(episode, slice.bundle)
       );
+      for (const citation of fix.citedTurns ?? []) {
+        evidence.push(...renderEvidence(citation, slice.bundle));
+      }
+      for (const source of fix.repositoryEvidence ?? []) {
+        const filePath = path.resolve(slice.bundle.repoKey, source.path);
+        evidence.push(
+          `- [${source.path}](${filePath})${source.revision ? ` (${source.revision})` : ""}: ${source.excerpt}`
+        );
+      }
       if (evidence.length > 0) {
         out.push(
           "  <details><summary>evidence</summary>",
@@ -469,24 +557,11 @@ const REQUIRED_SYNTHESIS_HEADINGS = [
 
 const REQUIRED_ACTIVE_ACTION_FIELDS = [
   "Problem",
-  "Impact",
-  "Cause",
   "Proposed fix",
-  "Next step",
-  "Why now",
   "Done when",
-  "Uncertainty",
-  "Change since last report",
-  "Target",
-  "Standards disposition",
-  "Workflow disposition",
+  "Evidence",
   "Confidence",
-  "Resolution",
-  "Checked-at",
-  "Checked-against",
-  "Current-state evidence",
-  "Remaining gap",
-  "Session evidence"
+  "Resolution"
 ];
 
 export function validateSynthesis(content: string | null | undefined) {
@@ -559,15 +634,6 @@ function validateActiveActions(section: string) {
       if (position === -1) {
         warnings.push(`Active action \`${title}\` is missing \`${field}:\`.`);
       }
-    }
-    const presentPositions = fieldPositions.filter(({ position }) => position !== -1);
-    if (
-      !presentPositions.every(
-        ({ position }, fieldIndex) =>
-          fieldIndex === 0 || position > (presentPositions[fieldIndex - 1]?.position ?? -1)
-      )
-    ) {
-      warnings.push(`Active action \`${title}\` fields are out of order.`);
     }
   }
   return warnings;
@@ -709,7 +775,10 @@ function episodesFor(fix: DurableFixProposal, episodes: FrictionEpisode[]) {
   return episodes.filter((episode) => fix.citedEpisodeRefs.includes(episode.id));
 }
 
-function renderEvidence(episode: FrictionEpisode, bundle: RepoBundle) {
+function renderEvidence(
+  episode: Pick<FrictionEpisode, "sessionId" | "citedTurnRefs">,
+  bundle: RepoBundle
+) {
   const session = bundle.sessions.find((candidate) => candidate.sessionId === episode.sessionId);
   if (!session) {
     return ["(session not in bundle)"];
@@ -717,16 +786,40 @@ function renderEvidence(episode: FrictionEpisode, bundle: RepoBundle) {
   const byRef = new Map(session.turns.map((turn) => [turn.ref, turn]));
   return episode.citedTurnRefs.map((ref) => {
     const turn = byRef.get(ref);
-    return turn ? `- ${ref}: ${renderTurn(turn)}` : `- ${ref}: (missing)`;
+    const citation = `${session.agent}/${session.sessionId} ${ref}`;
+    if (!turn) {
+      return `- ${citation}: (missing)`;
+    }
+    const lines = new Set([
+      turn.sourceLine,
+      ...(turn.kind === "tool_call" ? [turn.outputSourceLine] : [])
+    ]);
+    const locations = session.sourcePath
+      ? [...lines]
+          .filter((line) => line !== undefined)
+          .map((line) => `[raw line ${line}](<${session.sourcePath}:${line}>)`)
+      : [];
+    const source = locations.length > 0 ? ` (${locations.join(", ")})` : "";
+    return `- ${citation}${source}: ${renderTurn(turn)}`;
   });
 }
 
 function renderTurn(turn: CanonicalTurn) {
   if (turn.kind === "tool_call") {
-    const status = isNonEmptyString(turn.error) ? ` [${turn.error}]` : "";
-    return `\`${turn.name}\` ${turn.inputSummary}${status}`;
+    const status = isNonEmptyString(turn.error)
+      ? ` [${turn.error}]`
+      : turn.exitCode === undefined
+        ? ""
+        : ` [exit ${turn.exitCode}]`;
+    const output = isNonEmptyString(turn.outputHeadTail)
+      ? `\n\n${turn.outputHeadTail
+          .split("\n")
+          .map((line) => `  > ${line}`)
+          .join("\n")}`
+      : "";
+    return `\`${turn.name}\` ${turn.inputSummary}${status}${output}`;
   }
-  return `**${turn.kind}:** ${firstLine(turn.text)}`;
+  return `**${turn.kind}:** ${turn.text.replaceAll("\n", "\n  > ")}`;
 }
 
 function indentBody(body: string) {

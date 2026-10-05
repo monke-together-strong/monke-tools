@@ -19,15 +19,14 @@ For automation, add `--targets codex claude cursor` and/or `--custom-target /abs
 
 ## Spec workflow agent limits
 
-`ship-spec` needs four nested subagent layers and five concurrent subagents for
-one slice. Configure globally before starting a session:
+`ship-spec` needs three nested subagent layers and four concurrent subagents for
+one ticket: Spec coordinator, implementer, and two reviewers. Configure globally
+before starting a session:
 
 - Claude: `env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` = `"4"` in `~/.claude/settings.json`.
 - Codex: set `agents.max_concurrent_threads_per_session` to `6` in
   `~/.codex/config.toml` if unset or lower; preserve higher values. This excludes
   the primary agent. Defaults are chosen by Codex; do not assume six slots.
-
-For parallel slices, allow four slots per worker plus the coordinator.
 
 ## Update recovery
 

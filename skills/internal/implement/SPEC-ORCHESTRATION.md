@@ -2,54 +2,68 @@
 
 Use this when `$implement` is given a Spec that has implementation issues attached.
 
-The Spec `$implement` agent is a coordinator.
+The goal is the entire Spec implemented on one integration branch. The Spec
+`$implement` agent coordinates tickets; each ticket runs `$implement` and owns
+its implementation, code review, and fixes.
+
+The tickets are not a list of steps. They are a **task graph** with blocking
+relationships. The **frontier** is the set of tickets whose blockers are complete
+and integrated; tickets without blockers are ready immediately.
+
+Communication to and from subagents should be sparse. Communicate primarily
+through **context pointers**: to the Spec, tickets, research notes, and previous
+commits. Keep the information in those sources rather than restating it in
+handoffs.
+
+Run **implementer subagents** in the background where possible for maximum
+concurrency.
 
 One worker may use the current checkout and branch; give every additional
 concurrent worker its own worktree and branch, starting from a commit on the
-original branch that includes its completed dependencies. Only that worker may
-change its checkout until closeout finishes. The coordinator merges completed
-work into the original branch only while no worker is using that checkout.
+integration branch that includes its completed dependencies. Only that worker
+may change its checkout while implementing and reviewing. The coordinator merges
+completed work into the integration branch only while no worker is using that
+checkout.
 
 ## Process
 
-1. Fetch the Spec and its comments.
-2. Find implementation issues attached to the Spec.
-3. Record the review base (the final-review fixed point) before any slice starts.
-   Prefer the branch point from the target integration branch; if the user
-   supplied a review base, use that. Resolve and record its full commit SHA with
-   `git rev-parse <fixed point>^{commit}`; stop to ask if none can be identified.
-4. Read which issues block each slice. A slice is ready when all
-   its blockers are complete and integrated; slices with no blockers are ready
-   immediately.
-5. Launch ready slices in parallel within the host's concurrency limit, reserving
-   three descendant slots per worker for its verifier and two reviewers. Use a
-   fresh native subagent for each slice, not a fork, with the delegation prompt
-   below. Queue remaining ready slices until capacity is free. Wait for native
-   completion notifications or use the host's wait tool. Resume incomplete work;
-   a blocked slice pauses only its dependents. Record newly discovered
-   dependencies before scheduling affected slices.
-6. After a worker passes slice closeout, collect its final commit SHA and
-   verification evidence. Merge completed slices one at a time into the
-   original branch, waiting for any worker using that checkout to finish first.
+1. Use the Spec and discovered implementation tickets to understand the task
+   graph.
+2. (Optional) Use an exploration subagent for codebase or documentation research
+   shared by the tickets. Save its notes outside the repo, accessible to future
+   implementers, and pass a pointer to them.
+3. Record the integration review base before any ticket starts, for the final
+   shipping review.
+   Use the user-supplied review base, or the branch point from the intended PR
+   base branch. Resolve and record its full commit SHA with
+   `git rev-parse <review base>^{commit}`; stop to ask if none can be identified.
+4. Launch a fresh native implementer subagent for each ticket on the frontier,
+   using the delegation prompt below.
+   Wait for native completion notifications or use the host's wait tool; resume
+   incomplete work.
+5. After a worker finishes implementation, review, and fixes, collect its commit
+   SHA, concise verification summary, and remaining integration work. Merge
+   completed tickets one at a time into the integration branch, waiting for any
+   worker using that checkout to finish first.
    Work already on that branch needs no merge. Check that the combined changes
-   work before treating a slice as integrated.
-7. Launch newly ready slices as soon as their blockers are integrated, without
-   waiting for unrelated slices. Repeat until all slices are integrated.
-8. When a worker or review reports a finding deferred to a later attached issue
-   or final integration, add it to a Spec closeout list in the orchestrator
-   context. Include the source issue, the finding, and the later issue or final
-   check that will address it.
-9. After all issues are integrated, return to `SKILL.md` and close out the parent
-   Spec as the Work target, keeping the original review base.
+   work before treating a ticket as integrated.
+6. If integration changes the frontier, launch implementer subagents for the
+   newly ready tickets immediately, while unrelated tickets continue. A blocked
+   ticket pauses only its dependents. Record newly discovered dependencies
+   before scheduling affected tickets. Repeat until all tickets are integrated.
+7. Track deferred cross-ticket findings with their source issue and the ticket
+   or integration check that will address them.
+8. Complete remaining Spec acceptance and integration work using scoped checks;
+   assign code fixes to an implementer. Resolve each deferred finding through
+   a fix, verification, or explicit user acceptance of exclusion from scope.
+   Return the integration branch, final commit SHA, recorded review base SHA,
+   and concise verification summary.
 
 ## Delegation prompt
 
-When creating a subagent for an attached issue, use this template and do
-not add generic repo/process reminders.
-
 ```text
-$implement <attached issue URL>
+$implement <ticket URL>
 
+Parent Spec: <Spec URL>
 Checkout: <absolute checkout path>
-Parent Spec: <parent Spec URL>. Use it as background context for product intent and constraints only, do not implement the entire Spec.
 ```

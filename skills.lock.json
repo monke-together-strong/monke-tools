@@ -59,8 +59,8 @@
     },
     {
       "lock": {
-        "commit": "d81f3a183412e71a5b1e84ca21bc1a35eea03a60",
-        "digest": "f6478e29f7dd60cecb965e845ae1486f5a3546b12d2b20ffd9852011be1fdfd6",
+        "commit": "24fe0ef7737efae15c87225755e9f6f5965e4888",
+        "digest": "aa0a951eed3ea6e4f7656e1c5eb969d341db686a4bcd114259de303347d5f1a0",
         "importerVersion": "1.7.0",
         "materializerVersion": 1,
         "repository": "https://github.com/mattpocock/skills.git",
@@ -104,6 +104,11 @@
           "slug": "handoff"
         },
         {
+          "kind": "reference",
+          "selector": "implement",
+          "slug": "implement"
+        },
+        {
           "kind": "skill",
           "selector": "improve-codebase-architecture",
           "slug": "improve-codebase-architecture"
@@ -117,6 +122,11 @@
           "kind": "skill",
           "selector": "research",
           "slug": "research"
+        },
+        {
+          "kind": "skill",
+          "selector": "retro",
+          "slug": "retro"
         },
         {
           "kind": "skill",
@@ -179,22 +189,22 @@
     },
     {
       "lock": {
-        "commit": "c1aff547ca418e31a0769296563c73649862d429",
-        "digest": "37077e032e88047866b96ad2e808655c8f31d98875207d0b2ef188b5b9c22fba",
+        "commit": "6e802bd0ed99f53180e2359fddab6da8d97970d9",
+        "digest": "21735b36efe6e1e4958307fd0011e837c0e2aa171ae8df9691269cfa144f44ba",
         "importerVersion": "1.7.0",
         "materializerVersion": 1,
-        "repository": "https://github.com/openclaw/openclaw.git",
+        "repository": "https://github.com/pbakaus/impeccable.git",
         "subpath": "",
-        "updateRef": "main"
+        "updateRef": "HEAD"
       },
       "skills": [
         {
           "kind": "skill",
-          "selector": "test-audit",
-          "slug": "test-audit"
+          "selector": "impeccable",
+          "slug": "impeccable"
         }
       ],
-      "source": "https://github.com/openclaw/openclaw/tree/main"
+      "source": "https://github.com/pbakaus/impeccable"
     },
     {
       "lock": {
@@ -239,26 +249,6 @@
         }
       ],
       "source": "openclaw/agent-skills"
-    },
-    {
-      "lock": {
-        "commit": "cac56e1ebd3c279aa9153616cfeac7b174ab90f9",
-        "digest": "e896d416a7cae1a14caee184e48c62650112ca75775a5db8950392c7c1fa8c73",
-        "importerVersion": "1.7.0",
-        "materializerVersion": 1,
-        "repository": "https://github.com/shadcn/improve.git",
-        "subpath": "",
-        "updateRef": "HEAD"
-      },
-      "skills": [
-        {
-          "disableModelInvocation": true,
-          "kind": "skill",
-          "selector": "improve",
-          "slug": "improve"
-        }
-      ],
-      "source": "shadcn/improve"
     }
   ],
   "version": 3

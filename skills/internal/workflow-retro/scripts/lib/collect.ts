@@ -9,8 +9,10 @@ import { hashKey, resolveRepoKey, sessionHashKey } from "./identity.ts";
 import {
   listReportPaths,
   listFrozenSessions,
+  loadDeferredSessionHashes,
   loadFrozenSession,
   retroHome,
+  saveDeferredSessionHashes,
   writeBundle,
   writeRunWindow
 } from "./store.ts";
@@ -121,6 +123,7 @@ export function buildBundles(
       rawUserMessages: session.rawUserMessages,
       sessionHash: sessionHashKey(session.agent, session.sessionId),
       sessionId: session.sessionId,
+      sourcePath: session.filePath,
       threadSource: session.threadSource,
       turns: session.turns
     };
@@ -212,6 +215,7 @@ export interface RunCollectOptions extends DiscoverOptions {
   nowMs?: number;
   retroRoot?: string;
   runTs: string;
+  sessionId?: string;
   sinceMs?: number;
   untilMs?: number;
 }
@@ -226,16 +230,32 @@ const FIRST_RUN_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 export function resolveRetrospectiveWindow(
   root: string,
-  input: { nowMs: number; sinceMs?: number; untilMs?: number }
+  input: {
+    mode?: RetrospectiveWindow["mode"];
+    nowMs: number;
+    sinceMs?: number;
+    transcript?: CanonicalSession;
+    untilMs?: number;
+  }
 ): ResolvedWindow {
   const { sinceMs: inputSinceMs } = input;
-  const untilMs = input.untilMs ?? input.nowMs;
-  const untilSource = input.untilMs === undefined ? "now" : "explicit";
+  const transcript = input.mode === "focused" ? input.transcript : undefined;
+  const transcriptActivityMs = transcript ? sessionActivityMs(transcript) : undefined;
+  const untilMs = input.untilMs ?? transcriptActivityMs ?? input.nowMs;
+  const untilSource = input.untilMs !== undefined ? "explicit" : transcript ? "transcript" : "now";
   let sinceMs: number;
   let sinceSource: RetrospectiveWindow["sinceSource"];
 
-  if (inputSinceMs === undefined) {
-    const previousReportMs = newestReportCursorMs(root);
+  if (inputSinceMs !== undefined) {
+    sinceMs = inputSinceMs;
+    sinceSource = "explicit";
+  } else if (transcript) {
+    const startedMs = Date.parse(transcript.startedAt ?? "");
+    const activityMs = transcriptActivityMs ?? untilMs;
+    sinceMs = Number.isNaN(startedMs) ? activityMs : Math.min(startedMs, activityMs);
+    sinceSource = "transcript";
+  } else {
+    const previousReportMs = input.mode === "focused" ? undefined : newestReportCursorMs(root);
     if (previousReportMs === undefined) {
       sinceMs = untilMs - FIRST_RUN_WINDOW_MS;
       sinceSource = "first-run-default";
@@ -243,9 +263,6 @@ export function resolveRetrospectiveWindow(
       sinceMs = previousReportMs;
       sinceSource = "previous-report";
     }
-  } else {
-    sinceMs = inputSinceMs;
-    sinceSource = "explicit";
   }
 
   if (sinceMs > untilMs) {
@@ -260,6 +277,7 @@ export function resolveRetrospectiveWindow(
     sinceMs,
     untilMs,
     window: {
+      mode: input.mode ?? "periodic",
       since: new Date(sinceMs).toISOString(),
       sinceSource,
       until: new Date(untilMs).toISOString(),
@@ -272,21 +290,28 @@ function newestReportCursorMs(root: string) {
   const reports = listReportPaths(root).toSorted((a, b) =>
     path.basename(b).localeCompare(path.basename(a))
   );
-  return reports
-    .map((reportPath) => {
-      const fromWindow = parseReportWindowUntilMs(reportPath);
-      return fromWindow ?? parseRunTimestampMs(path.basename(reportPath, "-retrospective.md"));
-    })
-    .find((candidate) => candidate !== undefined);
+  let cursor: number | undefined;
+  for (const reportPath of reports) {
+    let content: string;
+    try {
+      content = readFileSync(reportPath, "utf-8");
+    } catch {
+      continue;
+    }
+    if (/^Mode:\s+focused\s*$/mu.test(content)) {
+      continue;
+    }
+    cursor =
+      parseReportWindowUntilMs(content) ??
+      parseRunTimestampMs(path.basename(reportPath, "-retrospective.md"));
+    if (cursor !== undefined) {
+      break;
+    }
+  }
+  return cursor;
 }
 
-function parseReportWindowUntilMs(reportPath: string) {
-  let content: string;
-  try {
-    content = readFileSync(reportPath, "utf-8");
-  } catch {
-    return;
-  }
+function parseReportWindowUntilMs(content: string) {
   const match = /^Window:\s+\S+\s+to\s+(?<until>\S+)/mu.exec(content);
   if (!match?.groups) {
     return;
@@ -317,21 +342,7 @@ function parseRunTimestampMs(value: string) {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
-/** Disk-driven collect: discover, normalize, gate, group, write bundles. */
-export function runCollect(options: RunCollectOptions) {
-  const root = options.retroRoot ?? retroHome(options.home);
-  const nowMs = options.nowMs ?? Date.now();
-  const idleMs = (options.idleMinutes ?? DEFAULT_IDLE_MINUTES) * MILLISECONDS_PER_MINUTE;
-  const resolvedWindow = resolveRetrospectiveWindow(root, {
-    nowMs,
-    sinceMs: options.sinceMs,
-    untilMs: options.untilMs
-  });
-  const skipped: Record<string, number> = {};
-  const bump = (reason: string) => {
-    skipped[reason] = (skipped[reason] ?? 0) + 1;
-  };
-
+function discoverCanonicalSessions(options: DiscoverOptions, bump: (reason: string) => void) {
   // Dedupe by (agent, session_id): a resumed/archived transcript can exist as
   // several files for one session. Keep the most complete copy so the session is
   // analyzed and frozen exactly once.
@@ -360,20 +371,88 @@ export function runCollect(options: RunCollectOptions) {
     }
   }
 
-  const memberships = resolveSessionMembership([...bySession.values()]);
+  return [...bySession.values()];
+}
+
+function selectSessions(sessions: CanonicalSession[], sessionId: string | undefined) {
+  if (sessionId === undefined) {
+    return sessions;
+  }
+  const selected = sessions.filter((session) => session.sessionId === sessionId);
+  if (selected.length !== 1) {
+    throw new Error(
+      selected.length === 0
+        ? `Unknown transcript session id: ${sessionId}`
+        : `Ambiguous transcript session id: ${sessionId} exists for multiple agents`
+    );
+  }
+  return selected;
+}
+
+function resolveCollectionWindow(
+  root: string,
+  options: RunCollectOptions,
+  nowMs: number,
+  transcript?: CanonicalSession
+) {
+  return resolveRetrospectiveWindow(root, {
+    mode: options.sessionId === undefined ? "periodic" : "focused",
+    nowMs,
+    sinceMs: options.sinceMs,
+    transcript,
+    untilMs: options.untilMs
+  });
+}
+
+/** Disk-driven collect: discover, normalize, gate, group, write bundles. */
+export function runCollect(options: RunCollectOptions) {
+  const root = options.retroRoot ?? retroHome(options.home);
+  const nowMs = options.nowMs ?? Date.now();
+  const idleMs = (options.idleMinutes ?? DEFAULT_IDLE_MINUTES) * MILLISECONDS_PER_MINUTE;
+  const focused = options.sessionId !== undefined;
+  // Reject invalid bounds before discovering and parsing the transcript corpus.
+  const initialWindow = resolveCollectionWindow(root, options, nowMs);
+  const skipped: Record<string, number> = {};
+  const bump = (reason: string) => {
+    skipped[reason] = (skipped[reason] ?? 0) + 1;
+  };
+  const sessions = discoverCanonicalSessions(options, bump);
+  const selected = selectSessions(sessions, options.sessionId);
+  const resolvedWindow = focused
+    ? resolveCollectionWindow(root, options, nowMs, selected[0])
+    : initialWindow;
+  const memberships = resolveSessionMembership(sessions);
+  const deferred = focused ? new Set<string>() : loadDeferredSessionHashes(root);
+  let deferredChanged = false;
   const eligibles: EligibleSession[] = [];
-  for (const session of bySession.values()) {
+  for (const session of selected) {
     const activityMs = sessionActivityMs(session);
     const prior = loadFrozenSession(root, session.agent, session.sessionId);
-    const decision = decideEligibility(session, prior, {
-      activityMs,
-      idleMs,
-      nowMs,
-      sinceMs: resolvedWindow.sinceMs,
-      untilMs: resolvedWindow.untilMs
-    });
+    const sessionHash = sessionHashKey(session.agent, session.sessionId);
+    const decision: Eligibility = focused
+      ? { firstNewTurnIndex: 0, include: true, priorFindingCount: prior?.friction.length ?? 0 }
+      : decideEligibility(session, prior, {
+          activityMs,
+          idleMs,
+          nowMs,
+          // Carry deferred evidence across default windows; explicit bounds still apply.
+          sinceMs:
+            options.sinceMs === undefined && deferred.has(sessionHash)
+              ? undefined
+              : resolvedWindow.sinceMs,
+          untilMs: resolvedWindow.untilMs
+        });
     if (!decision.include) {
       bump(decision.reason);
+      if (
+        decision.reason === "not-idle" &&
+        !deferred.has(sessionHash) &&
+        (!prior ||
+          (prior.contentHash !== session.contentHash && prior.lastTurnIndex < session.turns.length))
+      ) {
+        deferred.add(sessionHash);
+        deferredChanged = true;
+      }
       continue;
     }
     const membership = memberships.get(sessionKey(session));
@@ -391,6 +470,9 @@ export function runCollect(options: RunCollectOptions) {
   }
 
   const bundles = buildBundles(options.runTs, eligibles, listFrozenSessions(root));
+  if (deferredChanged) {
+    saveDeferredSessionHashes(root, deferred);
+  }
   writeRunWindow(root, options.runTs, resolvedWindow.window);
   return {
     bundles: bundles.map((bundle) => ({

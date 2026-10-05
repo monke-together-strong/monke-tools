@@ -5,7 +5,12 @@ import path from "node:path";
 import { hashKey } from "./identity.ts";
 import { summarizeInput } from "./normalize.ts";
 import { buildCanonicalSession } from "./session-events.ts";
-import type { DecodedSession, SessionAdapter, SessionEvent } from "./session-events.ts";
+import type {
+  DecodedSession,
+  SessionAdapter,
+  SessionEvent,
+  SourceRecord
+} from "./session-events.ts";
 import {
   ClaudeContentBlockSchema,
   ClaudeTranscriptEnvelopeSchema,
@@ -38,9 +43,9 @@ function readJsonlLines(filePath: string) {
   const raw = readFileSync(filePath, "utf-8");
   const hash = hashKey(raw);
   const lines = raw.split("\n");
-  const records: JsonValue[] = [];
+  const records: SourceRecord[] = [];
   let lineCount = 0;
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     if (!line.trim()) {
       continue;
     }
@@ -49,7 +54,7 @@ function readJsonlLines(filePath: string) {
       const value: unknown = JSON.parse(line);
       const parsed = JsonValueSchema.safeParse(value);
       if (parsed.success) {
-        records.push(parsed.data);
+        records.push({ line: index + 1, record: parsed.data });
       }
     } catch {
       // Skip malformed lines; transcripts are occasionally truncated mid-write.
@@ -86,30 +91,30 @@ export function parseCodexSession(filePath: string) {
   return parseSessionWithAdapter(filePath, codexSessionAdapter);
 }
 
-function decodeCodexSession(rawRecords: JsonValue[]) {
+function decodeCodexSession(rawRecords: SourceRecord[]) {
   const session = createDecodedSession();
   const records = parseCodexTranscript(rawRecords);
-  const hasEventProse = records.some((record) => record.type === "event_msg");
+  const hasEventProse = records.some(({ record }) => record.type === "event_msg");
 
-  for (const rawRecord of rawRecords) {
+  for (const { record: rawRecord } of rawRecords) {
     const envelope = TranscriptEnvelopeSchema.safeParse(rawRecord);
     if (envelope.success) {
       noteActivity(session, envelope.data.timestamp);
     }
   }
-  for (const record of records) {
+  for (const { line, record } of records) {
     switch (record.type) {
       case "event_msg": {
         const event = decodeCodexEventMessage(record.payload, hasEventProse);
         if (event) {
-          session.events.push(event);
+          session.events.push({ ...event, sourceLine: line });
         }
         break;
       }
       case "response_item": {
         const event = decodeCodexResponseItem(record.payload, hasEventProse, session.cwd);
         if (event) {
-          session.events.push(event);
+          session.events.push({ ...event, sourceLine: line });
         }
         break;
       }
@@ -204,7 +209,10 @@ function decodeCodexResponseItem(
     };
   }
 
-  const output = summarizeInput(payload.output);
+  // Keep output intact until the canonical builder applies its head/tail limit.
+  const output =
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The transcript schema validates recursive JSON; preserve its textual member without input clipping.
+    typeof payload.output === "string" ? payload.output : (JSON.stringify(payload.output) ?? "");
   const exitCode = parseExitCode(output);
   const event: SessionEvent & { kind: "tool-result" } = {
     callId: payload.call_id ?? "",
@@ -217,12 +225,12 @@ function decodeCodexResponseItem(
   return event;
 }
 
-function parseCodexTranscript(records: JsonValue[]) {
-  const parsedRecords: CodexTranscriptRecord[] = [];
-  for (const record of records) {
+function parseCodexTranscript(records: SourceRecord[]) {
+  const parsedRecords: SourceRecord<CodexTranscriptRecord>[] = [];
+  for (const { line, record } of records) {
     const parsed = CodexTranscriptRecordSchema.safeParse(record);
     if (parsed.success) {
-      parsedRecords.push(parsed.data);
+      parsedRecords.push({ line, record: parsed.data });
     }
   }
   return parsedRecords;
@@ -304,47 +312,52 @@ export function parseClaudeSession(filePath: string) {
   return parseSessionWithAdapter(filePath, claudeSessionAdapter);
 }
 
-function decodeClaudeSession(rawRecords: JsonValue[]) {
+function decodeClaudeSession(rawRecords: SourceRecord[]) {
   const session = createDecodedSession();
   const records = parseClaudeTranscript(rawRecords);
   const toolResults = collectClaudeToolResults(records);
 
-  for (const rawRecord of rawRecords) {
+  for (const { record: rawRecord } of rawRecords) {
     const envelope = ClaudeTranscriptEnvelopeSchema.safeParse(rawRecord);
     if (envelope.success) {
       noteActivity(session, envelope.data.timestamp);
       readClaudeSessionMetadata(session, envelope.data);
     }
   }
-  for (const record of records) {
-    session.events.push(...decodeClaudeMessage(record, session.cwd, toolResults));
+  for (const { line, record } of records) {
+    session.events.push(
+      ...decodeClaudeMessage(record, session.cwd, toolResults).map((event) => ({
+        ...event,
+        sourceLine: event.sourceLine ?? line
+      }))
+    );
   }
 
   return session;
 }
 
-function collectClaudeToolResults(records: ClaudeTranscriptRecord[]) {
+function collectClaudeToolResults(records: SourceRecord<ClaudeTranscriptRecord>[]) {
   const results = new Map<string, SessionEvent & { kind: "tool-result" }>();
-  for (const record of records) {
+  for (const { line, record } of records) {
     if (!Array.isArray(record.message.content)) {
       continue;
     }
     for (const block of record.message.content) {
       const result = decodeClaudeToolResult(block);
       if (result) {
-        results.set(result.callId, result);
+        results.set(result.callId, { ...result, sourceLine: line });
       }
     }
   }
   return results;
 }
 
-function parseClaudeTranscript(records: JsonValue[]) {
-  const parsedRecords: ClaudeTranscriptRecord[] = [];
-  for (const record of records) {
+function parseClaudeTranscript(records: SourceRecord[]) {
+  const parsedRecords: SourceRecord<ClaudeTranscriptRecord>[] = [];
+  for (const { line, record } of records) {
     const parsed = ClaudeTranscriptRecordSchema.safeParse(record);
     if (parsed.success) {
-      parsedRecords.push(parsed.data);
+      parsedRecords.push({ line, record: parsed.data });
     }
   }
   return parsedRecords;

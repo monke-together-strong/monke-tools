@@ -13,7 +13,7 @@ import type { AgentKind, CanonicalSession, CanonicalTurn } from "./types.ts";
 // best-effort, then frozen once (so it is stable thereafter).
 const MAX_TOUCHED_DIRS_PER_SESSION = 64;
 
-export type SessionEvent =
+export type SessionEvent = { sourceLine?: number } & (
   | {
       captureRawUserMessage: boolean;
       kind: "prose";
@@ -34,7 +34,13 @@ export type SessionEvent =
       exitCode?: number;
       kind: "tool-result";
       output: string;
-    };
+    }
+);
+
+export interface SourceRecord<T = JsonValue> {
+  line: number;
+  record: T;
+}
 
 export interface DecodedSession {
   cwd: string | null;
@@ -48,7 +54,7 @@ export interface DecodedSession {
 
 export interface SessionAdapter {
   readonly agent: AgentKind;
-  decode: (records: JsonValue[]) => DecodedSession;
+  decode: (records: SourceRecord[]) => DecodedSession;
 }
 
 interface BuildCanonicalSessionOptions extends DecodedSession {
@@ -62,20 +68,21 @@ interface BuildCanonicalSessionOptions extends DecodedSession {
 class TurnBuilder {
   readonly turns: CanonicalTurn[] = [];
 
-  prose(kind: "user" | "assistant", text: string) {
+  prose(kind: "user" | "assistant", text: string, sourceLine?: number) {
     const trimmed = clipProse(text);
     if (!trimmed) {
       return;
     }
-    this.turns.push({ kind, ref: `t${this.turns.length}`, text: trimmed });
+    this.turns.push({ kind, ref: `t${this.turns.length}`, sourceLine, text: trimmed });
   }
 
-  toolCall(name: string, inputSummary: string) {
+  toolCall(name: string, inputSummary: string, sourceLine?: number) {
     const turn = {
       inputSummary,
       kind: "tool_call" as const,
       name,
-      ref: `t${this.turns.length}`
+      ref: `t${this.turns.length}`,
+      sourceLine
     };
     this.turns.push(turn);
     return turn;
@@ -102,7 +109,7 @@ export function buildCanonicalSession(
       if (event.captureRawUserMessage && isHumanPromptSource(options.threadSource)) {
         rawUserMessages.push(event.text.trim());
       }
-      builder.prose(event.role, event.text);
+      builder.prose(event.role, event.text, event.sourceLine);
       continue;
     }
 
@@ -111,7 +118,7 @@ export function buildCanonicalSession(
       for (const candidate of event.pathCandidates) {
         collectTouchedRoot(candidate, callPrimary, touched, visitedDirs);
       }
-      const turn = builder.toolCall(event.name, event.inputSummary);
+      const turn = builder.toolCall(event.name, event.inputSummary, event.sourceLine);
       if (event.callId !== null) {
         pendingCalls.set(event.callId, turn);
       }
@@ -150,6 +157,7 @@ function applyToolResult(
   result: SessionEvent & { kind: "tool-result" }
 ) {
   turn.outputHeadTail = summarizeOutput(result.output);
+  turn.outputSourceLine = result.sourceLine;
   if (result.error !== undefined) {
     turn.error = result.error;
   }

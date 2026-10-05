@@ -37,11 +37,12 @@ instructions, use absolute file paths, and anchor every command to this checkout
    - If `$implement` stops after setup, planning, or branch creation without
      commits and verification, treat it as incomplete and resume or report the
      blocker.
-6. After implementation reports closeout `PASS`, launch a fresh review subagent
-   in the implementation checkout to run `$autoreview` against the Spec. When
-   the change has a user-visible surface (UI, CLI, API, generated artifact),
-   that agent also runs `$behavior-validator`, using the Spec as the behavior
-   contract. Wait for review and any fixes to finish before creating the PR.
+6. After implementation, code review, and fixes finish, launch a fresh review
+   subagent in the implementation checkout to run `$autoreview` against the Spec
+   using the recorded review base. When the change has a user-visible surface
+   (UI, CLI, API, generated artifact), that agent also runs `$behavior-validator`,
+   using the Spec as the behavior contract. Wait for review and any fixes to
+   finish before creating the PR.
    - Always run this. Do not treat `$implement`, `$code-review`, tests, lint, or
      screenshots from implementation as a substitute.
 7. Create a ready-for-review PR from the implementation checkout.
@@ -70,6 +71,6 @@ orchestration.
   leave product and process requirements in the Spec and owning skills.
 - Do not create extra code commits from the orchestrator.
 - Let `$implement` own implementation commits.
-- Let the review agent own closeout fixes and reruns for `$autoreview` and
+- Let the review agent own fixes and reruns for `$autoreview` and
   `$behavior-validator` findings.
 - Let `$shepherd-pr` own PR polling and reviewer follow-up after the PR exists.
