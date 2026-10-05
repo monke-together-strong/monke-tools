@@ -17,6 +17,7 @@ import { relativeMarkdownLinks } from "../scripts/check-skill-links.ts";
 import { importedGuidancePath } from "../scripts/import-guidance.ts";
 import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import type { SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import { rememberSkillGuidance } from "../scripts/skill-review.ts";
 import { MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig } from "./global-config.ts";
 import { discoverSourceSkillCopies, resolveSkillSourceFolder } from "./local-skill-source.ts";
@@ -421,6 +422,12 @@ export async function acquireManagedSkillSource(options: {
       }
       writeImportRecipeStore(options.registryRoot, next);
       options.reconcile();
+      rememberSkillGuidance(
+        options.registryRoot,
+        next.recipes
+          .flatMap((recipe) => recipe.skills)
+          .filter((skill) => slugs.includes(skill.slug))
+      );
     }
   );
   runtime.writeStdout(

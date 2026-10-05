@@ -159,6 +159,34 @@ done
 }
 
 describe("Skill import registry CLI", () => {
+  test.each(["create", "adopt"] as const)(
+    "a required baseline failure rolls back %s before reporting success",
+    async (action) => {
+      const fixture = registryFixture();
+      await runCliAsync(["skills", "list"], fixture.runtime);
+      const previous = readImportRecipeStore(fixture.registry);
+      const baseline = path.join(fixture.registry, ".monke-skill-baseline");
+      rmSync(baseline, { recursive: true });
+      writeFileSync(baseline, "Existing baseline obstruction.\n");
+      const slug = action === "create" ? "new-workflow" : "typography";
+      const request =
+        action === "create"
+          ? ["skills", "create", slug]
+          : ["skills", "adopt", path.join(fixture.source, slug)];
+      await expect(runCliAsync(request, fixture.runtime)).rejects.toThrow(/ENOTDIR/u);
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+      expect(read(fixture.source, "typography/SKILL.md")).toContain("Course instructions.");
+      expect(readFileSync(baseline, "utf-8")).toBe("Existing baseline obstruction.\n");
+      expect(existsSync(`${baseline}.tmp`)).toBeFalsy();
+      const managed = path.join(fixture.monkeHome, "skill-sources", slug);
+      expect(existsSync(managed)).toBeFalsy();
+      expect(fixture.stdout()).not.toContain(managed);
+      for (const target of Object.values(fixture.installed)) {
+        expect(existsSync(path.join(target, slug))).toBeFalsy();
+      }
+    }
+  );
+
   test.each(["Monke home", "active guidance"] as const)(
     "an independent protected copy in %s does not report its registered slug unchanged",
     async (storage) => {

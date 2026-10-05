@@ -118,7 +118,7 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
     }
     let changedSource: string;
     if (request.action === "create" || request.action === "adopt") {
-      changedSource = await acquireManagedSkillSource({
+      await acquireManagedSkillSource({
         guidanceRoot: guidance,
         async publish(source, name) {
           await addSkillSource(runtime, root, store, { action: "add", link: true, name, source });
@@ -131,6 +131,7 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
         runtime,
         store
       });
+      return;
     } else if (request.action === "add") {
       changedSource = await addSkillSource(runtime, root, store, request);
     } else {
@@ -155,10 +156,8 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
         await applyRecipePolicy(runtime, root, store, nextRecipe);
       }
     }
-    if (request.action !== "create" && request.action !== "adopt") {
-      retireAdoptedSkillLinks(root, store);
-      distributeRegistry(runtime, root);
-    }
+    retireAdoptedSkillLinks(root, store);
+    distributeRegistry(runtime, root);
     const nextStore = readImportRecipeStore(root);
     rememberSkillGuidance(
       root,
