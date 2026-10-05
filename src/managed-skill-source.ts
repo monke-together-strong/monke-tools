@@ -209,6 +209,60 @@ function adoptionProjectionFailures(options: {
     );
 }
 
+/** A collection alias owns its descendants; ordinary aliases above the discovery root do not. */
+function hasAliasedCollection(root: string, copy: string) {
+  for (let parent = path.dirname(copy); containsPath(root, parent); parent = path.dirname(parent)) {
+    if (lstatSync(parent).isSymbolicLink()) {
+      return true;
+    }
+    if (parent === root) {
+      break;
+    }
+  }
+  return false;
+}
+
+function registeredOwnerLayoutFailures(
+  target: ReturnType<typeof adoptionTargets>["targets"][number] | undefined,
+  configured: ReturnType<typeof adoptionTargets>["configured"],
+  copy: string,
+  owner: string,
+  slug: string
+) {
+  if (
+    target &&
+    target.kind !== "claude" &&
+    configured.some((item) => item.agentSkillRoot === target.agentSkillRoot) &&
+    !containsPath(target.namespacePath, copy)
+  ) {
+    return [
+      `${slug}: registered owner ${owner} occupies ${copy} outside its managed namespace, leaving duplicate discovery entries; preserve its source recipe and reconcile that harness layout separately`
+    ];
+  }
+  return [];
+}
+
+function unselectedAliasFailures(plans: AdoptionPlan[], copies: string[], selected: string[]) {
+  const failures: string[] = [];
+  const unselectedCopies = copies.filter((item) => !selected.includes(path.basename(item)));
+  for (const plan of plans) {
+    for (const copy of plan.copies) {
+      if (lstatSync(copy).isSymbolicLink()) {
+        continue;
+      }
+      const physical = realpathSync.native(copy);
+      for (const unselected of unselectedCopies) {
+        if (containsPath(physical, realpathSync.native(unselected))) {
+          failures.push(
+            `${plan.slug}: removing ${copy} would break unselected Skill alias ${unselected}; preserve or reconcile that alias outside adoption before rerunning`
+          );
+        }
+      }
+    }
+  }
+  return failures;
+}
+
 function planAdoption(options: AdoptionOptions, source: string, selection?: string[]) {
   const root = existsSync(path.join(source, "SKILL.md"))
     ? source
@@ -220,8 +274,10 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
   }
   const { configured, targets } = adoptionTargets(options.runtime);
   const copies = [...supplied];
+  const discoveryRoots = [root];
   for (const target of targets) {
     if (existsSync(target.agentSkillRoot)) {
+      discoveryRoots.push(target.agentSkillRoot);
       copies.push(...discoverSourceSkillCopies(target.agentSkillRoot));
     }
   }
@@ -266,6 +322,7 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
       const target = targets.find((item) => containsPath(item.agentSkillRoot, copy));
       if (owner && physical === destination) {
         if (!lstatSync(copy).isSymbolicLink()) {
+          failures.push(...registeredOwnerLayoutFailures(target, configured, copy, owner, slug));
           return false;
         }
         if (!target) {
@@ -285,7 +342,7 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
         }
       }
       // A symlinked collection parent belongs to its external owner. Report instead of deleting through it.
-      if (realpathSync.native(path.dirname(copy)) !== path.dirname(copy)) {
+      if (discoveryRoots.some((discoveryRoot) => hasAliasedCollection(discoveryRoot, copy))) {
         failures.push(
           `${slug}: ${copy} is inside an aliased collection; use an individual Skill alias or linked import to preserve its external source`
         );
@@ -316,6 +373,7 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
       slug
     });
   }
+  failures.push(...unselectedAliasFailures(plans, copies, selected));
   if (failures.length > 0) {
     throw new MonkeError(
       `Skill adoption preflight failed:\n${failures.join("\n")}\nReconcile these paths outside adoption, then rerun. Use mt skills add <source> --link to keep external dependencies. Checks cover Markdown links and symlinks, not dynamic script dependencies or plain-text references.`

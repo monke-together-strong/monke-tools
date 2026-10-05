@@ -273,10 +273,10 @@ describe("Skill import registry CLI", () => {
   );
 
   test.each([
-    { error: /^$/u, harness: "codex", preservesLeftover: false },
+    { error: /registered owner.*duplicate discovery/u, harness: "codex", preservesLeftover: true },
     { error: /registered owner occupies.*projection/u, harness: "claude", preservesLeftover: true },
     { error: /registered owner occupies.*projection/u, harness: "cursor", preservesLeftover: true },
-    { error: /^$/u, harness: "custom", preservesLeftover: false }
+    { error: /registered owner.*duplicate discovery/u, harness: "custom", preservesLeftover: true }
   ] as const)(
     "adoption preserves a registered physical owner in a raw $harness harness path",
     async (scenario) => {
@@ -694,6 +694,62 @@ describe("Skill import registry CLI", () => {
     expect(realpathSync(path.join(fixture.installed.codex, "typography"))).toBe(
       path.join(managed, "typography")
     );
+  });
+
+  test("adoption reports an unselected alias before removing its physical source or another selected skill", async () => {
+    const fixture = registryFixture();
+    writeSkill(fixture.source, "healthy", "Healthy instructions.\n");
+    symlinkSync("typography", path.join(fixture.source, "unselected-alias"), "dir");
+    await expect(
+      runCliAsync(
+        ["skills", "adopt", fixture.checkout, "--skill", "typography", "healthy"],
+        fixture.runtime
+      )
+    ).rejects.toThrow(
+      /typography: removing .* would break unselected Skill alias .*unselected-alias/u
+    );
+    expect(read(fixture.source, "unselected-alias/SKILL.md")).toContain("Course instructions.");
+    expect(readlinkSync(path.join(fixture.source, "unselected-alias"))).toBe("typography");
+    expect(read(fixture.source, "healthy/SKILL.md")).toContain("Healthy instructions.");
+    expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+    expect(existsSync(path.join(fixture.installed.codex, "healthy"))).toBeFalsy();
+  });
+
+  test.each(["skill", "collection"] as const)(
+    "adoption accepts an ordinary ancestor alias above a supplied %s",
+    async (scope) => {
+      const fixture = registryFixture();
+      const ancestor = path.join(fixture.sandbox, "ancestor-alias");
+      symlinkSync(fixture.checkout, ancestor, "dir");
+      const source = path.join(ancestor, ".claude", "skills");
+      await runCliAsync(
+        [
+          "skills",
+          "adopt",
+          scope === "skill" ? path.join(source, "typography") : source,
+          "--name",
+          "personal"
+        ],
+        fixture.runtime
+      );
+      const managed = path.join(fixture.monkeHome, "skill-sources/personal/typography");
+      expect(read(managed, "SKILL.md")).toContain("Course instructions.");
+      expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(managed);
+      expect(existsSync(path.join(fixture.source, "typography"))).toBeFalsy();
+      expect(readlinkSync(ancestor)).toBe(fixture.checkout);
+    }
+  );
+
+  test("adoption reports an explicit collection alias and preserves its external skills", async () => {
+    const fixture = registryFixture();
+    const collection = path.join(fixture.sandbox, "collection-alias");
+    symlinkSync(fixture.source, collection, "dir");
+    await expect(runCliAsync(["skills", "adopt", collection], fixture.runtime)).rejects.toThrow(
+      /inside an aliased collection/u
+    );
+    expect(read(fixture.source, "typography/SKILL.md")).toContain("Course instructions.");
+    expect(readlinkSync(collection)).toBe(fixture.source);
+    expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
   });
 
   test("adopting a single Codex alias removes duplicate discovery and preserves the external source", async () => {
