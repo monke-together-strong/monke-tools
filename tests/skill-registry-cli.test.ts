@@ -434,6 +434,59 @@ describe("Skill import registry CLI", () => {
     }
   );
 
+  test("adoption protects managed storage through ordinary ancestor aliases", async () => {
+    const fixture = registryFixture();
+    const protectedCollection = path.join(fixture.monkeHome, "orphans");
+    writeSkill(protectedCollection, "foo", "Protected instructions.\n");
+    const alias = path.join(fixture.sandbox, "ordinary-ancestor");
+    symlinkSync(protectedCollection, alias, "dir");
+    await expect(
+      runCliAsync(["skills", "adopt", path.join(alias, "foo")], fixture.runtime)
+    ).rejects.toThrow(/unregistered Skill.*inside managed storage/u);
+    expect(read(protectedCollection, "foo/SKILL.md")).toContain("Protected instructions.");
+    expect(readlinkSync(alias)).toBe(protectedCollection);
+    expect(existsSync(fixture.registry)).toBeFalsy();
+    expect(existsSync(path.join(fixture.monkeHome, "skill-sources/foo"))).toBeFalsy();
+  });
+
+  test("adoption preserves undiscovered registered owner roots through collection aliases", async () => {
+    const fixture = registryFixture();
+    const external = path.join(fixture.sandbox, "external/alpha");
+    writeSkill(path.dirname(external), "alpha", "Shared self-contained instructions.\n");
+    const independent = path.join(fixture.sandbox, "independent/alpha");
+    cpSync(external, independent, { recursive: true });
+    const collection = path.join(fixture.sandbox, "beta-collection");
+    mkdirSync(collection);
+    symlinkSync(external, path.join(collection, "beta"), "dir");
+    await runCliAsync(
+      ["skills", "add", collection, "--name", "existing-beta", "--link", "--skill", "beta"],
+      fixture.runtime
+    );
+    await runCliAsync(
+      ["skills", "add", independent, "--name", "existing-alpha", "--link"],
+      fixture.runtime
+    );
+    const previous = readImportRecipeStore(fixture.registry);
+    expect(
+      previous.recipes
+        .find((recipe) => recipe.name === "existing-beta")
+        ?.skills.map((skill) => skill.slug)
+    ).toStrictEqual(["beta"]);
+    expect(realpathSync(path.join(fixture.registry, "skills/imported/beta"))).toBe(external);
+    rmSync(path.join(fixture.installed.claude, "beta"));
+    rmSync(path.resolve(fixture.installed.codex, ".."), { recursive: true });
+    rmSync(path.resolve(fixture.installed.cursor, ".."), { force: true, recursive: true });
+    expect(realpathSync(path.join(fixture.registry, "skills/imported/beta"))).toBe(external);
+    await expect(runCliAsync(["skills", "adopt", external], fixture.runtime)).rejects.toThrow(
+      /beta: registered owner .*would break after removing/u
+    );
+    expect(read(external, "SKILL.md")).toContain("Shared self-contained instructions.");
+    expect(realpathSync(path.join(fixture.registry, "skills/imported/beta"))).toBe(external);
+    expect(realpathSync(path.join(fixture.registry, "skills/imported/alpha"))).toBe(independent);
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(existsSync(path.join(fixture.installed.claude, "beta"))).toBeFalsy();
+  });
+
   test("adoption protects registered owner dependencies when harness projections are absent", async () => {
     const fixture = registryFixture();
     const collection = path.join(fixture.sandbox, "external-collection");

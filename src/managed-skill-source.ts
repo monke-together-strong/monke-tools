@@ -362,14 +362,30 @@ function retainedDependencyFailures(
   if (removed.length === 0) {
     return failures;
   }
-  const retained = new Set([
+  const registeredOwners = [
     ...options.store.recipes
       .flatMap((recipe) => recipe.skills)
       .filter((skill) => skill.kind === "skill")
-      .map((skill) => importedGuidancePath(options.registryRoot, skill))
-      .filter((owner) => existsSync(owner))
-      .map((owner) => realpathSync.native(owner)),
-    ...plans.filter((plan) => plan.registered).map((plan) => plan.destination),
+      .map((skill) => ({
+        entry: importedGuidancePath(options.registryRoot, skill),
+        slug: skill.slug
+      })),
+    ...plans
+      .filter((plan) => plan.registered)
+      .map((plan) => ({ entry: plan.destination, slug: plan.slug }))
+  ].filter(({ entry }) => existsSync(entry));
+  for (const { entry, slug } of registeredOwners) {
+    const resolution = resolveDependency(entry);
+    for (const removal of removed) {
+      if ([...resolution.paths].some((resolved) => containsPath(removal.canonical, resolved))) {
+        failures.push(
+          `${slug}: registered owner ${entry} would break after removing ${removal.entry}; preserve or reconcile this owner outside adoption before rerunning`
+        );
+      }
+    }
+  }
+  const retained = new Set([
+    ...registeredOwners.map(({ entry }) => realpathSync.native(entry)),
     ...copies
       .filter((copy) => !selected.includes(path.basename(copy)))
       .map((copy) => realpathSync.native(copy))
@@ -405,6 +421,9 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
     throw new MonkeError(`No skills found in ${root}`);
   }
   const { configured, targets } = adoptionTargets(options.runtime);
+  const protectedRoots = [getMonkeHome(options.runtime), path.join(options.guidanceRoot, "skills")]
+    .filter((entry) => existsSync(entry))
+    .map((entry) => realpathSync.native(entry));
   const copies = [...supplied];
   const discoveryRoots = [root];
   for (const target of targets) {
@@ -441,8 +460,7 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
     const disposable = candidates.filter((copy) => {
       const physical = realpathSync.native(copy);
       if (
-        containsPath(getMonkeHome(options.runtime), copy) ||
-        containsPath(path.join(options.guidanceRoot, "skills"), copy)
+        protectedRoots.some((protectedRoot) => containsPath(protectedRoot, canonicalEntry(copy)))
       ) {
         if (!owner || physical !== destination) {
           failures.push(
