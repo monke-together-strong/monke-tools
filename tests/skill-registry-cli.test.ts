@@ -159,6 +159,30 @@ done
 }
 
 describe("Skill import registry CLI", () => {
+  test.each(["Monke home", "active guidance"] as const)(
+    "an independent protected copy in %s does not report its registered slug unchanged",
+    async (storage) => {
+      const fixture = registryFixture();
+      await runCliAsync(["skills", "create", "registered"], fixture.runtime);
+      const owner = path.join(fixture.monkeHome, "skill-sources/registered/registered");
+      const root =
+        storage === "Monke home"
+          ? path.join(fixture.monkeHome, "orphans")
+          : path.join(fixture.guidance, "skills/personal");
+      const copy = path.join(root, "registered");
+      cpSync(owner, copy, { recursive: true });
+      const previous = readImportRecipeStore(fixture.registry);
+      await expect(runCliAsync(["skills", "adopt", copy], fixture.runtime)).rejects.toThrow(
+        /independent Skill copy inside managed storage/u
+      );
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+      expect(read(copy, "SKILL.md")).toBe(read(owner, "SKILL.md"));
+      expect(fixture.stdout()).not.toContain("Unchanged: registered");
+      await runCliAsync(["skills", "adopt", owner], fixture.runtime);
+      expect(fixture.stdout()).toContain("Unchanged: registered");
+    }
+  );
+
   test("an interactive Git slug change reports adopted projections before confirmation or publication", async () => {
     const fixture = registryFixture();
     const config = loadGlobalMonkeConfig(fixture.monkeHome);

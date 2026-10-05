@@ -255,9 +255,9 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
         containsPath(getMonkeHome(options.runtime), copy) ||
         containsPath(path.join(options.guidanceRoot, "skills"), copy)
       ) {
-        if (!owner) {
+        if (!owner || physical !== destination) {
           failures.push(
-            `${slug}: unregistered Skill inside managed storage at ${copy}; register it with mt skills add <path> --link, or move it to an external source before adoption`
+            `${slug}: ${owner ? "independent Skill copy" : "unregistered Skill"} inside managed storage at ${copy}; register an unowned source with mt skills add <path> --link, or reconcile this protected copy outside adoption before rerunning`
           );
         }
         return false;
