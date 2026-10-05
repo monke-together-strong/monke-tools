@@ -1,10 +1,15 @@
 import {
+  chmodSync,
+  cpSync,
   existsSync,
+  mkdirSync,
   readFileSync,
   readlinkSync,
   realpathSync,
+  readdirSync,
   rmSync,
   symlinkSync,
+  statSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
@@ -154,6 +159,461 @@ done
 }
 
 describe("Skill import registry CLI", () => {
+  test("policy publication preserves an incidental projection replaced by a user-owned entry", async () => {
+    const fixture = registryFixture();
+    const config = loadGlobalMonkeConfig(fixture.monkeHome);
+    saveGlobalMonkeConfig(fixture.monkeHome, {
+      ...config,
+      skillInstallPreference: { targets: [{ kind: "codex" }] }
+    });
+    writeSkill(fixture.installed.claude, "typography", "Course instructions.\n");
+    await runCliAsync(
+      ["skills", "adopt", path.join(fixture.source, "typography")],
+      fixture.runtime
+    );
+    const previous = readImportRecipeStore(fixture.registry);
+    const owner = path.join(fixture.monkeHome, "skill-sources/typography/typography");
+    const previousBytes = read(owner, "SKILL.md");
+    rmSync(path.join(fixture.installed.claude, "typography"));
+    writeSkill(fixture.installed.claude, "typography", "User-owned replacement.\n");
+    await expect(
+      runCliAsync(["skills", "policy", "typography", "--model-invocation", "deny"], fixture.runtime)
+    ).rejects.toThrow(/adopted Skill projection/u);
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(read(owner, "SKILL.md")).toBe(previousBytes);
+    await runCliAsync(["skills", "remove", "typography"], fixture.runtime);
+    expect(read(fixture.installed.claude, "typography/SKILL.md")).toContain(
+      "User-owned replacement."
+    );
+  });
+
+  test.each(["Markdown", "symlink"] as const)(
+    "a detected external %s dependency stops the complete batch with actionable paths",
+    async (dependency) => {
+      const fixture = registryFixture();
+      const original = path.join(fixture.source, "typography");
+      write(fixture.source, "shared.md", "Shared content.\n");
+      writeSkill(fixture.source, "healthy", "Healthy instructions.\n");
+      if (dependency === "Markdown") {
+        write(original, "SKILL.md", `${read(original, "SKILL.md")}\n[Shared](../shared.md)\n`);
+      } else {
+        symlinkSync("../shared.md", path.join(original, "shared.md"));
+      }
+      await expect(
+        runCliAsync(["skills", "adopt", fixture.checkout], fixture.runtime)
+      ).rejects.toThrow(/typography:.*shared\.md/u);
+      expect(read(fixture.source, "healthy/SKILL.md")).toContain("Healthy instructions.");
+      expect(read(original, "SKILL.md")).toContain("Course instructions.");
+      expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+      expect(existsSync(path.join(fixture.monkeHome, "skill-sources/private-course"))).toBeFalsy();
+    }
+  );
+
+  test.each([false, true])(
+    "publication failure restores the whole batch or retains recovery when restoration is obstructed (%s)",
+    async (obstructRecovery) => {
+      const fixture = registryFixture();
+      await runCliAsync(["skills", "create", "existing"], fixture.runtime);
+      const previous = readImportRecipeStore(fixture.registry);
+      const previousManifest = read(fixture.installed.claude, ".monke-tools-flat-skills.json");
+      const previousInstructions = read(path.dirname(fixture.installed.claude), "CLAUDE.md");
+      writeSkill(fixture.source, "second", "Second instructions.\n");
+      writeSkill(fixture.installed.claude, "typography", "Course instructions.\n");
+      let failed = false;
+      fixture.runtime.writeStderr = (message) => {
+        if (!failed && message.startsWith("Linked monke-tools skills")) {
+          failed = true;
+          if (obstructRecovery) {
+            rmSync(fixture.source, { recursive: true });
+            writeFileSync(fixture.source, "A concurrent writer obstructed the source parent.\n");
+          }
+          throw new Error("Controlled target publication failure");
+        }
+      };
+      await expect(
+        runCliAsync(["skills", "adopt", fixture.checkout], fixture.runtime)
+      ).rejects.toThrow(
+        obstructRecovery ? /Recovery copies retained at/u : /Controlled target publication failure/u
+      );
+      expect(failed).toBeTruthy();
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+      expect(read(fixture.installed.claude, ".monke-tools-flat-skills.json")).toBe(
+        previousManifest
+      );
+      expect(read(path.dirname(fixture.installed.claude), "CLAUDE.md")).toBe(previousInstructions);
+      expect(read(fixture.installed.claude, "typography/SKILL.md")).toContain(
+        "Course instructions."
+      );
+      expect(existsSync(path.join(fixture.installed.codex, "second"))).toBeFalsy();
+      expect(existsSync(path.join(fixture.installed.cursor, "typography"))).toBeFalsy();
+      expect(existsSync(path.join(fixture.monkeHome, "skill-sources/private-course"))).toBeFalsy();
+      const recoveryNames = readdirSync(fixture.monkeHome).filter((name) =>
+        name.startsWith(".monke-adopt-recovery-")
+      );
+      expect(recoveryNames).toHaveLength(obstructRecovery ? 1 : 0);
+      const recovery = path.join(fixture.monkeHome, recoveryNames[0] ?? "missing");
+      const recoveryIndex = existsSync(recovery) ? read(recovery, "recovery.json") : "";
+      expect(recoveryIndex.includes(path.join(fixture.source, "typography"))).toBe(
+        obstructRecovery
+      );
+      const recoveredSkill = (existsSync(recovery) ? readdirSync(recovery) : []).find(
+        (name) =>
+          existsSync(path.join(recovery, name, "SKILL.md")) &&
+          read(recovery, `${name}/SKILL.md`).includes("Second instructions.")
+      );
+      expect(recoveredSkill !== undefined).toBe(obstructRecovery);
+      const restoredTypography = obstructRecovery
+        ? readFileSync(fixture.source, "utf-8")
+        : read(fixture.source, "typography/SKILL.md");
+      const restoredSecond = obstructRecovery
+        ? readFileSync(fixture.source, "utf-8")
+        : read(fixture.source, "second/SKILL.md");
+      expect(restoredTypography).toContain(
+        obstructRecovery ? "concurrent writer" : "Course instructions."
+      );
+      expect(restoredSecond).toContain(
+        obstructRecovery ? "concurrent writer" : "Second instructions."
+      );
+    }
+  );
+
+  test.each(["bytes", "metadata", "executable", "symlink", "directory"] as const)(
+    "a %s difference preserves the complete selected adoption batch",
+    async (difference) => {
+      const fixture = registryFixture();
+      writeSkill(fixture.source, "healthy", "Healthy instructions.\n");
+      const original = path.join(fixture.source, "typography");
+      write(original, "scripts/report.sh", "echo report\n");
+      write(original, "references/first.md", "First reference.\n");
+      write(original, "references/second.md", "Second reference.\n");
+      symlinkSync("references/first.md", path.join(original, "alias.md"));
+      const copy = path.join(fixture.installed.claude, "typography");
+      cpSync(original, copy, { recursive: true, verbatimSymlinks: true });
+      if (difference === "bytes") {
+        write(copy, "SKILL.md", `${read(copy, "SKILL.md")}\n`);
+      }
+      if (difference === "metadata") {
+        write(copy, "agents/openai.yaml", "policy:\n  allow_implicit_invocation: false\n");
+      }
+      if (difference === "executable") {
+        chmodSync(path.join(copy, "scripts/report.sh"), 0o755);
+      }
+      if (difference === "symlink") {
+        rmSync(path.join(copy, "alias.md"));
+        symlinkSync("references/second.md", path.join(copy, "alias.md"));
+      }
+      if (difference === "directory") {
+        mkdirSync(path.join(copy, "empty"));
+      }
+      const previous = loadGlobalMonkeConfig(fixture.monkeHome);
+      const copyBytes = read(copy, "SKILL.md");
+      await expect(
+        runCliAsync(
+          ["skills", "adopt", fixture.checkout, "--skill", "typography", "healthy"],
+          fixture.runtime
+        )
+      ).rejects.toThrow(/differing copies/u);
+      expect(read(fixture.source, "healthy/SKILL.md")).toContain("Healthy instructions.");
+      expect(read(original, "SKILL.md")).toContain("Course instructions.");
+      expect(read(copy, "SKILL.md")).toBe(copyBytes);
+      expect(readlinkSync(path.join(original, "alias.md"))).toBe("references/first.md");
+      expect(loadGlobalMonkeConfig(fixture.monkeHome)).toStrictEqual(previous);
+      expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+      expect(existsSync(path.join(fixture.monkeHome, "skill-sources/private-course"))).toBeFalsy();
+      expect(existsSync(path.join(fixture.installed.codex, "healthy"))).toBeFalsy();
+    }
+  );
+
+  test("adoption preserves scripts and internal aliases and keeps differently named skills separate", async () => {
+    const fixture = registryFixture();
+    const custom = path.join(fixture.sandbox, "custom-skills");
+    const config = loadGlobalMonkeConfig(fixture.monkeHome);
+    saveGlobalMonkeConfig(fixture.monkeHome, {
+      ...config,
+      skillInstallPreference: {
+        targets: [
+          ...(config.skillInstallPreference?.targets ?? []),
+          { kind: "custom", path: custom }
+        ]
+      }
+    });
+    const original = path.join(fixture.source, "typography");
+    write(
+      original,
+      "SKILL.md",
+      `${read(original, "SKILL.md")}\n[Guide](references/guide%20one.md#details)\n`
+    );
+    write(original, "references/guide one.md", "# Details\n");
+    writeExecutable(path.join(original, "scripts/report.sh"), "#!/bin/sh\necho report\n");
+    symlinkSync("references/guide one.md", path.join(original, "guide.md"));
+    cpSync(original, path.join(custom, "typography"), { recursive: true, verbatimSymlinks: true });
+    write(
+      fixture.source,
+      "different/SKILL.md",
+      read(original, "SKILL.md").split("\n[Guide]")[0] ?? ""
+    );
+    await runCliAsync(["skills", "adopt", fixture.checkout], fixture.runtime);
+    const managed = path.join(fixture.monkeHome, "skill-sources/private-course");
+    expect(readlinkSync(path.join(managed, "typography/guide.md"))).toBe("references/guide one.md");
+    expect(statSync(path.join(managed, "typography/scripts/report.sh")).mode % 512).toBe(0o755);
+    expect(realpathSync(path.join(custom, "monke-tools/imported/typography"))).toBe(
+      path.join(managed, "typography")
+    );
+    expect(existsSync(path.join(custom, "typography"))).toBeFalsy();
+    expect(realpathSync(path.join(fixture.installed.claude, "different"))).toBe(
+      path.join(managed, "different")
+    );
+  });
+
+  test("identical copies reuse a registered owner and repeat adoption reports unchanged", async () => {
+    const fixture = registryFixture();
+    await runCliAsync(["skills", "add", fixture.checkout, "--link"], fixture.runtime);
+    const previous = readImportRecipeStore(fixture.registry);
+    const raw = path.resolve(fixture.installed.codex, "../../typography");
+    cpSync(path.join(fixture.source, "typography"), raw, { recursive: true });
+    await runCliAsync(["skills", "adopt", raw], fixture.runtime);
+    expect(existsSync(raw)).toBeFalsy();
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(
+      path.join(fixture.source, "typography")
+    );
+    await runCliAsync(
+      ["skills", "adopt", path.join(fixture.installed.claude, "typography")],
+      fixture.runtime
+    );
+    expect(fixture.stdout()).toContain("Unchanged: typography");
+    writeSkill(path.dirname(raw), "typography", "Divergent leftover.\n");
+    await expect(runCliAsync(["skills", "adopt", raw], fixture.runtime)).rejects.toThrow(
+      /registered owner/u
+    );
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(read(fixture.source, "typography/SKILL.md")).toContain("Course instructions.");
+    expect(read(path.dirname(raw), "typography/SKILL.md")).toContain("Divergent leftover.");
+  });
+
+  test("adoption consolidates identical global copies without enabling an unconfigured harness", async () => {
+    const fixture = registryFixture();
+    const config = loadGlobalMonkeConfig(fixture.monkeHome);
+    saveGlobalMonkeConfig(fixture.monkeHome, {
+      ...config,
+      skillInstallPreference: { targets: [{ kind: "codex" }] }
+    });
+    const rawCodex = path.resolve(fixture.installed.codex, "../../typography");
+    writeSkill(path.dirname(rawCodex), "typography", "Course instructions.\n");
+    writeSkill(fixture.installed.claude, "typography", "Course instructions.\n");
+    await runCliAsync(["skills", "adopt", rawCodex], fixture.runtime);
+    const owner = path.join(fixture.monkeHome, "skill-sources/typography/typography");
+    expect(existsSync(rawCodex)).toBeFalsy();
+    expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(owner);
+    expect(realpathSync(path.join(fixture.installed.codex, "typography"))).toBe(owner);
+    expect(existsSync(path.join(fixture.installed.claude, "monke-tools-core"))).toBeFalsy();
+    expect(loadGlobalMonkeConfig(fixture.monkeHome)).toStrictEqual({
+      ...config,
+      skillInstallPreference: { targets: [{ kind: "codex" }] }
+    });
+    await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+    await runInstallSkillsLocked(fixture.runtime, fixture.guidance, {
+      builtInTargetKinds: ["claude"]
+    });
+    expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(owner);
+    await runInstallSkillsLocked(fixture.runtime, fixture.guidance, {
+      builtInTargetKinds: ["codex"]
+    });
+    expect(realpathSync(path.join(fixture.installed.claude, "typography"))).toBe(owner);
+    expect(existsSync(path.join(fixture.installed.claude, "monke-tools-core"))).toBeFalsy();
+    await runCliAsync(["skills", "remove", "typography"], fixture.runtime);
+    expect(existsSync(path.join(fixture.installed.claude, "typography"))).toBeFalsy();
+    expect(existsSync(path.join(owner, "SKILL.md"))).toBeTruthy();
+  });
+
+  test("creation shares editable files across targets and retains them through installation and removal", async () => {
+    const fixture = registryFixture();
+    await runCliAsync(
+      [
+        "skills",
+        "create",
+        "weekly-report",
+        "--description",
+        "Use for weekly reports: progress and risks."
+      ],
+      fixture.runtime
+    );
+    const skill = path.join(fixture.monkeHome, "skill-sources/weekly-report/weekly-report");
+    expect(fixture.stdout()).toContain(path.join(skill, "SKILL.md"));
+    expect(
+      parse(readFileSync(path.join(skill, "SKILL.md"), "utf-8").split("---")[1] ?? "")
+    ).toMatchObject({
+      description: "Use for weekly reports: progress and risks.",
+      name: "weekly-report"
+    });
+    for (const root of Object.values(fixture.installed)) {
+      expect(realpathSync(path.join(root, "weekly-report"))).toBe(skill);
+    }
+    writeSkill(path.dirname(skill), "weekly-report", "My weekly report workflow.\n");
+    await runCliAsync(
+      ["skills", "policy", "weekly-report", "--model-invocation", "deny"],
+      fixture.runtime
+    );
+    await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+    expect(read(fixture.installed.codex, "weekly-report/SKILL.md")).toContain(
+      "My weekly report workflow."
+    );
+    expect(read(fixture.installed.claude, "weekly-report/SKILL.md")).toContain(
+      "disable-model-invocation: true"
+    );
+    await expect(
+      runCliAsync(["skills", "create", "weekly-report"], fixture.runtime)
+    ).rejects.toThrow(/already registered/u);
+    await runCliAsync(["skills", "remove", "weekly-report"], fixture.runtime);
+    expect(readFileSync(path.join(skill, "SKILL.md"), "utf-8")).toContain(
+      "My weekly report workflow."
+    );
+    expect(existsSync(path.join(fixture.installed.codex, "weekly-report"))).toBeFalsy();
+  });
+
+  test("adoption replaces an unmanaged Claude skill with shared links and preserves supporting files", async () => {
+    const fixture = registryFixture();
+    const original = path.join(fixture.installed.claude, "personal");
+    writeSkill(fixture.installed.claude, "personal", "My instructions.\n");
+    write(original, "scripts/report.sh", "echo report\n");
+    write(original, "references/report.md", "Report reference.\n");
+    await runCliAsync(["skills", "adopt", original], fixture.runtime);
+    const skill = path.join(fixture.monkeHome, "skill-sources/personal/personal");
+    for (const root of Object.values(fixture.installed)) {
+      expect(realpathSync(path.join(root, "personal"))).toBe(skill);
+      expect(read(root, "personal/references/report.md")).toBe("Report reference.\n");
+    }
+    expect(readFileSync(path.join(skill, "scripts/report.sh"), "utf-8")).toBe("echo report\n");
+    writeFileSync(
+      path.join(fixture.installed.codex, "personal/SKILL.md"),
+      "Edited through Codex.\n"
+    );
+    expect(readFileSync(path.join(original, "SKILL.md"), "utf-8")).toBe("Edited through Codex.\n");
+    expect(readImportRecipeStore(fixture.registry).recipes).toMatchObject([
+      {
+        localSource: { kind: "link", skillSourceFolder: path.dirname(skill) },
+        name: "personal"
+      }
+    ]);
+  });
+
+  test("adoption selects collection skills, removes old entries, and leaves alias targets intact", async () => {
+    const fixture = registryFixture();
+    const original = path.join(fixture.source, "typography");
+    const external = path.join(fixture.sandbox, "external", "linked");
+    writeSkill(fixture.source, "unselected", "Unselected.\n");
+    writeSkill(path.dirname(external), "linked", "External instructions.\n");
+    symlinkSync(external, path.join(fixture.source, "linked"), "dir");
+    await runCliAsync(
+      [
+        "skills",
+        "adopt",
+        fixture.checkout,
+        "--name",
+        "personal",
+        "--skill",
+        "typography",
+        "linked"
+      ],
+      fixture.runtime
+    );
+    const managed = path.join(fixture.monkeHome, "skill-sources/personal");
+    expect(existsSync(original)).toBeFalsy();
+    expect(existsSync(path.join(fixture.source, "linked"))).toBeFalsy();
+    expect(realpathSync(path.join(fixture.installed.codex, "linked"))).toBe(
+      path.join(managed, "linked")
+    );
+    expect(readFileSync(path.join(external, "SKILL.md"), "utf-8")).toContain(
+      "External instructions."
+    );
+    expect(read(fixture.source, "unselected/SKILL.md")).toContain("Unselected.");
+    expect(existsSync(path.join(fixture.installed.codex, "unselected"))).toBeFalsy();
+    await runCliAsync(["skills", "update"], fixture.runtime);
+    await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+    expect(realpathSync(path.join(fixture.installed.codex, "typography"))).toBe(
+      path.join(managed, "typography")
+    );
+  });
+
+  test("adopting a single Codex alias removes duplicate discovery and preserves the external source", async () => {
+    const fixture = registryFixture();
+    const external = path.join(fixture.sandbox, "external", "original");
+    const codexRoot = path.join(fixture.sandbox, "home", ".codex", "skills");
+    writeSkill(path.dirname(external), "original", "External instructions.\n");
+    write(codexRoot, "unrelated/SKILL.md", "Unrelated.\n");
+    symlinkSync(external, path.join(codexRoot, "personal"), "dir");
+    await runCliAsync(["skills", "adopt", "~/.codex/skills/personal"], fixture.runtime);
+    expect(existsSync(path.join(codexRoot, "personal"))).toBeFalsy();
+    expect(readFileSync(path.join(external, "SKILL.md"), "utf-8")).toContain(
+      "External instructions."
+    );
+    expect(read(codexRoot, "unrelated/SKILL.md")).toBe("Unrelated.\n");
+    expect(realpathSync(path.join(fixture.installed.codex, "personal"))).toBe(
+      path.join(fixture.monkeHome, "skill-sources/personal/personal")
+    );
+  });
+
+  test("adopting an entire harness root skips skills Monke already manages", async () => {
+    const fixture = registryFixture();
+    await runCliAsync(["skills", "create", "already-managed"], fixture.runtime);
+    const codexRoot = path.join(fixture.sandbox, "home", ".codex", "skills");
+    writeSkill(codexRoot, "personal", "Personal instructions.\n");
+    await runCliAsync(["skills", "adopt", codexRoot, "--name", "from-codex"], fixture.runtime);
+    expect(existsSync(path.join(codexRoot, "personal"))).toBeFalsy();
+    expect(read(fixture.installed.codex, "personal/SKILL.md")).toContain("Personal instructions.");
+    expect(
+      readImportRecipeStore(fixture.registry).recipes.find((recipe) => recipe.name === "from-codex")
+        ?.skills
+    ).toStrictEqual([{ kind: "skill", selector: "personal", slug: "personal" }]);
+    expect(
+      existsSync(
+        path.join(fixture.monkeHome, "skill-sources/already-managed/already-managed/SKILL.md")
+      )
+    ).toBeTruthy();
+    expect(
+      read(path.join(fixture.guidance, "skills/internal"), "monke-tools-core/SKILL.md")
+    ).toContain("Internal instructions.");
+  });
+
+  test("divergent global copies are reported before adoption changes files", async () => {
+    const fixture = registryFixture();
+    const original = path.join(fixture.source, "typography");
+    writeSkill(fixture.installed.claude, "typography", "Unrelated target.\n");
+    await expect(runCliAsync(["skills", "adopt", original], fixture.runtime)).rejects.toThrow(
+      /differing copies.*typography/u
+    );
+    expect(readFileSync(path.join(original, "SKILL.md"), "utf-8")).toContain(
+      "Course instructions."
+    );
+    expect(read(fixture.installed.claude, "typography/SKILL.md")).toContain("Unrelated target.");
+    expect(existsSync(path.join(fixture.monkeHome, "skill-sources/typography"))).toBeFalsy();
+    expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+  });
+
+  test("invalid selections fail without changes and already managed sources report unchanged", async () => {
+    const fixture = registryFixture();
+    await expect(
+      runCliAsync(
+        ["skills", "adopt", fixture.checkout, "--skill", "typography", "missing"],
+        fixture.runtime
+      )
+    ).rejects.toThrow(/missing/u);
+    expect(read(fixture.source, "typography/SKILL.md")).toContain("Course instructions.");
+    await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
+    await runCliAsync(
+      ["skills", "adopt", path.join(fixture.source, "typography"), "--skill", "typography"],
+      fixture.runtime
+    );
+    expect(fixture.stdout()).toContain("Unchanged: typography");
+    await expect(runCliAsync(["skills", "create", "../escape"], fixture.runtime)).rejects.toThrow(
+      /lowercase/u
+    );
+    await expect(
+      runCliAsync(["skills", "create", "monke-tools-core"], fixture.runtime)
+    ).rejects.toThrow(/duplicate/u);
+    expect(existsSync(path.join(fixture.monkeHome, "skill-sources/monke-tools-core"))).toBeFalsy();
+  });
+
   test("explicit removal survives installation and explicit re-add enables a bundled source again", async () => {
     const fixture = registryFixture();
     const gitSource = createRepo(path.join(fixture.sandbox, "git-source"), {

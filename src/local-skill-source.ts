@@ -36,13 +36,13 @@ const SKILL_SOURCE_CANDIDATES = [
 ];
 
 /** Choose one skill source folder from a checkout or installer output. */
-export function resolveSkillSourceFolder(directory: string) {
+export function resolveSkillSourceFolder(directory: string, preserveAlias = false) {
   if (existsSync(path.join(directory, "SKILL.md"))) {
-    return realpathSync.native(directory);
+    return preserveAlias ? directory : realpathSync.native(directory);
   }
   const candidates = SKILL_SOURCE_CANDIDATES.map((candidate) => path.join(directory, candidate));
   const root = candidates.find((candidate) => existsSync(candidate)) ?? directory;
-  return existsSync(root) ? realpathSync.native(root) : root;
+  return existsSync(root) && !preserveAlias ? realpathSync.native(root) : root;
 }
 
 /** Scan Skill directories and their existing ancestors without following cycles. */
@@ -86,7 +86,7 @@ function scanSkillSource(root: string, includeNestedSkills = false) {
 }
 
 /** Discover Skills without asking which agent should receive them. */
-function discoverSourceSkills(root: string) {
+export function discoverSourceSkills(root: string) {
   const skills = new Map<string, string>();
   for (const directory of scanSkillSource(root).skills) {
     const slug = path.basename(directory);
@@ -96,6 +96,11 @@ function discoverSourceSkills(root: string) {
     skills.set(slug, directory);
   }
   return skills;
+}
+
+/** Keep duplicate slugs visible so adoption can compare them before publishing. */
+export function discoverSourceSkillCopies(root: string) {
+  return scanSkillSource(root).skills;
 }
 
 /** Back up Skill folders without treating an existing project as disposable installer output. */

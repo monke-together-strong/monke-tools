@@ -5,6 +5,7 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   rmdirSync,
@@ -15,6 +16,8 @@ import path from "node:path";
 
 import * as z from "zod";
 
+import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import type { SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { loadGlobalMonkeConfig, SkillInstallPreferenceSchema } from "./global-config.ts";
 import type {
@@ -25,6 +28,7 @@ import type {
 } from "./global-config.ts";
 import {
   preflightGlobalInstructions,
+  globalInstructionsPath,
   preflightRemoveGlobalInstructions,
   reconcileGlobalInstructions,
   removeGlobalInstructions
@@ -270,6 +274,7 @@ export function reconcileSkillNamespaces(options: {
   });
   const nextKeys = new Set(nextTargets.map(targetKey));
   const failures: string[] = [];
+  preflightAdoptedSkillLinks(options.guidanceSourceRoot);
 
   for (const previousTarget of previousTargets) {
     if (nextKeys.has(targetKey(previousTarget))) {
@@ -283,6 +288,8 @@ export function reconcileSkillNamespaces(options: {
       failures.push(`${previousTarget.agentSkillRoot}: ${message}`);
     }
   }
+
+  reconcileAdoptedSkillLinks(options.guidanceSourceRoot, nextTargets);
 
   for (const target of nextTargets) {
     try {
@@ -302,6 +309,109 @@ export function reconcileSkillNamespaces(options: {
       `Failed to reconcile ${failures.length} Skill install target(s):\n${failures.join("\n")}`
     );
   }
+}
+
+/** Additional projections replace pre-existing copies without enabling their harness. */
+export function preflightAdoptedSkillLinks(root: string) {
+  for (const recipe of readImportRecipeStore(root).recipes) {
+    for (const skill of recipe.skills) {
+      const source = path.join(root, "skills", "imported", skill.slug);
+      for (const destination of skill.adoptedPaths ?? []) {
+        const stat = lstatSync(destination, { throwIfNoEntry: false });
+        if (stat && (!stat.isSymbolicLink() || readlinkSync(destination) !== source)) {
+          throw new MonkeError(`Refusing to overwrite adopted Skill projection at ${destination}`);
+        }
+      }
+    }
+  }
+}
+
+function reconcileAdoptedSkillLinks(root: string, targets: ResolvedSkillInstallTarget[]) {
+  for (const recipe of readImportRecipeStore(root).recipes) {
+    for (const skill of recipe.skills) {
+      const source = path.join(root, "skills", "imported", skill.slug);
+      for (const destination of skill.adoptedPaths ?? []) {
+        const configured = targets.find(
+          (target) => path.dirname(destination) === target.agentSkillRoot
+        );
+        const stat = lstatSync(destination, { throwIfNoEntry: false });
+        if (configured) {
+          if (configured.kind !== "claude" && stat) {
+            rmSync(destination);
+          }
+          continue;
+        }
+        mkdirSync(path.dirname(destination), { recursive: true });
+        if (!stat) {
+          symlinkSync(source, destination, "dir");
+        }
+      }
+    }
+  }
+}
+
+/** Retire only projections still pointing at their recorded registry owner. */
+export function retireAdoptedSkillLinks(root: string, previous: SkillImportRecipeStore) {
+  const retained = new Set(
+    readImportRecipeStore(root).recipes.flatMap((recipe) =>
+      recipe.skills.flatMap((skill) => skill.adoptedPaths ?? [])
+    )
+  );
+  for (const recipe of previous.recipes) {
+    for (const skill of recipe.skills) {
+      const source = path.join(root, "skills", "imported", skill.slug);
+      for (const destination of skill.adoptedPaths ?? []) {
+        if (
+          !retained.has(destination) &&
+          lstatSync(destination, { throwIfNoEntry: false })?.isSymbolicLink() &&
+          readlinkSync(destination) === source
+        ) {
+          rmSync(destination);
+        }
+      }
+    }
+  }
+}
+
+/** Paths target reconciliation can mutate; adoption retains them until publication completes. */
+export function skillPublicationPaths(runtime: Runtime, root: string, slugs: string[]) {
+  const preference = loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference;
+  const homeDirectory = getHomeDirectory(runtime);
+  const targets = resolveSkillInstallTargets({
+    homeDirectory,
+    preference: preference ?? { targets: [] }
+  });
+  const paths = readImportRecipeStore(root).recipes.flatMap((recipe) =>
+    recipe.skills.flatMap((skill) => skill.adoptedPaths ?? [])
+  );
+  for (const target of targets) {
+    paths.push(target.namespacePath);
+    if (target.kind === "claude") {
+      const manifest = readFlatManifest(target);
+      const links = discoverFlatSkillLinks(resolveSkillSourceTree(root));
+      paths.push(
+        flatManifestPath(target),
+        ...[
+          ...slugs,
+          ...links.map((link) => link.name),
+          ...(manifest?.links.map((link) => link.name) ?? [])
+        ].map((slug) => path.join(target.agentSkillRoot, slug)),
+        ...discoverFlatSupportingLinks(target, resolveSkillSourceTree(root)).map(
+          (link) => link.targetPath
+        ),
+        ...(manifest?.supportingLinks?.map((link) => link.targetPath) ?? [])
+      );
+    }
+    const instructions = globalInstructionsPath(target, {
+      cwd: runtime.cwd,
+      environment: runtime.env,
+      homeDirectory
+    });
+    if (instructions) {
+      paths.push(existsSync(instructions) ? realpathSync.native(instructions) : instructions);
+    }
+  }
+  return paths;
 }
 
 /** Normalize one custom Agent skill root path for storage in Global monke config. */

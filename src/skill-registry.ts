@@ -36,13 +36,21 @@ import { loadGlobalMonkeConfig } from "./global-config.ts";
 import { loadActiveToolInstall } from "./install-manifest.ts";
 import { withInstallMutationLockAsync } from "./install-recovery.ts";
 import { resolveSkillSourceFolder, updateLocalSkillSource } from "./local-skill-source.ts";
+import { acquireManagedSkillSource } from "./managed-skill-source.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
-import { preflightInstallGuidance, reconcileSkillNamespaces } from "./skills.ts";
+import {
+  preflightAdoptedSkillLinks,
+  preflightInstallGuidance,
+  reconcileSkillNamespaces,
+  retireAdoptedSkillLinks
+} from "./skills.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 import { parseOwnedYamlText } from "./validation.ts";
 
 type SkillsRequest =
+  | { action: "create"; description?: string; name: string }
+  | { action: "adopt"; name?: string; skills?: string[]; source: string }
   | {
       action: "add";
       command?: string;
@@ -103,12 +111,27 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
           }
         );
       } finally {
+        retireAdoptedSkillLinks(root, store);
         distributeRegistry(runtime, root);
       }
       return;
     }
     let changedSource: string;
-    if (request.action === "add") {
+    if (request.action === "create" || request.action === "adopt") {
+      changedSource = await acquireManagedSkillSource({
+        guidanceRoot: guidance,
+        async publish(source, name) {
+          await addSkillSource(runtime, root, store, { action: "add", link: true, name, source });
+        },
+        reconcile() {
+          distributeRegistry(runtime, root);
+        },
+        registryRoot: root,
+        request,
+        runtime,
+        store
+      });
+    } else if (request.action === "add") {
       changedSource = await addSkillSource(runtime, root, store, request);
     } else {
       const recipe = findRecipe(store, request.source);
@@ -132,7 +155,10 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
         await applyRecipePolicy(runtime, root, store, nextRecipe);
       }
     }
-    distributeRegistry(runtime, root);
+    if (request.action !== "create" && request.action !== "adopt") {
+      retireAdoptedSkillLinks(root, store);
+      distributeRegistry(runtime, root);
+    }
     const nextStore = readImportRecipeStore(root);
     rememberSkillGuidance(
       root,
@@ -289,6 +315,7 @@ export function preflightSkillRegistryInstall(
     preflightInstallGuidance(runtime, guidance, explicitTargets);
     return;
   }
+  preflightAdoptedSkillLinks(registry);
   const proposal = mkdtempSync(path.join(tmpdir(), "monke-install-guidance-"));
   try {
     const { additions } = planRegistryImports(registry, guidance, true);
@@ -542,6 +569,7 @@ function preflightRegistryChange(
   guidance: SkillImportRecipe["skills"],
   previous: SkillImportRecipe["skills"]
 ) {
+  preflightAdoptedSkillLinks(root);
   const proposal = mkdtempSync(path.join(tmpdir(), "monke-skill-preflight-"));
   try {
     for (const folder of ["skills/internal", "skills/codex", "skills/references", "instructions"]) {

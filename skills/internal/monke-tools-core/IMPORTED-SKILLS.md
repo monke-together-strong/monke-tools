@@ -6,6 +6,60 @@ policies live in `$MONKE_HOME/skill-registry/skills.lock.json` (normally
 repository lock. The registry starts with the bundled imported guidance.
 Private content stays in your source directory or Monke home.
 
+## Create and adopt skills
+
+For a new global skill, start with Monke unless the user explicitly requests a
+specific harness:
+
+```sh
+mt skills create my-workflow --description 'Use when preparing a weekly report.'
+```
+
+Edit the printed `SKILL.md` path, replacing its TODO instructions with the skill
+content. Files live in `$MONKE_HOME/skill-sources/my-workflow/my-workflow`; all
+configured compatible targets link to those editable files. Supporting files
+belong beside `SKILL.md`. Creation preserves existing sources and target files;
+collisions fail instead of overwriting them.
+
+Move an existing skill or collection into Monke home:
+
+```sh
+mt skills adopt ~/.claude/skills/my-workflow
+mt skills adopt ~/.codex/skills --name personal
+mt skills adopt ~/.codex/skills --name personal --skill weekly-report code-notes
+```
+
+Adoption compares matching folder slugs across Claude, Codex, Cursor, and configured
+custom roots. It consolidates identical copies into one editable source under
+`$MONKE_HOME/skill-sources/<name>`, removes obsolete entries, and publishes links
+in each harness's layout. Existing matching entries in unconfigured harnesses
+become managed links without enabling those targets or installing other skills.
+Unselected skills stay in place. Identical copies of a registered skill reuse
+its owner and policies; already consolidated skills report `Unchanged`.
+
+Comparison covers complete folder structure, file bytes, executable permissions,
+and supporting symlinks. Formatting and metadata differences are conflicts.
+Every selected skill is checked before publication; any conflict stops the entire
+batch with paths and differences. Reconcile those files separately, then rerun.
+
+Adopting individual skill aliases preserves their external physical source.
+Supporting files must remain self-contained: relative Markdown links and symlinks
+that cannot survive relocation are reported. Checks do not infer dynamic script
+dependencies or plain-text references. Use linked import for external dependencies.
+Aliased collection parents are reported for explicit reconciliation.
+
+Originals and target state remain recoverable until registry and target publication
+finish. Handled failures restore the batch. If restoration is obstructed, the
+command reports retained recovery copies and their `recovery.json` index.
+
+Created and adopted sources use the existing linked-import registry: invocation
+policies, updates, target reconfiguration, and installation all retain them.
+`mt skills remove <name>` removes distribution and registration while preserving
+the files in Monke home.
+
+To distribute existing files while keeping their current source location, use
+`mt skills add <path> --link` instead.
+
 ## Acquire skills
 
 Choose how to get the skill files:
