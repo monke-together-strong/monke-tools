@@ -47,6 +47,8 @@ Supporting files must remain self-contained: relative Markdown links and symlink
 that cannot survive relocation are reported. Checks do not infer dynamic script
 dependencies or plain-text references. Use linked import for external dependencies.
 Aliased collection parents are reported for explicit reconciliation.
+Unregistered folders in protected Monke storage and a registered physical owner
+occupying a requested projection also report without changing the batch.
 
 Originals and target state remain recoverable until registry and target publication
 finish. Handled failures restore the batch. If restoration is obstructed, the
@@ -136,7 +138,10 @@ with their preceding accepted snapshot, showing changes installed outside Monke.
 command reopens the retained comparison if viewer delivery fails.
 
 Invocation policies survive installer replacement. Instruction edits follow the
-installer's overwrite behavior; commit or back them up before updating.
+installer’s overwrite behavior; commit or back them up before updating.
+Git slug changes with recorded incidental projections report before confirmation
+or publication. Preserve the owner and reconcile the recorded slug and projection
+paths explicitly before retrying the update.
 
 `mt skills list` shows registered sources. `mt skills remove <source>` removes
 its registration and managed projections while preserving the external source.

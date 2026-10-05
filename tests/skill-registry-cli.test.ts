@@ -159,6 +159,115 @@ done
 }
 
 describe("Skill import registry CLI", () => {
+  test("an interactive Git slug change reports adopted projections before confirmation or publication", async () => {
+    const fixture = registryFixture();
+    const config = loadGlobalMonkeConfig(fixture.monkeHome);
+    saveGlobalMonkeConfig(fixture.monkeHome, {
+      ...config,
+      skillInstallPreference: { targets: [{ kind: "codex" }] }
+    });
+    const upstream = createRepo(path.join(fixture.sandbox, "git-source"), {
+      "README.md": "Git source.\n"
+    });
+    writeSkill(path.join(upstream, "skills"), "typography", "Git instructions.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Original skill"]);
+    installGitImporter(fixture);
+    await runCliAsync(["skills", "add", `${upstream}#HEAD`, "--name", "original"], fixture.runtime);
+    cpSync(
+      path.join(fixture.registry, "skills/imported/typography"),
+      path.join(fixture.installed.claude, "typography"),
+      { recursive: true }
+    );
+    await runCliAsync(
+      ["skills", "adopt", path.join(fixture.installed.claude, "typography")],
+      fixture.runtime
+    );
+    const previous = readImportRecipeStore(fixture.registry);
+    git(upstream, ["mv", "skills/typography", "skills/renamed-typography"]);
+    git(upstream, ["commit", "-m", "Rename skill folder"]);
+    writeExecutable(
+      path.join(fixture.bin, "npx"),
+      `#!/bin/sh\nset -eu\nsource="$4"\nmkdir -p .agents/skills\ncp -R "$source/skills/renamed-typography" .agents/skills/\n`
+    );
+    await expect(
+      runCliAsync(["skills", "update", "--interactive"], fixture.runtime)
+    ).rejects.toThrow(/typography.*renamed-typography.*adopted projections/u);
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(read(fixture.installed.claude, "typography/SKILL.md")).toContain("Git instructions.");
+    expect(read(fixture.installed.codex, "typography/SKILL.md")).toContain("Git instructions.");
+    expect(
+      existsSync(path.join(fixture.registry, "skills/imported/renamed-typography"))
+    ).toBeFalsy();
+  });
+
+  test.each(["Monke home", "active guidance"] as const)(
+    "an unregistered skill inside %s reports a protected-source error",
+    async (storage) => {
+      const fixture = registryFixture();
+      const root =
+        storage === "Monke home"
+          ? path.join(fixture.monkeHome, "unregistered")
+          : path.join(fixture.guidance, "skills/personal");
+      writeSkill(root, "orphan", "Unregistered instructions.\n");
+      await expect(
+        runCliAsync(["skills", "adopt", path.join(root, "orphan")], fixture.runtime)
+      ).rejects.toThrow(/unregistered Skill inside managed storage/u);
+      expect(read(root, "orphan/SKILL.md")).toContain("Unregistered instructions.");
+      expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+      expect(fixture.stdout()).not.toContain("Unchanged: orphan");
+      expect(existsSync(path.join(fixture.installed.codex, "orphan"))).toBeFalsy();
+    }
+  );
+
+  test.each([
+    { error: /^$/u, harness: "codex", preservesLeftover: false },
+    { error: /registered owner occupies.*projection/u, harness: "claude", preservesLeftover: true },
+    { error: /registered owner occupies.*projection/u, harness: "cursor", preservesLeftover: true },
+    { error: /^$/u, harness: "custom", preservesLeftover: false }
+  ] as const)(
+    "adoption preserves a registered physical owner in a raw $harness harness path",
+    async (scenario) => {
+      const fixture = registryFixture();
+      const config = loadGlobalMonkeConfig(fixture.monkeHome);
+      saveGlobalMonkeConfig(fixture.monkeHome, {
+        ...config,
+        skillInstallPreference: {
+          targets: [
+            { kind: "codex" },
+            ...(scenario.harness === "custom"
+              ? [{ kind: "custom" as const, path: path.join(fixture.sandbox, "custom-skills") }]
+              : [])
+          ]
+        }
+      });
+      const rawRoot = {
+        claude: fixture.installed.claude,
+        codex: path.resolve(fixture.installed.codex, "../.."),
+        cursor: path.resolve(fixture.installed.cursor, "../.."),
+        custom: path.join(fixture.sandbox, "custom-skills")
+      }[scenario.harness];
+      writeSkill(rawRoot, "typography", "Course instructions.\n");
+      const owner = path.join(rawRoot, "typography");
+      await runCliAsync(["skills", "add", owner, "--name", "original", "--link"], fixture.runtime);
+      const previous = readImportRecipeStore(fixture.registry);
+      let report = "";
+      try {
+        await runCliAsync(
+          ["skills", "adopt", path.join(fixture.source, "typography")],
+          fixture.runtime
+        );
+      } catch (error) {
+        report = errorMessage(ThrownValueSchema.parse(error));
+      }
+      expect(report).toMatch(scenario.error);
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+      expect(read(owner, "SKILL.md")).toContain("Course instructions.");
+      expect(realpathSync(path.join(fixture.registry, "skills/imported/typography"))).toBe(owner);
+      expect(existsSync(path.join(fixture.source, "typography"))).toBe(scenario.preservesLeftover);
+    }
+  );
+
   test("policy publication preserves an incidental projection replaced by a user-owned entry", async () => {
     const fixture = registryFixture();
     const config = loadGlobalMonkeConfig(fixture.monkeHome);

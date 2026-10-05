@@ -186,6 +186,28 @@ function existingOwner(options: AdoptionOptions, slug: string) {
   };
 }
 
+function adoptionProjectionFailures(options: {
+  destination: string;
+  owner: string | undefined;
+  paths: string[];
+  slug: string;
+}) {
+  if (!options.owner) {
+    return [];
+  }
+  return options.paths
+    .filter(
+      (projection) =>
+        existsSync(projection) &&
+        realpathSync.native(projection) === options.destination &&
+        !lstatSync(projection).isSymbolicLink()
+    )
+    .map(
+      (projection) =>
+        `${options.slug}: registered owner occupies ${projection}, which is also the requested incidental projection; preserve the existing source recipe and reconcile that harness layout separately`
+    );
+}
+
 function planAdoption(options: AdoptionOptions, source: string, selection?: string[]) {
   const root = existsSync(path.join(source, "SKILL.md"))
     ? source
@@ -233,10 +255,18 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
         containsPath(getMonkeHome(options.runtime), copy) ||
         containsPath(path.join(options.guidanceRoot, "skills"), copy)
       ) {
+        if (!owner) {
+          failures.push(
+            `${slug}: unregistered Skill inside managed storage at ${copy}; register it with mt skills add <path> --link, or move it to an external source before adoption`
+          );
+        }
         return false;
       }
       const target = targets.find((item) => containsPath(item.agentSkillRoot, copy));
       if (owner && physical === destination) {
+        if (!lstatSync(copy).isSymbolicLink()) {
+          return false;
+        }
         if (!target) {
           return false;
         }
@@ -269,6 +299,7 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
           candidates.some((copy) => containsPath(target.agentSkillRoot, copy))
       )
       .map((target) => path.join(target.agentSkillRoot, slug));
+    failures.push(...adoptionProjectionFailures({ destination, owner, paths: adoptedPaths, slug }));
     if (builtin && !skill && adoptedPaths.length > 0) {
       failures.push(
         `${slug}: bundled Skill owner ${builtin} cannot acquire additional projections; configure that harness explicitly`
@@ -335,7 +366,9 @@ export async function acquireManagedSkillSource(options: {
   }
   if (
     request.action === "adopt" &&
-    plans.every((plan) => plan.copies.length === 0 && plan.adoptedPaths.length === 0)
+    plans.every(
+      (plan) => plan.registered && plan.copies.length === 0 && plan.adoptedPaths.length === 0
+    )
   ) {
     runtime.writeStdout(`Unchanged: ${plans.map((plan) => plan.slug).join(", ")}\n`);
     return name;
