@@ -231,9 +231,10 @@ function registeredOwnerLayoutFailures(
 ) {
   if (
     target &&
-    target.kind !== "claude" &&
-    configured.some((item) => item.agentSkillRoot === target.agentSkillRoot) &&
-    !containsPath(target.namespacePath, copy)
+    !containsPath(target.namespacePath, copy) &&
+    (copy !== path.join(target.agentSkillRoot, slug) ||
+      (target.kind !== "claude" &&
+        configured.some((item) => item.agentSkillRoot === target.agentSkillRoot)))
   ) {
     return [
       `${slug}: registered owner ${owner} occupies ${copy} outside its managed namespace, leaving duplicate discovery entries; preserve its source recipe and reconcile that harness layout separately`
@@ -242,19 +243,47 @@ function registeredOwnerLayoutFailures(
   return [];
 }
 
+/** Follow only the supplied entry's resolution, recording each alias before dereferencing it. */
+function aliasResolutionPaths(entry: string) {
+  const paths = new Set<string>();
+  let current = path.resolve(entry);
+  while (!paths.has(current)) {
+    paths.add(current);
+    const { root } = path.parse(current);
+    let ancestor = root;
+    let followedAlias = false;
+    for (const part of path.relative(root, current).split(path.sep)) {
+      ancestor = path.join(ancestor, part);
+      if (lstatSync(ancestor).isSymbolicLink()) {
+        paths.add(path.join(realpathSync.native(path.dirname(ancestor)), path.basename(ancestor)));
+        current = path.resolve(
+          path.dirname(ancestor),
+          readlinkSync(ancestor),
+          path.relative(ancestor, current)
+        );
+        followedAlias = true;
+        break;
+      }
+    }
+    if (!followedAlias) {
+      break;
+    }
+  }
+  return paths;
+}
+
 function unselectedAliasFailures(plans: AdoptionPlan[], copies: string[], selected: string[]) {
   const failures: string[] = [];
-  const unselectedCopies = copies.filter((item) => !selected.includes(path.basename(item)));
+  const unselectedCopies = copies
+    .filter((item) => !selected.includes(path.basename(item)))
+    .map((entry) => ({ entry, resolution: aliasResolutionPaths(entry) }));
   for (const plan of plans) {
     for (const copy of plan.copies) {
-      if (lstatSync(copy).isSymbolicLink()) {
-        continue;
-      }
-      const physical = realpathSync.native(copy);
-      for (const unselected of unselectedCopies) {
-        if (containsPath(physical, realpathSync.native(unselected))) {
+      const removed = path.join(realpathSync.native(path.dirname(copy)), path.basename(copy));
+      for (const { entry, resolution } of unselectedCopies) {
+        if ([...resolution].some((resolved) => containsPath(removed, resolved))) {
           failures.push(
-            `${plan.slug}: removing ${copy} would break unselected Skill alias ${unselected}; preserve or reconcile that alias outside adoption before rerunning`
+            `${plan.slug}: removing ${copy} would break unselected Skill alias ${entry}; preserve or reconcile that alias outside adoption before rerunning`
           );
         }
       }
