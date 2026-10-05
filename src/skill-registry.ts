@@ -314,7 +314,7 @@ export function preflightSkillRegistryInstall(
     preflightInstallGuidance(runtime, guidance, explicitTargets);
     return;
   }
-  preflightAdoptedSkillLinks(registry);
+  const adoptedLinks = preflightAdoptedSkillLinks(registry);
   const proposal = mkdtempSync(path.join(tmpdir(), "monke-install-guidance-"));
   try {
     const { additions } = planRegistryImports(registry, guidance, true);
@@ -339,7 +339,7 @@ export function preflightSkillRegistryInstall(
       }
     }
     copyBundledImports(proposal, guidance, additions);
-    preflightInstallGuidance(runtime, proposal, explicitTargets);
+    preflightInstallGuidance(runtime, proposal, explicitTargets, adoptedLinks);
   } finally {
     rmSync(proposal, { force: true, recursive: true });
   }

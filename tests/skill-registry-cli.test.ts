@@ -23,6 +23,7 @@ import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-conf
 import { runInstallSkillsLocked } from "../src/guidance-installation.ts";
 import { runCliAsync } from "../src/index.ts";
 import { shellQuote } from "../src/shell-quote.ts";
+import { preflightSkillRegistryInstall } from "../src/skill-registry.ts";
 import {
   createRepo,
   git,
@@ -337,6 +338,11 @@ describe("Skill import registry CLI", () => {
     const previousBytes = read(owner, "SKILL.md");
     rmSync(path.join(fixture.installed.claude, "typography"));
     writeSkill(fixture.installed.claude, "typography", "User-owned replacement.\n");
+    expect(() => {
+      preflightSkillRegistryInstall(fixture.runtime, fixture.guidance, {
+        builtInTargetKinds: ["claude"]
+      });
+    }).toThrow(/adopted Skill projection/u);
     await expect(
       runCliAsync(["skills", "policy", "typography", "--model-invocation", "deny"], fixture.runtime)
     ).rejects.toThrow(/adopted Skill projection/u);
@@ -573,6 +579,11 @@ describe("Skill import registry CLI", () => {
       skillInstallPreference: { targets: [{ kind: "codex" }] }
     });
     await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+    expect(() => {
+      preflightSkillRegistryInstall(fixture.runtime, fixture.guidance, {
+        builtInTargetKinds: ["claude"]
+      });
+    }).not.toThrow();
     await runInstallSkillsLocked(fixture.runtime, fixture.guidance, {
       builtInTargetKinds: ["claude"]
     });
