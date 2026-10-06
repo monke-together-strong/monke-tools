@@ -10,6 +10,4 @@ installation and cleanup lifecycle control every shared copy.
 Existing local imports can continue to retain an external source through
 `mt skills add --link`. Adoption transfers source ownership rather than merely
 adding distribution links. Duplicate discovery and conflicting copies are defined
-in the [creation and adoption plan](../managed-skill-authoring-plan.md).
-
-Published Spec: [GitHub issue #214](https://github.com/monke-together-strong/monke-tools/issues/214).
+in the [creation and adoption Spec](https://github.com/monke-together-strong/monke-tools/issues/214).
