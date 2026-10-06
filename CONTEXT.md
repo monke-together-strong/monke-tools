@@ -12,7 +12,6 @@ They contain terms and relationships; tool usage belongs in the
 - [Resources](docs/reference/resources.md): checkout ownership, values, and allocations.
 - [Installation](docs/reference/installation.md): installs, releases, activation, and provenance.
 - [Agent guidance](docs/reference/agent-guidance.md): skills, import sources, registries, invocation overrides, projections, and reviews.
-- [Retrospective](docs/reference/retrospective.md): transcripts, PR evidence, and fix proposals.
 
 Historical decisions live in [docs/adr](docs/adr).
 

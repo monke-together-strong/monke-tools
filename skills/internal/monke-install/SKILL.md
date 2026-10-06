@@ -1,5 +1,10 @@
-# Installation and updates
+---
+name: monke-install
+description: Install, update, and troubleshoot Monke, shell integration, and runtime dependencies.
+disable-model-invocation: true
+---
 
+# Monke installation
 
 Check availability with `command -v mt` and identity with `mt --version`. For local development, run `vp install` then `vpr install:local` in the monke-tools source checkout using [Vite+](https://viteplus.dev/guide/). Refresh after CLI changes before testing in a consumer repo. Local skill edits are immediately visible through source links; adding or removing skill directories requires `mt skills configure` to refresh links.
 
@@ -16,17 +21,6 @@ The installer prompts for Codex, Claude, Cursor, or one custom skill root, then 
 For automation, add `--targets codex claude cursor` and/or `--custom-target /absolute/path/to/agent/skills` to the local installer command. For the release pipeline, replace the trailing `sh` with `sh -s --` followed by those options. Explicit selections replace saved preferences.
 
 `mt update --check` checks availability without changing installation state; successful checks exit zero whether current or outdated. `mt update` activates the highest stable official release without prompting. Both prefer nonempty `GH_TOKEN` over `GITHUB_TOKEN`, otherwise using anonymous access. Updating a local install switches to a release while preserving the source checkout; run `vpr install:local` there to resume local development.
-
-## Spec workflow agent limits
-
-`ship-spec` needs three nested subagent layers and four concurrent subagents for
-one ticket: Spec coordinator, implementer, and two reviewers. Configure globally
-before starting a session:
-
-- Claude: `env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` = `"4"` in `~/.claude/settings.json`.
-- Codex: set `agents.max_concurrent_threads_per_session` to `6` in
-  `~/.codex/config.toml` if unset or lower; preserve higher values. This excludes
-  the primary agent. Defaults are chosen by Codex; do not assume six slots.
 
 ## Update recovery
 

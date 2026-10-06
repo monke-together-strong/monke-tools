@@ -2,7 +2,7 @@
 
 For machine-local imports, including private linked collections and installer
 commands, use `mt skills add` and `mt skills update`. See
-[Imported Skill registry](../skills/internal/monke-tools-core/IMPORTED-SKILLS.md).
+[Monke skills](../skills/internal/monke-skills/SKILL.md).
 The commands below maintain the public repository's bundled collection.
 
 The [agent guidance glossary](reference/agent-guidance.md) defines the shared

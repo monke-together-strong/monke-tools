@@ -19,8 +19,8 @@ one batch, run the affected checks, and commit the fixes. Explain dismissed
 findings and record deferred cross-ticket work.
 
 Confirmed production defects, missing task requirements, and failing required
-checks block completion. After blocking fixes, resume the existing reviewers to
-check the fix delta and affected callers, carrying prior findings forward.
+checks block completion. After blocking fixes, rerun `$code-review` with the
+same review base and Work target, carrying prior findings forward.
 Repeat until blockers are resolved. Completion requires committed task changes,
 passing required checks, and completed independent review.
 

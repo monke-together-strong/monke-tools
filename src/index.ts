@@ -6,8 +6,9 @@ import { runChop } from "./chop.ts";
 import { runCleanup } from "./cleanup.ts";
 import { configureCliParser, reportCliFailure } from "./cli-errors.ts";
 import { runDiffConfigure, runDiffInteractive } from "./diff.ts";
-import { ThrownValueSchema } from "./errors.ts";
+import { MonkeError, ThrownValueSchema } from "./errors.ts";
 import { runLocalInstallSkills, runSkillsConfigure } from "./guidance-installation.ts";
+import { addInstallGuidance } from "./install-guidance.ts";
 import {
   expectedReleaseIdentityFromEnvironment,
   runActivateLocalInstall,
@@ -25,7 +26,28 @@ import { runUpdate } from "./update.ts";
 
 /** Run the Monke Tools CLI. */
 export async function runCliAsync(argv: string[], runtime = createRuntime()) {
-  await createProgram(runtime).parseAsync(argv, { from: "user" });
+  const program = createProgram(runtime);
+  let installationCommand = false;
+  program.hook("preAction", (_program, command) => {
+    installationCommand =
+      [
+        "update",
+        "install-dependencies",
+        "activate-release-install",
+        "activate-local-install"
+      ].includes(command.name()) ||
+      (command.parent?.name() === "shell" && ["install", "init"].includes(command.name())) ||
+      (command.parent?.name() === "skills" &&
+        ["configure", "local-install"].includes(command.name()));
+  });
+  try {
+    await program.parseAsync(argv, { from: "user" });
+  } catch (error) {
+    if (installationCommand && error instanceof MonkeError) {
+      addInstallGuidance(runtime, error);
+    }
+    throw error;
+  }
 }
 
 function createProgram(runtime: Runtime) {

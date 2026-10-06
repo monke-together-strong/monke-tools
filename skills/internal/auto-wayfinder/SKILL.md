@@ -5,7 +5,7 @@ description: Only use when explicitly mentioned with /auto-wayfinder or $auto-wa
 
 # Auto Wayfinder
 
-Run `/wayfinder` as usual, passing `<mapLink>` when one already exists.
+Follow [wayfinder](../../imported/wayfinder/SKILL.md), passing `<mapLink>` when one already exists.
 
 Resolve at most one ticket per thread. Wait here when human input is needed.
 

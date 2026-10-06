@@ -37,10 +37,8 @@ checkout.
    Use the user-supplied review base, or the branch point from the intended PR
    base branch. Resolve and record its full commit SHA with
    `git rev-parse <review base>^{commit}`; stop to ask if none can be identified.
-4. Launch a fresh native implementer subagent for each ticket on the frontier,
+4. Launch a fresh implementer subagent for each ticket on the frontier,
    using the delegation prompt below.
-   Wait for native completion notifications or use the host's wait tool; resume
-   incomplete work.
 5. After a worker finishes implementation, review, and fixes, collect its commit
    SHA, concise verification summary, and remaining integration work. Merge
    completed tickets one at a time into the integration branch, waiting for any

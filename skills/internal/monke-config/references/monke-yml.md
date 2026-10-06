@@ -95,7 +95,7 @@ cleanup. Acquisition and release must be safe to retry.
 
 Commands default to `acquire: automatic`, which runs after Session bootstrap.
 Use `acquire: explicit` for resources that need additional setup. For acquisition,
-execution, and retry commands, read [resource commands](../../references/internal/RESOURCES.md).
+execution, and retry commands, read [resource commands](../../../references/internal/RESOURCES.md).
 
 ## Cleanup
 
