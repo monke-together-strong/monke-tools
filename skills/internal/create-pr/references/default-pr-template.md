@@ -1,4 +1,4 @@
-# Default PR Template
+# Default PR template
 
 Use this when the repository has no PR template. Headings are optional for a
 small change.
@@ -10,9 +10,9 @@ small change.
 
 <For interaction changes, insert the small view chosen with show-me.>
 
-## Verification
+## Evidence
 
-<One line: relevant checks and result; link CI or detailed evidence.>
+<Before-and-after evidence and material verification limits.>
 ```
 
 For visual proof or deployment-dependent changes, use the sections required by

@@ -1764,29 +1764,6 @@ describe("Skill import registry CLI", () => {
     expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
   });
 
-  test("local per-skill overrides survive disappearance and reintroduction", async () => {
-    const fixture = registryFixture();
-    writeSkill(fixture.source, "color", "Color instructions.\n");
-    await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
-    await runCliAsync(
-      ["skills", "policy", "private-course", "--model-invocation", "deny"],
-      fixture.runtime
-    );
-    await runCliAsync(
-      ["skills", "policy", "private-course", "color", "--model-invocation", "allow"],
-      fixture.runtime
-    );
-    rmSync(path.join(fixture.source, "color"), { recursive: true });
-    await runCliAsync(["skills", "update"], fixture.runtime);
-    expect(existsSync(path.join(fixture.installed.claude, "color"))).toBeFalsy();
-    writeSkill(fixture.source, "color", "Restored color.\n");
-    await runCliAsync(["skills", "update"], fixture.runtime);
-    expect(parse(read(fixture.source, "color/agents/openai.yaml"))).toMatchObject({
-      policy: { allow_implicit_invocation: true }
-    });
-    expect(read(fixture.source, "color/SKILL.md")).toContain("disable-model-invocation: false");
-  });
-
   test.each(["link", "command"] as const)(
     "a missing %s source does not prevent healthy sources updating",
     async (kind) => {
@@ -2041,7 +2018,7 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
     }
   );
 
-  test("repeat Git add preserves references and overrides across selection replacement", async () => {
+  test("repeat Git add preserves references and selected-skill policies", async () => {
     const fixture = registryFixture();
     const upstream = createRepo(path.join(fixture.sandbox, "git-source"), {
       "README.md": "Git skills.\n"
@@ -2071,7 +2048,6 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
       ["skills", "policy", "git-source", "bravo", "--model-invocation", "allow"],
       fixture.runtime
     );
-    await runCliAsync(["skills", "add", source, "--skill", "alpha"], fixture.runtime);
     await runCliAsync(["skills", "add", source, "--skill", "bravo"], fixture.runtime);
     expect(parse(read(fixture.installed.claude, "bravo/agents/openai.yaml"))).toMatchObject({
       policy: { allow_implicit_invocation: true }

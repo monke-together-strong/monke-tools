@@ -18,7 +18,6 @@ import path from "node:path";
 import { copyStagedGuidanceToManagedRoots } from "../scripts/import-guidance.ts";
 import {
   normalizeImportRecipeStore,
-  replaceRecipeSkills,
   writeImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
 import type { SkillImportRecipe, SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
@@ -423,13 +422,11 @@ export async function updateLocalSkillSource(options: {
         slug
       };
     });
-    const nextRecipe = replaceRecipeSkills(
-      {
-        ...recipe,
-        localSource: { ...localSource, skillSourceFolder: root }
-      },
+    const nextRecipe = {
+      ...recipe,
+      localSource: { ...localSource, skillSourceFolder: root },
       skills
-    );
+    };
     const next = normalizeImportRecipeStore({
       ...store,
       recipes: [...store.recipes.filter((item) => item.source !== recipe.source), nextRecipe]
