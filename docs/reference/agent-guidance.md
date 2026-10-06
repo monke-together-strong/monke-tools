@@ -1,6 +1,6 @@
 # Agent guidance distribution
 
-Part of the [domain glossary](../../CONTEXT.md).
+Part of the [domain glossary](../../GLOSSARY.md).
 
 ## Language
 

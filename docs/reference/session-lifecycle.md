@@ -1,6 +1,6 @@
 # Session lifecycle
 
-Part of the [domain glossary](../../CONTEXT.md).
+Part of the [domain glossary](../../GLOSSARY.md).
 
 ## Preparation and materialization
 

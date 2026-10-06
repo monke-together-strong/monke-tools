@@ -101,7 +101,7 @@ substituting another viewer, comparison, or picker.
 ## Use checkout resources
 
 With resources configured in `monke.yml`, run these commands in a
-[Source checkout or Session worktree](CONTEXT.md#session-topology):
+[Source checkout or Session worktree](GLOSSARY.md#session-topology):
 
 ```bash
 mt setup                        # Write dependency paths and static resource values
@@ -159,4 +159,4 @@ Rerun the local install after CLI changes before testing from another repo. Loca
 
 Run `vp check <changed-files>` for scoped formatting, lint, and type checks. Use `vpr test -- <test-file>` for focused tests: the package script runs Vitest under Bun. PR CI owns the full suite. Build the standalone executable through `install:local`.
 
-For domain terminology, start with [CONTEXT.md](CONTEXT.md). Track work in [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues).
+For domain terminology, start with [GLOSSARY.md](GLOSSARY.md). Track work in [GitHub Issues](https://github.com/monke-together-strong/monke-tools/issues).
