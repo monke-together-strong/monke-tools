@@ -77,7 +77,10 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
       throw new MonkeError("Select targets first with: mt skills configure");
     }
     const registry = path.join(getMonkeHome(runtime), "skill-registry");
-    if (request.action === "adopt" && !lstatSync(registry, { throwIfNoEntry: false })) {
+    if (
+      (request.action === "create" || request.action === "adopt") &&
+      !lstatSync(registry, { throwIfNoEntry: false })
+    ) {
       await withSkillPublicationTransaction(getMonkeHome(runtime), [registry], () =>
         runSkillsRegistryLocked(runtime, request, guidance)
       );

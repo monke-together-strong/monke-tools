@@ -14,7 +14,7 @@ options; the registry follows the configured targets (`mt skills configure`).
 | `mt skills add owner/repo [--skill <slugs...>]` | Import Git skills into registry-managed copies. |
 | `mt skills add --name <source> --command 'installer' [--cwd <path>]` | Save and replay an installer; default working directory is `$MONKE_HOME/skill-sources/<source>`. |
 
-Supporting files belong beside `SKILL.md`. Linked and command imports expose
+Keep supporting files inside the skill folder. Linked and command imports expose
 their editable source through agent links. Add `--link` to register existing
 installer output without running it now; reference credentials through environment
 variables. `--skill` restricts a collection; command/linked sources without a

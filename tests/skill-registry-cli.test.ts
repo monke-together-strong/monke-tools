@@ -160,6 +160,37 @@ done
 }
 
 describe("Skill import registry CLI", () => {
+  test.each([
+    { error: /lowercase Skill source name/u, name: "InvalidName" },
+    { error: /non-managed/u, name: "new-workflow" }
+  ])("a cold create failure restores the absent registry ($name)", async (scenario) => {
+    const fixture = registryFixture();
+    writeSkill(
+      path.join(fixture.guidance, "skills/imported"),
+      "bundled",
+      "Bundled instructions.\n"
+    );
+    writeImportRecipeStore(fixture.guidance, {
+      recipes: [
+        {
+          skills: [{ kind: "skill", selector: "bundled", slug: "bundled" }],
+          source: "example/bundled"
+        }
+      ],
+      version: 3
+    });
+    const occupied = path.join(fixture.installed.claude, scenario.name);
+    write(occupied, "SKILL.md", "User-owned instructions.\n");
+    const preference = loadGlobalMonkeConfig(fixture.monkeHome);
+    await expect(runCliAsync(["skills", "create", scenario.name], fixture.runtime)).rejects.toThrow(
+      scenario.error
+    );
+    expect(existsSync(fixture.registry)).toBeFalsy();
+    expect(existsSync(path.join(fixture.monkeHome, "skill-sources", scenario.name))).toBeFalsy();
+    expect(loadGlobalMonkeConfig(fixture.monkeHome)).toStrictEqual(preference);
+    expect(read(occupied, "SKILL.md")).toBe("User-owned instructions.\n");
+  });
+
   test.each(["create", "adopt"] as const)(
     "a required baseline failure rolls back %s before reporting success",
     async (action) => {
