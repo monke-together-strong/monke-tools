@@ -22,7 +22,6 @@ import { reportSecurityRiskAssessment } from "../scripts/import-skills.ts";
 import {
   normalizeImportRecipeStore,
   readImportRecipeStore,
-  replaceRecipeSkills,
   SKILL_LOCK_PATH,
   writeImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
@@ -471,7 +470,7 @@ async function addGitSkillSource(
         slug
       };
     });
-    const nextRecipe = replaceRecipeSkills(recipe, skills);
+    const nextRecipe = { ...recipe, skills };
     const next = normalizeImportRecipeStore({
       ...store,
       recipes: [...store.recipes.filter((item) => item !== previous), nextRecipe]
@@ -519,12 +518,12 @@ function setRecipePolicy(
   if (!recipe.skills.some((item) => item.kind === "skill" && item.slug === request.skill)) {
     throw new MonkeError(`Unknown Skill ${request.skill} in ${recipe.source}`);
   }
-  return replaceRecipeSkills(
-    recipe,
-    recipe.skills.map((item) =>
+  return {
+    ...recipe,
+    skills: recipe.skills.map((item) =>
       item.slug === request.skill ? { ...item, disableModelInvocation: request.disable } : item
     )
-  );
+  };
 }
 
 async function applyRecipePolicy(

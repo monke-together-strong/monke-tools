@@ -2,27 +2,34 @@
   "recipes": [
     {
       "lock": {
-        "commit": "000650b156983f5159695b441477f4e63b25dc85",
-        "digest": "08349c6615d655d32552af0324370d06bf291644c60382add43b0a39d16f455b",
+        "commit": "124f622bcaeac490e7e9dac6af83f3ef9611d554",
+        "digest": "456b0b3a0b405fbc72fc1e34e48cf9a9439eb03da0e26d92f64279e0c1b00337",
         "importerVersion": "1.7.0",
         "materializerVersion": 1,
-        "repository": "https://github.com/petergyang/no-ai-slop.git",
+        "repository": "https://github.com/backnotprop/pstack.git",
         "subpath": "",
         "updateRef": "HEAD"
       },
       "skills": [
         {
+          "disableModelInvocation": false,
           "kind": "skill",
-          "selector": "no-ai-slop",
-          "slug": "no-ai-slop"
+          "selector": "technical-writing",
+          "slug": "technical-writing"
+        },
+        {
+          "disableModelInvocation": false,
+          "kind": "skill",
+          "selector": "unslop",
+          "slug": "unslop"
         }
       ],
-      "source": "git@github.com:petergyang/no-ai-slop.git"
+      "source": "https://github.com/backnotprop/pstack"
     },
     {
       "lock": {
-        "commit": "5db75f0a43a904643dab06de0bd370a91d83b2cd",
-        "digest": "0bf1ce8f129dc8774442fb05e2905a0371a4538f8cc5dec0ea3e4f4119b4cc89",
+        "commit": "de9b41538822b189795539d5bd2d920edf7db52c",
+        "digest": "386fd65f749ff7dd199c07f02c61a3176900df8221814e3a8b98a38ea9aa5b8f",
         "importerVersion": "1.7.0",
         "materializerVersion": 1,
         "repository": "https://github.com/haydenbleasel/ultracite.git",
@@ -59,7 +66,7 @@
     },
     {
       "lock": {
-        "commit": "24fe0ef7737efae15c87225755e9f6f5965e4888",
+        "commit": "4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d",
         "digest": "aa0a951eed3ea6e4f7656e1c5eb969d341db686a4bcd114259de303347d5f1a0",
         "importerVersion": "1.7.0",
         "materializerVersion": 1,
@@ -189,8 +196,27 @@
     },
     {
       "lock": {
-        "commit": "6e802bd0ed99f53180e2359fddab6da8d97970d9",
-        "digest": "21735b36efe6e1e4958307fd0011e837c0e2aa171ae8df9691269cfa144f44ba",
+        "commit": "4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d",
+        "digest": "fbed2aefe29c37ea085ad8c99842e8aa55c417e461b0db217ccd9f5611f6cd8e",
+        "importerVersion": "1.7.0",
+        "materializerVersion": 1,
+        "repository": "https://github.com/mattpocock/skills.git",
+        "subpath": "skills/engineering/pr",
+        "updateRef": "main"
+      },
+      "skills": [
+        {
+          "kind": "reference",
+          "selector": "pr",
+          "slug": "pr"
+        }
+      ],
+      "source": "https://github.com/mattpocock/skills/tree/main/skills/engineering/pr"
+    },
+    {
+      "lock": {
+        "commit": "6b59cf2da4b0d0273a5e2cb34b433b2086c0056d",
+        "digest": "99d80e0fcae33c35984f4b15720b0dbebe0d84b7565a9a00da5703663e6f84be",
         "importerVersion": "1.7.0",
         "materializerVersion": 1,
         "repository": "https://github.com/pbakaus/impeccable.git",
@@ -208,7 +234,7 @@
     },
     {
       "lock": {
-        "commit": "295a1f114a138f23b5dfee0e0c6812394dfeb90c",
+        "commit": "0e3abd65a97707f4a9cc3ed07bf5006e1cb67b13",
         "digest": "b24e5381443ab5a3b8157d10bfceb07a619db218c9fcdb91bcee4802e9a24cd4",
         "importerVersion": "1.7.0",
         "materializerVersion": 1,
@@ -228,8 +254,8 @@
     {
       "acceptOpenClawRisks": true,
       "lock": {
-        "commit": "edf1e2f436fa2a5375c98052180a090a57223f9e",
-        "digest": "6c8e8ed3c268c1b0307b93ee6b42c642a62174c26575ce4dc2b25770e278b54b",
+        "commit": "3d3034af58d4c0a137b8ffe42b4c190fcd5bdd38",
+        "digest": "79e31773fa8c93c71b9e6e188c4188eee7353ee4270118215d1ec10687df2ddd",
         "importerVersion": "1.7.0",
         "materializerVersion": 1,
         "repository": "https://github.com/openclaw/agent-skills.git",

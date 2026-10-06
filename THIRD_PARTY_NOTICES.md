@@ -4,17 +4,18 @@ monke-tools redistributes the Imported guidance listed below. Each upstream lice
 
 ## Inventory
 
-### no-ai-slop
+### pstack
 
-- Source: <https://github.com/petergyang/no-ai-slop>
-- Included material: `skills/imported/no-ai-slop`
-- Copyright: Copyright (c) 2026 Peter Yang
-- License: MIT; the upstream text is also preserved in `skills/imported/no-ai-slop/LICENSE`
+- Source: <https://github.com/backnotprop/pstack>
+- Included material: `skills/imported/technical-writing` and `skills/imported/unslop`
+- Copyright: Copyright (c) 2026 Lauren Tan
+- License: MIT
 
 ### Matt Pocock skills
 
 - Source: <https://github.com/mattpocock/skills>
 - Included material: `skills/imported/code-review`, `skills/imported/codebase-design`, `skills/imported/diagnosing-bugs`, `skills/imported/domain-modeling`, `skills/imported/grill-with-docs`, `skills/imported/grilling`, `skills/imported/handoff`, `skills/imported/improve-codebase-architecture`, `skills/imported/prototype`, `skills/imported/research`, `skills/imported/resolving-merge-conflicts`, `skills/imported/setup-matt-pocock-skills`, `skills/imported/tdd`, `skills/imported/teach`, `skills/imported/to-questionnaire`, `skills/imported/to-spec`, `skills/imported/to-tickets`, `skills/imported/triage`, `skills/imported/wayfinder`, `skills/imported/wait-what`, `skills/imported/wizard`, and `skills/imported/writing-for-agents`
+- Included reference: `skills/references/imported/pr`
 - Copyright: Copyright (c) 2026 Matt Pocock
 - License: MIT
 
