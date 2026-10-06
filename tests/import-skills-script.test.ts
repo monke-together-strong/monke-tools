@@ -105,9 +105,7 @@ describe("locked skill command workflows", () => {
           return nativeLocaleCompare.call(this, other, "da");
         });
         rmSync(path.join(sandbox, "skills/imported"), { recursive: true });
-        expect(() => {
-          restoreLockedImports(sandbox);
-        }).not.toThrow();
+        await expect(restoreLockedImports(sandbox)).resolves.toBeUndefined();
         expect(read(sandbox, "skills/imported/aa/SKILL.md")).toBe("new aa");
         expect(read(sandbox, "skills/imported/z/SKILL.md")).toBe("new z");
         writeImportRecipeStore(sandbox, readImportRecipeStore(sandbox));

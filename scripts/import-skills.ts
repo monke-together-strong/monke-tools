@@ -246,7 +246,7 @@ async function importSkills(argv: string[], dependencies: ImportSkillsDependenci
       previousRecipe ?? { skills: [{ kind, selector: "pending", slug: "pending" }], source },
       repoRoot
     );
-    const normalizedSource = pinnedSkillSource({ ...revision, digest: "" }, stagingDirectory);
+    const normalizedSource = await pinnedSkillSource({ ...revision, digest: "" }, stagingDirectory);
     const listOutput = runSkillsCaptured(buildSkillsListArgs(normalizedSource), stagingDirectory);
     const availableSkillGroups = parseAvailableSkillGroups(
       `${listOutput.stdout}\n${listOutput.stderr}`
