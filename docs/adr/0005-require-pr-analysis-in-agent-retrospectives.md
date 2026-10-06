@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+Retired. The `workflow-retro` skill and its collector have been removed.
 
 ## Decision
 
@@ -10,7 +10,7 @@ Agent retrospectives have two required evidence lanes: Agent transcript analysis
 
 The PR lane is required for every run. Transcript-only synthesis is degraded and must explicitly report what PR analysis was missing.
 
-The operational source of truth for PR-analysis mechanics is [the skill reference](../../skills/internal/workflow-retro/references/pr-analysis.md). That reference owns repository scope, author scope, window handling, opening snapshot confidence, post-opening delta evidence, per-PR headings, gap reporting, aggregate report shape, and validation boundary.
+The removed skill's `references/pr-analysis.md` owned repository scope, author scope, window handling, opening snapshot confidence, post-opening delta evidence, per-PR headings, gap reporting, aggregate report shape, and validation boundary.
 
 ## Consequences
 

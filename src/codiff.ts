@@ -5,6 +5,7 @@ import * as z from "zod";
 
 import type { ComparisonPlan } from "./comparison-plan.ts";
 import { MonkeError } from "./errors.ts";
+import { addInstallGuidance } from "./install-guidance.ts";
 import { findExecutable } from "./runtime.ts";
 import type { ExecResult, Runtime } from "./types.ts";
 
@@ -17,7 +18,7 @@ const INSTALL_CODIFF = `brew install --cask --require-sha ${CODIFF_CASK}`;
 export async function verifyCodiffAsync(runtime: Runtime) {
   const executable = resolveCodiff(runtime);
   const result = await runtime.execAsync(executable, ["--version"], { allowFailure: true });
-  validateCodiffVersion(result);
+  validateCodiffVersion(runtime, result);
   return executable;
 }
 
@@ -100,7 +101,7 @@ export function reconcileCodiff(
   const installed =
     findExecutable("codiff", runtime.env) ?? resolveInstalledHomebrewCodiff(runtime, brew);
   if (installed === null) {
-    throwCodiffInstallError();
+    throwCodiffInstallError(runtime);
   }
   const installedVersion = inspectCodiff(runtime, installed);
   if (installedVersion === null || compareVersions(installedVersion, minimumVersion) < 0) {
@@ -159,20 +160,23 @@ export function launchCodiff(runtime: Runtime, executable: string, plan: Compari
 function resolveCodiff(runtime: Runtime) {
   const executable = findExecutable("codiff", runtime.env);
   if (executable === null) {
-    throwCodiffInstallError();
+    throwCodiffInstallError(runtime);
   }
   return executable;
 }
 
-function validateCodiffVersion(result: ExecResult) {
+function validateCodiffVersion(runtime: Runtime, result: ExecResult) {
   const version = parseCodiffResult(result);
   if (version === null) {
-    throwCodiffInstallError();
+    throwCodiffInstallError(runtime);
   }
 
   if (compareVersions(version, MINIMUM_CODIFF_VERSION) < 0) {
-    throw new MonkeError(
-      `Codiff ${MINIMUM_CODIFF_VERSION_TEXT} or newer is required; found ${version.join(".")}. Upgrade it with: brew upgrade --cask ${CODIFF_CASK}`
+    throw addInstallGuidance(
+      runtime,
+      new MonkeError(
+        `Codiff ${MINIMUM_CODIFF_VERSION_TEXT} or newer is required; found ${version.join(".")}. Upgrade it with: brew upgrade --cask ${CODIFF_CASK}`
+      )
     );
   }
 }
@@ -203,9 +207,12 @@ function compareVersions(left: readonly number[], right: readonly number[]) {
   return 0;
 }
 
-function throwCodiffInstallError(): never {
-  throw new MonkeError(
-    `Codiff ${MINIMUM_CODIFF_VERSION_TEXT} or newer is required. Install it with: ${INSTALL_CODIFF}`
+function throwCodiffInstallError(runtime: Runtime): never {
+  throw addInstallGuidance(
+    runtime,
+    new MonkeError(
+      `Codiff ${MINIMUM_CODIFF_VERSION_TEXT} or newer is required. Install it with: ${INSTALL_CODIFF}`
+    )
   );
 }
 

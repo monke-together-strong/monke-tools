@@ -8,16 +8,14 @@ description: 'Use when the user says things like "shepherd this PR", "babysit th
 Create or pick up the PR and mark it ready for review. Track CI and review
 coverage against its current head commit.
 
+Use `watch_pull_request` while waiting for CI or reviews.
+
 ## Observe
 
-On pickup and each wake or re-entry, check PR state before CI or reviews:
+On each run, check PR state before CI or reviews.
 
-```bash
-gh pr view <pr> --json state,mergedAt,closedAt,mergeCommit,headRefOid,baseRefName,isDraft
-```
-
-If merged or closed, remove the wake, report the terminal state and available
-merge details, and stop.
+If merged or closed, report the terminal state and available merge details,
+and stop.
 
 For an open draft, run `gh pr ready <pr>`. Fetch the live base and head. If the
 base is not an ancestor of the head, rebase a clean PR checkout, push with
@@ -42,16 +40,14 @@ triggering a missing review. Read mutable bot comment bodies and update times,
 command replies, and covered commits; a check context alone is insufficient.
 Processing text or an accepted trigger for this head means review has started.
 
-Use `$polling` until required reviews and all automatic reviews that started
-on this head finish. The watcher is
-`scripts/pr-watch.sh <owner/repo> <pr> 60 <max-seconds>`, with max-seconds set
-to the next deadline below; a heartbeat runs every eight minutes. Triage complete feedback.
+Use `schedule_task` only for the review deadlines below. Delete the schedule
+when those deadlines are resolved or shepherding stops.
 
 Optional integrations are best-effort. After sixteen minutes without a start,
 record an optional reviewer as unavailable and triage any existing comments.
 Avoid empty commits, PR-state toggles, and repeated triggers to wake reviewers.
-A required reviewer that cannot start is a blocker. On rate limits, keep polling
-and handle other available work without sending another manual trigger.
+A required reviewer that cannot start is a blocker. Avoid additional manual
+review triggers while rate limited.
 
 ## Address feedback
 
@@ -80,7 +76,7 @@ return to observation. For the current head, require all of the following:
   minutes.
 - No required changes or meaningful findings remain, and the PR is mergeable.
 
-Remove the wake when handing off. With explicit merge authorization,
-including standing instructions such as “merge when ready,” run `$merge-pr`.
+With explicit merge authorization, including standing instructions such as
+"merge when ready," run `$merge-pr`.
 Otherwise report merge-ready. Shepherding requests, acknowledgements, and green
 checks alone do not authorize merging.

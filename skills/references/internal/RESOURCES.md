@@ -9,7 +9,7 @@ Run from a Source checkout or an MT Session worktree; ordinary worktrees are uns
 5. Run `mt resources release` after use. It preserves the checkout and infrastructure.
 
 Spawn and Materialize acquire automatic resources after bootstrap; explicit resources
-wait for `acquire`. Configure modules using the [configuration reference](../../internal/monke-tools-core/MONKE-YML-REFERENCE.md#resources).
+wait for `acquire`. Configure modules using the [configuration reference](../../internal/monke-config/references/monke-yml.md#resources).
 
 Dynamic outputs live in MT state, not `.env`. `exec` checks required allocations,
 overrides inherited values, and blocks conflicting lifecycle operations while the

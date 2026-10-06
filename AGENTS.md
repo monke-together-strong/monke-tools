@@ -19,6 +19,8 @@ Check [./GLOSSARY.md](./GLOSSARY.md) for terminology questions.
 
 ## Imported guidance
 
+To invoke a manual-only skill from another skill or workflow, link directly to its `SKILL.md`.
+
 Treat `skills/imported/` and `skills/references/imported/` as upstream snapshots.
 Refresh them through the import/update tooling; do not edit their contents locally.
 Report findings against imported guidance for an upstream fix and later refresh.

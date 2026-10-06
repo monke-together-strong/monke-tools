@@ -1,4 +1,9 @@
-# Imported Skill registry
+---
+name: monke-skills
+description: Manage global skills with mt. Use when creating, adopting, importing, updating, or removing skills, configuring agent targets or invocation policies, or repairing skill links.
+---
+
+# Monke skills
 
 Use Monke for global skills unless the user requests a specific harness. Private
 content stays in its source or Monke home. Run `mt skills <command> --help` for

@@ -1,5 +1,0 @@
-interface:
-  display_name: "Workflow Retro"
-  short_description: "Review workflows with evidence and history"
-policy:
-  allow_implicit_invocation: false
