@@ -10,6 +10,8 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import pLimit from "p-limit";
+
 import { MonkeError } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
 import { createRuntime, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
@@ -26,12 +28,7 @@ import {
   SKILL_LOCK_PATH
 } from "./skill-import-recipes.ts";
 import type { SkillImportRecipe, SkillImportRecipeSkill } from "./skill-import-recipes.ts";
-import {
-  buildSkillsInstallArgs,
-  listStagedSkillSlugs,
-  runSkillsCaptured,
-  SKILLS_CLI_VERSION
-} from "./skills-cli.ts";
+import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from "./skills-cli.ts";
 
 export const MATERIALIZER_VERSION = 1;
 
@@ -139,7 +136,7 @@ export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string
 }
 
 /** Remote imports use skills.sh's SHA URL; local Git fixtures receive an immutable checkout. */
-export function pinnedSkillSource(
+export async function pinnedSkillSource(
   lock: NonNullable<SkillImportRecipe["lock"]>,
   stagingDirectory: string
 ) {
@@ -151,8 +148,17 @@ export function pinnedSkillSource(
   if (path.isAbsolute(lock.repository)) {
     const checkout = path.join(stagingDirectory, "upstream");
     const runtime = createRuntime({ cwd: stagingDirectory });
-    runtime.exec("git", ["clone", "--quiet", "--no-checkout", "--", lock.repository, checkout]);
-    runtime.exec("git", ["checkout", "--quiet", "--detach", lock.commit], { cwd: checkout });
+    await runtime.execAsync("git", [
+      "clone",
+      "--quiet",
+      "--no-checkout",
+      "--",
+      lock.repository,
+      checkout
+    ]);
+    await runtime.execAsync("git", ["checkout", "--quiet", "--detach", lock.commit], {
+      cwd: checkout
+    });
     validateUpstreamLinks(checkout);
     return path.join(checkout, lock.subpath);
   }
@@ -161,9 +167,17 @@ export function pinnedSkillSource(
   const checkout = path.join(stagingDirectory, "upstream-validation");
   mkdirSync(checkout, { recursive: true });
   const runtime = createRuntime({ cwd: checkout });
-  runtime.exec("git", ["init", "--quiet"]);
-  runtime.exec("git", ["fetch", "--quiet", "--depth", "1", "--", lock.repository, lock.commit]);
-  runtime.exec("git", ["checkout", "--quiet", "--detach", lock.commit]);
+  await runtime.execAsync("git", ["init", "--quiet"]);
+  await runtime.execAsync("git", [
+    "fetch",
+    "--quiet",
+    "--depth",
+    "1",
+    "--",
+    lock.repository,
+    lock.commit
+  ]);
+  await runtime.execAsync("git", ["checkout", "--quiet", "--detach", lock.commit]);
   validateUpstreamLinks(checkout);
   const github = /^https:\/\/github\.com\/(?<repository>.+)\.git$/u.exec(lock.repository);
   if (github?.groups?.repository) {
@@ -199,18 +213,19 @@ function validateUpstreamLinks(checkout: string) {
   visit(root);
 }
 
-export function stageLockedRecipe(recipe: SkillImportRecipe, stagingDirectory: string) {
+export async function stageLockedRecipe(recipe: SkillImportRecipe, stagingDirectory: string) {
   if (!recipe.lock) {
     throw new MonkeError(`Unpinned Skill import recipe: ${recipe.source}`);
   }
-  const source = pinnedSkillSource(recipe.lock, stagingDirectory);
-  const output = runSkillsCaptured(
+  const source = await pinnedSkillSource(recipe.lock, stagingDirectory);
+  const runtime = createRuntime({ cwd: stagingDirectory });
+  const output = await runtime.execAsync(
+    runtime.platform === "win32" ? "npx.cmd" : "npx",
     buildSkillsInstallArgs({
       importerVersion: recipe.lock.importerVersion,
       selectors: recipe.skills.map((skill) => skill.selector),
       source
-    }),
-    stagingDirectory
+    })
   );
   const slugs = listStagedSkillSlugs(stagingDirectory);
   if (
@@ -288,13 +303,11 @@ export async function withSkillImportMutation<T>(
 }
 
 export async function restoreSkillImports(repoRoot: string) {
-  await withSkillImportMutation(repoRoot, () => {
-    restoreLockedImports(repoRoot);
-  });
+  await withSkillImportMutation(repoRoot, () => restoreLockedImports(repoRoot));
 }
 
 /** Restore one accepted Git source without blocking unrelated source updates. */
-export function restoreLockedRecipe(repoRoot: string, recipe: SkillImportRecipe) {
+export async function restoreLockedRecipe(repoRoot: string, recipe: SkillImportRecipe) {
   if (!recipe.lock) {
     throw new MonkeError(`Unpinned Skill import recipe: ${recipe.source}`);
   }
@@ -308,7 +321,7 @@ export function restoreLockedRecipe(repoRoot: string, recipe: SkillImportRecipe)
   const stagingDirectory = path.join(repoRoot, "tmp", `skill-restore-${crypto.randomUUID()}`);
   mkdirSync(stagingDirectory, { recursive: true });
   try {
-    stageLockedRecipe(recipe, stagingDirectory);
+    await stageLockedRecipe(recipe, stagingDirectory);
     copyStagedGuidanceToManagedRoots({
       defaultDisableModelInvocation: recipe.disableModelInvocation,
       guidance: recipe.skills,
@@ -327,7 +340,7 @@ export function restoreLockedRecipe(repoRoot: string, recipe: SkillImportRecipe)
   }
 }
 
-export function restoreLockedImports(repoRoot: string) {
+export async function restoreLockedImports(repoRoot: string) {
   if (!existsSync(path.join(repoRoot, SKILL_LOCK_PATH))) {
     return;
   }
@@ -347,9 +360,16 @@ export function restoreLockedImports(repoRoot: string) {
       throw new MonkeError(`Imported guidance root must be a regular directory: ${root}`);
     }
   }
-  for (const recipe of store.recipes) {
-    if (!recipe.localSource) {
-      restoreLockedRecipe(repoRoot, recipe);
+  const restore = pLimit(4);
+  // Keep the mutation lock until every restore settles, even when a sibling fails.
+  const results = await Promise.allSettled(
+    store.recipes
+      .filter((recipe) => !recipe.localSource)
+      .map((recipe) => restore(() => restoreLockedRecipe(repoRoot, recipe)))
+  );
+  for (const result of results) {
+    if (result.status === "rejected") {
+      throw result.reason;
     }
   }
   for (const recipe of store.recipes) {

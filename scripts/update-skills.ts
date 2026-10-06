@@ -153,7 +153,9 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
         continue;
       }
       if (!migrating) {
-        restoreLockedRecipe(repoRoot, recipe);
+        // Restore each accepted baseline before its ordered update and review.
+        // oxlint-disable-next-line no-await-in-loop
+        await restoreLockedRecipe(repoRoot, recipe);
         for (const item of recipe.skills) {
           const target = importedGuidancePath(before, item);
           rmSync(target, { force: true, recursive: true });
@@ -164,7 +166,12 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
         }
       }
       const revision = resolveSkillRevision(recipe, repoRoot);
-      const normalizedSource = pinnedSkillSource({ ...revision, digest: "" }, stagingDirectory);
+      // Interactive updates and recipe publication remain ordered.
+      // oxlint-disable-next-line no-await-in-loop
+      const normalizedSource = await pinnedSkillSource(
+        { ...revision, digest: "" },
+        stagingDirectory
+      );
       const installOutput = runSkillsCaptured(
         buildSkillsInstallArgs({
           selectors: recipe.skills.map((skill) => skill.selector),
