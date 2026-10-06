@@ -3,13 +3,16 @@ import path from "node:path";
 
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { containsPath } from "./path-identity.ts";
+import { getMonkeHome } from "./runtime.ts";
+import type { Runtime } from "./types.ts";
 
 /** Retain exact entries (including aliases) until registry and target publication finish. */
 export async function withSkillPublicationTransaction<T>(
-  recoveryRoot: string,
+  runtime: Runtime,
   paths: string[],
-  publish: () => Promise<T>
+  publish: () => Promise<T> | T
 ) {
+  const recoveryRoot = getMonkeHome(runtime);
   mkdirSync(recoveryRoot, { recursive: true });
   const recovery = mkdtempSync(path.join(recoveryRoot, ".monke-adopt-recovery-"));
   const roots = [...new Set(paths)].filter(
@@ -69,6 +72,12 @@ export async function withSkillPublicationTransaction<T>(
     rmSync(recovery, { recursive: true });
     throw error;
   }
-  rmSync(recovery, { recursive: true });
+  try {
+    rmSync(recovery, { recursive: true });
+  } catch (error) {
+    runtime.writeStderr(
+      `Skills published successfully; could not remove recovery files at ${recovery}: ${errorMessage(ThrownValueSchema.parse(error))}\n`
+    );
+  }
   return result;
 }

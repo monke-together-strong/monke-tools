@@ -160,6 +160,48 @@ done
 }
 
 describe("Skill import registry CLI", () => {
+  test.each(["create", "adopt"] as const)(
+    "cold %s keeps publication coherent when recovery cleanup fails",
+    async (action) => {
+      const fixture = registryFixture();
+      const recoveryPaths = new Set<string>();
+      let stderr = "";
+      fixture.runtime.writeStderr = (message) => {
+        stderr += message;
+        if (message.startsWith("Linked monke-tools skills")) {
+          for (const name of readdirSync(fixture.monkeHome)) {
+            if (name.startsWith(".monke-adopt-recovery-")) {
+              const recovery = path.join(fixture.monkeHome, name);
+              recoveryPaths.add(recovery);
+              chmodSync(recovery, 0o500);
+            }
+          }
+        }
+      };
+      const name = action === "create" ? "new-workflow" : "typography";
+      try {
+        await expect(
+          runCliAsync(
+            ["skills", action, action === "create" ? name : path.join(fixture.source, name)],
+            fixture.runtime
+          )
+        ).resolves.toBeUndefined();
+      } finally {
+        for (const recovery of recoveryPaths) {
+          chmodSync(recovery, 0o700);
+        }
+      }
+      expect(stderr).toMatch(/published successfully.*could not remove recovery/u);
+      const owner = path.join(fixture.monkeHome, "skill-sources", name, name);
+      expect(read(owner, "SKILL.md")).toContain(`name: ${name}`);
+      expect(readImportRecipeStore(fixture.registry).recipes[0]?.skills[0]?.slug).toBe(name);
+      expect(realpathSync(path.join(fixture.installed.claude, name))).toBe(owner);
+      expect(realpathSync(path.join(fixture.installed.codex, name))).toBe(owner);
+      expect(realpathSync(path.join(fixture.installed.cursor, name))).toBe(owner);
+      expect(existsSync(path.join(fixture.source, "typography"))).toBe(action === "create");
+    }
+  );
+
   test.each([
     { error: /lowercase Skill source name/u, name: "InvalidName" },
     { error: /non-managed/u, name: "new-workflow" }
@@ -377,6 +419,76 @@ describe("Skill import registry CLI", () => {
       expect(read(owner, "SKILL.md")).toContain("Course instructions.");
       expect(realpathSync(path.join(fixture.registry, "skills/imported/typography"))).toBe(owner);
       expect(existsSync(path.join(fixture.source, "typography"))).toBe(scenario.preservesLeftover);
+    }
+  );
+
+  test.each([
+    { alias: false, claudeFirst: true, registered: true },
+    { alias: false, claudeFirst: false, registered: true },
+    { alias: false, claudeFirst: true, registered: false },
+    { alias: false, claudeFirst: false, registered: false },
+    { alias: true, claudeFirst: true, registered: true },
+    { alias: true, claudeFirst: false, registered: false }
+  ])(
+    "adoption rejects overlapping Claude/custom layouts before mutation ($registered, $claudeFirst, $alias)",
+    async ({ alias, claudeFirst, registered }) => {
+      const fixture = registryFixture();
+      const config = loadGlobalMonkeConfig(fixture.monkeHome);
+      mkdirSync(fixture.installed.claude, { recursive: true });
+      const customRoot = alias
+        ? path.join(fixture.sandbox, "claude-alias")
+        : fixture.installed.claude;
+      if (alias) {
+        symlinkSync(fixture.installed.claude, customRoot, "dir");
+      }
+      const custom = { kind: "custom" as const, path: customRoot };
+      saveGlobalMonkeConfig(fixture.monkeHome, {
+        ...config,
+        skillInstallPreference: { targets: [{ kind: "codex" }, custom] }
+      });
+      if (registered) {
+        writeSkill(fixture.installed.claude, "typography", "Course instructions.\n");
+        await runCliAsync(
+          ["skills", "add", path.join(fixture.installed.claude, "typography"), "--link"],
+          fixture.runtime
+        );
+      }
+      const targets = claudeFirst
+        ? [{ kind: "claude" as const }, custom]
+        : [custom, { kind: "claude" as const }];
+      const preference = { targets: [{ kind: "codex" as const }, ...targets] };
+      saveGlobalMonkeConfig(fixture.monkeHome, { ...config, skillInstallPreference: preference });
+      const previous = existsSync(fixture.registry)
+        ? readImportRecipeStore(fixture.registry)
+        : undefined;
+      const installed = readdirSync(fixture.installed.claude, {
+        encoding: "utf-8",
+        recursive: true
+      }).toSorted((a, b) => a.localeCompare(b));
+      const ownerBytes = registered
+        ? read(fixture.installed.claude, "typography/SKILL.md")
+        : undefined;
+      await expect(
+        runCliAsync(["skills", "adopt", path.join(fixture.source, "typography")], fixture.runtime)
+      ).rejects.toThrow(/overlapping Claude and custom Skill layouts.*configure distinct roots/u);
+      expect(loadGlobalMonkeConfig(fixture.monkeHome).skillInstallPreference).toStrictEqual(
+        preference
+      );
+      expect(read(fixture.source, "typography/SKILL.md")).toContain("Course instructions.");
+      expect(existsSync(path.join(fixture.monkeHome, "skill-sources/typography"))).toBeFalsy();
+      expect(
+        readdirSync(fixture.installed.claude, { encoding: "utf-8", recursive: true }).toSorted(
+          (a, b) => a.localeCompare(b)
+        )
+      ).toStrictEqual(installed);
+      expect(
+        existsSync(fixture.registry) ? readImportRecipeStore(fixture.registry) : undefined
+      ).toStrictEqual(previous);
+      expect(
+        existsSync(path.join(fixture.installed.claude, "typography/SKILL.md"))
+          ? read(fixture.installed.claude, "typography/SKILL.md")
+          : undefined
+      ).toBe(ownerBytes);
     }
   );
 
@@ -1573,6 +1685,42 @@ describe("Skill import registry CLI", () => {
       expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toHaveLength(3);
     }
   );
+
+  test("failed adopted-link retirement preserves the recipe for removal retry", async () => {
+    const fixture = registryFixture();
+    saveGlobalMonkeConfig(fixture.monkeHome, {
+      ...loadGlobalMonkeConfig(fixture.monkeHome),
+      skillInstallPreference: { targets: [{ kind: "codex" }] }
+    });
+    writeSkill(fixture.installed.claude, "typography", "Course instructions.\n");
+    await runCliAsync(
+      ["skills", "adopt", path.join(fixture.source, "typography")],
+      fixture.runtime
+    );
+    const previous = readImportRecipeStore(fixture.registry);
+    const projection = path.join(fixture.installed.claude, "typography");
+    const projectionTarget = readlinkSync(projection);
+    const owner = path.join(fixture.monkeHome, "skill-sources/typography/typography");
+    const ownerBytes = read(owner, "SKILL.md");
+    chmodSync(fixture.installed.claude, 0o500);
+    try {
+      await expect(
+        runCliAsync(["skills", "remove", "typography"], fixture.runtime)
+      ).rejects.toThrow(/typography/u);
+    } finally {
+      chmodSync(fixture.installed.claude, 0o700);
+    }
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(readlinkSync(projection)).toBe(projectionTarget);
+    expect(realpathSync(projection)).toBe(owner);
+    expect(realpathSync(path.join(fixture.installed.codex, "typography"))).toBe(owner);
+    expect(read(owner, "SKILL.md")).toBe(ownerBytes);
+    await runCliAsync(["skills", "remove", "typography"], fixture.runtime);
+    expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+    expect(existsSync(projection)).toBeFalsy();
+    expect(existsSync(path.join(fixture.installed.codex, "typography"))).toBeFalsy();
+    expect(read(owner, "SKILL.md")).toBe(ownerBytes);
+  });
 
   test("selection replacement and removal retire managed projections while keeping the external source", async () => {
     const fixture = registryFixture();

@@ -194,6 +194,20 @@ function adoptionTargets(runtime: Runtime) {
       targets: []
     }
   });
+  const claude = configured.find((target) => target.kind === "claude");
+  const custom = configured.find((target) => target.kind === "custom");
+  if (
+    claude &&
+    custom &&
+    (claude.agentSkillRoot === custom.agentSkillRoot ||
+      (existsSync(claude.agentSkillRoot) &&
+        existsSync(custom.agentSkillRoot) &&
+        realpathSync.native(claude.agentSkillRoot) === realpathSync.native(custom.agentSkillRoot)))
+  ) {
+    throw new MonkeError(
+      `Skill adoption preflight failed: overlapping Claude and custom Skill layouts at ${claude.agentSkillRoot} and ${custom.agentSkillRoot}; configure distinct roots with mt skills configure, then rerun adoption`
+    );
+  }
   const targets = [...configured];
   const known = resolveSkillInstallTargets({
     homeDirectory,
@@ -637,7 +651,7 @@ export async function acquireManagedSkillSource(options: {
   }
   const slugs = request.action === "create" ? [name] : plans.map((plan) => plan.slug);
   await withSkillPublicationTransaction(
-    getMonkeHome(runtime),
+    runtime,
     [
       realpathSync.native(options.registryRoot),
       ...(createsSource ? [directory] : []),

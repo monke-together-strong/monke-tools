@@ -43,7 +43,8 @@ import {
   preflightAdoptedSkillLinks,
   preflightInstallGuidance,
   reconcileSkillNamespaces,
-  retireAdoptedSkillLinks
+  retireAdoptedSkillLinks,
+  skillPublicationPaths
 } from "./skills.ts";
 import type { ExplicitSkillTargetSelection } from "./skills.ts";
 import type { Runtime } from "./types.ts";
@@ -81,7 +82,7 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
       (request.action === "create" || request.action === "adopt") &&
       !lstatSync(registry, { throwIfNoEntry: false })
     ) {
-      await withSkillPublicationTransaction(getMonkeHome(runtime), [registry], () =>
+      await withSkillPublicationTransaction(runtime, [registry], () =>
         runSkillsRegistryLocked(runtime, request, guidance)
       );
       return;
@@ -148,24 +149,40 @@ async function runSkillsRegistryLocked(runtime: Runtime, request: SkillsRequest,
     const recipe = findRecipe(store, request.source);
     changedSource = recipe.source;
     if (request.action === "remove") {
-      copyStagedGuidanceToManagedRoots({
-        commitState() {
-          writeImportRecipeStore(root, {
-            ...store,
-            recipes: store.recipes.filter((item) => item !== recipe),
-            removedSources: [...(store.removedSources ?? []), recipe.source]
+      await withSkillPublicationTransaction(
+        runtime,
+        [realpathSync.native(root), ...skillPublicationPaths(runtime, root, [])],
+        () => {
+          copyStagedGuidanceToManagedRoots({
+            commitState() {
+              writeImportRecipeStore(root, {
+                ...store,
+                recipes: store.recipes.filter((item) => item !== recipe),
+                removedSources: [...(store.removedSources ?? []), recipe.source]
+              });
+            },
+            guidance: [],
+            obsoleteGuidance: recipe.skills,
+            repoRoot: root,
+            stagingDirectory: root
           });
-        },
-        guidance: [],
-        obsoleteGuidance: recipe.skills,
-        repoRoot: root,
-        stagingDirectory: root
-      });
-    } else {
-      const nextRecipe = setRecipePolicy(recipe, request);
-      await applyRecipePolicy(runtime, root, store, nextRecipe);
+          completeRegistryChange(runtime, root, store, changedSource);
+        }
+      );
+      return;
     }
+    const nextRecipe = setRecipePolicy(recipe, request);
+    await applyRecipePolicy(runtime, root, store, nextRecipe);
   }
+  completeRegistryChange(runtime, root, store, changedSource);
+}
+
+function completeRegistryChange(
+  runtime: Runtime,
+  root: string,
+  store: SkillImportRecipeStore,
+  changedSource: string
+) {
   retireAdoptedSkillLinks(root, store);
   distributeRegistry(runtime, root);
   const nextStore = readImportRecipeStore(root);
