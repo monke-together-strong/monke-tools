@@ -322,7 +322,12 @@ describe("Skill import registry CLI", () => {
     { error: /registered owner.*duplicate discovery/u, harness: "codex", preservesLeftover: true },
     { error: /registered owner occupies.*projection/u, harness: "claude", preservesLeftover: true },
     { error: /registered owner occupies.*projection/u, harness: "cursor", preservesLeftover: true },
-    { error: /registered owner.*duplicate discovery/u, harness: "custom", preservesLeftover: true }
+    { error: /registered owner.*duplicate discovery/u, harness: "custom", preservesLeftover: true },
+    {
+      error: /registered owner.*duplicate discovery/u,
+      harness: "custom-claude",
+      preservesLeftover: true
+    }
   ] as const)(
     "adoption preserves a registered physical owner in a raw $harness harness path",
     async (scenario) => {
@@ -333,8 +338,16 @@ describe("Skill import registry CLI", () => {
         skillInstallPreference: {
           targets: [
             { kind: "codex" },
-            ...(scenario.harness === "custom"
-              ? [{ kind: "custom" as const, path: path.join(fixture.sandbox, "custom-skills") }]
+            ...(scenario.harness.startsWith("custom")
+              ? [
+                  {
+                    kind: "custom" as const,
+                    path:
+                      scenario.harness === "custom-claude"
+                        ? fixture.installed.claude
+                        : path.join(fixture.sandbox, "custom-skills")
+                  }
+                ]
               : [])
           ]
         }
@@ -343,7 +356,8 @@ describe("Skill import registry CLI", () => {
         claude: fixture.installed.claude,
         codex: path.resolve(fixture.installed.codex, "../.."),
         cursor: path.resolve(fixture.installed.cursor, "../.."),
-        custom: path.join(fixture.sandbox, "custom-skills")
+        custom: path.join(fixture.sandbox, "custom-skills"),
+        "custom-claude": fixture.installed.claude
       }[scenario.harness];
       writeSkill(rawRoot, "typography", "Course instructions.\n");
       const owner = path.join(rawRoot, "typography");

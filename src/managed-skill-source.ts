@@ -194,11 +194,12 @@ function adoptionTargets(runtime: Runtime) {
       targets: []
     }
   });
-  const targets = resolveSkillInstallTargets({
+  const targets = [...configured];
+  const known = resolveSkillInstallTargets({
     homeDirectory,
     preference: { targets: [{ kind: "claude" }, { kind: "codex" }, { kind: "cursor" }] }
   });
-  for (const target of configured) {
+  for (const target of known) {
     if (!targets.some((item) => item.agentSkillRoot === target.agentSkillRoot)) {
       targets.push(target);
     }
