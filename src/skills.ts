@@ -5,6 +5,7 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   rmdirSync,
@@ -15,6 +16,8 @@ import path from "node:path";
 
 import * as z from "zod";
 
+import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import type { SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { loadGlobalMonkeConfig, SkillInstallPreferenceSchema } from "./global-config.ts";
 import type {
@@ -25,6 +28,7 @@ import type {
 } from "./global-config.ts";
 import {
   preflightGlobalInstructions,
+  globalInstructionsPath,
   preflightRemoveGlobalInstructions,
   reconcileGlobalInstructions,
   removeGlobalInstructions
@@ -120,7 +124,8 @@ export function explicitSkillInstallPreference(
 export function preflightInstallGuidance(
   runtime: Runtime,
   guidanceSourceRoot: string,
-  explicitTargets?: ExplicitSkillTargetSelection
+  explicitTargets?: ExplicitSkillTargetSelection,
+  adoptedLinks: ReadonlyMap<string, string> = new Map()
 ) {
   const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
   const previousPreference = config.skillInstallPreference;
@@ -150,7 +155,7 @@ export function preflightInstallGuidance(
   }
   for (const target of nextTargets.values()) {
     try {
-      preflightOneSkillTarget(target, guidanceSourceRoot);
+      preflightOneSkillTarget(target, guidanceSourceRoot, adoptedLinks);
       preflightGlobalInstructions(target, {
         cwd: runtime.cwd,
         environment: runtime.env,
@@ -166,9 +171,13 @@ export function preflightInstallGuidance(
   }
 }
 
-function preflightOneSkillTarget(target: ResolvedSkillInstallTarget, guidanceSourceRoot: string) {
+function preflightOneSkillTarget(
+  target: ResolvedSkillInstallTarget,
+  guidanceSourceRoot: string,
+  adoptedLinks: ReadonlyMap<string, string>
+) {
   const skillSourceTree = resolveSkillSourceTree(guidanceSourceRoot);
-  prepareSkillTargetPlan(target, skillSourceTree).preflight();
+  prepareSkillTargetPlan(target, skillSourceTree, adoptedLinks).preflight();
 }
 
 function preflightNamespaceTarget(
@@ -205,14 +214,15 @@ function assertNamespaceLinksCanBeManaged(
 function preflightFlatTarget(
   target: ResolvedSkillInstallTarget,
   links: FlatSkillLink[],
-  supportingLinks: FlatSupportingLink[]
+  supportingLinks: FlatSupportingLink[],
+  adoptedLinks: ReadonlyMap<string, string>
 ) {
   const previousManifest = readFlatManifest(target);
   assertDirectoryMutationAccess(target.agentSkillRoot, "Agent Skill root");
   for (const link of supportingLinks) {
     assertDirectoryMutationAccess(path.dirname(link.targetPath), "Reference link parent");
   }
-  assertFlatLinksCanBeManaged(target, links, previousManifest);
+  assertFlatLinksCanBeManaged(target, links, previousManifest, adoptedLinks);
   assertFlatSupportingLinksCanBeManaged(supportingLinks, previousManifest);
 }
 
@@ -270,6 +280,7 @@ export function reconcileSkillNamespaces(options: {
   });
   const nextKeys = new Set(nextTargets.map(targetKey));
   const failures: string[] = [];
+  preflightAdoptedSkillLinks(options.guidanceSourceRoot);
 
   for (const previousTarget of previousTargets) {
     if (nextKeys.has(targetKey(previousTarget))) {
@@ -283,6 +294,8 @@ export function reconcileSkillNamespaces(options: {
       failures.push(`${previousTarget.agentSkillRoot}: ${message}`);
     }
   }
+
+  reconcileAdoptedSkillLinks(options.guidanceSourceRoot, nextTargets);
 
   for (const target of nextTargets) {
     try {
@@ -302,6 +315,112 @@ export function reconcileSkillNamespaces(options: {
       `Failed to reconcile ${failures.length} Skill install target(s):\n${failures.join("\n")}`
     );
   }
+}
+
+/** Additional projections replace pre-existing copies without enabling their harness. */
+export function preflightAdoptedSkillLinks(root: string) {
+  const links = new Map<string, string>();
+  for (const recipe of readImportRecipeStore(root).recipes) {
+    for (const skill of recipe.skills) {
+      const source = path.join(root, "skills", "imported", skill.slug);
+      for (const destination of skill.adoptedPaths ?? []) {
+        const stat = lstatSync(destination, { throwIfNoEntry: false });
+        if (stat && (!stat.isSymbolicLink() || readlinkSync(destination) !== source)) {
+          throw new MonkeError(`Refusing to overwrite adopted Skill projection at ${destination}`);
+        }
+        links.set(destination, source);
+      }
+    }
+  }
+  return links;
+}
+
+function reconcileAdoptedSkillLinks(root: string, targets: ResolvedSkillInstallTarget[]) {
+  for (const recipe of readImportRecipeStore(root).recipes) {
+    for (const skill of recipe.skills) {
+      const source = path.join(root, "skills", "imported", skill.slug);
+      for (const destination of skill.adoptedPaths ?? []) {
+        const configured = targets.find(
+          (target) => path.dirname(destination) === target.agentSkillRoot
+        );
+        const stat = lstatSync(destination, { throwIfNoEntry: false });
+        if (configured) {
+          if (configured.kind !== "claude" && stat) {
+            rmSync(destination);
+          }
+          continue;
+        }
+        mkdirSync(path.dirname(destination), { recursive: true });
+        if (!stat) {
+          symlinkSync(source, destination, "dir");
+        }
+      }
+    }
+  }
+}
+
+/** Retire only projections still pointing at their recorded registry owner. */
+export function retireAdoptedSkillLinks(root: string, previous: SkillImportRecipeStore) {
+  const retained = new Set(
+    readImportRecipeStore(root).recipes.flatMap((recipe) =>
+      recipe.skills.flatMap((skill) => skill.adoptedPaths ?? [])
+    )
+  );
+  for (const recipe of previous.recipes) {
+    for (const skill of recipe.skills) {
+      const source = path.join(root, "skills", "imported", skill.slug);
+      for (const destination of skill.adoptedPaths ?? []) {
+        if (
+          !retained.has(destination) &&
+          lstatSync(destination, { throwIfNoEntry: false })?.isSymbolicLink() &&
+          readlinkSync(destination) === source
+        ) {
+          rmSync(destination);
+        }
+      }
+    }
+  }
+}
+
+/** Paths target reconciliation can mutate; adoption retains them until publication completes. */
+export function skillPublicationPaths(runtime: Runtime, root: string, slugs: string[]) {
+  const preference = loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference;
+  const homeDirectory = getHomeDirectory(runtime);
+  const targets = resolveSkillInstallTargets({
+    homeDirectory,
+    preference: preference ?? { targets: [] }
+  });
+  const paths = readImportRecipeStore(root).recipes.flatMap((recipe) =>
+    recipe.skills.flatMap((skill) => skill.adoptedPaths ?? [])
+  );
+  for (const target of targets) {
+    paths.push(target.namespacePath);
+    if (target.kind === "claude") {
+      const manifest = readFlatManifest(target);
+      const links = discoverFlatSkillLinks(resolveSkillSourceTree(root));
+      paths.push(
+        flatManifestPath(target),
+        ...[
+          ...slugs,
+          ...links.map((link) => link.name),
+          ...(manifest?.links.map((link) => link.name) ?? [])
+        ].map((slug) => path.join(target.agentSkillRoot, slug)),
+        ...discoverFlatSupportingLinks(target, resolveSkillSourceTree(root)).map(
+          (link) => link.targetPath
+        ),
+        ...(manifest?.supportingLinks?.map((link) => link.targetPath) ?? [])
+      );
+    }
+    const instructions = globalInstructionsPath(target, {
+      cwd: runtime.cwd,
+      environment: runtime.env,
+      homeDirectory
+    });
+    if (instructions) {
+      paths.push(existsSync(instructions) ? realpathSync.native(instructions) : instructions);
+    }
+  }
+  return paths;
 }
 
 /** Normalize one custom Agent skill root path for storage in Global monke config. */
@@ -588,7 +707,8 @@ function discoverFlatSupportingLinks(target: ResolvedSkillInstallTarget, skillSo
 function assertFlatLinksCanBeManaged(
   target: ResolvedSkillInstallTarget,
   links: FlatSkillLink[],
-  previousManifest: FlatSkillManifest | null
+  previousManifest: FlatSkillManifest | null,
+  adoptedLinks: ReadonlyMap<string, string> = new Map()
 ) {
   const previousLinks = new Map(
     previousManifest?.links.map((link) => [link.name, link.sourcePath])
@@ -605,7 +725,11 @@ function assertFlatLinksCanBeManaged(
     }
 
     const currentTarget = readlinkSync(linkPath);
-    if (currentTarget !== link.sourcePath && currentTarget !== previousLinks.get(link.name)) {
+    if (
+      currentTarget !== link.sourcePath &&
+      currentTarget !== previousLinks.get(link.name) &&
+      currentTarget !== adoptedLinks.get(linkPath)
+    ) {
       throw new MonkeError(`Refusing to overwrite non-managed Skill at ${linkPath}`);
     }
   }
@@ -708,14 +832,18 @@ function flatManifestPath(target: ResolvedSkillInstallTarget) {
   return path.join(target.agentSkillRoot, FLAT_SKILL_MANIFEST);
 }
 
-function prepareSkillTargetPlan(target: ResolvedSkillInstallTarget, skillSourceTree: string) {
+function prepareSkillTargetPlan(
+  target: ResolvedSkillInstallTarget,
+  skillSourceTree: string,
+  adoptedLinks: ReadonlyMap<string, string> = new Map()
+) {
   const policy = skillTargetPolicy(target);
   if (policy.layout === "flat") {
     const links = discoverFlatSkillLinks(skillSourceTree);
     const supportingLinks = discoverFlatSupportingLinks(target, skillSourceTree);
     return {
       preflight() {
-        preflightFlatTarget(target, links, supportingLinks);
+        preflightFlatTarget(target, links, supportingLinks, adoptedLinks);
       },
       reconcile() {
         reconcileFlatTarget(target, links, supportingLinks);

@@ -210,7 +210,7 @@ function indexesOf(content: string, token: string) {
   return indexes;
 }
 
-function globalInstructionsPath(
+export function globalInstructionsPath(
   target: { kind: SkillInstallTargetKind },
   options: GlobalInstructionsOptions
 ) {

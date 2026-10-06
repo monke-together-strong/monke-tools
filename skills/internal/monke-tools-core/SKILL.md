@@ -1,6 +1,6 @@
 ---
 name: monke-tools-core
-description: Use mt for worktree creation, navigation, diff review, teardown, monke.yml configuration, installation, updates, and skill targets. Use for worktree tasks in repos with monke.yml or instructions requiring monke-tools.
+description: Use mt for worktree creation, navigation, diff review, teardown, monke.yml configuration, installation, updates, skill targets, and creating, installing, or adopting global skills. Use for worktree tasks in repos with monke.yml or instructions requiring monke-tools.
 ---
 
 # monke-tools Core
@@ -26,6 +26,8 @@ Use `mt <command> --help` for flags.
 | `mt cleanup --dry-run` | Preview eligible Sessions across all repos. |
 | `mt home` | Print the Monke home path. |
 | `mt skills configure` | Select skill targets or reconcile installed guidance. |
+| `mt skills create <name>` | Create an editable global skill managed by Monke. |
+| `mt skills adopt <path>` | Move existing skills into Monke home and link them to configured agents. |
 | `mt skills add [source]` | Register imported skills from Git, a local link, or an installer command. |
 | `mt skills update` | Update all registered imports and review the complete collection. |
 
@@ -75,8 +77,9 @@ For archives, missing or ordinary worktrees, and failed teardown, read
 
 ## Configuration and installation
 
-For private or personal imports, installer commands, invocation policies, or
-collection updates, read [imported Skill registry](IMPORTED-SKILLS.md).
+For creating or adopting global skills, private or personal imports, installer
+commands, invocation policies, or collection updates, read
+[imported Skill registry](IMPORTED-SKILLS.md).
 
 For `monke.yml`, resource modules, or Docker teardown, read the
 [configuration reference](MONKE-YML-REFERENCE.md).

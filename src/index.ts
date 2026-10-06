@@ -252,6 +252,30 @@ function createProgram(runtime: Runtime) {
   skills.command("configure").action(() => runSkillsConfigure(runtime));
 
   skills
+    .command("create")
+    .description("Create a Skill in Monke home and link it to configured agents")
+    .argument("<name>", "Lowercase Skill slug")
+    .option("--description <description>", "When agents should use this Skill")
+    .action((name, options) =>
+      runSkillsRegistry(runtime, { action: "create", description: options.description, name })
+    );
+
+  skills
+    .command("adopt")
+    .description("Move existing skills into Monke home and link them to configured agents")
+    .argument("<source>", "Existing Skill directory or collection")
+    .option("--name <name>", "Managed source name (defaults to the source folder name)")
+    .option("--skill <slugs...>", "Only adopt the selected skills")
+    .action((source, options) =>
+      runSkillsRegistry(runtime, {
+        action: "adopt",
+        name: options.name,
+        skills: options.skill,
+        source
+      })
+    );
+
+  skills
     .command("add")
     .alias("import")
     .description("Register imported skills from Git, a local link, or an installer command")

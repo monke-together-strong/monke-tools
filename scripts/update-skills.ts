@@ -339,6 +339,15 @@ async function resolveStagedSkillReplacements(options: {
     throw new MonkeError(renderSlugMismatchMessage(recipe.source, missingSlugs, unexpectedSlugs));
   }
 
+  const projectedSkills = recipe.skills.filter(
+    (skill) => missingSlugs.includes(skill.slug) && (skill.adoptedPaths?.length ?? 0) > 0
+  );
+  if (projectedSkills.length > 0) {
+    throw new MonkeError(
+      `Cannot replace Skill slug ${projectedSkills.map((skill) => skill.slug).join(", ")} with staged ${unexpectedSlugs.join(", ")} while adopted projections remain: ${projectedSkills.flatMap((skill) => skill.adoptedPaths ?? []).join(", ")}. Preserve this registered source and reconcile the recorded slug and projection paths explicitly before rerunning mt skills update.`
+    );
+  }
+
   const selectorMappings = resolveSkillSelectorSlugMappings({
     selectors: recipe.skills.map((skill) => skill.selector),
     source: options.source

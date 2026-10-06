@@ -62,11 +62,17 @@ Part of the [domain glossary](../../CONTEXT.md).
 
 **Skill import**: The operation that brings selected guidance from a **Skill import source** into the **Skill source tree** as **Imported skills** or **Imported references**.
 
+**Skill creation**: The operation that creates a new local **Distributed skill** under Monke's ownership.
+
+**Skill adoption**: The operation that brings existing local skills under Monke's source ownership and **Skill projection** management.
+
+**Skill copy**: A local representation of guidance for one **Skill slug**, held in an independent folder or exposed through a source alias. Matching **Agent skill names** alone do not establish that two folders represent the same skill.
+
 **Skill import source**: An outside collection from which a **Skill import** selects guidance. It may be a repository, an existing local collection, or a collection produced by a **Skill installer command**. _Avoid_: Skill install target, Dependency repo
 
 **Skill installer command**: A remembered command for acquiring or refreshing a **Skill import source**, independent of where its guidance is distributed.
 
-**Skill source folder**: The folder containing the authoritative skill files for a linked or installer-backed **Skill import**. _Avoid_: Canonical skill collection, Agent skill root, Skill projection
+**Skill source folder**: The folder containing the authoritative skill files for a linked or installer-backed **Skill import**, including skills created or adopted into Monke home. _Avoid_: Canonical skill collection, Agent skill root, Skill projection
 
 **Skill import recipe**: The remembered source, selection, import-kind, and invocation choices for refreshing **Imported guidance** from one **Skill import source**.
 
