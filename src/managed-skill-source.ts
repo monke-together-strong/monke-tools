@@ -214,9 +214,17 @@ function existingOwner(options: AdoptionOptions, slug: string) {
   const builtin = ["internal", "codex"]
     .map((category) => path.join(options.guidanceRoot, "skills", category, slug))
     .find((candidate) => existsSync(path.join(candidate, "SKILL.md")));
+  const owner = skill ? importedGuidancePath(options.registryRoot, skill) : builtin;
+  let failure: string | undefined;
+  if (skill?.kind === "reference") {
+    failure = `${slug}: existing registered reference owner ${owner}; keep its recipe and reconcile separately`;
+  } else if (owner && !existsSync(owner)) {
+    failure = `${slug}: registered owner ${owner} is missing; restore it with mt skills update or reinstall, then rerun adoption`;
+  }
   return {
     builtin,
-    owner: skill ? importedGuidancePath(options.registryRoot, skill) : builtin,
+    failure,
+    owner,
     skill
   };
 }
@@ -454,11 +462,9 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
       failures.push(`${slug}: invalid folder slug at ${original}`);
       continue;
     }
-    const { builtin, owner, skill } = existingOwner(options, slug);
-    if (skill?.kind === "reference") {
-      failures.push(
-        `${slug}: existing registered reference owner ${owner}; keep its recipe and reconcile separately`
-      );
+    const { builtin, failure, owner, skill } = existingOwner(options, slug);
+    if (failure) {
+      failures.push(failure);
       continue;
     }
     const destination = owner ? realpathSync.native(owner) : path.join(options.directory, slug);
@@ -470,7 +476,11 @@ function planAdoption(options: AdoptionOptions, source: string, selection?: stri
     const disposable = candidates.filter((copy) => {
       const physical = realpathSync.native(copy);
       if (
-        protectedRoots.some((protectedRoot) => containsPath(protectedRoot, canonicalEntry(copy)))
+        protectedRoots.some(
+          (protectedRoot) =>
+            containsPath(protectedRoot, canonicalEntry(copy)) ||
+            containsPath(protectedRoot, physical)
+        )
       ) {
         if (!owner || physical !== destination) {
           failures.push(

@@ -113,13 +113,3 @@ adoption; the command does not offer interactive resolution or replacement flags
 The glossary distinguishes Skill slug, Agent skill name, Skill copy, Skill
 adoption, Skill source folder, and Skill projection. Source ownership follows the
 ADR titled "Own created and adopted skill files in Monke home."
-
-A preliminary creation and basic-adoption implementation exists in the local
-Session `feature/managed-skill-authoring`. It passed 38 focused registry CLI tests
-and scoped lint, formatting, and typechecking. Cross-harness consolidation and
-adoption-time supporting-reference checks remain unimplemented; those earlier
-results do not validate the full contract in this Spec.
-
-The source rollback boundary in that preliminary implementation ends before
-target reconciliation. Completing the publication and restoration boundary is
-part of this feature, not a guarantee already provided by the prototype.

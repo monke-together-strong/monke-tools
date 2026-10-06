@@ -66,7 +66,7 @@ export async function checkSkillLinks(root: string) {
   return failures;
 }
 
-if (import.meta.main) {
+async function main() {
   const failures = await checkSkillLinks(path.resolve(import.meta.dirname, ".."));
   if (failures.length > 0) {
     process.stderr.write(`${failures.join("\n")}\n`);
@@ -74,4 +74,8 @@ if (import.meta.main) {
   } else {
     process.stdout.write("All relative Markdown file links resolve within packaged guidance.\n");
   }
+}
+
+if (import.meta.main) {
+  void main();
 }

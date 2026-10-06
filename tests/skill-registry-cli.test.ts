@@ -273,6 +273,20 @@ describe("Skill import registry CLI", () => {
     }
   );
 
+  test("adoption reports a missing selected registered owner before publication", async () => {
+    const fixture = registryFixture();
+    await runCliAsync(["skills", "add", fixture.source, "--link"], fixture.runtime);
+    const previous = readImportRecipeStore(fixture.registry);
+    const owner = path.join(fixture.registry, "skills/imported/typography");
+    rmSync(owner);
+    await expect(
+      runCliAsync(["skills", "adopt", path.join(fixture.source, "typography")], fixture.runtime)
+    ).rejects.toThrow(`typography: registered owner ${owner} is missing`);
+    expect(readImportRecipeStore(fixture.registry)).toStrictEqual(previous);
+    expect(read(fixture.source, "typography/SKILL.md")).toContain("Course instructions.");
+    expect(existsSync(path.join(fixture.monkeHome, "skill-sources/typography"))).toBeFalsy();
+  });
+
   test.each([
     { error: /registered owner.*duplicate discovery/u, harness: "codex", preservesLeftover: true },
     { error: /registered owner occupies.*projection/u, harness: "claude", preservesLeftover: true },
@@ -448,6 +462,28 @@ describe("Skill import registry CLI", () => {
     expect(existsSync(fixture.registry)).toBeFalsy();
     expect(existsSync(path.join(fixture.monkeHome, "skill-sources/foo"))).toBeFalsy();
   });
+
+  test.each(["Monke home", "active guidance"] as const)(
+    "adoption protects terminal aliases into %s",
+    async (storage) => {
+      const fixture = registryFixture();
+      const protectedCollection =
+        storage === "Monke home"
+          ? path.join(fixture.monkeHome, "orphans")
+          : path.join(fixture.guidance, "skills/personal");
+      writeSkill(protectedCollection, "foo", "Protected instructions.\n");
+      const owner = path.join(protectedCollection, "foo");
+      const alias = path.join(fixture.sandbox, "foo");
+      symlinkSync(owner, alias, "dir");
+      await expect(runCliAsync(["skills", "adopt", alias], fixture.runtime)).rejects.toThrow(
+        /unregistered Skill.*inside managed storage/u
+      );
+      expect(read(owner, "SKILL.md")).toContain("Protected instructions.");
+      expect(readlinkSync(alias)).toBe(owner);
+      expect(existsSync(fixture.registry)).toBeFalsy();
+      expect(existsSync(path.join(fixture.monkeHome, "skill-sources/foo"))).toBeFalsy();
+    }
+  );
 
   test.each([false, true])(
     "adoption preserves undiscovered registered owner roots (materialized link absent=%s)",
