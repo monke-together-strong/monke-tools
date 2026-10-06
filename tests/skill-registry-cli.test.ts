@@ -423,23 +423,39 @@ describe("Skill import registry CLI", () => {
   );
 
   test.each([
-    { alias: false, claudeFirst: true, registered: true },
-    { alias: false, claudeFirst: false, registered: true },
-    { alias: false, claudeFirst: true, registered: false },
-    { alias: false, claudeFirst: false, registered: false },
-    { alias: true, claudeFirst: true, registered: true },
-    { alias: true, claudeFirst: false, registered: false }
+    { alias: "none", claudeFirst: true, registered: true },
+    { alias: "none", claudeFirst: false, registered: true },
+    { alias: "none", claudeFirst: true, registered: false },
+    { alias: "none", claudeFirst: false, registered: false },
+    { alias: "root", claudeFirst: true, registered: true },
+    { alias: "root", claudeFirst: false, registered: false },
+    { alias: "missing-parent", claudeFirst: true, registered: false },
+    { alias: "missing-parent", claudeFirst: false, registered: false },
+    { alias: "dangling-root", claudeFirst: true, registered: false }
   ])(
     "adoption rejects overlapping Claude/custom layouts before mutation ($registered, $claudeFirst, $alias)",
     async ({ alias, claudeFirst, registered }) => {
       const fixture = registryFixture();
       const config = loadGlobalMonkeConfig(fixture.monkeHome);
-      mkdirSync(fixture.installed.claude, { recursive: true });
-      const customRoot = alias
-        ? path.join(fixture.sandbox, "claude-alias")
-        : fixture.installed.claude;
-      if (alias) {
-        symlinkSync(fixture.installed.claude, customRoot, "dir");
+      const missing = alias === "missing-parent" || alias === "dangling-root";
+      mkdirSync(missing ? path.dirname(fixture.installed.claude) : fixture.installed.claude, {
+        recursive: true
+      });
+      const aliasPath = path.join(fixture.sandbox, "claude-alias");
+      const customRoot =
+        alias === "none"
+          ? fixture.installed.claude
+          : alias === "missing-parent"
+            ? path.join(aliasPath, "skills")
+            : aliasPath;
+      if (alias !== "none") {
+        symlinkSync(
+          alias === "missing-parent"
+            ? path.dirname(fixture.installed.claude)
+            : fixture.installed.claude,
+          aliasPath,
+          "dir"
+        );
       }
       const custom = { kind: "custom" as const, path: customRoot };
       saveGlobalMonkeConfig(fixture.monkeHome, {
@@ -461,10 +477,11 @@ describe("Skill import registry CLI", () => {
       const previous = existsSync(fixture.registry)
         ? readImportRecipeStore(fixture.registry)
         : undefined;
-      const installed = readdirSync(fixture.installed.claude, {
-        encoding: "utf-8",
-        recursive: true
-      }).toSorted((a, b) => a.localeCompare(b));
+      const installed = existsSync(fixture.installed.claude)
+        ? readdirSync(fixture.installed.claude, { encoding: "utf-8", recursive: true }).toSorted(
+            (a, b) => a.localeCompare(b)
+          )
+        : undefined;
       const ownerBytes = registered
         ? read(fixture.installed.claude, "typography/SKILL.md")
         : undefined;
@@ -477,9 +494,11 @@ describe("Skill import registry CLI", () => {
       expect(read(fixture.source, "typography/SKILL.md")).toContain("Course instructions.");
       expect(existsSync(path.join(fixture.monkeHome, "skill-sources/typography"))).toBeFalsy();
       expect(
-        readdirSync(fixture.installed.claude, { encoding: "utf-8", recursive: true }).toSorted(
-          (a, b) => a.localeCompare(b)
-        )
+        existsSync(fixture.installed.claude)
+          ? readdirSync(fixture.installed.claude, { encoding: "utf-8", recursive: true }).toSorted(
+              (a, b) => a.localeCompare(b)
+            )
+          : undefined
       ).toStrictEqual(installed);
       expect(
         existsSync(fixture.registry) ? readImportRecipeStore(fixture.registry) : undefined

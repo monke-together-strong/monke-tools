@@ -111,8 +111,8 @@ function preservesExistingDependency(
     reusesOwner &&
     existsSync(original) &&
     existsSync(proposed) &&
-    !containsPath(root, resolveDependency(original).resolved) &&
-    resolveDependency(original).resolved === resolveDependency(proposed).resolved
+    !containsPath(root, resolveSkillPath(original).resolved) &&
+    resolveSkillPath(original).resolved === resolveSkillPath(proposed).resolved
   );
 }
 
@@ -130,7 +130,7 @@ function relocationFailures(original: string, destination: string, reusesOwner: 
     if (preservesExistingDependency(root, resolved, proposed, reusesOwner)) {
       continue;
     }
-    const resolution = existsSync(resolved) ? resolveDependency(resolved, root) : undefined;
+    const resolution = existsSync(resolved) ? resolveSkillPath(resolved, root) : undefined;
     if (
       (dependency.symlink && path.isAbsolute(dependency.destination)) ||
       !resolution ||
@@ -199,10 +199,8 @@ function adoptionTargets(runtime: Runtime) {
   if (
     claude &&
     custom &&
-    (claude.agentSkillRoot === custom.agentSkillRoot ||
-      (existsSync(claude.agentSkillRoot) &&
-        existsSync(custom.agentSkillRoot) &&
-        realpathSync.native(claude.agentSkillRoot) === realpathSync.native(custom.agentSkillRoot)))
+    resolveSkillPath(claude.agentSkillRoot).resolved ===
+      resolveSkillPath(custom.agentSkillRoot).resolved
   ) {
     throw new MonkeError(
       `Skill adoption preflight failed: overlapping Claude and custom Skill layouts at ${claude.agentSkillRoot} and ${custom.agentSkillRoot}; configure distinct roots with mt skills configure, then rerun adoption`
@@ -300,8 +298,8 @@ function registeredOwnerLayoutFailures(
   return [];
 }
 
-/** Follow native component order, recording aliases before dereferencing them or processing `..`. */
-function resolveDependency(entry: string, boundary?: string) {
+/** Follow native component order through aliases and `..`, projecting missing path components. */
+function resolveSkillPath(entry: string, boundary?: string) {
   const paths = new Set<string>();
   const absolute = path.isAbsolute(entry) ? entry : `${process.cwd()}${path.sep}${entry}`;
   const { root } = path.parse(absolute);
@@ -322,12 +320,12 @@ function resolveDependency(entry: string, boundary?: string) {
     } else if (reachedBoundary) {
       escaped = true;
     }
-    if (part === ".." || !lstatSync(ancestor).isSymbolicLink()) {
+    if (part === ".." || !lstatSync(ancestor, { throwIfNoEntry: false })?.isSymbolicLink()) {
       continue;
     }
     aliases += 1;
     if (aliases > 64) {
-      throw new MonkeError(`Cyclic or excessive Skill dependency aliases: ${entry}`);
+      throw new MonkeError(`Cyclic or excessive Skill path aliases: ${entry}`);
     }
     const target = readlinkSync(ancestor);
     if (path.isAbsolute(target)) {
@@ -352,7 +350,7 @@ function unselectedAliasFailures(plans: AdoptionPlan[], copies: string[], select
   const failures: string[] = [];
   const unselectedCopies = copies
     .filter((item) => !selected.includes(path.basename(item)))
-    .map((entry) => ({ entry, resolution: resolveDependency(entry).paths }));
+    .map((entry) => ({ entry, resolution: resolveSkillPath(entry).paths }));
   for (const plan of plans) {
     for (const copy of plan.copies.filter((entry) => !plan.preservedCopies.includes(entry))) {
       const removed = canonicalEntry(copy);
@@ -408,7 +406,7 @@ function retainedDependencyFailures(
       .map((plan) => ({ entry: plan.destination, slug: plan.slug }))
   ].filter(({ entry }) => existsSync(entry));
   for (const { entry, slug } of registeredOwners) {
-    const resolution = resolveDependency(entry);
+    const resolution = resolveSkillPath(entry);
     for (const removal of removed) {
       if ([...resolution.paths].some((resolved) => containsPath(removal.canonical, resolved))) {
         failures.push(
@@ -431,7 +429,7 @@ function retainedDependencyFailures(
       if (!existsSync(target)) {
         continue;
       }
-      const resolution = resolveDependency(target).paths;
+      const resolution = resolveSkillPath(target).paths;
       for (const removal of removed) {
         if ([...resolution].some((resolved) => containsPath(removal.canonical, resolved))) {
           failures.push(
