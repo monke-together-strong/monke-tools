@@ -1,9 +1,9 @@
 ---
-name: create-pr
+name: pr
 description: Create or edit a PR
 ---
 
-# Create or edit PR
+# PR
 
 Apply [technical-writing](../../imported/technical-writing/SKILL.md) to the title
 and body.
@@ -15,6 +15,15 @@ Rebase the PR branch onto the latest base before analyzing or verifying it.
 
 Consolidate new ADRs where possible. Exclude research and exploration artifacts,
 including `docs/research/` and `docs/explorations/`, unless requested.
+
+## Edit branch documentation
+
+When the branch changes documentation, have a subagent edit the full diff
+against the base, including pending edits and new files. Apply
+[technical-writing](../../imported/technical-writing/SKILL.md) to all changed
+docs and [writing-for-agents](../../imported/writing-for-agents/SKILL.md) to
+agent-facing instructions. Wait for the subagent and review its edits before
+verification and publishing.
 
 ## Load PR requirements
 
