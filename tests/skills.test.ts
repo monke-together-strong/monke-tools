@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -284,6 +284,76 @@ describe("skills", () => {
         writeMessage() {}
       });
     }).toThrow(/Invalid monke-tools flat Skill manifest/u);
+  });
+
+  test.each(["../unrelated", "nested/skill", ".", "..", "skill\0name"])(
+    "Claude manifest rejects unsafe Skill name %j before removing links",
+    (name) => {
+      const sandbox = makeTempDir("skill-manifest-name-boundary");
+      const sourceCheckout = path.join(sandbox, "source");
+      writeGlobalInstructionsSource(sourceCheckout);
+      write(sourceCheckout, "skills/internal/example/SKILL.md", "---\nname: example\n---\n");
+      const skillRoot = path.join(sandbox, ".claude", "skills");
+      const sourcePath = path.join(sourceCheckout, "skill");
+      mkdirSync(skillRoot, { recursive: true });
+      const unrelated = path.join(sandbox, ".claude", "unrelated");
+      symlinkSync(sourcePath, unrelated);
+      write(
+        skillRoot,
+        ".monke-tools-flat-skills.json",
+        JSON.stringify({
+          links: [{ name, sourcePath }],
+          managedBy: "monke-tools",
+          version: 1
+        })
+      );
+
+      expect(() => {
+        reconcileSkillNamespaces({
+          cwd: sandbox,
+          guidanceSourceRoot: sourceCheckout,
+          homeDirectory: sandbox,
+          nextPreference: { targets: [{ kind: "codex" }] },
+          previousPreference: { targets: [{ kind: "claude" }] },
+          writeMessage() {}
+        });
+      }).toThrow(/Invalid monke-tools flat Skill manifest/u);
+      expect(readlinkSync(unrelated)).toBe(sourcePath);
+    }
+  );
+
+  test("Claude manifest rejects supporting links outside its references destination before removal", () => {
+    const sandbox = makeTempDir("skill-manifest-supporting-boundary");
+    const sourceCheckout = path.join(sandbox, "source");
+    writeGlobalInstructionsSource(sourceCheckout);
+    write(sourceCheckout, "skills/internal/example/SKILL.md", "---\nname: example\n---\n");
+    const skillRoot = path.join(sandbox, ".claude", "skills");
+    const sourcePath = path.join(sourceCheckout, "references");
+    mkdirSync(skillRoot, { recursive: true });
+    const unrelated = path.join(sandbox, "unrelated");
+    symlinkSync(sourcePath, unrelated);
+    write(
+      skillRoot,
+      ".monke-tools-flat-skills.json",
+      JSON.stringify({
+        links: [],
+        managedBy: "monke-tools",
+        supportingLinks: [{ sourcePath, targetPath: unrelated }],
+        version: 1
+      })
+    );
+
+    expect(() => {
+      reconcileSkillNamespaces({
+        cwd: sandbox,
+        guidanceSourceRoot: sourceCheckout,
+        homeDirectory: sandbox,
+        nextPreference: { targets: [{ kind: "codex" }] },
+        previousPreference: { targets: [{ kind: "claude" }] },
+        writeMessage() {}
+      });
+    }).toThrow(/Invalid monke-tools flat Skill manifest/u);
+    expect(readlinkSync(unrelated)).toBe(sourcePath);
   });
 
   test("skill namespace reconciliation attempts every selected target before failing on unmanaged namespaces", () => {
