@@ -1,20 +1,23 @@
 ---
-name: create-pr
+name: pr
 description: Create or edit a PR
 ---
 
-# Create or edit PR
-
-Apply [technical-writing](../../imported/technical-writing/SKILL.md) to the title
-and body.
+# PR
 
 ## Prepare the branch
 
 Use the existing PR's base, the task's specified base, or the repository default.
 Rebase the PR branch onto the latest base before analyzing or verifying it.
 
-Consolidate new ADRs where possible. Exclude research and exploration artifacts,
+Exclude research and exploration artifacts,
 including `docs/research/` and `docs/explorations/`, unless requested.
+
+## Edit branch documentation
+Consolidate new ADRs where possible and have a subagent edit the full diff
+against the base, including pending edits and new files. Apply
+[technical-writing](../../imported/technical-writing/SKILL.md) to all changed
+docs and [writing-for-agents](../../imported/writing-for-agents/SKILL.md) to agent facing docs.
 
 ## Load PR requirements
 
@@ -31,6 +34,9 @@ Link the source issue or Spec. Identify material risks, including rollback limit
 For changes to component interactions, state transitions, schemas, API contracts,
 or key data structures, invoke `$show-me` for a small GitHub-renderable view.
 Use prose alone for simple local changes.
+
+Apply [technical-writing](../../imported/technical-writing/SKILL.md) to the title
+and body.
 
 ## Choose the evidence
 
