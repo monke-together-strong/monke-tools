@@ -359,6 +359,15 @@ describe("Release bundle verifier", () => {
           "hex"
         )
       );
+      for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
+        const content = spawnSync("tar", ["-xOzf", archivePath, `./${file}`], {
+          encoding: "utf-8"
+        });
+        expect(content.status).toBe(0);
+        expect(content.stdout).toBe(
+          readFileSync(path.join(import.meta.dirname, "..", file), "utf-8")
+        );
+      }
       expect(manifest.toolBuildIdentity).toBe(RELEASE_VERSION);
       expect(manifest.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
       expect(Date.parse(manifest.createdAt)).not.toBeNaN();
@@ -423,5 +432,7 @@ describe("Mainline Release selection", () => {
     expect(hasReleaseOwnedChanges(["bun.lock", "packages/oxc-config/package.json"])).toBeFalsy();
     expect(hasReleaseOwnedChanges(["bun.lock", "package.json"])).toBeTruthy();
     expect(hasReleaseOwnedChanges(["bun.lock"])).toBeTruthy();
+    expect(hasReleaseOwnedChanges(["LICENSE"])).toBeTruthy();
+    expect(hasReleaseOwnedChanges(["THIRD_PARTY_NOTICES.md"])).toBeTruthy();
   });
 });
