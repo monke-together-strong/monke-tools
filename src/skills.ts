@@ -636,7 +636,14 @@ function removeManagedNamespace(target: ResolvedSkillInstallTarget) {
 }
 
 const FlatSkillLinkSchema = z.strictObject({
-  name: z.string().min(1),
+  name: z
+    .string()
+    .min(1)
+    .refine(
+      (name) =>
+        name !== "." && name !== ".." && !name.includes("\0") && path.basename(name) === name,
+      "Skill names must be single directory names"
+    ),
   sourcePath: z.string().min(1)
 });
 const FlatSkillManifestSchema = z.strictObject({
@@ -803,7 +810,13 @@ function readFlatManifest(target: ResolvedSkillInstallTarget) {
   }
 
   return unwrapBoundaryResult(
-    FlatSkillManifestSchema.safeParse(rawManifest),
+    FlatSkillManifestSchema.refine(
+      (manifest) =>
+        (manifest.supportingLinks ?? []).every(
+          (link) => link.targetPath === path.resolve(target.agentSkillRoot, "..", "references")
+        ),
+      "Supporting links must target the Agent skill root's sibling references directory"
+    ).safeParse(rawManifest),
     `monke-tools flat Skill manifest at ${manifestPath}`
   );
 }
