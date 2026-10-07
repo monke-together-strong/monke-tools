@@ -150,7 +150,12 @@ function groupTrees(processes: WorktreeProcess[]): WorktreeProcessTree[] {
   const trees = new Map<number, WorktreeProcess[]>();
   for (const candidate of processes) {
     const root = rootOf(candidate);
-    trees.set(root.pid, [...(trees.get(root.pid) ?? []), candidate]);
+    const members = trees.get(root.pid);
+    if (members === undefined) {
+      trees.set(root.pid, [candidate]);
+    } else {
+      members.push(candidate);
+    }
   }
   return [...trees.values()].map((members) => ({
     ageMs: Math.max(...members.map((member) => member.ageMs)),
