@@ -63,7 +63,10 @@ template or unexpected in a way that affects review.
   workflow carries the claim. Inspect final assets using
   [proof asset review](references/proof-asset-review.md), upload them with
   `$github-image-upload`, and embed the GitHub attachments. Keep screenshots and
-  videos expanded.
+  videos expanded; do not put them in collapsed sections. Caption each screenshot
+  with the behavior it demonstrates. Use matched, labeled before/after pairs for
+  comparisons and group multiple screenshots by claim. Number workflow states.
+  Choose side-by-side or stacked layouts based on readability.
 - For correctness that requires deployment, include `## Post-Merge Verification`
   with the environment, deployment gate, and concrete checks.
 
