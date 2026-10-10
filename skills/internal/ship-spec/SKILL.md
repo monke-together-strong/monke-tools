@@ -15,12 +15,15 @@ description: Ship an agreed Spec from a supplied thread through implementation, 
    - If `$implement` stops after setup, planning, or branch creation without
      commits and verification, treat it as incomplete and resume or report the
      blocker.
-4. After implementation, code review, and fixes finish, launch a fresh review
-   subagent in the implementation checkout to run `$autoreview` against the Spec
-   using the recorded review base. When the change has a user-visible surface
-   (UI, CLI, API, generated artifact), that agent also runs `$behavior-validator`,
-   using the Spec as the behavior contract. That agent owns review fixes.
-   Wait for review and any fixes to finish before creating the PR.
+4. After implementation, code review, and fixes finish, launch one fresh review
+   subagent in the implementation checkout. Provide the checkout path and repo
+   instructions, the Spec reference, recorded review base, runtime access, and
+   the absolute path to [Review fixes](../../references/internal/REVIEW_FIXES.md)
+   for the agent to follow. Use this exact prompt:
+
+   > Start `$autoreview` and `$behavior-validator` concurrently on the committed HEAD. Keep the validator source-blind. Resolve findings using the provided Review fixes reference before creating the PR.
+
+   Wait for its completion before creating the PR.
    - Always run this. Do not treat `$implement`, `$code-review`, tests, lint, or
      screenshots from implementation as a substitute.
 5. Create the PR and shepherd it.
