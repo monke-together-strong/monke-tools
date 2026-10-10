@@ -31,9 +31,17 @@ Link the source issue or Spec. Identify material risks, including rollback limit
 
 ## Choose the explanation
 
+Lead with the problem and resulting behavior. A simple change usually needs one
+or two sentences. Aim for under 200 words; expand only for a concrete review
+decision or required template field.
+
 For changes to component interactions, state transitions, schemas, API contracts,
 or key data structures, invoke `$show-me` for a small GitHub-renderable view.
 Use prose alone for simple local changes.
+
+Describe the final implementation. Keep investigation history and reviewer
+bookkeeping in work records. Keep each fact in one place and remove prose that
+repeats the diff or visual.
 
 Apply [technical-writing](../../imported/technical-writing/SKILL.md) to the title
 and body.
@@ -41,8 +49,11 @@ and body.
 ## Choose the evidence
 
 Reuse verification that still covers the change, or run the smallest relevant
-checks. Include available before-and-after evidence and material verification
-limits.
+checks. Report verification only when it adds information beyond routine CI
+results: a decisive behavior result, a meaningful benchmark, or a material
+verification limitation. Keep test counts, repeated runs, and routine lint,
+formatting, typecheck, and test results in work records unless required by the
+template or unexpected in a way that affects review.
 
 - For hands-on verification of a locally runnable UI or API, prepare a
   [manual-test handoff](references/manual-test-handoff.md) for the final chat
@@ -50,8 +61,12 @@ limits.
 - For frontend-visible work, attach a screenshot of each changed view or state,
   or [video](references/browser-video-proof.md) when motion, timing, or a
   workflow carries the claim. Inspect final assets using
-  [proof asset review](references/proof-asset-review.md), upload them with
-  `$github-image-upload`, and embed the GitHub attachments.
+  [proof asset review](references/proof-asset-review.md), and use
+  `$github-media-upload` to attach them when publishing. Keep screenshots and
+  videos expanded; do not put them in collapsed sections. Caption each screenshot
+  with the behavior it demonstrates. Use matched, labeled before/after pairs for
+  comparisons and group multiple screenshots by claim. Number workflow states.
+  Choose side-by-side or stacked layouts based on readability.
 - For correctness that requires deployment, include `## Post-Merge Verification`
   with the environment, deployment gate, and concrete checks.
 

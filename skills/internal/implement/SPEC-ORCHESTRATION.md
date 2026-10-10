@@ -10,10 +10,11 @@ The tickets are not a list of steps. They are a **task graph** with blocking
 relationships. The **frontier** is the set of tickets whose blockers are complete
 and integrated; tickets without blockers are ready immediately.
 
-Communication to and from subagents should be sparse. Communicate primarily
-through **context pointers**: to the Spec, tickets, research notes, and previous
-commits. Keep the information in those sources rather than restating it in
-handoffs.
+Delegate with the prompt below, including a supplied review base when applicable.
+Add user constraints only when the worker cannot obtain them from the ticket or
+repo instructions. Use **context pointers** to supporting evidence. Use a handoff
+only for necessary state outside the ticket and checkout, such as ownership of
+an active runtime.
 
 Run **implementer subagents** in the background where possible for maximum
 concurrency.
@@ -49,8 +50,10 @@ checkout.
    newly ready tickets immediately, while unrelated tickets continue. A blocked
    ticket pauses only its dependents. Record newly discovered dependencies
    before scheduling affected tickets. Repeat until all tickets are integrated.
-7. Track deferred cross-ticket findings with their source issue and the ticket
-   or integration check that will address them.
+7. Record newly discovered cross-ticket requirements and findings in the owning
+   ticket before delegating it, with links to source evidence. Findings that
+   block the current ticket remain its responsibility until fixed or explicitly
+   reassigned.
 8. Complete remaining Spec acceptance and integration work using scoped checks;
    assign code fixes to an implementer. Resolve each deferred finding through
    a fix, verification, or explicit user acceptance of exclusion from scope.
