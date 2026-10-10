@@ -16,8 +16,8 @@ description: Ship an agreed Spec from a supplied thread through implementation, 
      commits and verification, treat it as incomplete and resume or report the
      blocker.
 4. After implementation, code review, and fixes finish, launch one fresh review
-   subagent in the implementation checkout. Provide the checkout path and repo
-   instructions, the Spec reference, recorded review base, runtime access, and
+   subagent in the implementation checkout. Provide the checkout path,
+   the Spec reference, recorded review base, runtime access, and
    the absolute path to [Review fixes](../../references/internal/REVIEW_FIXES.md)
    for the agent to follow. Use this exact prompt:
 
