@@ -12,17 +12,10 @@ and linting for the changed scope as you work, following the repo's instructions
 Commit the task's changes before review, preserving unrelated checkout edits.
 Run `$code-review <review base> <Work target>`, omitting the target when absent.
 Invoke it directly from the implementation agent and give its reviewers the
-absolute checkout path and repo instructions.
+absolute checkout path.
 
-Verify findings against the code and task. Fix confirmed in-scope findings in
-one batch, run the affected checks, and commit the fixes. Explain dismissed
-findings and record deferred cross-ticket work.
-
-Confirmed production defects, missing task requirements, and failing required
-checks block completion. After blocking fixes, rerun `$code-review` with the
-same review base and Work target, carrying prior findings forward.
-Repeat until blockers are resolved. Completion requires committed task changes,
-passing required checks, and completed independent review.
+Resolve findings and verify completion using
+[Review fixes](../../references/internal/REVIEW_FIXES.md).
 
 Return the review base and final commit SHAs, a concise verification summary,
 and any remaining integration work.
