@@ -370,7 +370,14 @@ function assertArchiveContract(entries: string[]) {
   for (const entry of entries) {
     const [topLevel, skillFolder] = entry.split("/");
     const allowedEntry =
-      ["install-manifest.json", "install.sh", "mt", "skills.lock.json"].includes(entry) ||
+      [
+        "install-manifest.json",
+        "install.sh",
+        "mt",
+        "skills.lock.json",
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.md"
+      ].includes(entry) ||
       entry === "instructions" ||
       entry === "instructions/GLOBAL.md" ||
       entry === "skills" ||

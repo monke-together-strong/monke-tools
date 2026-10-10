@@ -48,6 +48,8 @@ const RELEASE_INPUTS = [
   ".github/actions/setup-mainline/",
   ".github/workflows/publish.yml",
   "install.sh",
+  "LICENSE",
+  "THIRD_PARTY_NOTICES.md",
   "instructions/GLOBAL.md",
   "package.json",
   "scripts/install-local.sh",
@@ -274,7 +276,9 @@ async function compileExecutable(
 }
 
 function copyBundleInputs(bundleRoot: string) {
-  cpSync(path.join(repositoryRoot, "skills.lock.json"), path.join(bundleRoot, "skills.lock.json"));
+  for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md", "skills.lock.json"]) {
+    cpSync(path.join(repositoryRoot, file), path.join(bundleRoot, file));
+  }
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     cpSync(path.join(repositoryRoot, "skills", folder), path.join(bundleRoot, "skills", folder), {
       recursive: true
