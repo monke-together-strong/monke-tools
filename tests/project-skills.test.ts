@@ -259,6 +259,31 @@ describe("project skill installation", () => {
     expect(f.stdout()).toContain("lfv\tlink\t2 skills");
   });
 
+  test.each([false, true])(
+    "setup restores links without monke.yml in a linked worktree=%s",
+    async (linkedWorktree) => {
+      const f = fixture();
+      const sourceRepo = createRepo(path.join(f.sandbox, "configless"), {
+        "README.md": "Skill consumer.\n"
+      });
+      const checkout = linkedWorktree ? path.join(f.sandbox, "worktree") : sourceRepo;
+      if (linkedWorktree) {
+        git(sourceRepo, ["worktree", "add", "-b", "feature/skills", checkout]);
+      }
+      await runCliAsync(["skills", "add", f.source, "--project"], f.runtimeAt(checkout));
+      for (const agent of [".agents", ".claude", ".cursor"]) {
+        rmSync(path.join(checkout, agent, "skills"), { recursive: true });
+      }
+      const nested = path.join(checkout, "nested");
+      mkdirSync(nested);
+      await runCliAsync(["setup"], f.runtimeAt(nested));
+      for (const destination of f.installedAt(checkout, "lfv-view")) {
+        expect(realpathSync(destination)).toBe(path.join(f.source, "lfv-view"));
+      }
+      expect(existsSync(path.join(checkout, ".env"))).toBeFalsy();
+    }
+  );
+
   test("each consumer repo owns its selection of the same source", async () => {
     const f = fixture();
     const other = createRepo(path.join(f.sandbox, "other"), { "README.md": "Other consumer.\n" });
@@ -285,6 +310,10 @@ describe("project skill installation", () => {
     mkdirSync(fresh);
     git(fresh, ["init"]);
     await runCliAsync(["skills", "add", f.source, "--project"], f.runtimeAt(fresh));
+    for (const agent of [".agents", ".claude", ".cursor"]) {
+      rmSync(path.join(fresh, agent, "skills"), { recursive: true });
+    }
+    await runCliAsync(["setup"], f.runtimeAt(fresh));
     for (const destination of f.installedAt(fresh, "lfv-view")) {
       expect(realpathSync(destination)).toBe(path.join(f.source, "lfv-view"));
     }

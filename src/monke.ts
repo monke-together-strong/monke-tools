@@ -1265,7 +1265,10 @@ function toPreparedMaterializeWorktree(
 }
 
 export async function runSetup(runtime: Runtime) {
-  runCheckoutSetup(runtime);
+  const checkoutRoot = runGit(runtime, runtime.cwd, ["rev-parse", "--show-toplevel"]).trim();
+  if (existsSync(path.join(checkoutRoot, "monke.yml"))) {
+    runCheckoutSetup(runtime);
+  }
   await reconcileProjectSkills(runtime);
 }
 
