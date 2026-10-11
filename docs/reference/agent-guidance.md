@@ -80,7 +80,7 @@ Part of the [domain glossary](../../GLOSSARY.md).
 
 **Bundled import recipes**: The repo-owned **Skill import recipes** for **Imported guidance** distributed with monke-tools. _Avoid_: Bundled skill import store, Skill registry
 
-**Skill registry**: The machine-local **Skill import recipe store** for a user's imported guidance collection, including bundled imports and personal or private sources. _Avoid_: Bundled import recipes, monke-tools repository
+**Skill registry**: A local **Skill import recipe store** for an imported guidance collection. A global registry belongs to one machine's user. A project registry belongs to one local clone and is shared across its worktrees. _Avoid_: Bundled import recipes, monke-tools repository
 
 **Skill lock**: The recorded source revisions, guidance identities, and import choices for accepted **Imported guidance**. Repository-backed entries identify reproducible versions; installer commands and linked collections record where guidance comes from without promising an immutable source version.
 
@@ -125,9 +125,9 @@ Part of the [domain glossary](../../GLOSSARY.md).
 - A **Skill projection** exposes compatible skills and references in one **Agent skill root**. A **Managed skill namespace** groups them; a **Flat skill projection** exposes skills directly.
 - **Shared distributed skills** apply across compatible harnesses; **Harness-specific skills** apply only to their named harness.
 - Each **Imported guidance** item has one **Imported guidance owner** and one **Import kind**. Its recipe retains the source and choices needed to refresh it.
-- **Bundled import recipes** belong to monke-tools; a **Skill registry** belongs to one machine's user. A registry starts with bundled imports and then retains its own recipes and invocation choices independently.
+- **Bundled import recipes** belong to monke-tools. A global **Skill registry** includes bundled imports and personal or private sources. A project registry contains only explicitly registered sources. Each registry retains its recipes and invocation choices independently.
 - A **Skill import** selects a source collection. **Skill install preferences** select distribution targets; an installer's agent-specific output folder does not restrict those targets.
-- Linked and installer-backed **Imported skills** share editing authority with their **Skill source folder**. Their global **Skill projections** expose that same guidance; source refreshes may replace instruction edits.
+- Linked and installer-backed **Imported skills** share editing authority with their **Skill source folder**. Their global and project **Skill projections** expose that same guidance; source refreshes may replace instruction edits.
 - A skill may be both **Model-invoked** and **User-invoked**.
 - A per-skill **Model invocation override** takes precedence over its source-wide default. Overrides survive source refreshes and selection changes, including a skill disappearing and returning; without an override, upstream invocation metadata remains authoritative.
 - A **Skill source revision** may change without changing its **Guidance digest**. The resulting lock-only comparison is still a **Skill update review**.

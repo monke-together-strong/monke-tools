@@ -27,6 +27,7 @@ import {
 } from "./install-manifest.ts";
 import { createLogger } from "./logger.ts";
 import { samePath } from "./path-identity.ts";
+import { reconcileProjectSkills } from "./project-skills.ts";
 import {
   createInitialRepoLifecycleState,
   materializeRepo,
@@ -451,7 +452,7 @@ async function prepareSpawnRepoWorktree(request: SpawnRepoPreparationRequest) {
       ? (existingState?.pinnedRef ?? runGit(runtime, worktree.path, ["rev-parse", "HEAD"]).trim())
       : undefined;
   request.onWorktreeReady({ diffBaseRef, pinnedRef, worktreePath: worktree.path });
-  const preparationWarnings = prepareRepoWorktree(runtime, repoConfig, worktree.path);
+  const preparationWarnings = await prepareRepoWorktree(runtime, repoConfig, worktree.path);
   return {
     baselinePortsRoot: useWorktreeBaseline ? worktree.path : repoConfig.sourceRoot,
     diffBaseRef,
@@ -1234,7 +1235,11 @@ async function prepareMaterializeRepoWorktree(
     );
   }
   onWorktreeReady(worktreePath);
-  const preparationWarnings = prepareRepoWorktree(execution.runtime, repoConfig, worktreePath);
+  const preparationWarnings = await prepareRepoWorktree(
+    execution.runtime,
+    repoConfig,
+    worktreePath
+  );
   return toPreparedMaterializeWorktree(execution, repoConfig, worktreePath, preparationWarnings);
 }
 
@@ -1259,11 +1264,12 @@ function toPreparedMaterializeWorktree(
   };
 }
 
-export function runSetup(runtime: Runtime) {
+export async function runSetup(runtime: Runtime) {
   runCheckoutSetup(runtime);
+  await reconcileProjectSkills(runtime);
 }
 
-function prepareRepoWorktree(runtime: Runtime, repoConfig: RepoConfig, worktreePath: string) {
+async function prepareRepoWorktree(runtime: Runtime, repoConfig: RepoConfig, worktreePath: string) {
   const warnings: string[] = [];
   try {
     seedWorktreeFiles(repoConfig, worktreePath, (message) => {
@@ -1276,6 +1282,7 @@ function prepareRepoWorktree(runtime: Runtime, repoConfig: RepoConfig, worktreeP
       { cause: error }
     );
   }
+  await reconcileProjectSkills(runtime, worktreePath);
   return warnings;
 }
 

@@ -35,11 +35,19 @@ const SKILL_SOURCE_CANDIDATES = [
 ];
 
 /** Choose one skill source folder from a checkout or installer output. */
-export function resolveSkillSourceFolder(directory: string, preserveAlias = false) {
+export function resolveSkillSourceFolder(
+  directory: string,
+  preserveAlias = false,
+  preferPublishedSkills = false
+) {
   if (existsSync(path.join(directory, "SKILL.md"))) {
     return preserveAlias ? directory : realpathSync.native(directory);
   }
-  const candidates = SKILL_SOURCE_CANDIDATES.map((candidate) => path.join(directory, candidate));
+  // A project may publish skills/ while consuming unrelated skills in .agents/skills.
+  const folders = preferPublishedSkills
+    ? ["skills", ...SKILL_SOURCE_CANDIDATES.filter((candidate) => candidate !== "skills")]
+    : SKILL_SOURCE_CANDIDATES;
+  const candidates = folders.map((candidate) => path.join(directory, candidate));
   const root = candidates.find((candidate) => existsSync(candidate)) ?? directory;
   return existsSync(root) && !preserveAlias ? realpathSync.native(root) : root;
 }
