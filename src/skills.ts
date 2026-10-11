@@ -68,6 +68,12 @@ export interface ResolvedSkillInstallTarget {
   namespacePath: string;
 }
 
+/** Explicit publication destination for a project-local skill collection. */
+export interface SkillPublicationScope {
+  homeDirectory: string;
+  preference: SkillInstallPreference;
+}
+
 /** Noninteractive Skill targets supplied by install automation. */
 export interface ExplicitSkillTargetSelection {
   builtInTargetKinds?: BuiltInSkillInstallTargetKind[];
@@ -78,6 +84,7 @@ export interface ExplicitSkillTargetSelection {
 export function resolveSkillInstallTargets(options: {
   homeDirectory: string;
   preference: SkillInstallPreference;
+  project?: boolean;
 }) {
   return options.preference.targets.map((target) => {
     const agentSkillRoot =
@@ -86,7 +93,12 @@ export function resolveSkillInstallTargets(options: {
             homeDirectory: options.homeDirectory,
             input: target.path
           })
-        : path.join(options.homeDirectory, BUILT_IN_TARGET_ROOTS[target.kind]);
+        : path.join(
+            options.homeDirectory,
+            target.kind === "codex" && options.project
+              ? path.join(".agents", "skills")
+              : BUILT_IN_TARGET_ROOTS[target.kind]
+          );
 
     return {
       agentSkillRoot,
@@ -125,18 +137,23 @@ export function preflightInstallGuidance(
   runtime: Runtime,
   guidanceSourceRoot: string,
   explicitTargets?: ExplicitSkillTargetSelection,
-  adoptedLinks: ReadonlyMap<string, string> = new Map()
+  adoptedLinks: ReadonlyMap<string, string> = new Map(),
+  scope?: SkillPublicationScope
 ) {
-  const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
-  const previousPreference = config.skillInstallPreference;
-  const homeDirectory = getHomeDirectory(runtime);
+  const previousPreference =
+    scope?.preference ?? loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference;
+  const homeDirectory = scope?.homeDirectory ?? getHomeDirectory(runtime);
   const nextPreference =
     explicitSkillInstallPreference(homeDirectory, explicitTargets) ?? previousPreference;
   if (!nextPreference && !previousPreference) {
     return;
   }
-  const previousTargets = resolveTargetsByKey(homeDirectory, previousPreference);
-  const nextTargets = resolveTargetsByKey(homeDirectory, nextPreference);
+  const previousTargets = resolveTargetsByKey(
+    homeDirectory,
+    previousPreference,
+    scope !== undefined
+  );
+  const nextTargets = resolveTargetsByKey(homeDirectory, nextPreference, scope !== undefined);
   const failures: string[] = [];
   for (const [key, target] of previousTargets) {
     if (nextTargets.has(key)) {
@@ -144,11 +161,13 @@ export function preflightInstallGuidance(
     }
     try {
       preflightSkillTargetRemoval(target);
-      preflightRemoveGlobalInstructions(target, {
-        cwd: runtime.cwd,
-        environment: runtime.env,
-        homeDirectory
-      });
+      if (!scope) {
+        preflightRemoveGlobalInstructions(target, {
+          cwd: runtime.cwd,
+          environment: runtime.env,
+          homeDirectory
+        });
+      }
     } catch (error) {
       failures.push(`${target.agentSkillRoot}: ${errorMessage(ThrownValueSchema.parse(error))}`);
     }
@@ -156,12 +175,14 @@ export function preflightInstallGuidance(
   for (const target of nextTargets.values()) {
     try {
       preflightOneSkillTarget(target, guidanceSourceRoot, adoptedLinks);
-      preflightGlobalInstructions(target, {
-        cwd: runtime.cwd,
-        environment: runtime.env,
-        guidanceSourceRoot,
-        homeDirectory
-      });
+      if (!scope) {
+        preflightGlobalInstructions(target, {
+          cwd: runtime.cwd,
+          environment: runtime.env,
+          guidanceSourceRoot,
+          homeDirectory
+        });
+      }
     } catch (error) {
       failures.push(`${target.agentSkillRoot}: ${errorMessage(ThrownValueSchema.parse(error))}`);
     }
@@ -243,13 +264,14 @@ function preflightSkillTargetRemoval(target: ResolvedSkillInstallTarget) {
 
 function resolveTargetsByKey(
   homeDirectory: string,
-  preference: SkillInstallPreference | undefined
+  preference: SkillInstallPreference | undefined,
+  project = false
 ) {
   if (!preference) {
     return new Map<string, ResolvedSkillInstallTarget>();
   }
   return new Map(
-    resolveSkillInstallTargets({ homeDirectory, preference }).map((target) => [
+    resolveSkillInstallTargets({ homeDirectory, preference, project }).map((target) => [
       targetKey(target),
       target
     ])
@@ -262,8 +284,10 @@ export function reconcileSkillNamespaces(options: {
   environment?: Record<string, string | undefined>;
   guidanceSourceRoot: string;
   homeDirectory: string;
+  includeGlobalInstructions?: boolean;
   nextPreference: SkillInstallPreference;
   previousPreference: SkillInstallPreference | null;
+  project?: boolean;
   writeMessage: (message: string) => void;
 }) {
   const skillSourceTree = resolveSkillSourceTree(options.guidanceSourceRoot);
@@ -272,11 +296,13 @@ export function reconcileSkillNamespaces(options: {
       ? []
       : resolveSkillInstallTargets({
           homeDirectory: options.homeDirectory,
-          preference: options.previousPreference
+          preference: options.previousPreference,
+          project: options.project
         });
   const nextTargets = resolveSkillInstallTargets({
     homeDirectory: options.homeDirectory,
-    preference: options.nextPreference
+    preference: options.nextPreference,
+    project: options.project
   });
   const nextKeys = new Set(nextTargets.map(targetKey));
   const failures: string[] = [];
@@ -300,7 +326,9 @@ export function reconcileSkillNamespaces(options: {
   for (const target of nextTargets) {
     try {
       prepareSkillTargetPlan(target, skillSourceTree).reconcile();
-      reconcileGlobalInstructions(target, options);
+      if (options.includeGlobalInstructions !== false) {
+        reconcileGlobalInstructions(target, options);
+      }
       options.writeMessage(
         `Linked ${SKILL_NAMESPACE} skills at ${skillTargetPolicy(target).managedLocation}\n`
       );
@@ -383,12 +411,19 @@ export function retireAdoptedSkillLinks(root: string, previous: SkillImportRecip
 }
 
 /** Paths target reconciliation can mutate; adoption retains them until publication completes. */
-export function skillPublicationPaths(runtime: Runtime, root: string, slugs: string[]) {
-  const preference = loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference;
-  const homeDirectory = getHomeDirectory(runtime);
+export function skillPublicationPaths(
+  runtime: Runtime,
+  root: string,
+  slugs: string[],
+  scope?: SkillPublicationScope
+) {
+  const preference =
+    scope?.preference ?? loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference;
+  const homeDirectory = scope?.homeDirectory ?? getHomeDirectory(runtime);
   const targets = resolveSkillInstallTargets({
     homeDirectory,
-    preference: preference ?? { targets: [] }
+    preference: preference ?? { targets: [] },
+    project: scope !== undefined
   });
   const paths = readImportRecipeStore(root).recipes.flatMap((recipe) =>
     recipe.skills.flatMap((skill) => skill.adoptedPaths ?? [])
@@ -411,11 +446,13 @@ export function skillPublicationPaths(runtime: Runtime, root: string, slugs: str
         ...(manifest?.supportingLinks?.map((link) => link.targetPath) ?? [])
       );
     }
-    const instructions = globalInstructionsPath(target, {
-      cwd: runtime.cwd,
-      environment: runtime.env,
-      homeDirectory
-    });
+    const instructions = scope
+      ? null
+      : globalInstructionsPath(target, {
+          cwd: runtime.cwd,
+          environment: runtime.env,
+          homeDirectory
+        });
     if (instructions) {
       paths.push(existsSync(instructions) ? realpathSync.native(instructions) : instructions);
     }
@@ -602,13 +639,16 @@ function removeManagedTarget(
     cwd: string;
     environment?: Record<string, string | undefined>;
     homeDirectory: string;
+    includeGlobalInstructions?: boolean;
   }
 ) {
   if (target.kind === "claude") {
     removeFlatManagedLinks(target);
   }
   removeManagedNamespace(target);
-  removeGlobalInstructions(target, options);
+  if (options.includeGlobalInstructions !== false) {
+    removeGlobalInstructions(target, options);
+  }
 }
 
 function removeManagedNamespace(target: ResolvedSkillInstallTarget) {

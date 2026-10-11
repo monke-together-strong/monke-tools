@@ -183,9 +183,7 @@ function createProgram(runtime: Runtime) {
       })
     );
 
-  program.command("setup").action(() => {
-    runSetup(runtime);
-  });
+  program.command("setup").action(() => runSetup(runtime));
 
   program
     .command("install-dependencies")
@@ -302,62 +300,81 @@ function createProgram(runtime: Runtime) {
     .alias("import")
     .description("Register imported skills from Git, a local link, or an installer command")
     .argument("[source]", "Git source or local Skill collection")
+    .option("--project", "Install into this repository; local sources stay linked")
     .option("--command <command>", "Installer command to save and replay on update")
     .option("--cwd <path>", "Installer working directory (defaults to a managed source directory)")
     .option("--link", "Register existing files without running the installer now")
     .option("--name <name>", "Source name (required for command-only imports)")
     .option("--skill <slugs...>", "Only import the selected skills")
     .action((source, options) =>
-      runSkillsRegistry(runtime, {
-        action: "add",
-        command: options.command,
-        cwd: options.cwd,
-        link: options.link,
-        name: options.name,
-        skills: options.skill,
-        source
-      })
+      runSkillsRegistry(
+        runtime,
+        {
+          action: "add",
+          command: options.command,
+          cwd: options.cwd,
+          link: options.link,
+          name: options.name,
+          skills: options.skill,
+          source
+        },
+        options.project
+      )
     );
 
   skills
     .command("list")
     .description("List registered imported Skill sources")
-    .action(() => runSkillsRegistry(runtime, { action: "list" }));
+    .option("--project", "List this repository's Skill sources")
+    .action((options) => runSkillsRegistry(runtime, { action: "list" }, options.project));
 
   skills
     .command("update")
     .description("Update all imported skills and open one complete comparison")
+    .option("--project", "Update this repository's Skill sources")
     .addOption(new Option("--adapter <adapter>").choices(["codiff", "lfv"]))
     .option("--interactive", "Prompt before accepting upstream Skill slug replacements")
     .action((options) =>
-      runSkillsRegistry(runtime, {
-        action: "update",
-        adapter: options.adapter,
-        interactive: options.interactive
-      })
+      runSkillsRegistry(
+        runtime,
+        {
+          action: "update",
+          adapter: options.adapter,
+          interactive: options.interactive
+        },
+        options.project
+      )
     );
 
   skills
     .command("remove")
     .description("Remove an import registration while preserving its external source")
     .argument("<source>")
-    .action((source) => runSkillsRegistry(runtime, { action: "remove", source }));
+    .option("--project", "Remove a source from this repository")
+    .action((source, options) =>
+      runSkillsRegistry(runtime, { action: "remove", source }, options.project)
+    );
 
   skills
     .command("policy")
     .description("Set model invocation for one imported Skill or an entire source")
+    .option("--project", "Set policy for this repository's Skill sources")
     .argument("<source>")
     .argument("[skill]", "Skill slug; omit to set the source default, including future skills")
     .addOption(
       new Option("--model-invocation <policy>").choices(["allow", "deny"]).makeOptionMandatory()
     )
     .action((source, skill, options) =>
-      runSkillsRegistry(runtime, {
-        action: "policy",
-        disable: options.modelInvocation === "deny",
-        skill,
-        source
-      })
+      runSkillsRegistry(
+        runtime,
+        {
+          action: "policy",
+          disable: options.modelInvocation === "deny",
+          skill,
+          source
+        },
+        options.project
+      )
     );
 
   skills

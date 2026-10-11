@@ -133,6 +133,24 @@ The [configuration reference](skills/internal/monke-config/references/monke-yml.
 
 Run `mt skills configure` to select agents or change the saved targets. Codex and Claude also receive shared global instructions; existing guidance outside the managed section is preserved.
 
+To use skills from a local checkout in one project, run this inside the consumer repo:
+
+```bash
+mt skills add ../local-file-viewer --project
+```
+
+Local sources stay linked, so source edits and Git updates appear through the
+project's links. Add `--skill <slugs...>` to select skills. Use `--project` with
+`list`, `update`, `remove`, or `policy` to manage the project's sources.
+For a checkout, project imports prefer `skills/` over `.agents/skills`. Pass the
+exact skill directory to select another source folder.
+The first project install saves your global selection of built-in agent targets,
+or defaults to Codex, Claude, and Cursor if you have no saved selection. Codex
+project skills use `.agents/skills`. Claude and Cursor use their repo skill directories.
+Project registrations stay in shared Git metadata, and generated links are locally
+ignored. Spawn, materialize, and setup recreate links in each checkout. After a
+selection change or removal, run `mt setup` in other existing worktrees.
+
 Monke's skills cover [worktrees and Sessions](skills/internal/monke-worktrees/SKILL.md), [diff review](skills/internal/monke-diff/SKILL.md), and [skill management](skills/internal/monke-skills/SKILL.md). Link directly to the manual-only [configuration](skills/internal/monke-config/SKILL.md) and [installation](skills/internal/monke-install/SKILL.md) skills when needed. Other workflows live in [internal skills](skills/internal) and [imported guidance](docs/skill-imports.md). See [agent guidance distribution](docs/reference/agent-guidance.md) for domain terminology and ownership.
 
 Imported guidance is generated from the tracked skill lock. See [maintaining imported guidance](docs/skill-imports.md) for exact restoration, complete update review, and review-cache cleanup.
