@@ -46,6 +46,8 @@ checkout.
    worker using that checkout to finish first.
    Work already on that branch needs no merge. Check that the combined changes
    work before treating a ticket as integrated.
+   After verified integration, run `mt chop <worker-session>` from source to clean
+   up each separate worker Session.
 6. If integration changes the frontier, launch implementer subagents for the
    newly ready tickets immediately, while unrelated tickets continue. A blocked
    ticket pauses only its dependents. Record newly discovered dependencies

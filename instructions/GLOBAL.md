@@ -13,9 +13,12 @@
 
 ## Verification
 
-- Use the smallest proof that the change works: tests for the files or behavior
-  changed, plus targeted lint and typecheck for the changed scope.
-- **Do not run repo-wide checks** unless explicitly asked. CI owns full suite.
+- For ordinary changes, run focused tests, lint, and typecheck.
+- For CI fixes, iterate with focused checks, then run every failed job's full
+  verification with its setup, builds, workflow commands, runtime, and
+  configuration. Use a matching runner if needed. Report blockers; claim
+  verification only when all failed jobs pass.
+- Run other repo-wide checks only when asked.
 
 ## Branching
 

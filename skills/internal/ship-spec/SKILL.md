@@ -21,6 +21,10 @@ description: Ship an agreed Spec from a supplied thread through implementation, 
    concurrently on the committed HEAD from this thread. Use the recorded
    review base for AutoReview and the Spec as the behavior contract. Delegate
    behavior validation to a fresh source-blind subagent.
+   Freshness applies to agent context. The parent selects and owns the validation
+   environment, reuses suitable runtimes and fixtures, and confirms the code
+   version under test. Create new environments only when the contract or
+   isolation requires them; clean up temporary resources after validation.
    Resolve findings and verify completion using
    [Review fixes](../../references/internal/REVIEW_FIXES.md).
    - Always run this. Do not treat `$implement`, `$code-review`, tests, lint, or
