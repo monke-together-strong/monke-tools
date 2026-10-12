@@ -6,6 +6,31 @@ import { describe, expect, test } from "vite-plus/test";
 import { createRepo, makeTempDir, read, runMonke, spawnMonkeWorker, write } from "./helpers.ts";
 
 describe("checkout resources", () => {
+  test("Session resource operations validate apps in the executing checkout", () => {
+    const sandbox = makeTempDir("checkout-resource-app-paths");
+    const home = path.join(sandbox, "home");
+    const root = createRepo(path.join(sandbox, "repo"), { "monke.yml": "apps: {}\n" });
+    runMonke({ args: ["spawn", "feature"], cwd: root, monkeHome: home });
+    const checkout = path.join(home, "worktrees", "repo", "feature");
+    write(checkout, "new-app/.env", "PORT=3000\n");
+    write(
+      checkout,
+      "monke.yml",
+      "apps:\n  app:\n    path: new-app\n    mappings:\n      - env: PORT\n        port: WEB_PORT\n"
+    );
+    const operations = [["setup"], ["resources", "acquire"], ["resources", "exec", "--", "true"]];
+    for (const args of operations) {
+      runMonke({ args, cwd: checkout, monkeHome: home });
+    }
+    expect(existsSync(path.join(root, "new-app"))).toBeFalsy();
+    rmSync(path.join(checkout, "new-app"), { recursive: true });
+    for (const args of operations) {
+      expect(() => runMonke({ args, cwd: checkout, monkeHome: home })).toThrow(
+        /App path does not exist/u
+      );
+    }
+  });
+
   test("a source checkout acquires once and exec uses recorded values without exporting them to dotenv", () => {
     const sandbox = makeTempDir("checkout-resources");
     const home = path.join(sandbox, "home");

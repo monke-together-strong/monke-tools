@@ -50,11 +50,15 @@ function resolveCheckout(runtime: Runtime) {
   const owner = resourceOwner(context.sourceRoot, context.worktreeRoot, session?.session);
   const store = new CheckoutResourceStore(home, sessions.list());
   // Resource modules and declarations belong to the checkout being executed.
+  const configRoot = (sourceRoot: string) =>
+    samePath(sourceRoot, context.sourceRoot) ? context.worktreeRoot : sourceRoot;
   const loadConfig = () =>
     loadResolvedGraph(runtime, context.sourceRoot, {
+      pathExists(sourceRoot, relativePath) {
+        return existsSync(path.join(configRoot(sourceRoot), relativePath));
+      },
       readRepoConfig(sourceRoot) {
-        const root = samePath(sourceRoot, context.sourceRoot) ? context.worktreeRoot : sourceRoot;
-        return readFileSync(path.join(root, "monke.yml"), "utf-8");
+        return readFileSync(path.join(configRoot(sourceRoot), "monke.yml"), "utf-8");
       }
     }).reposByRoot.get(context.sourceRoot);
   const sessionRepo = session?.repos.find((repo) =>
