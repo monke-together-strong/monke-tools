@@ -534,9 +534,9 @@ function toImmediateResourceCommandStates(
       return existing ? [existing] : [];
     }
 
-    const declaredEnvNames = new Set(command.outputs);
+    const currentEnvNames = new Set(current.outputs.map((output) => output.env));
     const staleOutputs =
-      existing?.outputs.filter((output) => !declaredEnvNames.has(output.env)) ?? [];
+      existing?.outputs.filter((output) => !currentEnvNames.has(output.env)) ?? [];
     return [
       {
         ...current,

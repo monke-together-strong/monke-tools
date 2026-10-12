@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { CheckoutResourceStore } from "../src/checkout-resource-store.ts";
+import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { resolveResourceCommands } from "../src/resources.ts";
 import { hashKey } from "../src/runtime.ts";
 import type { RepoConfig, Runtime } from "../src/types.ts";
@@ -11,6 +11,74 @@ import { makeTempDir } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("resources", () => {
+  test.each([false, true])(
+    "checkpointing a new command retains each retired output once for legacy=%s",
+    async (legacy) => {
+      const sandbox = makeTempDir("resources-retired-output-checkpoint");
+      const sourceRoot = path.join(sandbox, "repo");
+      const store = new CheckoutResourceStore(path.join(sandbox, "home"));
+      const record = store.get(resourceOwner(sourceRoot, sourceRoot));
+      const original = {
+        legacy,
+        name: "retained",
+        outputs: [
+          { env: "KEPT", value: "kept" },
+          { env: "RETIRED", value: "retired" }
+        ],
+        run: "retained.ts",
+        timeoutSeconds: 60
+      };
+      record.resourceCommandOutputs = [original];
+      store.save(record);
+      const repoConfig: RepoConfig = {
+        appsInOrder: [],
+        configPath: path.join(sourceRoot, "monke.yml"),
+        externalInOrder: [],
+        externalMappingsInOrder: [],
+        localPortOrder: [],
+        resourceCommandsInOrder: [
+          { name: "retained", outputs: ["KEPT"], run: "retained.ts", timeoutSeconds: 60 },
+          { name: "new", outputs: ["NEW"], run: "new.ts", timeoutSeconds: 60 }
+        ],
+        resourceValuesInOrder: [],
+        seedPaths: [],
+        sourceRoot
+      };
+      const runtime: Runtime = {
+        ...createTestRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
+        async execAsync(_command, args) {
+          expect(args?.[4]).toBe(path.join(sourceRoot, "new.ts"));
+          writeFileSync(args?.[5] ?? "", JSON.stringify({ value: { NEW: "new" } }));
+          return { exitCode: 0, stderr: "", stdout: "" };
+        }
+      };
+      let checkpointed = false;
+      await resolveResourceCommands({
+        existingRepoState: record,
+        onCommandExecutionStarting(commands) {
+          expect(commands[0]).toStrictEqual(original);
+        },
+        onResolvedCommandOutputs(commands) {
+          checkpointed = true;
+          record.resourceCommandOutputs = commands;
+          store.save(record);
+        },
+        repoConfig,
+        resourceValues: [],
+        rootSourceRoot: sourceRoot,
+        runtime,
+        session: "",
+        store,
+        worktreePath: sourceRoot
+      });
+      expect(checkpointed).toBeTruthy();
+      expect(store.get(record.owner).resourceCommandOutputs).toStrictEqual([
+        original,
+        expect.objectContaining({ name: "new", outputs: [{ env: "NEW", value: "new" }] })
+      ]);
+    }
+  );
+
   test("resource command lock covers command execution and immediate persistence", async () => {
     const sandbox = makeTempDir("resources-command-lock");
     const home = path.join(sandbox, "home");
