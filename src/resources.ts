@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -288,7 +288,7 @@ export async function runResourceCommand(options: {
         stderr: result.stderr
       });
     }
-    const returned = readResourceCommandRunnerOutput({
+    const returned = await readResourceCommandRunnerOutput({
       command: options.command,
       outputPath,
       stderr: result.stderr,
@@ -389,7 +389,7 @@ function withResourceCommandLock<T>(
   );
 }
 
-function readResourceCommandRunnerOutput(options: {
+async function readResourceCommandRunnerOutput(options: {
   command: ResourceCommandConfig;
   outputPath: string;
   stderr: string;
@@ -397,7 +397,7 @@ function readResourceCommandRunnerOutput(options: {
 }) {
   let outputText: string;
   try {
-    outputText = readFileSync(options.outputPath, "utf-8");
+    outputText = Buffer.from(await Bun.file(options.outputPath).bytes()).toString("utf-8");
   } catch {
     throw resourceCommandFailure({
       command: options.command,

@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 function unwrapQuotedValue(value: string) {
   if (value.length >= 2) {
     const [first] = value;
@@ -13,11 +11,11 @@ function unwrapQuotedValue(value: string) {
   return value;
 }
 
-export function loadEnvFileIfPresent(filePath: string) {
+export async function loadEnvFileIfPresent(filePath: string) {
   let content: string;
 
   try {
-    content = readFileSync(filePath, "utf-8");
+    content = await Bun.file(filePath).text();
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return;

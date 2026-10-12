@@ -4,13 +4,35 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
-import { resolveResourceCommands } from "../src/resources.ts";
+import { resolveResourceCommands, runResourceCommand } from "../src/resources.ts";
 import { hashKey } from "../src/runtime.ts";
 import type { RepoConfig, Runtime } from "../src/types.ts";
 import { makeTempDir } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("resources", () => {
+  test("resource runner output with a BOM is a protocol violation", async () => {
+    const sourceRoot = makeTempDir("resources-output-bom");
+    const runtime: Runtime = {
+      ...createTestRuntime({ cwd: sourceRoot, env: {}, onStderr() {}, onStdout() {} }),
+      async execAsync(_command, args) {
+        await Bun.write(args?.[5] ?? "", '\uFEFF{"value":{"VALUE":"allocated"}}');
+        return { exitCode: 0, stderr: "", stdout: "" };
+      }
+    };
+    await expect(
+      runResourceCommand({
+        command: { name: "example", outputs: ["VALUE"], run: "example.ts", timeoutSeconds: 60 },
+        resourceValues: [],
+        runtime,
+        session: "",
+        sourceRoot,
+        stdin: {},
+        worktreePath: sourceRoot
+      })
+    ).rejects.toThrow("runner protocol violation");
+  });
+
   test.each([false, true])(
     "checkpointing a new command retains each retired output once for legacy=%s",
     async (legacy) => {

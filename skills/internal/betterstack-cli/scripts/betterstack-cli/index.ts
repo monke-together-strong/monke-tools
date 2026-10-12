@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 
 import { Command, InvalidArgumentError } from "@commander-js/extra-typings";
 import type { OptionValues } from "@commander-js/extra-typings";
@@ -133,25 +133,25 @@ function parseIntegerOption(value: string) {
   return parsed;
 }
 
-function initializeEnvironment(envFilePath?: string) {
+async function initializeEnvironment(envFilePath?: string) {
   if (envFilePath !== undefined && envFilePath !== "") {
-    loadEnvFileIfPresent(envFilePath);
+    await loadEnvFileIfPresent(envFilePath);
     return;
   }
 
   const defaultEnvFile = process.env.BETTERSTACK_ENV_FILE;
   if (defaultEnvFile !== undefined && defaultEnvFile !== "") {
-    loadEnvFileIfPresent(defaultEnvFile);
+    await loadEnvFileIfPresent(defaultEnvFile);
     return;
   }
 
   if (existsSync(".env.demo")) {
-    loadEnvFileIfPresent(".env.demo");
+    await loadEnvFileIfPresent(".env.demo");
   }
 }
 
 async function handleSourceList(options: PaginationOptions) {
-  initializeEnvironment(options.envFile);
+  await initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
   const { page } = options;
@@ -161,7 +161,7 @@ async function handleSourceList(options: PaginationOptions) {
 }
 
 async function handleSourceGet(options: SourceGetOptions) {
-  initializeEnvironment(options.envFile);
+  await initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
   const { id } = options;
@@ -170,7 +170,7 @@ async function handleSourceGet(options: SourceGetOptions) {
 }
 
 async function handleConnectionList(options: PaginationOptions) {
-  initializeEnvironment(options.envFile);
+  await initializeEnvironment(options.envFile);
 
   const client = createMetadataClient(options.token);
   const { page } = options;
@@ -180,7 +180,7 @@ async function handleConnectionList(options: PaginationOptions) {
 }
 
 async function handleQueryRun(options: QueryRunOptions) {
-  initializeEnvironment(options.envFile);
+  await initializeEnvironment(options.envFile);
 
   const { sourceId, table } = options;
   const sql = await resolveSql(options);
@@ -489,7 +489,7 @@ async function resolveSql(options: QueryRunOptions) {
   }
 
   if (sqlFile !== undefined) {
-    return readFileSync(sqlFile, "utf-8");
+    return Buffer.from(await Bun.file(sqlFile).bytes()).toString("utf-8");
   }
 
   if (process.stdin.isTTY) {
