@@ -40,7 +40,7 @@ import {
   verifyReleaseArchive
 } from "./release-contract.ts";
 import { BUNDLED_GUIDANCE_FOLDERS, hashReleaseGuidance } from "./release-guidance.ts";
-import { sha256 } from "./sha256.ts";
+import { sha256, sha256File } from "./sha256.ts";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const ZERO_COMMIT_PATTERN = /^0{40}$/u;
@@ -128,7 +128,7 @@ export async function buildReleaseBundle(options: BuildReleaseBundleOptions) {
     copyBundleInputs(bundleRoot);
 
     const manifest: ReleaseInstallManifest = ReleaseInstallManifestSchema.parse({
-      artifactDigest: sha256(readFileSync(path.join(bundleRoot, "mt"))),
+      artifactDigest: await sha256File(path.join(bundleRoot, "mt")),
       artifactName: archiveName,
       createdAt: options.createdAt ?? new Date().toISOString(),
       guidanceHashes: hashReleaseGuidance(bundleRoot),
@@ -141,10 +141,9 @@ export async function buildReleaseBundle(options: BuildReleaseBundleOptions) {
       sourceCommit,
       toolBuildIdentity: version
     });
-    writeFileSync(
+    await Bun.write(
       path.join(bundleRoot, "install-manifest.json"),
-      `${JSON.stringify(manifest, null, 2)}\n`,
-      "utf-8"
+      `${JSON.stringify(manifest, null, 2)}\n`
     );
     runReleaseCommand("tar", ["-czf", archivePath, "-C", bundleRoot, "."], {
       cwd: repositoryRoot,
