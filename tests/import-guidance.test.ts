@@ -24,6 +24,33 @@ function guidanceFixture() {
 }
 
 describe("guidance transaction recovery", () => {
+  test("a failed description publication restores linked source bytes without touching agent metadata", () => {
+    const fixture = guidanceFixture();
+    const source = path.join(fixture.repoRoot, "linked-alpha");
+    const original = "---\nname: alpha\ndescription: Original description.\n---\n\nInstructions.\n";
+    write(source, "SKILL.md", original);
+    write(source, "agents/openai.yaml/keep.txt", "Unrelated metadata.\n");
+    write(fixture.stagingDirectory, ".agents/skills/alpha/SKILL.md", original);
+    fs.rmSync(fixture.target("alpha"), { recursive: true });
+    fs.symlinkSync(source, fixture.target("alpha"), "dir");
+    expect(() => {
+      copyStagedGuidanceToManagedRoots({
+        ...fixture,
+        commitState() {
+          expect(read(source, "SKILL.md")).toContain("description: Local description.");
+          throw new Error("recipe commit failed");
+        },
+        guidance: [
+          { description: "Local description.", kind: "skill", selector: "alpha", slug: "alpha" }
+        ],
+        linkedSkills: new Map([["alpha", source]])
+      });
+    }).toThrow("recipe commit failed");
+    expect(read(source, "SKILL.md")).toBe(original);
+    expect(read(source, "agents/openai.yaml/keep.txt")).toBe("Unrelated metadata.\n");
+    expect(fs.realpathSync(fixture.target("alpha"))).toBe(fs.realpathSync(source));
+  });
+
   test("rejects traversal that re-enters the managed destination from a different backup depth", () => {
     const fixture = guidanceFixture();
     const slug = `../../../${path.basename(fixture.repoRoot)}/skills/imported/alpha`;

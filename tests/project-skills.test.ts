@@ -87,6 +87,37 @@ function writeSkill(source: string, slug: string, body: string) {
 }
 
 describe("project skill installation", () => {
+  test("project description overrides reach every target and survive source refresh", async () => {
+    const f = fixture();
+    await runCliAsync(["skills", "add", f.source, "--project", "--name", "lfv"], f.runtime);
+    await runCliAsync(
+      [
+        "skills",
+        "policy",
+        "lfv",
+        "lfv-view",
+        "--project",
+        "--description",
+        "Use to view local files."
+      ],
+      f.runtime
+    );
+    writeSkill(f.source, "lfv-view", "Updated instructions.\n");
+    await runCliAsync(["skills", "update", "--project"], f.runtime);
+    for (const destination of f.installedAt(f.repo, "lfv-view")) {
+      expect(read(destination, "SKILL.md")).toContain("description: Use to view local files.");
+      expect(read(destination, "SKILL.md")).toContain("Updated instructions.");
+      expect(existsSync(path.join(destination, "agents/openai.yaml"))).toBeFalsy();
+    }
+    expect(readImportRecipeStore(f.registry).recipes[0]?.skills).toContainEqual({
+      description: "Use to view local files.",
+      kind: "skill",
+      selector: "lfv-view",
+      slug: "lfv-view"
+    });
+    expect(existsSync(path.join(f.monkeHome, "skill-registry"))).toBeFalsy();
+  });
+
   test("local sources link by default, including supporting files, without global installation", async () => {
     const f = fixture();
     write(f.source, "lfv-view/references/usage.md", "First reference.\n");

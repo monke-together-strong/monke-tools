@@ -18,6 +18,7 @@ import { describe, expect, test } from "vite-plus/test";
 import { parse } from "yaml";
 
 import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import { restoreLockedImports } from "../scripts/skill-lock.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runInstallSkillsLocked } from "../src/guidance-installation.ts";
@@ -160,6 +161,131 @@ done
 }
 
 describe("Skill import registry CLI", () => {
+  test.each(["git", "link", "command"] as const)(
+    "%s description overrides preserve other metadata and survive updates",
+    async (kind) => {
+      const fixture = registryFixture();
+      const installedDescription = "Cut AI tells from any writing.";
+      const metadata =
+        "interface:\n  display_name: Writing\npolicy:\n  allow_implicit_invocation: false\n";
+      const commandSource = installer(fixture);
+      const gitSource = createRepo(path.join(fixture.sandbox, "git-source"), {
+        "README.md": "Git skills.\n"
+      });
+      const source =
+        kind === "git"
+          ? path.join(gitSource, "skills")
+          : kind === "command"
+            ? commandSource.upstream
+            : fixture.source;
+      write(
+        source,
+        "typography/SKILL.md",
+        "---\nname: typography\ndescription: Cut AI tells. Must always apply.\ndisable-model-invocation: true\nlicense: MIT # Keep this comment\n---\n\nKeep these instructions.\n"
+      );
+      write(source, "typography/agents/openai.yaml", metadata);
+      writeSkill(source, "color", "Color instructions.\n");
+      if (kind === "git") {
+        git(gitSource, ["add", "."]);
+        git(gitSource, ["commit", "-m", "Writing skills"]);
+        installGitImporter(fixture);
+        await runCliAsync(
+          ["skills", "add", `${gitSource}#HEAD`, "--name", "course"],
+          fixture.runtime
+        );
+      } else {
+        await runCliAsync(
+          kind === "command"
+            ? ["skills", "add", "--name", "course", "--command", commandSource.command]
+            : ["skills", "add", fixture.checkout, "--name", "course", "--link"],
+          fixture.runtime
+        );
+      }
+      await runCliAsync(
+        ["skills", "policy", "course", "typography", "--description", installedDescription],
+        fixture.runtime
+      );
+      for (const root of Object.values(fixture.installed)) {
+        const markdown = read(root, "typography/SKILL.md");
+        expect(parse(markdown.split("---")[1] ?? "")).toMatchObject({
+          description: installedDescription,
+          "disable-model-invocation": true,
+          license: "MIT",
+          name: "typography"
+        });
+        expect(markdown).toContain("# Keep this comment");
+        expect(markdown.split("---")[2]).toBe("\n\nKeep these instructions.\n");
+        expect(read(root, "typography/agents/openai.yaml")).toBe(metadata);
+        expect(read(root, "color/SKILL.md")).toContain("description: A course skill.");
+      }
+      writeSkill(source, "typography", "Updated upstream instructions.\n");
+      if (kind === "git") {
+        git(gitSource, ["add", "."]);
+        git(gitSource, ["commit", "-m", "Update writing skill"]);
+      }
+      await runCliAsync(["skills", "update"], fixture.runtime);
+      expect(readImportRecipeStore(fixture.registry).recipes[0]?.skills).toContainEqual({
+        description: installedDescription,
+        kind: "skill",
+        selector: "typography",
+        slug: "typography"
+      });
+      for (const root of Object.values(fixture.installed)) {
+        expect(read(root, "typography/SKILL.md")).toContain("Updated upstream instructions.");
+        expect(parse(read(root, "typography/SKILL.md").split("---")[1] ?? "")).toMatchObject({
+          description: installedDescription
+        });
+      }
+      const replacement = 'Use when: editing "prose".\nKeep the writer\'s voice.';
+      await runCliAsync(
+        [
+          "skills",
+          "policy",
+          "course",
+          "typography",
+          "--description",
+          replacement,
+          "--model-invocation",
+          "deny"
+        ],
+        fixture.runtime
+      );
+      expect(
+        parse(read(fixture.installed.codex, "typography/SKILL.md").split("---")[1] ?? "")
+      ).toMatchObject({
+        description: replacement,
+        "disable-model-invocation": true
+      });
+      if (kind === "git") {
+        rmSync(path.join(fixture.registry, "skills/imported/typography"), { recursive: true });
+        await restoreLockedImports(fixture.registry);
+      }
+      expect(
+        parse(read(fixture.installed.codex, "typography/SKILL.md").split("---")[1] ?? "")
+      ).toMatchObject({ description: replacement });
+    }
+  );
+
+  test.each([
+    { args: [], error: /Provide --model-invocation or --description/u },
+    { args: ["--description", "Use for writing."], error: /requires a Skill slug/u },
+    { args: ["typography", "--description", "  "], error: /non-empty/u },
+    { args: ["unknown", "--description", "Use for writing."], error: /Unknown Skill/u }
+  ])(
+    "invalid description policy leaves the source and recipe unchanged ($args)",
+    async ({ args, error }) => {
+      const fixture = registryFixture();
+      await runCliAsync(["skills", "add", fixture.checkout, "--link"], fixture.runtime);
+      const original = read(fixture.source, "typography/SKILL.md");
+      const store = readImportRecipeStore(fixture.registry);
+      await expect(
+        runCliAsync(["skills", "policy", "private-course", ...args], fixture.runtime)
+      ).rejects.toThrow(error);
+      expect(read(fixture.source, "typography/SKILL.md")).toBe(original);
+      expect(readImportRecipeStore(fixture.registry)).toStrictEqual(store);
+    }
+  );
+
   test.each(["create", "adopt"] as const)(
     "cold %s keeps publication coherent when recovery cleanup fails",
     async (action) => {
