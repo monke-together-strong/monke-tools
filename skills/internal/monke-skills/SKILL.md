@@ -86,8 +86,17 @@ Description overrides apply to one skill and survive updates. Combine
 imports write these overrides to their source metadata.
 
 Update advances Git refs, replays installers, and rereads linked files, then opens
-one complete comparison. Global updates retain successful sources even if another
-fails. A failed project update restores the whole project's registry and links.
+one complete comparison. Up to four Git sources prepare concurrently. Linked
+sources, installer commands, and publication run in recipe order.
+
+When skill or reference content changes, Monke invokes the installed Codex CLI
+with your configured model in a read-only session. Codex summarizes each changed
+skill or reference in the terminal and in `SKILL_UPDATE_SUMMARY.md` in the saved
+comparison. If Codex is unavailable or fails, Monke prints a warning and keeps the
+update and comparison.
+
+Global updates retain successful sources even if another fails. A failed project
+update restores the whole project's registry and links.
 Failed installers restore the Skill source folder, but may affect files outside it.
 Back up learned edits before installer updates. Reopen a failed viewer with the
 printed `mt diff` command. Git renames with recorded adopted links require explicit

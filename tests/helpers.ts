@@ -161,6 +161,25 @@ export function read(root: string, relativePath: string) {
   return readFileSync(path.join(root, relativePath), "utf-8");
 }
 
+export function installFakeCodexSummary(bin: string) {
+  const executable = path.join(bin, "codex");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(
+    executable,
+    `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --output-last-message ]; then
+    printf '# Skill update summary\\n\\n## Fixture skill\\n\\n- Updated guidance.\\n' > "$2"
+    exit 0
+  fi
+  shift
+done
+exit 1
+`
+  );
+  chmodSync(executable, 0o755);
+}
+
 export function installGitShim(
   binDirectory: string,
   options?: {

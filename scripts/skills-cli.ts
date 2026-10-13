@@ -73,3 +73,11 @@ export function runSkillsCaptured(
 ) {
   return runtime.exec(NPX_COMMAND, args, { cwd });
 }
+
+export function runSkillsCapturedAsync(
+  args: string[],
+  cwd: string,
+  runtime: Runtime = createRuntime({ cwd })
+) {
+  return runtime.execAsync(NPX_COMMAND, args, { cwd });
+}

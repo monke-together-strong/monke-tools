@@ -242,7 +242,7 @@ async function importSkills(argv: string[], dependencies: ImportSkillsDependenci
   try {
     const previousRecipeStore = readImportRecipeStore(repoRoot);
     const previousRecipe = previousRecipeStore.recipes.find((recipe) => recipe.source === source);
-    const revision = resolveSkillRevision(
+    const revision = await resolveSkillRevision(
       previousRecipe ?? { skills: [{ kind, selector: "pending", slug: "pending" }], source },
       repoRoot
     );

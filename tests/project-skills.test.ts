@@ -17,7 +17,15 @@ import { getExpectedWorktreePath } from "../src/git.ts";
 import { saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
 import { projectSkillRegistry } from "../src/project-skills.ts";
-import { createRepo, git, installFakeCodiff, makeTempDir, read, write } from "./helpers.ts";
+import {
+  createRepo,
+  git,
+  installFakeCodexSummary,
+  installFakeCodiff,
+  makeTempDir,
+  read,
+  write
+} from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 function fixture() {
@@ -32,6 +40,7 @@ function fixture() {
   const home = path.join(sandbox, "home");
   const bin = path.join(sandbox, "bin");
   installFakeCodiff(bin);
+  installFakeCodexSummary(bin);
   saveGlobalMonkeConfig(monkeHome, {
     diffAdapter: "codiff",
     skillInstallPreference: {

@@ -32,7 +32,8 @@ import {
 } from "../scripts/skill-import-recipes.ts";
 import { restoreLockedImports } from "../scripts/skill-lock.ts";
 import { runUpdateSkills } from "../scripts/update-skills.ts";
-import { createRepo, git, makeTempDir, read, write } from "./helpers.ts";
+import { createRepo, git, installFakeCodexSummary, makeTempDir, read, write } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("locked skill command workflows", () => {
   test("annotated discovery tags pin commits without overriding same-named branches", async () => {
@@ -275,7 +276,11 @@ describe("locked skill command workflows", () => {
         git(repository, ["diff", "--name-only", `${candidate}^`, candidate])
           .trim()
           .split("\n")
-      ).toStrictEqual(["skills.lock.json", "skills/imported/alpha/references/details.md"]);
+      ).toStrictEqual([
+        "SKILL_UPDATE_SUMMARY.md",
+        "skills.lock.json",
+        "skills/imported/alpha/references/details.md"
+      ]);
       expect(
         git(repository, ["show", `${candidate}^:skills/imported/alpha/references/details.md`])
       ).toBe("Reference one.");
@@ -427,6 +432,7 @@ describe("locked skill command workflows", () => {
         first.commit
       ]).split("\n");
       expect(changed).toStrictEqual([
+        "SKILL_UPDATE_SUMMARY.md",
         "skills.lock.json",
         "skills/imported/alpha/.hidden",
         "skills/imported/alpha/SKILL.md",
@@ -466,7 +472,18 @@ describe("locked skill command workflows", () => {
       const afterSourceCommit = git(consumer, ["rev-parse", "HEAD"]);
       sourceRevisions.push(afterSourceCommit);
       await runReviewSkills([beforeSourceCommit, afterSourceCommit]);
-      expect(readDeliveredComparison(sandbox)).toStrictEqual(first);
+      const historical = readDeliveredComparison(sandbox);
+      expect(historical.repository).toBe(first.repository);
+      expect(
+        git(first.repository, [
+          "diff",
+          first.commit,
+          historical.commit,
+          "--",
+          ".",
+          ":(exclude)SKILL_UPDATE_SUMMARY.md"
+        ])
+      ).toBe("");
 
       const retained: (typeof first)[] = [];
       for (const version of [3, 4, 5]) {
@@ -587,6 +604,7 @@ describe("locked skill command workflows", () => {
 function installReviewViewer(sandbox: string) {
   const directory = path.join(sandbox, "viewer-bin");
   mkdirSync(directory, { recursive: true });
+  installFakeCodexSummary(directory);
   writeFileSync(
     path.join(directory, "codiff"),
     `#!/bin/sh\nif [ "$1" = --version ]; then echo 'codiff v1.14.0'; else printf '%s\\n' "$@" > '${path.join(sandbox, "review-delivery")}' ; fi\n`
@@ -1657,6 +1675,135 @@ name: outside-entry
     });
 
     expect(installCalls).toStrictEqual([sandbox]);
+  });
+
+  test("skills update prepares four sources concurrently and preserves every recipe", async () => {
+    const sandbox = makeTempDir("skill-update-concurrent");
+    const bin = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log")
+    });
+    const slugs = ["alpha", "bravo", "charlie", "delta", "echo"];
+    writeImportRecipeStore(sandbox, {
+      recipes: slugs.map((slug) => ({
+        skills: [{ kind: "skill", selector: slug, slug }],
+        source: `owner/${slug}`
+      })),
+      version: 3
+    });
+    await withFakeNpx(sandbox, bin, async () => {
+      const runtime = createTestRuntime({ cwd: sandbox });
+      const exec = runtime.execAsync;
+      let active = 0;
+      let peak = 0;
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const timeout = setTimeout(release, 3000);
+      runtime.execAsync = async (command, args, options) => {
+        if (command !== "npx") {
+          return await exec(command, args, options);
+        }
+        active += 1;
+        peak = Math.max(peak, active);
+        if (active === 4) {
+          release();
+        }
+        try {
+          await gate;
+          return await exec(command, args, options);
+        } finally {
+          active -= 1;
+        }
+      };
+      try {
+        await runUpdateSkills([], { runtime, writeMessage() {} });
+      } finally {
+        clearTimeout(timeout);
+      }
+      expect(peak).toBe(4);
+    });
+    expect(readImportRecipeStore(sandbox).recipes).toHaveLength(5);
+    for (const slug of slugs) {
+      expect(read(sandbox, `skills/imported/${slug}/SKILL.md`)).toBe(`new ${slug}`);
+    }
+    expect(
+      read(path.join(sandbox, "home/skill-reviews/repository"), "SKILL_UPDATE_SUMMARY.md")
+    ).toContain("# Skill update summary");
+  });
+
+  test("skills update publishes Git groups before crossing installer barriers", async () => {
+    const sandbox = makeTempDir("skill-update-installer-barrier");
+    const bin = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log")
+    });
+    const installer = path.join(sandbox, "installer");
+    write(installer, "bravo/SKILL.md", "old bravo");
+    write(sandbox, "skills/imported/alpha/SKILL.md", "old alpha");
+    write(sandbox, "skills/imported/charlie/SKILL.md", "old charlie");
+    writeImportRecipeStore(sandbox, {
+      recipes: [
+        {
+          skills: [{ kind: "skill", selector: "alpha", slug: "alpha" }],
+          source: "owner/a"
+        },
+        {
+          localSource: {
+            command: "printf 'new bravo' > bravo/SKILL.md",
+            kind: "command",
+            skillSourceFolder: installer,
+            workingDirectory: installer
+          },
+          skills: [{ kind: "skill", selector: "bravo", slug: "bravo" }],
+          source: "owner/b"
+        },
+        {
+          skills: [{ kind: "skill", selector: "charlie", slug: "charlie" }],
+          source: "owner/c"
+        }
+      ],
+      version: 3
+    });
+    const events: string[] = [];
+    const observedGuidance: string[] = [];
+    await withFakeNpx(sandbox, bin, async () => {
+      const runtime = createTestRuntime({ cwd: sandbox });
+      const exec = runtime.execAsync;
+      runtime.execAsync = async (command, args, options) => {
+        if (command === "npx") {
+          const slug = args?.[args.indexOf("--skill") + 1];
+          events.push(`prepare ${slug}`);
+          if (slug === "charlie") {
+            observedGuidance.push(read(installer, "bravo/SKILL.md"));
+          }
+        } else if (command === "sh") {
+          events.push("install bravo");
+          observedGuidance.push(
+            read(sandbox, "skills/imported/alpha/SKILL.md"),
+            read(sandbox, "skills/imported/charlie/SKILL.md")
+          );
+        }
+        return await exec(command, args, options);
+      };
+      await runUpdateSkills([], {
+        runtime,
+        validatePrepared(_root, recipe) {
+          events.push(`publish ${recipe.skills[0]?.slug}`);
+        },
+        writeMessage() {}
+      });
+    });
+    expect(events).toStrictEqual([
+      "prepare alpha",
+      "publish alpha",
+      "install bravo",
+      "publish bravo",
+      "prepare charlie",
+      "publish charlie"
+    ]);
+    expect(observedGuidance).toStrictEqual(["new alpha", "old charlie", "new bravo"]);
   });
 
   test("skills update reruns recorded recipes without prompting for selection", async () => {
@@ -2990,6 +3137,7 @@ function installFakeNpx(
   const binDirectory = path.join(sandbox, "fake-bin");
   const guidanceFixturesDirectory = path.join(sandbox, "fake-upstream-guidance");
   mkdirSync(binDirectory, { recursive: true });
+  installFakeCodexSummary(binDirectory);
   const realGit = Bun.which("git");
   writeFileSync(
     path.join(binDirectory, "git"),
@@ -3044,11 +3192,12 @@ fi
     `#!/bin/sh
 set -eu
 printf '%s\\n' "$PWD" >> '${options.skillsCwdLogPath}'
+display_args=""
 for arg in "$@"; do
   display_arg=$(printf '%s' "$arg" | sed 's|https://github.com/||; s|/tree/[12]\\{40\\}||')
-  printf '%s ' "$display_arg" >> '${options.skillsLogPath}'
+  display_args="$display_args $display_arg"
 done
-printf '\\n' >> '${options.skillsLogPath}'
+printf '%s\\n' "$display_args" | sed 's/^ //' >> '${options.skillsLogPath}'
 
 is_list=0
 for arg in "$@"; do
