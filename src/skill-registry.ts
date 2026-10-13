@@ -68,7 +68,7 @@ type SkillsRequest =
       skills?: string[];
       source?: string;
     }
-  | { action: "policy"; disable: boolean; skill?: string; source: string }
+  | { action: "policy"; description?: string; disable?: boolean; skill?: string; source: string }
   | { action: "remove"; source: string }
   | { action: "update"; adapter?: string; interactive?: boolean }
   | { action: "list" };
@@ -588,6 +588,17 @@ function setRecipePolicy(
   recipe: SkillImportRecipe,
   request: Extract<SkillsRequest, { action: "policy" }>
 ): SkillImportRecipe {
+  if (request.disable === undefined && request.description === undefined) {
+    throw new MonkeError("Provide --model-invocation or --description");
+  }
+  if (request.description !== undefined) {
+    if (!request.skill) {
+      throw new MonkeError("--description requires a Skill slug");
+    }
+    if (request.description.trim().length === 0) {
+      throw new MonkeError("Skill description must be a non-empty string");
+    }
+  }
   if (!request.skill) {
     return { ...recipe, disableModelInvocation: request.disable };
   }
@@ -597,7 +608,13 @@ function setRecipePolicy(
   return {
     ...recipe,
     skills: recipe.skills.map((item) =>
-      item.slug === request.skill ? { ...item, disableModelInvocation: request.disable } : item
+      item.slug === request.skill
+        ? {
+            ...item,
+            ...(request.description !== undefined ? { description: request.description } : {}),
+            ...(request.disable !== undefined ? { disableModelInvocation: request.disable } : {})
+          }
+        : item
     )
   };
 }

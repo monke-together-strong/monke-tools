@@ -13,6 +13,10 @@ const LEGACY_IMPORT_RECIPE_STORE_PATH = path.join(IMPORTED_SKILLS_ROOT, ".monke-
 const SkillImportRecipeSkillSchema = z.strictObject(
   {
     adoptedPaths: z.array(z.string().refine(path.isAbsolute)).optional(),
+    description: z
+      .string()
+      .refine((value) => value.trim().length > 0)
+      .optional(),
     disableModelInvocation: z.boolean().optional(),
     kind: z.enum(["skill", "reference"], {
       error: "Import kind must be skill or reference"

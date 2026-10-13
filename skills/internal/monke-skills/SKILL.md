@@ -73,13 +73,17 @@ or installer changes outside the registry and project agent directories.
 
 ```sh
 mt skills policy <source> [skill] --model-invocation <allow|deny>
+mt skills policy <source> <skill> --description 'Use when…'
 mt skills update [--adapter <codiff|lfv>] [--interactive]
 mt skills list
 mt skills remove <source>
 ```
 
-Omit `[skill]` for a source default covering future skills; per-skill overrides win.
-Policies survive updates and preserve explicit human invocation.
+To set a source invocation default for future skills, omit `[skill]`.
+Per-skill overrides win. Policies survive updates and preserve explicit human invocation.
+Description overrides apply to one skill and survive updates. Combine
+`--description` with `--model-invocation` to change both. Linked and command
+imports write these overrides to their source metadata.
 
 Update advances Git refs, replays installers, and rereads linked files, then opens
 one complete comparison. Global updates retain successful sources even if another

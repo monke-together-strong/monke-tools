@@ -10,6 +10,7 @@ import {
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
+import { parse } from "yaml";
 
 import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -87,6 +88,66 @@ function writeSkill(source: string, slug: string, body: string) {
 }
 
 describe("project skill installation", () => {
+  test("description overrides preserve YAML anchors and comments used by other metadata", async () => {
+    const f = fixture();
+    write(
+      f.source,
+      "lfv-view/SKILL.md",
+      "---\nname: lfv-view\ndescription: &desc Use LFV. # Keep this comment\nmetadata:\n  summary: *desc\n---\nInstructions.\n"
+    );
+    await runCliAsync(["skills", "add", f.source, "--project", "--name", "lfv"], f.runtime);
+    await runCliAsync(
+      [
+        "skills",
+        "policy",
+        "lfv",
+        "lfv-view",
+        "--project",
+        "--description",
+        "Use to view local files."
+      ],
+      f.runtime
+    );
+    const markdown = read(f.source, "lfv-view/SKILL.md");
+    expect(parse(markdown.split("---")[1] ?? "")).toMatchObject({
+      description: "Use to view local files.",
+      metadata: { summary: "Use to view local files." }
+    });
+    expect(markdown).toContain("# Keep this comment");
+    expect(markdown.split("---")[2]).toBe("\nInstructions.\n");
+  });
+
+  test("project description overrides reach every target and survive source refresh", async () => {
+    const f = fixture();
+    await runCliAsync(["skills", "add", f.source, "--project", "--name", "lfv"], f.runtime);
+    await runCliAsync(
+      [
+        "skills",
+        "policy",
+        "lfv",
+        "lfv-view",
+        "--project",
+        "--description",
+        "Use to view local files."
+      ],
+      f.runtime
+    );
+    writeSkill(f.source, "lfv-view", "Updated instructions.\n");
+    await runCliAsync(["skills", "update", "--project"], f.runtime);
+    for (const destination of f.installedAt(f.repo, "lfv-view")) {
+      expect(read(destination, "SKILL.md")).toContain("description: Use to view local files.");
+      expect(read(destination, "SKILL.md")).toContain("Updated instructions.");
+      expect(existsSync(path.join(destination, "agents/openai.yaml"))).toBeFalsy();
+    }
+    expect(readImportRecipeStore(f.registry).recipes[0]?.skills).toContainEqual({
+      description: "Use to view local files.",
+      kind: "skill",
+      selector: "lfv-view",
+      slug: "lfv-view"
+    });
+    expect(existsSync(path.join(f.monkeHome, "skill-registry"))).toBeFalsy();
+  });
+
   test("local sources link by default, including supporting files, without global installation", async () => {
     const f = fixture();
     write(f.source, "lfv-view/references/usage.md", "First reference.\n");

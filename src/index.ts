@@ -357,19 +357,20 @@ function createProgram(runtime: Runtime) {
 
   skills
     .command("policy")
-    .description("Set model invocation for one imported Skill or an entire source")
+    .description("Override an imported Skill's description or model invocation")
     .option("--project", "Set policy for this repository's Skill sources")
     .argument("<source>")
     .argument("[skill]", "Skill slug; omit to set the source default, including future skills")
-    .addOption(
-      new Option("--model-invocation <policy>").choices(["allow", "deny"]).makeOptionMandatory()
-    )
+    .addOption(new Option("--model-invocation <policy>").choices(["allow", "deny"]))
+    .option("--description <description>", "Replace one Skill's description; requires a Skill slug")
     .action((source, skill, options) =>
       runSkillsRegistry(
         runtime,
         {
           action: "policy",
-          disable: options.modelInvocation === "deny",
+          description: options.description,
+          disable:
+            options.modelInvocation === undefined ? undefined : options.modelInvocation === "deny",
           skill,
           source
         },

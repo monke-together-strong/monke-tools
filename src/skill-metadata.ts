@@ -9,13 +9,13 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { parseDocument } from "yaml";
+import { isScalar, parseDocument } from "yaml";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
 import { unwrapBoundaryResult } from "./validation.ts";
 
-const SkillInvocationFrontmatterSchema = z.looseObject({
+const SkillFrontmatterSchema = z.looseObject({
   "disable-model-invocation": z.boolean().optional()
 });
 const CodexSkillMetadataSchema = z.looseObject({
@@ -26,8 +26,14 @@ const CodexSkillMetadataSchema = z.looseObject({
     .optional()
 });
 
-/** Apply an invocation override while preserving the skill body and other metadata. */
-export function setSkillModelInvocation(skillPath: string, disableModelInvocation: boolean) {
+/** Apply recorded overrides while preserving the skill body and other metadata. */
+export function setSkillMetadata(
+  skillPath: string,
+  overrides: { description?: string; disableModelInvocation?: boolean }
+) {
+  if (overrides.description === undefined && overrides.disableModelInvocation === undefined) {
+    return;
+  }
   const skillEntryPath = path.join(skillPath, "SKILL.md");
   if (!existsSync(skillEntryPath) || !lstatSync(skillEntryPath).isFile()) {
     throw new MonkeError(
@@ -47,16 +53,29 @@ export function setSkillModelInvocation(skillPath: string, disableModelInvocatio
     frontmatterMatch.groups?.frontmatter ?? "",
     frontmatterLabel
   );
-  unwrapBoundaryResult(
-    SkillInvocationFrontmatterSchema.safeParse(frontmatter.toJS()),
-    frontmatterLabel
-  );
-  frontmatter.set("disable-model-invocation", disableModelInvocation);
+  unwrapBoundaryResult(SkillFrontmatterSchema.safeParse(frontmatter.toJS()), frontmatterLabel);
+  if (overrides.description !== undefined) {
+    const description = frontmatter.get("description", true);
+    if (isScalar(description)) {
+      description.value = overrides.description;
+      // Choose style from the new value while retaining anchors and comments.
+      delete description.type;
+    } else {
+      frontmatter.set("description", frontmatter.createNode(overrides.description));
+    }
+  }
+  if (overrides.disableModelInvocation !== undefined) {
+    frontmatter.set("disable-model-invocation", overrides.disableModelInvocation);
+  }
   writeFileSync(
     skillEntryPath,
     `---\n${frontmatter.toString()}---\n${skillMarkdown.slice(frontmatterMatch[0].length)}`,
     "utf-8"
   );
+
+  if (overrides.disableModelInvocation === undefined) {
+    return;
+  }
 
   const agentsPath = path.join(skillPath, "agents");
   const openaiMetadataPath = path.join(skillPath, "agents", "openai.yaml");
@@ -91,7 +110,7 @@ export function setSkillModelInvocation(skillPath: string, disableModelInvocatio
     CodexSkillMetadataSchema.safeParse(openaiMetadata.toJS()),
     openaiMetadataLabel
   );
-  openaiMetadata.setIn(["policy", "allow_implicit_invocation"], !disableModelInvocation);
+  openaiMetadata.setIn(["policy", "allow_implicit_invocation"], !overrides.disableModelInvocation);
   mkdirSync(agentsPath, { recursive: true });
   writeFileSync(openaiMetadataPath, openaiMetadata.toString(), "utf-8");
 }

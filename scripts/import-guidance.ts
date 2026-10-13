@@ -19,7 +19,7 @@ import path from "node:path";
 
 import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
-import { setSkillModelInvocation } from "../src/skill-invocation.ts";
+import { setSkillMetadata } from "../src/skill-metadata.ts";
 import type { SkillImportRecipeSkill } from "./skill-import-recipes.ts";
 
 export const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
@@ -41,6 +41,10 @@ export function copyStagedGuidanceToManagedRoots(
   },
   move: (source: string, destination: string) => void = renameSync
 ) {
+  const guidance = options.guidance.map((item) => ({
+    ...item,
+    disableModelInvocation: item.disableModelInvocation ?? options.defaultDisableModelInvocation
+  }));
   // Validate every destination before copying staged content or moving any originals.
   const destinations = [...options.guidance, ...(options.obsoleteGuidance ?? [])].map((item) => ({
     item,
@@ -50,19 +54,12 @@ export function copyStagedGuidanceToManagedRoots(
   const backupRoot = mkdtempSync(path.join(options.repoRoot, ".monke-guidance-backup-"));
   const preparedRoot = path.join(backupRoot, "prepared");
   const affectedPaths = new Map<string, string | null>();
-  const invocationCopies = new Map<string, string | null>();
+  const metadataCopies = new Map<string, string | null>();
   const newAgentsDirectories = new Set<string>();
   let retainRecovery = false;
 
   try {
-    prepareStagedGuidance(
-      options.guidance.map((item) => ({
-        ...item,
-        disableModelInvocation: item.disableModelInvocation ?? options.defaultDisableModelInvocation
-      })),
-      stagedSkillsRoot,
-      preparedRoot
-    );
+    prepareStagedGuidance(guidance, stagedSkillsRoot, preparedRoot);
 
     options.validatePrepared?.(preparedRoot);
     assertObsoleteReferencesAreUnconsumed(options.repoRoot, options.obsoleteGuidance ?? []);
@@ -80,27 +77,27 @@ export function copyStagedGuidanceToManagedRoots(
       }
     }
 
-    for (const item of options.guidance) {
+    for (const item of guidance) {
       const targetPath = importedGuidancePath(options.repoRoot, item);
       const linkedSource = options.linkedSkills?.get(item.slug);
       if (
         linkedSource &&
-        (item.disableModelInvocation ?? options.defaultDisableModelInvocation) !== undefined
+        (item.description !== undefined || item.disableModelInvocation !== undefined)
       ) {
-        backupLinkedInvocation(linkedSource, backupRoot, invocationCopies, newAgentsDirectories);
+        backupLinkedMetadata(
+          linkedSource,
+          backupRoot,
+          metadataCopies,
+          newAgentsDirectories,
+          item.disableModelInvocation !== undefined
+        );
       }
       mkdirSync(path.dirname(targetPath), { recursive: true });
-      publishPreparedGuidance(
-        item,
-        targetPath,
-        preparedRoot,
-        linkedSource,
-        options.defaultDisableModelInvocation
-      );
+      publishPreparedGuidance(item, targetPath, preparedRoot, linkedSource);
     }
     options.commitState?.();
   } catch (error) {
-    const failures = restoreLinkedInvocation(invocationCopies, newAgentsDirectories);
+    const failures = restoreLinkedMetadata(metadataCopies, newAgentsDirectories);
     for (const [targetPath, backupPath] of affectedPaths) {
       try {
         rmSync(targetPath, { force: true, recursive: true });
@@ -127,7 +124,7 @@ export function copyStagedGuidanceToManagedRoots(
   }
 }
 
-function restoreLinkedInvocation(
+function restoreLinkedMetadata(
   copies: Map<string, string | null>,
   newAgentsDirectories: Set<string>
 ) {
@@ -155,18 +152,19 @@ function restoreLinkedInvocation(
 }
 
 /** Keep publication rollback separate from installer recovery and unrelated Skill assets. */
-function backupLinkedInvocation(
+function backupLinkedMetadata(
   source: string,
   backupRoot: string,
   copies: Map<string, string | null>,
-  newAgentsDirectories: Set<string>
+  newAgentsDirectories: Set<string>,
+  updateInvocation: boolean
 ) {
   const physicalSource = realpathSync.native(source);
   const metadataPaths = [path.join(physicalSource, "SKILL.md")];
   const agentsPath = path.join(physicalSource, "agents");
   const agents = lstatSync(agentsPath, { throwIfNoEntry: false });
-  // The invocation setter rejects directory aliases before changing their contents.
-  if (!agents || agents.isDirectory()) {
+  // The metadata setter rejects directory aliases before changing their contents.
+  if (updateInvocation && (!agents || agents.isDirectory())) {
     metadataPaths.push(path.join(agentsPath, "openai.yaml"), path.join(agentsPath, "openai.yml"));
     if (!agents) {
       newAgentsDirectories.add(agentsPath);
@@ -177,7 +175,7 @@ function backupLinkedInvocation(
       continue;
     }
     if (lstatSync(metadataPath, { throwIfNoEntry: false })) {
-      const copy = path.join(backupRoot, "invocation", String(copies.size));
+      const copy = path.join(backupRoot, "metadata", String(copies.size));
       mkdirSync(path.dirname(copy), { recursive: true });
       cpSync(metadataPath, copy, { verbatimSymlinks: true });
       copies.set(metadataPath, copy);
@@ -191,17 +189,13 @@ function publishPreparedGuidance(
   item: SkillImportRecipeSkill,
   targetPath: string,
   preparedRoot: string,
-  linkedSource?: string,
-  defaultDisableModelInvocation?: boolean
+  linkedSource?: string
 ) {
   if (linkedSource) {
     if (item.kind !== "skill") {
       throw new MonkeError("Linked guidance must be a Skill");
     }
-    const disable = item.disableModelInvocation ?? defaultDisableModelInvocation;
-    if (disable !== undefined) {
-      setSkillModelInvocation(linkedSource, disable);
-    }
+    setSkillMetadata(linkedSource, item);
     symlinkSync(linkedSource, targetPath, "dir");
   } else {
     cpSync(path.join(preparedRoot, item.kind, item.slug), targetPath, {
@@ -232,8 +226,8 @@ function prepareStagedGuidance(
     cpSync(sourcePath, preparedPath, { recursive: true, verbatimSymlinks: true });
     if (item.kind === "reference") {
       transformPreparedReference(preparedPath);
-    } else if (item.disableModelInvocation !== undefined) {
-      setSkillModelInvocation(preparedPath, item.disableModelInvocation);
+    } else {
+      setSkillMetadata(preparedPath, item);
     }
   }
 }

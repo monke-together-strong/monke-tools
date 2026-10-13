@@ -8,13 +8,11 @@ description: Open visual diffs with mt. Use when presenting completed changes, r
 `mt diff` owns comparison selection. Use `mt diff --help` for sources and flags;
 `--pick` chooses a comparison base.
 
-Use `--adapter lfv` for user-facing diffs, or save it with
-`mt diff configure --adapter lfv`. LFV owns authentication, rendering, Refresh,
-and expiry. The configured LFV CLI must exist. Return the printed review URL unchanged.
+Save the adapter preference with `mt diff configure --adapter <codiff|lfv>`.
 
 For "last N hours/days plus dirty changes", resolve the oldest included first-parent
 commit's parent to an immutable base SHA, then run
-`mt diff --adapter lfv --branch <base-sha> --path <checkout>`. With no included commits,
+`mt diff --branch <base-sha> --path <checkout>`. With no included commits,
 use `--working-tree`. Refresh keeps the base
 fixed while updating HEAD and dirty changes; it does not slide the time window.
 

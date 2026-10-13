@@ -849,6 +849,27 @@ describe("skill importing", () => {
     expect(() => recipeChoices(sandbox)).toThrow(/version.*must be 3/u);
   });
 
+  test.each([42, "", "   "])(
+    "skill import recipe store rejects invalid description overrides (%j)",
+    (description) => {
+      const sandbox = makeTempDir("skill-import-recipes-invalid-description");
+      write(
+        sandbox,
+        "skills.lock.json",
+        JSON.stringify({
+          recipes: [
+            {
+              skills: [{ description, kind: "skill", selector: "alpha", slug: "alpha" }],
+              source: "owner/repo"
+            }
+          ],
+          version: 3
+        })
+      );
+      expect(() => recipeChoices(sandbox)).toThrow(/description/u);
+    }
+  );
+
   test("skill import recipe store rejects non-boolean model invocation overrides", () => {
     const sandbox = makeTempDir("skill-import-recipes-invalid-invocation-override");
     write(
