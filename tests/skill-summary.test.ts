@@ -62,7 +62,8 @@ describe("skill update summaries", () => {
       "--sandbox",
       "read-only"
     ]);
-    expect(options?.stdin).toContain("skills/imported/alpha");
+    expect(options?.stdin).toContain(path.join(before, "skills/imported/alpha"));
+    expect(options?.stdin).toContain(path.join(after, "skills/imported/alpha"));
     expect(options?.stdin).toContain("skills/imported/added");
     expect(options?.stdin).toContain("skills/imported/removed");
     expect(options?.stdin).not.toContain("skills/imported/unchanged");

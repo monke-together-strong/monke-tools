@@ -59,8 +59,13 @@ export async function summarizeSkillChanges(options: {
           "Group changes by skill slug, with a heading and 1-3 concise bullets per changed skill.",
           "Explain changed guidance or behavior, including supporting files. Identify additions and removals.",
           "Include changed references in their own headings. Omit unchanged skills and lock-only pin changes.",
-          "Describe observable changes, not speculative benefits. These are the changed guidance paths:",
-          JSON.stringify(changed.map((item) => importedGuidancePath("", item)))
+          "Describe observable changes, not speculative benefits. These are the before and after paths for each changed skill or reference:",
+          JSON.stringify(
+            changed.map((item) => ({
+              after: importedGuidancePath(after, item),
+              before: importedGuidancePath(before, item)
+            }))
+          )
         ].join("\n"),
         timeoutSeconds: 120
       }
