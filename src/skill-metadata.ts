@@ -55,11 +55,13 @@ export function setSkillMetadata(
   );
   unwrapBoundaryResult(SkillFrontmatterSchema.safeParse(frontmatter.toJS()), frontmatterLabel);
   if (overrides.description !== undefined) {
-    frontmatter.set("description", overrides.description);
     const description = frontmatter.get("description", true);
     if (isScalar(description)) {
+      description.value = overrides.description;
       // Choose style from the new value while retaining anchors and comments.
       delete description.type;
+    } else {
+      frontmatter.set("description", frontmatter.createNode(overrides.description));
     }
   }
   if (overrides.disableModelInvocation !== undefined) {

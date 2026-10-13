@@ -218,7 +218,11 @@ describe("Skill import registry CLI", () => {
         expect(read(root, "typography/agents/openai.yaml")).toBe(metadata);
         expect(read(root, "color/SKILL.md")).toContain("description: A course skill.");
       }
-      writeSkill(source, "typography", "Updated upstream instructions.\n");
+      write(
+        source,
+        "typography/SKILL.md",
+        "---\nname: typography\nmetadata:\n  summary: &desc Original description.\ndescription: *desc\n---\nUpdated upstream instructions.\n"
+      );
       if (kind === "git") {
         git(gitSource, ["add", "."]);
         git(gitSource, ["commit", "-m", "Update writing skill"]);
@@ -256,7 +260,8 @@ describe("Skill import registry CLI", () => {
         description: replacement,
         "disable-model-invocation": true
       });
-      const finalDescription = "Use for revising prose.";
+      const finalDescription =
+        "Use when: revising prose, preserving the authors voice, clarifying sentences, and making technical documents easier to read.";
       await runCliAsync(
         ["skills", "policy", "course", "typography", "--description", finalDescription],
         fixture.runtime
@@ -267,7 +272,11 @@ describe("Skill import registry CLI", () => {
       }
       expect(
         parse(read(fixture.installed.codex, "typography/SKILL.md").split("---")[1] ?? "")
-      ).toMatchObject({ description: finalDescription, "disable-model-invocation": true });
+      ).toMatchObject({
+        description: finalDescription,
+        "disable-model-invocation": true,
+        metadata: { summary: "Original description." }
+      });
     }
   );
 
