@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
@@ -17,23 +17,24 @@ export async function summarizeSkillChanges(options: {
   writeMessage: (message: string) => void;
 }) {
   const { after, before, runtime, writeMessage } = options;
-  const guidance = new Map(
-    [before, after]
-      .flatMap((root) => readImportRecipeStore(root).recipes.flatMap((recipe) => recipe.skills))
-      .map((item) => [`${item.kind}:${item.slug}`, item])
-  );
-  const changed = [...guidance.values()].filter((item) => {
-    const had = existsSync(importedGuidancePath(before, item));
-    const has = existsSync(importedGuidancePath(after, item));
-    return had !== has || (had && guidanceDigest(before, [item]) !== guidanceDigest(after, [item]));
-  });
-  if (changed.length === 0) {
-    return;
-  }
-
   const output = path.join(after, SKILL_SUMMARY_FILE);
-  writeMessage("Summarizing skill changes with Codex...\n");
   try {
+    const guidance = new Map(
+      [before, after]
+        .flatMap((root) => readImportRecipeStore(root).recipes.flatMap((recipe) => recipe.skills))
+        .map((item) => [`${item.kind}:${item.slug}`, item])
+    );
+    const changed = [...guidance.values()].filter((item) => {
+      const had = existsSync(importedGuidancePath(before, item));
+      const has = existsSync(importedGuidancePath(after, item));
+      return (
+        had !== has || (had && guidanceDigest(before, [item]) !== guidanceDigest(after, [item]))
+      );
+    });
+    if (changed.length === 0) {
+      return;
+    }
+    writeMessage("Summarizing skill changes with Codex...\n");
     const result = await runtime.execAsync(
       "codex",
       [
@@ -71,7 +72,8 @@ export async function summarizeSkillChanges(options: {
           : result.stderr.trim() || `Codex exited with ${result.exitCode}`
       );
     }
-    const summary = readFileSync(output, "utf-8").trim();
+    const contents = await Bun.file(output).text();
+    const summary = contents.trim();
     if (!summary) {
       throw new MonkeError("Codex returned an empty summary");
     }

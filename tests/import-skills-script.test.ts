@@ -31,6 +31,7 @@ import {
   writeImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
 import { restoreLockedImports } from "../scripts/skill-lock.ts";
+import { rememberSkillGuidance } from "../scripts/skill-review.ts";
 import { runUpdateSkills } from "../scripts/update-skills.ts";
 import { createRepo, git, installFakeCodexSummary, makeTempDir, read, write } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
@@ -1804,6 +1805,56 @@ name: outside-entry
       "publish charlie"
     ]);
     expect(observedGuidance).toStrictEqual(["new alpha", "old charlie", "new bravo"]);
+  });
+
+  test("skills update saves the comparison when a failed linked source loses SKILL.md", async () => {
+    const sandbox = makeTempDir("skill-update-broken-summary");
+    const bin = installFakeNpx(sandbox, {
+      skillsCwdLogPath: path.join(sandbox, "cwd.log"),
+      skillsLogPath: path.join(sandbox, "skills.log")
+    });
+    const slugs = ["broken", "healthy"];
+    writeImportRecipeStore(sandbox, {
+      recipes: slugs.map((slug) => {
+        const folder = path.join(sandbox, "linked", slug);
+        write(folder, "SKILL.md", `old ${slug}`);
+        write(folder, "support.md", "Supporting guidance.");
+        mkdirSync(path.join(sandbox, "skills/imported"), { recursive: true });
+        symlinkSync(folder, path.join(sandbox, "skills/imported", slug), "dir");
+        return {
+          localSource: { kind: "link", skillSourceFolder: folder, workingDirectory: folder },
+          skills: [{ kind: "skill", selector: slug, slug }],
+          source: `linked/${slug}`
+        };
+      }),
+      version: 3
+    });
+    rememberSkillGuidance(sandbox);
+    rmSync(path.join(sandbox, "linked/broken/SKILL.md"));
+    write(sandbox, "linked/healthy/SKILL.md", "new healthy");
+    let messages = "";
+    await withFakeNpx(sandbox, bin, async () => {
+      await expect(
+        runUpdateSkills([], {
+          writeMessage(message) {
+            messages += message;
+          }
+        })
+      ).rejects.toThrow(/No skills found/u);
+    });
+    expect(messages).toContain("Skill update summary unavailable:");
+    const comparison = readDeliveredComparison(sandbox);
+    expect(
+      git(comparison.repository, ["show", `${comparison.commit}:skills/imported/healthy/SKILL.md`])
+    ).toBe("new healthy");
+    expect(
+      git(comparison.repository, [
+        "diff",
+        "--name-only",
+        `${comparison.commit}^`,
+        comparison.commit
+      ])
+    ).toContain("skills/imported/broken/SKILL.md");
   });
 
   test("skills update reruns recorded recipes without prompting for selection", async () => {
