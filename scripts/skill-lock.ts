@@ -32,18 +32,30 @@ import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from
 
 export const MATERIALIZER_VERSION = 1;
 
-function resolveExplicitSkillCommit(repository: string, revision: string, repoRoot: string) {
+async function resolveExplicitSkillCommit(repository: string, revision: string, repoRoot: string) {
   if (path.isAbsolute(repository)) {
-    return createRuntime({ cwd: repository })
-      .exec("git", ["rev-parse", "--verify", "--end-of-options", `${revision}^{commit}`])
-      .stdout.trim();
+    const result = await createRuntime({ cwd: repository }).execAsync("git", [
+      "rev-parse",
+      "--verify",
+      "--end-of-options",
+      `${revision}^{commit}`
+    ]);
+    return result.stdout.trim();
   }
   const stagingDirectory = path.join(repoRoot, "tmp", `skill-pin-${crypto.randomUUID()}`);
   mkdirSync(stagingDirectory, { recursive: true });
   const runtime = createRuntime({ cwd: stagingDirectory });
   try {
     runtime.exec("git", ["init", "--quiet"]);
-    runtime.exec("git", ["fetch", "--quiet", "--depth", "1", "--", repository, revision]);
+    await runtime.execAsync("git", [
+      "fetch",
+      "--quiet",
+      "--depth",
+      "1",
+      "--",
+      repository,
+      revision
+    ]);
     return runtime.exec("git", ["rev-parse", "--verify", "FETCH_HEAD^{commit}"]).stdout.trim();
   } finally {
     rmSync(stagingDirectory, { force: true, recursive: true });
@@ -83,7 +95,7 @@ export function describeSkillSource(source: string, repoRoot: string) {
   };
 }
 
-export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string) {
+export async function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string) {
   const source = recipe.lock ?? describeSkillSource(recipe.source, repoRoot);
   const treePath = "treePath" in source ? source.treePath : undefined;
   const requestedRefs = treePath
@@ -92,18 +104,19 @@ export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string
         .map((_, index, segments) => segments.slice(0, index + 1).join("/"))
         .toReversed()
     : [source.updateRef];
-  const revisions = /^[a-f\d]{40}$/u.test(source.updateRef)
-    ? []
-    : createRuntime({ cwd: repoRoot })
-        .exec("git", [
-          "ls-remote",
-          "--",
-          source.repository,
-          ...requestedRefs.flatMap((ref) => [ref, `${ref}^{}`])
-        ])
-        .stdout.trim()
-        .split("\n")
-        .map((row) => row.split(/\s+/u));
+  let revisions: string[][] = [];
+  if (!/^[a-f\d]{40}$/u.test(source.updateRef)) {
+    const result = await createRuntime({ cwd: repoRoot }).execAsync("git", [
+      "ls-remote",
+      "--",
+      source.repository,
+      ...requestedRefs.flatMap((ref) => [ref, `${ref}^{}`])
+    ]);
+    revisions = result.stdout
+      .trim()
+      .split("\n")
+      .map((row) => row.split(/\s+/u));
+  }
   const updateRef =
     requestedRefs.find((requestedRef) =>
       revisions.some(
@@ -118,7 +131,7 @@ export function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string
     revisions.find(([, ref]) => ref === `refs/heads/${updateRef}`) ??
     revisions.find(([, ref]) => ref === `refs/tags/${updateRef}`);
   const commit = /^[a-f\d]{40}$/u.test(source.updateRef)
-    ? resolveExplicitSkillCommit(source.repository, source.updateRef, repoRoot)
+    ? await resolveExplicitSkillCommit(source.repository, source.updateRef, repoRoot)
     : (revisions.find(([, ref]) => ref === `${selected?.[1]}^{}`) ?? selected)?.[0];
   if (!commit || !/^[a-f\d]{40}$/u.test(commit)) {
     throw new MonkeError(

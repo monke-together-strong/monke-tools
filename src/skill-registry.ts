@@ -504,7 +504,7 @@ async function addGitSkillSource(
   };
   const staging = mkdtempSync(path.join(tmpdir(), "monke-skill-git-"));
   try {
-    const revision = resolveSkillRevision(recipe, root);
+    const revision = await resolveSkillRevision(recipe, root);
     const normalized = await pinnedSkillSource({ ...revision, digest: "" }, staging);
     const installOutput = await runtime.execAsync(
       runtime.platform === "win32" ? "npx.cmd" : "npx",

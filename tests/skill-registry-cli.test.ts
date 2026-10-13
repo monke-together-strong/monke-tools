@@ -28,6 +28,7 @@ import { preflightSkillRegistryInstall } from "../src/skill-registry.ts";
 import {
   createRepo,
   git,
+  installFakeCodexSummary,
   installFakeCodiff,
   makeTempDir,
   read,
@@ -47,6 +48,7 @@ function registryFixture() {
   const registry = path.join(monkeHome, "skill-registry");
   const bin = path.join(sandbox, "bin");
   const codiffLog = installFakeCodiff(bin);
+  installFakeCodexSummary(bin);
   let stdout = "";
   const runtime = createTestRuntime({
     cwd: sandbox,
