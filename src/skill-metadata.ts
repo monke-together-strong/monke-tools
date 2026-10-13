@@ -55,7 +55,8 @@ export function setSkillMetadata(
   );
   unwrapBoundaryResult(SkillFrontmatterSchema.safeParse(frontmatter.toJS()), frontmatterLabel);
   if (overrides.description !== undefined) {
-    frontmatter.set("description", overrides.description);
+    // Replace the scalar so previous overrides cannot affect lock serialization.
+    frontmatter.set("description", frontmatter.createNode(overrides.description));
   }
   if (overrides.disableModelInvocation !== undefined) {
     frontmatter.set("disable-model-invocation", overrides.disableModelInvocation);

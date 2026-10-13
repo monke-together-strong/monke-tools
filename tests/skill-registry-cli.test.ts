@@ -256,13 +256,18 @@ describe("Skill import registry CLI", () => {
         description: replacement,
         "disable-model-invocation": true
       });
+      const finalDescription = "Use for revising prose.";
+      await runCliAsync(
+        ["skills", "policy", "course", "typography", "--description", finalDescription],
+        fixture.runtime
+      );
       if (kind === "git") {
         rmSync(path.join(fixture.registry, "skills/imported/typography"), { recursive: true });
         await restoreLockedImports(fixture.registry);
       }
       expect(
         parse(read(fixture.installed.codex, "typography/SKILL.md").split("---")[1] ?? "")
-      ).toMatchObject({ description: replacement });
+      ).toMatchObject({ description: finalDescription, "disable-model-invocation": true });
     }
   );
 
