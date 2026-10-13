@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { parseDocument } from "yaml";
+import { isScalar, parseDocument } from "yaml";
 import * as z from "zod";
 
 import { MonkeError } from "./errors.ts";
@@ -55,8 +55,12 @@ export function setSkillMetadata(
   );
   unwrapBoundaryResult(SkillFrontmatterSchema.safeParse(frontmatter.toJS()), frontmatterLabel);
   if (overrides.description !== undefined) {
-    // Replace the scalar so previous overrides cannot affect lock serialization.
-    frontmatter.set("description", frontmatter.createNode(overrides.description));
+    frontmatter.set("description", overrides.description);
+    const description = frontmatter.get("description", true);
+    if (isScalar(description)) {
+      // Choose style from the new value while retaining anchors and comments.
+      delete description.type;
+    }
   }
   if (overrides.disableModelInvocation !== undefined) {
     frontmatter.set("disable-model-invocation", overrides.disableModelInvocation);
