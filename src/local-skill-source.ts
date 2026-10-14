@@ -8,7 +8,6 @@ import {
   readdirSync,
   readlinkSync,
   realpathSync,
-  renameSync,
   rmSync,
   rmdirSync,
   statSync,
@@ -326,10 +325,8 @@ async function discoverLocalGuidance(
     cwd: workingDirectory
   });
   const publisher = repository.exitCode === 0 ? repository.stdout.trim() : undefined;
-  const declared =
-    publisher && existsSync(path.join(publisher, "monke.yml"))
-      ? readRepoImportRecipeStore(publisher).recipes.flatMap((item) => item.skills)
-      : [];
+  const declaredStore = publisher ? readRepoImportRecipeStore(publisher) : { recipes: [] };
+  const declared = declaredStore.recipes.flatMap((item) => item.skills);
   const managesImports =
     publisher !== undefined &&
     (existsSync(path.join(publisher, SKILL_RESTORE_MARKER)) ||
@@ -345,7 +342,7 @@ async function discoverLocalGuidance(
       publisher,
       recipe.source
     );
-    await restoreSkillImports(publisher, false, runtime);
+    await restoreSkillImports(publisher, false, runtime, declaredStore);
   }
   const root = resolveLocalSourceRoot(recipe.localSource, workingDirectory);
   const discovered = new Map<string, { kind: SkillImportRecipeSkill["kind"]; sourcePath: string }>(
@@ -443,9 +440,6 @@ export async function updateLocalSkillSource(options: {
         dereference: true,
         recursive: true
       });
-      if (source.kind === "reference") {
-        renameSync(path.join(target, "MAIN.md"), path.join(target, "SKILL.md"));
-      }
       return {
         ...recipe.skills.find((item) => item.slug === slug),
         kind: source.kind,

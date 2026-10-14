@@ -30,7 +30,7 @@ import {
   SKILL_LOCK_PATH,
   writeImportRecipeStore
 } from "./skill-import-recipes.ts";
-import type { SkillImportRecipeSkill } from "./skill-import-recipes.ts";
+import type { SkillImportRecipeSkill, SkillImportRecipeStore } from "./skill-import-recipes.ts";
 import { restoreSkillImports } from "./skill-lock.ts";
 
 const ReviewSchema = z.strictObject({
@@ -43,17 +43,18 @@ const ACCEPTED_GUIDANCE_DIRECTORY = ".monke-skill-baseline";
 /** Retain accepted bytes so externally edited linked Skills can also be reviewed. */
 export function rememberSkillGuidance(
   repoRoot: string,
-  changedGuidance?: readonly SkillImportRecipeSkill[]
+  changedGuidance?: readonly SkillImportRecipeSkill[],
+  store = readImportRecipeStore(repoRoot)
 ) {
   const baseline = path.join(repoRoot, ACCEPTED_GUIDANCE_DIRECTORY);
   const next = `${baseline}.tmp`;
   rmSync(next, { force: true, recursive: true });
   if (changedGuidance && existsSync(baseline)) {
     cpSync(baseline, next, { recursive: true, verbatimSymlinks: true });
-    replaceSnapshotGuidance(repoRoot, next, changedGuidance);
-    writeImportRecipeStore(next, readImportRecipeStore(repoRoot));
+    replaceSnapshotGuidance(repoRoot, next, changedGuidance, store);
+    writeImportRecipeStore(next, store);
   } else {
-    snapshotSkillGuidance(repoRoot, next);
+    snapshotSkillGuidance(repoRoot, next, store);
   }
   rmSync(baseline, { force: true, recursive: true });
   renameSync(next, baseline);
@@ -62,11 +63,12 @@ export function rememberSkillGuidance(
 function replaceSnapshotGuidance(
   repoRoot: string,
   destination: string,
-  guidance: readonly SkillImportRecipeSkill[]
+  guidance: readonly SkillImportRecipeSkill[],
+  store: SkillImportRecipeStore
 ) {
   const localSkills = new Set(
-    readImportRecipeStore(repoRoot)
-      .recipes.filter((recipe) => recipe.localSource)
+    store.recipes
+      .filter((recipe) => recipe.localSource)
       .flatMap((recipe) => recipe.skills.map((item) => item.slug))
   );
   for (const item of guidance) {
@@ -89,8 +91,11 @@ function copyGuidanceSnapshot(source: string, target: string, dereference: boole
 }
 
 /** Capture complete guidance independently of source Git tracking and ignore rules. */
-export function snapshotSkillGuidance(repoRoot: string, destination: string) {
-  const store = readImportRecipeStore(repoRoot);
+export function snapshotSkillGuidance(
+  repoRoot: string,
+  destination: string,
+  store = readImportRecipeStore(repoRoot)
+) {
   mkdirSync(destination, { recursive: true });
   for (const root of [IMPORTED_SKILLS_ROOT, IMPORTED_REFERENCES_ROOT]) {
     if (existsSync(path.join(repoRoot, root))) {
@@ -101,7 +106,8 @@ export function snapshotSkillGuidance(repoRoot: string, destination: string) {
   replaceSnapshotGuidance(
     repoRoot,
     destination,
-    store.recipes.filter((recipe) => recipe.localSource).flatMap((recipe) => recipe.skills)
+    store.recipes.filter((recipe) => recipe.localSource).flatMap((recipe) => recipe.skills),
+    store
   );
   rmSync(path.join(destination, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
   writeImportRecipeStore(destination, store);
@@ -111,14 +117,15 @@ export function snapshotSkillGuidance(repoRoot: string, destination: string) {
 export function snapshotSkillUpdateBaseline(
   repoRoot: string,
   destination: string,
-  migrating: boolean
+  migrating: boolean,
+  store = readImportRecipeStore(repoRoot)
 ) {
   const accepted = path.join(repoRoot, ACCEPTED_GUIDANCE_DIRECTORY);
   if (existsSync(accepted)) {
     cpSync(accepted, destination, { recursive: true, verbatimSymlinks: true });
     // Installer updates compare against current editable bytes, including learned changes.
     // Plain links retain the accepted baseline so externally installed updates remain visible.
-    for (const recipe of readImportRecipeStore(repoRoot).recipes) {
+    for (const recipe of store.recipes) {
       if (!recipe.localSource?.command) {
         continue;
       }
@@ -151,7 +158,7 @@ export function snapshotSkillUpdateBaseline(
       )
     : undefined;
   if (!trackedImports || trackedImports.exitCode !== 0 || !trackedImports.stdout.trim()) {
-    snapshotSkillGuidance(repoRoot, destination);
+    snapshotSkillGuidance(repoRoot, destination, store);
     return;
   }
   mkdirSync(path.join(repoRoot, "tmp"), { recursive: true });
@@ -168,7 +175,7 @@ export function snapshotSkillUpdateBaseline(
       checkout
     ]);
     runtime.exec("git", ["checkout", "--quiet", "--detach", commit], { cwd: checkout });
-    snapshotSkillGuidance(checkout, destination);
+    snapshotSkillGuidance(checkout, destination, store);
   } finally {
     rmSync(checkout, { force: true, recursive: true });
   }

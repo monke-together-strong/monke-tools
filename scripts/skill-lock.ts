@@ -23,6 +23,7 @@ import { discoverSourceSkills, resolveSkillSourceFolder } from "../src/skill-sou
 import type { Runtime } from "../src/types.ts";
 import { parseOwnedYamlText } from "../src/validation.ts";
 import {
+  assertManagedGuidanceRoots,
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath,
   IMPORTED_REFERENCES_ROOT,
@@ -34,7 +35,11 @@ import {
   readImportRecipeStore,
   readRepoImportRecipeStore
 } from "./skill-import-recipes.ts";
-import type { SkillImportRecipe, SkillImportRecipeSkill } from "./skill-import-recipes.ts";
+import type {
+  SkillImportRecipe,
+  SkillImportRecipeSkill,
+  SkillImportRecipeStore
+} from "./skill-import-recipes.ts";
 import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from "./skills-cli.ts";
 
 export const MATERIALIZER_VERSION = 1;
@@ -365,7 +370,7 @@ export async function stageGitSkillSource(options: {
   }
   if (declared.recipes.length > 0) {
     // Never follow imports declared by an imported source itself.
-    await restoreLockedImports(checkout, false, runtime);
+    await restoreLockedImports(checkout, false, runtime, declared);
     for (const item of imported) {
       if (
         !selectors.includes("*") &&
@@ -383,9 +388,6 @@ export async function stageGitSkillSource(options: {
         recursive: true,
         verbatimSymlinks: true
       });
-      if (item.kind === "reference") {
-        renameSync(path.join(target, "MAIN.md"), path.join(target, "SKILL.md"));
-      }
     }
   }
   return { ...output, declaredGuidance: [...imported, ...ownReplacements], source };
@@ -435,9 +437,12 @@ export function stagedSkillGuidance(
   return listStagedSkillSlugs(stagingDirectory).map((slug) => {
     const entry = path.join(stagingDirectory, ".agents", "skills", slug, "SKILL.md");
     const imported = declared.find((item) => item.slug === slug);
-    const frontmatter = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
-      readFileSync(entry, "utf-8")
-    );
+    const frontmatter =
+      imported?.kind === "reference"
+        ? null
+        : /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
+            readFileSync(entry, "utf-8")
+          );
     if (!frontmatter && imported?.kind !== "reference") {
       throw new MonkeError(`Expected leading YAML frontmatter at ${entry}`);
     }
@@ -552,11 +557,12 @@ export async function withSkillImportMutation<T>(
 export async function restoreSkillImports(
   repoRoot: string,
   includeDeclaredImports = true,
-  runtime?: Runtime
+  runtime?: Runtime,
+  store?: Pick<SkillImportRecipeStore, "recipes">
 ) {
   await withSkillImportMutation(
     repoRoot,
-    () => restoreLockedImports(repoRoot, includeDeclaredImports, runtime),
+    () => restoreLockedImports(repoRoot, includeDeclaredImports, runtime, store),
     runtime
   );
 }
@@ -604,10 +610,12 @@ export async function restoreLockedRecipe(
 export async function restoreLockedImports(
   repoRoot: string,
   includeDeclaredImports = true,
-  runtime?: Runtime
+  runtime?: Runtime,
+  store?: Pick<SkillImportRecipeStore, "recipes">
 ) {
-  const store = readImportRecipeStore(repoRoot);
-  if (store.recipes.some((recipe) => !recipe.localSource && !recipe.commit)) {
+  assertManagedGuidanceRoots(repoRoot);
+  const { recipes } = store ?? readImportRecipeStore(repoRoot);
+  if (recipes.some((recipe) => !recipe.localSource && !recipe.commit)) {
     throw new MonkeError(
       "Skill lock is incomplete; run mt skills update --repo to pin every recipe before source installation"
     );
@@ -618,7 +626,7 @@ export async function restoreLockedImports(
   const restore = pLimit(4);
   // Keep the mutation lock until every restore settles, even when a sibling fails.
   const results = await Promise.allSettled(
-    store.recipes
+    recipes
       .filter((recipe) => !recipe.localSource)
       .map((recipe) =>
         restore(() => restoreLockedRecipe(repoRoot, recipe, includeDeclaredImports, runtime))
@@ -632,22 +640,17 @@ export async function restoreLockedImports(
   // Wait until every recipe validates before pruning entries from a newer lock.
   pruneImportedGuidance(
     repoRoot,
-    store.recipes.flatMap((recipe) => recipe.skills)
+    recipes.flatMap((recipe) => recipe.skills)
   );
 }
 
 /** Generated roots belong only to the current selected guidance. */
 export function pruneImportedGuidance(repoRoot: string, guidance: SkillImportRecipeSkill[]) {
+  assertManagedGuidanceRoots(repoRoot);
   const managedRoots = [
     { kind: "skill", root: path.join(repoRoot, IMPORTED_SKILLS_ROOT) },
     { kind: "reference", root: path.join(repoRoot, IMPORTED_REFERENCES_ROOT) }
   ];
-  for (const { root } of managedRoots) {
-    const metadata = lstatSync(root, { throwIfNoEntry: false });
-    if (metadata && !metadata.isDirectory()) {
-      throw new MonkeError(`Imported guidance root must be a regular directory: ${root}`);
-    }
-  }
   for (const { kind, root } of managedRoots) {
     const owned = new Set(guidance.filter((item) => item.kind === kind).map((item) => item.slug));
     for (const name of existsSync(root) ? readdirSync(root) : []) {

@@ -1,4 +1,5 @@
 import { ok } from "node:assert/strict";
+import { hash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -35,8 +36,128 @@ import {
   prepareSource
 } from "./installation-fixtures.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
+import { prepareActiveRelease, release as catalogRelease } from "./update-fixtures.ts";
 
 describe("versioned installation lifecycle", () => {
+  test("installing and seeding a legacy Release preserves its original hashed lock", async () => {
+    const sandbox = makeTempDir("legacy-release-registry-seeding");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const candidate = prepareReleaseBundle(sandbox);
+    const importedSkill = "---\nname: legacy\ndescription: Legacy bundled skill.\n---\nAccepted.\n";
+    const legacyLock = `${JSON.stringify({
+      recipes: [
+        {
+          lock: {
+            commit: "f".repeat(40),
+            digest: "0".repeat(64),
+            importerVersion: "1.7.0",
+            materializerVersion: 1,
+            repository: "https://example.invalid/legacy.git",
+            subpath: "",
+            updateRef: "HEAD"
+          },
+          skills: [{ kind: "skill", selector: "legacy", slug: "legacy" }],
+          source: "https://example.invalid/legacy.git"
+        }
+      ],
+      version: 3
+    })}\n`;
+    write(candidate.bundleRoot, "skills.lock.json", legacyLock);
+    write(candidate.bundleRoot, "skills/imported/legacy/SKILL.md", importedSkill);
+    write(
+      candidate.bundleRoot,
+      "install-manifest.json",
+      `${JSON.stringify({
+        ...candidate.manifest,
+        guidanceHashes: {
+          ...candidate.manifest.guidanceHashes,
+          "skills.lock.json": hash("sha256", legacyLock, "hex"),
+          "skills/imported/legacy/SKILL.md": hash("sha256", importedSkill, "hex")
+        }
+      })}\n`
+    );
+
+    await activateRelease({
+      args: ["--targets", "codex"],
+      bundleRoot: candidate.bundleRoot,
+      home,
+      monkeHome,
+      sandbox
+    });
+    const installRoot = path.join(monkeHome, "installs", "release-1.2.3-linux-x64");
+    let stdout = "";
+    await runCliAsync(
+      ["skills", "list"],
+      createTestRuntime({
+        cwd: sandbox,
+        env: { HOME: home, MONKE_HOME: monkeHome },
+        onStderr() {},
+        onStdout(message) {
+          stdout += message;
+        },
+        toolInstallRoot: installRoot
+      })
+    );
+
+    expect(stdout).toContain("https://example.invalid/legacy.git\tgit\t1 skills");
+    expect(readFileSync(path.join(candidate.bundleRoot, "skills.lock.json"), "utf-8")).toBe(
+      legacyLock
+    );
+    expect(readFileSync(path.join(installRoot, "skills.lock.json"), "utf-8")).toBe(legacyLock);
+    expect(
+      readFileSync(path.join(monkeHome, "skill-registry", "skills.lock.json"), "utf-8")
+    ).toContain('"version": 4');
+    expect(
+      readFileSync(path.join(home, ".codex/skills/monke-tools/imported/legacy/SKILL.md"), "utf-8")
+    ).toBe(importedSkill);
+  });
+
+  test("current tooling can check an unchanged legacy Release and detects changes to its lock", async () => {
+    const sandbox = makeTempDir("legacy-release-update-check");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
+    const legacyLock = '{"recipes":[],"version":3}\n';
+    const manifest = ReleaseInstallManifestSchema.parse(
+      JSON.parse(readFileSync(path.join(installRoot, "install-manifest.json"), "utf-8"))
+    );
+    manifest.guidanceHashes["skills.lock.json"] = hash("sha256", legacyLock, "hex");
+    write(installRoot, "skills.lock.json", legacyLock);
+    write(installRoot, "install-manifest.json", `${JSON.stringify(manifest)}\n`);
+    let stderr = "";
+    const runtime = createTestRuntime({
+      architecture: "x64",
+      cwd: sandbox,
+      env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+      onStderr(text) {
+        stderr += text;
+      },
+      onStdout() {},
+      platform: "linux",
+      releaseDistribution: {
+        async downloadReleaseAsset() {
+          throw new Error("Update check must not download assets");
+        },
+        async listReleases(page) {
+          return page === 1 ? [catalogRelease("1.2.3")] : [];
+        }
+      },
+      toolBuildIdentity: "1.2.4",
+      toolInstallRoot: installRoot
+    });
+
+    await runCliAsync(["update", "--check"], runtime);
+    expect(stderr).toContain(
+      "Active tool install 1.2.3 already matches the selected stable Release"
+    );
+    expect(readFileSync(path.join(installRoot, "skills.lock.json"), "utf-8")).toBe(legacyLock);
+
+    write(installRoot, "skills.lock.json", "Edited legacy recipe.\n");
+    await expect(runCliAsync(["update", "--check"], runtime)).rejects.toThrow(
+      "Changed guidance paths:\n- skills.lock.json"
+    );
+  });
+
   test("Local installation restores missing pins, synchronizes a reverted lock, and rejects incomplete guidance before activation", async () => {
     const sandbox = makeTempDir("local-install-locked-imports");
     const sourceCheckout = path.join(sandbox, "source");

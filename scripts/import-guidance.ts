@@ -27,6 +27,23 @@ export const IMPORTED_REFERENCES_ROOT = path.join("skills", "references", "impor
 const CODEX_SKILLS_ROOT = path.join("skills", "codex");
 const INTERNAL_SKILLS_ROOT = path.join("skills", "internal");
 const INTERNAL_REFERENCES_ROOT = path.join("skills", "references", "internal");
+
+/** Reject aliases before any publication or pruning can reach outside managed roots. */
+export function assertManagedGuidanceRoots(repoRoot: string) {
+  for (const relative of [
+    "skills",
+    "skills/references",
+    IMPORTED_SKILLS_ROOT,
+    IMPORTED_REFERENCES_ROOT
+  ]) {
+    const root = path.join(repoRoot, relative);
+    const metadata = lstatSync(root, { throwIfNoEntry: false });
+    if (metadata && !metadata.isDirectory()) {
+      throw new MonkeError(`Imported guidance root must be a regular directory: ${root}`);
+    }
+  }
+}
+
 /** Materializes staged upstream guidance using its recorded local Import kind. */
 export function copyStagedGuidanceToManagedRoots(
   options: {
@@ -41,6 +58,7 @@ export function copyStagedGuidanceToManagedRoots(
   },
   move: (source: string, destination: string) => void = renameSync
 ) {
+  assertManagedGuidanceRoots(options.repoRoot);
   const guidance = options.guidance.map((item) => ({
     ...item,
     disableModelInvocation: item.disableModelInvocation ?? options.defaultDisableModelInvocation
@@ -236,6 +254,10 @@ function transformPreparedReference(referencePath: string) {
   const skillEntryPath = path.join(referencePath, "SKILL.md");
   const referenceEntryPath = path.join(referencePath, "MAIN.md");
   if (existsSync(referenceEntryPath)) {
+    if (!existsSync(skillEntryPath) && lstatSync(referenceEntryPath).isFile()) {
+      // Publisher references have already had their entry transformed.
+      return;
+    }
     throw new MonkeError(
       `Cannot import reference because upstream guidance already contains MAIN.md at ${referenceEntryPath}`
     );

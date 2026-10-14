@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
+  assertManagedGuidanceRoots,
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath
 } from "../scripts/import-guidance.ts";
@@ -152,6 +153,9 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
   await withSkillImportMutation(
     root,
     async () => {
+      if (request.action !== "list") {
+        assertManagedGuidanceRoots(root);
+      }
       const store = readRepoImportRecipeStore(root);
       if (request.action === "list") {
         for (const recipe of store.recipes) {
@@ -160,7 +164,7 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
           );
         }
       } else if (request.action === "restore") {
-        await restoreLockedImports(root, true, runtime);
+        await restoreLockedImports(root, true, runtime, store);
       } else if (request.action === "add") {
         if (!request.source || request.command || request.link || request.cwd || request.name) {
           throw new MonkeError(
@@ -178,7 +182,7 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
                 item === recipe ? setRecipePolicy(recipe, request) : item
               );
         writeRepoImportRecipeStore(root, { ...store, recipes });
-        await restoreLockedImports(root, true, runtime);
+        await restoreLockedImports(root, true, runtime, { ...store, recipes });
       } else {
         throw new MonkeError(`${request.action} is machine-local and does not accept --repo`);
       }
@@ -330,7 +334,7 @@ export function registryGuidanceRoot(runtime: Runtime, guidanceSourceRoot: strin
 
 function planRegistryImports(root: string, guidance: string, includeNewSources: boolean) {
   const store = readImportRecipeStore(root);
-  const bundledRecipes = readImportRecipeStore(guidance);
+  const bundledRecipes = readImportRecipeStore(guidance, false);
   const sources = new Set([
     ...store.recipes.map((recipe) => recipe.source),
     ...(store.removedSources ?? [])

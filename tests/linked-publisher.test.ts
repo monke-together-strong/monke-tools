@@ -72,10 +72,68 @@ done
   }
   declare("reference");
   const installed = path.join(consumer, ".agents/skills/monke-tools");
-  return { consumer, declare, installed, publisher, runtime };
+  return { consumer, declare, installed, publisher, runtime, upstream };
 }
 
 describe("linked publisher collections", () => {
+  test.each([false, true])("publisher YAML overrides stale JSON with linked=%s", async (linked) => {
+    const { installed, publisher, runtime, upstream } = fixture();
+    write(
+      publisher,
+      "skills.lock.json",
+      JSON.stringify({
+        recipes: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["base"], source: upstream }
+        ],
+        version: 4
+      })
+    );
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Publish declaration beside stale JSON"]);
+    await runCliAsync(
+      ["skills", "add", linked ? publisher : `${publisher}#HEAD`, "--project"],
+      runtime
+    );
+    expect(read(installed, "references/imported/base/MAIN.md")).toBe("Base instructions.\n");
+    expect(existsSync(path.join(installed, "imported/base"))).toBeFalsy();
+    write(publisher, "monke.yml", "# No declared imports.\n");
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Remove YAML declarations"]);
+    await runCliAsync(["skills", "update", "--project", "--adapter", "codiff"], runtime);
+    expect(existsSync(path.join(installed, "references/imported/base"))).toBeFalsy();
+    expect(existsSync(path.join(installed, "imported/base"))).toBeFalsy();
+    expect(read(installed, "imported/own/SKILL.md")).toContain("Own instructions.");
+  });
+
+  test.each([
+    { body: "---\nReference starts with a rule.\n", linked: false },
+    { body: "---\nReference starts with a rule.\n", linked: true },
+    { body: "---\nKeep this section.\n---\nKeep the tail.\n", linked: false },
+    { body: "---\nKeep this section.\n---\nKeep the tail.\n", linked: true }
+  ])(
+    "published reference bodies retain horizontal rules with linked=$linked",
+    async ({ body, linked }) => {
+      const { declare, installed, publisher, runtime, upstream } = fixture();
+      write(
+        upstream,
+        "skills/base/SKILL.md",
+        `---\nname: base\ndescription: Reference.\n---\n${body}`
+      );
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Reference with Markdown rules"]);
+      declare("reference");
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Publish reference"]);
+      await runCliAsync(
+        ["skills", "add", linked ? publisher : `${publisher}#HEAD`, "--project", "--skill", "base"],
+        runtime
+      );
+      expect(read(installed, "references/imported/base/MAIN.md")).toBe(body);
+      await runCliAsync(["skills", "update", "--project", "--adapter", "codiff"], runtime);
+      expect(read(installed, "references/imported/base/MAIN.md")).toBe(body);
+    }
+  );
+
   test("default selection publishes declared references beside linked own skills", async () => {
     const { installed, publisher, runtime } = fixture();
     await runCliAsync(["skills", "add", publisher, "--link", "--project"], runtime);

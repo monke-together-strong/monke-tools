@@ -5,6 +5,8 @@ import { MonkeError } from "./errors.ts";
 import { sha256 } from "./sha256.ts";
 
 export const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
+// Earlier schema-version-1 Releases bundled their recipes in skills.lock.json.
+const RECIPE_FILENAMES = ["monke.yml", "skills.lock.json"];
 
 /** Hash the ordinary guidance files included in a Release bundle. */
 export function hashReleaseGuidance(bundleRoot: string) {
@@ -14,13 +16,15 @@ export function hashReleaseGuidance(bundleRoot: string) {
     throw new MonkeError(`Release guidance file is missing: ${globalInstructions}`);
   }
   const hashes = new Map([["instructions/GLOBAL.md", sha256(readFileSync(globalInstructions))]]);
-  const lock = path.join(bundleRoot, "monke.yml");
-  const lockStat = lstatSync(lock, { throwIfNoEntry: false });
-  if (lockStat) {
-    if (!lockStat.isFile() || lockStat.isSymbolicLink()) {
-      throw new MonkeError(`Release Skill lock must be a regular file: ${lock}`);
+  for (const filename of RECIPE_FILENAMES) {
+    const recipe = path.join(bundleRoot, filename);
+    const recipeStat = lstatSync(recipe, { throwIfNoEntry: false });
+    if (recipeStat) {
+      if (!recipeStat.isFile() || recipeStat.isSymbolicLink()) {
+        throw new MonkeError(`Release Skill recipes must be a regular file: ${recipe}`);
+      }
+      hashes.set(filename, sha256(readFileSync(recipe)));
     }
-    hashes.set("monke.yml", sha256(readFileSync(lock)));
   }
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     const root = path.join(bundleRoot, "skills", folder);
@@ -62,13 +66,15 @@ export function findChangedReleaseGuidancePaths(
       ? sha256(readFileSync(globalInstructions))
       : null
   );
-  const lock = path.join(bundleRoot, "monke.yml");
-  const lockStat = lstatSync(lock, { throwIfNoEntry: false });
-  if (lockStat) {
-    actual.set(
-      "monke.yml",
-      lockStat.isFile() && !lockStat.isSymbolicLink() ? sha256(readFileSync(lock)) : null
-    );
+  for (const filename of RECIPE_FILENAMES) {
+    const recipe = path.join(bundleRoot, filename);
+    const recipeStat = lstatSync(recipe, { throwIfNoEntry: false });
+    if (recipeStat) {
+      actual.set(
+        filename,
+        recipeStat.isFile() && !recipeStat.isSymbolicLink() ? sha256(readFileSync(recipe)) : null
+      );
+    }
   }
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     collectGuidanceEntries(path.join(bundleRoot, "skills", folder), bundleRoot, actual);

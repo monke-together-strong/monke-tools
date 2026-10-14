@@ -199,7 +199,11 @@ const LegacyStoreSchema = z
   }));
 
 /** Read machine-local recipes, or the publishing repo's declaration. */
-export function readImportRecipeStore(repoRoot: string): SkillImportRecipeStore {
+export function readImportRecipeStore(repoRoot: string, migrate = true): SkillImportRecipeStore {
+  const config = path.join(repoRoot, "monke.yml");
+  if (existsSync(config) && parseDocument(readFileSync(config, "utf-8")).has("skills")) {
+    return readRepoImportRecipeStore(repoRoot);
+  }
   const storePath = existsSync(path.join(repoRoot, SKILL_LOCK_PATH))
     ? path.join(repoRoot, SKILL_LOCK_PATH)
     : path.join(repoRoot, LEGACY_IMPORT_RECIPE_STORE_PATH);
@@ -213,7 +217,7 @@ export function readImportRecipeStore(repoRoot: string): SkillImportRecipeStore 
       "Skill import recipe store"
     )
   );
-  if (LegacyStoreSchema.safeParse(input).success) {
+  if (migrate && LegacyStoreSchema.safeParse(input).success) {
     writeImportRecipeStore(repoRoot, store);
   }
   return store;

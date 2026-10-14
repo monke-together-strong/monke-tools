@@ -1,4 +1,4 @@
-import { existsSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -57,6 +57,118 @@ done
 }
 
 describe("repo import recipes through mt skills", () => {
+  test.each(["skills.lock.json", "skills/imported/.monke-imports.json"])(
+    "repo restore and update obey YAML over %s",
+    async (legacyFile) => {
+      const { bin, repo, runtime, upstream } = repoFixture();
+      const commit = git(upstream, ["rev-parse", "HEAD"]);
+      const legacy = JSON.stringify({
+        recipes: [
+          {
+            commit,
+            skills: ["first"],
+            source: upstream
+          }
+        ],
+        version: 4
+      });
+      write(repo, legacyFile, legacy);
+      const config = stringify({
+        skills: [
+          {
+            commit,
+            skills: [
+              {
+                description: "YAML trigger.",
+                modelInvocation: "deny",
+                slug: "second"
+              }
+            ],
+            source: upstream
+          }
+        ]
+      });
+      write(repo, "monke.yml", config);
+      await runCliAsync(["skills", "restore", "--repo"], runtime);
+      expect(read(repo, "skills/imported/second/SKILL.md")).toContain("description: YAML trigger.");
+      expect(read(repo, "skills/imported/second/SKILL.md")).toContain(
+        "disable-model-invocation: true"
+      );
+      expect(existsSync(path.join(repo, "skills/imported/first"))).toBeFalsy();
+      write(upstream, "skills/second/guide.md", "New accepted guide.\n");
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Advance YAML-selected guidance"]);
+      const reviewLog = installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+      expect(read(repo, "skills/imported/second/guide.md")).toBe("New accepted guide.\n");
+      expect(read(repo, "monke.yml")).toContain("YAML trigger.");
+      expect(read(repo, "monke.yml")).not.toContain("first");
+      const [, reviewCommit = "", reviewRepo = ""] = read(bin, path.relative(bin, reviewLog))
+        .trim()
+        .split("\n");
+      const reviewedStore = git(reviewRepo, ["show", `${reviewCommit}:skills.lock.json`]);
+      expect(reviewedStore).toContain("second");
+      expect(reviewedStore).not.toContain("first");
+      write(repo, "monke.yml", "# No repo imports remain.\n");
+      await runCliAsync(["skills", "restore", "--repo"], runtime);
+      expect(existsSync(path.join(repo, "skills/imported/second"))).toBeFalsy();
+      await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+      expect(read(repo, "monke.yml")).toBe("# No repo imports remain.\n");
+      expect(existsSync(path.join(repo, "skills/imported/first"))).toBeFalsy();
+    }
+  );
+
+  test.each([
+    { action: "add", kind: "skill" },
+    { action: "restore", kind: "skill" },
+    { action: "update", kind: "skill" },
+    { action: "add", kind: "reference" },
+    { action: "restore", kind: "reference" },
+    { action: "update", kind: "reference" }
+  ] as const)(
+    "$action rejects a symlinked $kind root before changing external files",
+    async ({ action, kind }) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      const config = stringify({
+        skills: [
+          {
+            commit: git(upstream, ["rev-parse", "HEAD"]),
+            skills: [{ kind, slug: "first" }],
+            source: upstream
+          }
+        ]
+      });
+      write(repo, "monke.yml", config);
+      const external = path.join(sandbox, "external");
+      const entry = `first/${kind === "reference" ? "MAIN.md" : "SKILL.md"}`;
+      write(external, entry, "External content must survive.\n");
+      const root = path.join(
+        repo,
+        kind === "reference" ? "skills/references/imported" : "skills/imported"
+      );
+      mkdirSync(path.dirname(root), { recursive: true });
+      symlinkSync(external, root, "dir");
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      const args =
+        action === "add"
+          ? [
+              "skills",
+              action,
+              upstream,
+              "--repo",
+              "--skill",
+              "first",
+              ...(kind === "reference" ? ["--ref"] : [])
+            ]
+          : ["skills", action, "--repo", ...(action === "update" ? ["--adapter", "codiff"] : [])];
+      await expect(runCliAsync(args, runtime)).rejects.toThrow(/root must be a regular directory/u);
+      expect(read(external, entry)).toBe("External content must survive.\n");
+      expect(read(repo, "monke.yml")).toBe(config);
+    }
+  );
+
   test("add pins a compact declaration, preserves YAML, and restores ignored guidance", async () => {
     const { repo, runtime, upstream } = repoFixture();
     const original = "# Keep this comment\nbootstrapCommand: 'echo setup' # Keep this too\n";

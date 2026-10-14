@@ -12,6 +12,7 @@ import { updateLocalSkillSource } from "../src/local-skill-source.ts";
 import { createRuntime } from "../src/runtime.ts";
 import type { Runtime } from "../src/types.ts";
 import {
+  assertManagedGuidanceRoots,
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath,
   IMPORTED_REFERENCES_ROOT,
@@ -25,6 +26,7 @@ import type {
 import {
   normalizeImportRecipeStore,
   readImportRecipeStore,
+  readRepoImportRecipeStore,
   writeImportRecipeStore,
   writeRepoImportRecipeStore
 } from "./skill-import-recipes.ts";
@@ -93,10 +95,11 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
 async function updateSkills(argv: string[], dependencies: UpdateSkillsDependencies) {
   const { adapter, interactive } = parseCommand(argv);
   const repoRoot = dependencies.repoRoot ?? process.cwd();
+  assertManagedGuidanceRoots(repoRoot);
   const runtime =
     dependencies.runtime ??
     createRuntime({ cwd: repoRoot, writeStdout: dependencies.writeMessage });
-  let store = readImportRecipeStore(repoRoot);
+  let store = (dependencies.repo ? readRepoImportRecipeStore : readImportRecipeStore)(repoRoot);
   const writeMessage =
     dependencies.writeMessage ??
     ((message: string) => {
@@ -114,7 +117,7 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
   const reviewDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-review-"));
   const before = path.join(reviewDirectory, "before");
   const migrating = store.recipes.some((recipe) => !recipe.localSource && !recipe.commit);
-  snapshotSkillUpdateBaseline(repoRoot, before, migrating);
+  snapshotSkillUpdateBaseline(repoRoot, before, migrating, store);
 
   const { recipes } = store;
   const prepare = createGitSkillPreparer({
@@ -235,7 +238,8 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
       runtime,
       adapter,
       writeMessage,
-      acceptedGuidance
+      acceptedGuidance,
+      store
     );
   } catch (error) {
     reviewFailure = error instanceof Error ? error.message : String(error);
@@ -347,14 +351,15 @@ async function reviewSkillUpdate(
   runtime: Runtime,
   adapter: string | undefined,
   writeMessage: (message: string) => void,
-  acceptedGuidance: readonly SkillImportRecipeSkill[]
+  acceptedGuidance: readonly SkillImportRecipeSkill[],
+  store: SkillImportRecipeStore
 ) {
   const after = path.join(reviewDirectory, "after");
-  snapshotSkillGuidance(repoRoot, after);
+  snapshotSkillGuidance(repoRoot, after, store);
   await summarizeSkillChanges({ after, before, runtime, writeMessage });
   const comparison = await saveSkillComparison(before, after, runtime);
   if (existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
-    rememberSkillGuidance(repoRoot, acceptedGuidance);
+    rememberSkillGuidance(repoRoot, acceptedGuidance, store);
   }
   if (comparison) {
     await openSkillComparison(comparison, { adapter, runtime, writeMessage });
