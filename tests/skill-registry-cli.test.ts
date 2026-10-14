@@ -261,6 +261,76 @@ async function namedPublisherTransition(options: {
 }
 
 describe("Skill import registry CLI", () => {
+  test.each(["skill", "reference"] as const)(
+    "policy rejects an edited %s support link before changing accepted state",
+    async (kind) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "reference-source"), {
+        "skills/base/SKILL.md": "---\nname: base\ndescription: Base.\n---\nBase instructions.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            {
+              commit: git(upstream, ["rev-parse", "HEAD"]),
+              skills: [{ kind: "reference", slug: "base" }],
+              source: upstream
+            }
+          ]
+        }),
+        "skills/own-skill/SKILL.md":
+          "---\nname: own-skill\ndescription: Original trigger.\n---\nOwn instructions.\n"
+      });
+      await runCliAsync(
+        ["skills", "add", `${publisher}#HEAD`, "--name", "publisher"],
+        fixture.runtime
+      );
+      const link = path.join(
+        fixture.registry,
+        kind === "skill"
+          ? "skills/imported/own-skill/shared.md"
+          : "skills/references/imported/base/shared.md"
+      );
+      const support = path.resolve(path.dirname(link), "../../shared.md");
+      writeFileSync(support, "Shared local support.\n");
+      symlinkSync("../../shared.md", link);
+      const accepted = {
+        entry: read(fixture.registry, "skills/imported/own-skill/SKILL.md"),
+        marker: read(fixture.registry, "skills/.monke-restored.json"),
+        reference: read(fixture.registry, "skills/references/imported/base/MAIN.md"),
+        store: read(fixture.registry, "skills.lock.json")
+      };
+      const policy = [
+        "skills",
+        "policy",
+        "publisher",
+        "own-skill",
+        "--description",
+        "Next trigger."
+      ];
+
+      await expect(runCliAsync(policy, fixture.runtime)).rejects.toThrow(
+        "Imported symlink escapes its guidance directory"
+      );
+
+      expect(read(fixture.registry, "skills/imported/own-skill/SKILL.md")).toBe(accepted.entry);
+      expect(read(fixture.registry, "skills/.monke-restored.json")).toBe(accepted.marker);
+      expect(read(fixture.registry, "skills/references/imported/base/MAIN.md")).toBe(
+        accepted.reference
+      );
+      expect(read(fixture.registry, "skills.lock.json")).toBe(accepted.store);
+      expect(readlinkSync(link)).toBe("../../shared.md");
+      expect(readFileSync(support, "utf-8")).toBe("Shared local support.\n");
+
+      rmSync(link);
+      await runCliAsync(policy, fixture.runtime);
+      expect(read(fixture.registry, "skills/imported/own-skill/SKILL.md")).toContain(
+        "description: Next trigger."
+      );
+    }
+  );
+
   test("Git publishers include declared imports, retain consumer overrides, and update accepted pins", async () => {
     const fixture = registryFixture();
     installGitImporter(fixture);

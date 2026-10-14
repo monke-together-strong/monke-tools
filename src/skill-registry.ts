@@ -29,6 +29,7 @@ import { reportSecurityRiskAssessment } from "../scripts/skill-import.ts";
 import {
   assertRepoImportIgnoreFile,
   assertSkillRestoreMarker,
+  guidanceDigest,
   ignoreRepoImports,
   isSkillRecipeRestored,
   rememberRestoredRecipe,
@@ -843,6 +844,7 @@ async function applyRecipePolicy(
             verbatimSymlinks: true
           });
         }
+        guidanceDigest(prepared, recipe.skills, true);
       }
     });
     rememberRestoredRecipe(root, recipe);
