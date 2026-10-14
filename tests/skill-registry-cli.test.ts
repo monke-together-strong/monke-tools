@@ -770,6 +770,71 @@ done
     }
   );
 
+  test.each([
+    { composed: false, project: false },
+    { composed: true, project: true }
+  ])(
+    "retained raw selectors survive update and re-add with composed=$composed project=$project",
+    async ({ composed, project }) => {
+      const fixture = registryFixture();
+      installInternalRootImporter(fixture.bin);
+      fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const consumer = createRepo(path.join(fixture.sandbox, "retained-consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = project
+        ? createTestRuntime({
+            cwd: consumer,
+            env: fixture.runtime.env,
+            onStderr() {},
+            onStdout() {}
+          })
+        : fixture.runtime;
+      const registry = project
+        ? path.join(consumer, ".git/monke-tools/skill-registry")
+        : fixture.registry;
+      const upstream = createRepo(path.join(fixture.sandbox, "retained-course"), {
+        "skills/course/SKILL.md":
+          "---\nname: course\ndescription: Course.\n---\nDeclared guidance.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "retained-publisher"), {
+        "SKILL.md":
+          "---\nname: Internal Guide\ndescription: Root.\nmetadata:\n  internal: true\n---\nAccepted internal root.\n",
+        "skills/public/SKILL.md":
+          "---\nname: Internal-Guide\ndescription: Child.\n---\nOther public child.\n",
+        ...(composed
+          ? {
+              "monke.yml": stringify({
+                skills: [
+                  {
+                    commit: git(upstream, ["rev-parse", "HEAD"]),
+                    skills: ["course"],
+                    source: upstream
+                  }
+                ]
+              })
+            }
+          : {})
+      });
+      const flags = project ? ["--project"] : [];
+      const add = ["skills", "add", `${publisher}#HEAD`, ...flags];
+      const selectors = composed ? ["Internal Guide", "course"] : ["Internal Guide"];
+      await runCliAsync([...add, "--skill", ...selectors], runtime);
+      const accepted = read(registry, "skills/imported/internal-guide/SKILL.md");
+      for (const command of [["skills", "update", ...flags], add, ["skills", "update", ...flags]]) {
+        await runCliAsync(command, runtime);
+        expect(readImportRecipeStore(registry).recipes[0]?.selection).toStrictEqual(selectors);
+        expect(read(registry, "skills/imported/internal-guide/SKILL.md")).toBe(accepted);
+      }
+      rmSync(path.join(registry, "skills/imported"), { recursive: true });
+      rmSync(path.join(registry, "skills/.monke-restored.json"));
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(readImportRecipeStore(registry).recipes[0]?.selection).toStrictEqual(selectors);
+      expect(read(registry, "skills/imported/internal-guide/SKILL.md")).toBe(accepted);
+      expect(existsSync(path.join(registry, "skills/imported/course"))).toBe(composed);
+    }
+  );
+
   test("machine explicit replay preserves internal guidance when a public child has the same name", async () => {
     const fixture = registryFixture();
     installInternalRootImporter(fixture.bin);

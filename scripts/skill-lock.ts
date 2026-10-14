@@ -586,7 +586,11 @@ async function stageOwnGitSkills(options: {
       buildSkillsInstallArgs({
         selectors: ownSelectors.map(
           (selector) =>
-            catalog.names.get(findRetainedSkill(retainedSkills, selector)?.slug ?? "") ?? selector
+            retainedPublisherSelector(
+              findRetainedSkill(retainedSkills, selector),
+              imported,
+              catalog
+            ) ?? selector
         ),
         source
       }),
@@ -595,14 +599,28 @@ async function stageOwnGitSkills(options: {
   }
   const selection = selectors.map((selector) => {
     const previous = findRetainedSkill(retainedSkills, selector);
-    const currentName =
-      imported.find((item) => item.slug === previous?.slug)?.selector ??
-      catalog.names.get(previous?.slug ?? "");
+    const currentName = retainedPublisherSelector(previous, imported, catalog);
     return previous && currentName && currentName.toLowerCase() !== previous.selector.toLowerCase()
       ? previous.slug
       : selector;
   });
   return { output, ownNames: catalog.names, ownSkills: catalog.slugs, selected, selection };
+}
+
+function retainedPublisherSelector(
+  previous: SkillImportRecipeSkill | undefined,
+  imported: readonly SkillImportRecipeSkill[],
+  catalog: PublisherSkillCatalog
+) {
+  if (!previous) {
+    return;
+  }
+  return (
+    imported.find((item) => item.slug === previous.slug)?.selector ??
+    (catalog.entries.has(previous.selector.toLowerCase())
+      ? previous.selector
+      : catalog.names.get(previous.slug))
+  );
 }
 
 async function stagePublisherCollection(options: {
