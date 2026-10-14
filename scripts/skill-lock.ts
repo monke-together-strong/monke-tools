@@ -493,6 +493,7 @@ export async function stageGitSkillSource(options: {
   return {
     ...output,
     declaredGuidance: [...imported, ...ownReplacements],
+    declaredSelectors: imported.flatMap((item) => [item.selector, item.slug]),
     selection:
       options.retainSelection &&
       !selectors.includes("*") &&

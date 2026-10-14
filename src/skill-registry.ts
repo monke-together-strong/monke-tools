@@ -292,7 +292,7 @@ async function runSkillsRegistryLocked(
             repoRoot: root,
             stagingDirectory: root
           });
-          completeRegistryChange(runtime, root, store, changedSource, scope);
+          completeRegistryChange(runtime, root, store, [changedSource], scope);
         }
       );
       return;
@@ -300,14 +300,20 @@ async function runSkillsRegistryLocked(
     const nextRecipe = setRecipePolicy(recipe, request);
     await applyRecipePolicy(runtime, root, store, nextRecipe, scope);
   }
-  completeRegistryChange(runtime, root, store, changedSource, scope);
+  completeRegistryChange(
+    runtime,
+    root,
+    store,
+    request.action === "add" && request.source ? [request.source, changedSource] : [changedSource],
+    scope
+  );
 }
 
 function completeRegistryChange(
   runtime: Runtime,
   root: string,
   store: SkillImportRecipeStore,
-  changedSource: string,
+  changedSources: readonly string[],
   scope?: SkillPublicationScope
 ) {
   retireAdoptedSkillLinks(root, store);
@@ -316,7 +322,7 @@ function completeRegistryChange(
   rememberSkillGuidance(
     root,
     [...store.recipes, ...nextStore.recipes]
-      .filter((recipe) => recipe.source === changedSource)
+      .filter((recipe) => changedSources.includes(recipe.source))
       .flatMap((recipe) => recipe.skills)
   );
 }
@@ -625,6 +631,7 @@ async function addGitSkillSource(
       reference: request.reference
     });
     assertGitSkillSelection({
+      declaredSelectors: installOutput.declaredSelectors,
       previous,
       recipe,
       repo,
@@ -705,6 +712,7 @@ function gitSourceRecipe(
 }
 
 function assertGitSkillSelection(options: {
+  declaredSelectors: string[];
   previous?: SkillImportRecipe;
   recipe: SkillImportRecipe;
   repo: boolean;
@@ -712,12 +720,12 @@ function assertGitSkillSelection(options: {
   selectors: string[];
   skills: SkillImportRecipe["skills"];
 }) {
-  const { previous, recipe, repo, requestedSkills, selectors, skills } = options;
-  if (repo) {
-    assertRepoSkillSelectorsMatched(recipe.source, selectors, skills);
+  const { declaredSelectors, previous, recipe, repo, requestedSkills, selectors, skills } = options;
+  if (repo || requestedSkills !== undefined) {
+    assertSkillSelectorsMatched(recipe.source, selectors, skills, declaredSelectors);
     return;
   }
-  if (requestedSkills !== undefined || !previous || selectors.includes("*")) {
+  if (!previous || selectors.includes("*")) {
     return;
   }
   const missing = previous.skills.filter((item) => !skills.some((next) => next.slug === item.slug));
@@ -728,15 +736,18 @@ function assertGitSkillSelection(options: {
   }
 }
 
-function assertRepoSkillSelectorsMatched(
+function assertSkillSelectorsMatched(
   source: string,
   selectors: string[],
-  skills: SkillImportRecipe["skills"]
+  skills: SkillImportRecipe["skills"],
+  aliases: string[]
 ) {
   if (selectors.includes("*")) {
     return;
   }
-  const names = new Set(skills.map((skill) => skill.selector.toLowerCase()));
+  const names = new Set(
+    [...skills.map((skill) => skill.selector), ...aliases].map((name) => name.toLowerCase())
+  );
   const missing = selectors.filter((selector) => !names.has(selector.toLowerCase()));
   if (missing.length > 0) {
     throw new MonkeError(`Selected skills not found in ${source}: ${missing.join(", ")}`);

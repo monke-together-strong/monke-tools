@@ -162,14 +162,7 @@ done
   );
 }
 
-async function namedPublisherTransition(options: {
-  action: "update" | "readd";
-  candidateName: string;
-  initial: "own" | "reference" | "skill";
-  selector: string;
-}) {
-  const { action, candidateName, initial, selector } = options;
-  const fixture = registryFixture();
+function installNamedGitImporter(fixture: ReturnType<typeof registryFixture>) {
   writeExecutable(
     path.join(fixture.bin, "npx"),
     `#!/usr/bin/env bun
@@ -193,6 +186,17 @@ for (const folder of readdirSync(path.join(source, "skills"))) {
 if (installed === 0) throw new Error("No matching skills: " + selectors.join(", "));
 `
   );
+}
+
+async function namedPublisherTransition(options: {
+  action: "update" | "readd";
+  candidateName: string;
+  initial: "own" | "reference" | "skill";
+  selector: string;
+}) {
+  const { action, candidateName, initial, selector } = options;
+  const fixture = registryFixture();
+  installNamedGitImporter(fixture);
   const skill = (body: string, name = "Fancy Author") =>
     `---\nname: ${name}\ndescription: Author trigger.\n---\n${body}\n`;
   const declaredName = initial === "own" ? candidateName : "Fancy Author";
@@ -590,6 +594,99 @@ done
     }
   );
 
+  test.each([
+    { declared: false, project: false },
+    { declared: false, project: true },
+    { declared: true, project: false },
+    { declared: true, project: true }
+  ])(
+    "Git selections must be complete before publication with declared=$declared project=$project",
+    async ({ declared, project }) => {
+      const fixture = registryFixture();
+      installNamedGitImporter(fixture);
+      const consumer = createRepo(path.join(fixture.sandbox, "consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = project
+        ? createTestRuntime({
+            cwd: consumer,
+            env: fixture.runtime.env,
+            onStderr() {},
+            onStdout() {}
+          })
+        : fixture.runtime;
+      const registry = project
+        ? path.join(consumer, ".git/monke-tools/skill-registry")
+        : fixture.registry;
+      const installed = project
+        ? path.join(consumer, ".agents/skills/monke-tools/imported")
+        : fixture.installed.codex;
+      const publisher = createRepo(path.join(fixture.sandbox, "publisher"), {
+        "skills/author/SKILL.md":
+          "---\nname: Fancy Author\ndescription: Author trigger.\n---\nOwn instructions.\n"
+      });
+      if (declared) {
+        const upstream = createRepo(path.join(fixture.sandbox, "declared-source"), {
+          "skills/course/SKILL.md":
+            "---\nname: Course Import\ndescription: Course trigger.\n---\nDeclared instructions.\n"
+        });
+        write(
+          publisher,
+          "monke.yml",
+          stringify({
+            skills: [
+              {
+                commit: git(upstream, ["rev-parse", "HEAD"]),
+                skills: [{ selector: "Course Import", slug: "course-import" }],
+                source: upstream
+              }
+            ]
+          })
+        );
+        git(publisher, ["add", "."]);
+        git(publisher, ["commit", "-m", "Declare imported guidance"]);
+      }
+      const add = ["skills", "add", `${publisher}#HEAD`, ...(project ? ["--project"] : [])];
+      const selection = ["FANCY AUTHOR", ...(declared ? ["COURSE-IMPORT"] : [])];
+      const incomplete = [...add, "--skill", ...selection, "missing-course-skill"];
+      await expect(runCliAsync(incomplete, runtime)).rejects.toThrow(
+        /Selected skills not found.*missing-course-skill/u
+      );
+      expect(readImportRecipeStore(registry).recipes).toStrictEqual([]);
+      expect(existsSync(path.join(installed, "fancy-author"))).toBeFalsy();
+      expect(existsSync(path.join(installed, "course-import"))).toBeFalsy();
+
+      await runCliAsync([...add, "--skill", ...selection], runtime);
+      const guidance = [
+        { body: "Own instructions.", slug: "fancy-author" },
+        ...(declared ? [{ body: "Declared instructions.", slug: "course-import" }] : [])
+      ];
+      for (const { body, slug } of guidance) {
+        expect(read(installed, `${slug}/SKILL.md`)).toContain(body);
+      }
+      if (declared) {
+        await runCliAsync([...add, "--skill", "Fancy Author", "Course Import"], runtime);
+      }
+      const acceptedRegistry = read(registry, "skills.lock.json");
+      const acceptedMarker = read(registry, "skills/.monke-restored.json");
+      const acceptedGuidance = guidance.map(({ slug }) => read(installed, `${slug}/SKILL.md`));
+      await expect(runCliAsync(incomplete, runtime)).rejects.toThrow(
+        /Selected skills not found.*missing-course-skill/u
+      );
+      expect(read(registry, "skills.lock.json")).toBe(acceptedRegistry);
+      expect(read(registry, "skills/.monke-restored.json")).toBe(acceptedMarker);
+      expect(guidance.map(({ slug }) => read(installed, `${slug}/SKILL.md`))).toStrictEqual(
+        acceptedGuidance
+      );
+      await expect(
+        runCliAsync([...add, "--skill", ...selection, "fancy-author"], runtime)
+      ).rejects.toThrow(/Selected skills not found.*fancy-author/u);
+      expect(read(registry, "skills.lock.json")).toBe(acceptedRegistry);
+      expect(read(registry, "skills/.monke-restored.json")).toBe(acceptedMarker);
+      expect(existsSync(path.join(installed, "missing-course-skill"))).toBeFalsy();
+    }
+  );
+
   test.each(["git", "link"] as const)(
     "%s publisher selections span own skills and declared imports",
     async (kind) => {
@@ -968,6 +1065,113 @@ done
         );
         expect(existsSync(path.join(installed, "typography"))).toBe(!replacement);
         expect(existsSync(path.join(installed, "color"))).toBe(replacement);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
+  );
+
+  test.each([
+    { linkedEdit: false, scope: "global" },
+    { linkedEdit: true, scope: "global" },
+    { linkedEdit: false, scope: "project" },
+    { linkedEdit: true, scope: "project" }
+  ])(
+    "canonical re-add refreshes the $scope review baseline with linkedEdit=$linkedEdit",
+    async ({ linkedEdit, scope }) => {
+      const fixture = registryFixture();
+      const upstream = createRepo(path.join(fixture.sandbox, "baseline-tree-source"), {
+        "course/skills/color/SKILL.md":
+          "---\nname: color\ndescription: Color.\n---\nColor instructions.\n",
+        "course/skills/typography/SKILL.md":
+          "---\nname: typography\ndescription: Typography.\n---\nCourse instructions.\n"
+      });
+      git(upstream, ["branch", "feature/topic"]);
+      const consumer = createRepo(path.join(fixture.sandbox, "baseline-consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      let stdout = "";
+      const runtime = createTestRuntime({
+        cwd: consumer,
+        env: fixture.runtime.env,
+        onStderr() {},
+        onStdout(message) {
+          stdout += message;
+        }
+      });
+      const flags = scope === "project" ? ["--project"] : [];
+      const root =
+        scope === "project"
+          ? path.join(consumer, ".git/monke-tools/skill-registry")
+          : fixture.registry;
+      const installed =
+        scope === "project"
+          ? path.join(consumer, ".agents/skills/monke-tools/imported")
+          : fixture.installed.codex;
+      const linked = path.join(fixture.sandbox, "unrelated-linked-source");
+      writeSkill(linked, "notes", "Accepted notes.\n");
+      writeExecutable(
+        path.join(fixture.bin, "npx"),
+        `#!/bin/sh
+set -eu
+shift 4
+mkdir -p .agents/skills
+while [ "$1" = --skill ]; do
+  if [ "$2" = '*' ]; then cp -R ${shellQuote(path.join(upstream, "course/skills"))}/* .agents/skills/;
+  else cp -R ${shellQuote(path.join(upstream, "course/skills"))}/"$2" .agents/skills/; fi
+  shift 2
+done
+`
+      );
+      const gitConfig = path.join(fixture.sandbox, "git-config");
+      write(
+        fixture.sandbox,
+        "git-config",
+        `[url "${upstream}"]\n  insteadOf = https://github.com/owner/repeated.git\n`
+      );
+      runtime.env.GIT_CONFIG_GLOBAL = gitConfig;
+      const source = "https://github.com/owner/repeated/tree/feature/topic/course";
+      const canonical = "https://github.com/owner/repeated/course#feature/topic";
+      vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
+      try {
+        await runCliAsync(["skills", "add", linked, "--link", ...flags], runtime);
+        await runCliAsync(["skills", "add", source, ...flags, "--skill", "typography"], runtime);
+        write(
+          root,
+          "skills.lock.json",
+          read(root, "skills.lock.json").replace(
+            `"source": "${canonical}"`,
+            `"source": "${source}"`
+          )
+        );
+        if (linkedEdit) {
+          writeSkill(linked, "notes", "Unreviewed notes.\n");
+        }
+        await runCliAsync(["skills", "add", source, ...flags, "--skill", "color"], runtime);
+        expect(existsSync(path.join(installed, "typography"))).toBeFalsy();
+        expect(read(installed, "color/SKILL.md")).toContain("Color instructions.");
+
+        const beforeUpdate = stdout.length;
+        await runCliAsync(["skills", "update", ...flags], runtime);
+        expect(stdout.slice(beforeUpdate).includes("No skill changes.")).toBe(!linkedEdit);
+        expect(existsSync(fixture.codiffLog)).toBe(linkedEdit);
+        const launch = existsSync(fixture.codiffLog)
+          ? readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")
+          : [];
+        const reviewRepo = launch[2] ?? "";
+        const commit = launch[1] ?? "";
+        const diff = reviewRepo ? git(reviewRepo, ["diff", `${commit}^`, commit]) : "";
+        expect(diff).not.toContain("typography");
+        expect(diff.includes("-Accepted notes.")).toBe(linkedEdit);
+        expect(diff.includes("+Unreviewed notes.")).toBe(linkedEdit);
+
+        const beforeRepeatedUpdate = stdout.length;
+        await runCliAsync(["skills", "update", ...flags], runtime);
+        expect(stdout.slice(beforeRepeatedUpdate)).toContain("No skill changes.");
+        const repeatedLaunch = existsSync(fixture.codiffLog)
+          ? readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")
+          : [];
+        expect(repeatedLaunch).toStrictEqual(launch);
       } finally {
         vi.unstubAllEnvs();
       }
