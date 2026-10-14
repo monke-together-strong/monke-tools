@@ -163,6 +163,55 @@ describe("linked publisher collections", () => {
     expect(existsSync(path.join(installed, "imported/own"))).toBeFalsy();
   });
 
+  test("linked publisher imports isolate consumer overrides from publisher restores", async () => {
+    const { consumer, declare, installed, publisher, runtime } = fixture();
+    const runtimeAt = (cwd: string) =>
+      createTestRuntime({
+        cwd,
+        env: runtime.env,
+        onStderr: runtime.writeStderr,
+        onStdout: runtime.writeStdout
+      });
+    declare("skill");
+    await runCliAsync(["skills", "add", publisher, "--link", "--project"], runtime);
+    const publisherSkill = read(publisher, "skills/imported/base/SKILL.md");
+    await runCliAsync(
+      [
+        "skills",
+        "policy",
+        "publisher",
+        "base",
+        "--project",
+        "--description",
+        "Consumer trigger.",
+        "--model-invocation",
+        "allow"
+      ],
+      runtime
+    );
+    const consumerSkill = read(installed, "imported/base/SKILL.md");
+    expect(consumerSkill).toContain("description: Consumer trigger.");
+    expect(consumerSkill).toContain("disable-model-invocation: false");
+    expect(read(publisher, "skills/imported/base/SKILL.md")).toBe(publisherSkill);
+
+    await runCliAsync(["skills", "restore", "--repo"], runtimeAt(publisher));
+    expect(read(installed, "imported/base/SKILL.md")).toBe(consumerSkill);
+    const other = createRepo(path.join(consumer, "..", "other"), { "README.md": "Other.\n" });
+    await runCliAsync(["skills", "add", publisher, "--link", "--project"], runtimeAt(other));
+    expect(read(other, ".agents/skills/monke-tools/imported/base/SKILL.md")).toBe(publisherSkill);
+    expect(read(installed, "imported/base/SKILL.md")).toBe(consumerSkill);
+
+    write(publisher, "monke.yml", "skills: []\n");
+    await runCliAsync(["skills", "restore", "--repo"], runtimeAt(publisher));
+    expect(existsSync(path.join(publisher, "skills/imported/base"))).toBeFalsy();
+    expect(read(installed, "imported/base/SKILL.md")).toBe(consumerSkill);
+    await runCliAsync(["skills", "update", "--project", "--adapter", "codiff"], runtime);
+    expect(existsSync(path.join(installed, "imported/base"))).toBeFalsy();
+    expect(realpathSync(path.join(installed, "imported/own"))).toBe(
+      realpathSync(path.join(publisher, "skills/own"))
+    );
+  });
+
   test.each(["skill", "reference"] as const)(
     "declared %s selections accept selectors and slugs without duplicate publication",
     async (kind) => {

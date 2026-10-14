@@ -478,7 +478,7 @@ export async function updateLocalSkillSource(options: {
       guidance: nextRecipe.skills,
       linkedSkills: new Map(
         [...discovered]
-          .filter(([, item]) => item.kind === "skill")
+          .filter(([, item]) => item.kind === "skill" && item.selector === undefined)
           .map(([slug, item]) => [slug, item.sourcePath])
       ),
       obsoleteGuidance: previous?.skills.filter(
