@@ -91,6 +91,28 @@ if (installed === 0) throw new Error("No matching skills: " + selectors.join(", 
   );
 }
 
+function installInternalRootImporter(bin: string) {
+  writeExecutable(
+    path.join(bin, "npx"),
+    `#!/bin/sh
+set -eu
+source="$4"
+shift 4
+selection="$2"
+mkdir -p .agents/skills
+if [ -f "$source/SKILL.md" ] && { [ "\${INSTALL_INTERNAL_SKILLS:-}" = 1 ] || [ "\${INSTALL_INTERNAL_SKILLS:-}" = true ] || [ "$selection" != '*' ]; }; then
+  [ "$selection" = '*' ] || [ "$selection" = internal ] || exit 1
+  mkdir -p .agents/skills/internal
+  cp "$source/SKILL.md" .agents/skills/internal/
+elif [ "$selection" = '*' ]; then
+  cp -R "$source/skills/"* .agents/skills/
+else
+  cp -R "$source/skills/$selection" .agents/skills/
+fi
+`
+  );
+}
+
 function installEmptyPublisherImporter(
   bin: string,
   failure = {
@@ -869,9 +891,13 @@ fi
     }
   );
 
-  test.each([false, true])(
-    "wildcard publishers retain declared imports with internal skills enabled=%s",
-    async (includeInternal) => {
+  test.each([
+    { includeInternal: false, selection: "*" },
+    { includeInternal: true, selection: "*" },
+    { includeInternal: false, selection: "internal" }
+  ])(
+    "publishers preserve discovery with internal=$includeInternal selection=$selection",
+    async ({ includeInternal, selection }) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
       const projected = path.join(repo, ".agents/skills/monke-tools/imported");
       const publisher = createRepo(path.join(sandbox, "internal-publisher"), {
@@ -880,28 +906,102 @@ fi
             { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
           ]
         }),
-        "skills/internal/SKILL.md":
-          "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nInternal.\n"
+        "SKILL.md":
+          "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nInternal.\n",
+        "skills/public/SKILL.md":
+          "---\nname: public\ndescription: Public skill.\n---\nPublic guidance.\n"
       });
-      writeExecutable(
-        path.join(bin, "npx"),
-        `#!/bin/sh
-set -eu
-mkdir -p .agents/skills
-if [ -f "$4/skills/internal/SKILL.md" ]; then
-  [ "$INSTALL_INTERNAL_SKILLS" = 1 ]
-  cp -R "$4/skills/internal" .agents/skills/
-else
-  cp -R "$4/skills/first" .agents/skills/
-fi
-`
+      installInternalRootImporter(bin);
+      runtime.env.INSTALL_INTERNAL_SKILLS = includeInternal ? "1" : "";
+      await runCliAsync(
+        ["skills", "add", `${publisher}#HEAD`, "--project", "--skill", selection],
+        runtime
       );
-      if (includeInternal) {
-        runtime.env.INSTALL_INTERNAL_SKILLS = "1";
-      }
-      await runCliAsync(["skills", "add", `${publisher}#HEAD`, "--project"], runtime);
-      expect(read(projected, "first/SKILL.md")).toContain("Pinned first.");
-      expect(existsSync(path.join(projected, "internal"))).toBe(includeInternal);
+      expect(existsSync(path.join(projected, "first/SKILL.md"))).toBe(selection === "*");
+      expect(existsSync(path.join(projected, "internal/SKILL.md"))).toBe(
+        includeInternal || selection === "internal"
+      );
+      expect(existsSync(path.join(projected, "public/SKILL.md"))).toBe(
+        !includeInternal && selection === "*"
+      );
+    }
+  );
+
+  test.each([
+    { action: "update", change: "root" },
+    { action: "readd", change: "declarations" }
+  ])("$action retains public skills when a publisher adds $change", async ({ action, change }) => {
+    const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+    installInternalRootImporter(bin);
+    installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+    runtime.env.INSTALL_INTERNAL_SKILLS = "";
+    const root =
+      "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nInternal.\n";
+    const declarations = stringify({
+      skills: [
+        { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
+      ]
+    });
+    const publisher = createRepo(path.join(sandbox, "changing-publisher"), {
+      "skills/public/SKILL.md":
+        "---\nname: public\ndescription: Public skill.\n---\nRetained public guidance.\n",
+      ...(change === "root" ? { "monke.yml": declarations } : { "SKILL.md": root })
+    });
+    const add = ["skills", "add", `${publisher}#HEAD`, "--project"];
+    const projected = path.join(repo, ".agents/skills/monke-tools/imported");
+    await runCliAsync(add, runtime);
+    const acceptedPublic = read(projected, "public/SKILL.md");
+    write(
+      publisher,
+      change === "root" ? "SKILL.md" : "monke.yml",
+      change === "root" ? root : declarations
+    );
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", `Add publisher ${change}`]);
+    await runCliAsync(
+      action === "readd" ? add : ["skills", "update", "--project", "--adapter", "codiff"],
+      runtime
+    );
+    expect(read(projected, "public/SKILL.md")).toBe(acceptedPublic);
+    expect(read(projected, "first/SKILL.md")).toContain("Pinned first.");
+    expect(existsSync(path.join(projected, "internal"))).toBeFalsy();
+    const accepted: unknown = JSON.parse(
+      read(repo, ".git/monke-tools/skill-registry/skills.lock.json")
+    );
+    expect(accepted).toMatchObject({
+      recipes: [{ selection: ["*"], skills: ["first", "public"] }]
+    });
+  });
+
+  test.each(["*", "first"])(
+    "internal roots do not hide authored collisions from selection %s",
+    async (selection) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      installInternalRootImporter(bin);
+      runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const publisher = createRepo(path.join(sandbox, "colliding-internal-publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
+          ]
+        }),
+        "SKILL.md":
+          "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nInternal.\n",
+        "skills/first/SKILL.md":
+          "---\nname: first\ndescription: Authored skill.\n---\nAuthored collision.\n"
+      });
+      await expect(
+        runCliAsync(
+          ["skills", "add", `${publisher}#HEAD`, "--project", "--skill", selection],
+          runtime
+        )
+      ).rejects.toThrow(/first.*collides/u);
+      const accepted: unknown = JSON.parse(
+        read(repo, ".git/monke-tools/skill-registry/skills.lock.json")
+      );
+      expect(accepted).toStrictEqual({ recipes: [], version: 4 });
+      expect(existsSync(path.join(repo, ".agents/skills/monke-tools/imported/first"))).toBeFalsy();
     }
   );
 

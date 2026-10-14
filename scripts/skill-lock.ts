@@ -545,6 +545,7 @@ async function stageOwnGitSkills(options: {
     const { empty, installed } = await installPublisherSkills({
       allowEmptyCollection,
       directory: collectionDirectory,
+      includeInternal: explicit && ownSelectors.length > 0,
       inspectCollection,
       runtime,
       selectors: inspectCollection ? ["*"] : ownSelectors,
@@ -564,13 +565,6 @@ async function stageOwnGitSkills(options: {
     if (!inspectCollection || !explicit) {
       output = installed;
     }
-  }
-  if (
-    inspectCollection &&
-    !explicit &&
-    !["1", "true"].includes(runtime.env.INSTALL_INTERNAL_SKILLS ?? "")
-  ) {
-    pruneInternalPublisherSkills(collectionDirectory, ownSkills);
   }
   if (inspectCollection && explicit && ownSelectors.length > 0) {
     output = await runtime.execAsync(
@@ -600,13 +594,21 @@ async function stageOwnGitSkills(options: {
 async function installPublisherSkills(options: {
   allowEmptyCollection: boolean;
   directory: string;
+  includeInternal: boolean;
   inspectCollection: boolean;
   runtime: Runtime;
   selectors: string[];
   source: string;
 }) {
-  const { allowEmptyCollection, directory, inspectCollection, runtime, selectors, source } =
-    options;
+  const {
+    allowEmptyCollection,
+    directory,
+    includeInternal,
+    inspectCollection,
+    runtime,
+    selectors,
+    source
+  } = options;
   const command = runtime.platform === "win32" ? "npx.cmd" : "npx";
   const args = buildSkillsInstallArgs({ selectors, source });
   if (inspectCollection) {
@@ -615,7 +617,7 @@ async function installPublisherSkills(options: {
   const installed = await runtime.execAsync(command, args, {
     allowFailure: inspectCollection,
     cwd: directory,
-    ...(inspectCollection ? { env: { INSTALL_INTERNAL_SKILLS: "1" } } : {})
+    ...(inspectCollection && includeInternal ? { env: { INSTALL_INTERNAL_SKILLS: "1" } } : {})
   });
   if (installed.exitCode === 0) {
     return { empty: false, installed };
@@ -687,24 +689,6 @@ function publisherSkillSelection(options: {
     (imported.length > 0 || (explicit && (retainedSkills?.length ?? 0) > 0));
   const allowEmptyCollection = imported.length > 0 && (!explicit || ownSelectors.length === 0);
   return { allowEmptyCollection, explicit, inspectCollection, ownSelectors, selected };
-}
-
-/** Match the pinned importer's default exclusion after staging an entire publisher. */
-function pruneInternalPublisherSkills(stagingDirectory: string, ownSkills: Set<string>) {
-  for (const slug of ownSkills) {
-    const directory = path.join(stagingDirectory, ".agents", "skills", slug);
-    const content = readFileSync(path.join(directory, "SKILL.md"), "utf-8");
-    const frontmatter = /^---\r?\n(?<yaml>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(content);
-    const data = parseOwnedYamlText(
-      frontmatter?.groups?.yaml ?? "{}",
-      directory,
-      z.looseObject({ metadata: z.unknown().optional() })
-    );
-    if (z.looseObject({ internal: z.literal(true) }).safeParse(data.metadata).success) {
-      rmSync(directory, { recursive: true });
-      ownSkills.delete(slug);
-    }
-  }
 }
 
 /** Identify inherited reference kinds without overriding legacy consumer choices. */
