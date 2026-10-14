@@ -112,7 +112,7 @@ Update advances Git refs, replays installers, and rereads linked files, then ope
 one complete comparison. It first updates `monke.yml` imports in connected local
 checkouts: the local Monke installation's source checkout and linked repositories.
 Each checkout keeps its selections and overrides. Review and commit the changed
-YAML files. See [connected update scope](../../../docs/skill-imports.md#review-updates)
+YAML files. See [connected update scope](https://github.com/monke-together-strong/monke-tools/blob/main/docs/skill-imports.md#review-updates)
 for project, release, and installer behavior.
 Up to four Git sources prepare concurrently. Linked
 sources, installer commands, and publication run in recipe order.
