@@ -316,7 +316,9 @@ async function prepareGitSkillUpdate(
 ) {
   const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-update-"));
   try {
-    if (recipe.commit) {
+    // Repo selections may have been edited to include guidance absent from the old pin.
+    // Their baseline is the materialized tree captured before candidate preparation.
+    if (recipe.commit && !repo) {
       await restoreLockedRecipe(repoRoot, recipe, true, runtime);
       for (const item of recipe.skills) {
         const target = importedGuidancePath(before, item);

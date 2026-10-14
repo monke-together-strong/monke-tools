@@ -440,6 +440,83 @@ fi
     expect(read(repo, path.relative(repo, reviewLog))).toContain("--commit");
   });
 
+  test("update accepts a handwritten selection first published after its recorded pin", async () => {
+    const { bin, repo, runtime, sandbox } = repoFixture();
+    const upstream = createRepo(path.join(sandbox, "expanded-source"), {
+      "skills/first/SKILL.md": "---\nname: first\ndescription: First skill.\n---\nOriginal first.\n"
+    });
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+    const originalPin = git(upstream, ["rev-parse", "HEAD"]);
+    const originalFirst = read(repo, "skills/imported/first/SKILL.md");
+    write(
+      upstream,
+      "skills/first/SKILL.md",
+      "---\nname: first\ndescription: First skill.\n---\nUpdated first.\n"
+    );
+    write(
+      upstream,
+      "skills/second/SKILL.md",
+      "---\nname: second\ndescription: Second skill.\n---\nNew second.\n"
+    );
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Publish second skill"]);
+    write(
+      repo,
+      "monke.yml",
+      stringify({
+        skills: [{ commit: originalPin, skills: ["first", "second"], source: upstream }]
+      })
+    );
+    const reviewLog = installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+
+    await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+
+    expect(read(repo, "monke.yml")).toContain(git(upstream, ["rev-parse", "HEAD"]));
+    expect(read(repo, "skills/imported/first/SKILL.md")).toContain("Updated first.");
+    expect(read(repo, "skills/imported/second/SKILL.md")).toContain("New second.");
+    const [, reviewCommit = "", reviewRepo = ""] = read(bin, path.relative(bin, reviewLog))
+      .trim()
+      .split("\n");
+    expect(git(reviewRepo, ["show", `${reviewCommit}^:skills/imported/first/SKILL.md`])).toBe(
+      originalFirst.trimEnd()
+    );
+    expect(
+      git(reviewRepo, ["ls-tree", "--name-only", `${reviewCommit}^`, "skills/imported/second"])
+    ).toBe("");
+    expect(git(reviewRepo, ["show", `${reviewCommit}:skills/imported/second/SKILL.md`])).toContain(
+      "New second."
+    );
+  });
+
+  test("a failed expanded selection retains its recorded pin and accepted files", async () => {
+    const { bin, repo, runtime, upstream } = repoFixture();
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+    const originalPin = git(upstream, ["rev-parse", "HEAD"]);
+    const originalFirst = read(repo, "skills/imported/first/SKILL.md");
+    write(
+      upstream,
+      "skills/first/SKILL.md",
+      "---\nname: first\ndescription: First skill.\n---\nCandidate first.\n"
+    );
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Advance without the selected skill"]);
+    const config = stringify({
+      skills: [{ commit: originalPin, skills: ["first", "unpublished"], source: upstream }]
+    });
+    write(repo, "monke.yml", config);
+    installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+
+    await expect(
+      runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime)
+    ).rejects.toThrow("unpublished");
+
+    expect(read(repo, "monke.yml")).toBe(config);
+    expect(read(repo, "skills/imported/first/SKILL.md")).toBe(originalFirst);
+    expect(existsSync(path.join(repo, "skills/imported/unpublished"))).toBeFalsy();
+  });
+
   test("reference imports and policy and remove commands update the repo declaration", async () => {
     const { repo, runtime, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);

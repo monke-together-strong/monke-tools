@@ -1,3 +1,4 @@
+import { linkSync, mkdirSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -37,10 +38,38 @@ cp -R "$4/skills/example" .agents/skills/
     skills: ["example"],
     source: upstream
   };
-  return { recipe, repo, runtime, upstream };
+  return { recipe, repo, runtime, sandbox, upstream };
 }
 
 describe("repo skill edits preserve unrelated YAML bytes", () => {
+  test.each([
+    { alias: "symlink", temporary: "monke.yml.tmp" },
+    { alias: "hardlink", temporary: "monke.yml.tmp" },
+    { alias: "symlink", temporary: "skills/.monke-restored.json.tmp" },
+    { alias: "hardlink", temporary: "skills/.monke-restored.json.tmp" }
+  ])(
+    "add leaves a $alias at $temporary and its external bytes untouched",
+    async ({ alias, temporary }) => {
+      const { recipe, repo, runtime, sandbox, upstream } = fixture();
+      const external = path.join(sandbox, "external");
+      write(sandbox, "external", "Unrelated external bytes.\n");
+      const target = path.join(repo, temporary);
+      mkdirSync(path.dirname(target), { recursive: true });
+      if (alias === "hardlink") {
+        linkSync(external, target);
+      } else {
+        symlinkSync(external, target);
+      }
+      await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "example"], runtime);
+      expect(read(sandbox, "external")).toBe("Unrelated external bytes.\n");
+      expect(read(repo, temporary)).toBe("Unrelated external bytes.\n");
+      expect(parseDocument(read(repo, "monke.yml")).getIn(["skills", 0, "commit"])).toBe(
+        recipe.commit
+      );
+      expect(read(repo, "skills/imported/example/SKILL.md")).toContain("Example.");
+    }
+  );
+
   test("add appends skills without changing four-space indentation or quoting", async () => {
     const { repo, runtime, upstream } = fixture();
     const original =

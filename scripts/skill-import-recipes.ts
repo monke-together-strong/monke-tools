@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import is from "@sindresorhus/is";
@@ -9,6 +9,7 @@ import * as z from "zod";
 import { MonkeError } from "../src/errors.ts";
 import { unwrapBoundaryResult } from "../src/validation.ts";
 import { IMPORTED_SKILLS_ROOT } from "./import-guidance.ts";
+import { writeSkillImportState } from "./skill-import-state.ts";
 
 export const SKILL_LOCK_PATH = "skills.lock.json";
 const SKILL_IMPORT_RECIPE_STORE_VERSION = 4 as const;
@@ -274,13 +275,10 @@ export function writeImportRecipeStore(repoRoot: string, store: SkillImportRecip
   const normalized = normalizeImportRecipeStore(store);
   const storePath = path.join(repoRoot, SKILL_LOCK_PATH);
   mkdirSync(path.dirname(storePath), { recursive: true });
-  const temporaryStorePath = `${storePath}.tmp`;
-  writeFileSync(
-    temporaryStorePath,
-    `${JSON.stringify({ ...normalized, recipes: normalized.recipes.map(compactRecipe) }, null, 2)}\n`,
-    "utf-8"
+  writeSkillImportState(
+    storePath,
+    `${JSON.stringify({ ...normalized, recipes: normalized.recipes.map(compactRecipe) }, null, 2)}\n`
   );
-  renameSync(temporaryStorePath, storePath);
 }
 
 /** Change only the skills YAML node, preserving the rest of the document. */
@@ -299,9 +297,7 @@ export function writeRepoImportRecipeStore(repoRoot: string, store: SkillImportR
   }
   const recipes = normalizeImportRecipeStore(store).recipes.map(compactRecipe);
   unwrapBoundaryResult(RepoImportRecipesSchema.safeParse(recipes), "Repo import recipes");
-  const temporary = `${file}.tmp`;
-  writeFileSync(temporary, editRepoSkillsYaml(original, document, recipes));
-  renameSync(temporary, file);
+  writeSkillImportState(file, editRepoSkillsYaml(original, document, recipes));
 }
 
 function editRepoSkillsYaml(

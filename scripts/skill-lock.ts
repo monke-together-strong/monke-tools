@@ -8,7 +8,6 @@ import {
   readlinkSync,
   realpathSync,
   rmSync,
-  renameSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
@@ -39,6 +38,7 @@ import type {
   SkillImportRecipeSkill,
   SkillImportRecipeStore
 } from "./skill-import-recipes.ts";
+import { writeSkillImportState } from "./skill-import-state.ts";
 import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from "./skills-cli.ts";
 
 export const MATERIALIZER_VERSION = 1;
@@ -82,8 +82,7 @@ export function rememberRestoredRecipe(repoRoot: string, recipe: SkillImportReci
     tooling: `${SKILLS_CLI_VERSION}/${MATERIALIZER_VERSION}`
   };
   mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(`${file}.tmp`, `${JSON.stringify(markers)}\n`);
-  renameSync(`${file}.tmp`, file);
+  writeSkillImportState(file, `${JSON.stringify(markers)}\n`);
 }
 /** Ignore updates must not mutate another file through a symlink or hard link. */
 export function assertRepoImportIgnoreFile(repoRoot: string) {
