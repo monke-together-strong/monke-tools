@@ -814,6 +814,35 @@ exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.m
     }
   );
 
+  test("malformed publisher declarations retain healthy publisher comparisons for retry", async () => {
+    const f = fixture();
+    await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
+      ...f.runtime,
+      cwd: f.checkout
+    });
+    const broken = createRepo(path.join(f.sandbox, "broken-publisher"), {
+      "monke.yml": "skills: []\n",
+      "skills/own/SKILL.md": "---\nname: own\ndescription: Own.\n---\nOwn.\n"
+    });
+    await runCliAsync(["skills", "add", broken, "--name", "broken"], f.runtime);
+    const previous = readRepoImportRecipeStore(f.checkout).recipes[0]?.commit;
+    const commit = f.advance();
+    write(broken, "monke.yml", "skills: [\n");
+
+    await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(/monke\.yml/u);
+    expect(readRepoImportRecipeStore(f.checkout).recipes[0]?.commit).toBe(commit);
+    expect(existsSync(path.join(f.monkeHome, "skill-reviews/comparisons.json"))).toBeFalsy();
+    expect(existsSync(f.reviewLog)).toBeFalsy();
+    write(broken, "monke.yml", "skills: []\n");
+    await runCliAsync(["skills", "update"], f.runtime);
+
+    const diff = reviewDiff(f.reviewLog);
+    expect(diff).toContain(`-  - commit: ${previous}`);
+    expect(diff).toContain(`+  - commit: ${commit}`);
+    expect(diff).toContain("-First version.");
+    expect(diff).toContain("+Second version.");
+  });
+
   test("the comparison includes publisher restoration performed by consumer refresh", async () => {
     const f = fixture();
     const publisher = createRepo(path.join(f.sandbox, "publisher"), {

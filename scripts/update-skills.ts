@@ -137,18 +137,19 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
     const roots = [...lockedRepositories].toSorted();
     await withSkillLocks([registryRoot, ...connected].toSorted(), runtime, async () => {
       for (const root of connected) {
+        const collection = path.join(
+          "repositories",
+          `${path.basename(root)}-${sha256(root).slice(0, 8)}`
+        );
+        collections.push(collection);
         try {
           if (
             readRepoImportRecipeStore(root).recipes.length === 0 &&
             !existsSync(path.join(root, SKILL_RESTORE_MARKER))
           ) {
+            collections.pop();
             continue;
           }
-          const collection = path.join(
-            "repositories",
-            `${path.basename(root)}-${sha256(root).slice(0, 8)}`
-          );
-          collections.push(collection);
           writeMessage(`Updating repo imports: ${root}\n`);
           // Publisher updates run in connection order before consumer publication.
           // oxlint-disable-next-line no-await-in-loop
