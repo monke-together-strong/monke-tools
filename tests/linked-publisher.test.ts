@@ -145,14 +145,23 @@ describe("linked publisher collections", () => {
     expect(read(installed, "imported/base/SKILL.md")).toContain("disable-model-invocation: false");
   });
 
-  test.each(["readd", "update"])(
-    "%s replaces a retired import with an own skill",
-    async (action) => {
+  test.each([
+    { action: "readd", removeConfig: false },
+    { action: "update", removeConfig: false },
+    { action: "readd", removeConfig: true },
+    { action: "update", removeConfig: true }
+  ])(
+    "$action replaces a retired import with an own skill, removeConfig=$removeConfig",
+    async ({ action, removeConfig }) => {
       const { declare, installed, publisher, runtime } = fixture();
       const add = ["skills", "add", publisher, "--link", "--project"];
       declare("skill");
       await runCliAsync(add, runtime);
-      write(publisher, "monke.yml", "skills: []\n");
+      if (removeConfig) {
+        rmSync(path.join(publisher, "monke.yml"));
+      } else {
+        write(publisher, "monke.yml", "skills: []\n");
+      }
       write(
         publisher,
         "skills/base/SKILL.md",
@@ -172,6 +181,25 @@ describe("linked publisher collections", () => {
       expect(read(installed, "imported/base/SKILL.md")).toContain(
         "description: Publisher trigger."
       );
+      if (removeConfig) {
+        rmSync(path.join(publisher, "monke.yml"));
+      } else {
+        write(publisher, "monke.yml", "skills: []\n");
+      }
+      await runCliAsync(action === "readd" ? add : ["skills", "update", "--project"], runtime);
+      expect(existsSync(path.join(installed, "imported/base"))).toBeFalsy();
+      expect(existsSync(path.join(publisher, "skills/imported/base"))).toBeFalsy();
     }
   );
+
+  test("a Sessions-only config preserves a legacy linked collection without a restore marker", async () => {
+    const { installed, publisher, runtime } = fixture();
+    write(publisher, "monke.yml", "apps: {}\n");
+    const legacy = "---\nname: base\ndescription: Legacy base.\n---\nLegacy instructions.\n";
+    write(publisher, "skills/imported/base/SKILL.md", legacy);
+    await runCliAsync(["skills", "add", publisher, "--link", "--project"], runtime);
+    expect(read(installed, "imported/base/SKILL.md")).toBe(legacy);
+    expect(read(publisher, "skills/imported/base/SKILL.md")).toBe(legacy);
+    expect(existsSync(path.join(publisher, "skills/.monke-restored.json"))).toBeFalsy();
+  });
 });

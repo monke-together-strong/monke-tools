@@ -4,6 +4,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   readlinkSync,
   realpathSync,
@@ -15,6 +16,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+import { parseDocument } from "yaml";
 
 import {
   copyStagedGuidanceToManagedRoots,
@@ -30,7 +33,7 @@ import type {
   SkillImportRecipeSkill,
   SkillImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
-import { restoreSkillImports } from "../scripts/skill-lock.ts";
+import { restoreSkillImports, SKILL_RESTORE_MARKER } from "../scripts/skill-lock.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { containsPath } from "./path-identity.ts";
 import { getMonkeHome } from "./runtime.ts";
@@ -327,7 +330,12 @@ async function discoverLocalGuidance(
     publisher && existsSync(path.join(publisher, "monke.yml"))
       ? readRepoImportRecipeStore(publisher).recipes.flatMap((item) => item.skills)
       : [];
-  if (publisher && existsSync(path.join(publisher, "monke.yml"))) {
+  const managesImports =
+    publisher !== undefined &&
+    (existsSync(path.join(publisher, SKILL_RESTORE_MARKER)) ||
+      (existsSync(path.join(publisher, "monke.yml")) &&
+        parseDocument(readFileSync(path.join(publisher, "monke.yml"), "utf-8")).has("skills")));
+  if (publisher && managesImports) {
     validateDeclaredSlugs(
       discoverSourceSkills(
         resolveLocalSourceRoot(recipe.localSource, workingDirectory),
