@@ -86,7 +86,7 @@ materialize, and setup recreate links in each checkout. After changing a skill
 selection or removing a source, run `mt setup` in other existing worktrees to
 reconcile their links. Removal preserves the source folders.
 
-If a project command fails, Monke restores its registry, agent links, and Git
+If project publication fails, Monke restores its registry, agent links, and Git
 exclusions, or reports retained recovery copies if restoration fails. Linked
 source content stays live. This recovery does not undo changes in external sources
 or installer changes outside the registry and project agent directories.
@@ -123,8 +123,7 @@ skill or reference in the terminal and in `SKILL_UPDATE_SUMMARY.md` in the saved
 comparison. If Codex is unavailable or fails, Monke prints a warning and keeps the
 update and comparison.
 
-Global or repo updates retain successful sources even if another fails. A failed
-project update restores the whole project's registry and links.
+Updates retain successful sources even if another fails.
 Connected publisher updates remain accepted if consumer publication fails.
 Failed installers restore the Skill source folder, but may affect files outside it.
 Back up learned edits before installer updates. Reopen a failed viewer with the
