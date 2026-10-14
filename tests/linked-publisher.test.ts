@@ -39,7 +39,10 @@ shift 4
 mkdir -p .agents/skills
 while [ "$1" = --skill ]; do
   if [ "$2" = '*' ]; then cp -R "$source/skills/"* .agents/skills/;
-  else cp -R "$source/skills/$2" .agents/skills/; fi
+  else
+    slug=$(printf '%s' "$2" | tr '[:upper:] ' '[:lower:]-')
+    cp -R "$source/skills/$slug" .agents/skills/
+  fi
   shift 2
 done
 `
@@ -54,7 +57,7 @@ done
     onStderr() {},
     onStdout() {}
   });
-  function declare(kind: "reference" | "skill", slug = "base") {
+  function declare(kind: "reference" | "skill", slug = "base", selector = "base") {
     write(
       publisher,
       "monke.yml",
@@ -63,7 +66,7 @@ done
           {
             commit: git(upstream, ["rev-parse", "HEAD"]),
             modelInvocation: "deny",
-            skills: [{ description: "Publisher trigger.", kind, selector: "base", slug }],
+            skills: [{ description: "Publisher trigger.", kind, selector, slug }],
             source: upstream
           }
         ]
@@ -159,6 +162,70 @@ describe("linked publisher collections", () => {
     expect(read(installed, "references/imported/base/MAIN.md")).toBe("Base instructions.\n");
     expect(existsSync(path.join(installed, "imported/own"))).toBeFalsy();
   });
+
+  test.each(["skill", "reference"] as const)(
+    "declared %s selections accept selectors and slugs without duplicate publication",
+    async (kind) => {
+      const { declare, installed, publisher, runtime, upstream } = fixture();
+      write(
+        upstream,
+        "skills/base-skill/SKILL.md",
+        "---\nname: Base Skill\ndescription: Base trigger.\n---\nBase instructions.\n"
+      );
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Publish named skill"]);
+      declare(kind, "base-skill", "Base Skill");
+      await runCliAsync(
+        ["skills", "add", publisher, "--link", "--project", "--skill", "BASE SKILL"],
+        runtime
+      );
+      const entry =
+        kind === "skill"
+          ? "imported/base-skill/SKILL.md"
+          : "references/imported/base-skill/MAIN.md";
+      expect(read(installed, entry)).toContain("Base instructions.");
+      await runCliAsync(
+        ["skills", "add", publisher, "--link", "--project", "--skill", "Base Skill", "base-skill"],
+        runtime
+      );
+      expect(read(installed, entry)).toContain("Base instructions.");
+      expect(existsSync(path.join(installed, "imported/own"))).toBeFalsy();
+      if (kind === "skill") {
+        await runCliAsync(
+          [
+            "skills",
+            "policy",
+            "publisher",
+            "base-skill",
+            "--project",
+            "--description",
+            "Consumer trigger.",
+            "--model-invocation",
+            "allow"
+          ],
+          runtime
+        );
+      }
+      write(
+        upstream,
+        "skills/base-skill/SKILL.md",
+        "---\nname: base-skill\ndescription: Changed trigger.\n---\nChanged instructions.\n"
+      );
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Change selector without changing slug"]);
+      declare(kind, "base-skill", "base-skill");
+      await runCliAsync(["skills", "update", "--project", "--adapter", "codiff"], runtime);
+      const expected = [
+        "Changed instructions.",
+        ...(kind === "skill"
+          ? ["description: Consumer trigger.", "disable-model-invocation: false"]
+          : [])
+      ];
+      for (const text of expected) {
+        expect(read(installed, entry)).toContain(text);
+      }
+    }
+  );
 
   test("a declared reference collision fails before restoring or publishing guidance", async () => {
     const { consumer, declare, installed, publisher, runtime } = fixture();

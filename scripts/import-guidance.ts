@@ -439,9 +439,14 @@ function contentContainsRelativePathInto(
       : [])
   ];
   const consumerDirectory = realpathSync.native(path.dirname(consumerPath));
-  return destinations.some((destination) =>
-    pathPointsIntoReference(`${consumerDirectory}${path.sep}${destination}`, targetRoot)
-  );
+  return destinations.some((destination) => {
+    const filePath = destination.replace(/[?#].*$/u, "");
+    return (
+      pathPointsIntoReference(`${consumerDirectory}${path.sep}${destination}`, targetRoot) ||
+      (filePath !== destination &&
+        pathPointsIntoReference(`${consumerDirectory}${path.sep}${filePath}`, targetRoot))
+    );
+  });
 }
 
 function pathPointsIntoReference(candidate: string, referenceRoot: string) {

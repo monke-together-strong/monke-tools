@@ -345,16 +345,20 @@ async function discoverLocalGuidance(
     await restoreSkillImports(publisher, false, runtime, declaredStore);
   }
   const root = resolveLocalSourceRoot(recipe.localSource, workingDirectory);
-  const discovered = new Map<string, { kind: SkillImportRecipeSkill["kind"]; sourcePath: string }>(
+  const discovered = new Map<
+    string,
+    { kind: SkillImportRecipeSkill["kind"]; selector: string; sourcePath: string }
+  >(
     [...discoverSourceSkills(root)].map(([slug, sourcePath]) => [
       slug,
-      { kind: "skill", sourcePath }
+      { kind: "skill", selector: slug, sourcePath }
     ])
   );
   if (publisher) {
     for (const item of declared) {
       discovered.set(item.slug, {
         kind: item.kind,
+        selector: item.selector,
         sourcePath: importedGuidancePath(publisher, item)
       });
     }
@@ -429,27 +433,41 @@ export async function updateLocalSkillSource(options: {
     if (discovered.size === 0) {
       throw new MonkeError(`No skills found in ${root}`);
     }
-    const selected = recipe.selection ?? [...discovered.keys()];
-    const skills = selected.map((slug) => {
-      const source = discovered.get(slug);
-      if (!source) {
-        throw new MonkeError(`Selected Skill ${slug} is missing from ${root}`);
-      }
-      const target = path.join(staging, ".agents", "skills", slug);
-      cpSync(source.sourcePath, target, {
-        dereference: true,
-        recursive: true
-      });
-      return {
-        ...recipe.skills.find((item) => item.slug === slug),
-        kind: source.kind,
-        selector: slug,
-        slug
-      };
+    const selection = recipe.selection?.map((selector) => {
+      const retained = recipe.skills.find((item) =>
+        [item.slug, item.selector].some((name) => name.toLowerCase() === selector.toLowerCase())
+      );
+      return retained && discovered.has(retained.slug) ? retained.slug : selector;
     });
+    const selected = selection ?? [...discovered.keys()];
+    const entries = [...discovered];
+    const matchesSelection = ([slug, source]: (typeof entries)[number], selector: string) =>
+      slug.toLowerCase() === selector.toLowerCase() ||
+      source.selector.toLowerCase() === selector.toLowerCase();
+    for (const selector of selected) {
+      if (!entries.some((entry) => matchesSelection(entry, selector))) {
+        throw new MonkeError(`Selected Skill ${selector} is missing from ${root}`);
+      }
+    }
+    const skills = entries
+      .filter((entry) => selected.some((selector) => matchesSelection(entry, selector)))
+      .map(([slug, source]) => {
+        const target = path.join(staging, ".agents", "skills", slug);
+        cpSync(source.sourcePath, target, {
+          dereference: true,
+          recursive: true
+        });
+        return {
+          ...recipe.skills.find((item) => item.slug === slug),
+          kind: source.kind,
+          selector: source.selector,
+          slug
+        };
+      });
     const nextRecipe = {
       ...recipe,
       localSource: { ...localSource, skillSourceFolder: root },
+      selection,
       skills
     };
     const next = normalizeImportRecipeStore({

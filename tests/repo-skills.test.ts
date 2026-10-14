@@ -637,7 +637,13 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     expect(readlinkSync(path.join(repo, "skills/local/cycle"))).toBe(".");
   });
 
-  test.each(["leaf chain", "Markdown alias"] as const)(
+  test.each([
+    "leaf chain",
+    "Markdown fragment alias",
+    "Markdown query alias",
+    "raw fragment alias",
+    "raw query alias"
+  ] as const)(
     "restore protects a reference consumed through a native %s dependency",
     async (kind) => {
       const { repo, runtime, upstream } = repoFixture();
@@ -646,8 +652,10 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
         runtime
       );
       const dependency = kind === "leaf chain" ? "base.md" : "../../authored/base.md";
-      const link = kind === "leaf chain" ? dependency : `${dependency}#usage`;
-      const consumer = `---\nname: author\ndescription: Authored skill.\n---\nRead [base](${link}).\n`;
+      const suffix = kind.includes("query") ? "?view=source#usage" : "#usage";
+      const link = kind === "leaf chain" ? dependency : `${dependency}${suffix}`;
+      const instruction = kind.startsWith("raw") ? `Read \`${link}\`.` : `Read [base](${link}).`;
+      const consumer = `---\nname: author\ndescription: Authored skill.\n---\n${instruction}\n`;
       write(repo, "skills/author/SKILL.md", consumer);
       mkdirSync(path.join(repo, "authored"));
       symlinkSync(
