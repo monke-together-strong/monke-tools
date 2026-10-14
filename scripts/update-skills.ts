@@ -208,13 +208,19 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
         failures.push(error instanceof Error ? error.message : String(error));
       }
       // Consumer restoration can change publisher files, so capture final bytes last.
+      let capturedCollections = 0;
       for (const collection of updatedCollections) {
         try {
           // oxlint-disable-next-line no-await-in-loop
           await collection.snapshotAfter();
+          capturedCollections += 1;
         } catch (error) {
           failures.push(error instanceof Error ? error.message : String(error));
         }
+      }
+      // Include every publisher and the consumer before saving or accepting baselines.
+      if (capturedCollections !== collections.length + 1) {
+        return;
       }
       try {
         await summarizeSkillChanges({ after, before, collections, runtime, writeMessage });

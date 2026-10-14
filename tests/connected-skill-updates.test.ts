@@ -1,4 +1,12 @@
-import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync
+} from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -741,6 +749,70 @@ exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.m
     expect(diff).toContain("-First version.");
     expect(diff).toContain("+Second version.");
   });
+
+  test.each(["consumer before", "publisher after"])(
+    "incomplete %s snapshots retain baselines without publishing a comparison",
+    async (phase) => {
+      const f = fixture();
+      await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
+        ...f.runtime,
+        cwd: f.checkout
+      });
+      await runCliAsync(["skills", "list"], f.runtime);
+      const gate = path.join(f.sandbox, "corrupt-publisher");
+      const yaml = path.join(f.checkout, "monke.yml");
+      if (phase === "publisher after") {
+        await runCliAsync(
+          [
+            "skills",
+            "add",
+            "--name",
+            "installer",
+            "--command",
+            `if test -f ${shellQuote(gate)}; then cp ${shellQuote(yaml)} ${shellQuote(`${yaml}.accepted`)}; printf 'skills: [' > ${shellQuote(yaml)}; fi`,
+            "--cwd",
+            f.upstream,
+            "--skill",
+            "extra"
+          ],
+          f.runtime
+        );
+      }
+      const previous = readRepoImportRecipeStore(f.checkout).recipes[0]?.commit;
+      const commit = f.advance();
+      const baseline = path.join(
+        f.monkeHome,
+        "skill-registry/.monke-skill-baseline/skills/imported/base/SKILL.md"
+      );
+      if (phase === "consumer before") {
+        chmodSync(baseline, 0o000);
+      } else {
+        write(f.sandbox, "corrupt-publisher", "Corrupt YAML only during update.\n");
+      }
+      try {
+        await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(
+          phase === "consumer before" ? /EACCES/u : /monke\.yml/u
+        );
+        expect(existsSync(path.join(f.monkeHome, "skill-reviews/comparisons.json"))).toBeFalsy();
+        expect(existsSync(f.reviewLog)).toBeFalsy();
+      } finally {
+        if (phase === "consumer before") {
+          chmodSync(baseline, 0o644);
+        } else {
+          cpSync(`${yaml}.accepted`, yaml);
+          rmSync(gate);
+        }
+      }
+      expect(readRepoImportRecipeStore(f.checkout).recipes[0]?.commit).toBe(commit);
+      await runCliAsync(["skills", "update"], f.runtime);
+
+      const diff = reviewDiff(f.reviewLog);
+      expect(diff).toContain(`-  - commit: ${previous}`);
+      expect(diff).toContain(`+  - commit: ${commit}`);
+      expect(diff).toContain("-First version.");
+      expect(diff).toContain("+Second version.");
+    }
+  );
 
   test("the comparison includes publisher restoration performed by consumer refresh", async () => {
     const f = fixture();
