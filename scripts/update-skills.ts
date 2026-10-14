@@ -19,7 +19,7 @@ import pLimit from "p-limit";
 import { configureCliParser } from "../src/cli-errors.ts";
 import { MonkeError } from "../src/errors.ts";
 import { updateLocalSkillSource } from "../src/local-skill-source.ts";
-import { createRuntime, getMonkeHome } from "../src/runtime.ts";
+import { createRuntime, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
 import { sha256 } from "../src/sha256.ts";
 import type { Runtime } from "../src/types.ts";
 import {
@@ -190,11 +190,14 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
           await summarizeSkillChanges({ after, before, collections, runtime, writeMessage });
           const comparison = await saveSkillComparison(before, after, runtime);
           // A failed save must leave prior baselines available for the next review.
-          for (const collection of updatedCollections) {
-            try {
-              collection.rememberBaseline();
-            } catch (error) {
-              failures.push(error instanceof Error ? error.message : String(error));
+          const remembered = await Promise.allSettled(
+            updatedCollections.map((collection) => collection.rememberBaseline())
+          );
+          for (const result of remembered) {
+            if (result.status === "rejected") {
+              failures.push(
+                result.reason instanceof Error ? result.reason.message : String(result.reason)
+              );
             }
           }
           if (comparison) {
@@ -251,7 +254,7 @@ async function updateSkills(
     ignoreRepoImports(repoRoot, runtime);
   }
   const migrating = store.recipes.some((recipe) => !recipe.localSource && !recipe.commit);
-  const retainedBefore = snapshotUpdateBefore({
+  const forgetBefore = await snapshotUpdateBefore({
     before,
     migrating,
     repo: dependencies.repo,
@@ -382,14 +385,12 @@ async function updateSkills(
   let snapshotComplete = false;
   return {
     failure: skillUpdateFailure(failures, finalizationFailure),
-    rememberBaseline: () => {
+    rememberBaseline: async () => {
       if (snapshotComplete) {
         if (existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
           rememberSkillGuidance(repoRoot, acceptedGuidance, store);
         }
-        if (retainedBefore) {
-          rmSync(retainedBefore, { recursive: true });
-        }
+        await forgetBefore?.();
       }
     },
     snapshotAfter: () => {
@@ -400,7 +401,7 @@ async function updateSkills(
   };
 }
 
-function snapshotUpdateBefore(options: {
+async function snapshotUpdateBefore(options: {
   before: string;
   migrating: boolean;
   repo?: boolean;
@@ -413,26 +414,37 @@ function snapshotUpdateBefore(options: {
     snapshotSkillUpdateBaseline(repoRoot, before, migrating, store);
     return;
   }
-  // Pins and generated files can advance even when comparison storage fails.
-  // Retain their original state until a complete comparison is durably saved.
-  const retained = path.join(
-    getMonkeHome(runtime),
-    "skill-update-baselines",
-    sha256(realpathSync.native(repoRoot))
-  );
-  if (!existsSync(retained)) {
-    mkdirSync(path.dirname(retained), { mode: 0o700, recursive: true });
-    const staging = mkdtempSync(`${retained}-`);
+  const home = getMonkeHome(runtime);
+  const key = sha256(realpathSync.native(repoRoot));
+  const namespace = `skill-update-baseline:${key}`;
+  return await withScopedLockAsync(home, namespace, () => {
+    const root = path.join(home, "skill-update-baselines", key);
+    mkdirSync(root, { mode: 0o700, recursive: true });
+    const pending = readdirSync(root).map((entry) => path.join(root, entry));
+    const staging = mkdtempSync(`${root}-`);
+    const retained = path.join(root, path.basename(staging));
     try {
-      snapshotSkillUpdateBaseline(repoRoot, staging, migrating, store);
-      snapshotRepoDeclaration(repoRoot, staging, true);
+      // Each in-flight update owns a complete copy, so another saved comparison
+      // can discard older snapshots without losing this attempt's retry state.
+      if (pending[0]) {
+        cpSync(pending[0], staging, { recursive: true, verbatimSymlinks: true });
+      } else {
+        snapshotSkillUpdateBaseline(repoRoot, staging, migrating, store);
+        snapshotRepoDeclaration(repoRoot, staging, true);
+      }
       renameSync(staging, retained);
+      cpSync(retained, before, { recursive: true, verbatimSymlinks: true });
     } finally {
       rmSync(staging, { force: true, recursive: true });
     }
-  }
-  cpSync(retained, before, { recursive: true, verbatimSymlinks: true });
-  return retained;
+    return async () => {
+      await withScopedLockAsync(home, namespace, () => {
+        for (const snapshot of [...pending, retained]) {
+          rmSync(snapshot, { force: true, recursive: true });
+        }
+      });
+    };
+  });
 }
 
 function snapshotRepoDeclaration(repoRoot: string, destination: string, repo = false) {

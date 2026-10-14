@@ -10,6 +10,7 @@ import {
 } from "../scripts/skill-import-recipes.ts";
 import { saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
+import type { Runtime } from "../src/types.ts";
 import {
   createRepo,
   git,
@@ -139,6 +140,27 @@ function reviewDiff(log: string) {
   return git(launch[2] ?? "", ["diff", `${launch[1]}^`, launch[1] ?? ""]);
 }
 
+function pauseSummary(runtime: Runtime) {
+  const entered = Promise.withResolvers<undefined>();
+  const released = Promise.withResolvers<undefined>();
+  return {
+    entered: entered.promise,
+    release: () => {
+      released.resolve(undefined);
+    },
+    runtime: {
+      ...runtime,
+      async execAsync(...args: Parameters<Runtime["execAsync"]>) {
+        if (args[0] === "codex") {
+          entered.resolve(undefined);
+          await released.promise;
+        }
+        return await runtime.execAsync(...args);
+      }
+    }
+  };
+}
+
 describe("updates through connected local repositories", () => {
   test("bare update advances the local Monke checkout and its installed imports", async () => {
     const f = fixture();
@@ -238,27 +260,85 @@ describe("updates through connected local repositories", () => {
     expect(diff).toContain("monke.yml");
   });
 
-  test("a missing link does not stop connected healthy imports", async () => {
-    const f = fixture();
-    await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
-      ...f.runtime,
-      cwd: f.checkout
-    });
-    const missing = createRepo(path.join(f.sandbox, "missing"), {
-      "skills/missing/SKILL.md": "---\nname: missing\ndescription: Missing.\n---\nMissing.\n"
-    });
-    await runCliAsync(["skills", "add", missing], f.runtime);
-    rmSync(missing, { recursive: true });
-    const commit = f.advance();
+  test.each(["missing", "file"])(
+    "a %s link does not stop connected healthy imports",
+    async (kind) => {
+      const f = fixture();
+      await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
+        ...f.runtime,
+        cwd: f.checkout
+      });
+      const missing = createRepo(path.join(f.sandbox, "missing"), {
+        "skills/missing/SKILL.md": "---\nname: missing\ndescription: Missing.\n---\nMissing.\n"
+      });
+      await runCliAsync(["skills", "add", missing], f.runtime);
+      rmSync(missing, { recursive: true });
+      if (kind === "file") {
+        write(f.sandbox, "missing", "The linked checkout was replaced by a file.\n");
+      }
+      const commit = f.advance();
 
-    await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(/missing/u);
+      await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(/missing/u);
 
-    expect(readRepoImportRecipeStore(f.checkout).recipes[0]?.commit).toBe(commit);
-    expect(read(f.home, ".codex/skills/monke-tools/imported/base/SKILL.md")).toContain(
-      "Second version."
-    );
-    expect(reviewDiff(f.reviewLog)).toContain("Second version.");
-  });
+      expect(readRepoImportRecipeStore(f.checkout).recipes[0]?.commit).toBe(commit);
+      expect(read(f.home, ".codex/skills/monke-tools/imported/base/SKILL.md")).toContain(
+        "Second version."
+      );
+      expect(reviewDiff(f.reviewLog)).toContain("Second version.");
+    }
+  );
+
+  test.each([false, true])(
+    "overlapping publisher comparisons retain independent recovery when save fails: %s",
+    async (failSave) => {
+      const f = fixture();
+      const repoRuntime = { ...f.runtime, cwd: f.checkout };
+      await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], repoRuntime);
+      await runCliAsync(["skills", "list"], f.runtime);
+      const original = readRepoImportRecipeStore(f.checkout).recipes[0]?.commit;
+      f.advance();
+      const globalSummary = pauseSummary(f.runtime);
+      const repoSummary = pauseSummary(repoRuntime);
+      const globalUpdate = runCliAsync(["skills", "update"], globalSummary.runtime);
+      let repoUpdate: Promise<void> | undefined;
+      try {
+        await globalSummary.entered;
+        write(
+          f.upstream,
+          "skills/base/SKILL.md",
+          "---\nname: base\ndescription: Base.\n---\nThird version.\n"
+        );
+        git(f.upstream, ["add", "."]);
+        git(f.upstream, ["commit", "-m", "Advance during review"]);
+        const current = git(f.upstream, ["rev-parse", "HEAD"]);
+        repoUpdate = runCliAsync(["skills", "update", "--repo"], repoSummary.runtime);
+        await repoSummary.entered;
+        globalSummary.release();
+        await globalUpdate;
+        rmSync(f.reviewLog);
+        if (failSave) {
+          rmSync(path.join(f.monkeHome, "skill-reviews"), { recursive: true });
+          write(f.monkeHome, "skill-reviews", "Obstructed second comparison.\n");
+        }
+        repoSummary.release();
+        const error = await repoUpdate.then(() => "", String);
+        expect(error).toMatch(failSave ? /skill-reviews/u : /^$/u);
+        if (failSave) {
+          rmSync(path.join(f.monkeHome, "skill-reviews"));
+          await runCliAsync(["skills", "update", "--repo"], repoRuntime);
+        }
+        const diff = reviewDiff(f.reviewLog);
+        expect(diff).toContain(`-  - commit: ${original}`);
+        expect(diff).toContain(`+  - commit: ${current}`);
+        expect(diff).toContain("-First version.");
+        expect(diff).toContain("+Third version.");
+      } finally {
+        globalSummary.release();
+        repoSummary.release();
+        await Promise.allSettled([globalUpdate, ...(repoUpdate ? [repoUpdate] : [])]);
+      }
+    }
+  );
 
   test("failed publisher imports keep accepted pins while healthy imports reach consumers", async () => {
     const f = fixture();

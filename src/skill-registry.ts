@@ -339,11 +339,16 @@ function connectedSkillRepositories(
     if (!existsSync(cwd)) {
       return [];
     }
-    const result = runtime.exec("git", ["rev-parse", "--show-toplevel"], {
-      allowFailure: true,
-      cwd
-    });
-    return result.exitCode === 0 ? [result.stdout.trim()] : [];
+    try {
+      const result = runtime.exec("git", ["rev-parse", "--show-toplevel"], {
+        allowFailure: true,
+        cwd
+      });
+      return result.exitCode === 0 ? [result.stdout.trim()] : [];
+    } catch {
+      // The ordinary source update reports broken links while healthy sources continue.
+      return [];
+    }
   });
 }
 
