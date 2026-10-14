@@ -247,7 +247,7 @@ async function runSkillsRegistryLocked(
     }
     return;
   }
-  let changedSource: string;
+  let changedSources: string[];
   if (request.action === "create" || request.action === "adopt") {
     await acquireManagedSkillSource({
       guidanceRoot: guidance,
@@ -270,10 +270,10 @@ async function runSkillsRegistryLocked(
     });
     return;
   } else if (request.action === "add") {
-    changedSource = await addSkillSource(runtime, root, store, request, scope);
+    changedSources = await addSkillSource(runtime, root, store, request, scope);
   } else {
     const recipe = findRecipe(store, request.source);
-    changedSource = recipe.source;
+    changedSources = [recipe.source];
     if (request.action === "remove") {
       await withSkillPublicationTransaction(
         runtime,
@@ -292,7 +292,7 @@ async function runSkillsRegistryLocked(
             repoRoot: root,
             stagingDirectory: root
           });
-          completeRegistryChange(runtime, root, store, [changedSource], scope);
+          completeRegistryChange(runtime, root, store, changedSources, scope);
         }
       );
       return;
@@ -300,13 +300,7 @@ async function runSkillsRegistryLocked(
     const nextRecipe = setRecipePolicy(recipe, request);
     await applyRecipePolicy(runtime, root, store, nextRecipe, scope);
   }
-  completeRegistryChange(
-    runtime,
-    root,
-    store,
-    request.action === "add" && request.source ? [request.source, changedSource] : [changedSource],
-    scope
-  );
+  completeRegistryChange(runtime, root, store, changedSources, scope);
 }
 
 function completeRegistryChange(
@@ -484,7 +478,7 @@ async function addSkillSource(
       );
     }
   });
-  return recipe.source;
+  return [recipe.source];
 }
 
 /** Validate the retained imports together with a candidate install's owned guidance. */
@@ -683,7 +677,7 @@ async function addGitSkillSource(
       }
     });
     rememberRestoredRecipe(root, nextRecipe);
-    return revision.source;
+    return previous ? [previous.source, revision.source] : [revision.source];
   } finally {
     rmSync(staging, { force: true, recursive: true });
   }

@@ -1178,6 +1178,69 @@ done
     }
   );
 
+  test.each([
+    { kind: "link", scope: "global", source: "foo" },
+    { kind: "link", scope: "global", source: "./foo" },
+    { kind: "command", scope: "global", source: "foo" },
+    { kind: "command", scope: "global", source: "./foo" },
+    { kind: "link", scope: "project", source: "foo" },
+    { kind: "link", scope: "project", source: "./foo" },
+    { kind: "command", scope: "project", source: "foo" },
+    { kind: "command", scope: "project", source: "./foo" }
+  ])(
+    "$scope $kind add from $source preserves an unrelated source's review baseline",
+    async ({ kind, scope, source }) => {
+      const fixture = registryFixture();
+      const consumer = createRepo(path.join(fixture.sandbox, "baseline-consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const original = path.join(fixture.sandbox, "original-collection");
+      writeSkill(original, "notes", "Accepted notes.\n");
+      writeSkill(path.join(consumer, "foo"), "color", "New collection.\n");
+      let stdout = "";
+      const runtime = createTestRuntime({
+        cwd: consumer,
+        env: fixture.runtime.env,
+        onStderr() {},
+        onStdout(message) {
+          stdout += message;
+        }
+      });
+      const flags = scope === "project" ? ["--project"] : [];
+      await runCliAsync(["skills", "add", original, "--link", "--name", "foo", ...flags], runtime);
+      writeSkill(original, "notes", "Unreviewed notes.\n");
+      await runCliAsync(
+        [
+          "skills",
+          "add",
+          source,
+          "--name",
+          "bar",
+          ...(kind === "link" ? ["--link"] : ["--command", "true"]),
+          ...flags
+        ],
+        runtime
+      );
+
+      const beforeUpdate = stdout.length;
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(stdout.slice(beforeUpdate)).not.toContain("No skill changes.");
+      const launch = readFileSync(fixture.codiffLog, "utf-8").trim().split("\n");
+      expect(launch).toHaveLength(3);
+      const reviewRepo = launch[2] ?? "";
+      const commit = launch[1] ?? "";
+      const diff = git(reviewRepo, ["diff", `${commit}^`, commit]);
+      expect(diff).toContain("-Accepted notes.");
+      expect(diff).toContain("+Unreviewed notes.");
+      expect(diff).not.toContain("skills/imported/color");
+
+      const beforeRepeatedUpdate = stdout.length;
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(stdout.slice(beforeRepeatedUpdate)).toContain("No skill changes.");
+      expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toStrictEqual(launch);
+    }
+  );
+
   test.each(["main", "feature/topic"])(
     "tree source at %s keeps its identity across registry changes",
     async (updateRef) => {
