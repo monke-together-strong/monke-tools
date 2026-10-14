@@ -9,7 +9,8 @@ import {
   realpathSync,
   renameSync,
   rmSync,
-  symlinkSync
+  symlinkSync,
+  unlinkSync
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -740,6 +741,59 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
       expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
       expect(read(repo, "skills/author/SKILL.md")).toBe(repairedAuthor);
       expect(readlinkSync(path.join(repo, "shortcut"))).toBe(shortcut);
+    }
+  );
+
+  test.each(["markdown", "symlink"] as const)(
+    "restore preserves a $0 dependency that traverses an Imported reference before leaving it",
+    async (kind) => {
+      const { repo, runtime, upstream } = repoFixture();
+      write(upstream, "skills/first/deep/deeper/keep.txt", "Keep traversal directories.\n");
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Add nested reference support"]);
+      await runCliAsync(
+        ["skills", "add", upstream, "--repo", "--ref", "--skill", "first"],
+        runtime
+      );
+      const dependency = "../../shortcut/../../../../outside.md";
+      const author = `---\nname: author\ndescription: Authored skill.\n---\nRead [outside](${kind === "markdown" ? dependency : "context.md"}).\n`;
+      write(repo, "skills/author/SKILL.md", author);
+      const shortcut = "skills/references/imported/first/deep/deeper";
+      symlinkSync(shortcut, path.join(repo, "shortcut"), "dir");
+      write(repo, "skills/references/outside.md", "Retained outside guidance.\n");
+      const context = path.join(repo, "skills/author/context.md");
+      if (kind === "symlink") {
+        symlinkSync(dependency, context);
+      }
+      const rawDependency = `${repo}/skills/author/${dependency}`;
+      expect(readFileSync(rawDependency, "utf-8")).toBe("Retained outside guidance.\n");
+      write(repo, "monke.yml", "skills: []\n");
+      const marker = read(repo, "skills/.monke-restored.json");
+
+      await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
+        "Cannot replace Imported reference first"
+      );
+
+      expect(read(repo, "monke.yml")).toBe("skills: []\n");
+      expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+      expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
+      expect(read(repo, "skills/author/SKILL.md")).toBe(author);
+      expect(readFileSync(rawDependency, "utf-8")).toBe("Retained outside guidance.\n");
+      expect(readlinkSync(path.join(repo, "shortcut"))).toBe(shortcut);
+      if (kind === "symlink") {
+        unlinkSync(context);
+        write(repo, "skills/author/context.md", "Self-contained context.\n");
+      } else {
+        write(
+          repo,
+          "skills/author/SKILL.md",
+          author.replace(dependency, "../../references/outside.md")
+        );
+      }
+
+      await runCliAsync(["skills", "restore", "--repo"], runtime);
+      expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
+      expect(read(repo, "skills/references/outside.md")).toBe("Retained outside guidance.\n");
     }
   );
 

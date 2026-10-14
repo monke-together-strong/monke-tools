@@ -448,7 +448,10 @@ function pathPointsIntoReference(candidate: string, referenceRoot: string) {
   if (containsPath(referenceRoot, path.resolve(candidate))) {
     return true;
   }
-  return existsSync(candidate) && containsPath(referenceRoot, resolveSkillPath(candidate).resolved);
+  return (
+    existsSync(candidate) &&
+    [...resolveSkillPath(candidate).paths].some((entry) => containsPath(referenceRoot, entry))
+  );
 }
 
 export function importedGuidancePath(
