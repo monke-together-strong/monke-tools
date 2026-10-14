@@ -469,7 +469,7 @@ function snapshotUpdateBefore(options: {
   const key = sha256(realpathSync.native(repoRoot));
   const retained = path.join(home, "skill-update-baselines", key, sha256(options.reviewOwner));
   // Each consumer owns its retry baseline, even if another consumer saves a review.
-  // The repository mutation lock covers it through durable review saving.
+  // The lock on accepted declarations covers this snapshot until the review is saved.
   if (!existsSync(retained)) {
     mkdirSync(path.dirname(retained), { mode: 0o700, recursive: true });
     const staging = mkdtempSync(`${retained}-`);
