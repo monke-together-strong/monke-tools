@@ -3,6 +3,7 @@ import {
   existsSync,
   linkSync,
   mkdirSync,
+  readFileSync,
   readlinkSync,
   readdirSync,
   realpathSync,
@@ -677,6 +678,75 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
       );
     }
   );
+
+  test.each([false, true])(
+    "restore preserves a native dependency whose lexical spelling escapes with outside file=%s",
+    async (outsideFileExists) => {
+      const { repo, runtime, sandbox, upstream } = repoFixture();
+      write(upstream, "skills/first/deep/deeper/keep.txt", "Accepted support bytes.\n");
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Add nested reference support"]);
+      await runCliAsync(
+        ["skills", "add", upstream, "--repo", "--ref", "--skill", "first"],
+        runtime
+      );
+      const dependency = "../../shortcut/../../MAIN.md";
+      const author = `---\nname: author\ndescription: Authored skill.\n---\nRead [first](${dependency}).\n`;
+      write(repo, "skills/author/SKILL.md", author);
+      const shortcut = "skills/references/imported/first/deep/deeper";
+      symlinkSync(shortcut, path.join(repo, "shortcut"), "dir");
+      const outsideBytes = outsideFileExists ? "Unrelated outside file.\n" : undefined;
+      if (outsideBytes !== undefined) {
+        write(sandbox, "MAIN.md", outsideBytes);
+      }
+      const rawDependency = `${repo}/skills/author/${dependency}`;
+      expect(readFileSync(rawDependency, "utf-8")).toBe("Pinned first.\n");
+      write(repo, "monke.yml", "skills: []\n");
+      const marker = read(repo, "skills/.monke-restored.json");
+      const ignored = read(repo, ".gitignore");
+
+      await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
+        /Cannot (?:resolve existing reference dependency|replace Imported reference first)/u
+      );
+
+      expect(read(repo, "monke.yml")).toBe("skills: []\n");
+      expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+      expect(read(repo, ".gitignore")).toBe(ignored);
+      expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
+      expect(read(repo, "skills/references/imported/first/deep/deeper/keep.txt")).toBe(
+        "Accepted support bytes.\n"
+      );
+      expect(read(repo, "skills/author/SKILL.md")).toBe(author);
+      expect(readFileSync(rawDependency, "utf-8")).toBe("Pinned first.\n");
+      expect(readlinkSync(path.join(repo, "shortcut"))).toBe(shortcut);
+      expect(existsSync(path.join(sandbox, "MAIN.md"))).toBe(outsideFileExists);
+      expect(outsideFileExists ? read(sandbox, "MAIN.md") : undefined).toBe(outsideBytes);
+
+      const repairedAuthor =
+        "---\nname: author\ndescription: Authored skill.\n---\nSelf-contained.\n";
+      write(repo, "skills/author/SKILL.md", repairedAuthor);
+      await runCliAsync(["skills", "restore", "--repo"], runtime);
+      expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
+      expect(read(repo, "skills/author/SKILL.md")).toBe(repairedAuthor);
+      expect(readlinkSync(path.join(repo, "shortcut"))).toBe(shortcut);
+    }
+  );
+
+  test("restore can prune beside an ordinary existing dependency outside the repo", async () => {
+    const { repo, runtime, sandbox, upstream } = repoFixture();
+    await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
+    const author =
+      "---\nname: author\ndescription: Authored skill.\n---\nRead [outside](../../../outside.md).\n";
+    write(repo, "skills/author/SKILL.md", author);
+    write(sandbox, "outside.md", "Unrelated outside guidance.\n");
+    write(repo, "monke.yml", "skills: []\n");
+
+    await runCliAsync(["skills", "restore", "--repo"], runtime);
+
+    expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
+    expect(read(repo, "skills/author/SKILL.md")).toBe(author);
+    expect(read(sandbox, "outside.md")).toBe("Unrelated outside guidance.\n");
+  });
 
   test("restore protects a reference consumed by root Skill supporting files", async () => {
     const { repo, runtime, upstream } = repoFixture();

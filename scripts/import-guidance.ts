@@ -389,7 +389,7 @@ function listReferenceConsumers(
         : `${realpathSync.native(path.dirname(consumerPath))}${path.sep}${linkTarget}`;
       if (
         linkTarget.includes(referencePathPrefix) ||
-        pathPointsIntoReference(resolvedTarget, obsoleteReferenceRoot, repoRoot)
+        pathPointsIntoReference(resolvedTarget, obsoleteReferenceRoot)
       ) {
         return [consumerPath];
       }
@@ -417,7 +417,7 @@ function listReferenceConsumers(
       const content = readFileSync(consumerPath, "utf-8");
       const consumesReference =
         content.includes(referencePathPrefix) ||
-        contentContainsRelativePathInto(content, consumerPath, obsoleteReferenceRoot, repoRoot);
+        contentContainsRelativePathInto(content, consumerPath, obsoleteReferenceRoot);
       return consumesReference ? [consumerPath] : [];
     }
     return [];
@@ -428,8 +428,7 @@ function listReferenceConsumers(
 function contentContainsRelativePathInto(
   content: string,
   consumerPath: string,
-  targetRoot: string,
-  repoRoot: string
+  targetRoot: string
 ) {
   const relativePathPattern = /(?:\.\.?\/)+[^\s)"'`>]+/gu;
   const destinations = [
@@ -440,18 +439,34 @@ function contentContainsRelativePathInto(
   ];
   const consumerDirectory = realpathSync.native(path.dirname(consumerPath));
   return destinations.some((destination) =>
-    pathPointsIntoReference(`${consumerDirectory}${path.sep}${destination}`, targetRoot, repoRoot)
+    pathPointsIntoReference(`${consumerDirectory}${path.sep}${destination}`, targetRoot)
   );
 }
 
-function pathPointsIntoReference(candidate: string, referenceRoot: string, repoRoot: string) {
-  const lexicalTarget = path.resolve(candidate);
-  return (
-    containsPath(referenceRoot, lexicalTarget) ||
-    (containsPath(repoRoot, lexicalTarget) &&
-      existsSync(candidate) &&
-      containsPath(referenceRoot, realpathSync.native(candidate)))
-  );
+function pathPointsIntoReference(candidate: string, referenceRoot: string) {
+  if (containsPath(referenceRoot, path.resolve(candidate))) {
+    return true;
+  }
+  if (!existsSync(candidate)) {
+    return false;
+  }
+  try {
+    const resolvedTarget = realpathSync.native(candidate);
+    if (containsPath(referenceRoot, resolvedTarget)) {
+      return true;
+    }
+    const original = statSync(candidate);
+    const resolved = statSync(resolvedTarget);
+    if (original.dev !== resolved.dev || original.ino !== resolved.ino) {
+      throw new MonkeError("Native path resolution identifies a different filesystem entry");
+    }
+    return false;
+  } catch (error) {
+    throw new MonkeError(
+      `Cannot resolve existing reference dependency ${candidate} before pruning ${referenceRoot}`,
+      { cause: error }
+    );
+  }
 }
 
 export function importedGuidancePath(
