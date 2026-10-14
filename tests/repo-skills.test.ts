@@ -20,6 +20,7 @@ import {
   git,
   installFakeCodexSummary,
   installFakeCodiff,
+  installInternalRootImporter,
   makeTempDir,
   read,
   write,
@@ -87,28 +88,6 @@ for (const folder of readdirSync(path.join(source, "skills"))) {
   installed += 1;
 }
 if (installed === 0) throw new Error("No matching skills: " + selectors.join(", "));
-`
-  );
-}
-
-function installInternalRootImporter(bin: string) {
-  writeExecutable(
-    path.join(bin, "npx"),
-    `#!/bin/sh
-set -eu
-source="$4"
-shift 4
-selection="$2"
-mkdir -p .agents/skills
-if [ -f "$source/SKILL.md" ] && { [ "\${INSTALL_INTERNAL_SKILLS:-}" = 1 ] || [ "\${INSTALL_INTERNAL_SKILLS:-}" = true ] || [ "$selection" != '*' ]; }; then
-  [ "$selection" = '*' ] || [ "$selection" = internal ] || exit 1
-  mkdir -p .agents/skills/internal
-  cp "$source/SKILL.md" .agents/skills/internal/
-elif [ "$selection" = '*' ]; then
-  cp -R "$source/skills/"* .agents/skills/
-else
-  cp -R "$source/skills/$selection" .agents/skills/
-fi
 `
   );
 }
@@ -321,7 +300,7 @@ cp -R "$4/skills/Fancy Folder" .agents/skills/fancy-folder
       path.join(bin, "npx"),
       `#!/bin/sh
 set -eu
-[ "$6" = 'Fancy Author' ]
+case "$6" in '*'|'Fancy Author') ;; *) exit 1 ;; esac
 mkdir -p .agents/skills
 cp -R "$4/skills/authors" .agents/skills/fancy-author
 `
@@ -628,7 +607,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     });
     write(repo, "monke.yml", edited);
     await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
-      /slugs changed/u
+      /Selected skills not found.*second/u
     );
     expect(read(repo, "monke.yml")).toBe(edited);
     expect(read(repo, "skills/imported/first/SKILL.md")).toBe(first);
@@ -924,6 +903,135 @@ fi
       expect(existsSync(path.join(projected, "public/SKILL.md"))).toBe(
         !includeInternal && selection === "*"
       );
+    }
+  );
+
+  test("recorded repo selections distinguish raw names sharing a slug", async () => {
+    const { bin, repo, runtime, sandbox } = repoFixture();
+    installInternalRootImporter(bin);
+    runtime.env.INSTALL_INTERNAL_SKILLS = "";
+    const publisher = createRepo(path.join(sandbox, "same-slug"), {
+      "SKILL.md":
+        "---\nname: Internal Guide\ndescription: Root.\nmetadata:\n  internal: true\n---\nAccepted root.\n",
+      "skills/public/SKILL.md":
+        "---\nname: Internal-Guide\ndescription: Child.\n---\nOther child.\n"
+    });
+    await runCliAsync(
+      ["skills", "add", `${publisher}#HEAD`, "--repo", "--skill", "Internal Guide"],
+      runtime
+    );
+    const accepted = read(repo, "skills/imported/internal-guide/SKILL.md");
+    rmSync(path.join(repo, "skills/imported"), { recursive: true });
+    rmSync(path.join(repo, "skills/.monke-restored.json"));
+    await runCliAsync(["skills", "restore", "--repo"], runtime);
+    expect(read(repo, "skills/imported/internal-guide/SKILL.md")).toBe(accepted);
+  });
+
+  test.each([
+    { optin: false, selector: "*" },
+    { optin: true, selector: "*" },
+    { optin: false, selector: "internal" }
+  ])(
+    "repo add rejects ambiguous discovery identities for $selector atomically with optin=$optin",
+    async ({ optin, selector }) => {
+      const { bin, repo, runtime, sandbox } = repoFixture();
+      installInternalRootImporter(bin);
+      runtime.env.INSTALL_INTERNAL_SKILLS = optin ? "1" : "";
+      const publisher = createRepo(path.join(sandbox, "same-identity"), {
+        "skills/public/SKILL.md": "---\nname: internal\ndescription: Child.\n---\nAccepted child.\n"
+      });
+      const add = ["skills", "add", `${publisher}#HEAD`, "--repo", "--skill", selector];
+      await runCliAsync(add, runtime);
+      const accepted = [
+        read(repo, "monke.yml"),
+        read(repo, "skills/.monke-restored.json"),
+        read(repo, "skills/imported/internal/SKILL.md")
+      ];
+      write(
+        publisher,
+        "SKILL.md",
+        "---\nname: internal\ndescription: Root.\nmetadata:\n  internal: true\n---\nDifferent root.\n"
+      );
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Introduce ambiguous root"]);
+      await expect(runCliAsync(add, runtime)).rejects.toThrow("Ambiguous Skill selector internal");
+      expect([
+        read(repo, "monke.yml"),
+        read(repo, "skills/.monke-restored.json"),
+        read(repo, "skills/imported/internal/SKILL.md")
+      ]).toStrictEqual(accepted);
+      const fresh = createRepo(path.join(sandbox, "fresh-ambiguous"), { "README.md": "Fresh.\n" });
+      const freshRuntime = createTestRuntime({
+        cwd: fresh,
+        env: runtime.env,
+        onStderr() {},
+        onStdout() {}
+      });
+      await expect(runCliAsync(add, freshRuntime)).rejects.toThrow(
+        "Ambiguous Skill selector internal"
+      );
+      expect(existsSync(path.join(fresh, "monke.yml"))).toBeFalsy();
+      expect(existsSync(path.join(fresh, "skills/imported"))).toBeFalsy();
+    }
+  );
+
+  test.each([false, true])(
+    "recorded repo selections replay public children with ignored declarations=%s",
+    async (declared) => {
+      const { bin, repo, runtime, sandbox } = repoFixture();
+      installInternalRootImporter(bin);
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const publisher = createRepo(path.join(sandbox, "replay-publisher"), {
+        "SKILL.md":
+          "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nInternal.\n",
+        "skills/public/scripts/tool.sh": "Pinned support asset.\n",
+        "skills/public/SKILL.md":
+          "---\nname: public\ndescription: Public skill.\n---\nPinned public.\n",
+        ...(declared
+          ? {
+              "monke.yml": "skills:\n  - source: owner/unavailable\n    skills: [must-not-follow]\n"
+            }
+          : {})
+      });
+      await runCliAsync(["skills", "add", `${publisher}#HEAD`, "--repo"], runtime);
+      const accepted = read(repo, "monke.yml");
+      const publicGuidance = read(repo, "skills/imported/public/SKILL.md");
+      runtime.env.INSTALL_INTERNAL_SKILLS = "1";
+      rmSync(path.join(repo, "skills/imported/public"), { recursive: true });
+      rmSync(path.join(repo, "skills/.monke-restored.json"));
+      await runCliAsync(["skills", "restore", "--repo"], runtime);
+      expect(read(repo, "monke.yml")).toBe(accepted);
+      expect(read(repo, "skills/imported/public/SKILL.md")).toBe(publicGuidance);
+      expect(read(repo, "skills/imported/public/scripts/tool.sh")).toBe("Pinned support asset.\n");
+      write(
+        publisher,
+        "skills/public/SKILL.md",
+        "---\nname: public\ndescription: Public skill.\n---\nUpdated public.\n"
+      );
+      write(
+        publisher,
+        "skills/extra/SKILL.md",
+        "---\nname: extra\ndescription: Extra skill.\n---\nUnselected.\n"
+      );
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Advance publisher"]);
+      const fresh = createRepo(path.join(sandbox, "fresh"), { "monke.yml": accepted });
+      const freshRuntime = createTestRuntime({
+        cwd: fresh,
+        env: runtime.env,
+        onStderr() {},
+        onStdout() {}
+      });
+      await runCliAsync(["skills", "restore", "--repo"], freshRuntime);
+      expect(read(fresh, "skills/imported/public/SKILL.md")).toBe(publicGuidance);
+      expect(read(fresh, "skills/imported/public/scripts/tool.sh")).toBe("Pinned support asset.\n");
+      expect(existsSync(path.join(fresh, "skills/imported/extra"))).toBeFalsy();
+      await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+      expect(read(repo, "skills/imported/public/SKILL.md")).toContain("Updated public.");
+      expect(existsSync(path.join(repo, "skills/imported/extra"))).toBeFalsy();
+      expect(existsSync(path.join(repo, "skills/imported/must-not-follow"))).toBeFalsy();
     }
   );
 
@@ -1399,10 +1507,11 @@ fi
     writeExecutable(
       path.join(bin, "npx"),
       `#!${process.execPath}
-import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 const args = process.argv.slice(2);
-const slug = args[args.indexOf("--skill") + 1];
+const selector = args[args.indexOf("--skill") + 1];
+const slug = selector === "*" ? readdirSync(path.join(args[3], "skills"))[0] : selector;
 const index = Number(slug.split("-")[1]);
 const barrier = ${JSON.stringify(sandbox)};
 writeFileSync(path.join(barrier, "entered-" + index), "");

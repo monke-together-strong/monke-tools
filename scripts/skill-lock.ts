@@ -403,9 +403,11 @@ export async function stageGitSkillSource(options: {
   includeDeclaredImports?: boolean;
   previousRecipe?: SkillImportRecipe;
   recipe: SkillImportRecipe;
+  rejectAmbiguousSelection?: boolean;
   repoRoot: string;
   retainSelection?: boolean;
   runtime?: Runtime;
+  selectFromCollection?: boolean;
   selectors: string[];
   stagingDirectory: string;
 }) {
@@ -432,8 +434,10 @@ export async function stageGitSkillSource(options: {
   const runtime = options.runtime ?? createRuntime({ cwd: stagingDirectory });
   const { output, ownNames, ownSkills, selected, selection } = await stageOwnGitSkills({
     imported,
+    rejectAmbiguousSelection: options.rejectAmbiguousSelection,
     retainedSkills: options.retainSelection ? options.previousRecipe?.skills : undefined,
     runtime,
+    selectFromCollection: options.selectFromCollection,
     selectors,
     source,
     sourceRoot: path.join(checkout, descriptor.subpath),
@@ -515,64 +519,74 @@ function publisherGuidanceSelected(item: SkillImportRecipeSkill, selectors: stri
   );
 }
 
+interface PublisherSkillCatalog {
+  entries: Map<string, { directory: string; slug: string }>;
+  names: Map<string, string>;
+  slugs: Set<string>;
+}
+
 async function stageOwnGitSkills(options: {
   imported: readonly SkillImportRecipeSkill[];
+  rejectAmbiguousSelection?: boolean;
   retainedSkills?: readonly SkillImportRecipeSkill[];
   runtime: Runtime;
+  selectFromCollection?: boolean;
   selectors: string[];
   source: string;
   sourceRoot: string;
   stagingDirectory: string;
 }) {
-  const { imported, retainedSkills, runtime, selectors, source, sourceRoot, stagingDirectory } =
-    options;
-  const { allowEmptyCollection, explicit, inspectCollection, ownSelectors, selected } =
-    publisherSkillSelection({
-      imported,
-      retainedSkills,
-      selectors,
-      sourceRoot
-    });
-  const collectionDirectory =
-    inspectCollection && explicit
-      ? path.join(stagingDirectory, "publisher-collection")
-      : stagingDirectory;
-  let output = { exitCode: 0, stderr: "", stdout: "" };
-  let ownSkills = new Set<string>();
-  let ownNames = new Map<string, string>();
-  if (inspectCollection || ownSelectors.length > 0) {
-    mkdirSync(collectionDirectory, { recursive: true });
-    const { empty, installed } = await installPublisherSkills({
-      allowEmptyCollection,
-      directory: collectionDirectory,
-      includeInternal: explicit && ownSelectors.length > 0,
-      inspectCollection,
+  const {
+    imported,
+    rejectAmbiguousSelection = false,
+    retainedSkills,
+    runtime,
+    selectFromCollection = false,
+    selectors,
+    source,
+    sourceRoot,
+    stagingDirectory
+  } = options;
+  const selectionOptions = publisherSkillSelection({
+    imported,
+    rejectAmbiguousSelection,
+    retainedSkills,
+    selectFromCollection,
+    selectors,
+    sourceRoot
+  });
+  const { explicit, inspectCollection, ownSelectors, selected } = selectionOptions;
+  const collection = await stagePublisherCollection({
+    runtime,
+    selectFromCollection,
+    selection: selectionOptions,
+    source,
+    stagingDirectory
+  });
+  const { catalog } = collection;
+  let { output } = collection;
+  if (inspectCollection && (explicit || rejectAmbiguousSelection)) {
+    await mergeAlternatePublisherCatalog({
+      catalog,
+      includeInternal:
+        selectFromCollection || !["1", "true"].includes(runtime.env.INSTALL_INTERNAL_SKILLS ?? ""),
+      rejectAmbiguity: rejectAmbiguousSelection || selectFromCollection,
       runtime,
-      selectors: inspectCollection ? ["*"] : ownSelectors,
-      source
+      selectFromCollection,
+      selection: selectionOptions,
+      source,
+      stagingDirectory
     });
-    if (!empty) {
-      ownSkills = new Set(listStagedSkillSlugs(collectionDirectory));
-    }
-    if (inspectCollection && !empty) {
-      ownNames = new Map(
-        stagedSkillGuidance(collectionDirectory, { skills: [], source }).map((item) => [
-          item.slug,
-          item.selector
-        ])
-      );
-    }
-    if (!inspectCollection || !explicit) {
-      output = installed;
-    }
   }
-  if (inspectCollection && explicit && ownSelectors.length > 0) {
+  if (selectFromCollection) {
+    copyPublisherSelection(catalog, ownSelectors, source, stagingDirectory);
+  } else if (inspectCollection && explicit && ownSelectors.length > 0) {
     output = await runtime.execAsync(
       runtime.platform === "win32" ? "npx.cmd" : "npx",
       buildSkillsInstallArgs({
         selectors: ownSelectors.map(
           (selector) =>
-            ownNames.get(findRetainedSkill(retainedSkills, selector)?.slug ?? "") ?? selector
+            catalog.names.get(findRetainedSkill(retainedSkills, selector)?.slug ?? "") ?? selector
         ),
         source
       }),
@@ -583,18 +597,148 @@ async function stageOwnGitSkills(options: {
     const previous = findRetainedSkill(retainedSkills, selector);
     const currentName =
       imported.find((item) => item.slug === previous?.slug)?.selector ??
-      ownNames.get(previous?.slug ?? "");
+      catalog.names.get(previous?.slug ?? "");
     return previous && currentName && currentName.toLowerCase() !== previous.selector.toLowerCase()
       ? previous.slug
       : selector;
   });
-  return { output, ownNames, ownSkills, selected, selection };
+  return { output, ownNames: catalog.names, ownSkills: catalog.slugs, selected, selection };
+}
+
+async function stagePublisherCollection(options: {
+  runtime: Runtime;
+  selectFromCollection: boolean;
+  selection: ReturnType<typeof publisherSkillSelection>;
+  source: string;
+  stagingDirectory: string;
+}) {
+  const { runtime, selectFromCollection, selection, source, stagingDirectory } = options;
+  const { allowEmptyCollection, explicit, inspectCollection, ownSelectors } = selection;
+  const directory =
+    inspectCollection && explicit
+      ? path.join(stagingDirectory, "publisher-collection")
+      : stagingDirectory;
+  const catalog: PublisherSkillCatalog = { entries: new Map(), names: new Map(), slugs: new Set() };
+  let output = { exitCode: 0, stderr: "", stdout: "" };
+  if (!inspectCollection && ownSelectors.length === 0) {
+    return { catalog, output };
+  }
+  mkdirSync(directory, { recursive: true });
+  const { empty, installed } = await installPublisherSkills({
+    allowEmptyCollection: allowEmptyCollection || (inspectCollection && explicit),
+    directory,
+    includeInternal: selectFromCollection ? false : undefined,
+    inspectCollection,
+    runtime,
+    selectors: inspectCollection ? ["*"] : ownSelectors,
+    source
+  });
+  if (!empty) {
+    catalog.slugs = new Set(listStagedSkillSlugs(directory));
+    if (inspectCollection) {
+      for (const item of stagedSkillGuidance(directory, { skills: [], source })) {
+        catalog.names.set(item.slug, item.selector);
+        catalog.entries.set(item.selector.toLowerCase(), {
+          directory: path.join(directory, ".agents/skills", item.slug),
+          slug: item.slug
+        });
+      }
+    }
+  }
+  if (!inspectCollection || !explicit) {
+    output = installed;
+  }
+  return { catalog, output };
+}
+
+async function mergeAlternatePublisherCatalog(options: {
+  catalog: PublisherSkillCatalog;
+  includeInternal: boolean;
+  rejectAmbiguity: boolean;
+  runtime: Runtime;
+  selectFromCollection: boolean;
+  selection: ReturnType<typeof publisherSkillSelection>;
+  source: string;
+  stagingDirectory: string;
+}) {
+  const {
+    catalog,
+    includeInternal,
+    rejectAmbiguity,
+    runtime,
+    selectFromCollection,
+    selection,
+    source,
+    stagingDirectory
+  } = options;
+  const { explicit, ownSelectors } = selection;
+  const internalDirectory = path.join(stagingDirectory, "publisher-alternate-collection");
+  mkdirSync(internalDirectory, { recursive: true });
+  const { empty } = await installPublisherSkills({
+    allowEmptyCollection: true,
+    directory: internalDirectory,
+    includeInternal,
+    inspectCollection: true,
+    runtime,
+    selectors: ["*"],
+    source
+  });
+  if (empty) {
+    return;
+  }
+  for (const item of stagedSkillGuidance(internalDirectory, { skills: [], source })) {
+    const selectedOwn =
+      ownSelectors.includes("*") ||
+      ownSelectors.some((selector) => selector.toLowerCase() === item.selector.toLowerCase());
+    const directory = path.join(internalDirectory, ".agents/skills", item.slug);
+    const previous = catalog.entries.get(item.selector.toLowerCase());
+    if (
+      rejectAmbiguity &&
+      selectedOwn &&
+      previous &&
+      skillDirectoryDigest(previous.directory) !== skillDirectoryDigest(directory)
+    ) {
+      throw new MonkeError(
+        `Ambiguous Skill selector ${item.selector} in ${source}; default and internal discovery deliver different guidance`
+      );
+    }
+    if (explicit && (!selectFromCollection || selectedOwn)) {
+      catalog.slugs.add(item.slug);
+    }
+    if (!previous) {
+      catalog.entries.set(item.selector.toLowerCase(), { directory, slug: item.slug });
+    }
+    if (!catalog.names.has(item.slug)) {
+      catalog.names.set(item.slug, item.selector);
+    }
+  }
+}
+
+function copyPublisherSelection(
+  catalog: PublisherSkillCatalog,
+  selectors: string[],
+  source: string,
+  stagingDirectory: string
+) {
+  const missing = selectors.filter((selector) => !catalog.entries.has(selector.toLowerCase()));
+  if (missing.length > 0) {
+    throw new MonkeError(`Selected skills not found in ${source}: ${missing.join(", ")}`);
+  }
+  for (const selector of selectors) {
+    const skill = catalog.entries.get(selector.toLowerCase());
+    if (skill) {
+      cpSync(skill.directory, path.join(stagingDirectory, ".agents/skills", skill.slug), {
+        recursive: true,
+        verbatimSymlinks: true
+      });
+    }
+  }
 }
 
 async function installPublisherSkills(options: {
   allowEmptyCollection: boolean;
   directory: string;
-  includeInternal: boolean;
+  includeInternal?: boolean;
   inspectCollection: boolean;
   runtime: Runtime;
   selectors: string[];
@@ -617,7 +761,9 @@ async function installPublisherSkills(options: {
   const installed = await runtime.execAsync(command, args, {
     allowFailure: inspectCollection,
     cwd: directory,
-    ...(inspectCollection && includeInternal ? { env: { INSTALL_INTERNAL_SKILLS: "1" } } : {})
+    ...(inspectCollection && includeInternal !== undefined
+      ? { env: { INSTALL_INTERNAL_SKILLS: includeInternal ? "1" : "" } }
+      : {})
   });
   if (installed.exitCode === 0) {
     return { empty: false, installed };
@@ -661,11 +807,20 @@ function findRetainedSkill(
 
 function publisherSkillSelection(options: {
   imported: readonly SkillImportRecipeSkill[];
+  rejectAmbiguousSelection?: boolean;
   retainedSkills?: readonly SkillImportRecipeSkill[];
+  selectFromCollection?: boolean;
   selectors: string[];
   sourceRoot: string;
 }) {
-  const { imported, retainedSkills, selectors, sourceRoot } = options;
+  const {
+    imported,
+    rejectAmbiguousSelection = false,
+    retainedSkills,
+    selectFromCollection = false,
+    selectors,
+    sourceRoot
+  } = options;
   const selected = selectors.map((selector) => {
     const previous = findRetainedSkill(retainedSkills, selector);
     return imported.find((item) => item.slug === previous?.slug)?.slug ?? selector;
@@ -686,7 +841,10 @@ function publisherSkillSelection(options: {
   const explicit = !selectors.includes("*");
   const inspectCollection =
     sourceMayHaveOwnSkills &&
-    (imported.length > 0 || (explicit && (retainedSkills?.length ?? 0) > 0));
+    (rejectAmbiguousSelection ||
+      selectFromCollection ||
+      imported.length > 0 ||
+      (explicit && (retainedSkills?.length ?? 0) > 0));
   const allowEmptyCollection = imported.length > 0 && (!explicit || ownSelectors.length === 0);
   return { allowEmptyCollection, explicit, inspectCollection, ownSelectors, selected };
 }
@@ -787,6 +945,7 @@ export async function stageLockedRecipe(
     recipe,
     repoRoot,
     runtime,
+    selectFromCollection: recipe.selection === undefined || recipe.selection.includes("*"),
     selectors: recipe.skills.map((skill) => skill.selector),
     stagingDirectory
   });
@@ -825,6 +984,12 @@ export function guidanceDigest(
     }
     hashDirectory(root, root, `${item.kind}/${item.slug}`, hash);
   }
+  return hash.digest("hex");
+}
+
+function skillDirectoryDigest(directory: string) {
+  const hash = new Bun.CryptoHasher("sha256");
+  hashDirectory(directory, directory, "skill", hash);
   return hash.digest("hex");
 }
 

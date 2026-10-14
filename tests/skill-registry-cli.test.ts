@@ -30,6 +30,7 @@ import {
   git,
   installFakeCodexSummary,
   installFakeCodiff,
+  installInternalRootImporter,
   makeTempDir,
   read,
   write,
@@ -684,6 +685,213 @@ done
       expect(read(registry, "skills.lock.json")).toBe(acceptedRegistry);
       expect(read(registry, "skills/.monke-restored.json")).toBe(acceptedMarker);
       expect(existsSync(path.join(installed, "missing-course-skill"))).toBeFalsy();
+    }
+  );
+
+  test.each([
+    { nested: false, project: false },
+    { nested: true, project: true }
+  ])(
+    "explicit internal guidance rejects declaration collisions with nested=$nested project=$project",
+    async ({ nested, project }) => {
+      const fixture = registryFixture();
+      installInternalRootImporter(fixture.bin);
+      fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const consumer = createRepo(path.join(fixture.sandbox, "consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = project
+        ? createTestRuntime({
+            cwd: consumer,
+            env: fixture.runtime.env,
+            onStderr() {},
+            onStdout() {}
+          })
+        : fixture.runtime;
+      const registry = project
+        ? path.join(consumer, ".git/monke-tools/skill-registry")
+        : fixture.registry;
+      const installed = project
+        ? path.join(consumer, ".agents/skills/monke-tools/imported")
+        : fixture.installed.codex;
+      const upstream = createRepo(path.join(fixture.sandbox, "declared-internal"), {
+        "skills/internal/SKILL.md":
+          "---\nname: internal\ndescription: Declared skill.\n---\nDeclared guidance.\n"
+      });
+      const declaration = stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["internal"], source: upstream }
+        ]
+      });
+      const ownPath = nested ? "skills/internal/SKILL.md" : "SKILL.md";
+      const publisher = createRepo(path.join(fixture.sandbox, "internal-publisher"), {
+        "monke.yml": declaration,
+        [ownPath]:
+          "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nOwned guidance.\n",
+        "skills/public/SKILL.md":
+          "---\nname: public\ndescription: Public skill.\n---\nPublic guidance.\n"
+      });
+      const add = ["skills", "add", `${publisher}#HEAD`, ...(project ? ["--project"] : [])];
+      const explicit = [...add, "--skill", "internal"];
+      await expect(runCliAsync(explicit, runtime)).rejects.toThrow(/internal.*collides/u);
+      expect(readImportRecipeStore(registry).recipes).toStrictEqual([]);
+      expect(existsSync(path.join(installed, "internal"))).toBeFalsy();
+      await runCliAsync(add, runtime);
+      expect(read(installed, "internal/SKILL.md")).toContain("Declared guidance.");
+      await runCliAsync(
+        ["skills", "remove", `${publisher}#HEAD`, ...(project ? ["--project"] : [])],
+        runtime
+      );
+      rmSync(path.join(publisher, "monke.yml"));
+      git(publisher, ["add", "-A"]);
+      git(publisher, ["commit", "-m", "Remove declaration"]);
+      await runCliAsync(explicit, runtime);
+      const accepted = read(registry, "skills.lock.json");
+      const marker = read(registry, "skills/.monke-restored.json");
+      const guidance = read(installed, "internal/SKILL.md");
+      write(publisher, "monke.yml", declaration);
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Declare colliding skill"]);
+      for (const command of [
+        explicit,
+        add,
+        ["skills", "update", ...(project ? ["--project"] : [])]
+      ]) {
+        await expect(runCliAsync(command, runtime)).rejects.toThrow(/internal.*collides/u);
+        expect(read(registry, "skills.lock.json")).toBe(accepted);
+        expect(read(registry, "skills/.monke-restored.json")).toBe(marker);
+        expect(read(installed, "internal/SKILL.md")).toBe(guidance);
+      }
+      rmSync(path.join(publisher, ownPath));
+      git(publisher, ["add", "-A"]);
+      git(publisher, ["commit", "-m", "Retire own guidance"]);
+      await runCliAsync(["skills", "update", ...(project ? ["--project"] : [])], runtime);
+      expect(read(installed, "internal/SKILL.md")).toContain("Declared guidance.");
+    }
+  );
+
+  test("machine explicit replay preserves internal guidance when a public child has the same name", async () => {
+    const fixture = registryFixture();
+    installInternalRootImporter(fixture.bin);
+    fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+    const upstream = createRepo(path.join(fixture.sandbox, "declared-source"), {
+      "skills/course/SKILL.md": "---\nname: course\ndescription: Course.\n---\nDeclared.\n",
+      "skills/internal/SKILL.md":
+        "---\nname: internal\ndescription: External.\n---\nConflicting external.\n"
+    });
+    const publisher = createRepo(path.join(fixture.sandbox, "equal-names"), {
+      "monke.yml": stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["course"], source: upstream }
+        ]
+      }),
+      "SKILL.md":
+        "---\nname: internal\ndescription: Root.\nmetadata:\n  internal: true\n---\nInternal root.\n",
+      "skills/public/SKILL.md": "---\nname: internal\ndescription: Child.\n---\nPublic child.\n"
+    });
+    await runCliAsync(
+      ["skills", "add", `${publisher}#HEAD`, "--skill", "internal"],
+      fixture.runtime
+    );
+    const accepted = read(fixture.registry, "skills/imported/internal/SKILL.md");
+    const lock = read(fixture.registry, "skills.lock.json");
+    rmSync(path.join(fixture.registry, "skills/imported"), { recursive: true });
+    rmSync(path.join(fixture.registry, "skills/.monke-restored.json"));
+    write(
+      publisher,
+      "monke.yml",
+      stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["internal"], source: upstream }
+        ]
+      })
+    );
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Declare conflicting external"]);
+    await expect(runCliAsync(["skills", "update"], fixture.runtime)).rejects.toThrow(
+      /internal.*collides/u
+    );
+    expect(read(fixture.registry, "skills.lock.json")).toBe(lock);
+    expect(read(fixture.registry, "skills/imported/internal/SKILL.md")).toBe(accepted);
+  });
+
+  test("machine wildcard acceptance rejects ambiguous discovery identities", async () => {
+    const fixture = registryFixture();
+    installInternalRootImporter(fixture.bin);
+    fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+    const publisher = createRepo(path.join(fixture.sandbox, "ambiguous-wildcard"), {
+      "skills/public/SKILL.md": "---\nname: internal\ndescription: Child.\n---\nAccepted child.\n"
+    });
+    const add = ["skills", "add", `${publisher}#HEAD`];
+    await runCliAsync(add, fixture.runtime);
+    const accepted = read(fixture.registry, "skills/imported/internal/SKILL.md");
+    const lock = read(fixture.registry, "skills.lock.json");
+    write(
+      publisher,
+      "SKILL.md",
+      "---\nname: internal\ndescription: Root.\nmetadata:\n  internal: true\n---\nDifferent root.\n"
+    );
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Introduce ambiguous root"]);
+    for (const command of [add, ["skills", "update"]]) {
+      await expect(runCliAsync(command, fixture.runtime)).rejects.toThrow(
+        "Ambiguous Skill selector internal"
+      );
+      expect(read(fixture.registry, "skills.lock.json")).toBe(lock);
+      expect(read(fixture.registry, "skills/imported/internal/SKILL.md")).toBe(accepted);
+    }
+  });
+
+  test.each([false, true])(
+    "composed wildcard selections recover cold guidance with project=%s",
+    async (project) => {
+      const fixture = registryFixture();
+      installInternalRootImporter(fixture.bin);
+      fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const consumer = createRepo(path.join(fixture.sandbox, "consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = project
+        ? createTestRuntime({
+            cwd: consumer,
+            env: fixture.runtime.env,
+            onStderr() {},
+            onStdout() {}
+          })
+        : fixture.runtime;
+      const registry = project
+        ? path.join(consumer, ".git/monke-tools/skill-registry")
+        : fixture.registry;
+      const upstream = createRepo(path.join(fixture.sandbox, "declared-source"), {
+        "skills/course/SKILL.md":
+          "---\nname: course\ndescription: Declared course.\n---\nDeclared guidance.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "cold-publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["course"], source: upstream }
+          ]
+        }),
+        "SKILL.md":
+          "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nInternal.\n",
+        "skills/public/references/details.md": "Pinned support asset.\n",
+        "skills/public/SKILL.md":
+          "---\nname: public\ndescription: Public skill.\n---\nPublic guidance.\n"
+      });
+      const flags = project ? ["--project"] : [];
+      await runCliAsync(["skills", "add", `${publisher}#HEAD`, ...flags], runtime);
+      const accepted = read(registry, "skills.lock.json");
+      const guidance = read(registry, "skills/imported/public/SKILL.md");
+      rmSync(path.join(registry, "skills/imported"), { recursive: true });
+      rmSync(path.join(registry, "skills/.monke-restored.json"));
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(read(registry, "skills.lock.json")).toBe(accepted);
+      expect(read(registry, "skills/imported/public/SKILL.md")).toBe(guidance);
+      expect(read(registry, "skills/imported/public/references/details.md")).toBe(
+        "Pinned support asset.\n"
+      );
+      expect(read(registry, "skills/imported/course/SKILL.md")).toContain("Declared guidance.");
+      expect(existsSync(path.join(registry, "skills/imported/internal"))).toBeFalsy();
     }
   );
 

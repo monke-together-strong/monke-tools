@@ -22,10 +22,15 @@ describe("parallel locked skill restore", () => {
       const home = path.join(sandbox, "home");
       const bin = path.join(sandbox, "bin");
       mkdirSync(bin);
-      const recipes = Array.from({ length: 7 }, (_, index) => {
+      const skillContents = Array.from(
+        { length: 7 },
+        (_, index) =>
+          `---\nname: skill-${index}\ndescription: Fixture Skill\n---\naccepted skill-${index}\n`
+      );
+      const recipes = skillContents.map((content, index) => {
         const slug = `skill-${index}`;
         const skills = [{ kind: "skill" as const, selector: slug, slug }];
-        write(sandbox, `skills/imported/${slug}/SKILL.md`, `accepted ${slug}\n`);
+        write(sandbox, `skills/imported/${slug}/SKILL.md`, content);
         return {
           commit: String(index).padStart(40, "0"),
           skills,
@@ -47,11 +52,12 @@ import path from "node:path";
 const root = ${JSON.stringify(sandbox)};
 const home = ${JSON.stringify(home)};
 const failImport = ${failImport};
+const skillContents = ${JSON.stringify(skillContents)};
 const args = process.argv.slice(2);
 const importer = path.basename(process.argv[1]) === "npx";
 if (!importer && args[0] !== "fetch") process.exit(0);
 const index = importer
-  ? Number(args[args.indexOf("--skill") + 1].split("-")[1])
+  ? Number(/source-([0-9]+)/u.exec(args[args.indexOf("add") + 1])?.[1])
   : Number(args.at(-1));
 const phase = importer ? "import" : "fetch";
 const marker = (name) => path.join(root, name);
@@ -89,7 +95,7 @@ if (importer) {
   const slug = "skill-" + index;
   const target = path.join(".agents", "skills", slug);
   mkdirSync(target, { recursive: true });
-  writeFileSync(path.join(target, "SKILL.md"), "accepted " + slug + "\\n");
+  writeFileSync(path.join(target, "SKILL.md"), skillContents[index]);
 }
 rmSync(active);
 writeFileSync(marker(phase + "-done-" + index), "");
@@ -119,7 +125,7 @@ writeFileSync(marker(phase + "-done-" + index), "");
         )) {
           expect(existsSync(path.join(sandbox, `import-done-${index}`))).toBeTruthy();
           expect(read(sandbox, `skills/imported/skill-${index}/SKILL.md`)).toBe(
-            `accepted skill-${index}\n`
+            skillContents[index]
           );
         }
         expect(existsSync(path.join(sandbox, "fetch-start-6"))).toBeFalsy();

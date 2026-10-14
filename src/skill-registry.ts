@@ -610,6 +610,7 @@ async function addGitSkillSource(
       includeDeclaredImports: !repo,
       previousRecipe: repo ? undefined : previous,
       recipe: { ...recipe, commit: revision.commit, source: revision.source },
+      rejectAmbiguousSelection: repo || selectors.includes("*"),
       repoRoot: root,
       retainSelection: !repo && request.skills === undefined,
       runtime,

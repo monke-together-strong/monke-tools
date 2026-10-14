@@ -552,6 +552,41 @@ export function writeExecutable(targetPath: string, contents: string) {
   chmodSync(targetPath, 0o755);
 }
 
+export function installInternalRootImporter(bin: string) {
+  writeExecutable(
+    path.join(bin, "npx"),
+    `#!/usr/bin/env bun
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+const source = process.argv[5];
+const selectors = [];
+for (let index = 6; process.argv[index] === "--skill"; index += 2) selectors.push(process.argv[index + 1].toLowerCase());
+const includeInternal = ["1", "true"].includes(process.env.INSTALL_INTERNAL_SKILLS) || !selectors.includes("*");
+const root = path.join(source, "SKILL.md");
+const eligible = directory => {
+  const content = readFileSync(path.join(directory, "SKILL.md"), "utf8");
+  return includeInternal || !/^  internal: true$/m.test(content);
+};
+const directories = existsSync(root) && eligible(source) ? [source] :
+  existsSync(path.join(source, "skills")) ? readdirSync(path.join(source, "skills")).map(folder => path.join(source, "skills", folder)).filter(eligible) : [];
+let installed = 0;
+for (const directory of directories) {
+  const name = /^name: (.+)$/m.exec(readFileSync(path.join(directory, "SKILL.md"), "utf8"))[1];
+  if (!selectors.includes("*") && !selectors.includes(name.toLowerCase())) continue;
+  const destination = path.join(".agents", "skills", name.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+  mkdirSync(destination, { recursive: true });
+  if (directory === source) cpSync(path.join(directory, "SKILL.md"), path.join(destination, "SKILL.md"));
+  else cpSync(directory, destination, { recursive: true });
+  installed += 1;
+}
+if (installed === 0) {
+  console.log(JSON.stringify([{ status: "failed", error: "No valid skills found. Skills require a SKILL.md with name and description." }]));
+  process.exit(1);
+}
+`
+  );
+}
+
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }

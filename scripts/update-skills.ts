@@ -345,9 +345,11 @@ async function prepareGitSkillUpdate(
       includeDeclaredImports: !repo,
       previousRecipe: repo ? undefined : recipe,
       recipe: { ...recipe, commit: revision.commit, source: revision.source },
+      rejectAmbiguousSelection: recipe.selection?.includes("*"),
       repoRoot,
       retainSelection: !repo,
       runtime,
+      selectFromCollection: repo,
       selectors: recipe.selection ?? recipe.skills.map((skill) => skill.selector),
       stagingDirectory
     });
