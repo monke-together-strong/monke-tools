@@ -3,7 +3,9 @@ import {
   existsSync,
   linkSync,
   mkdirSync,
+  readlinkSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
   symlinkSync
@@ -482,6 +484,82 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
       expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
     }
   );
+
+  test.each([
+    {
+      aliasPath: "skills/local-dependent",
+      aliasTarget: "../authored/local-dependent",
+      consumerPath: "skills/local-dependent/SKILL.md",
+      dependencyPath: "../../skills/references/imported/first/MAIN.md",
+      kind: "directory",
+      targetPath: "authored/local-dependent/SKILL.md"
+    },
+    {
+      aliasPath: "skills/local-dependent/guide.md",
+      aliasTarget: "../../authored/guide.md",
+      consumerPath: "skills/local-dependent/guide.md",
+      dependencyPath: "../references/imported/first/MAIN.md",
+      kind: "supporting-file",
+      targetPath: "authored/guide.md"
+    },
+    {
+      aliasPath: ".codex/skills",
+      aliasTarget: "../authored",
+      consumerPath: ".codex/skills/local-dependent/SKILL.md",
+      dependencyPath: "../../skills/references/imported/first/MAIN.md",
+      kind: "candidate-root",
+      targetPath: "authored/local-dependent/SKILL.md"
+    }
+  ])("restore protects a reference consumed through a $kind alias", async (fixture) => {
+    const { repo, runtime, upstream } = repoFixture();
+    await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
+    const consumer = `---\nname: local-dependent\ndescription: Local skill.\n---\nLoad [first](${fixture.dependencyPath}).\n`;
+    write(repo, fixture.targetPath, consumer);
+    if (fixture.kind === "supporting-file") {
+      write(
+        repo,
+        "skills/local-dependent/SKILL.md",
+        "---\nname: local-dependent\ndescription: Local skill.\n---\nRead guide.md.\n"
+      );
+    }
+    mkdirSync(path.dirname(path.join(repo, fixture.aliasPath)), { recursive: true });
+    symlinkSync(fixture.aliasTarget, path.join(repo, fixture.aliasPath));
+    expect(
+      existsSync(
+        path.resolve(
+          realpathSync.native(path.dirname(path.join(repo, fixture.consumerPath))),
+          fixture.dependencyPath
+        )
+      )
+    ).toBeTruthy();
+    write(repo, "monke.yml", "skills: []\n");
+    const marker = read(repo, "skills/.monke-restored.json");
+
+    await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
+      fixture.consumerPath
+    );
+
+    expect(read(repo, "monke.yml")).toBe("skills: []\n");
+    expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+    expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
+    expect(read(repo, fixture.targetPath)).toBe(consumer);
+    expect(readlinkSync(path.join(repo, fixture.aliasPath))).toBe(fixture.aliasTarget);
+  });
+
+  test("restore can prune an unused reference beside a harmless authored directory cycle", async () => {
+    const { repo, runtime, upstream } = repoFixture();
+    await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
+    const consumer = "---\nname: local\ndescription: Local skill.\n---\nSelf-contained.\n";
+    write(repo, "skills/local/SKILL.md", consumer);
+    symlinkSync(".", path.join(repo, "skills/local/cycle"), "dir");
+    write(repo, "monke.yml", "skills: []\n");
+
+    await runCliAsync(["skills", "restore", "--repo"], runtime);
+
+    expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
+    expect(read(repo, "skills/local/SKILL.md")).toBe(consumer);
+    expect(readlinkSync(path.join(repo, "skills/local/cycle"))).toBe(".");
+  });
 
   test.each(["policy", "remove"] as const)(
     "%s validates the prospective retained consumer before pruning references",

@@ -11,6 +11,7 @@ import {
   renameSync,
   rmSync,
   rmdirSync,
+  statSync,
   symlinkSync,
   unlinkSync,
   writeFileSync
@@ -297,24 +298,31 @@ export function assertObsoleteReferencesAreUnconsumed(
   obsoleteGuidance: readonly Pick<SkillImportRecipeSkill, "kind" | "slug">[],
   ignoredConsumerRoots: readonly string[] = []
 ) {
+  const physicalRepoRoot = realpathSync.native(repoRoot);
   for (const guidance of obsoleteGuidance) {
     if (guidance.kind !== "reference") {
       continue;
     }
 
-    const obsoleteReferenceRoot = importedGuidancePath(repoRoot, guidance);
+    const obsoleteReferenceRoot = importedGuidancePath(physicalRepoRoot, guidance);
     const referencePathPrefix = `${path.posix.join("references", "imported", guidance.slug)}/`;
-    const ignored = [path.join(repoRoot, "skills/.monke-restored.json"), ...ignoredConsumerRoots];
+    const ignored = [
+      path.join(physicalRepoRoot, "skills/.monke-restored.json"),
+      ...ignoredConsumerRoots.map((root) =>
+        path.resolve(physicalRepoRoot, path.relative(repoRoot, root))
+      )
+    ];
     const consumers = ["SKILL.md", ...SKILL_SOURCE_CANDIDATES]
       .flatMap((root) =>
         listReferenceConsumers(
-          path.join(repoRoot, root),
+          physicalRepoRoot,
+          path.join(physicalRepoRoot, root),
           obsoleteReferenceRoot,
           referencePathPrefix,
           ignored
         )
       )
-      .map((entryPath) => path.relative(repoRoot, entryPath))
+      .map((entryPath) => path.relative(physicalRepoRoot, entryPath))
       .toSorted();
 
     if (consumers.length > 0) {
@@ -326,47 +334,71 @@ export function assertObsoleteReferencesAreUnconsumed(
 }
 
 function listReferenceConsumers(
+  repoRoot: string,
   root: string,
   obsoleteReferenceRoot: string,
   referencePathPrefix: string,
   ignoredConsumerRoots: readonly string[]
 ): string[] {
-  if (
-    containsPath(obsoleteReferenceRoot, root) ||
-    ignoredConsumerRoots.some((ignored) => containsPath(ignored, root))
-  ) {
+  const ancestors = new Set<string>();
+  const isExcluded = (entryPath: string) =>
+    containsPath(obsoleteReferenceRoot, entryPath) ||
+    ignoredConsumerRoots.some((ignored) => containsPath(ignored, entryPath));
+
+  function visit(consumerPath: string): string[] {
+    if (isExcluded(consumerPath)) {
+      return [];
+    }
+    let entry = lstatSync(consumerPath, { throwIfNoEntry: false });
+    if (!entry) {
+      return [];
+    }
+    if (entry.isSymbolicLink()) {
+      const linkTarget = readlinkSync(consumerPath);
+      const resolvedTarget = path.resolve(
+        realpathSync.native(path.dirname(consumerPath)),
+        linkTarget
+      );
+      if (
+        linkTarget.includes(referencePathPrefix) ||
+        containsPath(obsoleteReferenceRoot, resolvedTarget)
+      ) {
+        return [consumerPath];
+      }
+      entry = statSync(consumerPath, { throwIfNoEntry: false });
+      if (!entry) {
+        return [];
+      }
+    }
+    const physicalPath = realpathSync.native(consumerPath);
+    if (!containsPath(repoRoot, physicalPath) || isExcluded(physicalPath)) {
+      return [];
+    }
+    if (entry.isDirectory()) {
+      if (ancestors.has(physicalPath)) {
+        return [];
+      }
+      ancestors.add(physicalPath);
+      const consumers = readdirSync(consumerPath)
+        .filter((name) => name !== ".git" && name !== "node_modules")
+        .flatMap((name) => visit(path.join(consumerPath, name)));
+      ancestors.delete(physicalPath);
+      return consumers;
+    }
+    if (entry.isFile()) {
+      const content = readFileSync(consumerPath, "utf-8");
+      const consumesReference =
+        content.includes(referencePathPrefix) ||
+        contentContainsRelativePathInto(
+          content,
+          realpathSync.native(path.dirname(consumerPath)),
+          obsoleteReferenceRoot
+        );
+      return consumesReference ? [consumerPath] : [];
+    }
     return [];
   }
-  const entry = lstatSync(root, { throwIfNoEntry: false });
-  if (!entry) {
-    return [];
-  }
-  if (entry.isDirectory()) {
-    return readdirSync(root).flatMap((name) =>
-      listReferenceConsumers(
-        path.join(root, name),
-        obsoleteReferenceRoot,
-        referencePathPrefix,
-        ignoredConsumerRoots
-      )
-    );
-  }
-  if (entry.isFile()) {
-    const content = readFileSync(root, "utf-8");
-    const consumesReference =
-      content.includes(referencePathPrefix) ||
-      contentContainsRelativePathInto(content, path.dirname(root), obsoleteReferenceRoot);
-    return consumesReference ? [root] : [];
-  }
-  if (entry.isSymbolicLink()) {
-    const linkTarget = readlinkSync(root);
-    const resolvedTarget = path.resolve(path.dirname(root), linkTarget);
-    return linkTarget.includes(referencePathPrefix) ||
-      containsPath(obsoleteReferenceRoot, resolvedTarget)
-      ? [root]
-      : [];
-  }
-  return [];
+  return visit(root);
 }
 
 function contentContainsRelativePathInto(
