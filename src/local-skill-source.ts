@@ -345,15 +345,22 @@ async function discoverLocalGuidance(
     await restoreSkillImports(publisher, false, runtime, declaredStore);
   }
   const root = resolveLocalSourceRoot(recipe.localSource, workingDirectory);
+  const own = discoverSourceSkills(root);
+  const importedRoots = publisher
+    ? declared.map((item) => realpathSync.native(importedGuidancePath(publisher, item)))
+    : [];
+  const linkedSkills = new Map(
+    [...own].filter(
+      ([, sourcePath]) =>
+        !importedRoots.some((importedRoot) =>
+          containsPath(importedRoot, realpathSync.native(sourcePath))
+        )
+    )
+  );
   const discovered = new Map<
     string,
     { kind: SkillImportRecipeSkill["kind"]; selector?: string; sourcePath: string }
-  >(
-    [...discoverSourceSkills(root)].map(([slug, sourcePath]) => [
-      slug,
-      { kind: "skill", sourcePath }
-    ])
-  );
+  >([...own].map(([slug, sourcePath]) => [slug, { kind: "skill", sourcePath }]));
   if (publisher) {
     for (const item of declared) {
       discovered.set(item.slug, {
@@ -363,7 +370,7 @@ async function discoverLocalGuidance(
       });
     }
   }
-  return { discovered, root };
+  return { discovered, linkedSkills, root };
 }
 
 /** Refresh a command or linked source and publish it through the existing import materializer. */
@@ -425,7 +432,7 @@ export async function updateLocalSkillSource(options: {
         );
       }
     }
-    const { discovered, root } = await discoverLocalGuidance(
+    const { discovered, linkedSkills, root } = await discoverLocalGuidance(
       { ...recipe, localSource },
       workingDirectory,
       runtime
@@ -476,11 +483,7 @@ export async function updateLocalSkillSource(options: {
       },
       defaultDisableModelInvocation: recipe.disableModelInvocation,
       guidance: nextRecipe.skills,
-      linkedSkills: new Map(
-        [...discovered]
-          .filter(([, item]) => item.kind === "skill" && item.selector === undefined)
-          .map(([slug, item]) => [slug, item.sourcePath])
-      ),
+      linkedSkills,
       obsoleteGuidance: previous?.skills.filter(
         (item) =>
           !skills.some((candidate) => candidate.slug === item.slug && candidate.kind === item.kind)

@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -210,6 +210,24 @@ describe("linked publisher collections", () => {
     expect(realpathSync(path.join(installed, "imported/own"))).toBe(
       realpathSync(path.join(publisher, "skills/own"))
     );
+  });
+
+  test("aliases into declared publisher imports keep consumer metadata local", async () => {
+    const { declare, installed, publisher, runtime } = fixture();
+    declare("skill");
+    await runCliAsync(["skills", "add", publisher, "--link", "--project"], runtime);
+    const publisherSkill = read(publisher, "skills/imported/base/SKILL.md");
+    symlinkSync("imported/base", path.join(publisher, "skills/alias"), "dir");
+    await runCliAsync(
+      ["skills", "add", publisher, "--link", "--project", "--skill", "alias"],
+      runtime
+    );
+    await runCliAsync(
+      ["skills", "policy", "publisher", "alias", "--project", "--description", "Alias trigger."],
+      runtime
+    );
+    expect(read(installed, "imported/alias/SKILL.md")).toContain("description: Alias trigger.");
+    expect(read(publisher, "skills/imported/base/SKILL.md")).toBe(publisherSkill);
   });
 
   test.each(["skill", "reference"] as const)(
