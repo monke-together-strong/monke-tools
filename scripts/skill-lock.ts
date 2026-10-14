@@ -41,7 +41,12 @@ import type {
   SkillImportRecipeStore
 } from "./skill-import-recipes.ts";
 import { writeSkillImportState } from "./skill-import-state.ts";
-import { sanitizeSkillMetadata } from "./skill-import.ts";
+import {
+  readJsonSecurityRiskAssessments,
+  renderSecurityRiskAssessments,
+  sanitizeSkillMetadata
+} from "./skill-import.ts";
+import type { SecurityRiskAssessment } from "./skill-import.ts";
 import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from "./skills-cli.ts";
 
 export const MATERIALIZER_VERSION = 1;
@@ -520,7 +525,7 @@ function publisherGuidanceSelected(item: SkillImportRecipeSkill, selectors: stri
 }
 
 interface PublisherSkillCatalog {
-  entries: Map<string, { directory: string; slug: string }>;
+  entries: Map<string, { assessment?: SecurityRiskAssessment; directory: string; slug: string }>;
   names: Map<string, string>;
   slugs: Set<string>;
 }
@@ -579,7 +584,11 @@ async function stageOwnGitSkills(options: {
     });
   }
   if (selectFromCollection) {
-    copyPublisherSelection(catalog, ownSelectors, source, stagingDirectory);
+    output = {
+      ...output,
+      stderr: "",
+      stdout: copyPublisherSelection(catalog, ownSelectors, source, stagingDirectory)
+    };
   } else if (inspectCollection && explicit && ownSelectors.length > 0) {
     output = await runtime.execAsync(
       runtime.platform === "win32" ? "npx.cmd" : "npx",
@@ -654,9 +663,11 @@ async function stagePublisherCollection(options: {
   if (!empty) {
     catalog.slugs = new Set(listStagedSkillSlugs(directory));
     if (inspectCollection) {
+      const assessments = readJsonSecurityRiskAssessments(installed.stdout);
       for (const item of stagedSkillGuidance(directory, { skills: [], source })) {
         catalog.names.set(item.slug, item.selector);
         catalog.entries.set(item.selector.toLowerCase(), {
+          assessment: assessments.get(item.selector.toLowerCase()),
           directory: path.join(directory, ".agents/skills", item.slug),
           slug: item.slug
         });
@@ -692,7 +703,7 @@ async function mergeAlternatePublisherCatalog(options: {
   const { explicit, ownSelectors } = selection;
   const internalDirectory = path.join(stagingDirectory, "publisher-alternate-collection");
   mkdirSync(internalDirectory, { recursive: true });
-  const { empty } = await installPublisherSkills({
+  const { empty, installed } = await installPublisherSkills({
     allowEmptyCollection: true,
     directory: internalDirectory,
     includeInternal,
@@ -704,6 +715,7 @@ async function mergeAlternatePublisherCatalog(options: {
   if (empty) {
     return;
   }
+  const assessments = readJsonSecurityRiskAssessments(installed.stdout);
   for (const item of stagedSkillGuidance(internalDirectory, { skills: [], source })) {
     const selectedOwn =
       ownSelectors.includes("*") ||
@@ -724,7 +736,11 @@ async function mergeAlternatePublisherCatalog(options: {
       catalog.slugs.add(item.slug);
     }
     if (!previous) {
-      catalog.entries.set(item.selector.toLowerCase(), { directory, slug: item.slug });
+      catalog.entries.set(item.selector.toLowerCase(), {
+        assessment: assessments.get(item.selector.toLowerCase()),
+        directory,
+        slug: item.slug
+      });
     }
     if (!catalog.names.has(item.slug)) {
       catalog.names.set(item.slug, item.selector);
@@ -742,15 +758,20 @@ function copyPublisherSelection(
   if (missing.length > 0) {
     throw new MonkeError(`Selected skills not found in ${source}: ${missing.join(", ")}`);
   }
-  for (const selector of selectors) {
+  const assessments: SecurityRiskAssessment[] = [];
+  for (const selector of new Set(selectors.map((item) => item.toLowerCase()))) {
     const skill = catalog.entries.get(selector.toLowerCase());
     if (skill) {
+      if (skill.assessment) {
+        assessments.push(skill.assessment);
+      }
       cpSync(skill.directory, path.join(stagingDirectory, ".agents/skills", skill.slug), {
         recursive: true,
         verbatimSymlinks: true
       });
     }
   }
+  return renderSecurityRiskAssessments(assessments);
 }
 
 async function installPublisherSkills(options: {

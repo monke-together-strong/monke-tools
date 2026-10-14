@@ -906,6 +906,100 @@ fi
     }
   );
 
+  test.each([
+    { assessed: true, selection: "public" },
+    { assessed: true, selection: "internal" },
+    { assessed: false, selection: "public" }
+  ])(
+    "repo update reports assessments only from chosen $selection catalog entries with assessed=$assessed",
+    async ({ assessed, selection }) => {
+      const { bin, messages, repo, runtime, sandbox } = repoFixture();
+      runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const selected = "assessment-shared-prefix-12345678901234567890-selected";
+      const unselected = "assessment-shared-prefix-12345678901234567890-unselected";
+      const publisher = createRepo(path.join(sandbox, "assessed-publisher"), {
+        "SKILL.md":
+          "---\nname: internal-root\ndescription: Root.\nmetadata:\n  internal: true\n---\nInternal guidance.\n",
+        "skills/selected/SKILL.md": `---\nname: ${selected}\ndescription: Public.\n---\nSelected guidance.\n`,
+        "skills/unselected/SKILL.md": `---\nname: ${unselected}\ndescription: Other.\n---\nUnselected guidance.\n`
+      });
+      writeExecutable(
+        path.join(bin, "npx"),
+        `#!/usr/bin/env bun
+import { cpSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+const args = process.argv.slice(2);
+const source = args[3];
+const selectors = [];
+for (let index = 4; args[index] === "--skill"; index += 2) selectors.push(args[index + 1]);
+const internal = process.env.INSTALL_INTERNAL_SKILLS === "1" || !selectors.includes("*");
+const directories = internal ? [source] : readdirSync(path.join(source, "skills")).map(name => path.join(source, "skills", name));
+const results = [];
+for (const directory of directories) {
+  const name = /^name: (.+)$/m.exec(readFileSync(path.join(directory, "SKILL.md"), "utf8"))[1];
+  if (!selectors.includes("*") && !selectors.includes(name)) continue;
+  const destination = path.resolve(".agents/skills", name);
+  mkdirSync(destination, { recursive: true });
+  if (directory === source) cpSync(path.join(directory, "SKILL.md"), path.join(destination, "SKILL.md"));
+  else cpSync(directory, destination, { recursive: true });
+  const security = name === "internal-root" ? { gen: "medium", socket: "1 alert", snyk: "low" } : name.endsWith("-selected") ? { gen: "critical", socket: "2 alerts", snyk: "high" } : { gen: "safe", socket: "0 alerts", snyk: "low" };
+  results.push({ name, path: destination, security: !${assessed} && name.endsWith("-selected") ? null : { ...security, details: "https://skills.sh/owner/assessed" }, status: "installed" });
+}
+const table = "Security Risk Assessments\\n" + results.map(item => item.name.slice(0, 35) + "…  Safe  0 alerts  Low Risk").join("\\n") + "\\nDetails: https://skills.sh/owner/assessed\\nInstallation complete\\n";
+if (args.includes("--json")) { console.error("UNSELECTED-INVENTORY-STDERR" + table); console.log(JSON.stringify(results)); }
+else console.log(table);
+`
+      );
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      await runCliAsync(
+        [
+          "skills",
+          "add",
+          `${publisher}#HEAD`,
+          "--repo",
+          ...(selection === "internal" ? ["--skill", "internal-root"] : [])
+        ],
+        runtime
+      );
+      const chosen = selection === "internal" ? "internal-root" : selected;
+      write(
+        repo,
+        "monke.yml",
+        stringify({
+          skills: [
+            {
+              commit: git(publisher, ["rev-parse", "HEAD"]),
+              skills: [chosen],
+              source: `${publisher}#HEAD`
+            }
+          ]
+        })
+      );
+      messages.length = 0;
+      await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+      const output = messages.join("");
+      const expectedReports = assessed ? 1 : 0;
+      const risk = selection === "internal" ? "Med Risk" : "Critical Risk";
+      const socket = selection === "internal" ? "1 alert" : "2 alerts";
+      const snyk = selection === "internal" ? "Low Risk" : "High Risk";
+      expect(output.match(/Security Risk Assessments/gu) ?? []).toHaveLength(expectedReports);
+      expect(
+        output.match(new RegExp(`${chosen} +${risk} +${socket} +${snyk}`, "gu")) ?? []
+      ).toHaveLength(expectedReports);
+      expect(output.match(/https:\/\/skills.sh\/owner\/assessed/gu) ?? []).toHaveLength(
+        expectedReports
+      );
+      for (const omitted of [
+        "UNSELECTED-INVENTORY-STDERR",
+        unselected,
+        selection === "internal" ? selected : "internal-root"
+      ]) {
+        expect(output).not.toContain(omitted);
+      }
+    }
+  );
+
   test("recorded repo selections distinguish raw names sharing a slug", async () => {
     const { bin, repo, runtime, sandbox } = repoFixture();
     installInternalRootImporter(bin);

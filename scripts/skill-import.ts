@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import pc from "picocolors";
+import * as z from "zod";
 
 import { MonkeError } from "../src/errors.ts";
 import type { StagedSkillSelection } from "./skill-import-recipes.ts";
 import { buildSkillsInstallArgs, listStagedSkillSlugs, runSkillsCaptured } from "./skills-cli.ts";
 
-interface SecurityRiskAssessment {
+export interface SecurityRiskAssessment {
   detailsUrl: string | null;
   rows: SecurityRiskRow[];
 }
@@ -59,6 +60,83 @@ export function reportSecurityRiskAssessment(
   const assessment = extractSecurityRiskAssessment(output);
   if (assessment) {
     writeMessage(assessment);
+  }
+}
+
+/** Reads optional importer assessments keyed by lowercase selector. Ignores invalid output. */
+export function readJsonSecurityRiskAssessments(output: string) {
+  const assessments = new Map<string, SecurityRiskAssessment>();
+  const schema = z.array(
+    z.looseObject({
+      name: z.string(),
+      security: z
+        .looseObject({
+          details: z.string().optional(),
+          gen: z.string().optional(),
+          snyk: z.string().optional(),
+          socket: z.string().optional()
+        })
+        .nullish(),
+      status: z.string()
+    })
+  );
+  try {
+    const value: unknown = JSON.parse(output);
+    const parsed = schema.safeParse(value);
+    if (parsed.success) {
+      for (const result of parsed.data) {
+        if (result.status === "installed" && result.security) {
+          assessments.set(result.name.toLowerCase(), {
+            detailsUrl: result.security.details ?? null,
+            rows: [
+              {
+                gen: jsonRiskLabel(result.security.gen),
+                skillName: result.name,
+                snyk: jsonRiskLabel(result.security.snyk),
+                socket: result.security.socket ?? "--"
+              }
+            ]
+          });
+        }
+      }
+    }
+  } catch {
+    return assessments;
+  }
+  return assessments;
+}
+
+/** Combines selected assessments into one report, or returns an empty string when none exist. */
+export function renderSecurityRiskAssessments(assessments: readonly SecurityRiskAssessment[]) {
+  if (assessments.length === 0) {
+    return "";
+  }
+  return renderSecurityRiskAssessment({
+    detailsUrl: assessments.find((assessment) => assessment.detailsUrl)?.detailsUrl ?? null,
+    rows: assessments.flatMap((assessment) => assessment.rows)
+  });
+}
+
+function jsonRiskLabel(value: string | undefined) {
+  switch (value ?? "") {
+    case "critical": {
+      return "Critical Risk";
+    }
+    case "high": {
+      return "High Risk";
+    }
+    case "medium": {
+      return "Med Risk";
+    }
+    case "low": {
+      return "Low Risk";
+    }
+    case "safe": {
+      return "Safe";
+    }
+    default: {
+      return "--";
+    }
   }
 }
 
