@@ -24,7 +24,7 @@ import {
   IMPORTED_REFERENCES_ROOT,
   IMPORTED_SKILLS_ROOT
 } from "./import-guidance.ts";
-import { readImportRecipeStore, SKILL_LOCK_PATH } from "./skill-import-recipes.ts";
+import { readImportRecipeStore, writeImportRecipeStore } from "./skill-import-recipes.ts";
 import type { SkillImportRecipeSkill } from "./skill-import-recipes.ts";
 import { restoreSkillImports } from "./skill-lock.ts";
 
@@ -46,10 +46,7 @@ export function rememberSkillGuidance(
   if (changedGuidance && existsSync(baseline)) {
     cpSync(baseline, next, { recursive: true, verbatimSymlinks: true });
     replaceSnapshotGuidance(repoRoot, next, changedGuidance);
-    writeFileSync(
-      path.join(next, SKILL_LOCK_PATH),
-      `${JSON.stringify(readImportRecipeStore(repoRoot), null, 2)}\n`
-    );
+    writeImportRecipeStore(next, readImportRecipeStore(repoRoot));
   } else {
     snapshotSkillGuidance(repoRoot, next);
   }
@@ -102,7 +99,7 @@ export function snapshotSkillGuidance(repoRoot: string, destination: string) {
     store.recipes.filter((recipe) => recipe.localSource).flatMap((recipe) => recipe.skills)
   );
   rmSync(path.join(destination, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
-  writeFileSync(path.join(destination, SKILL_LOCK_PATH), `${JSON.stringify(store, null, 2)}\n`);
+  writeImportRecipeStore(destination, store);
 }
 
 /** Every incomplete migration retry compares against the original committed imported tree. */
@@ -378,7 +375,7 @@ export async function reviewSkillRevisions(
           checkout
         ]);
         runtime.exec("git", ["checkout", "--quiet", "--detach", commit], { cwd: checkout });
-        // Each source version owns its recorded materializer format; unsupported versions fail.
+        // Reconstruct old locks and repo recipes with the current transformation.
         await restoreSkillImports(checkout);
         const snapshot = path.join(temporaryRoot, `snapshot-${index}`);
         snapshotSkillGuidance(checkout, snapshot);

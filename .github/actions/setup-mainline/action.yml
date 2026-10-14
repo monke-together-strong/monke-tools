@@ -20,4 +20,4 @@ runs:
 
     - name: Restore locked guidance
       shell: bash
-      run: vpr skills:restore
+      run: bun run src/index.ts skills restore --repo

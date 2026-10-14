@@ -3,6 +3,7 @@ import path from "node:path";
 
 import * as z from "zod";
 
+import { RepoImportRecipesSchema } from "../scripts/skill-import-recipes.ts";
 import { MonkeError } from "./errors.ts";
 import { resolveGitRepoRoot } from "./git.ts";
 import { containsPath } from "./path-identity.ts";
@@ -90,12 +91,13 @@ const ResourcesSchema = z
     error: "must contain values or commands"
   });
 const RawRepoConfigSchema = z.strictObject({
-  apps: z.record(LabelSchema, AppSchema, { error: "must contain an apps section" }),
+  apps: z.record(LabelSchema, AppSchema).default({}),
   bootstrapCommand: NonEmptyStringSchema.optional(),
   cleanupCommand: NonEmptyStringSchema.optional(),
   external: z.record(LabelSchema, ExternalRepoSchema).optional(),
   resources: ResourcesSchema.optional(),
-  seedPaths: z.array(NonEmptyStringSchema, { error: "must be an array" }).optional()
+  seedPaths: z.array(NonEmptyStringSchema, { error: "must be an array" }).optional(),
+  skills: RepoImportRecipesSchema.optional()
 });
 
 type RawRepoConfig = z.output<typeof RawRepoConfigSchema>;

@@ -20,10 +20,10 @@ import type { SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts"
 import { rememberSkillGuidance } from "../scripts/skill-review.ts";
 import { MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig } from "./global-config.ts";
-import { discoverSourceSkillCopies, resolveSkillSourceFolder } from "./local-skill-source.ts";
 import { containsPath } from "./path-identity.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import { withSkillPublicationTransaction } from "./skill-publication-transaction.ts";
+import { discoverSourceSkillCopies, resolveSkillSourceFolder } from "./skill-source-discovery.ts";
 import { resolveSkillInstallTargets, skillPublicationPaths } from "./skills.ts";
 import type { Runtime } from "./types.ts";
 

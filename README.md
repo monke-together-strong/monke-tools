@@ -153,7 +153,7 @@ selection change or removal, run `mt setup` in other existing worktrees.
 
 Monke's skills cover [worktrees and Sessions](skills/internal/monke-worktrees/SKILL.md), [diff review](skills/internal/monke-diff/SKILL.md), and [skill management](skills/internal/monke-skills/SKILL.md). Link directly to the manual-only [configuration](skills/internal/monke-config/SKILL.md) and [installation](skills/internal/monke-install/SKILL.md) skills when needed. Other workflows live in [internal skills](skills/internal) and [imported guidance](docs/skill-imports.md). See [agent guidance distribution](docs/reference/agent-guidance.md) for domain terminology and ownership.
 
-Imported guidance is generated from the tracked skill lock. See [maintaining imported guidance](docs/skill-imports.md) for exact restoration, complete update review, and review-cache cleanup.
+Imported guidance is generated from the commit pins in `monke.yml`. See [maintain imported guidance](docs/skill-imports.md) for restoration, complete update review, and review-cache cleanup.
 
 ## Update
 

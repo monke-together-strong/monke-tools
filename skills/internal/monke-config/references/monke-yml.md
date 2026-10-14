@@ -1,6 +1,7 @@
-# monke.yml Reference
+# monke.yml reference
 
-Each repo declares its Session behavior and checkout resources in a root `monke.yml`.
+Each repo declares Session behavior, checkout resources, and published guidance
+in a root `monke.yml`. All sections are optional.
 
 ```yaml
 apps:
@@ -139,3 +140,49 @@ only when all containers in the project belong to this checkout.
 Put application resource cleanup in resource modules, and reuse a package script for infrastructure teardown with `cleanupCommand: bun run session:cleanup`. MT releases resources before invoking that script.
 
 Apply project naming to new Sessions. Existing Sessions keep recorded commands and resource values; adding a project name to an existing Session changes the container and volume namespace. Clean up or explicitly migrate its old project before materializing the new configuration. Never suppress Docker errors with `|| true` or use source recovery blindly: failed cleanup retains state for retry.
+
+## Imported guidance
+
+`skills` declares Git imports published with the repo. A `monke.yml` file can
+contain only this section. Link and installer-command sources belong to
+machine-local registries instead.
+
+```yaml
+skills:
+  - source: kepano/obsidian-skills
+    commit: 3ccff5338ea700537839b21900aa5358a0402c98
+    modelInvocation: deny
+    skills:
+      - obsidian-bases
+      - slug: canvas-guidance
+        selector: json-canvas
+        kind: reference
+      - slug: obsidian-markdown
+        modelInvocation: allow
+        description: Use when editing Obsidian Markdown notes.
+```
+
+`source` identifies a Git repository with an optional ref and subpath. `commit`
+is a full 40-character lowercase Git SHA. Restore rejects entries without a commit.
+`mt skills update --repo` pins them.
+
+Each entry requires a nonempty `skills` list. A string uses the same upstream
+selector and local slug. Objects require `slug`. `selector` defaults to that
+slug, and `kind` defaults to `skill`. `modelInvocation` accepts `allow` or `deny`
+at source or skill level. Per-skill choices override source defaults.
+`description` overrides one skill's description. `acceptOpenClawRisks: true` on
+the source records upstream risk acceptance.
+
+`mt skills restore --repo` restores pinned skills into `skills/imported/` and
+references into `skills/references/imported/`. References replace `SKILL.md`
+with `MAIN.md` and remove its leading YAML frontmatter. Restore applies selection
+or override edits, replaces local edits, and prunes undeclared guidance. Monke
+adds missing ignore rules for the generated roots and local restoration state.
+
+When Monke writes recipes, it changes only the `skills` node and appends the node
+when absent. Spawn, materialize, and setup do not restore these imports.
+
+Consumers importing or linking the repo receive its own skills and one level of
+declared imports. This does not project the repo's imports into its own agents.
+Use `mt skills add <source> --project` for clone-local agent projections. See
+[Monke skills](../../monke-skills/SKILL.md) for that workflow.

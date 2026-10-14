@@ -1,5 +1,8 @@
 # Import skills through a skills CLI wrapper
 
+The runtime-command and grouped-selection restrictions below are superseded by
+[ADR 0015](0015-declare-repo-skill-import-recipes.md).
+
 The source-only restriction below is superseded by
 [ADR 0013](./0013-keep-personal-skill-imports-in-a-machine-local-registry.md).
 The repository's bundled Git import and reference-materialization rules remain in force.

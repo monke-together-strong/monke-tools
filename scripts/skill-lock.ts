@@ -1,4 +1,5 @@
 import {
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -6,16 +7,21 @@ import {
   readdirSync,
   readlinkSync,
   realpathSync,
-  rmSync
+  rmSync,
+  renameSync,
+  writeFileSync
 } from "node:fs";
 import path from "node:path";
 
 import pLimit from "p-limit";
+import * as z from "zod";
 
 import { MonkeError } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
 import { createRuntime, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
+import { discoverSourceSkills, resolveSkillSourceFolder } from "../src/skill-source-discovery.ts";
 import type { Runtime } from "../src/types.ts";
+import { parseOwnedYamlText } from "../src/validation.ts";
 import {
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath,
@@ -25,12 +31,69 @@ import {
 import {
   compareSkillLockStrings,
   readImportRecipeStore,
-  SKILL_LOCK_PATH
+  readRepoImportRecipeStore
 } from "./skill-import-recipes.ts";
 import type { SkillImportRecipe, SkillImportRecipeSkill } from "./skill-import-recipes.ts";
 import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from "./skills-cli.ts";
 
 export const MATERIALIZER_VERSION = 1;
+export const SKILL_RESTORE_MARKER = "skills/.monke-restored.json";
+const MarkerSchema = z.record(
+  z.string(),
+  z.strictObject({ digest: z.string(), recipe: z.string(), tooling: z.string() })
+);
+function recipeIdentity(recipe: SkillImportRecipe) {
+  return JSON.stringify({
+    commit: recipe.commit,
+    disableModelInvocation: recipe.disableModelInvocation,
+    skills: recipe.skills.map(({ description, disableModelInvocation, kind, selector, slug }) => ({
+      description,
+      disableModelInvocation,
+      kind,
+      selector,
+      slug
+    })),
+    source: recipe.source
+  });
+}
+function readRestoreMarkers(repoRoot: string) {
+  const file = path.join(repoRoot, SKILL_RESTORE_MARKER);
+  if (!existsSync(file)) {
+    return {};
+  }
+  try {
+    const parsed = MarkerSchema.safeParse(JSON.parse(readFileSync(file, "utf-8")));
+    return parsed.success ? parsed.data : {};
+  } catch {
+    return {};
+  }
+}
+export function rememberRestoredRecipe(repoRoot: string, recipe: SkillImportRecipe) {
+  const file = path.join(repoRoot, SKILL_RESTORE_MARKER);
+  const markers = readRestoreMarkers(repoRoot);
+  markers[recipe.source] = {
+    digest: guidanceDigest(repoRoot, recipe.skills),
+    recipe: recipeIdentity(recipe),
+    tooling: `${SKILLS_CLI_VERSION}/${MATERIALIZER_VERSION}`
+  };
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(`${file}.tmp`, `${JSON.stringify(markers)}\n`);
+  renameSync(`${file}.tmp`, file);
+}
+export function ignoreRepoImports(repoRoot: string) {
+  const file = path.join(repoRoot, ".gitignore");
+  let text = existsSync(file) ? readFileSync(file, "utf-8") : "";
+  for (const entry of [
+    "/skills/imported/",
+    "/skills/references/imported/",
+    `/${SKILL_RESTORE_MARKER}`
+  ]) {
+    if (!text.split(/\r?\n/u).some((line) => line === entry || line === entry.slice(1))) {
+      text += `${text && !text.endsWith("\n") ? "\n" : ""}${entry}\n`;
+    }
+  }
+  writeFileSync(file, text);
+}
 
 async function resolveExplicitSkillCommit(repository: string, revision: string, repoRoot: string) {
   if (path.isAbsolute(repository)) {
@@ -96,7 +159,7 @@ export function describeSkillSource(source: string, repoRoot: string) {
 }
 
 export async function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string) {
-  const source = recipe.lock ?? describeSkillSource(recipe.source, repoRoot);
+  const source = describeSkillSource(recipe.source, repoRoot);
   const treePath = "treePath" in source ? source.treePath : undefined;
   const requestedRefs = treePath
     ? treePath
@@ -140,9 +203,10 @@ export async function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: 
   }
   return {
     commit,
-    importerVersion: SKILLS_CLI_VERSION,
-    materializerVersion: MATERIALIZER_VERSION,
     repository: source.repository,
+    source: treePath
+      ? `https://github.com/${source.repository.slice("https://github.com/".length).replace(/\.git$/u, "")}${treePath.slice(updateRef.length)}#${updateRef}`
+      : recipe.source,
     subpath: treePath ? treePath.slice(updateRef.length).replace(/^\//u, "") : source.subpath,
     updateRef
   };
@@ -150,14 +214,9 @@ export async function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: 
 
 /** Remote imports use skills.sh's SHA URL; local Git fixtures receive an immutable checkout. */
 export async function pinnedSkillSource(
-  lock: NonNullable<SkillImportRecipe["lock"]>,
+  lock: { commit: string; repository: string; subpath: string },
   stagingDirectory: string
 ) {
-  if (lock.materializerVersion !== MATERIALIZER_VERSION) {
-    throw new MonkeError(
-      `Unsupported skill materializer version ${lock.materializerVersion}; use the tooling from the selected source revision`
-    );
-  }
   if (path.isAbsolute(lock.repository)) {
     const checkout = path.join(stagingDirectory, "upstream");
     const runtime = createRuntime({ cwd: stagingDirectory });
@@ -226,20 +285,136 @@ function validateUpstreamLinks(checkout: string) {
   visit(root);
 }
 
-export async function stageLockedRecipe(recipe: SkillImportRecipe, stagingDirectory: string) {
-  if (!recipe.lock) {
-    throw new MonkeError(`Unpinned Skill import recipe: ${recipe.source}`);
+/** Stage a publishing repo and one level of its declared imports as one collection. */
+export async function stageGitSkillSource(options: {
+  includeDeclaredImports?: boolean;
+  recipe: SkillImportRecipe;
+  repoRoot: string;
+  runtime?: Runtime;
+  selectors: string[];
+  stagingDirectory: string;
+}) {
+  const { recipe, repoRoot, selectors, stagingDirectory } = options;
+  if (!recipe.commit) {
+    throw new MonkeError(
+      `Unpinned Skill import recipe: ${recipe.source}; run mt skills update --repo`
+    );
   }
-  const source = await pinnedSkillSource(recipe.lock, stagingDirectory);
-  const runtime = createRuntime({ cwd: stagingDirectory });
-  const output = await runtime.execAsync(
-    runtime.platform === "win32" ? "npx.cmd" : "npx",
-    buildSkillsInstallArgs({
-      importerVersion: recipe.lock.importerVersion,
-      selectors: recipe.skills.map((skill) => skill.selector),
-      source
-    })
+  const descriptor = describeSkillSource(recipe.source, repoRoot);
+  const source = await pinnedSkillSource(
+    { ...descriptor, commit: recipe.commit },
+    stagingDirectory
   );
+  const checkout = path.join(
+    stagingDirectory,
+    path.isAbsolute(descriptor.repository) ? "upstream" : "upstream-validation"
+  );
+  const declared =
+    options.includeDeclaredImports === false
+      ? { recipes: [] }
+      : readRepoImportRecipeStore(checkout);
+  const imported = declared.recipes.flatMap((entry) => entry.skills);
+  const ownSkills = discoverSourceSkills(
+    resolveSkillSourceFolder(path.join(checkout, descriptor.subpath), false, true)
+  );
+  if (imported.length > 0) {
+    for (const item of imported) {
+      if (ownSkills.has(item.slug)) {
+        throw new MonkeError(
+          `Imported ${item.kind} slug ${item.slug} collides with publishing source ${recipe.source}`
+        );
+      }
+    }
+  }
+  const declaredSelectors = new Set(imported.flatMap((item) => [item.slug, item.selector]));
+  const ownSelectors = selectors.filter(
+    (selector) => !declaredSelectors.has(selector) && (selector !== "*" || ownSkills.size > 0)
+  );
+  const runtime = options.runtime ?? createRuntime({ cwd: stagingDirectory });
+  let output = { exitCode: 0, stderr: "", stdout: "" };
+  if (ownSelectors.length > 0) {
+    output = await runtime.execAsync(
+      runtime.platform === "win32" ? "npx.cmd" : "npx",
+      buildSkillsInstallArgs({ selectors: ownSelectors, source }),
+      { cwd: stagingDirectory }
+    );
+  }
+  if (declared.recipes.length > 0) {
+    // Never follow imports declared by an imported source itself.
+    await restoreLockedImports(checkout, false, runtime);
+    for (const item of imported) {
+      if (
+        !selectors.includes("*") &&
+        !selectors.some((selector) => selector === item.slug || selector === item.selector)
+      ) {
+        continue;
+      }
+      const target = path.join(stagingDirectory, ".agents", "skills", item.slug);
+      if (existsSync(target)) {
+        throw new MonkeError(
+          `Imported ${item.kind} slug ${item.slug} collides with publishing source ${recipe.source}`
+        );
+      }
+      cpSync(importedGuidancePath(checkout, item), target, {
+        recursive: true,
+        verbatimSymlinks: true
+      });
+      if (item.kind === "reference") {
+        renameSync(path.join(target, "MAIN.md"), path.join(target, "SKILL.md"));
+      }
+    }
+  }
+  return { ...output, declaredGuidance: imported, source };
+}
+
+/** Preserve user overrides while discovering the publishing source's selected collection. */
+export function stagedSkillGuidance(
+  stagingDirectory: string,
+  previous: SkillImportRecipe,
+  declared: SkillImportRecipeSkill[] = [],
+  reference = false
+) {
+  return listStagedSkillSlugs(stagingDirectory).map((slug) => {
+    const entry = path.join(stagingDirectory, ".agents", "skills", slug, "SKILL.md");
+    const imported = declared.find((item) => item.slug === slug);
+    const frontmatter = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
+      readFileSync(entry, "utf-8")
+    );
+    if (!frontmatter && imported?.kind !== "reference") {
+      throw new MonkeError(`Expected leading YAML frontmatter at ${entry}`);
+    }
+    const metadata = parseOwnedYamlText(
+      frontmatter?.groups?.frontmatter ?? "{}",
+      entry,
+      z.looseObject({ name: z.string().optional() })
+    );
+    const existing = previous.skills.find((item) => item.slug === slug);
+    return {
+      ...existing,
+      kind: reference
+        ? ("reference" as const)
+        : (existing?.kind ?? imported?.kind ?? ("skill" as const)),
+      selector: metadata.name ?? slug,
+      slug
+    };
+  });
+}
+
+export async function stageLockedRecipe(
+  recipe: SkillImportRecipe,
+  stagingDirectory: string,
+  repoRoot: string,
+  includeDeclaredImports = true,
+  runtime?: Runtime
+) {
+  const output = await stageGitSkillSource({
+    includeDeclaredImports,
+    recipe,
+    repoRoot,
+    runtime,
+    selectors: recipe.skills.map((skill) => skill.selector),
+    stagingDirectory
+  });
   const slugs = listStagedSkillSlugs(stagingDirectory);
   if (
     slugs.join("\0") !==
@@ -315,54 +490,95 @@ export async function withSkillImportMutation<T>(
   return await withScopedLockAsync(getMonkeHome(runtime), `skill-import:${repoRoot}`, callback);
 }
 
-export async function restoreSkillImports(repoRoot: string) {
-  await withSkillImportMutation(repoRoot, () => restoreLockedImports(repoRoot));
+export async function restoreSkillImports(
+  repoRoot: string,
+  includeDeclaredImports = true,
+  runtime?: Runtime
+) {
+  await withSkillImportMutation(
+    repoRoot,
+    () => restoreLockedImports(repoRoot, includeDeclaredImports, runtime),
+    runtime
+  );
 }
 
 /** Restore one accepted Git source without blocking unrelated source updates. */
-export async function restoreLockedRecipe(repoRoot: string, recipe: SkillImportRecipe) {
-  if (!recipe.lock) {
-    throw new MonkeError(`Unpinned Skill import recipe: ${recipe.source}`);
+export async function restoreLockedRecipe(
+  repoRoot: string,
+  recipe: SkillImportRecipe,
+  includeDeclaredImports = true,
+  runtime?: Runtime
+) {
+  if (!recipe.commit) {
+    throw new MonkeError(
+      `Unpinned Skill import recipe: ${recipe.source}; run mt skills update --repo`
+    );
   }
+  const marker = readRestoreMarkers(repoRoot)[recipe.source];
   try {
-    if (guidanceDigest(repoRoot, recipe.skills) === recipe.lock?.digest) {
+    if (
+      marker?.recipe === recipeIdentity(recipe) &&
+      marker.tooling === `${SKILLS_CLI_VERSION}/${MATERIALIZER_VERSION}` &&
+      guidanceDigest(repoRoot, recipe.skills) === marker.digest
+    ) {
       return;
     }
   } catch {
-    // Missing/stale local materialization is restored from the accepted pin.
+    // Missing or edited guidance must be restored from the pin.
   }
   const stagingDirectory = path.join(repoRoot, "tmp", `skill-restore-${crypto.randomUUID()}`);
   mkdirSync(stagingDirectory, { recursive: true });
   try {
-    await stageLockedRecipe(recipe, stagingDirectory);
+    await stageLockedRecipe(recipe, stagingDirectory, repoRoot, includeDeclaredImports, runtime);
     copyStagedGuidanceToManagedRoots({
       defaultDisableModelInvocation: recipe.disableModelInvocation,
       guidance: recipe.skills,
       repoRoot,
-      stagingDirectory,
-      validatePrepared(preparedRoot) {
-        if (guidanceDigest(preparedRoot, recipe.skills, true) !== recipe.lock?.digest) {
-          throw new MonkeError(
-            `Skill lock digest mismatch for ${recipe.source}; accepted lock was not changed`
-          );
-        }
-      }
+      stagingDirectory
     });
+    rememberRestoredRecipe(repoRoot, recipe);
   } finally {
     rmSync(stagingDirectory, { force: true, recursive: true });
   }
 }
 
-export async function restoreLockedImports(repoRoot: string) {
-  if (!existsSync(path.join(repoRoot, SKILL_LOCK_PATH))) {
-    return;
-  }
+export async function restoreLockedImports(
+  repoRoot: string,
+  includeDeclaredImports = true,
+  runtime?: Runtime
+) {
   const store = readImportRecipeStore(repoRoot);
-  if (store.recipes.some((recipe) => !recipe.localSource && !recipe.lock)) {
+  if (store.recipes.some((recipe) => !recipe.localSource && !recipe.commit)) {
     throw new MonkeError(
-      "Skill lock is incomplete; run skills:update to pin every recipe before source installation"
+      "Skill lock is incomplete; run mt skills update --repo to pin every recipe before source installation"
     );
   }
+  if (existsSync(path.join(repoRoot, "monke.yml"))) {
+    ignoreRepoImports(repoRoot);
+  }
+  const restore = pLimit(4);
+  // Keep the mutation lock until every restore settles, even when a sibling fails.
+  const results = await Promise.allSettled(
+    store.recipes
+      .filter((recipe) => !recipe.localSource)
+      .map((recipe) =>
+        restore(() => restoreLockedRecipe(repoRoot, recipe, includeDeclaredImports, runtime))
+      )
+  );
+  for (const result of results) {
+    if (result.status === "rejected") {
+      throw result.reason;
+    }
+  }
+  // Wait until every recipe validates before pruning entries from a newer lock.
+  pruneImportedGuidance(
+    repoRoot,
+    store.recipes.flatMap((recipe) => recipe.skills)
+  );
+}
+
+/** Generated roots belong only to the current selected guidance. */
+export function pruneImportedGuidance(repoRoot: string, guidance: SkillImportRecipeSkill[]) {
   const managedRoots = [
     { kind: "skill", root: path.join(repoRoot, IMPORTED_SKILLS_ROOT) },
     { kind: "reference", root: path.join(repoRoot, IMPORTED_REFERENCES_ROOT) }
@@ -373,26 +589,6 @@ export async function restoreLockedImports(repoRoot: string) {
       throw new MonkeError(`Imported guidance root must be a regular directory: ${root}`);
     }
   }
-  const restore = pLimit(4);
-  // Keep the mutation lock until every restore settles, even when a sibling fails.
-  const results = await Promise.allSettled(
-    store.recipes
-      .filter((recipe) => !recipe.localSource)
-      .map((recipe) => restore(() => restoreLockedRecipe(repoRoot, recipe)))
-  );
-  for (const result of results) {
-    if (result.status === "rejected") {
-      throw result.reason;
-    }
-  }
-  for (const recipe of store.recipes) {
-    if (!recipe.localSource && guidanceDigest(repoRoot, recipe.skills) !== recipe.lock?.digest) {
-      throw new MonkeError(`Invalid locked guidance for ${recipe.source}`);
-    }
-  }
-  // Generated roots belong to the selected lock, including after a Git revert.
-  // Wait until every recipe validates before removing entries from a newer lock.
-  const guidance = store.recipes.flatMap((recipe) => recipe.skills);
   for (const { kind, root } of managedRoots) {
     const owned = new Set(guidance.filter((item) => item.kind === kind).map((item) => item.slug));
     for (const name of existsSync(root) ? readdirSync(root) : []) {

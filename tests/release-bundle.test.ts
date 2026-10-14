@@ -352,12 +352,8 @@ describe("Release bundle verifier", () => {
         expectedVersion: RELEASE_VERSION
       });
 
-      expect(manifest.guidanceHashes["skills.lock.json"]).toBe(
-        hash(
-          "sha256",
-          readFileSync(path.join(import.meta.dirname, "..", "skills.lock.json")),
-          "hex"
-        )
+      expect(manifest.guidanceHashes["monke.yml"]).toBe(
+        hash("sha256", readFileSync(path.join(import.meta.dirname, "..", "monke.yml")), "hex")
       );
       for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
         const content = spawnSync("tar", ["-xOzf", archivePath, `./${file}`], {
@@ -414,7 +410,7 @@ describe("Mainline Release selection", () => {
     ["skills/internal/implement/SKILL.md", true],
     ["install.sh", true],
     ["scripts/install-release.sh", true],
-    ["skills.lock.json", true],
+    ["monke.yml", true],
     ["scripts/skill-lock.ts", true],
     ["scripts/import-guidance.ts", true],
     [".github/actions/setup-mainline/action.yml", true],

@@ -56,14 +56,13 @@ const RELEASE_INPUTS = [
   "scripts/install-release.sh",
   "scripts/release-bundle.ts",
   "scripts/import-guidance.ts",
-  "scripts/import-skills.ts",
-  "scripts/restore-skills.ts",
+  "scripts/skill-import.ts",
   "scripts/skill-lock.ts",
   "scripts/skill-import-recipes.ts",
   "scripts/skill-review.ts",
   "scripts/update-skills.ts",
   "scripts/skills-cli.ts",
-  "skills.lock.json",
+  "monke.yml",
   "src/",
   "skills/codex/",
   "skills/imported/",
@@ -275,7 +274,7 @@ async function compileExecutable(
 }
 
 function copyBundleInputs(bundleRoot: string) {
-  for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md", "skills.lock.json"]) {
+  for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md", "monke.yml"]) {
     cpSync(path.join(repositoryRoot, file), path.join(bundleRoot, file));
   }
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {

@@ -40,7 +40,7 @@ jobs:
         run: vp install --frozen-lockfile -- --prefer-offline
 
       - name: Restore locked guidance
-        run: vpr skills:restore
+        run: bun run src/index.ts skills restore --repo
 
       - name: Detect relevant changes
         id: relevance

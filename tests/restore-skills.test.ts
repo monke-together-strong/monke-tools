@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
-import { guidanceDigest, restoreSkillImports } from "../scripts/skill-lock.ts";
+import { rememberRestoredRecipe, restoreSkillImports } from "../scripts/skill-lock.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { makeTempDir, read, write } from "./helpers.ts";
 
@@ -27,21 +27,16 @@ describe("parallel locked skill restore", () => {
         const skills = [{ kind: "skill" as const, selector: slug, slug }];
         write(sandbox, `skills/imported/${slug}/SKILL.md`, `accepted ${slug}\n`);
         return {
-          lock: {
-            commit: String(index).padStart(40, "0"),
-            digest: guidanceDigest(sandbox, skills),
-            importerVersion: "1.7.0",
-            materializerVersion: 1,
-            repository: `https://github.com/owner/source-${index}.git`,
-            subpath: "",
-            updateRef: "HEAD"
-          },
+          commit: String(index).padStart(40, "0"),
           skills,
           source: `owner/source-${index}`
         };
       });
-      writeImportRecipeStore(sandbox, { recipes, version: 3 });
+      writeImportRecipeStore(sandbox, { recipes, version: 4 });
       const acceptedLock = read(sandbox, "skills.lock.json");
+      for (const recipe of recipes) {
+        rememberRestoredRecipe(sandbox, recipe);
+      }
       for (let index = 0; index < 6; index += 1) {
         rmSync(path.join(sandbox, `skills/imported/skill-${index}`), { recursive: true });
       }

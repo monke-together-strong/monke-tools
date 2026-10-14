@@ -1,6 +1,6 @@
 ---
 name: monke-config
-description: Author monke.yml and resource modules for repository dependencies, environment, bootstrap, and teardown.
+description: Author monke.yml and resource modules for repository dependencies, environment, bootstrap, teardown, and published skill imports.
 disable-model-invocation: true
 ---
 

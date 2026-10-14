@@ -300,38 +300,48 @@ function createProgram(runtime: Runtime) {
     .alias("import")
     .description("Register imported skills from Git, a local link, or an installer command")
     .argument("[source]", "Git source or local Skill collection")
-    .option("--project", "Install into this repository; local sources stay linked")
+    .option("--repo", "Declare imports published with this repo in monke.yml")
+    .option("--project", "Project skills into this clone using its machine-local registry")
     .option("--command <command>", "Installer command to save and replay on update")
     .option("--cwd <path>", "Installer working directory (defaults to a managed source directory)")
     .option("--link", "Register existing files without running the installer now")
     .option("--name <name>", "Source name (required for command-only imports)")
     .option("--skill <slugs...>", "Only import the selected skills")
+    .option("--ref", "Import selections as references in repo scope")
+    .option("--accept-openclaw-risks", "Accept upstream OpenClaw security risks")
     .action((source, options) =>
       runSkillsRegistry(
         runtime,
         {
+          acceptOpenClawRisks: options.acceptOpenclawRisks,
           action: "add",
           command: options.command,
           cwd: options.cwd,
           link: options.link,
           name: options.name,
+          reference: options.ref,
           skills: options.skill,
           source
         },
-        options.project
+        options.project,
+        options.repo
       )
     );
 
   skills
     .command("list")
     .description("List registered imported Skill sources")
-    .option("--project", "List this repository's Skill sources")
-    .action((options) => runSkillsRegistry(runtime, { action: "list" }, options.project));
+    .option("--repo", "Declare imports published with this repo in monke.yml")
+    .option("--project", "List the clone-local registry that projects skills into this clone")
+    .action((options) =>
+      runSkillsRegistry(runtime, { action: "list" }, options.project, options.repo)
+    );
 
   skills
     .command("update")
     .description("Update all imported skills and open one complete comparison")
-    .option("--project", "Update this repository's Skill sources")
+    .option("--repo", "Declare imports published with this repo in monke.yml")
+    .option("--project", "Update the clone-local registry and its skill projections")
     .addOption(new Option("--adapter <adapter>").choices(["codiff", "lfv"]))
     .option("--interactive", "Prompt before accepting upstream Skill slug replacements")
     .action((options) =>
@@ -342,7 +352,8 @@ function createProgram(runtime: Runtime) {
           adapter: options.adapter,
           interactive: options.interactive
         },
-        options.project
+        options.project,
+        options.repo
       )
     );
 
@@ -350,15 +361,17 @@ function createProgram(runtime: Runtime) {
     .command("remove")
     .description("Remove an import registration while preserving its external source")
     .argument("<source>")
-    .option("--project", "Remove a source from this repository")
+    .option("--repo", "Declare imports published with this repo in monke.yml")
+    .option("--project", "Remove a source from the clone-local registry and its projections")
     .action((source, options) =>
-      runSkillsRegistry(runtime, { action: "remove", source }, options.project)
+      runSkillsRegistry(runtime, { action: "remove", source }, options.project, options.repo)
     );
 
   skills
     .command("policy")
     .description("Override an imported Skill's description or model invocation")
-    .option("--project", "Set policy for this repository's Skill sources")
+    .option("--repo", "Declare imports published with this repo in monke.yml")
+    .option("--project", "Set overrides in the clone-local registry for skill projections")
     .argument("<source>")
     .argument("[skill]", "Skill slug; omit to set the source default, including future skills")
     .addOption(new Option("--model-invocation <policy>").choices(["allow", "deny"]))
@@ -374,9 +387,16 @@ function createProgram(runtime: Runtime) {
           skill,
           source
         },
-        options.project
+        options.project,
+        options.repo
       )
     );
+
+  skills
+    .command("restore")
+    .description("Restore this repo's pinned imports without moving commits")
+    .option("--repo", "Restore the imports declared in monke.yml")
+    .action((options) => runSkillsRegistry(runtime, { action: "restore" }, false, options.repo));
 
   skills
     .command("local-install", { hidden: true })

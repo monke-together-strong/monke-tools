@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import is from "@sindresorhus/is";
+import { isMap, isNode, parseDocument } from "yaml";
 import * as z from "zod";
 
 import { MonkeError } from "../src/errors.ts";
@@ -8,7 +10,7 @@ import { unwrapBoundaryResult } from "../src/validation.ts";
 import { IMPORTED_SKILLS_ROOT } from "./import-guidance.ts";
 
 export const SKILL_LOCK_PATH = "skills.lock.json";
-const SKILL_IMPORT_RECIPE_STORE_VERSION = 3;
+const SKILL_IMPORT_RECIPE_STORE_VERSION = 4 as const;
 const LEGACY_IMPORT_RECIPE_STORE_PATH = path.join(IMPORTED_SKILLS_ROOT, ".monke-imports.json");
 const SkillImportRecipeSkillSchema = z.strictObject(
   {
@@ -37,6 +39,10 @@ const SkillImportRecipeSchema = z.strictObject(
         error: "Skill import recipe acceptOpenClawRisks must be true when present"
       })
       .optional(),
+    commit: z
+      .string()
+      .regex(/^[a-f\d]{40}$/u)
+      .optional(),
     disableModelInvocation: z.boolean().optional(),
     localSource: z
       .strictObject({
@@ -53,23 +59,6 @@ const SkillImportRecipeSchema = z.strictObject(
             path: ["command"]
           });
         }
-      })
-      .optional(),
-    lock: z
-      .strictObject({
-        commit: z.string().regex(/^[a-f\d]{40}$/u),
-        digest: z.string().regex(/^[a-f\d]{64}$/u),
-        importerVersion: z.string().regex(/^\d+\.\d+\.\d+$/u),
-        materializerVersion: z.number().int().positive(),
-        repository: z.string().min(1),
-        subpath: z
-          .string()
-          .refine(
-            (value) =>
-              !value.startsWith("/") && !value.includes("\\") && !value.split("/").includes(".."),
-            { error: "Skill source subpath must stay inside the repository" }
-          ),
-        updateRef: z.string().min(1)
       })
       .optional(),
     name: z
@@ -116,129 +105,194 @@ export type SkillImportRecipeSkill = z.output<typeof SkillImportRecipeSkillSchem
 /** Selector-to-slug mapping before an Import kind is assigned. */
 export type StagedSkillSelection = Omit<SkillImportRecipeSkill, "kind">;
 
-/** Input for recording newly imported skills in the recipe store. */
-export interface RecordImportedGuidanceInput {
-  /** Whether OpenClaw risk acceptance was recorded for this recipe. */
-  acceptOpenClawRisks: boolean;
-  /** Import kind applied to every selection in this invocation. */
-  kind: ImportedGuidanceKind;
-  /** Selector-to-slug ownership entries created by the import. */
-  skills: StagedSkillSelection[];
-  /** Human-facing source string passed through to upstream `skills add`. */
-  source: string;
-}
-
 /** Stable code-unit ordering for persisted lock data and guidance digests. */
 export function compareSkillLockStrings(left: string, right: string) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-/** Reads a Skill import recipe store, returning an empty store when absent. */
+const RecipeSelectionSchema = z
+  .union([
+    z.string().min(1),
+    z.strictObject({
+      adoptedPaths: z.array(z.string().refine(path.isAbsolute)).optional(),
+      description: z.string().trim().min(1).optional(),
+      kind: z.enum(["skill", "reference"]).optional(),
+      modelInvocation: z.enum(["allow", "deny"]).optional(),
+      selector: z.string().min(1).optional(),
+      slug: z.string().min(1)
+    })
+  ])
+  .transform((selection) => {
+    const item = is.string(selection) ? { slug: selection } : selection;
+    const { modelInvocation, ...skill } = item;
+    return {
+      ...skill,
+      kind: skill.kind ?? ("skill" as const),
+      selector: skill.selector ?? skill.slug,
+      ...(modelInvocation === undefined
+        ? {}
+        : { disableModelInvocation: modelInvocation === "deny" })
+    };
+  });
+const RecipeFields = {
+  acceptOpenClawRisks: z.literal(true).optional(),
+  commit: z
+    .string()
+    .regex(/^[a-f\d]{40}$/u)
+    .optional(),
+  modelInvocation: z.enum(["allow", "deny"]).optional(),
+  skills: z.array(RecipeSelectionSchema).min(1),
+  source: z.string().trim().min(1)
+};
+const CompactRecipeSchema = z
+  .strictObject({
+    ...RecipeFields,
+    localSource: SkillImportRecipeSchema.shape.localSource,
+    name: SkillImportRecipeSchema.shape.name,
+    selection: SkillImportRecipeSchema.shape.selection
+  })
+  .transform(({ modelInvocation, ...recipe }) => ({
+    ...recipe,
+    ...(modelInvocation === undefined ? {} : { disableModelInvocation: modelInvocation === "deny" })
+  }));
+export const RepoImportRecipesSchema = z.array(
+  z.strictObject(RecipeFields).transform(({ modelInvocation, ...recipe }) => ({
+    ...recipe,
+    ...(modelInvocation === undefined ? {} : { disableModelInvocation: modelInvocation === "deny" })
+  }))
+);
+const CompactStoreSchema = z.strictObject({
+  recipes: z.array(CompactRecipeSchema),
+  removedSources: z.array(z.string().min(1)).optional(),
+  version: z.literal(SKILL_IMPORT_RECIPE_STORE_VERSION)
+});
+const LegacyStoreSchema = z
+  .object({
+    recipes: z.array(
+      SkillImportRecipeSchema.extend({
+        lock: z
+          .object({
+            commit: z.string().regex(/^[a-f\d]{40}$/u),
+            repository: z.string().min(1),
+            subpath: z.string(),
+            updateRef: z.string().min(1)
+          })
+          .optional()
+      })
+    ),
+    removedSources: z.array(z.string().min(1)).optional(),
+    version: z.literal(3)
+  })
+  .transform((store) => ({
+    ...store,
+    recipes: store.recipes.map(({ lock, ...recipe }) => ({
+      ...recipe,
+      commit: lock?.commit,
+      source:
+        lock && /^(?:https?:\/\/github\.com\/)?[^/\s:]+\/[^/#\s]+\/tree\//u.test(recipe.source)
+          ? `${lock.repository.replace(/\.git$/u, "")}${lock.subpath ? `/${lock.subpath}` : ""}#${lock.updateRef}`
+          : recipe.source
+    })),
+    version: SKILL_IMPORT_RECIPE_STORE_VERSION
+  }));
+
+/** Read machine-local recipes, or the publishing repo's declaration. */
 export function readImportRecipeStore(repoRoot: string): SkillImportRecipeStore {
   const storePath = existsSync(path.join(repoRoot, SKILL_LOCK_PATH))
     ? path.join(repoRoot, SKILL_LOCK_PATH)
     : path.join(repoRoot, LEGACY_IMPORT_RECIPE_STORE_PATH);
   if (!existsSync(storePath)) {
-    return {
-      recipes: [],
-      version: SKILL_IMPORT_RECIPE_STORE_VERSION
-    };
+    return readRepoImportRecipeStore(repoRoot);
   }
-
-  return normalizeImportRecipeStore(
+  const input: unknown = JSON.parse(readFileSync(storePath, "utf-8"));
+  const store = normalizeImportRecipeStore(
     unwrapBoundaryResult(
-      SkillImportRecipeStoreSchema.safeParse(JSON.parse(readFileSync(storePath, "utf-8"))),
+      z.union([CompactStoreSchema, LegacyStoreSchema]).safeParse(input),
       "Skill import recipe store"
     )
   );
+  if (LegacyStoreSchema.safeParse(input).success) {
+    writeImportRecipeStore(repoRoot, store);
+  }
+  return store;
 }
 
-/** Writes the Skill import recipe store with deterministic recipe and skill ordering. */
+export function readRepoImportRecipeStore(repoRoot: string): SkillImportRecipeStore {
+  const file = path.join(repoRoot, "monke.yml");
+  if (!existsSync(file)) {
+    return { recipes: [], version: SKILL_IMPORT_RECIPE_STORE_VERSION };
+  }
+  const document = parseDocument(readFileSync(file, "utf-8"));
+  if (document.errors.length) {
+    throw new MonkeError(`Invalid ${file}: ${document.errors[0]?.message}`);
+  }
+  const skills = document.get("skills", true);
+  const recipes = unwrapBoundaryResult(
+    RepoImportRecipesSchema.safeParse(isNode(skills) ? skills.toJSON() : []),
+    `Repo import recipes in ${file}`
+  );
+  return normalizeImportRecipeStore({ recipes, version: SKILL_IMPORT_RECIPE_STORE_VERSION });
+}
+
+function compactRecipe(recipe: SkillImportRecipe) {
+  const { disableModelInvocation, skills, ...fields } = recipe;
+  return {
+    ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)),
+    ...(disableModelInvocation === undefined
+      ? {}
+      : { modelInvocation: disableModelInvocation ? "deny" : "allow" }),
+    skills: skills.map(
+      ({ disableModelInvocation: disable, kind, selector, slug, ...overrides }) => {
+        if (
+          kind === "skill" &&
+          selector === slug &&
+          disable === undefined &&
+          Object.keys(overrides).length === 0
+        ) {
+          return slug;
+        }
+        return {
+          slug,
+          ...(selector === slug ? {} : { selector }),
+          ...(kind === "skill" ? {} : { kind }),
+          ...(disable === undefined ? {} : { modelInvocation: disable ? "deny" : "allow" }),
+          ...overrides
+        };
+      }
+    )
+  };
+}
+
+/** Keep deterministic compact recipes in machine-local JSON. */
 export function writeImportRecipeStore(repoRoot: string, store: SkillImportRecipeStore) {
-  const normalizedStore = normalizeImportRecipeStore(store);
+  const normalized = normalizeImportRecipeStore(store);
   const storePath = path.join(repoRoot, SKILL_LOCK_PATH);
   mkdirSync(path.dirname(storePath), { recursive: true });
   const temporaryStorePath = `${storePath}.tmp`;
-  writeFileSync(temporaryStorePath, `${JSON.stringify(normalizedStore, null, 2)}\n`, "utf-8");
+  writeFileSync(
+    temporaryStorePath,
+    `${JSON.stringify({ ...normalized, recipes: normalized.recipes.map(compactRecipe) }, null, 2)}\n`,
+    "utf-8"
+  );
   renameSync(temporaryStorePath, storePath);
 }
 
-export function mergeImportedGuidanceIntoRecipeStore(
-  store: SkillImportRecipeStore,
-  input: RecordImportedGuidanceInput
-) {
-  if (input.skills.length === 0) {
-    throw new MonkeError("At least one imported skill must be recorded");
+/** Change only the skills YAML node, preserving the rest of the document. */
+export function writeRepoImportRecipeStore(repoRoot: string, store: SkillImportRecipeStore) {
+  const file = path.join(repoRoot, "monke.yml");
+  const document = parseDocument(existsSync(file) ? readFileSync(file, "utf-8") : "");
+  if (document.errors.length) {
+    throw new MonkeError(`Invalid ${file}: ${document.errors[0]?.message}`);
   }
-
-  const nextStore = normalizeImportRecipeStore(store);
-  assertUniqueImportedSkillOwners(nextStore);
-  const importedGuidance = input.skills.map((skill) => ({ ...skill, kind: input.kind }));
-
-  const recipe = nextStore.recipes.find((candidate) => candidate.source === input.source);
-  if (recipe) {
-    if (Boolean(recipe.acceptOpenClawRisks) !== input.acceptOpenClawRisks) {
-      throw new MonkeError(
-        `Skill import recipe for ${input.source} already exists with a different OpenClaw risk setting`
-      );
-    }
-
-    for (const skill of importedGuidance) {
-      assertSkillCanBeOwnedByRecipe(nextStore, recipe, skill);
-      const existingSkill = recipe.skills.find(
-        (candidate) => candidate.selector === skill.selector
-      );
-      if (existingSkill) {
-        if (existingSkill.slug !== skill.slug) {
-          throw new MonkeError(
-            `Skill import selector ${skill.selector} is already recorded with slug ${existingSkill.slug}`
-          );
-        }
-        if (
-          recipe.skills.some(
-            (candidate) =>
-              candidate !== existingSkill &&
-              candidate.kind === skill.kind &&
-              candidate.slug === skill.slug
-          )
-        ) {
-          throw new MonkeError(
-            `Imported ${skill.kind} slug ${skill.slug} is already owned by ${input.source}`
-          );
-        }
-        existingSkill.kind = skill.kind;
-        continue;
-      }
-
-      if (
-        recipe.skills.some(
-          (candidate) => candidate.kind === skill.kind && candidate.slug === skill.slug
-        )
-      ) {
-        throw new MonkeError(
-          `Imported ${skill.kind} slug ${skill.slug} is already owned by ${input.source}`
-        );
-      }
-
-      recipe.skills.push(skill);
-    }
-  } else {
-    const newRecipe: SkillImportRecipe = {
-      skills: importedGuidance,
-      source: input.source
-    };
-    if (input.acceptOpenClawRisks) {
-      newRecipe.acceptOpenClawRisks = true;
-    }
-
-    for (const skill of importedGuidance) {
-      assertSkillCanBeOwnedByRecipe(nextStore, newRecipe, skill);
-    }
-
-    nextStore.recipes.push(newRecipe);
+  if (document.contents && !isMap(document.contents)) {
+    throw new MonkeError(`${file} must be a YAML mapping`);
   }
-
-  return nextStore;
+  const recipes = normalizeImportRecipeStore(store).recipes.map(compactRecipe);
+  unwrapBoundaryResult(RepoImportRecipesSchema.safeParse(recipes), "Repo import recipes");
+  document.set("skills", document.createNode(recipes));
+  const temporary = `${file}.tmp`;
+  writeFileSync(temporary, document.toString({ lineWidth: 0 }));
+  renameSync(temporary, file);
 }
 
 export function normalizeImportRecipeStore(input: SkillImportRecipeStore): SkillImportRecipeStore {
@@ -339,28 +393,6 @@ function assertUniqueImportedSkillOwners(store: SkillImportRecipeStore) {
       }
 
       owners.set(ownershipKey, recipe.source);
-    }
-  }
-}
-
-function assertSkillCanBeOwnedByRecipe(
-  store: SkillImportRecipeStore,
-  owningRecipe: SkillImportRecipe,
-  skill: SkillImportRecipeSkill
-) {
-  for (const recipe of store.recipes) {
-    if (recipe === owningRecipe) {
-      continue;
-    }
-
-    if (
-      recipe.skills.some(
-        (candidate) => candidate.kind === skill.kind && candidate.slug === skill.slug
-      )
-    ) {
-      throw new MonkeError(
-        `Imported ${skill.kind} slug ${skill.slug} is already owned by recipe ${recipe.source}`
-      );
     }
   }
 }

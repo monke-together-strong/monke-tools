@@ -1,14 +1,18 @@
 ---
 name: monke-skills
-description: Manage global and project skills with mt. Use when creating, adopting, importing, updating, or removing skills, configuring agent targets or invocation policies, or repairing skill links.
+description: Manage global, project, and repo skills with mt. Use when creating, adopting, importing, updating, or removing skills, configuring agent targets or invocation policies, or repairing skill links.
 ---
 
 # Monke skills
 
-Use Monke for global or project skills unless the user requests a specific harness.
+Use Monke for global, project, or repo skills unless the user requests a specific
+harness.
 Private content stays in its source or local registry. Run
 `mt skills <command> --help` for options. Select global targets with
 `mt skills configure`.
+
+Import commands default to the global registry. Use `--project` for clone-local
+agent installs or `--repo` for published imports.
 
 ## Acquire and edit
 
@@ -34,6 +38,21 @@ source. Relocation checks cover Markdown links and symlinks, not dynamic script
 dependencies or plain-text references; use linked import when dependencies must
 stay external. Publication failures restore the batch or report retained recovery
 copies when restoration is obstructed.
+
+## Publish repo imports
+
+Run `mt skills add <git-source> --repo --skill <selectors...>` to declare imports
+in the current repo's `monke.yml`. Add `--ref` for non-invocable references.
+`list`, `remove`, `policy`, and `update` accept `--repo` too. After a fresh clone
+or hand edits, run `mt skills restore --repo` to restore pinned imports.
+Run `mt skills update --repo` to pin missing commits, advance existing sources,
+and open one complete content review. Commit `monke.yml` after review. Restored
+files stay gitignored. monke-tools manages its own imports through this scope.
+
+Repo imports publish guidance alongside a repo's own skills. Global or project
+consumers receive that collection, with their selection and per-skill overrides.
+For the recipe fields and restoration rules, read the
+[configuration reference](../monke-config/references/monke-yml.md#imported-guidance).
 
 ## Project installs
 
@@ -102,7 +121,6 @@ Back up learned edits before installer updates. Reopen a failed viewer with the
 printed `mt diff` command. Git renames with recorded adopted links require explicit
 reconciliation before update.
 
-Removal unregisters the source and its managed links while preserving source
-files. Collisions preserve user-owned targets. Reinstall and target reconfiguration
-retain the registry. For public bundled imports, use `vpr skills:update` in Monke's
-source checkout and commit its lock.
+Global or project removal unregisters the source and its managed links while
+preserving source files. Collisions preserve user-owned targets. Reinstall and
+target reconfiguration retain the registry.
