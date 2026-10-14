@@ -69,6 +69,20 @@ export function assertSkillRestoreMarker(repoRoot: string) {
       cause: error
     });
   }
+  const entry = lstatSync(file, { throwIfNoEntry: false });
+  const directory = lstatSync(parent);
+  const uid = process.geteuid?.();
+  if (
+    entry &&
+    uid !== undefined &&
+    uid !== 0 &&
+    // oxlint-disable-next-line no-bitwise -- Sticky directories restrict replacement by entry ownership.
+    (directory.mode & 0o1000) !== 0 &&
+    directory.uid !== uid &&
+    entry.uid !== uid
+  ) {
+    throw new MonkeError(`Skill restore marker cannot be replaced in sticky directory: ${file}`);
+  }
 }
 
 const MarkerSchema = z.record(
