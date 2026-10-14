@@ -19,7 +19,6 @@ import * as z from "zod";
 import { MonkeError } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
 import { createRuntime, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
-import { discoverSourceSkills, resolveSkillSourceFolder } from "../src/skill-source-discovery.ts";
 import type { Runtime } from "../src/types.ts";
 import { parseOwnedYamlText } from "../src/validation.ts";
 import {
@@ -86,7 +85,17 @@ export function rememberRestoredRecipe(repoRoot: string, recipe: SkillImportReci
   writeFileSync(`${file}.tmp`, `${JSON.stringify(markers)}\n`);
   renameSync(`${file}.tmp`, file);
 }
+/** Ignore updates must not mutate another file through a symlink or hard link. */
+export function assertRepoImportIgnoreFile(repoRoot: string) {
+  const file = path.join(repoRoot, ".gitignore");
+  const metadata = lstatSync(file, { throwIfNoEntry: false });
+  if (metadata && (!metadata.isFile() || metadata.nlink > 1)) {
+    throw new MonkeError(`.gitignore must be a regular file without aliases: ${file}`);
+  }
+}
+
 export function ignoreRepoImports(repoRoot: string) {
+  assertRepoImportIgnoreFile(repoRoot);
   const file = path.join(repoRoot, ".gitignore");
   let text = existsSync(file) ? readFileSync(file, "utf-8") : "";
   for (const entry of [
@@ -322,10 +331,15 @@ export async function stageGitSkillSource(options: {
       ? { recipes: [] }
       : readRepoImportRecipeStore(checkout);
   const imported = declared.recipes.flatMap((entry) => entry.skills);
-  const ownSkills = discoverSourceSkills(
-    resolveSkillSourceFolder(path.join(checkout, descriptor.subpath), false, true)
-  );
   const runtime = options.runtime ?? createRuntime({ cwd: stagingDirectory });
+  const { output, ownSkills } = await stageOwnGitSkills({
+    imported,
+    runtime,
+    selectors,
+    source,
+    sourceRoot: path.join(checkout, descriptor.subpath),
+    stagingDirectory
+  });
   const retiredReferences =
     options.previousRecipe?.skills.filter(
       (item) =>
@@ -356,18 +370,6 @@ export async function stageGitSkillSource(options: {
       }
     }
   }
-  const declaredSelectors = new Set(imported.flatMap((item) => [item.slug, item.selector]));
-  const ownSelectors = selectors.filter(
-    (selector) => !declaredSelectors.has(selector) && (selector !== "*" || ownSkills.size > 0)
-  );
-  let output = { exitCode: 0, stderr: "", stdout: "" };
-  if (ownSelectors.length > 0) {
-    output = await runtime.execAsync(
-      runtime.platform === "win32" ? "npx.cmd" : "npx",
-      buildSkillsInstallArgs({ selectors: ownSelectors, source }),
-      { cwd: stagingDirectory }
-    );
-  }
   if (declared.recipes.length > 0) {
     // Never follow imports declared by an imported source itself.
     await restoreLockedImports(checkout, false, runtime, declared);
@@ -391,6 +393,89 @@ export async function stageGitSkillSource(options: {
     }
   }
   return { ...output, declaredGuidance: [...imported, ...ownReplacements], source };
+}
+
+async function stageOwnGitSkills(options: {
+  imported: readonly SkillImportRecipeSkill[];
+  runtime: Runtime;
+  selectors: string[];
+  source: string;
+  sourceRoot: string;
+  stagingDirectory: string;
+}) {
+  const { imported, runtime, selectors, source, sourceRoot, stagingDirectory } = options;
+  // Only skip the importer for declaration-only publishers. Upstream owns discovery
+  // and installed names, including hidden catalogs and names unlike their folders.
+  const hasOwnSkills =
+    imported.length === 0 ||
+    !new Bun.Glob("**/SKILL.md")
+      .scanSync({
+        cwd: sourceRoot,
+        dot: true,
+        onlyFiles: true
+      })
+      .next().done;
+  const declaredSelectors = new Set(imported.flatMap((item) => [item.slug, item.selector]));
+  const ownSelectors = selectors.filter(
+    (selector) => !declaredSelectors.has(selector) && (selector !== "*" || hasOwnSkills)
+  );
+  const inspectCollection = imported.length > 0 && hasOwnSkills;
+  const explicit = !selectors.includes("*");
+  const collectionDirectory =
+    inspectCollection && explicit
+      ? path.join(stagingDirectory, "publisher-collection")
+      : stagingDirectory;
+  let output = { exitCode: 0, stderr: "", stdout: "" };
+  let ownSkills = new Set<string>();
+  if (inspectCollection || ownSelectors.length > 0) {
+    mkdirSync(collectionDirectory, { recursive: true });
+    const installed = await runtime.execAsync(
+      runtime.platform === "win32" ? "npx.cmd" : "npx",
+      buildSkillsInstallArgs({ selectors: inspectCollection ? ["*"] : ownSelectors, source }),
+      {
+        cwd: collectionDirectory,
+        // Stage the complete collection before applying the consumer's selection.
+        ...(inspectCollection ? { env: { INSTALL_INTERNAL_SKILLS: "1" } } : {})
+      }
+    );
+    ownSkills = new Set(listStagedSkillSlugs(collectionDirectory));
+    if (!inspectCollection || !explicit) {
+      output = installed;
+    }
+  }
+  if (
+    inspectCollection &&
+    !explicit &&
+    !["1", "true"].includes(runtime.env.INSTALL_INTERNAL_SKILLS ?? "")
+  ) {
+    pruneInternalPublisherSkills(collectionDirectory, ownSkills);
+  }
+  if (inspectCollection && explicit && ownSelectors.length > 0) {
+    output = await runtime.execAsync(
+      runtime.platform === "win32" ? "npx.cmd" : "npx",
+      buildSkillsInstallArgs({ selectors: ownSelectors, source }),
+      { cwd: stagingDirectory }
+    );
+  }
+  return { output, ownSkills };
+}
+
+/** Match the pinned importer's default exclusion after staging an entire publisher. */
+function pruneInternalPublisherSkills(stagingDirectory: string, ownSkills: Set<string>) {
+  for (const slug of ownSkills) {
+    const directory = path.join(stagingDirectory, ".agents", "skills", slug);
+    const content = readFileSync(path.join(directory, "SKILL.md"), "utf-8");
+    const frontmatter = /^---\r?\n(?<yaml>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(content);
+    const data = parseOwnedYamlText(
+      frontmatter?.groups?.yaml ?? "{}",
+      directory,
+      z.looseObject({ metadata: z.unknown().optional() })
+    );
+    if (z.looseObject({ internal: z.literal(true) }).safeParse(data.metadata).success) {
+      rmSync(directory, { recursive: true });
+      ownSkills.delete(slug);
+    }
+  }
 }
 
 /** Identify inherited reference kinds without overriding legacy consumer choices. */
@@ -564,6 +649,13 @@ export async function restoreSkillImports(
     repoRoot,
     () => restoreLockedImports(repoRoot, includeDeclaredImports, runtime, store),
     runtime
+  );
+}
+
+/** Restore source-checkout declarations, reading YAML while holding the mutation lock. */
+export async function restoreRepoSkillImports(repoRoot: string) {
+  await withSkillImportMutation(repoRoot, () =>
+    restoreLockedImports(repoRoot, true, undefined, readRepoImportRecipeStore(repoRoot))
   );
 }
 

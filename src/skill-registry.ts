@@ -27,6 +27,7 @@ import {
 import type { SkillImportRecipe, SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { reportSecurityRiskAssessment } from "../scripts/skill-import.ts";
 import {
+  assertRepoImportIgnoreFile,
   ignoreRepoImports,
   rememberRestoredRecipe,
   resolveSkillRevision,
@@ -155,6 +156,7 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
     async () => {
       if (request.action !== "list") {
         assertManagedGuidanceRoots(root);
+        assertRepoImportIgnoreFile(root);
       }
       const store = readRepoImportRecipeStore(root);
       if (request.action === "list") {

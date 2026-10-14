@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, symlinkSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, renameSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -57,6 +57,151 @@ done
 }
 
 describe("repo import recipes through mt skills", () => {
+  test("wildcard imports discover upstream hidden catalogs", async () => {
+    const { bin, repo, runtime, sandbox } = repoFixture();
+    const upstream = createRepo(path.join(sandbox, "curated-source"), {
+      "skills/.curated/base/SKILL.md":
+        "---\nname: base\ndescription: Curated skill.\n---\nCurated.\n"
+    });
+    writeExecutable(
+      path.join(bin, "npx"),
+      '#!/bin/sh\nset -eu\nmkdir -p .agents/skills\ncp -R "$4/skills/.curated/base" .agents/skills/\n'
+    );
+    await runCliAsync(["skills", "add", upstream, "--repo"], runtime);
+    expect(read(repo, "skills/imported/base/SKILL.md")).toContain("Curated.");
+    expect(read(repo, "monke.yml")).toContain("base");
+  });
+
+  test.each([false, true])(
+    "publisher collisions use installed names with explicit=%s",
+    async (explicit) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      const publisher = createRepo(path.join(sandbox, "named-publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
+          ]
+        }),
+        "skills/first/SKILL.md":
+          "---\nname: repo-author\ndescription: Publisher skill.\n---\nOwn guidance.\n"
+      });
+      writeExecutable(
+        path.join(bin, "npx"),
+        `#!/bin/sh
+set -eu
+mkdir -p .agents/skills
+if grep -q '^name: repo-author$' "$4/skills/first/SKILL.md"; then
+  cp -R "$4/skills/first" .agents/skills/repo-author
+else
+  cp -R "$4/skills/first" .agents/skills/first
+fi
+`
+      );
+      await runCliAsync(
+        ["skills", "add", `${publisher}#HEAD`, "--repo", ...(explicit ? ["--skill", "first"] : [])],
+        runtime
+      );
+      expect(read(repo, "skills/imported/first/SKILL.md")).toContain("Pinned first.");
+      expect(existsSync(path.join(repo, "skills/imported/repo-author"))).toBe(!explicit);
+      write(
+        publisher,
+        "skills/first/SKILL.md",
+        "---\nname: first\ndescription: Colliding skill.\n---\nCollision.\n"
+      );
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Introduce installed slug collision"]);
+      const accepted = read(repo, "monke.yml");
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      await expect(
+        runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime)
+      ).rejects.toThrow(/collid/u);
+      expect(read(repo, "monke.yml")).toBe(accepted);
+      expect(read(repo, "skills/imported/first/SKILL.md")).toContain("Pinned first.");
+    }
+  );
+
+  test.each([false, true])(
+    "wildcard publishers retain declared imports with internal skills enabled=%s",
+    async (includeInternal) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      const publisher = createRepo(path.join(sandbox, "internal-publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
+          ]
+        }),
+        "skills/internal/SKILL.md":
+          "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nInternal.\n"
+      });
+      writeExecutable(
+        path.join(bin, "npx"),
+        `#!/bin/sh
+set -eu
+mkdir -p .agents/skills
+if [ -f "$4/skills/internal/SKILL.md" ]; then
+  [ "$INSTALL_INTERNAL_SKILLS" = 1 ]
+  cp -R "$4/skills/internal" .agents/skills/
+else
+  cp -R "$4/skills/first" .agents/skills/
+fi
+`
+      );
+      if (includeInternal) {
+        runtime.env.INSTALL_INTERNAL_SKILLS = "1";
+      }
+      await runCliAsync(["skills", "add", publisher, "--repo"], runtime);
+      expect(read(repo, "skills/imported/first/SKILL.md")).toContain("Pinned first.");
+      expect(existsSync(path.join(repo, "skills/imported/internal"))).toBe(includeInternal);
+    }
+  );
+
+  test.each([
+    { action: "add", alias: "symlink" },
+    { action: "restore", alias: "symlink" },
+    { action: "update", alias: "symlink" },
+    { action: "remove", alias: "symlink" },
+    { action: "policy", alias: "symlink" },
+    { action: "add", alias: "hardlink" }
+  ])(
+    "$action rejects a $alias .gitignore before changing accepted state",
+    async ({ action, alias }) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+      const acceptedConfig = read(repo, "monke.yml");
+      const acceptedSkill = read(repo, "skills/imported/first/SKILL.md");
+      const external = path.join(sandbox, "external-ignore");
+      write(sandbox, "external-ignore", "External ignores must survive.\n");
+      renameSync(path.join(repo, ".gitignore"), path.join(repo, "original-ignore"));
+      if (alias === "hardlink") {
+        linkSync(external, path.join(repo, ".gitignore"));
+      } else {
+        symlinkSync(external, path.join(repo, ".gitignore"));
+      }
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      const args = ["skills", action];
+      if (["add", "remove", "policy"].includes(action)) {
+        args.push(upstream);
+      }
+      args.push("--repo");
+      if (action === "add") {
+        args.push("--skill", "second");
+      }
+      if (action === "policy") {
+        args.push("--model-invocation", "deny");
+      }
+      if (action === "update") {
+        args.push("--adapter", "codiff");
+      }
+      await expect(runCliAsync(args, runtime)).rejects.toThrow(/\.gitignore.*regular file/u);
+      expect(read(sandbox, "external-ignore")).toBe("External ignores must survive.\n");
+      expect(read(repo, "monke.yml")).toBe(acceptedConfig);
+      expect(read(repo, "skills/imported/first/SKILL.md")).toBe(acceptedSkill);
+      expect(existsSync(path.join(repo, "skills/imported/second"))).toBeFalsy();
+    }
+  );
+
   test.each(["add", "update"])(
     "failed %s preserves the accepted pin and files when a publisher retires a selected Skill entry",
     async (action) => {
