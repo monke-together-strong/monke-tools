@@ -394,7 +394,7 @@ export async function reviewSkillRevisions(
         ) {
           // Reconstruct accepted pins with current tooling. Pre-lock history has only
           // committed imported bytes, so preserve those when no repo recipe is declared.
-          await restoreSkillImports(checkout);
+          await restoreSkillImports(checkout, false);
         }
         const snapshot = path.join(temporaryRoot, `snapshot-${index}`);
         snapshotSkillGuidance(checkout, snapshot);

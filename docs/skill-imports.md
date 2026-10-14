@@ -6,6 +6,8 @@ and overrides in the root `monke.yml`, then restores generated guidance into
 `skills/imported/` and `skills/references/imported/`. It adds missing ignore rules.
 Add `--ref` to restore references, whose `SKILL.md` becomes `MAIN.md` without its
 leading YAML frontmatter. Supporting files retain their bytes.
+Repo recipes select a source's committed guidance without following that
+source's import declarations.
 
 See [Monke skills](../skills/internal/monke-skills/SKILL.md) for machine-local
 imports and project projections. `--repo` publishes a collection through
@@ -44,9 +46,11 @@ update the pins to modify restored guidance.
 ## Review updates
 
 Run `mt skills update --repo` to pin missing commits and advance existing sources.
-Successful sources replace their files and
-pins. Failed sources retain their previous pins. Monke reports failures after
-opening one complete comparison, with a Codex summary of changed skills.
+Git preparation runs concurrently. Successful sources replace their files and
+pins. Failed sources retain their previous pins and restored files. If any source
+fails, Monke defers the final removal of undeclared files until a successful
+restore or update. Monke reports failures after opening one complete comparison,
+with a Codex summary of changed skills.
 Use `--interactive` to accept upstream slug changes and `--adapter codiff` or
 `--adapter lfv` to select the viewer.
 

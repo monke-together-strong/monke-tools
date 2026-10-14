@@ -59,6 +59,7 @@ const RELEASE_INPUTS = [
   "scripts/skill-import.ts",
   "scripts/skill-lock.ts",
   "scripts/skill-import-recipes.ts",
+  "scripts/skill-import-state.ts",
   "scripts/skill-review.ts",
   "scripts/update-skills.ts",
   "scripts/skills-cli.ts",

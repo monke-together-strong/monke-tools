@@ -216,7 +216,8 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
     }
   }
 
-  if (dependencies.repo) {
+  if (dependencies.repo && failures.length === 0) {
+    // A rejected hand-edited selection may omit the last accepted files.
     pruneImportedGuidance(
       repoRoot,
       store.recipes.flatMap((recipe) => recipe.skills)
@@ -331,6 +332,7 @@ async function prepareGitSkillUpdate(
     }
     const revision = await resolveSkillRevision(recipe, repoRoot);
     const installOutput = await stageGitSkillSource({
+      includeDeclaredImports: !repo,
       previousRecipe: repo ? undefined : recipe,
       recipe: { ...recipe, commit: revision.commit, source: revision.source },
       repoRoot,

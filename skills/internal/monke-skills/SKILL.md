@@ -114,8 +114,8 @@ skill or reference in the terminal and in `SKILL_UPDATE_SUMMARY.md` in the saved
 comparison. If Codex is unavailable or fails, Monke prints a warning and keeps the
 update and comparison.
 
-Global updates retain successful sources even if another fails. A failed project
-update restores the whole project's registry and links.
+Global or repo updates retain successful sources even if another fails. A failed
+project update restores the whole project's registry and links.
 Failed installers restore the Skill source folder, but may affect files outside it.
 Back up learned edits before installer updates. Reopen a failed viewer with the
 printed `mt diff` command. Git renames with recorded adopted links require explicit

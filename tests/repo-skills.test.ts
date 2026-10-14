@@ -1,5 +1,6 @@
-import { existsSync, linkSync, mkdirSync, renameSync, symlinkSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vite-plus/test";
 import { parseDocument, stringify } from "yaml";
@@ -57,6 +58,104 @@ done
 }
 
 describe("repo import recipes through mt skills", () => {
+  test("repo declarations select their source's own skills and Git and linked consumers resolve one level", async () => {
+    const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+    const publisher = createRepo(path.join(sandbox, "publisher-b"), {
+      "monke.yml": stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
+        ]
+      }),
+      "skills/own-b/SKILL.md": "---\nname: own-b\ndescription: B skill.\n---\nB first revision.\n"
+    });
+    write(
+      repo,
+      "skills/own-a/SKILL.md",
+      "---\nname: own-a\ndescription: A skill.\n---\nA guidance.\n"
+    );
+    const source = `${publisher}#HEAD`;
+    await runCliAsync(["skills", "add", source, "--repo"], runtime);
+    expect(parseDocument(read(repo, "monke.yml")).toJS()).toStrictEqual({
+      skills: [{ commit: git(publisher, ["rev-parse", "HEAD"]), skills: ["own-b"], source }]
+    });
+    expect(read(repo, "skills/imported/own-b/SKILL.md")).toContain("B first revision.");
+    expect(existsSync(path.join(repo, "skills/imported/first"))).toBeFalsy();
+    git(repo, ["add", "."]);
+    git(repo, ["commit", "-m", "Publish B own guidance"]);
+    const before = git(repo, ["rev-parse", "HEAD"]);
+
+    // B's declaration is outside A's import depth and must never be fetched.
+    renameSync(upstream, `${upstream}-offline`);
+    rmSync(path.join(repo, "skills/imported/own-b"), { recursive: true });
+    await runCliAsync(["skills", "restore", "--repo"], runtime);
+    await runCliAsync(
+      [
+        "skills",
+        "policy",
+        source,
+        "own-b",
+        "--repo",
+        "--description",
+        "A trigger.",
+        "--model-invocation",
+        "deny"
+      ],
+      runtime
+    );
+    write(
+      publisher,
+      "skills/own-b/SKILL.md",
+      "---\nname: own-b\ndescription: B skill.\n---\nB second revision.\n"
+    );
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Advance B own guidance"]);
+    installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+    await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+    expect(read(repo, "skills/imported/own-b/SKILL.md")).toContain("B second revision.");
+    expect(read(repo, "skills/imported/own-b/SKILL.md")).toContain("description: A trigger.");
+    expect(read(repo, "skills/imported/own-b/SKILL.md")).toContain(
+      "disable-model-invocation: true"
+    );
+    git(repo, ["add", "."]);
+    git(repo, ["commit", "-m", "Publish updated B guidance"]);
+    const after = git(repo, ["rev-parse", "HEAD"]);
+    const history = await runtime.execAsync(process.execPath, [
+      fileURLToPath(new URL("../scripts/review-skills.ts", import.meta.url)),
+      before,
+      after,
+      "--adapter",
+      "codiff"
+    ]);
+    expect(history.stdout).toContain("Complete skill review:");
+
+    for (const kind of ["git", "link"] as const) {
+      const consumer = createRepo(path.join(sandbox, `consumer-${kind}`), {
+        "README.md": "Consumer.\n"
+      });
+      const consumerRuntime = createTestRuntime({
+        cwd: consumer,
+        env: runtime.env,
+        onStderr() {},
+        onStdout() {}
+      });
+      await runCliAsync(
+        kind === "git"
+          ? ["skills", "add", `${repo}#HEAD`, "--project"]
+          : ["skills", "add", repo, "--project", "--link", "--name", "publisher-a"],
+        consumerRuntime
+      );
+      const projected = path.join(consumer, ".agents/skills/monke-tools/imported");
+      expect(read(projected, "own-a/SKILL.md")).toContain("A guidance.");
+      expect(read(projected, "own-b/SKILL.md")).toContain("B second revision.");
+      expect(read(projected, "own-b/SKILL.md")).toContain("description: A trigger.");
+      expect(existsSync(path.join(projected, "first"))).toBeFalsy();
+    }
+    await runCliAsync(["skills", "remove", source, "--repo"], runtime);
+    expect(existsSync(path.join(repo, "skills/imported/own-b"))).toBeFalsy();
+    expect(read(repo, "skills/own-a/SKILL.md")).toContain("A guidance.");
+  });
+
   test("wildcard imports discover upstream hidden catalogs", async () => {
     const { bin, repo, runtime, sandbox } = repoFixture();
     const upstream = createRepo(path.join(sandbox, "curated-source"), {
@@ -72,10 +171,98 @@ describe("repo import recipes through mt skills", () => {
     expect(read(repo, "monke.yml")).toContain("base");
   });
 
+  test.each(["add", "restore", "update"])(
+    "repo %s rejects selections available only through its source's declarations",
+    async (action) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      const publisher = createRepo(path.join(sandbox, "publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
+          ]
+        }),
+        "skills/own/SKILL.md":
+          "---\nname: own\ndescription: Own skill.\n---\nAccepted own guidance.\n"
+      });
+      const source = `${publisher}#HEAD`;
+      const commit = git(publisher, ["rev-parse", "HEAD"]);
+      await runCliAsync(["skills", "add", source, "--repo", "--skill", "own"], runtime);
+      const accepted = read(repo, "skills/imported/own/SKILL.md");
+      if (action !== "add") {
+        write(repo, "monke.yml", stringify({ skills: [{ commit, skills: ["first"], source }] }));
+      }
+      const config = read(repo, "monke.yml");
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      const args =
+        action === "add"
+          ? ["skills", "add", source, "--repo", "--skill", "first"]
+          : ["skills", action, "--repo", ...(action === "update" ? ["--adapter", "codiff"] : [])];
+      await expect(runCliAsync(args, runtime)).rejects.toThrow(/first/u);
+      expect(read(repo, "monke.yml")).toBe(config);
+      expect(read(repo, "skills/imported/own/SKILL.md")).toBe(accepted);
+      expect(existsSync(path.join(repo, "skills/imported/first"))).toBeFalsy();
+    }
+  );
+
+  test("a failed replacement selection keeps accepted files while another source advances", async () => {
+    const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+    const other = createRepo(path.join(sandbox, "other"), {
+      "skills/other/SKILL.md":
+        "---\nname: other\ndescription: Other skill.\n---\nOther first revision.\n"
+    });
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+    await runCliAsync(["skills", "add", other, "--repo", "--skill", "other"], runtime);
+    const failedPin = git(upstream, ["rev-parse", "HEAD"]);
+    const accepted = read(repo, "skills/imported/first/SKILL.md");
+    write(
+      repo,
+      "monke.yml",
+      stringify({
+        skills: [
+          { commit: failedPin, skills: ["unpublished"], source: upstream },
+          { commit: git(other, ["rev-parse", "HEAD"]), skills: ["other"], source: other }
+        ]
+      })
+    );
+    write(
+      other,
+      "skills/other/SKILL.md",
+      "---\nname: other\ndescription: Other skill.\n---\nOther second revision.\n"
+    );
+    git(other, ["add", "."]);
+    git(other, ["commit", "-m", "Advance working source"]);
+    installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+    await expect(
+      runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime)
+    ).rejects.toThrow("1 recipe(s)");
+    expect(read(repo, "skills/imported/first/SKILL.md")).toBe(accepted);
+    expect(existsSync(path.join(repo, "skills/imported/unpublished"))).toBeFalsy();
+    expect(read(repo, "skills/imported/other/SKILL.md")).toContain("Other second revision.");
+    expect(parseDocument(read(repo, "monke.yml")).toJS()).toStrictEqual({
+      skills: [
+        { commit: git(other, ["rev-parse", "HEAD"]), skills: ["other"], source: other },
+        { commit: failedPin, skills: ["unpublished"], source: upstream }
+      ]
+    });
+    write(
+      repo,
+      "monke.yml",
+      stringify({
+        skills: [{ commit: git(other, ["rev-parse", "HEAD"]), skills: ["other"], source: other }]
+      })
+    );
+    await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+    expect(existsSync(path.join(repo, "skills/imported/first"))).toBeFalsy();
+  });
+
   test.each([false, true])(
     "publisher collisions use installed names with explicit=%s",
     async (explicit) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      const registry = path.join(repo, ".git/monke-tools/skill-registry");
+      const projected = path.join(repo, ".agents/skills/monke-tools/imported");
       const publisher = createRepo(path.join(sandbox, "named-publisher"), {
         "monke.yml": stringify({
           skills: [
@@ -98,11 +285,17 @@ fi
 `
       );
       await runCliAsync(
-        ["skills", "add", `${publisher}#HEAD`, "--repo", ...(explicit ? ["--skill", "first"] : [])],
+        [
+          "skills",
+          "add",
+          `${publisher}#HEAD`,
+          "--project",
+          ...(explicit ? ["--skill", "first"] : [])
+        ],
         runtime
       );
-      expect(read(repo, "skills/imported/first/SKILL.md")).toContain("Pinned first.");
-      expect(existsSync(path.join(repo, "skills/imported/repo-author"))).toBe(!explicit);
+      expect(read(projected, "first/SKILL.md")).toContain("Pinned first.");
+      expect(existsSync(path.join(projected, "repo-author"))).toBe(!explicit);
       write(
         publisher,
         "skills/first/SKILL.md",
@@ -110,14 +303,14 @@ fi
       );
       git(publisher, ["add", "."]);
       git(publisher, ["commit", "-m", "Introduce installed slug collision"]);
-      const accepted = read(repo, "monke.yml");
+      const accepted = read(registry, "skills.lock.json");
       installFakeCodiff(bin);
       installFakeCodexSummary(bin);
       await expect(
-        runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime)
+        runCliAsync(["skills", "update", "--project", "--adapter", "codiff"], runtime)
       ).rejects.toThrow(/collid/u);
-      expect(read(repo, "monke.yml")).toBe(accepted);
-      expect(read(repo, "skills/imported/first/SKILL.md")).toContain("Pinned first.");
+      expect(read(registry, "skills.lock.json")).toBe(accepted);
+      expect(read(projected, "first/SKILL.md")).toContain("Pinned first.");
     }
   );
 
@@ -125,6 +318,7 @@ fi
     "wildcard publishers retain declared imports with internal skills enabled=%s",
     async (includeInternal) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      const projected = path.join(repo, ".agents/skills/monke-tools/imported");
       const publisher = createRepo(path.join(sandbox, "internal-publisher"), {
         "monke.yml": stringify({
           skills: [
@@ -150,9 +344,9 @@ fi
       if (includeInternal) {
         runtime.env.INSTALL_INTERNAL_SKILLS = "1";
       }
-      await runCliAsync(["skills", "add", publisher, "--repo"], runtime);
-      expect(read(repo, "skills/imported/first/SKILL.md")).toContain("Pinned first.");
-      expect(existsSync(path.join(repo, "skills/imported/internal"))).toBe(includeInternal);
+      await runCliAsync(["skills", "add", `${publisher}#HEAD`, "--project"], runtime);
+      expect(read(projected, "first/SKILL.md")).toContain("Pinned first.");
+      expect(existsSync(path.join(projected, "internal"))).toBe(includeInternal);
     }
   );
 
@@ -199,44 +393,6 @@ fi
       expect(read(repo, "monke.yml")).toBe(acceptedConfig);
       expect(read(repo, "skills/imported/first/SKILL.md")).toBe(acceptedSkill);
       expect(existsSync(path.join(repo, "skills/imported/second"))).toBeFalsy();
-    }
-  );
-
-  test.each(["add", "update"])(
-    "failed %s preserves the accepted pin and files when a publisher retires a selected Skill entry",
-    async (action) => {
-      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
-      const imported = {
-        commit: git(upstream, ["rev-parse", "HEAD"]),
-        skills: ["first"],
-        source: upstream
-      };
-      const publisher = createRepo(path.join(sandbox, "publisher"), {
-        "monke.yml": stringify({ skills: [imported] })
-      });
-      await runCliAsync(
-        ["skills", "add", `${publisher}#HEAD`, "--repo", "--skill", "first"],
-        runtime
-      );
-      const acceptedConfig = read(repo, "monke.yml");
-      const acceptedSkill = read(repo, "skills/imported/first/SKILL.md");
-      write(
-        publisher,
-        "monke.yml",
-        stringify({ skills: [{ ...imported, skills: [{ kind: "reference", slug: "first" }] }] })
-      );
-      git(publisher, ["add", "."]);
-      git(publisher, ["commit", "-m", "Retire skill entry in favor of reference"]);
-      installFakeCodiff(bin);
-      installFakeCodexSummary(bin);
-      const args =
-        action === "add"
-          ? ["skills", "add", `${publisher}#HEAD`, "--repo", "--skill", "first"]
-          : ["skills", "update", "--repo", "--adapter", "codiff"];
-      await expect(runCliAsync(args, runtime)).rejects.toThrow(/entry/u);
-      expect(read(repo, "monke.yml")).toBe(acceptedConfig);
-      expect(read(repo, "skills/imported/first/SKILL.md")).toBe(acceptedSkill);
-      expect(existsSync(path.join(repo, "skills/imported/first/MAIN.md"))).toBeFalsy();
     }
   );
 
@@ -543,7 +699,7 @@ fi
     expect(parseDocument(read(repo, "monke.yml")).toJS()).toStrictEqual({ skills: [] });
   });
 
-  test("repo reference choices remain authoritative when the source publishes imported skills", async () => {
+  test("repo reference choices remain authoritative for a source's own skills", async () => {
     const { bin, repo, runtime, sandbox, upstream } = repoFixture();
     const publisher = createRepo(path.join(sandbox, "reference-publisher"), {
       "monke.yml": stringify({
@@ -558,7 +714,7 @@ fi
       "skills/own/SKILL.md": "---\nname: own\ndescription: Own skill.\n---\nOwn instructions.\n"
     });
     await runCliAsync(
-      ["skills", "add", `${publisher}#HEAD`, "--repo", "--ref", "--skill", "first"],
+      ["skills", "add", `${publisher}#HEAD`, "--repo", "--ref", "--skill", "own"],
       runtime
     );
     write(publisher, "README.md", "Publisher advances.\n");
@@ -567,8 +723,8 @@ fi
     installFakeCodiff(bin);
     installFakeCodexSummary(bin);
     await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
-    expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
-    expect(existsSync(path.join(repo, "skills/imported/first"))).toBeFalsy();
+    expect(read(repo, "skills/references/imported/own/MAIN.md")).toBe("Own instructions.\n");
+    expect(existsSync(path.join(repo, "skills/imported/own"))).toBeFalsy();
     await expect(
       runCliAsync(["skills", "add", `${publisher}#HEAD`, "--ref"], runtime)
     ).rejects.toThrow("--ref requires --repo");

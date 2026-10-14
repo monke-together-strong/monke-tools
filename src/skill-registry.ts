@@ -166,7 +166,7 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
           );
         }
       } else if (request.action === "restore") {
-        await restoreLockedImports(root, true, runtime, store);
+        await restoreLockedImports(root, false, runtime, store);
       } else if (request.action === "add") {
         if (!request.source || request.command || request.link || request.cwd || request.name) {
           throw new MonkeError(
@@ -184,7 +184,7 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
                 item === recipe ? setRecipePolicy(recipe, request) : item
               );
         writeRepoImportRecipeStore(root, { ...store, recipes });
-        await restoreLockedImports(root, true, runtime, { ...store, recipes });
+        await restoreLockedImports(root, false, runtime, { ...store, recipes });
       } else {
         throw new MonkeError(`${request.action} is machine-local and does not accept --repo`);
       }
@@ -600,6 +600,7 @@ async function addGitSkillSource(
   const staging = mkdtempSync(path.join(tmpdir(), "monke-skill-git-"));
   try {
     const installOutput = await stageGitSkillSource({
+      includeDeclaredImports: !repo,
       previousRecipe: repo ? undefined : previous,
       recipe: { ...recipe, commit: revision.commit, source: revision.source },
       repoRoot: root,

@@ -435,6 +435,7 @@ describe("Mainline Release selection", () => {
     ["scripts/install-release.sh", true],
     ["monke.yml", true],
     ["scripts/skill-lock.ts", true],
+    ["scripts/skill-import-state.ts", true],
     ["scripts/import-guidance.ts", true],
     [".github/actions/setup-mainline/action.yml", true],
     [".github/workflows/publish.yml", true],

@@ -654,7 +654,7 @@ export async function restoreSkillImports(
 /** Restore source-checkout declarations, reading YAML while holding the mutation lock. */
 export async function restoreRepoSkillImports(repoRoot: string) {
   await withSkillImportMutation(repoRoot, () =>
-    restoreLockedImports(repoRoot, true, undefined, readRepoImportRecipeStore(repoRoot))
+    restoreLockedImports(repoRoot, false, undefined, readRepoImportRecipeStore(repoRoot))
   );
 }
 
