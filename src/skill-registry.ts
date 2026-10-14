@@ -115,6 +115,18 @@ export function runSkillsRegistry(
         return;
       }
       const scope = initializeProjectSkillRegistry(runtime, context);
+      if (request.action === "update") {
+        // Agent roots can overlap publishers, so snapshot recovery after publisher updates.
+        await runSkillsRegistryLocked(
+          runtime,
+          request,
+          context.root,
+          context.root,
+          scope,
+          (publish) => withProjectSkillPublicationTransaction(runtime, context, scope, publish)
+        );
+        return;
+      }
       await withProjectSkillPublicationTransaction(runtime, context, scope, () =>
         runSkillsRegistryLocked(runtime, request, context.root, context.root, scope)
       );
@@ -204,7 +216,8 @@ async function runSkillsRegistryLocked(
   request: Exclude<SkillsRequest, { action: "restore" }>,
   guidance: string,
   projectRoot?: string,
-  scope?: SkillPublicationScope
+  scope?: SkillPublicationScope,
+  publishUpdate?: (publish: () => Promise<void>) => Promise<void>
 ) {
   const root = projectRoot ?? initializeSkillRegistry(runtime, guidance);
   const store = readImportRecipeStore(root);
@@ -217,36 +230,42 @@ async function runSkillsRegistryLocked(
     return;
   }
   if (request.action === "update") {
-    try {
-      await runUpdateSkills(
-        [
-          ...(request.adapter ? ["--adapter", request.adapter] : []),
-          ...(request.interactive ? ["--interactive"] : [])
-        ],
-        {
-          connectedRepos: connectedSkillRepositories(runtime, store, scope === undefined),
-          repoRoot: root,
-          runtime,
-          validatePrepared(prepared, recipe) {
-            const previous = readImportRecipeStore(root).recipes.find(
-              (item) => item.source === recipe.source
-            );
-            preflightRegistryChange(
-              runtime,
-              root,
-              prepared,
-              recipe.skills,
-              previous?.skills ?? [],
-              scope
-            );
-          },
-          writeMessage: runtime.writeStdout
-        }
-      );
-    } finally {
-      retireAdoptedSkillLinks(root, store);
-      distributeRegistry(runtime, root, scope);
-    }
+    await runUpdateSkills(
+      [
+        ...(request.adapter ? ["--adapter", request.adapter] : []),
+        ...(request.interactive ? ["--interactive"] : [])
+      ],
+      {
+        connectedRepos: connectedSkillRepositories(runtime, store, scope === undefined),
+        publishCollection(update) {
+          const publish = async () => {
+            try {
+              await update();
+            } finally {
+              retireAdoptedSkillLinks(root, store);
+              distributeRegistry(runtime, root, scope);
+            }
+          };
+          return publishUpdate ? publishUpdate(publish) : publish();
+        },
+        repoRoot: root,
+        runtime,
+        validatePrepared(prepared, recipe) {
+          const previous = readImportRecipeStore(root).recipes.find(
+            (item) => item.source === recipe.source
+          );
+          preflightRegistryChange(
+            runtime,
+            root,
+            prepared,
+            recipe.skills,
+            previous?.skills ?? [],
+            scope
+          );
+        },
+        writeMessage: runtime.writeStdout
+      }
+    );
     return;
   }
   let changedSources: string[];

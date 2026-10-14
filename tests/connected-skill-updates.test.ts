@@ -1,4 +1,4 @@
-import { cpSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -260,30 +260,42 @@ describe("updates through connected local repositories", () => {
     expect(diff).toContain("monke.yml");
   });
 
-  test.each(["missing", "file"])(
-    "a %s link does not stop connected healthy imports",
-    async (kind) => {
+  test.each([
+    ["missing", false],
+    ["file", false],
+    ["missing", true],
+    ["file", true]
+  ] as const)(
+    "a %s link does not stop connected healthy imports in project=%s",
+    async (kind, project) => {
       const f = fixture();
       await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
         ...f.runtime,
         cwd: f.checkout
       });
+      const scope = project ? ["--project"] : [];
+      if (project) {
+        await runCliAsync(["skills", "add", f.checkout, "--project", "--skill", "base"], f.runtime);
+      }
       const missing = createRepo(path.join(f.sandbox, "missing"), {
         "skills/missing/SKILL.md": "---\nname: missing\ndescription: Missing.\n---\nMissing.\n"
       });
-      await runCliAsync(["skills", "add", missing], f.runtime);
+      await runCliAsync(["skills", "add", missing, ...scope], f.runtime);
       rmSync(missing, { recursive: true });
       if (kind === "file") {
         write(f.sandbox, "missing", "The linked checkout was replaced by a file.\n");
       }
       const commit = f.advance();
 
-      await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(/missing/u);
+      await expect(runCliAsync(["skills", "update", ...scope], f.runtime)).rejects.toThrow(
+        /missing/u
+      );
 
       expect(readRepoImportRecipeStore(f.checkout).recipes[0]?.commit).toBe(commit);
-      expect(read(f.home, ".codex/skills/monke-tools/imported/base/SKILL.md")).toContain(
-        "Second version."
-      );
+      const installed = project
+        ? path.join(f.caller, ".agents/skills")
+        : path.join(f.home, ".codex/skills");
+      expect(read(installed, "monke-tools/imported/base/SKILL.md")).toContain("Second version.");
       expect(reviewDiff(f.reviewLog)).toContain("Second version.");
     }
   );
@@ -398,6 +410,49 @@ describe("updates through connected local repositories", () => {
     );
     expect(reviewDiff(f.reviewLog)).toContain("Second version.");
   });
+
+  test.each(["nested", "alias"])(
+    "project recovery preserves a %s publisher's accepted updates",
+    async (kind) => {
+      const f = fixture();
+      const publisher = createRepo(
+        path.join(f.caller, kind === "nested" ? ".agents/skills/publisher" : "publisher"),
+        { "monke.yml": "skills: []\n" }
+      );
+      await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
+        ...f.runtime,
+        cwd: publisher
+      });
+      if (kind === "alias") {
+        mkdirSync(path.join(f.caller, ".agents"), { recursive: true });
+        symlinkSync(path.join(publisher, "skills"), path.join(f.caller, ".agents/skills"), "dir");
+      }
+      await runCliAsync(["skills", "add", publisher, "--project", "--skill", "base"], f.runtime);
+      const missing = createRepo(path.join(f.sandbox, "missing"), {
+        "skills/missing/SKILL.md": "---\nname: missing\ndescription: Missing.\n---\nMissing.\n"
+      });
+      await runCliAsync(["skills", "add", missing, "--project"], f.runtime);
+      rmSync(missing, { recursive: true });
+      const commit = f.advance();
+      const exclude = path.join(f.caller, ".git/info/exclude");
+      f.runtime.writeStderr = (message) => {
+        if (message.startsWith("Linked monke-tools skills")) {
+          chmodSync(exclude, 0o444);
+        }
+      };
+      try {
+        await expect(runCliAsync(["skills", "update", "--project"], f.runtime)).rejects.toThrow(
+          /not writable/u
+        );
+
+        expect(readRepoImportRecipeStore(publisher).recipes[0]?.commit).toBe(commit);
+        expect(read(publisher, "skills/imported/base/SKILL.md")).toContain("Second version.");
+        expect(reviewDiff(f.reviewLog)).toContain("+Second version.");
+      } finally {
+        chmodSync(exclude, 0o644);
+      }
+    }
+  );
 
   test("release installs and Git-only imports do not connect editable checkouts", async () => {
     const f = fixture("release");

@@ -87,6 +87,8 @@ export interface UpdateSkillsDependencies {
   confirmSlugReplacement?: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
   /** Editable publisher checkouts whose declarations advance before installed copies. */
   connectedRepos?: string[];
+  /** Publish the installed collection, completing recovery before final review snapshots. */
+  publishCollection?: (update: () => Promise<void>) => Promise<void>;
   repo?: boolean;
   repoRoot?: string;
   runtime?: Runtime;
@@ -164,17 +166,22 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
           }
         }
         try {
-          const result = await updateSkills(
-            options.interactive,
-            dependencies,
-            before,
-            after,
-            revisions
-          );
-          if (result.failure) {
-            failures.push(result.failure.message);
-          }
-          updatedCollections.push(result);
+          const update = async () => {
+            const result = await updateSkills(
+              options.interactive,
+              dependencies,
+              before,
+              after,
+              revisions
+            );
+            updatedCollections.push(result);
+            if (result.failure) {
+              failures.push(result.failure.message);
+            }
+          };
+          await (dependencies.publishCollection
+            ? dependencies.publishCollection(update)
+            : update());
         } catch (error) {
           failures.push(error instanceof Error ? error.message : String(error));
         }
@@ -235,7 +242,8 @@ async function updateSkills(
   const runtime =
     dependencies.runtime ??
     createRuntime({ cwd: repoRoot, writeStdout: dependencies.writeMessage });
-  let store = (dependencies.repo ? readRepoImportRecipeStore : readImportRecipeStore)(repoRoot);
+  const readStore = dependencies.repo ? readRepoImportRecipeStore : readImportRecipeStore;
+  let store = readStore(repoRoot);
   if (store.recipes.some((recipe) => !recipe.localSource)) {
     assertSkillRestoreMarker(repoRoot);
   }
@@ -382,21 +390,23 @@ async function updateSkills(
   if (finalizationFailure) {
     writeMessage(`${finalizationFailure}\n`);
   }
-  let snapshotComplete = false;
+  let reviewedStore: SkillImportRecipeStore | undefined;
   return {
     failure: skillUpdateFailure(failures, finalizationFailure),
     rememberBaseline: async () => {
-      if (snapshotComplete) {
+      if (reviewedStore) {
         if (existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
-          rememberSkillGuidance(repoRoot, acceptedGuidance, store);
+          rememberSkillGuidance(repoRoot, acceptedGuidance, reviewedStore);
         }
         await forgetBefore?.();
       }
     },
     snapshotAfter: () => {
-      snapshotSkillGuidance(repoRoot, after, store);
+      // Publication recovery may have restored the installed collection's store.
+      const currentStore = readStore(repoRoot);
+      snapshotSkillGuidance(repoRoot, after, currentStore);
       snapshotRepoDeclaration(repoRoot, after, dependencies.repo);
-      snapshotComplete = true;
+      reviewedStore = currentStore;
     }
   };
 }
