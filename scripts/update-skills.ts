@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 import { confirm, isCancel } from "@clack/prompts";
 import { Command } from "@commander-js/extra-typings";
@@ -111,6 +112,7 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
     });
   const failures: string[] = [];
   const acceptedGuidance: SkillImportRecipeSkill[] = [];
+  const pendingMarkers: SkillImportRecipe[] = [];
   let reviewFailure: string | undefined;
 
   if (!dependencies.repo) {
@@ -211,7 +213,11 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
           nextRecipe.source = revision.source;
         }
       });
-      rememberRestoredRecipe(repoRoot, nextRecipe);
+      if (isDeepStrictEqual(recipe, nextRecipe)) {
+        pendingMarkers.push(nextRecipe);
+      } else {
+        rememberRestoredRecipe(repoRoot, nextRecipe);
+      }
       store = nextStore;
       acceptedGuidance.push(...recipe.skills, ...nextRecipe.skills);
     } catch (error) {
@@ -224,20 +230,18 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
     }
   }
 
-  if (dependencies.repo && failures.length === 0) {
-    // A rejected hand-edited selection may omit the last accepted files.
-    pruneImportedGuidance(
-      repoRoot,
-      store.recipes.flatMap((recipe) => recipe.skills)
-    );
-  }
-  if (
-    store.recipes.every((recipe) => recipe.localSource !== undefined || recipe.commit !== undefined)
-  ) {
-    rmSync(path.join(repoRoot, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
-  }
+  const finalizationFailure = finalizeUpdatedImports({
+    failedRecipes: failures.length > 0,
+    pendingMarkers,
+    repo: Boolean(dependencies.repo),
+    repoRoot,
+    store
+  });
   for (const failure of failures) {
     writeMessage(`Skill source failed: ${failure}\n`);
+  }
+  if (finalizationFailure) {
+    writeMessage(`${finalizationFailure}\n`);
   }
   try {
     await reviewSkillUpdate(
@@ -256,15 +260,50 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
     rmSync(reviewDirectory, { force: true, recursive: true });
   }
 
-  return { failure: skillUpdateFailure(failures, reviewFailure) };
+  return { failure: skillUpdateFailure(failures, finalizationFailure, reviewFailure) };
 }
 
-function skillUpdateFailure(failures: string[], reviewFailure: string | undefined) {
+function finalizeUpdatedImports(options: {
+  failedRecipes: boolean;
+  pendingMarkers: SkillImportRecipe[];
+  repo: boolean;
+  repoRoot: string;
+  store: SkillImportRecipeStore;
+}) {
+  const { failedRecipes, pendingMarkers, repo, repoRoot, store } = options;
+  let failure: string | undefined;
+  try {
+    if (repo && !failedRecipes) {
+      // A rejected hand-edited selection may omit the last accepted files.
+      pruneImportedGuidance(
+        repoRoot,
+        store.recipes.flatMap((recipe) => recipe.skills)
+      );
+    }
+    if (!repo || !failedRecipes) {
+      for (const recipe of pendingMarkers) {
+        rememberRestoredRecipe(repoRoot, recipe);
+      }
+    }
+    if (
+      store.recipes.every(
+        (recipe) => recipe.localSource !== undefined || recipe.commit !== undefined
+      )
+    ) {
+      rmSync(path.join(repoRoot, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
+    }
+  } catch (error) {
+    failure = `Skill update finalization failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  return failure;
+}
+
+function skillUpdateFailure(failures: string[], ...otherFailures: (string | undefined)[]) {
   const messages = [
     ...(failures.length > 0
       ? [`Skill update failed for ${failures.length} recipe(s):\n${failures.join("\n")}`]
       : []),
-    ...(reviewFailure ? [reviewFailure] : [])
+    ...otherFailures.filter((message) => message !== undefined)
   ];
   return messages.length > 0 ? new MonkeError(messages.join("\n")) : undefined;
 }

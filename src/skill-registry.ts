@@ -27,7 +27,6 @@ import {
 import type { SkillImportRecipe, SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { reportSecurityRiskAssessment } from "../scripts/skill-import.ts";
 import {
-  assertImportedGuidanceCanBePruned,
   assertRepoImportIgnoreFile,
   assertSkillRestoreMarker,
   ignoreRepoImports,
@@ -188,13 +187,9 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
         if (recipes.some((nextRecipe) => !isSkillRecipeRestored(root, nextRecipe))) {
           assertSkillRestoreMarker(root);
         }
-        assertImportedGuidanceCanBePruned(
-          root,
-          recipes.flatMap((item) => item.skills)
-        );
-        ignoreRepoImports(root, runtime);
-        writeRepoImportRecipeStore(root, { ...store, recipes });
-        await restoreLockedImports(root, false, runtime, { ...store, recipes });
+        await restoreLockedImports(root, false, runtime, { ...store, recipes }, () => {
+          writeRepoImportRecipeStore(root, { ...store, recipes });
+        });
       } else {
         throw new MonkeError(`${request.action} is machine-local and does not accept --repo`);
       }

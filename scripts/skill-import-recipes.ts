@@ -315,7 +315,11 @@ export function writeRepoImportRecipeStore(repoRoot: string, store: SkillImportR
   if (contents && !isMap(contents) && !empty) {
     throw new MonkeError(`${file} must be a YAML mapping`);
   }
-  const recipes = normalizeImportRecipeStore(store).recipes.map(compactRecipe);
+  const normalized = normalizeImportRecipeStore(store);
+  if (existsSync(file) && isDeepStrictEqual(readRepoImportRecipeStore(repoRoot), normalized)) {
+    return;
+  }
+  const recipes = normalized.recipes.map(compactRecipe);
   unwrapBoundaryResult(RepoImportRecipesSchema.safeParse(recipes), "Repo import recipes");
   const updated = editRepoSkillsYaml(original, document, recipes);
   const updatedDocument = parseDocument(updated);

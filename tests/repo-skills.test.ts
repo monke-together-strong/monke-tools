@@ -3,6 +3,7 @@ import {
   existsSync,
   linkSync,
   mkdirSync,
+  readdirSync,
   renameSync,
   rmSync,
   symlinkSync
@@ -15,6 +16,10 @@ import { describe, expect, test } from "vite-plus/test";
 import { parseDocument, stringify } from "yaml";
 import * as z from "zod";
 
+import {
+  readRepoImportRecipeStore,
+  writeRepoImportRecipeStore
+} from "../scripts/skill-import-recipes.ts";
 import { runCliAsync } from "../src/index.ts";
 import {
   createRepo,
@@ -444,6 +449,202 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
       expect(read(marker, "obstruction")).toBe("Marker obstruction must survive.\n");
     }
   );
+
+  test.each(["remove", "restore", "update"] as const)(
+    "%s protects references consumed by ordinary authored skills",
+    async (action) => {
+      const { bin, repo, runtime, upstream } = repoFixture();
+      await runCliAsync(
+        ["skills", "add", upstream, "--repo", "--ref", "--skill", "first"],
+        runtime
+      );
+      const consumer =
+        "---\nname: local-dependent\ndescription: Local skill.\n---\nLoad [first](../references/imported/first/MAIN.md).\n";
+      write(repo, "skills/local-dependent/SKILL.md", consumer);
+      if (action !== "remove") {
+        write(repo, "monke.yml", stringify({ skills: [] }));
+      }
+      const config = read(repo, "monke.yml");
+      const marker = read(repo, "skills/.monke-restored.json");
+      const command =
+        action === "remove"
+          ? ["skills", "remove", upstream, "--repo"]
+          : ["skills", action, "--repo"];
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+
+      await expect(runCliAsync(command, runtime)).rejects.toThrow(
+        "skills/local-dependent/SKILL.md"
+      );
+      expect(read(repo, "monke.yml")).toBe(config);
+      expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+      expect(read(repo, "skills/local-dependent/SKILL.md")).toBe(consumer);
+      expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
+    }
+  );
+
+  test.each(["policy", "remove"] as const)(
+    "%s validates the prospective retained consumer before pruning references",
+    async (action) => {
+      const { repo, runtime, sandbox, upstream } = repoFixture();
+      const link = "Load [first](../../references/imported/first/MAIN.md).";
+      const source = createRepo(path.join(sandbox, "consumer-source"), {
+        "skills/consumer/SKILL.md": `---\nname: consumer\ndescription: ${JSON.stringify(action === "policy" ? link : "Consumer.")}\n---\n${action === "remove" ? link : "Self-contained body."}\n`
+      });
+      await runCliAsync(
+        ["skills", "add", upstream, "--repo", "--ref", "--skill", "first"],
+        runtime
+      );
+      await runCliAsync(["skills", "add", source, "--repo", "--skill", "consumer"], runtime);
+      const nextDescription = "Self-contained consumer.";
+      if (action === "remove") {
+        write(
+          source,
+          "skills/consumer/SKILL.md",
+          "---\nname: consumer\ndescription: Consumer.\n---\nSelf-contained V2 body.\n"
+        );
+        git(source, ["add", "."]);
+        git(source, ["commit", "-m", "Remove dependency"]);
+      }
+      const store = readRepoImportRecipeStore(repo);
+      store.recipes = store.recipes
+        .filter((recipe) => action === "remove" || recipe.source !== upstream)
+        .map((recipe) =>
+          recipe.source === source
+            ? { ...recipe, commit: git(source, ["rev-parse", "HEAD"]) }
+            : recipe
+        );
+      writeRepoImportRecipeStore(repo, store);
+
+      await runCliAsync(
+        action === "policy"
+          ? ["skills", "policy", source, "consumer", "--repo", "--description", nextDescription]
+          : ["skills", "remove", upstream, "--repo"],
+        runtime
+      );
+
+      expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
+      expect(read(repo, "skills/imported/consumer/SKILL.md")).not.toContain(
+        "references/imported/first"
+      );
+      expect(read(repo, "skills/imported/consumer/SKILL.md")).toContain("Self-contained");
+      expect(read(repo, "monke.yml")).not.toContain(upstream);
+      expect(read(repo, "skills/imported/consumer/SKILL.md")).toContain(
+        action === "policy" ? nextDescription : "Self-contained V2 body."
+      );
+    }
+  );
+
+  test.each([
+    "SKILL.md",
+    ".agents/skills/local-dependent/SKILL.md",
+    ".claude/skills/local-dependent/SKILL.md",
+    ".codex/skills/local-dependent/SKILL.md",
+    ".cursor/skills/local-dependent/SKILL.md"
+  ])("restore protects a reference consumed by authored %s", async (consumerPath) => {
+    const { repo, runtime, upstream } = repoFixture();
+    await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
+    write(
+      repo,
+      consumerPath,
+      "---\nname: local-dependent\ndescription: Local skill.\n---\nLoad skills/references/imported/first/MAIN.md.\n"
+    );
+    write(repo, "monke.yml", stringify({ skills: [] }));
+    const marker = read(repo, "skills/.monke-restored.json");
+
+    await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
+      consumerPath
+    );
+
+    expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
+    expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+  });
+
+  test("policy preparation failure preserves bytes and markers for its uncommitted override", async () => {
+    const { repo, runtime, sandbox, upstream } = repoFixture();
+    const other = createRepo(path.join(sandbox, "other"), {
+      "skills/other/SKILL.md": "---\nname: other\ndescription: Other.\n---\nOther content.\n"
+    });
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+    await runCliAsync(["skills", "add", other, "--repo", "--skill", "other"], runtime);
+    write(
+      other,
+      "skills/other/SKILL.md",
+      "---\nname: other\ndescription: Other.\n---\nAdvanced other.\n"
+    );
+    git(other, ["add", "."]);
+    git(other, ["commit", "-m", "Advance unavailable source"]);
+    const store = readRepoImportRecipeStore(repo);
+    store.recipes = store.recipes.map((recipe) =>
+      recipe.source === other ? { ...recipe, commit: git(other, ["rev-parse", "HEAD"]) } : recipe
+    );
+    writeRepoImportRecipeStore(repo, store);
+    renameSync(other, `${other}-unavailable`);
+    const config = read(repo, "monke.yml");
+    const marker = read(repo, "skills/.monke-restored.json");
+    const first = read(repo, "skills/imported/first/SKILL.md");
+
+    await expect(
+      runCliAsync(
+        ["skills", "policy", upstream, "first", "--repo", "--description", "Uncommitted override."],
+        runtime
+      )
+    ).rejects.toThrow(other);
+
+    expect(read(repo, "monke.yml")).toBe(config);
+    expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+    expect(read(repo, "skills/imported/first/SKILL.md")).toBe(first);
+  });
+
+  test("pruning rejection reviews accepted source advances and cleans review snapshots", async () => {
+    const { bin, messages, repo, runtime, sandbox, upstream } = repoFixture();
+    const provider = createRepo(path.join(sandbox, "provider"), {
+      "skills/base/SKILL.md": "---\nname: base\ndescription: Base.\n---\nAccepted base.\n"
+    });
+    const source = createRepo(path.join(sandbox, "consumer-source"), {
+      "skills/consumer/SKILL.md":
+        "---\nname: consumer\ndescription: Consumer.\n---\nLoad [base](../../references/imported/base/MAIN.md).\n"
+    });
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+    await runCliAsync(["skills", "add", provider, "--repo", "--ref", "--skill", "base"], runtime);
+    await runCliAsync(["skills", "add", source, "--repo", "--skill", "consumer"], runtime);
+    const store = readRepoImportRecipeStore(repo);
+    store.recipes = store.recipes.filter((recipe) => recipe.source !== provider);
+    writeRepoImportRecipeStore(repo, store);
+    write(
+      upstream,
+      "skills/first/SKILL.md",
+      "---\nname: first\ndescription: First.\n---\nAdvanced first.\n"
+    );
+    write(upstream, "skills/first/asset.txt", "Advanced asset.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Advance independent source"]);
+    const reviewLog = installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+    const temp = path.join(sandbox, "owned-review-temp");
+    mkdirSync(temp);
+    const previousTmpdir = process.env.TMPDIR;
+    try {
+      process.env.TMPDIR = temp;
+      await expect(
+        runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime)
+      ).rejects.toThrow("Cannot replace Imported reference base");
+    } finally {
+      if (previousTmpdir === undefined) {
+        delete process.env.TMPDIR;
+      } else {
+        process.env.TMPDIR = previousTmpdir;
+      }
+    }
+    expect(read(repo, "monke.yml")).toContain(git(upstream, ["rev-parse", "HEAD"]));
+    expect(read(repo, "skills/imported/first/SKILL.md")).toContain("Advanced first.");
+    expect(read(repo, "skills/imported/first/asset.txt")).toBe("Advanced asset.\n");
+    expect(read(repo, "skills/references/imported/base/MAIN.md")).toBe("Accepted base.\n");
+    expect(messages.join("")).toContain("# Skill update summary");
+    expect(messages.join("")).toContain("Complete skill review:");
+    expect(read(repo, path.relative(repo, reviewLog)).split("--commit")).toHaveLength(2);
+    expect(readdirSync(temp)).toStrictEqual([]);
+  });
 
   test.each(["symlink", "dangling symlink", "hardlink"])(
     "update atomically replaces a safe marker %s without changing its target",
@@ -1631,6 +1832,7 @@ else console.log(table);
       const config = read(repo, "monke.yml");
       const reference = read(repo, "skills/references/imported/first/MAIN.md");
       const referenceAsset = read(repo, "skills/references/imported/first/assets/accepted.txt");
+      const marker = read(repo, "skills/.monke-restored.json");
       const acceptedConsumer = read(repo, `${consumerFolder}/consumer/SKILL.md`);
       const command =
         action === "remove"
@@ -1651,6 +1853,7 @@ else console.log(table);
         referenceAsset
       );
       expect(read(repo, `${consumerFolder}/consumer/SKILL.md`)).toBe(acceptedConsumer);
+      expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
       expect(
         existsSync(
           path.resolve(repo, consumerFolder, "consumer", "../../references/imported/first/MAIN.md")

@@ -59,7 +59,7 @@ describe("guidance transaction recovery", () => {
       copyStagedGuidanceToManagedRoots({
         ...fixture,
         guidance: [],
-        obsoleteGuidance: [{ kind: "skill", selector: "alpha", slug }]
+        obsoleteGuidance: [{ kind: "skill", slug }]
       });
     }).toThrow(/slug .* escapes/u);
     expect(read(fixture.target("alpha"), "SKILL.md")).toBe("original alpha");

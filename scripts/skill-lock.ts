@@ -1129,7 +1129,8 @@ export async function restoreLockedImports(
   repoRoot: string,
   includeDeclaredImports = true,
   runtime?: Runtime,
-  store?: Pick<SkillImportRecipeStore, "recipes">
+  store?: Pick<SkillImportRecipeStore, "recipes">,
+  commitState?: () => void
 ) {
   assertManagedGuidanceRoots(repoRoot);
   const { recipes } = store ?? readImportRecipeStore(repoRoot);
@@ -1142,53 +1143,120 @@ export async function restoreLockedImports(
     ignoreRepoImports(repoRoot, runtime);
   }
   const restore = pLimit(4);
-  // Keep the mutation lock until every restore settles, even when a sibling fails.
-  const results = await Promise.allSettled(
-    recipes
-      .filter((recipe) => !recipe.localSource)
-      .map((recipe) =>
-        restore(() => restoreLockedRecipe(repoRoot, recipe, includeDeclaredImports, runtime))
+  const stagingDirectories: string[] = [];
+  try {
+    // Keep the mutation lock until every preparation settles, even when a sibling fails.
+    const results = await Promise.allSettled(
+      recipes
+        .filter((recipe) => !recipe.localSource && !isSkillRecipeRestored(repoRoot, recipe))
+        .map((recipe) =>
+          restore(async () => {
+            assertSkillRestoreMarker(repoRoot);
+            const stagingDirectory = path.join(
+              repoRoot,
+              "tmp",
+              `skill-restore-${crypto.randomUUID()}`
+            );
+            stagingDirectories.push(stagingDirectory);
+            mkdirSync(stagingDirectory, { recursive: true });
+            await stageLockedRecipe(
+              recipe,
+              stagingDirectory,
+              repoRoot,
+              includeDeclaredImports,
+              runtime
+            );
+            return { recipe, stagingDirectory };
+          })
+        )
+    );
+    const prepared = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : []
+    );
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed && commitState) {
+      throw failed.reason;
+    }
+    const guidance = prepared.flatMap(({ recipe }) =>
+      recipe.skills.map((item) => ({
+        ...item,
+        disableModelInvocation: item.disableModelInvocation ?? recipe.disableModelInvocation
+      }))
+    );
+    const stagedPaths = new Map(
+      prepared.flatMap(({ recipe, stagingDirectory }) =>
+        recipe.skills.map(
+          (item) =>
+            [
+              `${item.kind}:${item.slug}`,
+              path.join(stagingDirectory, ".agents", "skills", item.slug)
+            ] as const
+        )
       )
-  );
-  for (const result of results) {
-    if (result.status === "rejected") {
-      throw result.reason;
+    );
+    const obsolete = failed
+      ? []
+      : obsoleteImportedGuidance(
+          repoRoot,
+          recipes.flatMap((recipe) => recipe.skills)
+        );
+    if (guidance.length > 0) {
+      assertSkillRestoreMarker(repoRoot);
+    }
+    if (guidance.length > 0 || obsolete.length > 0) {
+      copyStagedGuidanceToManagedRoots({
+        commitState: failed ? undefined : commitState,
+        guidance,
+        obsoleteGuidance: obsolete,
+        repoRoot,
+        stagedGuidancePath(item) {
+          const source = stagedPaths.get(`${item.kind}:${item.slug}`);
+          if (!source) {
+            throw new MonkeError(`Missing staged ${item.kind} ${item.slug}`);
+          }
+          return source;
+        },
+        stagingDirectory: repoRoot
+      });
+    } else if (!failed) {
+      commitState?.();
+    }
+    for (const { recipe } of prepared) {
+      rememberRestoredRecipe(repoRoot, recipe);
+    }
+    if (failed) {
+      throw failed.reason;
+    }
+  } finally {
+    for (const stagingDirectory of stagingDirectories) {
+      rmSync(stagingDirectory, { force: true, recursive: true });
     }
   }
-  // Wait until every recipe validates before pruning entries from a newer lock.
-  pruneImportedGuidance(
-    repoRoot,
-    recipes.flatMap((recipe) => recipe.skills)
-  );
 }
 
-/** Return obsolete identities after checking that retained guidance does not need them. */
-export function assertImportedGuidanceCanBePruned(
-  repoRoot: string,
-  guidance: readonly SkillImportRecipeSkill[]
-) {
+function obsoleteImportedGuidance(repoRoot: string, guidance: readonly SkillImportRecipeSkill[]) {
   assertManagedGuidanceRoots(repoRoot);
   const managedRoots = [
     { kind: "skill", root: path.join(repoRoot, IMPORTED_SKILLS_ROOT) },
     { kind: "reference", root: path.join(repoRoot, IMPORTED_REFERENCES_ROOT) }
   ] as const;
-  const obsolete = managedRoots.flatMap(({ kind, root }) => {
+  return managedRoots.flatMap(({ kind, root }) => {
     const owned = new Set(guidance.filter((item) => item.kind === kind).map((item) => item.slug));
     return (existsSync(root) ? readdirSync(root) : [])
       .filter((slug) => !owned.has(slug))
       .map((slug) => ({ kind, slug }));
   });
+}
+
+/** Generated roots belong only to the current selected guidance. */
+export function pruneImportedGuidance(repoRoot: string, guidance: SkillImportRecipeSkill[]) {
+  const obsolete = obsoleteImportedGuidance(repoRoot, guidance);
   assertObsoleteReferencesAreUnconsumed(
     repoRoot,
     obsolete,
     obsolete.map((item) => importedGuidancePath(repoRoot, item))
   );
-  return obsolete;
-}
-
-/** Generated roots belong only to the current selected guidance. */
-export function pruneImportedGuidance(repoRoot: string, guidance: SkillImportRecipeSkill[]) {
-  for (const item of assertImportedGuidanceCanBePruned(repoRoot, guidance)) {
+  for (const item of obsolete) {
     rmSync(importedGuidancePath(repoRoot, item), { force: true, recursive: true });
   }
 }

@@ -6,9 +6,58 @@ import { describe, expect, test } from "vite-plus/test";
 import { writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { rememberRestoredRecipe, restoreSkillImports } from "../scripts/skill-lock.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
-import { makeTempDir, read, write } from "./helpers.ts";
+import { createRepo, git, makeTempDir, read, write, writeExecutable } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("parallel locked skill restore", () => {
+  test("batch restore preserves distinct skill and reference sources sharing a slug", async () => {
+    const sandbox = makeTempDir("cross-kind-skill-restore");
+    const recipes = (["skill", "reference"] as const).map((kind) => {
+      const source = createRepo(path.join(sandbox, `source-${kind}`), {
+        "skills/shared/SKILL.md": `---\nname: shared\ndescription: Shared fixture.\n---\nDistinct ${kind} bytes.\n`
+      });
+      return {
+        commit: git(source, ["rev-parse", "HEAD"]),
+        disableModelInvocation: true,
+        skills: [{ kind, selector: "shared", slug: "shared" }],
+        source
+      };
+    });
+    const target = path.join(sandbox, "target");
+    writeImportRecipeStore(target, { recipes, version: 4 });
+    const bin = path.join(sandbox, "bin");
+    writeExecutable(
+      path.join(bin, "npx"),
+      `#!/bin/sh
+set -eu
+mkdir -p .agents/skills
+cp -R "$4/skills/shared" .agents/skills/shared
+`
+    );
+    const runtime = createTestRuntime({
+      cwd: target,
+      env: {
+        MONKE_HOME: path.join(sandbox, "home"),
+        PATH: `${bin}${path.delimiter}${process.env.PATH}`
+      }
+    });
+
+    await restoreSkillImports(target, false, runtime);
+
+    expect(read(target, "skills/imported/shared/SKILL.md")).toContain("Distinct skill bytes.");
+    expect(read(target, "skills/imported/shared/SKILL.md")).toContain(
+      "disable-model-invocation: true"
+    );
+    expect(read(target, "skills/references/imported/shared/MAIN.md")).toBe(
+      "Distinct reference bytes.\n"
+    );
+    const marker = read(target, "skills/.monke-restored.json");
+    writeExecutable(path.join(bin, "git"), "#!/bin/sh\nexit 42\n");
+    writeExecutable(path.join(bin, "npx"), "#!/bin/sh\nexit 42\n");
+    await restoreSkillImports(target, false, runtime);
+    expect(read(target, "skills/.monke-restored.json")).toBe(marker);
+  });
+
   test.each([
     { expectedFailure: null, failImport: false },
     {
