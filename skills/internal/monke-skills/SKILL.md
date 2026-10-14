@@ -25,7 +25,8 @@ agent installs or `--repo` for published imports.
 | `mt skills add --name <source> --command 'installer' [--cwd <path>]` | Save and replay an installer; default working directory is `$MONKE_HOME/skill-sources/<source>`. |
 
 Keep supporting files inside the skill folder. Linked and command imports expose
-their editable source through agent links. Add `--link` to register existing
+authored skills through agent links. Publisher-declared imports remain
+consumer-owned copies. Add `--link` to register existing
 installer output without running it now; reference credentials through environment
 variables. `--skill` restricts a collection; command/linked sources without a
 selection discover new skills on update.
@@ -57,8 +58,9 @@ For the recipe fields and restoration rules, read the
 ## Project installs
 
 Run `mt skills add <local-checkout> --project` inside the consumer repo. Local
-sources stay linked by default, including supporting files. Source edits and Git
-updates appear through existing links. Use `--skill <slugs...>` to select skills.
+sources keep authored skills linked by default, including supporting files.
+Source edits and Git updates appear through those links. Publisher-declared
+imports refresh consumer copies on update. Use `--skill <slugs...>` to select skills.
 For a checkout, project imports prefer `skills/` over `.agents/skills`. Pass the
 exact skill directory to select another source folder.
 Git imports and saved installer commands also accept `--project`.
@@ -76,8 +78,8 @@ Use `--project` with `list`, `update`, `remove`, or `policy` to select this regi
 `update` discovers added or removed folders in unfiltered linked sources and opens
 the existing comparison. It also advances linked publishers' declared imports.
 Monke leaves Git checkout updates to the linked checkout's owner.
-Invocation policies on linked skills edit their source metadata and affect all
-consumers of that source.
+Invocation policies on authored linked skills edit their source metadata and
+affect all consumers of that source.
 
 Generated links are excluded through Git's local `info/exclude`. Spawn,
 materialize, and setup recreate links in each checkout. After changing a skill
@@ -103,7 +105,8 @@ To set a source invocation default for future skills, omit `[skill]`.
 Per-skill overrides win. Policies survive updates and preserve explicit human invocation.
 Description overrides apply to one skill and survive updates. Combine
 `--description` with `--model-invocation` to change both. Linked and command
-imports write these overrides to their source metadata.
+imports write overrides for authored skills to their source metadata. Overrides
+for publisher-declared imports remain in consumer copies.
 
 Update advances Git refs, replays installers, and rereads linked files, then opens
 one complete comparison. It first updates `monke.yml` imports in connected local

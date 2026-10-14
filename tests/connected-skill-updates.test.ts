@@ -341,4 +341,58 @@ describe("updates through connected local repositories", () => {
     );
     expect(f.output()).not.toContain("Updating repo imports:");
   });
+
+  test("identical relative source declarations resolve in each connected checkout", async () => {
+    const f = fixture();
+    const publishers = [];
+    for (const slug of ["alpha", "beta"]) {
+      const upstream = createRepo(path.join(f.sandbox, slug, "upstream"), {
+        [`skills/${slug}/SKILL.md`]: `---\nname: ${slug}\ndescription: ${slug}.\n---\nFirst ${slug}.\n`
+      });
+      const publisher = createRepo(path.join(f.sandbox, slug, "publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            {
+              commit: git(upstream, ["rev-parse", "HEAD"]),
+              skills: [slug],
+              source: "../upstream#HEAD"
+            }
+          ]
+        })
+      });
+      await runCliAsync(["skills", "add", publisher, "--name", slug], f.runtime);
+      write(
+        upstream,
+        `skills/${slug}/SKILL.md`,
+        `---\nname: ${slug}\ndescription: ${slug}.\n---\nSecond ${slug}.\n`
+      );
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", `Update ${slug}`]);
+      publishers.push({ commit: git(upstream, ["rev-parse", "HEAD"]), publisher, slug });
+    }
+
+    await runCliAsync(["skills", "update"], f.runtime);
+
+    for (const { commit, publisher, slug } of publishers) {
+      expect(readRepoImportRecipeStore(publisher).recipes[0]?.commit).toBe(commit);
+      expect(read(f.home, `.codex/skills/monke-tools/imported/${slug}/SKILL.md`)).toContain(
+        `Second ${slug}.`
+      );
+    }
+  });
+
+  test("failed comparison saving retains the previous baseline for retry", async () => {
+    const f = fixture();
+    await runCliAsync(["skills", "add", f.upstream, "--skill", "base"], f.runtime);
+    f.advance();
+    write(f.monkeHome, "skill-reviews", "Obstructed comparison storage.\n");
+
+    await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(/skill-reviews/u);
+    rmSync(path.join(f.monkeHome, "skill-reviews"));
+    await runCliAsync(["skills", "update"], f.runtime);
+
+    const diff = reviewDiff(f.reviewLog);
+    expect(diff).toContain("-First version.");
+    expect(diff).toContain("+Second version.");
+  });
 });

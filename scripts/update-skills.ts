@@ -39,6 +39,7 @@ import {
 } from "./skill-import.ts";
 import {
   assertSkillRestoreMarker,
+  describeSkillSource,
   ignoreRepoImports,
   pruneImportedGuidance,
   rememberRestoredRecipe,
@@ -95,6 +96,7 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
   const before = path.join(reviewDirectory, "before");
   const after = path.join(reviewDirectory, "after");
   const collections: string[] = [];
+  const rememberBaselines: (() => void)[] = [];
   const revisions = new Map<string, ReturnType<typeof resolveSkillRevision>>();
   const failures: string[] = [];
   try {
@@ -142,6 +144,7 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
                 if (result.failure) {
                   failures.push(`${root}: ${result.failure.message}`);
                 }
+                rememberBaselines.push(result.rememberBaseline);
               },
               runtime
             );
@@ -162,12 +165,21 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
           if (result.failure) {
             failures.push(result.failure.message);
           }
+          rememberBaselines.push(result.rememberBaseline);
         } catch (error) {
           failures.push(error instanceof Error ? error.message : String(error));
         }
         try {
           await summarizeSkillChanges({ after, before, collections, runtime, writeMessage });
           const comparison = await saveSkillComparison(before, after, runtime);
+          // A failed save must leave prior baselines available for the next review.
+          for (const remember of rememberBaselines) {
+            try {
+              remember();
+            } catch (error) {
+              failures.push(error instanceof Error ? error.message : String(error));
+            }
+          }
           if (comparison) {
             await openSkillComparison(comparison, {
               adapter: options.adapter,
@@ -348,14 +360,18 @@ async function updateSkills(
   try {
     snapshotSkillGuidance(repoRoot, after, store);
     snapshotRepoDeclaration(repoRoot, after, dependencies.repo);
-    if (existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
-      rememberSkillGuidance(repoRoot, acceptedGuidance, store);
-    }
   } catch (error) {
     reviewFailure = error instanceof Error ? error.message : String(error);
   }
 
-  return { failure: skillUpdateFailure(failures, finalizationFailure, reviewFailure) };
+  return {
+    failure: skillUpdateFailure(failures, finalizationFailure, reviewFailure),
+    rememberBaseline: () => {
+      if (reviewFailure === undefined && existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
+        rememberSkillGuidance(repoRoot, acceptedGuidance, store);
+      }
+    }
+  };
 }
 
 function snapshotRepoDeclaration(repoRoot: string, destination: string, repo = false) {
@@ -490,10 +506,14 @@ async function prepareGitSkillUpdate(
         });
       }
     }
-    let pendingRevision = revisions.get(recipe.source);
+    const revisionKey = JSON.stringify([
+      recipe.source,
+      describeSkillSource(recipe.source, repoRoot)
+    ]);
+    let pendingRevision = revisions.get(revisionKey);
     if (!pendingRevision) {
       pendingRevision = resolveSkillRevision(recipe, repoRoot);
-      revisions.set(recipe.source, pendingRevision);
+      revisions.set(revisionKey, pendingRevision);
     }
     const revision = await pendingRevision;
     const installOutput = await stageGitSkillSource({
