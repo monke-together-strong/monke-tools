@@ -74,6 +74,32 @@ done
   return { bin, messages, repo, runtime, sandbox, upstream };
 }
 
+async function rootSkillWithReferenceDescription() {
+  const fixture = repoFixture();
+  const rootSkill = "---\nname: root\ndescription: Root Skill.\n---\nSelf-contained root.\n";
+  write(fixture.repo, "SKILL.md", rootSkill);
+  writeRepoImportRecipeStore(fixture.repo, {
+    recipes: [
+      {
+        commit: git(fixture.upstream, ["rev-parse", "HEAD"]),
+        skills: [
+          { kind: "reference", selector: "first", slug: "first" },
+          {
+            description: "Load ../../references/imported/first/MAIN.md",
+            kind: "skill",
+            selector: "second",
+            slug: "second"
+          }
+        ],
+        source: fixture.upstream
+      }
+    ],
+    version: 4
+  });
+  await runCliAsync(["skills", "restore", "--repo"], fixture.runtime);
+  return { ...fixture, rootSkill };
+}
+
 function installPartialSuccessImporter(bin: string) {
   writeExecutable(
     path.join(bin, "npx"),
@@ -151,6 +177,54 @@ cp -R "$4/skills/Fancy Folder" .agents/skills/fancy-folder
     expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
     expect(read(repo, "skills/imported/first/SKILL.md")).toBe(first);
     expect(existsSync(path.join(repo, "skills/imported/fancy-folder"))).toBeFalsy();
+  });
+
+  test("root Skill removal ignores a removed mixed recipe's description metadata", async () => {
+    const { repo, rootSkill, runtime, upstream } = await rootSkillWithReferenceDescription();
+
+    await runCliAsync(["skills", "remove", upstream, "--repo"], runtime);
+
+    expect(readRepoImportRecipeStore(repo).recipes).toStrictEqual([]);
+    expect(existsSync(path.join(repo, "skills/imported/second"))).toBeFalsy();
+    expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
+    expect(read(repo, "SKILL.md")).toBe(rootSkill);
+  });
+
+  test("root Skill policy checks the retained description instead of stale recipe metadata", async () => {
+    const { repo, rootSkill, runtime, upstream } = await rootSkillWithReferenceDescription();
+    const store = readRepoImportRecipeStore(repo);
+    store.recipes = store.recipes.map((recipe) => ({
+      ...recipe,
+      skills: recipe.skills.filter((item) => item.kind === "skill")
+    }));
+    writeRepoImportRecipeStore(repo, store);
+    const config = read(repo, "monke.yml");
+
+    await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
+      "skills/imported/second/SKILL.md"
+    );
+    expect(read(repo, "monke.yml")).toBe(config);
+    expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
+
+    await runCliAsync(
+      [
+        "skills",
+        "policy",
+        upstream,
+        "second",
+        "--repo",
+        "--description",
+        "Self-contained description."
+      ],
+      runtime
+    );
+
+    expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
+    expect(read(repo, "skills/imported/second/SKILL.md")).toContain(
+      "description: Self-contained description."
+    );
+    expect(read(repo, "monke.yml")).not.toContain("references/imported/first");
+    expect(read(repo, "SKILL.md")).toBe(rootSkill);
   });
 
   test.each([

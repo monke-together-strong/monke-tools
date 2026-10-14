@@ -332,6 +332,7 @@ export function assertObsoleteReferencesAreUnconsumed(
     const obsoleteReferenceRoot = importedGuidancePath(physicalRepoRoot, guidance);
     const referencePathPrefix = `${path.posix.join("references", "imported", guidance.slug)}/`;
     const ignored = [
+      path.join(physicalRepoRoot, "monke.yml"),
       path.join(physicalRepoRoot, "skills/.monke-restored.json"),
       ...ignoredConsumerRoots.map((root) =>
         path.resolve(physicalRepoRoot, path.relative(repoRoot, root))
