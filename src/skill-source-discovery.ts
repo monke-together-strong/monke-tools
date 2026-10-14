@@ -2,6 +2,7 @@ import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { MonkeError } from "./errors.ts";
+import { containsPath } from "./path-identity.ts";
 
 export const SKILL_SOURCE_CANDIDATES = [
   ".agents/skills",
@@ -70,9 +71,12 @@ export function scanSkillSource(root: string, includeNestedSkills = false) {
 }
 
 /** Discover Skills without asking which agent should receive them. */
-export function discoverSourceSkills(root: string) {
+export function discoverSourceSkills(root: string, excludedRoot?: string) {
   const skills = new Map<string, string>();
   for (const directory of scanSkillSource(root).skills) {
+    if (excludedRoot && containsPath(excludedRoot, directory)) {
+      continue;
+    }
     const slug = path.basename(directory);
     if (skills.has(slug)) {
       throw new MonkeError(`Duplicate Skill slug ${slug} in ${root}`);

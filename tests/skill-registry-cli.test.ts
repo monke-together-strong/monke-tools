@@ -355,6 +355,82 @@ describe("Skill import registry CLI", () => {
     }
   );
 
+  test.each([
+    { explicit: false, readd: false, remote: false, removeConfig: false },
+    { explicit: true, readd: false, remote: false, removeConfig: false },
+    { explicit: false, readd: false, remote: false, removeConfig: true },
+    { explicit: true, readd: false, remote: false, removeConfig: true },
+    { explicit: false, readd: true, remote: false, removeConfig: false },
+    { explicit: true, readd: true, remote: false, removeConfig: false },
+    { explicit: false, readd: true, remote: false, removeConfig: true },
+    { explicit: true, readd: true, remote: true, removeConfig: true }
+  ])(
+    "owned skills replace inherited references with explicit=$explicit removeConfig=$removeConfig readd=$readd remote=$remote",
+    async ({ explicit, readd, remote, removeConfig }) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "owned-transition-source"), {
+        "skills/base/SKILL.md":
+          "---\nname: base\ndescription: Base trigger.\n---\nImported base instructions.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "owned-transition-publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            {
+              commit: git(upstream, ["rev-parse", "HEAD"]),
+              skills: [{ kind: "reference", slug: "base" }],
+              source: upstream
+            }
+          ]
+        })
+      });
+      const source = remote ? "https://github.com/owner/owned-transition" : publisher;
+      if (remote) {
+        const gitConfig = path.join(fixture.sandbox, "git-config");
+        write(fixture.sandbox, "git-config", `[url "${publisher}"]\n  insteadOf = ${source}.git\n`);
+        fixture.runtime.env.GIT_CONFIG_GLOBAL = gitConfig;
+        vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
+        writeExecutable(
+          path.join(fixture.bin, "npx"),
+          `#!/bin/sh
+set -eu
+source="$4"
+[ -d "$source" ] || source=upstream-validation
+shift 4
+mkdir -p .agents/skills
+while [ "$1" = --skill ]; do
+  if [ "$2" = '*' ]; then cp -R "$source/skills/"* .agents/skills/;
+  else cp -R "$source/skills/$2" .agents/skills/; fi
+  shift 2
+done
+`
+        );
+      }
+      try {
+        const add = ["skills", "add", `${source}#HEAD`, ...(explicit ? ["--skill", "base"] : [])];
+        await runCliAsync(add, fixture.runtime);
+        if (removeConfig) {
+          rmSync(path.join(publisher, "monke.yml"));
+        } else {
+          write(publisher, "monke.yml", "skills: []\n");
+        }
+        writeSkill(path.join(publisher, "skills"), "base", "Owned base instructions.\n");
+        git(publisher, ["add", "-A"]);
+        git(publisher, ["commit", "-m", "Replace declared reference with own skill"]);
+        await runCliAsync(readd ? add : ["skills", "update"], fixture.runtime);
+        expect(
+          existsSync(path.join(fixture.registry, "skills/references/imported/base"))
+        ).toBeFalsy();
+        expect(read(fixture.installed.codex, "base/SKILL.md")).toContain(
+          "Owned base instructions."
+        );
+        expect(read(fixture.installed.codex, "base/SKILL.md")).toContain("name: base");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
+  );
+
   test.each(["git", "link"] as const)(
     "%s publisher selections span own skills and declared imports",
     async (kind) => {
@@ -2641,6 +2717,7 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
   test("repeat Git add preserves references and selected-skill policies", async () => {
     const fixture = registryFixture();
     const upstream = createRepo(path.join(fixture.sandbox, "git-source"), {
+      "monke.yml": "apps: {}\n",
       "README.md": "Git skills.\n"
     });
     writeSkill(path.join(upstream, "skills"), "alpha", "Alpha instructions.\n");
@@ -2651,7 +2728,13 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
     const source = `${upstream}#HEAD`;
     write(fixture.guidance, "skills/references/imported/alpha/MAIN.md", "Alpha instructions.\n");
     writeImportRecipeStore(fixture.guidance, {
-      recipes: [{ skills: [{ kind: "reference", selector: "alpha", slug: "alpha" }], source }],
+      recipes: [
+        {
+          commit: git(upstream, ["rev-parse", "HEAD"]),
+          skills: [{ kind: "reference", selector: "alpha", slug: "alpha" }],
+          source
+        }
+      ],
       version: 4
     });
     await runCliAsync(["skills", "add", source, "--name", "git-source"], fixture.runtime);

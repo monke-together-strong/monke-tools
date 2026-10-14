@@ -30,6 +30,7 @@ import {
 } from "./import-guidance.ts";
 import {
   compareSkillLockStrings,
+  RepoImportRecipesSchema,
   readImportRecipeStore,
   readRepoImportRecipeStore
 } from "./skill-import-recipes.ts";
@@ -289,6 +290,7 @@ function validateUpstreamLinks(checkout: string) {
 /** Stage a publishing repo and one level of its declared imports as one collection. */
 export async function stageGitSkillSource(options: {
   includeDeclaredImports?: boolean;
+  previousRecipe?: SkillImportRecipe;
   recipe: SkillImportRecipe;
   repoRoot: string;
   runtime?: Runtime;
@@ -318,6 +320,28 @@ export async function stageGitSkillSource(options: {
   const ownSkills = discoverSourceSkills(
     resolveSkillSourceFolder(path.join(checkout, descriptor.subpath), false, true)
   );
+  const runtime = options.runtime ?? createRuntime({ cwd: stagingDirectory });
+  const retiredReferences =
+    options.previousRecipe?.skills.filter(
+      (item) =>
+        item.kind === "reference" &&
+        ownSkills.has(item.slug) &&
+        !imported.some((current) => current.slug === item.slug)
+    ) ?? [];
+  const previousDeclared =
+    retiredReferences.length > 0
+      ? await previousPublisherGuidance(
+          checkout,
+          descriptor.repository,
+          options.previousRecipe?.commit,
+          runtime
+        )
+      : [];
+  const ownReplacements = retiredReferences
+    .filter((item) =>
+      previousDeclared.some((old) => old.kind === "reference" && old.slug === item.slug)
+    )
+    .map((item) => ({ kind: "skill" as const, selector: item.slug, slug: item.slug }));
   if (imported.length > 0) {
     for (const item of imported) {
       if (ownSkills.has(item.slug)) {
@@ -331,7 +355,6 @@ export async function stageGitSkillSource(options: {
   const ownSelectors = selectors.filter(
     (selector) => !declaredSelectors.has(selector) && (selector !== "*" || ownSkills.size > 0)
   );
-  const runtime = options.runtime ?? createRuntime({ cwd: stagingDirectory });
   let output = { exitCode: 0, stderr: "", stdout: "" };
   if (ownSelectors.length > 0) {
     output = await runtime.execAsync(
@@ -365,7 +388,41 @@ export async function stageGitSkillSource(options: {
       }
     }
   }
-  return { ...output, declaredGuidance: imported, source };
+  return { ...output, declaredGuidance: [...imported, ...ownReplacements], source };
+}
+
+/** Identify inherited reference kinds without overriding legacy consumer choices. */
+async function previousPublisherGuidance(
+  checkout: string,
+  repository: string,
+  commit: string | undefined,
+  runtime: Runtime
+) {
+  if (!commit) {
+    return [];
+  }
+  const available = await runtime.execAsync("git", ["cat-file", "-e", `${commit}^{commit}`], {
+    allowFailure: true,
+    cwd: checkout
+  });
+  if (available.exitCode !== 0) {
+    await runtime.execAsync("git", ["fetch", "--quiet", "--depth", "1", "--", repository, commit], {
+      cwd: checkout
+    });
+  }
+  const config = await runtime.execAsync("git", ["show", `${commit}:monke.yml`], {
+    allowFailure: true,
+    cwd: checkout
+  });
+  if (config.exitCode !== 0) {
+    return [];
+  }
+  const previous = parseOwnedYamlText(
+    config.stdout,
+    `monke.yml at ${commit}`,
+    z.looseObject({ skills: RepoImportRecipesSchema.default([]) })
+  );
+  return previous.skills.flatMap((entry) => entry.skills);
 }
 
 /** Preserve user overrides while discovering the publishing source's selected collection. */

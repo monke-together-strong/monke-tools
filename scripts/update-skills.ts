@@ -117,7 +117,13 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
   snapshotSkillUpdateBaseline(repoRoot, before, migrating);
 
   const { recipes } = store;
-  const prepare = createGitSkillPreparer({ before, recipes, repoRoot, runtime });
+  const prepare = createGitSkillPreparer({
+    before,
+    recipes,
+    repo: dependencies.repo,
+    repoRoot,
+    runtime
+  });
 
   // Every recipe reaches the loop tail; Oxlint currently misclassifies the try/finally body.
   // oxlint-disable-next-line no-unreachable-loop
@@ -253,6 +259,7 @@ function skillUpdateFailure(failures: string[], reviewFailure: string | undefine
 function createGitSkillPreparer(options: {
   before: string;
   recipes: SkillImportRecipe[];
+  repo?: boolean;
   repoRoot: string;
   runtime: Runtime;
 }) {
@@ -274,7 +281,7 @@ function createGitSkillPreparer(options: {
       // Installer commands are barriers; wait for every preparation before publication.
       const results = await Promise.allSettled(
         group.map((candidate) =>
-          limit(() => prepareGitSkillUpdate(repoRoot, candidate, before, runtime))
+          limit(() => prepareGitSkillUpdate(repoRoot, candidate, before, runtime, options.repo))
         )
       );
       for (const [position, candidate] of group.entries()) {
@@ -300,7 +307,8 @@ async function prepareGitSkillUpdate(
   repoRoot: string,
   recipe: SkillImportRecipe,
   before: string,
-  runtime: Runtime
+  runtime: Runtime,
+  repo?: boolean
 ) {
   const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-update-"));
   try {
@@ -317,6 +325,7 @@ async function prepareGitSkillUpdate(
     }
     const revision = await resolveSkillRevision(recipe, repoRoot);
     const installOutput = await stageGitSkillSource({
+      previousRecipe: repo ? undefined : recipe,
       recipe: { ...recipe, commit: revision.commit, source: revision.source },
       repoRoot,
       runtime,

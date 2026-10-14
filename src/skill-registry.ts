@@ -590,6 +590,7 @@ async function addGitSkillSource(
   const staging = mkdtempSync(path.join(tmpdir(), "monke-skill-git-"));
   try {
     const installOutput = await stageGitSkillSource({
+      previousRecipe: repo ? undefined : previous,
       recipe: { ...recipe, commit: revision.commit, source: revision.source },
       repoRoot: root,
       runtime,

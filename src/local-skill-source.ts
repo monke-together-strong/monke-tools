@@ -329,7 +329,10 @@ async function discoverLocalGuidance(
       : [];
   if (publisher && existsSync(path.join(publisher, "monke.yml"))) {
     validateDeclaredSlugs(
-      discoverSourceSkills(resolveLocalSourceRoot(recipe.localSource, workingDirectory)),
+      discoverSourceSkills(
+        resolveLocalSourceRoot(recipe.localSource, workingDirectory),
+        path.join(publisher, "skills/imported")
+      ),
       declared,
       publisher,
       recipe.source

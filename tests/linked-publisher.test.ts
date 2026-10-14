@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -144,4 +144,34 @@ describe("linked publisher collections", () => {
     expect(read(installed, "imported/base/SKILL.md")).toContain("description: Consumer trigger.");
     expect(read(installed, "imported/base/SKILL.md")).toContain("disable-model-invocation: false");
   });
+
+  test.each(["readd", "update"])(
+    "%s replaces a retired import with an own skill",
+    async (action) => {
+      const { declare, installed, publisher, runtime } = fixture();
+      const add = ["skills", "add", publisher, "--link", "--project"];
+      declare("skill");
+      await runCliAsync(add, runtime);
+      write(publisher, "monke.yml", "skills: []\n");
+      write(
+        publisher,
+        "skills/base/SKILL.md",
+        "---\nname: base\ndescription: Own base.\n---\nOwn base instructions.\n"
+      );
+      await runCliAsync(action === "readd" ? add : ["skills", "update", "--project"], runtime);
+      expect(read(installed, "imported/base/SKILL.md")).toContain("Own base instructions.");
+      expect(realpathSync(path.join(installed, "imported/base"))).toBe(
+        realpathSync(path.join(publisher, "skills/base"))
+      );
+      expect(existsSync(path.join(publisher, "skills/imported/base"))).toBeFalsy();
+
+      rmSync(path.join(publisher, "skills/base"), { recursive: true });
+      declare("skill");
+      await runCliAsync(action === "readd" ? add : ["skills", "update", "--project"], runtime);
+      expect(read(installed, "imported/base/SKILL.md")).toContain("Base instructions.");
+      expect(read(installed, "imported/base/SKILL.md")).toContain(
+        "description: Publisher trigger."
+      );
+    }
+  );
 });
