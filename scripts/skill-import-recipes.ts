@@ -190,7 +190,8 @@ const LegacyStoreSchema = z
       ...recipe,
       commit: lock?.commit,
       source:
-        lock && /^(?:https?:\/\/github\.com\/)?[^/\s:]+\/[^/#\s]+\/tree\//u.test(recipe.source)
+        lock?.updateRef.includes("/") &&
+        /^(?:https?:\/\/github\.com\/)?[^/\s:]+\/[^/#\s]+\/tree\//u.test(recipe.source)
           ? `${lock.repository.replace(/\.git$/u, "")}${lock.subpath ? `/${lock.subpath}` : ""}#${lock.updateRef}`
           : recipe.source
     })),

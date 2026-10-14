@@ -204,9 +204,10 @@ export async function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: 
   return {
     commit,
     repository: source.repository,
-    source: treePath
-      ? `https://github.com/${source.repository.slice("https://github.com/".length).replace(/\.git$/u, "")}${treePath.slice(updateRef.length)}#${updateRef}`
-      : recipe.source,
+    source:
+      treePath && updateRef.includes("/")
+        ? `https://github.com/${source.repository.slice("https://github.com/".length).replace(/\.git$/u, "")}${treePath.slice(updateRef.length)}#${updateRef}`
+        : recipe.source,
     subpath: treePath ? treePath.slice(updateRef.length).replace(/^\//u, "") : source.subpath,
     updateRef
   };

@@ -514,53 +514,134 @@ describe("Skill import registry CLI", () => {
     expect(registry).not.toContain("importerVersion");
   });
 
-  test("adding an ambiguous GitHub tree source again replaces its canonical recipe", async () => {
+  test("installation preserves a migrated bundled source and its accepted guidance", async () => {
     const fixture = registryFixture();
-    const upstream = createRepo(path.join(fixture.sandbox, "tree-source"), {
-      "course/skills/typography/SKILL.md":
-        "---\nname: typography\ndescription: Typography.\n---\nCourse instructions.\n"
-    });
-    git(upstream, ["branch", "feature/topic"]);
-    const gitConfig = path.join(fixture.sandbox, "git-config");
+    const source = "https://github.com/owner/bundled/tree/main/course";
+    const accepted =
+      "---\nname: bundled\ndescription: Consumer trigger.\n---\nAccepted instructions.\n";
+    write(fixture.registry, "skills/imported/bundled/SKILL.md", accepted);
+    write(fixture.guidance, "skills/imported/bundled/SKILL.md", "New bundled instructions.\n");
     write(
-      fixture.sandbox,
-      "git-config",
-      `[url "${upstream}"]\n  insteadOf = https://github.com/owner/repeated.git\n`
+      fixture.guidance,
+      "monke.yml",
+      stringify({ skills: [{ commit: "b".repeat(40), skills: ["bundled"], source }] })
     );
-    fixture.runtime.env.GIT_CONFIG_GLOBAL = gitConfig;
-    writeExecutable(
-      path.join(fixture.bin, "npx"),
-      `#!/bin/sh
+    write(
+      fixture.registry,
+      "skills.lock.json",
+      JSON.stringify({
+        recipes: [
+          {
+            lock: {
+              commit: "a".repeat(40),
+              repository: "https://github.com/owner/bundled.git",
+              subpath: "course",
+              updateRef: "main"
+            },
+            skills: [
+              {
+                description: "Consumer trigger.",
+                kind: "skill",
+                selector: "bundled",
+                slug: "bundled"
+              }
+            ],
+            source
+          }
+        ],
+        version: 3
+      })
+    );
+    await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+    expect(read(fixture.installed.codex, "bundled/SKILL.md")).toBe(accepted);
+    const migrated: unknown = JSON.parse(read(fixture.registry, "skills.lock.json"));
+    expect(migrated).toStrictEqual({
+      recipes: [
+        {
+          commit: "a".repeat(40),
+          skills: [{ description: "Consumer trigger.", slug: "bundled" }],
+          source
+        }
+      ],
+      version: 4
+    });
+  });
+
+  test.each(["main", "feature/topic"])(
+    "tree source at %s keeps its identity across registry changes",
+    async (updateRef) => {
+      const fixture = registryFixture();
+      const upstream = createRepo(path.join(fixture.sandbox, "tree-source"), {
+        "course/skills/typography/SKILL.md":
+          "---\nname: typography\ndescription: Typography.\n---\nCourse instructions.\n"
+      });
+      if (updateRef !== "main") {
+        git(upstream, ["branch", updateRef]);
+      }
+      const gitConfig = path.join(fixture.sandbox, "git-config");
+      write(
+        fixture.sandbox,
+        "git-config",
+        `[url "${upstream}"]\n  insteadOf = https://github.com/owner/repeated.git\n`
+      );
+      fixture.runtime.env.GIT_CONFIG_GLOBAL = gitConfig;
+      writeExecutable(
+        path.join(fixture.bin, "npx"),
+        `#!/bin/sh
 set -eu
 mkdir -p .agents/skills
 cp -R upstream-validation/course/skills/typography .agents/skills/
 `
-    );
-    const source = "https://github.com/owner/repeated/tree/feature/topic/course";
-    vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
-    try {
-      await runCliAsync(
-        ["skills", "add", source, "--name", "course", "--skill", "typography"],
-        fixture.runtime
       );
-      await runCliAsync(
-        ["skills", "policy", "course", "typography", "--description", "Consumer trigger."],
-        fixture.runtime
-      );
-      await runCliAsync(["skills", "add", source, "--skill", "typography"], fixture.runtime);
-      const registry = read(fixture.registry, "skills.lock.json");
-      expect(registry.match(/"source":/gu)).toHaveLength(1);
-      expect(registry).toContain(
-        '"source": "https://github.com/owner/repeated/course#feature/topic"'
-      );
-      expect(registry).toContain('"name": "course"');
-      expect(read(fixture.installed.codex, "typography/SKILL.md")).toContain(
-        "description: Consumer trigger."
-      );
-    } finally {
-      vi.unstubAllEnvs();
+      const source = `https://github.com/owner/repeated/tree/${updateRef}/course`;
+      const expectedSource = updateRef.includes("/")
+        ? `https://github.com/owner/repeated/course#${updateRef}`
+        : source;
+      vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
+      try {
+        await runCliAsync(
+          ["skills", "add", source, "--name", "course", "--skill", "typography"],
+          fixture.runtime
+        );
+        await runCliAsync(
+          ["skills", "policy", "course", "typography", "--description", "Consumer trigger."],
+          fixture.runtime
+        );
+        await runCliAsync(["skills", "add", source, "--skill", "typography"], fixture.runtime);
+        await runCliAsync(["skills", "update"], fixture.runtime);
+        const registry = read(fixture.registry, "skills.lock.json");
+        expect(registry.match(/"source":/gu)).toHaveLength(1);
+        expect(registry).toContain(`"source": "${expectedSource}"`);
+        expect(registry).toContain('"name": "course"');
+        expect(read(fixture.installed.codex, "typography/SKILL.md")).toContain(
+          "description: Consumer trigger."
+        );
+        write(fixture.guidance, "skills/imported/typography/SKILL.md", "Bundled instructions.\n");
+        write(
+          fixture.guidance,
+          "monke.yml",
+          stringify({
+            skills: [
+              {
+                commit: git(upstream, ["rev-parse", "HEAD"]),
+                skills: ["typography"],
+                source: expectedSource
+              }
+            ]
+          })
+        );
+        await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+        expect(read(fixture.installed.codex, "typography/SKILL.md")).toContain(
+          "description: Consumer trigger."
+        );
+        await runCliAsync(["skills", "remove", expectedSource], fixture.runtime);
+        await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+        expect(existsSync(path.join(fixture.installed.codex, "typography"))).toBeFalsy();
+      } finally {
+        vi.unstubAllEnvs();
+      }
     }
-  });
+  );
 
   test.each(["git", "link", "command"] as const)(
     "%s description overrides preserve other metadata and survive updates",
