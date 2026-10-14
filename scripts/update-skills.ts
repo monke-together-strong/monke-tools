@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -11,6 +11,7 @@ import { configureCliParser } from "../src/cli-errors.ts";
 import { MonkeError } from "../src/errors.ts";
 import { updateLocalSkillSource } from "../src/local-skill-source.ts";
 import { createRuntime } from "../src/runtime.ts";
+import { sha256 } from "../src/sha256.ts";
 import type { Runtime } from "../src/types.ts";
 import {
   assertManagedGuidanceRoots,
@@ -42,6 +43,7 @@ import {
   pruneImportedGuidance,
   rememberRestoredRecipe,
   stageGitSkillSource,
+  SKILL_RESTORE_MARKER,
   stagedSkillGuidance,
   resolveSkillRevision,
   restoreLockedRecipe,
@@ -73,6 +75,8 @@ export interface SlugReplacementRequest {
 export interface UpdateSkillsDependencies {
   /** Confirms whether an interactive update should accept a staged slug replacement. */
   confirmSlugReplacement?: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
+  /** Editable publisher checkouts whose declarations advance before installed copies. */
+  connectedRepos?: string[];
   repo?: boolean;
   repoRoot?: string;
   runtime?: Runtime;
@@ -83,19 +87,117 @@ export interface UpdateSkillsDependencies {
 
 /** Reruns all recorded Skill import recipes into their recorded managed roots. */
 export async function runUpdateSkills(argv: string[], dependencies: UpdateSkillsDependencies) {
+  const options = parseCommand(argv);
   const repoRoot = dependencies.repoRoot ?? process.cwd();
-  const { failure } = await withSkillImportMutation(
-    repoRoot,
-    () => updateSkills(argv, dependencies),
-    dependencies.runtime
-  );
-  if (failure) {
-    throw failure;
+  const runtime = dependencies.runtime ?? createRuntime({ cwd: repoRoot });
+  const writeMessage = dependencies.writeMessage ?? runtime.writeStdout;
+  const reviewDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-review-"));
+  const before = path.join(reviewDirectory, "before");
+  const after = path.join(reviewDirectory, "after");
+  const collections: string[] = [];
+  const revisions = new Map<string, ReturnType<typeof resolveSkillRevision>>();
+  const failures: string[] = [];
+  try {
+    await withSkillImportMutation(
+      repoRoot,
+      async () => {
+        const visited = new Set([realpathSync.native(repoRoot)]);
+        for (const directory of dependencies.connectedRepos ?? []) {
+          try {
+            const root = realpathSync.native(directory);
+            if (visited.has(root)) {
+              continue;
+            }
+            visited.add(root);
+            // Accept publisher pins and files before consumer recovery snapshots them.
+            // oxlint-disable-next-line no-await-in-loop
+            await withSkillImportMutation(
+              root,
+              async () => {
+                if (
+                  readRepoImportRecipeStore(root).recipes.length === 0 &&
+                  !existsSync(path.join(root, SKILL_RESTORE_MARKER))
+                ) {
+                  return;
+                }
+                const collection = path.join(
+                  "repositories",
+                  `${path.basename(root)}-${sha256(root).slice(0, 8)}`
+                );
+                collections.push(collection);
+                writeMessage(`Updating repo imports: ${root}\n`);
+                const result = await updateSkills(
+                  options.interactive,
+                  {
+                    confirmSlugReplacement: dependencies.confirmSlugReplacement,
+                    repo: true,
+                    repoRoot: root,
+                    runtime,
+                    writeMessage
+                  },
+                  path.join(before, collection),
+                  path.join(after, collection),
+                  revisions
+                );
+                if (result.failure) {
+                  failures.push(`${root}: ${result.failure.message}`);
+                }
+              },
+              runtime
+            );
+          } catch (error) {
+            failures.push(
+              `${directory}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        }
+        try {
+          const result = await updateSkills(
+            options.interactive,
+            dependencies,
+            before,
+            after,
+            revisions
+          );
+          if (result.failure) {
+            failures.push(result.failure.message);
+          }
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : String(error));
+        }
+        try {
+          await summarizeSkillChanges({ after, before, collections, runtime, writeMessage });
+          const comparison = await saveSkillComparison(before, after, runtime);
+          if (comparison) {
+            await openSkillComparison(comparison, {
+              adapter: options.adapter,
+              runtime,
+              writeMessage
+            });
+          } else {
+            writeMessage("No skill changes.\n");
+          }
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : String(error));
+        }
+      },
+      runtime
+    );
+  } finally {
+    rmSync(reviewDirectory, { force: true, recursive: true });
+  }
+  if (failures.length > 0) {
+    throw new MonkeError(failures.join("\n"));
   }
 }
 
-async function updateSkills(argv: string[], dependencies: UpdateSkillsDependencies) {
-  const { adapter, interactive } = parseCommand(argv);
+async function updateSkills(
+  interactive: boolean,
+  dependencies: UpdateSkillsDependencies,
+  before: string,
+  after: string,
+  revisions: Map<string, ReturnType<typeof resolveSkillRevision>>
+) {
   const repoRoot = dependencies.repoRoot ?? process.cwd();
   assertManagedGuidanceRoots(repoRoot);
   const runtime =
@@ -120,10 +222,9 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
   } else {
     ignoreRepoImports(repoRoot, runtime);
   }
-  const reviewDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-review-"));
-  const before = path.join(reviewDirectory, "before");
   const migrating = store.recipes.some((recipe) => !recipe.localSource && !recipe.commit);
   snapshotSkillUpdateBaseline(repoRoot, before, migrating, store);
+  snapshotRepoDeclaration(repoRoot, before, dependencies.repo);
 
   const { recipes } = store;
   const prepare = createGitSkillPreparer({
@@ -131,6 +232,7 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
     recipes,
     repo: dependencies.repo,
     repoRoot,
+    revisions,
     runtime
   });
 
@@ -244,23 +346,23 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
     writeMessage(`${finalizationFailure}\n`);
   }
   try {
-    await reviewSkillUpdate(
-      repoRoot,
-      reviewDirectory,
-      before,
-      runtime,
-      adapter,
-      writeMessage,
-      acceptedGuidance,
-      store
-    );
+    snapshotSkillGuidance(repoRoot, after, store);
+    snapshotRepoDeclaration(repoRoot, after, dependencies.repo);
+    if (existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
+      rememberSkillGuidance(repoRoot, acceptedGuidance, store);
+    }
   } catch (error) {
     reviewFailure = error instanceof Error ? error.message : String(error);
-  } finally {
-    rmSync(reviewDirectory, { force: true, recursive: true });
   }
 
   return { failure: skillUpdateFailure(failures, finalizationFailure, reviewFailure) };
+}
+
+function snapshotRepoDeclaration(repoRoot: string, destination: string, repo = false) {
+  const file = path.join(repoRoot, "monke.yml");
+  if (repo && existsSync(file)) {
+    cpSync(file, path.join(destination, "monke.yml"));
+  }
 }
 
 function finalizeUpdatedImports(options: {
@@ -313,6 +415,7 @@ function createGitSkillPreparer(options: {
   recipes: SkillImportRecipe[];
   repo?: boolean;
   repoRoot: string;
+  revisions: Map<string, ReturnType<typeof resolveSkillRevision>>;
   runtime: Runtime;
 }) {
   const { before, recipes, repoRoot, runtime } = options;
@@ -333,7 +436,16 @@ function createGitSkillPreparer(options: {
       // Installer commands are barriers; wait for every preparation before publication.
       const results = await Promise.allSettled(
         group.map((candidate) =>
-          limit(() => prepareGitSkillUpdate(repoRoot, candidate, before, runtime, options.repo))
+          limit(() =>
+            prepareGitSkillUpdate(
+              repoRoot,
+              candidate,
+              before,
+              runtime,
+              options.revisions,
+              options.repo
+            )
+          )
         )
       );
       for (const [position, candidate] of group.entries()) {
@@ -360,6 +472,7 @@ async function prepareGitSkillUpdate(
   recipe: SkillImportRecipe,
   before: string,
   runtime: Runtime,
+  revisions: Map<string, ReturnType<typeof resolveSkillRevision>>,
   repo?: boolean
 ) {
   const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-update-"));
@@ -377,7 +490,12 @@ async function prepareGitSkillUpdate(
         });
       }
     }
-    const revision = await resolveSkillRevision(recipe, repoRoot);
+    let pendingRevision = revisions.get(recipe.source);
+    if (!pendingRevision) {
+      pendingRevision = resolveSkillRevision(recipe, repoRoot);
+      revisions.set(recipe.source, pendingRevision);
+    }
+    const revision = await pendingRevision;
     const installOutput = await stageGitSkillSource({
       includeDeclaredImports: !repo,
       previousRecipe: repo ? undefined : recipe,
@@ -397,30 +515,6 @@ async function prepareGitSkillUpdate(
   } catch (error) {
     rmSync(stagingDirectory, { force: true, recursive: true });
     throw error;
-  }
-}
-
-async function reviewSkillUpdate(
-  repoRoot: string,
-  reviewDirectory: string,
-  before: string,
-  runtime: Runtime,
-  adapter: string | undefined,
-  writeMessage: (message: string) => void,
-  acceptedGuidance: readonly SkillImportRecipeSkill[],
-  store: SkillImportRecipeStore
-) {
-  const after = path.join(reviewDirectory, "after");
-  snapshotSkillGuidance(repoRoot, after, store);
-  await summarizeSkillChanges({ after, before, runtime, writeMessage });
-  const comparison = await saveSkillComparison(before, after, runtime);
-  if (existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
-    rememberSkillGuidance(repoRoot, acceptedGuidance, store);
-  }
-  if (comparison) {
-    await openSkillComparison(comparison, { adapter, runtime, writeMessage });
-  } else {
-    writeMessage("No skill changes.\n");
   }
 }
 

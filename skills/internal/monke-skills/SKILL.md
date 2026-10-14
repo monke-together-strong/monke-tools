@@ -74,7 +74,8 @@ uses `.cursor/skills`. Project installs preserve existing skills and agent instr
 
 Use `--project` with `list`, `update`, `remove`, or `policy` to select this registry.
 `update` discovers added or removed folders in unfiltered linked sources and opens
-the existing comparison. Monke leaves Git updates to the linked checkout's owner.
+the existing comparison. It also advances linked publishers' declared imports.
+Monke leaves Git checkout updates to the linked checkout's owner.
 Invocation policies on linked skills edit their source metadata and affect all
 consumers of that source.
 
@@ -105,7 +106,12 @@ Description overrides apply to one skill and survive updates. Combine
 imports write these overrides to their source metadata.
 
 Update advances Git refs, replays installers, and rereads linked files, then opens
-one complete comparison. Up to four Git sources prepare concurrently. Linked
+one complete comparison. It first updates `monke.yml` imports in connected local
+checkouts: the local Monke installation's source checkout and linked repositories.
+Each checkout keeps its selections and overrides. Review and commit the changed
+YAML files. See [connected update scope](../../../docs/skill-imports.md#review-updates)
+for project, release, and installer behavior.
+Up to four Git sources prepare concurrently. Linked
 sources, installer commands, and publication run in recipe order.
 
 When skill or reference content changes, Monke invokes the installed Codex CLI
@@ -116,6 +122,7 @@ update and comparison.
 
 Global or repo updates retain successful sources even if another fails. A failed
 project update restores the whole project's registry and links.
+Connected publisher updates remain accepted if consumer publication fails.
 Failed installers restore the Skill source folder, but may affect files outside it.
 Back up learned edits before installer updates. Reopen a failed viewer with the
 printed `mt diff` command. Git renames with recorded adopted links require explicit

@@ -58,6 +58,21 @@ update the pins to modify restored guidance.
 
 ## Review updates
 
+Bare `mt skills update` updates the repositories connected to your global
+installation, then refreshes installed skills. A local Monke install connects
+its source checkout. Adding a local source connects its Git checkout through
+the saved link. Monke advances each connected checkout's `monke.yml` imports
+and generated guidance once, preserving that checkout's selections and overrides.
+It includes those changes in the same comparison as the installed collection.
+Commit each changed `monke.yml` after review.
+
+`mt skills update --project` updates the project's linked source checkouts and
+installed collection. It does not include the global Monke source checkout.
+Release installs and Git imports use managed copies rather than connecting an
+editable checkout. Saved installer commands replay their installer without
+automatically editing the working directory's declarations. The command's
+current directory alone does not connect a repository.
+
 Run `mt skills update --repo` to pin missing commits and advance existing sources.
 Successful sources replace their files and pins. Failed sources retain their
 previous pins and restored files. If any source fails, Monke defers the final

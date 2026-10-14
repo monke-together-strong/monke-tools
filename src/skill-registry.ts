@@ -224,6 +224,7 @@ async function runSkillsRegistryLocked(
           ...(request.interactive ? ["--interactive"] : [])
         ],
         {
+          connectedRepos: connectedSkillRepositories(runtime, store, scope === undefined),
           repoRoot: root,
           runtime,
           validatePrepared(prepared, recipe) {
@@ -320,6 +321,30 @@ function completeRegistryChange(
       .filter((recipe) => changedSources.includes(recipe.source))
       .flatMap((recipe) => recipe.skills)
   );
+}
+
+function connectedSkillRepositories(
+  runtime: Runtime,
+  store: SkillImportRecipeStore,
+  includeInstall: boolean
+) {
+  const active = includeInstall ? loadActiveToolInstall(getMonkeHome(runtime)) : null;
+  const directories = [
+    ...(active?.manifest.installKind === "local" ? [active.manifest.sourceCheckout] : []),
+    ...store.recipes.flatMap((recipe) =>
+      recipe.localSource?.kind === "link" ? [recipe.localSource.workingDirectory] : []
+    )
+  ];
+  return directories.flatMap((cwd) => {
+    if (!existsSync(cwd)) {
+      return [];
+    }
+    const result = runtime.exec("git", ["rev-parse", "--show-toplevel"], {
+      allowFailure: true,
+      cwd
+    });
+    return result.exitCode === 0 ? [result.stdout.trim()] : [];
+  });
 }
 
 function activeGuidanceRoot(runtime: Runtime) {
