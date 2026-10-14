@@ -19,8 +19,9 @@ import pLimit from "p-limit";
 import { configureCliParser } from "../src/cli-errors.ts";
 import { MonkeError } from "../src/errors.ts";
 import { updateLocalSkillSource } from "../src/local-skill-source.ts";
-import { createRuntime, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
+import { createRuntime, getMonkeHome } from "../src/runtime.ts";
 import { sha256 } from "../src/sha256.ts";
+import { resolveSkillPath } from "../src/skill-path.ts";
 import type { Runtime } from "../src/types.ts";
 import {
   assertManagedGuidanceRoots,
@@ -89,6 +90,8 @@ export interface UpdateSkillsDependencies {
   connectedRepos?: string[];
   /** Publish the installed collection, completing recovery before final review snapshots. */
   publishCollection?: (update: () => Promise<void>) => Promise<void>;
+  /** All local publisher checkouts, including installer working directories. */
+  publisherRepos?: string[];
   repo?: boolean;
   repoRoot?: string;
   runtime?: Runtime;
@@ -110,118 +113,115 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
   const updatedCollections: Awaited<ReturnType<typeof updateSkills>>[] = [];
   const revisions = new Map<string, ReturnType<typeof resolveSkillRevision>>();
   const failures: string[] = [];
+  let comparison: Awaited<ReturnType<typeof saveSkillComparison>>;
+  const connected = new Set<string>();
+  const connectedDirectories = new Set(dependencies.connectedRepos);
+  const registryRoot = realpathSync.native(repoRoot);
+  const lockedRepositories = new Set([registryRoot]);
+  for (const directory of [...connectedDirectories, ...(dependencies.publisherRepos ?? [])]) {
+    try {
+      const root = resolveSkillPath(directory).resolved;
+      lockedRepositories.add(root);
+      if (connectedDirectories.has(directory) && root !== registryRoot) {
+        connected.add(root);
+      }
+    } catch (error) {
+      failures.push(`${directory}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   try {
-    await withSkillImportMutation(
-      repoRoot,
-      async () => {
-        const visited = new Set([realpathSync.native(repoRoot)]);
-        for (const directory of dependencies.connectedRepos ?? []) {
-          try {
-            const root = realpathSync.native(directory);
-            if (visited.has(root)) {
-              continue;
-            }
-            visited.add(root);
-            // Accept publisher pins and files before consumer recovery snapshots them.
-            // oxlint-disable-next-line no-await-in-loop
-            await withSkillImportMutation(
-              root,
-              async () => {
-                if (
-                  readRepoImportRecipeStore(root).recipes.length === 0 &&
-                  !existsSync(path.join(root, SKILL_RESTORE_MARKER))
-                ) {
-                  return;
-                }
-                const collection = path.join(
-                  "repositories",
-                  `${path.basename(root)}-${sha256(root).slice(0, 8)}`
-                );
-                collections.push(collection);
-                writeMessage(`Updating repo imports: ${root}\n`);
-                const result = await updateSkills(
-                  options.interactive,
-                  {
-                    confirmSlugReplacement: dependencies.confirmSlugReplacement,
-                    repo: true,
-                    repoRoot: root,
-                    runtime,
-                    writeMessage
-                  },
-                  path.join(before, collection),
-                  path.join(after, collection),
-                  revisions
-                );
-                if (result.failure) {
-                  failures.push(`${root}: ${result.failure.message}`);
-                }
-                updatedCollections.push(result);
-              },
-              runtime
-            );
-          } catch (error) {
-            failures.push(
-              `${directory}: ${error instanceof Error ? error.message : String(error)}`
-            );
-          }
-        }
+    await withUpdateLocks([...lockedRepositories].toSorted(), runtime, async () => {
+      for (const root of connected) {
         try {
-          const update = async () => {
-            const result = await updateSkills(
-              options.interactive,
-              dependencies,
-              before,
-              after,
-              revisions
-            );
-            updatedCollections.push(result);
-            if (result.failure) {
-              failures.push(result.failure.message);
-            }
-          };
-          await (dependencies.publishCollection
-            ? dependencies.publishCollection(update)
-            : update());
+          if (
+            readRepoImportRecipeStore(root).recipes.length === 0 &&
+            !existsSync(path.join(root, SKILL_RESTORE_MARKER))
+          ) {
+            continue;
+          }
+          const collection = path.join(
+            "repositories",
+            `${path.basename(root)}-${sha256(root).slice(0, 8)}`
+          );
+          collections.push(collection);
+          writeMessage(`Updating repo imports: ${root}\n`);
+          // Publisher updates run in connection order before consumer publication.
+          // oxlint-disable-next-line no-await-in-loop
+          const result = await updateSkills(
+            options.interactive,
+            {
+              confirmSlugReplacement: dependencies.confirmSlugReplacement,
+              repo: true,
+              repoRoot: root,
+              runtime,
+              writeMessage
+            },
+            path.join(before, collection),
+            path.join(after, collection),
+            revisions,
+            lockedRepositories,
+            registryRoot
+          );
+          if (result.failure) {
+            failures.push(`${root}: ${result.failure.message}`);
+          }
+          updatedCollections.push(result);
+        } catch (error) {
+          failures.push(`${root}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      try {
+        const update = async () => {
+          const result = await updateSkills(
+            options.interactive,
+            dependencies,
+            before,
+            after,
+            revisions,
+            lockedRepositories,
+            registryRoot
+          );
+          updatedCollections.push(result);
+          if (result.failure) {
+            failures.push(result.failure.message);
+          }
+        };
+        await (dependencies.publishCollection ? dependencies.publishCollection(update) : update());
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : String(error));
+      }
+      // Consumer restoration can change publisher files, so capture final bytes last.
+      for (const collection of updatedCollections) {
+        try {
+          collection.snapshotAfter();
         } catch (error) {
           failures.push(error instanceof Error ? error.message : String(error));
         }
-        // Consumer restoration can change publisher files, so capture final bytes last.
+      }
+      try {
+        await summarizeSkillChanges({ after, before, collections, runtime, writeMessage });
+        comparison = await saveSkillComparison(before, after, runtime);
+        // A failed save must leave prior baselines available for the next review.
         for (const collection of updatedCollections) {
           try {
-            collection.snapshotAfter();
+            collection.rememberBaseline();
           } catch (error) {
             failures.push(error instanceof Error ? error.message : String(error));
           }
         }
-        try {
-          await summarizeSkillChanges({ after, before, collections, runtime, writeMessage });
-          const comparison = await saveSkillComparison(before, after, runtime);
-          // A failed save must leave prior baselines available for the next review.
-          const remembered = await Promise.allSettled(
-            updatedCollections.map((collection) => collection.rememberBaseline())
-          );
-          for (const result of remembered) {
-            if (result.status === "rejected") {
-              failures.push(
-                result.reason instanceof Error ? result.reason.message : String(result.reason)
-              );
-            }
-          }
-          if (comparison) {
-            await openSkillComparison(comparison, {
-              adapter: options.adapter,
-              runtime,
-              writeMessage
-            });
-          } else {
-            writeMessage("No skill changes.\n");
-          }
-        } catch (error) {
-          failures.push(error instanceof Error ? error.message : String(error));
-        }
-      },
-      runtime
-    );
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : String(error));
+      }
+    });
+    try {
+      if (comparison) {
+        await openSkillComparison(comparison, { adapter: options.adapter, runtime, writeMessage });
+      } else if (failures.length === 0) {
+        writeMessage("No skill changes.\n");
+      }
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
   } finally {
     rmSync(reviewDirectory, { force: true, recursive: true });
   }
@@ -230,12 +230,28 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
   }
 }
 
+// Publisher recovery and review baselines must finish before another update can mutate them.
+async function withUpdateLocks(
+  roots: string[],
+  runtime: Runtime,
+  update: () => Promise<void>
+): Promise<void> {
+  const [root, ...remaining] = roots;
+  if (root === undefined) {
+    await update();
+    return;
+  }
+  await withSkillImportMutation(root, () => withUpdateLocks(remaining, runtime, update), runtime);
+}
+
 async function updateSkills(
   interactive: boolean,
   dependencies: UpdateSkillsDependencies,
   before: string,
   after: string,
-  revisions: Map<string, ReturnType<typeof resolveSkillRevision>>
+  revisions: Map<string, ReturnType<typeof resolveSkillRevision>>,
+  lockedRepositories: ReadonlySet<string>,
+  reviewOwner: string
 ) {
   const repoRoot = dependencies.repoRoot ?? process.cwd();
   assertManagedGuidanceRoots(repoRoot);
@@ -262,11 +278,12 @@ async function updateSkills(
     ignoreRepoImports(repoRoot, runtime);
   }
   const migrating = store.recipes.some((recipe) => !recipe.localSource && !recipe.commit);
-  const forgetBefore = await snapshotUpdateBefore({
+  const forgetBefore = snapshotUpdateBefore({
     before,
     migrating,
     repo: dependencies.repo,
     repoRoot,
+    reviewOwner,
     runtime,
     store
   });
@@ -290,6 +307,7 @@ async function updateSkills(
         // Source commands and registry writes must complete in recipe order.
         // oxlint-disable-next-line no-await-in-loop
         store = await updateLocalSkillSource({
+          lockedRepositories,
           recipe,
           repoRoot,
           runtime,
@@ -393,12 +411,12 @@ async function updateSkills(
   let reviewedStore: SkillImportRecipeStore | undefined;
   return {
     failure: skillUpdateFailure(failures, finalizationFailure),
-    rememberBaseline: async () => {
+    rememberBaseline: () => {
       if (reviewedStore) {
         if (existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
           rememberSkillGuidance(repoRoot, acceptedGuidance, reviewedStore);
         }
-        await forgetBefore?.();
+        forgetBefore?.();
       }
     },
     snapshotAfter: () => {
@@ -411,11 +429,12 @@ async function updateSkills(
   };
 }
 
-async function snapshotUpdateBefore(options: {
+function snapshotUpdateBefore(options: {
   before: string;
   migrating: boolean;
   repo?: boolean;
   repoRoot: string;
+  reviewOwner: string;
   runtime: Runtime;
   store: SkillImportRecipeStore;
 }) {
@@ -426,35 +445,24 @@ async function snapshotUpdateBefore(options: {
   }
   const home = getMonkeHome(runtime);
   const key = sha256(realpathSync.native(repoRoot));
-  const namespace = `skill-update-baseline:${key}`;
-  return await withScopedLockAsync(home, namespace, () => {
-    const root = path.join(home, "skill-update-baselines", key);
-    mkdirSync(root, { mode: 0o700, recursive: true });
-    const pending = readdirSync(root).map((entry) => path.join(root, entry));
-    const staging = mkdtempSync(`${root}-`);
-    const retained = path.join(root, path.basename(staging));
+  const retained = path.join(home, "skill-update-baselines", key, sha256(options.reviewOwner));
+  // Each consumer owns its retry baseline, even if another consumer saves a review.
+  // The repository mutation lock covers it through durable review saving.
+  if (!existsSync(retained)) {
+    mkdirSync(path.dirname(retained), { mode: 0o700, recursive: true });
+    const staging = mkdtempSync(`${retained}-`);
     try {
-      // Each in-flight update owns a complete copy, so another saved comparison
-      // can discard older snapshots without losing this attempt's retry state.
-      if (pending[0]) {
-        cpSync(pending[0], staging, { recursive: true, verbatimSymlinks: true });
-      } else {
-        snapshotSkillUpdateBaseline(repoRoot, staging, migrating, store);
-        snapshotRepoDeclaration(repoRoot, staging, true);
-      }
+      snapshotSkillUpdateBaseline(repoRoot, staging, migrating, store);
+      snapshotRepoDeclaration(repoRoot, staging, true);
       renameSync(staging, retained);
-      cpSync(retained, before, { recursive: true, verbatimSymlinks: true });
     } finally {
       rmSync(staging, { force: true, recursive: true });
     }
-    return async () => {
-      await withScopedLockAsync(home, namespace, () => {
-        for (const snapshot of [...pending, retained]) {
-          rmSync(snapshot, { force: true, recursive: true });
-        }
-      });
-    };
-  });
+  }
+  cpSync(retained, before, { recursive: true, verbatimSymlinks: true });
+  return () => {
+    rmSync(retained, { force: true, recursive: true });
+  };
 }
 
 function snapshotRepoDeclaration(repoRoot: string, destination: string, repo = false) {

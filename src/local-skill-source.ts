@@ -32,7 +32,11 @@ import type {
   SkillImportRecipeSkill,
   SkillImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
-import { restoreSkillImports, SKILL_RESTORE_MARKER } from "../scripts/skill-lock.ts";
+import {
+  restoreLockedImports,
+  restoreSkillImports,
+  SKILL_RESTORE_MARKER
+} from "../scripts/skill-lock.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { containsPath } from "./path-identity.ts";
 import { getMonkeHome } from "./runtime.ts";
@@ -318,7 +322,8 @@ function validateDeclaredSlugs(
 async function discoverLocalGuidance(
   recipe: SkillImportRecipe & { localSource: NonNullable<SkillImportRecipe["localSource"]> },
   workingDirectory: string,
-  runtime: Runtime
+  runtime: Runtime,
+  lockedRepositories?: ReadonlySet<string>
 ) {
   const repository = runtime.exec("git", ["rev-parse", "--show-toplevel"], {
     allowFailure: true,
@@ -342,7 +347,15 @@ async function discoverLocalGuidance(
       publisher,
       recipe.source
     );
-    await restoreSkillImports(publisher, false, runtime, declaredStore);
+    if (lockedRepositories && !lockedRepositories.has(realpathSync.native(publisher))) {
+      throw new MonkeError(
+        `Skill publisher changed during the update: ${publisher}; rerun mt skills update`
+      );
+    }
+    const restore = lockedRepositories?.has(realpathSync.native(publisher))
+      ? restoreLockedImports
+      : restoreSkillImports;
+    await restore(publisher, false, runtime, declaredStore);
   }
   const root = resolveLocalSourceRoot(recipe.localSource, workingDirectory);
   const own = discoverSourceSkills(root);
@@ -376,6 +389,8 @@ async function discoverLocalGuidance(
 /** Refresh a command or linked source and publish it through the existing import materializer. */
 export async function updateLocalSkillSource(options: {
   executeCommand?: boolean;
+  /** Publisher mutation locks already held by the connected update. */
+  lockedRepositories?: ReadonlySet<string>;
   recipe: SkillImportRecipe;
   repoRoot: string;
   runtime: Runtime;
@@ -435,7 +450,8 @@ export async function updateLocalSkillSource(options: {
     const { discovered, linkedSkills, root } = await discoverLocalGuidance(
       { ...recipe, localSource },
       workingDirectory,
-      runtime
+      runtime,
+      options.lockedRepositories
     );
     if (discovered.size === 0) {
       throw new MonkeError(`No skills found in ${root}`);

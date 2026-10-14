@@ -20,6 +20,7 @@ import * as z from "zod";
 import { MonkeError } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
 import { createRuntime, formatCommand, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
+import { resolveSkillPath } from "../src/skill-path.ts";
 import type { ExecResult, Runtime } from "../src/types.ts";
 import { parseOwnedYamlText } from "../src/validation.ts";
 import {
@@ -1070,7 +1071,11 @@ export async function withSkillImportMutation<T>(
   callback: () => T | Promise<T>,
   runtime: Runtime = createRuntime({ cwd: repoRoot })
 ) {
-  return await withScopedLockAsync(getMonkeHome(runtime), `skill-import:${repoRoot}`, callback);
+  return await withScopedLockAsync(
+    getMonkeHome(runtime),
+    `skill-import:${resolveSkillPath(repoRoot).resolved}`,
+    callback
+  );
 }
 
 export async function restoreSkillImports(

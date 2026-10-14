@@ -230,13 +230,14 @@ async function runSkillsRegistryLocked(
     return;
   }
   if (request.action === "update") {
+    const repositories = localSkillRepositories(runtime, store, scope === undefined);
     await runUpdateSkills(
       [
         ...(request.adapter ? ["--adapter", request.adapter] : []),
         ...(request.interactive ? ["--interactive"] : [])
       ],
       {
-        connectedRepos: connectedSkillRepositories(runtime, store, scope === undefined),
+        connectedRepos: repositories.connected,
         publishCollection(update) {
           const publish = async () => {
             try {
@@ -248,6 +249,7 @@ async function runSkillsRegistryLocked(
           };
           return publishUpdate ? publishUpdate(publish) : publish();
         },
+        publisherRepos: repositories.publishers,
         repoRoot: root,
         runtime,
         validatePrepared(prepared, recipe) {
@@ -342,33 +344,54 @@ function completeRegistryChange(
   );
 }
 
-function connectedSkillRepositories(
+function localSkillRepositories(
   runtime: Runtime,
   store: SkillImportRecipeStore,
   includeInstall: boolean
 ) {
   const active = includeInstall ? loadActiveToolInstall(getMonkeHome(runtime)) : null;
   const directories = [
-    ...(active?.manifest.installKind === "local" ? [active.manifest.sourceCheckout] : []),
+    ...(active?.manifest.installKind === "local"
+      ? [{ connected: true, cwd: active.manifest.sourceCheckout }]
+      : []),
     ...store.recipes.flatMap((recipe) =>
-      recipe.localSource?.kind === "link" ? [recipe.localSource.workingDirectory] : []
+      recipe.localSource
+        ? [
+            {
+              connected: recipe.localSource.kind === "link",
+              cwd: recipe.localSource.workingDirectory
+            }
+          ]
+        : []
     )
   ];
-  return directories.flatMap((cwd) => {
+  const connected: string[] = [];
+  const publishers: string[] = [];
+  for (const { connected: update, cwd } of directories) {
+    if (!update) {
+      // An installer may initialize a repository in this directory during the update.
+      publishers.push(cwd);
+    }
     if (!existsSync(cwd)) {
-      return [];
+      continue;
     }
     try {
       const result = runtime.exec("git", ["rev-parse", "--show-toplevel"], {
         allowFailure: true,
         cwd
       });
-      return result.exitCode === 0 ? [result.stdout.trim()] : [];
+      if (result.exitCode === 0) {
+        const root = result.stdout.trim();
+        publishers.push(root);
+        if (update) {
+          connected.push(root);
+        }
+      }
     } catch {
       // The ordinary source update reports broken links while healthy sources continue.
-      return [];
     }
-  });
+  }
+  return { connected, publishers };
 }
 
 function activeGuidanceRoot(runtime: Runtime) {

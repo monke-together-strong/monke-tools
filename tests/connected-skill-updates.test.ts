@@ -140,7 +140,7 @@ function reviewDiff(log: string) {
   return git(launch[2] ?? "", ["diff", `${launch[1]}^`, launch[1] ?? ""]);
 }
 
-function pauseSummary(runtime: Runtime) {
+function pauseCommand(runtime: Runtime, command = "codex") {
   const entered = Promise.withResolvers<undefined>();
   const released = Promise.withResolvers<undefined>();
   return {
@@ -151,7 +151,7 @@ function pauseSummary(runtime: Runtime) {
     runtime: {
       ...runtime,
       async execAsync(...args: Parameters<Runtime["execAsync"]>) {
-        if (args[0] === "codex") {
+        if (args[0] === command) {
           entered.resolve(undefined);
           await released.promise;
         }
@@ -300,19 +300,29 @@ describe("updates through connected local repositories", () => {
     }
   );
 
-  test.each([false, true])(
-    "overlapping publisher comparisons retain independent recovery when save fails: %s",
-    async (failSave) => {
+  test.each([
+    { firstFails: false, secondFails: false },
+    { firstFails: false, secondFails: true },
+    { firstFails: true, secondFails: false }
+  ])(
+    "publisher comparisons serialize saving and retry baselines: %j",
+    async ({ firstFails, secondFails }) => {
       const f = fixture();
       const repoRuntime = { ...f.runtime, cwd: f.checkout };
-      await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], repoRuntime);
+      await runCliAsync(
+        ["skills", "add", f.upstream, "--repo", "--skill", "base", "extra"],
+        repoRuntime
+      );
       await runCliAsync(["skills", "list"], f.runtime);
       const original = readRepoImportRecipeStore(f.checkout).recipes[0]?.commit;
-      f.advance();
-      const globalSummary = pauseSummary(f.runtime);
-      const repoSummary = pauseSummary(repoRuntime);
-      const globalUpdate = runCliAsync(["skills", "update"], globalSummary.runtime);
-      let repoUpdate: Promise<void> | undefined;
+      const second = f.advance();
+      const globalSummary = pauseCommand(f.runtime);
+      const repoSummary = pauseCommand(repoRuntime);
+      const globalUpdate = runCliAsync(["skills", "update"], globalSummary.runtime).then(
+        () => "",
+        String
+      );
+      let repoUpdate: Promise<string> | undefined;
       try {
         await globalSummary.entered;
         write(
@@ -323,27 +333,58 @@ describe("updates through connected local repositories", () => {
         git(f.upstream, ["add", "."]);
         git(f.upstream, ["commit", "-m", "Advance during review"]);
         const current = git(f.upstream, ["rev-parse", "HEAD"]);
-        repoUpdate = runCliAsync(["skills", "update", "--repo"], repoSummary.runtime);
-        await repoSummary.entered;
+        repoUpdate = runCliAsync(["skills", "update", "--repo"], repoSummary.runtime).then(
+          () => "",
+          String
+        );
+        await expect(
+          Promise.race([
+            repoSummary.entered.then(() => "entered"),
+            new Promise<string>((resolve) => {
+              setTimeout(() => {
+                resolve("waiting");
+              }, 250);
+            })
+          ])
+        ).resolves.toBe("waiting");
+        expect(readRepoImportRecipeStore(f.checkout).recipes[0]?.commit).toBe(second);
+        if (firstFails) {
+          write(f.monkeHome, "skill-reviews", "Obstructed first comparison.\n");
+        }
         globalSummary.release();
-        await globalUpdate;
-        rmSync(f.reviewLog);
-        if (failSave) {
-          rmSync(path.join(f.monkeHome, "skill-reviews"), { recursive: true });
+        await expect(globalUpdate).resolves.toMatch(firstFails ? /skill-reviews/u : /^$/u);
+        if (firstFails) {
+          rmSync(path.join(f.monkeHome, "skill-reviews"));
+        } else {
+          rmSync(f.reviewLog);
+        }
+        await repoSummary.entered;
+        if (secondFails) {
+          rmSync(path.join(f.monkeHome, "skill-reviews"), { force: true, recursive: true });
           write(f.monkeHome, "skill-reviews", "Obstructed second comparison.\n");
         }
         repoSummary.release();
-        const error = await repoUpdate.then(() => "", String);
-        expect(error).toMatch(failSave ? /skill-reviews/u : /^$/u);
-        if (failSave) {
+        await expect(repoUpdate).resolves.toMatch(secondFails ? /skill-reviews/u : /^$/u);
+        if (secondFails) {
           rmSync(path.join(f.monkeHome, "skill-reviews"));
           await runCliAsync(["skills", "update", "--repo"], repoRuntime);
         }
         const diff = reviewDiff(f.reviewLog);
-        expect(diff).toContain(`-  - commit: ${original}`);
+        expect(diff).toContain(`-  - commit: ${second}`);
         expect(diff).toContain(`+  - commit: ${current}`);
-        expect(diff).toContain("-First version.");
+        expect(diff).toContain("-Second version.");
         expect(diff).toContain("+Third version.");
+        expect(diff).not.toContain("-Extra first.");
+        let retried = diff;
+        if (firstFails) {
+          rmSync(f.reviewLog);
+          await runCliAsync(["skills", "update"], f.runtime);
+          retried = reviewDiff(f.reviewLog);
+        }
+        expect(retried).toContain(`-  - commit: ${firstFails ? original : second}`);
+        expect(retried).toContain(`+  - commit: ${current}`);
+        expect(retried.includes("-Extra first.")).toBe(firstFails);
+        expect(retried.includes("+Extra second.")).toBe(firstFails);
       } finally {
         globalSummary.release();
         repoSummary.release();
@@ -450,6 +491,92 @@ describe("updates through connected local repositories", () => {
         expect(reviewDiff(f.reviewLog)).toContain("+Second version.");
       } finally {
         chmodSync(exclude, 0o644);
+      }
+    }
+  );
+
+  test.each(["nested", "alias"])(
+    "concurrent publisher updates wait for %s project publication recovery",
+    async (kind) => {
+      const f = fixture();
+      const publisher = createRepo(
+        path.join(f.caller, kind === "nested" ? ".agents/skills/publisher" : "publisher"),
+        { "monke.yml": "skills: []\n" }
+      );
+      const repoRuntime = { ...f.runtime, cwd: publisher };
+      await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], repoRuntime);
+      if (kind === "alias") {
+        mkdirSync(path.join(f.caller, ".agents"), { recursive: true });
+        symlinkSync(path.join(publisher, "skills"), path.join(f.caller, ".agents/skills"), "dir");
+      }
+      await runCliAsync(["skills", "add", publisher, "--project", "--skill", "base"], f.runtime);
+      await runCliAsync(
+        [
+          "skills",
+          "add",
+          "--project",
+          "--name",
+          "installer",
+          "--command",
+          "true",
+          "--cwd",
+          f.upstream,
+          "--skill",
+          "extra"
+        ],
+        f.runtime
+      );
+      const accepted = f.advance();
+      const installer = pauseCommand(f.runtime, "sh");
+      const publisherSummary = pauseCommand(repoRuntime);
+      const exclude = path.join(f.caller, ".git/info/exclude");
+      installer.runtime.writeStderr = (message) => {
+        if (message.startsWith("Linked monke-tools skills")) {
+          chmodSync(exclude, 0o444);
+        }
+      };
+      const projectUpdate = runCliAsync(["skills", "update", "--project"], installer.runtime).then(
+        () => "",
+        String
+      );
+      let publisherUpdate: Promise<string> | undefined;
+      try {
+        await installer.entered;
+        expect(readRepoImportRecipeStore(publisher).recipes[0]?.commit).toBe(accepted);
+        write(
+          f.upstream,
+          "skills/base/SKILL.md",
+          "---\nname: base\ndescription: Base.\n---\nThird version.\n"
+        );
+        git(f.upstream, ["add", "."]);
+        git(f.upstream, ["commit", "-m", "Concurrent accepted revision"]);
+        const newest = git(f.upstream, ["rev-parse", "HEAD"]);
+        publisherUpdate = runCliAsync(
+          ["skills", "update", "--repo"],
+          publisherSummary.runtime
+        ).then(() => "", String);
+        await expect(
+          Promise.race([
+            publisherSummary.entered.then(() => "entered"),
+            new Promise<string>((resolve) => {
+              setTimeout(() => {
+                resolve("waiting");
+              }, 250);
+            })
+          ])
+        ).resolves.toBe("waiting");
+        installer.release();
+        await expect(projectUpdate).resolves.toMatch(/not writable/u);
+        await publisherSummary.entered;
+        expect(readRepoImportRecipeStore(publisher).recipes[0]?.commit).toBe(newest);
+        expect(read(publisher, "skills/imported/base/SKILL.md")).toContain("Third version.");
+        publisherSummary.release();
+        await expect(publisherUpdate).resolves.toBe("");
+      } finally {
+        installer.release();
+        publisherSummary.release();
+        chmodSync(exclude, 0o644);
+        await Promise.allSettled([projectUpdate, ...(publisherUpdate ? [publisherUpdate] : [])]);
       }
     }
   );
