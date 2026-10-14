@@ -10,6 +10,7 @@ import {
 } from "../scripts/skill-import-recipes.ts";
 import { saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
+import { shellQuote } from "../src/shell-quote.ts";
 import type { Runtime } from "../src/types.ts";
 import {
   createRepo,
@@ -579,6 +580,65 @@ describe("updates through connected local repositories", () => {
         await Promise.allSettled([projectUpdate, ...(publisherUpdate ? [publisherUpdate] : [])]);
       }
     }
+  );
+
+  test.each([
+    { command: "restore", connected: false },
+    { command: "restore", connected: true },
+    { command: "update", connected: false }
+  ])(
+    "saved repo installers remain replayable: %j",
+    async ({ command, connected }) => {
+      const f = fixture();
+      const publisher = createRepo(path.join(f.sandbox, "publisher"), {
+        "monke.yml": "skills: []\n"
+      });
+      await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base", "extra"], {
+        ...f.runtime,
+        cwd: publisher
+      });
+      const original = readRepoImportRecipeStore(publisher).recipes[0]?.commit;
+      writeExecutable(
+        path.join(f.bin, "mt"),
+        `#!/bin/sh
+exec ${shellQuote(Bun.which("bun") ?? "bun")} ${shellQuote(path.resolve(import.meta.dirname, "../src/index.ts"))} "$@"
+`
+      );
+      if (connected) {
+        await runCliAsync(["skills", "add", publisher, "--project", "--skill", "base"], f.runtime);
+      }
+      await runCliAsync(
+        [
+          "skills",
+          "add",
+          "--project",
+          "--name",
+          "restorer",
+          "--command",
+          `mt skills ${command} --repo`,
+          "--cwd",
+          publisher,
+          "--skill",
+          "extra"
+        ],
+        f.runtime
+      );
+      const newest = f.advance();
+      const advances = connected || command === "update";
+
+      await runCliAsync(["skills", "update", "--project"], f.runtime);
+
+      expect(readRepoImportRecipeStore(publisher).recipes[0]?.commit).toBe(
+        advances ? newest : original
+      );
+      expect(read(publisher, "skills/imported/extra/SKILL.md")).toContain(
+        advances ? "Extra second." : "Extra first."
+      );
+      expect(read(f.caller, ".agents/skills/monke-tools/imported/extra/SKILL.md")).toContain(
+        advances ? "Extra second." : "Extra first."
+      );
+    },
+    10_000
   );
 
   test("release installs and Git-only imports do not connect editable checkouts", async () => {

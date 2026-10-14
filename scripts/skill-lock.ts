@@ -1065,7 +1065,20 @@ function hashDirectory(root: string, directory: string, prefix: string, hash: Bu
   }
 }
 
-/** Restores exact accepted guidance without discovery or lock rewriting. */
+/** Reserve accepted declaration changes through consumer recovery and review saving. */
+export async function withSkillImportUpdate<T>(
+  repoRoot: string,
+  callback: () => T | Promise<T>,
+  runtime: Runtime = createRuntime({ cwd: repoRoot })
+) {
+  return await withScopedLockAsync(
+    getMonkeHome(runtime),
+    `skill-update:${resolveSkillPath(repoRoot).resolved}`,
+    callback
+  );
+}
+
+/** Serialize materialization, including restores run by saved installers. */
 export async function withSkillImportMutation<T>(
   repoRoot: string,
   callback: () => T | Promise<T>,

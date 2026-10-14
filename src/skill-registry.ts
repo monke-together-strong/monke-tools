@@ -37,7 +37,8 @@ import {
   restoreLockedImports,
   stageGitSkillSource,
   stagedSkillGuidance,
-  withSkillImportMutation
+  withSkillImportMutation,
+  withSkillImportUpdate
 } from "../scripts/skill-lock.ts";
 import { rememberSkillGuidance } from "../scripts/skill-review.ts";
 import { runUpdateSkills } from "../scripts/update-skills.ts";
@@ -123,7 +124,14 @@ export function runSkillsRegistry(
           context.root,
           context.root,
           scope,
-          (publish) => withProjectSkillPublicationTransaction(runtime, context, scope, publish)
+          (publish, withSnapshotLocks) =>
+            withProjectSkillPublicationTransaction(
+              runtime,
+              context,
+              scope,
+              publish,
+              withSnapshotLocks
+            )
         );
         return;
       }
@@ -166,49 +174,53 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
     );
     return;
   }
-  await withSkillImportMutation(
-    root,
-    async () => {
-      if (request.action !== "list") {
-        assertManagedGuidanceRoots(root);
-        assertRepoImportIgnoreFile(root);
-      }
-      const store = readRepoImportRecipeStore(root);
-      if (request.action === "list") {
-        for (const recipe of store.recipes) {
-          runtime.writeStdout(
-            `${recipe.source}\t${recipe.commit ?? "unpinned"}\t${recipe.skills.length} skills\n`
-          );
+  const mutate = () =>
+    withSkillImportMutation(
+      root,
+      async () => {
+        if (request.action !== "list") {
+          assertManagedGuidanceRoots(root);
+          assertRepoImportIgnoreFile(root);
         }
-      } else if (request.action === "restore") {
-        await restoreLockedImports(root, false, runtime, store);
-      } else if (request.action === "add") {
-        if (!request.source || request.command || request.link || request.cwd || request.name) {
-          throw new MonkeError(
-            "Repo recipes require a Git source; --command, --link, --cwd and --name are machine-local"
-          );
+        const store = readRepoImportRecipeStore(root);
+        if (request.action === "list") {
+          for (const recipe of store.recipes) {
+            runtime.writeStdout(
+              `${recipe.source}\t${recipe.commit ?? "unpinned"}\t${recipe.skills.length} skills\n`
+            );
+          }
+        } else if (request.action === "restore") {
+          await restoreLockedImports(root, false, runtime, store);
+        } else if (request.action === "add") {
+          if (!request.source || request.command || request.link || request.cwd || request.name) {
+            throw new MonkeError(
+              "Repo recipes require a Git source; --command, --link, --cwd and --name are machine-local"
+            );
+          }
+          await addGitSkillSource(runtime, root, store, request.source, request, undefined, true);
+        } else if (request.action === "remove" || request.action === "policy") {
+          const recipe = findRecipe(store, request.source);
+          const recipes =
+            request.action === "remove"
+              ? store.recipes.filter((item) => item !== recipe)
+              : store.recipes.map((item) =>
+                  item === recipe ? setRecipePolicy(recipe, request) : item
+                );
+          if (recipes.some((nextRecipe) => !isSkillRecipeRestored(root, nextRecipe))) {
+            assertSkillRestoreMarker(root);
+          }
+          await restoreLockedImports(root, false, runtime, { ...store, recipes }, () => {
+            writeRepoImportRecipeStore(root, { ...store, recipes });
+          });
+        } else {
+          throw new MonkeError(`${request.action} is machine-local and does not accept --repo`);
         }
-        await addGitSkillSource(runtime, root, store, request.source, request, undefined, true);
-      } else if (request.action === "remove" || request.action === "policy") {
-        const recipe = findRecipe(store, request.source);
-        const recipes =
-          request.action === "remove"
-            ? store.recipes.filter((item) => item !== recipe)
-            : store.recipes.map((item) =>
-                item === recipe ? setRecipePolicy(recipe, request) : item
-              );
-        if (recipes.some((nextRecipe) => !isSkillRecipeRestored(root, nextRecipe))) {
-          assertSkillRestoreMarker(root);
-        }
-        await restoreLockedImports(root, false, runtime, { ...store, recipes }, () => {
-          writeRepoImportRecipeStore(root, { ...store, recipes });
-        });
-      } else {
-        throw new MonkeError(`${request.action} is machine-local and does not accept --repo`);
-      }
-    },
-    runtime
-  );
+      },
+      runtime
+    );
+  await (request.action === "restore" || request.action === "list"
+    ? mutate()
+    : withSkillImportUpdate(root, mutate, runtime));
 }
 
 async function runSkillsRegistryLocked(
@@ -217,7 +229,10 @@ async function runSkillsRegistryLocked(
   guidance: string,
   projectRoot?: string,
   scope?: SkillPublicationScope,
-  publishUpdate?: (publish: () => Promise<void>) => Promise<void>
+  publishUpdate?: (
+    publish: () => Promise<void>,
+    withSnapshotLocks: (recover: () => Promise<void>) => Promise<void>
+  ) => Promise<void>
 ) {
   const root = projectRoot ?? initializeSkillRegistry(runtime, guidance);
   const store = readImportRecipeStore(root);
@@ -238,7 +253,7 @@ async function runSkillsRegistryLocked(
       ],
       {
         connectedRepos: repositories.connected,
-        publishCollection(update) {
+        publishCollection(update, withSnapshotLocks) {
           const publish = async () => {
             try {
               await update();
@@ -247,7 +262,7 @@ async function runSkillsRegistryLocked(
               distributeRegistry(runtime, root, scope);
             }
           };
-          return publishUpdate ? publishUpdate(publish) : publish();
+          return publishUpdate ? publishUpdate(publish, withSnapshotLocks) : publish();
         },
         publisherRepos: repositories.publishers,
         repoRoot: root,

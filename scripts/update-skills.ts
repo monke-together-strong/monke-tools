@@ -58,7 +58,8 @@ import {
   stagedSkillGuidance,
   resolveSkillRevision,
   restoreLockedRecipe,
-  withSkillImportMutation
+  withSkillImportMutation,
+  withSkillImportUpdate
 } from "./skill-lock.ts";
 import {
   openSkillComparison,
@@ -89,8 +90,11 @@ export interface UpdateSkillsDependencies {
   /** Editable publisher checkouts whose declarations advance before installed copies. */
   connectedRepos?: string[];
   /** Publish the installed collection, completing recovery before final review snapshots. */
-  publishCollection?: (update: () => Promise<void>) => Promise<void>;
-  /** All local publisher checkouts, including installer working directories. */
+  publishCollection?: (
+    update: () => Promise<void>,
+    withSnapshotLocks: (recover: () => Promise<void>) => Promise<void>
+  ) => Promise<void>;
+  /** Local publisher checkouts whose files may overlap project recovery snapshots. */
   publisherRepos?: string[];
   repo?: boolean;
   repoRoot?: string;
@@ -130,7 +134,8 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
     }
   }
   try {
-    await withUpdateLocks([...lockedRepositories].toSorted(), runtime, async () => {
+    const roots = [...lockedRepositories].toSorted();
+    await withSkillLocks([registryRoot, ...connected].toSorted(), runtime, async () => {
       for (const root of connected) {
         try {
           if (
@@ -147,20 +152,24 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
           writeMessage(`Updating repo imports: ${root}\n`);
           // Publisher updates run in connection order before consumer publication.
           // oxlint-disable-next-line no-await-in-loop
-          const result = await updateSkills(
-            options.interactive,
-            {
-              confirmSlugReplacement: dependencies.confirmSlugReplacement,
-              repo: true,
-              repoRoot: root,
-              runtime,
-              writeMessage
-            },
-            path.join(before, collection),
-            path.join(after, collection),
-            revisions,
-            lockedRepositories,
-            registryRoot
+          const result = await withSkillImportMutation(
+            root,
+            () =>
+              updateSkills(
+                options.interactive,
+                {
+                  confirmSlugReplacement: dependencies.confirmSlugReplacement,
+                  repo: true,
+                  repoRoot: root,
+                  runtime,
+                  writeMessage
+                },
+                path.join(before, collection),
+                path.join(after, collection),
+                revisions,
+                registryRoot
+              ),
+            runtime
           );
           if (result.failure) {
             failures.push(`${root}: ${result.failure.message}`);
@@ -172,28 +181,37 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
       }
       try {
         const update = async () => {
-          const result = await updateSkills(
-            options.interactive,
-            dependencies,
-            before,
-            after,
-            revisions,
-            lockedRepositories,
-            registryRoot
+          const result = await withSkillImportMutation(
+            repoRoot,
+            () =>
+              updateSkills(
+                options.interactive,
+                dependencies,
+                before,
+                after,
+                revisions,
+                registryRoot
+              ),
+            runtime
           );
           updatedCollections.push(result);
           if (result.failure) {
             failures.push(result.failure.message);
           }
         };
-        await (dependencies.publishCollection ? dependencies.publishCollection(update) : update());
+        await (dependencies.publishCollection
+          ? dependencies.publishCollection(update, (recover) =>
+              withSkillLocks(roots, runtime, recover, withSkillImportMutation)
+            )
+          : update());
       } catch (error) {
         failures.push(error instanceof Error ? error.message : String(error));
       }
       // Consumer restoration can change publisher files, so capture final bytes last.
       for (const collection of updatedCollections) {
         try {
-          collection.snapshotAfter();
+          // oxlint-disable-next-line no-await-in-loop
+          await collection.snapshotAfter();
         } catch (error) {
           failures.push(error instanceof Error ? error.message : String(error));
         }
@@ -230,18 +248,19 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
   }
 }
 
-// Publisher recovery and review baselines must finish before another update can mutate them.
-async function withUpdateLocks(
+// Reserve accepted declarations for the update; materialization locks also protect snapshots.
+async function withSkillLocks(
   roots: string[],
   runtime: Runtime,
-  update: () => Promise<void>
+  update: () => Promise<void>,
+  lock = withSkillImportUpdate
 ): Promise<void> {
   const [root, ...remaining] = roots;
   if (root === undefined) {
     await update();
     return;
   }
-  await withSkillImportMutation(root, () => withUpdateLocks(remaining, runtime, update), runtime);
+  await lock(root, () => withSkillLocks(remaining, runtime, update, lock), runtime);
 }
 
 async function updateSkills(
@@ -250,7 +269,6 @@ async function updateSkills(
   before: string,
   after: string,
   revisions: Map<string, ReturnType<typeof resolveSkillRevision>>,
-  lockedRepositories: ReadonlySet<string>,
   reviewOwner: string
 ) {
   const repoRoot = dependencies.repoRoot ?? process.cwd();
@@ -307,7 +325,6 @@ async function updateSkills(
         // Source commands and registry writes must complete in recipe order.
         // oxlint-disable-next-line no-await-in-loop
         store = await updateLocalSkillSource({
-          lockedRepositories,
           recipe,
           repoRoot,
           runtime,
@@ -419,13 +436,18 @@ async function updateSkills(
         forgetBefore?.();
       }
     },
-    snapshotAfter: () => {
-      // Publication recovery may have restored the installed collection's store.
-      const currentStore = readStore(repoRoot);
-      snapshotSkillGuidance(repoRoot, after, currentStore);
-      snapshotRepoDeclaration(repoRoot, after, dependencies.repo);
-      reviewedStore = currentStore;
-    }
+    snapshotAfter: () =>
+      withSkillImportMutation(
+        repoRoot,
+        () => {
+          // Publication recovery may have restored the installed collection's store.
+          const currentStore = readStore(repoRoot);
+          snapshotSkillGuidance(repoRoot, after, currentStore);
+          snapshotRepoDeclaration(repoRoot, after, dependencies.repo);
+          reviewedStore = currentStore;
+        },
+        runtime
+      )
   };
 }
 

@@ -34,7 +34,7 @@ import type {
 } from "../scripts/skill-import-recipes.ts";
 import {
   restoreLockedImports,
-  restoreSkillImports,
+  withSkillImportMutation,
   SKILL_RESTORE_MARKER
 } from "../scripts/skill-lock.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
@@ -322,41 +322,39 @@ function validateDeclaredSlugs(
 async function discoverLocalGuidance(
   recipe: SkillImportRecipe & { localSource: NonNullable<SkillImportRecipe["localSource"]> },
   workingDirectory: string,
-  runtime: Runtime,
-  lockedRepositories?: ReadonlySet<string>
+  runtime: Runtime
 ) {
   const repository = runtime.exec("git", ["rev-parse", "--show-toplevel"], {
     allowFailure: true,
     cwd: workingDirectory
   });
   const publisher = repository.exitCode === 0 ? repository.stdout.trim() : undefined;
-  const declaredStore = publisher ? readRepoImportRecipeStore(publisher) : { recipes: [] };
+  const declaredStore = publisher
+    ? await withSkillImportMutation(
+        publisher,
+        async () => {
+          const store = readRepoImportRecipeStore(publisher);
+          const declaresImports =
+            existsSync(path.join(publisher, "monke.yml")) &&
+            parseDocument(readFileSync(path.join(publisher, "monke.yml"), "utf-8")).has("skills");
+          if (existsSync(path.join(publisher, SKILL_RESTORE_MARKER)) || declaresImports) {
+            validateDeclaredSlugs(
+              discoverSourceSkills(
+                resolveLocalSourceRoot(recipe.localSource, workingDirectory),
+                path.join(publisher, "skills/imported")
+              ),
+              store.recipes.flatMap((item) => item.skills),
+              publisher,
+              recipe.source
+            );
+            await restoreLockedImports(publisher, false, runtime, store);
+          }
+          return store;
+        },
+        runtime
+      )
+    : { recipes: [] };
   const declared = declaredStore.recipes.flatMap((item) => item.skills);
-  const managesImports =
-    publisher !== undefined &&
-    (existsSync(path.join(publisher, SKILL_RESTORE_MARKER)) ||
-      (existsSync(path.join(publisher, "monke.yml")) &&
-        parseDocument(readFileSync(path.join(publisher, "monke.yml"), "utf-8")).has("skills")));
-  if (publisher && managesImports) {
-    validateDeclaredSlugs(
-      discoverSourceSkills(
-        resolveLocalSourceRoot(recipe.localSource, workingDirectory),
-        path.join(publisher, "skills/imported")
-      ),
-      declared,
-      publisher,
-      recipe.source
-    );
-    if (lockedRepositories && !lockedRepositories.has(realpathSync.native(publisher))) {
-      throw new MonkeError(
-        `Skill publisher changed during the update: ${publisher}; rerun mt skills update`
-      );
-    }
-    const restore = lockedRepositories?.has(realpathSync.native(publisher))
-      ? restoreLockedImports
-      : restoreSkillImports;
-    await restore(publisher, false, runtime, declaredStore);
-  }
   const root = resolveLocalSourceRoot(recipe.localSource, workingDirectory);
   const own = discoverSourceSkills(root);
   const importedRoots = publisher
@@ -389,8 +387,6 @@ async function discoverLocalGuidance(
 /** Refresh a command or linked source and publish it through the existing import materializer. */
 export async function updateLocalSkillSource(options: {
   executeCommand?: boolean;
-  /** Publisher mutation locks already held by the connected update. */
-  lockedRepositories?: ReadonlySet<string>;
   recipe: SkillImportRecipe;
   repoRoot: string;
   runtime: Runtime;
@@ -450,8 +446,7 @@ export async function updateLocalSkillSource(options: {
     const { discovered, linkedSkills, root } = await discoverLocalGuidance(
       { ...recipe, localSource },
       workingDirectory,
-      runtime,
-      options.lockedRepositories
+      runtime
     );
     if (discovered.size === 0) {
       throw new MonkeError(`No skills found in ${root}`);
