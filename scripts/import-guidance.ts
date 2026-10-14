@@ -62,7 +62,6 @@ export function copyStagedGuidanceToManagedRoots(
     prepareStagedGuidance(guidance, stagedSkillsRoot, preparedRoot);
 
     options.validatePrepared?.(preparedRoot);
-    assertObsoleteReferencesAreUnconsumed(options.repoRoot, options.obsoleteGuidance ?? []);
     for (const { item, targetPath } of destinations) {
       if (affectedPaths.has(targetPath)) {
         continue;
@@ -95,6 +94,7 @@ export function copyStagedGuidanceToManagedRoots(
       mkdirSync(path.dirname(targetPath), { recursive: true });
       publishPreparedGuidance(item, targetPath, preparedRoot, linkedSource);
     }
+    assertObsoleteReferencesAreUnconsumed(options.repoRoot, options.obsoleteGuidance ?? []);
     options.commitState?.();
   } catch (error) {
     const failures = restoreLinkedMetadata(metadataCopies, newAgentsDirectories);

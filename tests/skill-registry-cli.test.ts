@@ -255,6 +255,13 @@ describe("Skill import registry CLI", () => {
         "skills/own/SKILL.md": "---\nname: own\ndescription: Own trigger.\n---\nOwn instructions.\n"
       });
       function publish(kind: "skill" | "reference") {
+        writeSkill(
+          path.join(publisher, "skills"),
+          "own",
+          kind === "reference"
+            ? "Load ../../references/imported/base/MAIN.md.\n"
+            : "Self-contained instructions.\n"
+        );
         write(
           publisher,
           "monke.yml",
@@ -284,6 +291,67 @@ describe("Skill import registry CLI", () => {
       const entry = readFileSync(nextKind === "skill" ? skill : reference, "utf-8");
       expect(entry).toContain("Base instructions.");
       expect(entry.startsWith("---")).toBe(nextKind === "skill");
+    }
+  );
+
+  test.each(["update", "readd", "remove"] as const)(
+    "%s can retire a publisher reference together with its consumer",
+    async (action) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "reference-source"), {
+        "skills/base/SKILL.md":
+          "---\nname: base\ndescription: Base trigger.\n---\nBase instructions.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "reference-publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            {
+              commit: git(upstream, ["rev-parse", "HEAD"]),
+              skills: [{ kind: "reference", slug: "base" }],
+              source: upstream
+            }
+          ]
+        }),
+        "skills/own/SKILL.md":
+          "---\nname: own\ndescription: Own trigger.\n---\nLoad ../../references/imported/base/MAIN.md.\n"
+      });
+      const source = `${publisher}#HEAD`;
+      await runCliAsync(["skills", "add", source], fixture.runtime);
+      if (action !== "remove") {
+        writeSkill(path.join(publisher, "skills"), "own", "Self-contained instructions.\n");
+        write(publisher, "monke.yml", "skills: []\n");
+        git(publisher, ["add", "."]);
+        git(publisher, ["commit", "-m", "Retire reference"]);
+      }
+      const command =
+        action === "readd"
+          ? ["skills", "add", source]
+          : ["skills", action, ...(action === "remove" ? [source] : [])];
+      const external = createRepo(path.join(fixture.sandbox, "external"), {
+        "skills/retained/SKILL.md":
+          "---\nname: retained\ndescription: Retained trigger.\n---\nLoad ../../references/imported/base/MAIN.md.\n"
+      });
+      await runCliAsync(["skills", "add", `${external}#HEAD`], fixture.runtime);
+      const acceptedRegistry = read(fixture.registry, "skills.lock.json");
+      const acceptedOwn = read(fixture.installed.codex, "own/SKILL.md");
+      await expect(runCliAsync(command, fixture.runtime)).rejects.toThrow(
+        /Cannot replace Imported reference base; it is used by skills\/imported\/retained\/SKILL.md/u
+      );
+      expect(read(fixture.registry, "skills.lock.json")).toBe(acceptedRegistry);
+      expect(read(fixture.installed.codex, "own/SKILL.md")).toBe(acceptedOwn);
+      expect(read(fixture.registry, "skills/references/imported/base/MAIN.md")).toBe(
+        "Base instructions.\n"
+      );
+      await runCliAsync(["skills", "remove", `${external}#HEAD`], fixture.runtime);
+      await runCliAsync(command, fixture.runtime);
+      expect(
+        existsSync(path.join(fixture.registry, "skills/references/imported/base"))
+      ).toBeFalsy();
+      const ownEntry = path.join(fixture.installed.codex, "own/SKILL.md");
+      expect(existsSync(ownEntry)).toBe(action !== "remove");
+      const ownContent = existsSync(ownEntry) ? readFileSync(ownEntry, "utf-8") : "";
+      expect(ownContent.includes("Self-contained instructions.")).toBe(action !== "remove");
     }
   );
 
