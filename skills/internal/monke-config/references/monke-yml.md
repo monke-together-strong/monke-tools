@@ -172,6 +172,8 @@ at source or skill level. Per-skill choices override source defaults.
 `description` overrides one skill's description. `acceptOpenClawRisks: true` on
 the source records upstream risk acceptance.
 
+Slugs must be unique across all repo entries, including skills and references.
+
 `mt skills restore --repo` restores pinned skills into `skills/imported/` and
 references into `skills/references/imported/`. References replace `SKILL.md`
 with `MAIN.md` and remove its leading YAML frontmatter. Restore applies selection

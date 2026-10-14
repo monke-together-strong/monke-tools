@@ -327,8 +327,8 @@ async function prepareGitSkillUpdate(
 ) {
   const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-update-"));
   try {
-    // Repo selections may have been edited to include guidance absent from the old pin.
-    // Their baseline is the materialized tree captured before candidate preparation.
+    // Hand-edited repo selections may not exist at the accepted pin, so preserve
+    // the captured review baseline instead of restoring that selection first.
     if (recipe.commit && !repo) {
       await restoreLockedRecipe(repoRoot, recipe, true, runtime);
       for (const item of recipe.skills) {

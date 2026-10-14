@@ -19,8 +19,8 @@ import * as z from "zod";
 
 import { MonkeError } from "../src/errors.ts";
 import { containsPath } from "../src/path-identity.ts";
-import { createRuntime, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
-import type { Runtime } from "../src/types.ts";
+import { createRuntime, formatCommand, getMonkeHome, withScopedLockAsync } from "../src/runtime.ts";
+import type { ExecResult, Runtime } from "../src/types.ts";
 import { parseOwnedYamlText } from "../src/validation.ts";
 import {
   assertManagedGuidanceRoots,
@@ -41,6 +41,7 @@ import type {
   SkillImportRecipeStore
 } from "./skill-import-recipes.ts";
 import { writeSkillImportState } from "./skill-import-state.ts";
+import { sanitizeSkillMetadata } from "./skill-import.ts";
 import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from "./skills-cli.ts";
 
 export const MATERIALIZER_VERSION = 1;
@@ -510,12 +511,13 @@ async function stageOwnGitSkills(options: {
 }) {
   const { imported, retainedSkills, runtime, selectors, source, sourceRoot, stagingDirectory } =
     options;
-  const { explicit, inspectCollection, ownSelectors, selected } = publisherSkillSelection({
-    imported,
-    retainedSkills,
-    selectors,
-    sourceRoot
-  });
+  const { allowEmptyCollection, explicit, inspectCollection, ownSelectors, selected } =
+    publisherSkillSelection({
+      imported,
+      retainedSkills,
+      selectors,
+      sourceRoot
+    });
   const collectionDirectory =
     inspectCollection && explicit
       ? path.join(stagingDirectory, "publisher-collection")
@@ -525,17 +527,18 @@ async function stageOwnGitSkills(options: {
   let ownNames = new Map<string, string>();
   if (inspectCollection || ownSelectors.length > 0) {
     mkdirSync(collectionDirectory, { recursive: true });
-    const installed = await runtime.execAsync(
-      runtime.platform === "win32" ? "npx.cmd" : "npx",
-      buildSkillsInstallArgs({ selectors: inspectCollection ? ["*"] : ownSelectors, source }),
-      {
-        cwd: collectionDirectory,
-        // Stage the complete collection before applying the consumer's selection.
-        ...(inspectCollection ? { env: { INSTALL_INTERNAL_SKILLS: "1" } } : {})
-      }
-    );
-    ownSkills = new Set(listStagedSkillSlugs(collectionDirectory));
-    if (inspectCollection) {
+    const { empty, installed } = await installPublisherSkills({
+      allowEmptyCollection,
+      directory: collectionDirectory,
+      inspectCollection,
+      runtime,
+      selectors: inspectCollection ? ["*"] : ownSelectors,
+      source
+    });
+    if (!empty) {
+      ownSkills = new Set(listStagedSkillSlugs(collectionDirectory));
+    }
+    if (inspectCollection && !empty) {
       ownNames = new Map(
         stagedSkillGuidance(collectionDirectory, { skills: [], source }).map((item) => [
           item.slug,
@@ -579,6 +582,56 @@ async function stageOwnGitSkills(options: {
   return { output, ownNames, ownSkills, selected, selection };
 }
 
+async function installPublisherSkills(options: {
+  allowEmptyCollection: boolean;
+  directory: string;
+  inspectCollection: boolean;
+  runtime: Runtime;
+  selectors: string[];
+  source: string;
+}) {
+  const { allowEmptyCollection, directory, inspectCollection, runtime, selectors, source } =
+    options;
+  const command = runtime.platform === "win32" ? "npx.cmd" : "npx";
+  const args = buildSkillsInstallArgs({ selectors, source });
+  if (inspectCollection) {
+    args.push("--json");
+  }
+  const installed = await runtime.execAsync(command, args, {
+    allowFailure: inspectCollection,
+    cwd: directory,
+    ...(inspectCollection ? { env: { INSTALL_INTERNAL_SKILLS: "1" } } : {})
+  });
+  if (installed.exitCode === 0) {
+    return { empty: false, installed };
+  }
+  if (allowEmptyCollection && isEmptyPublisherCollection(installed)) {
+    return { empty: true, installed: { ...installed, exitCode: 0 } };
+  }
+  const reason =
+    installed.stderr.trim() || installed.stdout.trim() || `exit code ${installed.exitCode}`;
+  throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
+}
+
+function isEmptyPublisherCollection(output: ExecResult) {
+  if (output.exitCode !== 1 || output.timedOut) {
+    return false;
+  }
+  const schema = z.tuple([
+    z.strictObject({
+      error: z.literal(
+        "No valid skills found. Skills require a SKILL.md with name and description."
+      ),
+      status: z.literal("failed")
+    })
+  ]);
+  try {
+    return schema.safeParse(JSON.parse(output.stdout)).success;
+  } catch {
+    return false;
+  }
+}
+
 function findRetainedSkill(
   retainedSkills: readonly SkillImportRecipeSkill[] | undefined,
   selector: string
@@ -602,7 +655,7 @@ function publisherSkillSelection(options: {
   });
   // Only skip the importer for declaration-only publishers. Upstream owns discovery
   // and installed names, including hidden catalogs and names unlike their folders.
-  const hasOwnSkills =
+  const sourceMayHaveOwnSkills =
     imported.length === 0 ||
     !new Bun.Glob("**/SKILL.md").scanSync({ cwd: sourceRoot, dot: true, onlyFiles: true }).next()
       .done;
@@ -611,12 +664,14 @@ function publisherSkillSelection(options: {
   );
   const ownSelectors = selected.filter(
     (selector) =>
-      !declaredSelectors.has(selector.toLowerCase()) && (selector !== "*" || hasOwnSkills)
+      !declaredSelectors.has(selector.toLowerCase()) && (selector !== "*" || sourceMayHaveOwnSkills)
   );
   const explicit = !selectors.includes("*");
   const inspectCollection =
-    hasOwnSkills && (imported.length > 0 || (explicit && (retainedSkills?.length ?? 0) > 0));
-  return { explicit, inspectCollection, ownSelectors, selected };
+    sourceMayHaveOwnSkills &&
+    (imported.length > 0 || (explicit && (retainedSkills?.length ?? 0) > 0));
+  const allowEmptyCollection = imported.length > 0 && (!explicit || ownSelectors.length === 0);
+  return { allowEmptyCollection, explicit, inspectCollection, ownSelectors, selected };
 }
 
 /** Match the pinned importer's default exclusion after staging an entire publisher. */
@@ -709,7 +764,16 @@ function stagedSkillSelector(entry: string, slug: string, imported?: SkillImport
     entry,
     z.looseObject({ name: z.string().optional() })
   );
-  return metadata.name ?? imported?.selector ?? slug;
+  if (metadata.name === undefined) {
+    return imported?.selector ?? slug;
+  }
+  const selector = sanitizeSkillMetadata(metadata.name);
+  if (!selector) {
+    throw new MonkeError(
+      `Skill name normalizes to an empty selector at ${entry}; use a name containing visible characters`
+    );
+  }
+  return selector;
 }
 
 export async function stageLockedRecipe(

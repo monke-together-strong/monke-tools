@@ -703,6 +703,81 @@ done
     expect(existsSync(path.join(fixture.installed.codex, "unwanted-nested"))).toBeFalsy();
   });
 
+  test.each([
+    { selection: "implicit", version: 3 },
+    { selection: "implicit", version: 4 },
+    { selection: "wildcard", version: 4 },
+    { selection: "explicit", version: 4 }
+  ] as const)(
+    "re-add preserves $selection selections from v$version recipes",
+    async ({ selection, version }) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "legacy-subset"), {
+        "skills/other/SKILL.md":
+          "---\nname: other\ndescription: Other trigger.\n---\nOther first revision.\n",
+        "skills/selected/SKILL.md":
+          "---\nname: selected\ndescription: Original trigger.\n---\nSelected first revision.\n"
+      });
+      const source = `${upstream}#HEAD`;
+      await runCliAsync(["skills", "add", source, "--skill", "selected"], fixture.runtime);
+      const commit = git(upstream, ["rev-parse", "HEAD"]);
+      write(
+        fixture.registry,
+        "skills.lock.json",
+        JSON.stringify({
+          recipes: [
+            {
+              ...(version === 3
+                ? { lock: { commit, repository: upstream, subpath: "", updateRef: "HEAD" } }
+                : { commit }),
+              ...(selection === "wildcard" ? { selection: ["*"] } : {}),
+              skills: [
+                {
+                  description: "Accepted trigger.",
+                  ...(version === 3
+                    ? { disableModelInvocation: true, kind: "skill", selector: "selected" }
+                    : { modelInvocation: "deny" }),
+                  slug: "selected"
+                }
+              ],
+              source
+            }
+          ],
+          version
+        })
+      );
+      await runCliAsync(["skills", "list"], fixture.runtime);
+      await runCliAsync(
+        ["skills", "add", source, ...(selection === "explicit" ? ["--skill", "other"] : [])],
+        fixture.runtime
+      );
+      const selected = selection !== "explicit";
+      const other = selection !== "implicit";
+      const expectedSelection = { explicit: "other", implicit: "selected", wildcard: "*" }[
+        selection
+      ];
+      expect(existsSync(path.join(fixture.installed.codex, "selected/SKILL.md"))).toBe(selected);
+      expect(existsSync(path.join(fixture.installed.codex, "other/SKILL.md"))).toBe(other);
+      expect(JSON.parse(read(fixture.registry, "skills.lock.json"))).toMatchObject({
+        recipes: [{ selection: [expectedSelection] }]
+      });
+      writeSkill(path.join(upstream, "skills"), "selected", "Selected second revision.\n");
+      writeSkill(path.join(upstream, "skills"), "other", "Other second revision.\n");
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Advance both skills"]);
+      await runCliAsync(["skills", "update"], fixture.runtime);
+      expect(existsSync(path.join(fixture.installed.codex, "selected/SKILL.md"))).toBe(selected);
+      expect(existsSync(path.join(fixture.installed.codex, "other/SKILL.md"))).toBe(other);
+      const selectedContent = selected ? read(fixture.installed.codex, "selected/SKILL.md") : "";
+      const otherContent = other ? read(fixture.installed.codex, "other/SKILL.md") : "";
+      expect(selectedContent.includes("Selected second revision.")).toBe(selected);
+      expect(selectedContent.includes("description: Accepted trigger.")).toBe(selected);
+      expect(selectedContent.includes("disable-model-invocation: true")).toBe(selected);
+      expect(otherContent.includes("Other second revision.")).toBe(other);
+    }
+  );
+
   test("old machine registries migrate their pins and overrides on first read", async () => {
     const fixture = registryFixture();
     write(

@@ -91,7 +91,240 @@ if (installed === 0) throw new Error("No matching skills: " + selectors.join(", 
   );
 }
 
+function installEmptyPublisherImporter(
+  bin: string,
+  failure = {
+    exitCode: 1,
+    results: [
+      {
+        error: "No valid skills found. Skills require a SKILL.md with name and description.",
+        status: "failed"
+      }
+    ]
+  }
+) {
+  writeExecutable(
+    path.join(bin, "npx"),
+    `#!/bin/sh
+set -eu
+if [ -f "$4/fixtures/example/SKILL.md" ]; then
+  printf '%s\\n' '${JSON.stringify(failure.results)}'
+  exit ${failure.exitCode}
+fi
+mkdir -p .agents/skills
+cp -R "$4/skills/first" .agents/skills/first
+`
+  );
+}
+
 describe("repo import recipes through mt skills", () => {
+  test("repo add rejects a name that normalizes to an empty selector before publication", async () => {
+    const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+    const config = read(repo, "monke.yml");
+    const marker = read(repo, "skills/.monke-restored.json");
+    const first = read(repo, "skills/imported/first/SKILL.md");
+    const invalid = createRepo(path.join(sandbox, "empty-name"), {
+      "skills/Fancy Folder/SKILL.md": `---\n${stringify({ description: "Author trigger.", name: " \u001B[31m\u001B[0m " })}---\nUnusable name.\n`
+    });
+    writeExecutable(
+      path.join(bin, "npx"),
+      `#!/bin/sh
+set -eu
+mkdir -p .agents/skills
+cp -R "$4/skills/Fancy Folder" .agents/skills/fancy-folder
+`
+    );
+    await expect(runCliAsync(["skills", "add", invalid, "--repo"], runtime)).rejects.toThrow(
+      /name.*empty selector/iu
+    );
+    expect(read(repo, "monke.yml")).toBe(config);
+    expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+    expect(read(repo, "skills/imported/first/SKILL.md")).toBe(first);
+    expect(existsSync(path.join(repo, "skills/imported/fancy-folder"))).toBeFalsy();
+  });
+
+  test.each([
+    { action: "add", selectors: ["first"] },
+    { action: "add", selectors: ["*"] },
+    { action: "update", selectors: ["first"] },
+    { action: "readd", selectors: ["first"] }
+  ])(
+    "$action accepts a declared selection $selectors after upstream discovers no authored skills",
+    async ({ action, selectors }) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      installEmptyPublisherImporter(bin);
+      const declaration = stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
+        ]
+      });
+      const publisher = createRepo(
+        path.join(sandbox, "empty-publisher"),
+        action === "add"
+          ? { "fixtures/example/SKILL.md": "Example document.\n", "monke.yml": declaration }
+          : {
+              "skills/first/SKILL.md":
+                "---\nname: first\ndescription: First skill.\n---\nOwned first.\n"
+            }
+      );
+      const source = `${publisher}#HEAD`;
+      if (action !== "add") {
+        await runCliAsync(["skills", "add", source, "--project", "--skill", ...selectors], runtime);
+        rmSync(path.join(publisher, "skills/first"), { recursive: true });
+        write(publisher, "monke.yml", declaration);
+        write(publisher, "fixtures/example/SKILL.md", "Example document.\n");
+        git(publisher, ["add", "-A"]);
+        git(publisher, ["commit", "-m", "Replace owned skill with declaration"]);
+      }
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      await runCliAsync(
+        action === "update"
+          ? ["skills", "update", "--project", "--adapter", "codiff"]
+          : [
+              "skills",
+              "add",
+              source,
+              "--project",
+              ...(action === "add" ? ["--skill", ...selectors] : [])
+            ],
+        runtime
+      );
+      expect(read(repo, ".agents/skills/monke-tools/imported/first/SKILL.md")).toContain(
+        "Pinned first."
+      );
+      expect(
+        JSON.parse(read(repo, ".git/monke-tools/skill-registry/skills.lock.json"))
+      ).toMatchObject({
+        recipes: [{ commit: git(publisher, ["rev-parse", "HEAD"]), skills: ["first"] }]
+      });
+    }
+  );
+
+  test.each([
+    {
+      exitCode: 1,
+      label: "unrelated error",
+      results: [{ error: "Importer transport failed", status: "failed" }]
+    },
+    {
+      exitCode: 42,
+      label: "different exit code",
+      results: [
+        {
+          error: "No valid skills found. Skills require a SKILL.md with name and description.",
+          status: "failed"
+        }
+      ]
+    },
+    {
+      exitCode: 1,
+      label: "multiple failures",
+      results: [
+        {
+          error: "No valid skills found. Skills require a SKILL.md with name and description.",
+          status: "failed"
+        },
+        { error: "Importer transport failed", status: "failed" }
+      ]
+    }
+  ])("declared imports preserve the importer's $label", async ({ exitCode, results }) => {
+    const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+    installEmptyPublisherImporter(bin, { exitCode, results });
+    const publisher = createRepo(path.join(sandbox, "failing-publisher"), {
+      "fixtures/example/SKILL.md": "Example document.\n",
+      "monke.yml": stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
+        ]
+      })
+    });
+    await expect(
+      runCliAsync(["skills", "add", `${publisher}#HEAD`, "--project", "--skill", "first"], runtime)
+    ).rejects.toThrow(/No valid skills|Importer transport failed/u);
+    expect(
+      JSON.parse(read(repo, ".git/monke-tools/skill-registry/skills.lock.json"))
+    ).toMatchObject({ recipes: [] });
+    expect(existsSync(path.join(repo, ".agents/skills/monke-tools/imported/first"))).toBeFalsy();
+  });
+
+  test.each([
+    { declarations: false, selectors: ["first"] },
+    { declarations: true, selectors: ["first", "missing"] }
+  ])(
+    "empty authored discovery rejects missing selectors $selectors with declarations=$declarations",
+    async ({ declarations, selectors }) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      installEmptyPublisherImporter(bin);
+      const publisher = createRepo(path.join(sandbox, "empty-invalid-publisher"), {
+        "fixtures/example/SKILL.md": "Invalid example.\n",
+        "monke.yml": stringify({
+          skills: declarations
+            ? [
+                {
+                  commit: git(upstream, ["rev-parse", "HEAD"]),
+                  skills: ["first"],
+                  source: upstream
+                }
+              ]
+            : []
+        })
+      });
+      await expect(
+        runCliAsync(
+          ["skills", "add", `${publisher}#HEAD`, "--project", "--skill", ...selectors],
+          runtime
+        )
+      ).rejects.toThrow(/No valid skills/u);
+      expect(
+        JSON.parse(read(repo, ".git/monke-tools/skill-registry/skills.lock.json"))
+      ).toMatchObject({ recipes: [] });
+      expect(existsSync(path.join(repo, ".agents/skills/monke-tools/imported/first"))).toBeFalsy();
+    }
+  );
+
+  test.each([
+    { name: "padded", rawName: " Fancy Author " },
+    { name: "multiline", rawName: "Fancy\r\nAuthor" },
+    { name: "terminal escape", rawName: "\u001B[31mFancy Author\u001B[0m" },
+    { name: "control", rawName: "Fancy\u0000\u0085 Author" }
+  ])("repo selectors replay the importer's normalized $name name", async ({ rawName }) => {
+    const { bin, repo, runtime, sandbox } = repoFixture();
+    const content = `---\n${stringify({ description: "Author trigger.", name: rawName })}---\nAccepted author.\n`;
+    const upstream = createRepo(path.join(sandbox, "normalized-name"), {
+      "skills/authors/SKILL.md": content
+    });
+    writeExecutable(
+      path.join(bin, "npx"),
+      `#!/bin/sh
+set -eu
+[ "$6" = 'Fancy Author' ]
+mkdir -p .agents/skills
+cp -R "$4/skills/authors" .agents/skills/fancy-author
+`
+    );
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "Fancy Author"], runtime);
+    expect(parseDocument(read(repo, "monke.yml")).toJS()).toMatchObject({
+      skills: [{ skills: [{ selector: "Fancy Author", slug: "fancy-author" }] }]
+    });
+    expect(read(repo, "skills/imported/fancy-author/SKILL.md")).toBe(content);
+    rmSync(path.join(repo, "skills/imported/fancy-author"), { recursive: true });
+    await runCliAsync(["skills", "restore", "--repo"], runtime);
+    expect(read(repo, "skills/imported/fancy-author/SKILL.md")).toBe(content);
+    write(
+      upstream,
+      "skills/authors/SKILL.md",
+      content.replace("Accepted author.", "Updated author.")
+    );
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Advance normalized skill"]);
+    installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+    await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+    expect(read(repo, "skills/imported/fancy-author/SKILL.md")).toContain("Updated author.");
+  });
+
   test.skipIf(process.platform === "win32" || process.getuid?.() === 0).each(["add", "update"])(
     "%s rejects an unwritable marker parent before changing accepted state",
     async (action) => {

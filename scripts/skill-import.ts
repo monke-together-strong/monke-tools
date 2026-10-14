@@ -322,6 +322,12 @@ export function assertSkillSelectorSlugMappingsMatchStagedSlugs(
   }
 }
 
+export function sanitizeSkillMetadata(value: string) {
+  return stripTerminalEscapes(value)
+    .replaceAll(/[\r\n]+/gu, " ")
+    .trim();
+}
+
 function stripTerminalEscapes(value: string) {
   return value
     .replace(OSC_RE, "")

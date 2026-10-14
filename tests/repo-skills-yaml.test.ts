@@ -1,4 +1,4 @@
-import { linkSync, mkdirSync, symlinkSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
@@ -56,6 +56,114 @@ done
 }
 
 describe("repo skill edits preserve unrelated YAML bytes", () => {
+  test.each([false, true])(
+    "repo add rejects a slug shared by skills and references with reference first=%s",
+    async (referenceFirst) => {
+      const { repo, runtime, sandbox, upstream } = fixture();
+      const other = createRepo(path.join(sandbox, "other"), {
+        "skills/example/SKILL.md":
+          "---\nname: example\ndescription: Other skill.\n---\nOther source.\n"
+      });
+      await runCliAsync(
+        [
+          "skills",
+          "add",
+          upstream,
+          "--repo",
+          "--skill",
+          "example",
+          ...(referenceFirst ? ["--ref"] : [])
+        ],
+        runtime
+      );
+      const config = read(repo, "monke.yml");
+      const marker = read(repo, "skills/.monke-restored.json");
+      const acceptedPath = referenceFirst
+        ? "skills/references/imported/example/MAIN.md"
+        : "skills/imported/example/SKILL.md";
+      const rejectedPath = referenceFirst
+        ? "skills/imported/example"
+        : "skills/references/imported/example";
+      const accepted = read(repo, acceptedPath);
+
+      await expect(
+        runCliAsync(
+          [
+            "skills",
+            "add",
+            other,
+            "--repo",
+            "--skill",
+            "example",
+            ...(referenceFirst ? [] : ["--ref"])
+          ],
+          runtime
+        )
+      ).rejects.toThrow(/slug example/u);
+
+      expect(read(repo, "monke.yml")).toBe(config);
+      expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+      expect(read(repo, acceptedPath)).toBe(accepted);
+      expect(existsSync(path.join(repo, rejectedPath))).toBeFalsy();
+    }
+  );
+
+  test.each(["restore", "update"])(
+    "repo %s rejects handwritten mixed-kind slug ownership before changing restored state",
+    async (action) => {
+      const { bin, recipe, repo, runtime, sandbox, upstream } = fixture();
+      const other = createRepo(path.join(sandbox, "other"), {
+        "skills/Example/SKILL.md":
+          "---\nname: Example\ndescription: Other skill.\n---\nOther source.\n"
+      });
+      await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "example"], runtime);
+      const marker = read(repo, "skills/.monke-restored.json");
+      const accepted = read(repo, "skills/imported/example/SKILL.md");
+      const original = `${JSON.stringify({
+        skills: [
+          recipe,
+          {
+            commit: git(other, ["rev-parse", "HEAD"]),
+            skills: [{ kind: "reference", selector: "Example", slug: "example" }],
+            source: other
+          }
+        ]
+      })}\n`;
+      write(repo, "monke.yml", original);
+      writeExecutable(
+        path.join(bin, "npx"),
+        `#!/bin/sh
+set -eu
+mkdir -p .agents/skills
+source="$4"
+shift 4
+while [ "$1" = --skill ]; do
+  destination="$2"
+  if [ "$2" = Example ]; then destination=example; fi
+  cp -R "$source/skills/$2" ".agents/skills/$destination"
+  shift 2
+done
+`
+      );
+      const ignore = read(repo, ".gitignore");
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+
+      await expect(
+        runCliAsync(
+          ["skills", action, "--repo", ...(action === "update" ? ["--adapter", "codiff"] : [])],
+          runtime
+        )
+      ).rejects.toThrow(/slug example/u);
+
+      expect(read(repo, "monke.yml")).toBe(original);
+      expect(read(repo, ".gitignore")).toBe(ignore);
+      expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+      expect(read(repo, "skills/imported/example/SKILL.md")).toBe(accepted);
+      expect(existsSync(path.join(repo, "skills/references/imported/example"))).toBeFalsy();
+    }
+  );
+
   test("shared commit and source aliases resolve for restore, list, and update", async () => {
     const { bin, repo, runtime, sandbox, upstream } = fixture();
     write(

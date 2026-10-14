@@ -158,12 +158,31 @@ const CompactRecipeSchema = z
     ...recipe,
     ...(modelInvocation === undefined ? {} : { disableModelInvocation: modelInvocation === "deny" })
   }));
-export const RepoImportRecipesSchema = z.array(
-  z.strictObject(RecipeFields).transform(({ modelInvocation, ...recipe }) => ({
-    ...recipe,
-    ...(modelInvocation === undefined ? {} : { disableModelInvocation: modelInvocation === "deny" })
-  }))
-);
+export const RepoImportRecipesSchema = z
+  .array(
+    z.strictObject(RecipeFields).transform(({ modelInvocation, ...recipe }) => ({
+      ...recipe,
+      ...(modelInvocation === undefined
+        ? {}
+        : { disableModelInvocation: modelInvocation === "deny" })
+    }))
+  )
+  .superRefine((recipes, context) => {
+    const owners = new Map<string, string>();
+    for (const [recipeIndex, recipe] of recipes.entries()) {
+      for (const [selectionIndex, skill] of recipe.skills.entries()) {
+        const owner = owners.get(skill.slug);
+        if (owner !== undefined) {
+          context.addIssue({
+            code: "custom",
+            message: `Repo import slug ${skill.slug} is owned by both ${owner} and ${recipe.source}; skills and references must have unique slugs`,
+            path: [recipeIndex, "skills", selectionIndex]
+          });
+        }
+        owners.set(skill.slug, recipe.source);
+      }
+    }
+  });
 const CompactStoreSchema = z.strictObject({
   recipes: z.array(CompactRecipeSchema),
   removedSources: z.array(z.string().min(1)).optional(),
@@ -200,7 +219,7 @@ const LegacyStoreSchema = z
     version: SKILL_IMPORT_RECIPE_STORE_VERSION
   }));
 
-/** Read machine-local recipes, or the publishing repo's declaration. */
+/** Read repo declarations or machine recipes, migrating legacy machine JSON by default. */
 export function readImportRecipeStore(repoRoot: string, migrate = true): SkillImportRecipeStore {
   const config = path.join(repoRoot, "monke.yml");
   if (existsSync(config) && parseDocument(readFileSync(config, "utf-8")).has("skills")) {

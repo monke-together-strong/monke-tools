@@ -691,7 +691,13 @@ function gitSourceRecipe(
     name: request.name ?? previous?.name,
     skills: previous?.skills ?? [],
     source,
-    ...(!repo ? { selection: request.skills ?? previous?.selection ?? ["*"] } : {}),
+    ...(!repo
+      ? {
+          selection: request.skills ??
+            previous?.selection ??
+            previous?.skills.map((item) => item.selector) ?? ["*"]
+        }
+      : {}),
     ...(request.acceptOpenClawRisks ? { acceptOpenClawRisks: true as const } : {})
   };
 }
