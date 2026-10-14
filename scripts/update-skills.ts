@@ -96,7 +96,7 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
   const before = path.join(reviewDirectory, "before");
   const after = path.join(reviewDirectory, "after");
   const collections: string[] = [];
-  const rememberBaselines: (() => void)[] = [];
+  const updatedCollections: Awaited<ReturnType<typeof updateSkills>>[] = [];
   const revisions = new Map<string, ReturnType<typeof resolveSkillRevision>>();
   const failures: string[] = [];
   try {
@@ -144,7 +144,7 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
                 if (result.failure) {
                   failures.push(`${root}: ${result.failure.message}`);
                 }
-                rememberBaselines.push(result.rememberBaseline);
+                updatedCollections.push(result);
               },
               runtime
             );
@@ -165,17 +165,25 @@ export async function runUpdateSkills(argv: string[], dependencies: UpdateSkills
           if (result.failure) {
             failures.push(result.failure.message);
           }
-          rememberBaselines.push(result.rememberBaseline);
+          updatedCollections.push(result);
         } catch (error) {
           failures.push(error instanceof Error ? error.message : String(error));
+        }
+        // Consumer restoration can change publisher files, so capture final bytes last.
+        for (const collection of updatedCollections) {
+          try {
+            collection.snapshotAfter();
+          } catch (error) {
+            failures.push(error instanceof Error ? error.message : String(error));
+          }
         }
         try {
           await summarizeSkillChanges({ after, before, collections, runtime, writeMessage });
           const comparison = await saveSkillComparison(before, after, runtime);
           // A failed save must leave prior baselines available for the next review.
-          for (const remember of rememberBaselines) {
+          for (const collection of updatedCollections) {
             try {
-              remember();
+              collection.rememberBaseline();
             } catch (error) {
               failures.push(error instanceof Error ? error.message : String(error));
             }
@@ -227,7 +235,6 @@ async function updateSkills(
   const failures: string[] = [];
   const acceptedGuidance: SkillImportRecipeSkill[] = [];
   const pendingMarkers: SkillImportRecipe[] = [];
-  let reviewFailure: string | undefined;
 
   if (!dependencies.repo) {
     validateImportedGuidanceDirectoriesAreTracked(repoRoot, store);
@@ -357,19 +364,18 @@ async function updateSkills(
   if (finalizationFailure) {
     writeMessage(`${finalizationFailure}\n`);
   }
-  try {
-    snapshotSkillGuidance(repoRoot, after, store);
-    snapshotRepoDeclaration(repoRoot, after, dependencies.repo);
-  } catch (error) {
-    reviewFailure = error instanceof Error ? error.message : String(error);
-  }
-
+  let snapshotComplete = false;
   return {
-    failure: skillUpdateFailure(failures, finalizationFailure, reviewFailure),
+    failure: skillUpdateFailure(failures, finalizationFailure),
     rememberBaseline: () => {
-      if (reviewFailure === undefined && existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
+      if (snapshotComplete && existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
         rememberSkillGuidance(repoRoot, acceptedGuidance, store);
       }
+    },
+    snapshotAfter: () => {
+      snapshotSkillGuidance(repoRoot, after, store);
+      snapshotRepoDeclaration(repoRoot, after, dependencies.repo);
+      snapshotComplete = true;
     }
   };
 }

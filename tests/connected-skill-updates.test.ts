@@ -2,7 +2,7 @@ import { cpSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
-import { stringify } from "yaml";
+import { parseDocument, stringify } from "yaml";
 
 import {
   readImportRecipeStore,
@@ -394,5 +394,39 @@ describe("updates through connected local repositories", () => {
     const diff = reviewDiff(f.reviewLog);
     expect(diff).toContain("-First version.");
     expect(diff).toContain("+Second version.");
+  });
+
+  test("the comparison includes publisher restoration performed by consumer refresh", async () => {
+    const f = fixture();
+    const publisher = createRepo(path.join(f.sandbox, "publisher"), {
+      "monke.yml": "skills: []\n"
+    });
+    await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
+      ...f.runtime,
+      cwd: publisher
+    });
+    await runCliAsync(["skills", "add", publisher, "--name", "publisher"], f.runtime);
+    await runCliAsync(
+      ["skills", "policy", "publisher", "base", "--description", "Consumer trigger."],
+      f.runtime
+    );
+    const document = parseDocument(read(publisher, "monke.yml"));
+    document.setIn(
+      ["skills", 0, "skills"],
+      [{ description: "Updated publisher trigger.", slug: "base" }]
+    );
+    write(publisher, "monke.yml", document.toString());
+    git(f.upstream, ["rm", "-r", "skills/base"]);
+    git(f.upstream, ["commit", "-m", "Remove publisher selection"]);
+
+    await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(/base/u);
+
+    expect(read(publisher, "skills/imported/base/SKILL.md")).toContain(
+      "Updated publisher trigger."
+    );
+    expect(read(f.home, ".codex/skills/monke-tools/imported/base/SKILL.md")).toContain(
+      "Consumer trigger."
+    );
+    expect(reviewDiff(f.reviewLog)).toContain("+description: Updated publisher trigger.");
   });
 });
