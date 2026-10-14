@@ -44,7 +44,7 @@ update the pins to modify restored guidance.
 ## Review updates
 
 Run `mt skills update --repo` to pin missing commits and advance existing sources.
-Git preparation runs concurrently. Successful sources replace their files and
+Successful sources replace their files and
 pins. Failed sources retain their previous pins. Monke reports failures after
 opening one complete comparison, with a Codex summary of changed skills.
 Use `--interactive` to accept upstream slug changes and `--adapter codiff` or

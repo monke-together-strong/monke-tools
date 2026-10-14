@@ -163,6 +163,7 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
         confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
         declaredGuidance: installOutput.declaredGuidance,
         interactive,
+        preserveImportKinds: dependencies.repo,
         recipe,
         source: normalizedSource,
         stagingDirectory
@@ -394,6 +395,7 @@ async function resolveUpdatedGuidance(options: {
   confirmSlugReplacement: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
   declaredGuidance: SkillImportRecipeSkill[];
   interactive: boolean;
+  preserveImportKinds?: boolean;
   recipe: SkillImportRecipe;
   source: string;
   stagingDirectory: string;
@@ -406,10 +408,18 @@ async function resolveUpdatedGuidance(options: {
       (skill) => (skill.adoptedPaths?.length ?? 0) > 0 && !stagedSlugs.includes(skill.slug)
     )
   ) {
-    return stagedSkillGuidance(stagingDirectory, recipe, options.declaredGuidance);
+    return stagedSkillGuidance(stagingDirectory, recipe, options.declaredGuidance, {
+      preserveImportKinds: options.preserveImportKinds
+    });
   }
   const replacements = await resolveStagedSkillReplacements(options);
-  return applySlugReplacementsToGuidance(recipe, replacements);
+  return applySlugReplacementsToGuidance(recipe, replacements).map((item) => ({
+    ...item,
+    kind: options.preserveImportKinds
+      ? item.kind
+      : (options.declaredGuidance.find((declared) => declared.slug === item.slug)?.kind ??
+        item.kind)
+  }));
 }
 
 async function resolveStagedSkillReplacements(options: {

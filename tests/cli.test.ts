@@ -73,8 +73,8 @@ describe("CLI", () => {
 
   test.each([
     ["main", "src/index.ts", ["chop", "first", "second"]],
-    ["skill import", "scripts/import-skills.ts", []],
-    ["skill update", "scripts/update-skills.ts", ["extra"]]
+    ["skill import", "src/index.ts", ["skills", "add", "unexpected", "extra"]],
+    ["skill update", "src/index.ts", ["skills", "update", "extra"]]
   ])("%s CLI reports one concise process failure", (_name, script, args) => {
     const result = spawnSync("bun", ["run", script, ...args], {
       cwd: projectRoot,
@@ -89,8 +89,8 @@ describe("CLI", () => {
   test.each([
     ["main", "src/index.ts", ["--help"], "Usage: mt [options] [command]"],
     ["main nested", "src/index.ts", ["help", "shell"], "Usage: mt shell [options] [command]"],
-    ["skill import", "scripts/import-skills.ts", ["--help"], "Usage: bun run skills:import"],
-    ["skill update", "scripts/update-skills.ts", ["--help"], "Usage: bun run skills:update"]
+    ["skill import", "src/index.ts", ["skills", "add", "--help"], "Usage: mt skills add"],
+    ["skill update", "src/index.ts", ["skills", "update", "--help"], "Usage: mt skills update"]
   ])("%s CLI help is successful", (_name, script, args, usage) => {
     const result = spawnSync("bun", ["run", script, ...args], {
       cwd: projectRoot,

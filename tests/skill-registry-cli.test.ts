@@ -233,6 +233,60 @@ describe("Skill import registry CLI", () => {
     expect(readImportRecipeStore(fixture.registry).recipes).toHaveLength(1);
   });
 
+  test.each([
+    { explicit: false, initial: "skill", readd: false },
+    { explicit: false, initial: "reference", readd: false },
+    { explicit: true, initial: "skill", readd: false },
+    { explicit: true, initial: "reference", readd: false },
+    { explicit: false, initial: "skill", readd: true },
+    { explicit: false, initial: "reference", readd: true },
+    { explicit: true, initial: "skill", readd: true },
+    { explicit: true, initial: "reference", readd: true }
+  ] as const)(
+    "Git consumers follow publisher kinds from $initial with explicit=$explicit readd=$readd",
+    async ({ explicit, initial, readd }) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "kind-source"), {
+        "skills/base/SKILL.md":
+          "---\nname: base\ndescription: Base trigger.\n---\nBase instructions.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "kind-publisher"), {
+        "skills/own/SKILL.md": "---\nname: own\ndescription: Own trigger.\n---\nOwn instructions.\n"
+      });
+      function publish(kind: "skill" | "reference") {
+        write(
+          publisher,
+          "monke.yml",
+          stringify({
+            skills: [
+              {
+                commit: git(upstream, ["rev-parse", "HEAD"]),
+                skills: [{ kind, slug: "base" }],
+                source: upstream
+              }
+            ]
+          })
+        );
+        git(publisher, ["add", "."]);
+        git(publisher, ["commit", "-m", `Publish ${kind}`]);
+      }
+      publish(initial);
+      const add = ["skills", "add", `${publisher}#HEAD`, ...(explicit ? ["--skill", "base"] : [])];
+      await runCliAsync(add, fixture.runtime);
+      const nextKind = initial === "skill" ? "reference" : "skill";
+      publish(nextKind);
+      await runCliAsync(readd ? add : ["skills", "update"], fixture.runtime);
+      const skill = path.join(fixture.registry, "skills/imported/base/SKILL.md");
+      const reference = path.join(fixture.registry, "skills/references/imported/base/MAIN.md");
+      expect(existsSync(skill)).toBe(nextKind === "skill");
+      expect(existsSync(reference)).toBe(nextKind === "reference");
+      const entry = readFileSync(nextKind === "skill" ? skill : reference, "utf-8");
+      expect(entry).toContain("Base instructions.");
+      expect(entry.startsWith("---")).toBe(nextKind === "skill");
+    }
+  );
+
   test.each(["git", "link"] as const)(
     "%s publisher selections span own skills and declared imports",
     async (kind) => {

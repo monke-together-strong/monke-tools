@@ -90,6 +90,9 @@ export function runSkillsRegistry(
   project = false,
   repo = false
 ) {
+  if (request.action === "add" && request.reference && !repo) {
+    throw new MonkeError("--ref requires --repo");
+  }
   if (repo && project) {
     throw new MonkeError("--repo and --project are mutually exclusive");
   }
@@ -599,12 +602,10 @@ async function addGitSkillSource(
       `${installOutput.stdout}\n${installOutput.stderr}`,
       runtime.writeStdout
     );
-    const skills = stagedSkillGuidance(
-      staging,
-      recipe,
-      installOutput.declaredGuidance,
-      request.reference
-    );
+    const skills = stagedSkillGuidance(staging, recipe, installOutput.declaredGuidance, {
+      preserveImportKinds: repo,
+      reference: request.reference
+    });
     const nextRecipe = { ...recipe, commit: revision.commit, skills, source: revision.source };
     const next = normalizeImportRecipeStore({
       ...store,

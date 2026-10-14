@@ -372,7 +372,7 @@ export function stagedSkillGuidance(
   stagingDirectory: string,
   previous: SkillImportRecipe,
   declared: SkillImportRecipeSkill[] = [],
-  reference = false
+  options: { preserveImportKinds?: boolean; reference?: boolean } = {}
 ) {
   return listStagedSkillSlugs(stagingDirectory).map((slug) => {
     const entry = path.join(stagingDirectory, ".agents", "skills", slug, "SKILL.md");
@@ -389,11 +389,12 @@ export function stagedSkillGuidance(
       z.looseObject({ name: z.string().optional() })
     );
     const existing = previous.skills.find((item) => item.slug === slug);
+    const kind = options.preserveImportKinds
+      ? (existing?.kind ?? imported?.kind)
+      : (imported?.kind ?? existing?.kind);
     return {
       ...existing,
-      kind: reference
-        ? ("reference" as const)
-        : (existing?.kind ?? imported?.kind ?? ("skill" as const)),
+      kind: options.reference ? ("reference" as const) : (kind ?? ("skill" as const)),
       selector: metadata.name ?? slug,
       slug
     };

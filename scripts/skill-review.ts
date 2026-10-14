@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import { parseDocument } from "yaml";
 import * as z from "zod";
 
 import { runDiffInteractive } from "../src/diff.ts";
@@ -24,7 +25,11 @@ import {
   IMPORTED_REFERENCES_ROOT,
   IMPORTED_SKILLS_ROOT
 } from "./import-guidance.ts";
-import { readImportRecipeStore, writeImportRecipeStore } from "./skill-import-recipes.ts";
+import {
+  readImportRecipeStore,
+  SKILL_LOCK_PATH,
+  writeImportRecipeStore
+} from "./skill-import-recipes.ts";
 import type { SkillImportRecipeSkill } from "./skill-import-recipes.ts";
 import { restoreSkillImports } from "./skill-lock.ts";
 
@@ -375,8 +380,15 @@ export async function reviewSkillRevisions(
           checkout
         ]);
         runtime.exec("git", ["checkout", "--quiet", "--detach", commit], { cwd: checkout });
-        // Reconstruct old locks and repo recipes with the current transformation.
-        await restoreSkillImports(checkout);
+        const config = path.join(checkout, "monke.yml");
+        if (
+          existsSync(path.join(checkout, SKILL_LOCK_PATH)) ||
+          (existsSync(config) && parseDocument(readFileSync(config, "utf-8")).has("skills"))
+        ) {
+          // Reconstruct accepted pins with current tooling. Pre-lock history has only
+          // committed imported bytes, so preserve those when no repo recipe is declared.
+          await restoreSkillImports(checkout);
+        }
         const snapshot = path.join(temporaryRoot, `snapshot-${index}`);
         snapshotSkillGuidance(checkout, snapshot);
         return snapshot;

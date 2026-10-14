@@ -168,7 +168,38 @@ describe("repo import recipes through mt skills", () => {
     expect(read(repo, "monke.yml")).toContain("modelInvocation: deny");
     await runCliAsync(["skills", "remove", upstream, "--repo"], runtime);
     expect(existsSync(path.join(repo, "skills/imported/second"))).toBeFalsy();
-    expect(read(repo, "monke.yml")).toContain("skills: []");
+    expect(parseDocument(read(repo, "monke.yml")).toJS()).toStrictEqual({ skills: [] });
+  });
+
+  test("repo reference choices remain authoritative when the source publishes imported skills", async () => {
+    const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+    const publisher = createRepo(path.join(sandbox, "reference-publisher"), {
+      "monke.yml": stringify({
+        skills: [
+          {
+            commit: git(upstream, ["rev-parse", "HEAD"]),
+            skills: ["first"],
+            source: upstream
+          }
+        ]
+      }),
+      "skills/own/SKILL.md": "---\nname: own\ndescription: Own skill.\n---\nOwn instructions.\n"
+    });
+    await runCliAsync(
+      ["skills", "add", `${publisher}#HEAD`, "--repo", "--ref", "--skill", "first"],
+      runtime
+    );
+    write(publisher, "README.md", "Publisher advances.\n");
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Advance publisher"]);
+    installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+    await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+    expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
+    expect(existsSync(path.join(repo, "skills/imported/first"))).toBeFalsy();
+    await expect(
+      runCliAsync(["skills", "add", `${publisher}#HEAD`, "--ref"], runtime)
+    ).rejects.toThrow("--ref requires --repo");
   });
 
   test("update prepares Git sources concurrently and prunes guidance removed by hand", async () => {

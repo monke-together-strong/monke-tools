@@ -154,8 +154,7 @@ skills:
     modelInvocation: deny
     skills:
       - obsidian-bases
-      - slug: canvas-guidance
-        selector: json-canvas
+      - slug: json-canvas
         kind: reference
       - slug: obsidian-markdown
         modelInvocation: allow

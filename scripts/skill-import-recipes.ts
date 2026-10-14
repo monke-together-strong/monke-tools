@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import path from "node:path";
 
 import is from "@sindresorhus/is";
-import { isMap, isNode, parseDocument } from "yaml";
+import { Document, isMap, isNode, isScalar, isSeq, parseDocument } from "yaml";
+import type { YAMLMap } from "yaml";
 import * as z from "zod";
 
 import { MonkeError } from "../src/errors.ts";
@@ -280,19 +281,65 @@ export function writeImportRecipeStore(repoRoot: string, store: SkillImportRecip
 /** Change only the skills YAML node, preserving the rest of the document. */
 export function writeRepoImportRecipeStore(repoRoot: string, store: SkillImportRecipeStore) {
   const file = path.join(repoRoot, "monke.yml");
-  const document = parseDocument(existsSync(file) ? readFileSync(file, "utf-8") : "");
+  const original = existsSync(file) ? readFileSync(file, "utf-8") : "";
+  const document = parseDocument(original, { keepSourceTokens: true });
   if (document.errors.length) {
     throw new MonkeError(`Invalid ${file}: ${document.errors[0]?.message}`);
   }
-  if (document.contents && !isMap(document.contents)) {
+  const { contents } = document;
+  const empty =
+    isScalar(contents) && contents.value === null && contents.range?.[0] === contents.range?.[1];
+  if (contents && !isMap(contents) && !empty) {
     throw new MonkeError(`${file} must be a YAML mapping`);
   }
   const recipes = normalizeImportRecipeStore(store).recipes.map(compactRecipe);
   unwrapBoundaryResult(RepoImportRecipesSchema.safeParse(recipes), "Repo import recipes");
-  document.set("skills", document.createNode(recipes));
   const temporary = `${file}.tmp`;
-  writeFileSync(temporary, document.toString({ lineWidth: 0 }));
+  writeFileSync(temporary, editRepoSkillsYaml(original, document, recipes));
   renameSync(temporary, file);
+}
+
+function editRepoSkillsYaml(
+  original: string,
+  document: Document.Parsed,
+  recipes: ReturnType<typeof compactRecipe>[]
+) {
+  const { contents } = document;
+  const previous = document.get("skills", true);
+  const replacement = new Document(recipes);
+  if (isSeq(replacement.contents)) {
+    replacement.contents.flow =
+      (isSeq(previous) && previous.flow === true) || (isMap(contents) && contents.flow === true);
+  }
+  const value = replacement.toString({ lineWidth: 0 }).replace(/\n$/u, "");
+  if (isNode(previous) && previous.range) {
+    const [start, end] = previous.range;
+    const indent = original.slice(original.lastIndexOf("\n", start - 1) + 1, start);
+    const rendered =
+      isSeq(previous) && previous.flow !== true ? value.replaceAll("\n", `\n${indent}`) : value;
+    const newline = original.slice(start, end).endsWith("\n") ? "\n" : "";
+    return `${original.slice(0, start)}${rendered}${newline}${original.slice(end)}`;
+  }
+  if (isMap(contents) && contents.flow === true) {
+    return appendFlowSkillsYaml(original, contents, value);
+  }
+  const [, end] = document.range;
+  const prefix = original.slice(0, end);
+  const newline = prefix.length > 0 && !prefix.endsWith("\n") ? "\n" : "";
+  const addition = new Document({ skills: recipes }).toString({ lineWidth: 0 });
+  return `${prefix}${newline}${addition}${original.slice(end)}`;
+}
+
+function appendFlowSkillsYaml(original: string, contents: YAMLMap.Parsed, value: string) {
+  const end = contents.range[1] - 1;
+  const token = contents.srcToken;
+  const last = token?.type === "flow-collection" ? token.items.at(-1) : undefined;
+  const trailingComma =
+    last?.key === undefined &&
+    last?.value === undefined &&
+    last?.start.some((item) => item.type === "comma") === true;
+  const separator = contents.items.length > 0 && !trailingComma ? ", " : "";
+  return `${original.slice(0, end)}${separator}skills: ${value}${original.slice(end)}`;
 }
 
 export function normalizeImportRecipeStore(input: SkillImportRecipeStore): SkillImportRecipeStore {
