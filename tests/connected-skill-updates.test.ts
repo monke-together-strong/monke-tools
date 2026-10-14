@@ -396,6 +396,30 @@ describe("updates through connected local repositories", () => {
     expect(diff).toContain("+Second version.");
   });
 
+  test("failed comparison saving retains publisher YAML and guidance for retry", async () => {
+    const f = fixture();
+    await runCliAsync(["skills", "add", f.upstream, "--repo", "--skill", "base"], {
+      ...f.runtime,
+      cwd: f.checkout
+    });
+    await runCliAsync(["skills", "list"], f.runtime);
+    const previous = readRepoImportRecipeStore(f.checkout).recipes[0]?.commit;
+    const commit = f.advance();
+    write(f.monkeHome, "skill-reviews", "Obstructed comparison storage.\n");
+
+    await expect(runCliAsync(["skills", "update"], f.runtime)).rejects.toThrow(/skill-reviews/u);
+    expect(readRepoImportRecipeStore(f.checkout).recipes[0]?.commit).toBe(commit);
+    rmSync(path.join(f.monkeHome, "skill-reviews"));
+    await runCliAsync(["skills", "update"], f.runtime);
+
+    const diff = reviewDiff(f.reviewLog);
+    expect(diff).toContain(`-  - commit: ${previous}`);
+    expect(diff).toContain(`+  - commit: ${commit}`);
+    expect(diff).toContain("monke.yml");
+    expect(diff).toContain("-First version.");
+    expect(diff).toContain("+Second version.");
+  });
+
   test("the comparison includes publisher restoration performed by consumer refresh", async () => {
     const f = fixture();
     const publisher = createRepo(path.join(f.sandbox, "publisher"), {

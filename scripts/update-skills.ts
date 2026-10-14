@@ -1,4 +1,13 @@
-import { cpSync, existsSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  renameSync,
+  rmSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -10,7 +19,7 @@ import pLimit from "p-limit";
 import { configureCliParser } from "../src/cli-errors.ts";
 import { MonkeError } from "../src/errors.ts";
 import { updateLocalSkillSource } from "../src/local-skill-source.ts";
-import { createRuntime } from "../src/runtime.ts";
+import { createRuntime, getMonkeHome } from "../src/runtime.ts";
 import { sha256 } from "../src/sha256.ts";
 import type { Runtime } from "../src/types.ts";
 import {
@@ -242,8 +251,14 @@ async function updateSkills(
     ignoreRepoImports(repoRoot, runtime);
   }
   const migrating = store.recipes.some((recipe) => !recipe.localSource && !recipe.commit);
-  snapshotSkillUpdateBaseline(repoRoot, before, migrating, store);
-  snapshotRepoDeclaration(repoRoot, before, dependencies.repo);
+  const retainedBefore = snapshotUpdateBefore({
+    before,
+    migrating,
+    repo: dependencies.repo,
+    repoRoot,
+    runtime,
+    store
+  });
 
   const { recipes } = store;
   const prepare = createGitSkillPreparer({
@@ -368,8 +383,13 @@ async function updateSkills(
   return {
     failure: skillUpdateFailure(failures, finalizationFailure),
     rememberBaseline: () => {
-      if (snapshotComplete && existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
-        rememberSkillGuidance(repoRoot, acceptedGuidance, store);
+      if (snapshotComplete) {
+        if (existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
+          rememberSkillGuidance(repoRoot, acceptedGuidance, store);
+        }
+        if (retainedBefore) {
+          rmSync(retainedBefore, { recursive: true });
+        }
       }
     },
     snapshotAfter: () => {
@@ -378,6 +398,41 @@ async function updateSkills(
       snapshotComplete = true;
     }
   };
+}
+
+function snapshotUpdateBefore(options: {
+  before: string;
+  migrating: boolean;
+  repo?: boolean;
+  repoRoot: string;
+  runtime: Runtime;
+  store: SkillImportRecipeStore;
+}) {
+  const { before, migrating, repoRoot, runtime, store } = options;
+  if (!options.repo) {
+    snapshotSkillUpdateBaseline(repoRoot, before, migrating, store);
+    return;
+  }
+  // Pins and generated files can advance even when comparison storage fails.
+  // Retain their original state until a complete comparison is durably saved.
+  const retained = path.join(
+    getMonkeHome(runtime),
+    "skill-update-baselines",
+    sha256(realpathSync.native(repoRoot))
+  );
+  if (!existsSync(retained)) {
+    mkdirSync(path.dirname(retained), { mode: 0o700, recursive: true });
+    const staging = mkdtempSync(`${retained}-`);
+    try {
+      snapshotSkillUpdateBaseline(repoRoot, staging, migrating, store);
+      snapshotRepoDeclaration(repoRoot, staging, true);
+      renameSync(staging, retained);
+    } finally {
+      rmSync(staging, { force: true, recursive: true });
+    }
+  }
+  cpSync(retained, before, { recursive: true, verbatimSymlinks: true });
+  return retained;
 }
 
 function snapshotRepoDeclaration(repoRoot: string, destination: string, repo = false) {

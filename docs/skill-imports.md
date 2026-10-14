@@ -64,6 +64,9 @@ its source checkout. Adding a local source connects its Git checkout through
 the saved link. Monke advances each connected checkout's `monke.yml` imports
 and generated guidance once, preserving that checkout's selections and overrides.
 It includes those changes in the same comparison as the installed collection.
+Successful publisher updates remain in place if refreshing an installed collection
+fails. If saving the comparison fails, retrying retains the original publisher
+YAML and guidance in the next comparison.
 Commit each changed `monke.yml` after review.
 
 `mt skills update --project` updates the project's linked source checkouts and
