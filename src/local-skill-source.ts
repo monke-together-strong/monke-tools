@@ -347,11 +347,11 @@ async function discoverLocalGuidance(
   const root = resolveLocalSourceRoot(recipe.localSource, workingDirectory);
   const discovered = new Map<
     string,
-    { kind: SkillImportRecipeSkill["kind"]; selector: string; sourcePath: string }
+    { kind: SkillImportRecipeSkill["kind"]; selector?: string; sourcePath: string }
   >(
     [...discoverSourceSkills(root)].map(([slug, sourcePath]) => [
       slug,
-      { kind: "skill", selector: slug, sourcePath }
+      { kind: "skill", sourcePath }
     ])
   );
   if (publisher) {
@@ -433,17 +433,13 @@ export async function updateLocalSkillSource(options: {
     if (discovered.size === 0) {
       throw new MonkeError(`No skills found in ${root}`);
     }
-    const selection = recipe.selection?.map((selector) => {
-      const retained = recipe.skills.find((item) =>
-        [item.slug, item.selector].some((name) => name.toLowerCase() === selector.toLowerCase())
-      );
-      return retained && discovered.has(retained.slug) ? retained.slug : selector;
-    });
-    const selected = selection ?? [...discovered.keys()];
+    const selected = recipe.selection ?? [...discovered.keys()];
     const entries = [...discovered];
     const matchesSelection = ([slug, source]: (typeof entries)[number], selector: string) =>
-      slug.toLowerCase() === selector.toLowerCase() ||
-      source.selector.toLowerCase() === selector.toLowerCase();
+      discovered.has(selector)
+        ? slug === selector
+        : source.selector !== undefined &&
+          [slug, source.selector].some((name) => name.toLowerCase() === selector.toLowerCase());
     for (const selector of selected) {
       if (!entries.some((entry) => matchesSelection(entry, selector))) {
         throw new MonkeError(`Selected Skill ${selector} is missing from ${root}`);
@@ -460,14 +456,14 @@ export async function updateLocalSkillSource(options: {
         return {
           ...recipe.skills.find((item) => item.slug === slug),
           kind: source.kind,
-          selector: source.selector,
+          selector: source.selector ?? slug,
           slug
         };
       });
     const nextRecipe = {
       ...recipe,
       localSource: { ...localSource, skillSourceFolder: root },
-      selection,
+      selection: recipe.selection ? skills.map((item) => item.slug) : undefined,
       skills
     };
     const next = normalizeImportRecipeStore({

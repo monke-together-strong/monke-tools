@@ -406,7 +406,9 @@ export function normalizeImportRecipeStore(input: SkillImportRecipeStore): Skill
   );
 
   const recipes = store.recipes.map((recipe) => {
-    assertUniqueRecipeSkillSelectors(recipe.source, recipe.skills);
+    if (!recipe.localSource) {
+      assertUniqueRecipeSkillSelectors(recipe.source, recipe.skills);
+    }
     assertUniqueRecipeSkillSlugs(recipe.source, recipe.skills);
     return {
       ...recipe,

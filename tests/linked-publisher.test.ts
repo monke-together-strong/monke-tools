@@ -227,6 +227,66 @@ describe("linked publisher collections", () => {
     }
   );
 
+  test.each(["guide", "Base Skill"])(
+    "exact own slug selection excludes the %s alias",
+    async (other) => {
+      const { declare, installed, publisher, runtime, upstream } = fixture();
+      const slug = other === "guide" ? "Guide" : "Base Skill";
+      write(
+        publisher,
+        `skills/${slug}/SKILL.md`,
+        `---\nname: ${slug}\ndescription: Exact own skill.\n---\nExact own instructions.\n`
+      );
+      if (other === "guide") {
+        write(
+          publisher,
+          "skills/guide/SKILL.md",
+          "---\nname: guide\ndescription: Different own skill.\n---\nOther instructions.\n"
+        );
+      } else {
+        write(
+          upstream,
+          "skills/base-skill/SKILL.md",
+          "---\nname: Base Skill\ndescription: Declared skill.\n---\nOther instructions.\n"
+        );
+        git(upstream, ["add", "."]);
+        git(upstream, ["commit", "-m", "Publish alias"]);
+        declare("skill", "base-skill", "Base Skill");
+      }
+      const otherSlug = other === "guide" ? "guide" : "base-skill";
+      const probes =
+        other === "guide"
+          ? [
+              { expected: [slug, otherSlug], selected: [slug, otherSlug] },
+              { expected: [slug], selected: [slug] }
+            ]
+          : [
+              { expected: [slug, otherSlug], selected: [] },
+              { expected: [otherSlug], selected: ["BASE SKILL"] },
+              { expected: [slug], selected: [slug] }
+            ];
+      for (const probe of probes) {
+        await runCliAsync(
+          [
+            "skills",
+            "add",
+            publisher,
+            "--link",
+            "--project",
+            ...(probe.selected.length ? ["--skill", ...probe.selected] : [])
+          ],
+          runtime
+        );
+        expect(
+          [slug, otherSlug].filter((name) => existsSync(path.join(installed, "imported", name)))
+        ).toStrictEqual(probe.expected);
+      }
+      await runCliAsync(["skills", "update", "--project", "--adapter", "codiff"], runtime);
+      expect(read(installed, `imported/${slug}/SKILL.md`)).toContain("Exact own instructions.");
+      expect(existsSync(path.join(installed, "imported", otherSlug))).toBeFalsy();
+    }
+  );
+
   test("a declared reference collision fails before restoring or publishing guidance", async () => {
     const { consumer, declare, installed, publisher, runtime } = fixture();
     declare("reference", "own");
