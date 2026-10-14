@@ -326,7 +326,12 @@ function editRepoSkillsYaml(
   const [, end] = document.range;
   const prefix = original.slice(0, end);
   const newline = prefix.length > 0 && !prefix.endsWith("\n") ? "\n" : "";
-  const addition = new Document({ skills: recipes }).toString({ lineWidth: 0 });
+  const indent = isMap(contents)
+    ? original.slice(original.lastIndexOf("\n", contents.range[0] - 1) + 1, contents.range[0])
+    : "";
+  const addition = new Document({ skills: recipes })
+    .toString({ lineWidth: 0 })
+    .replaceAll(/^(?=.)/gmu, indent);
   return `${prefix}${newline}${addition}${original.slice(end)}`;
 }
 

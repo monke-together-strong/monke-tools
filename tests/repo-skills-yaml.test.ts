@@ -52,6 +52,17 @@ describe("repo skill edits preserve unrelated YAML bytes", () => {
     expect(parseDocument(updated).getIn(["skills", 0, "source"])).toBe(upstream);
   });
 
+  test("add preserves indented root keys", async () => {
+    const { repo, runtime, upstream } = fixture();
+    const original = "    apps: {}\n    bootstrapCommand: 'echo setup'\n";
+    write(repo, "monke.yml", original);
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "example"], runtime);
+    const updated = read(repo, "monke.yml");
+    expect(updated.startsWith(original)).toBeTruthy();
+    expect(parseDocument(updated).errors).toStrictEqual([]);
+    expect(parseDocument(updated).getIn(["skills", 0, "source"])).toBe(upstream);
+  });
+
   test.each(["block", "flow", "flow root"])(
     "policy replaces a %s skills value without changing surrounding comments and formatting",
     async (style) => {
