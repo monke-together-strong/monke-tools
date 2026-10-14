@@ -57,6 +57,44 @@ done
 }
 
 describe("repo import recipes through mt skills", () => {
+  test.each(["add", "update"])(
+    "failed %s preserves the accepted pin and files when a publisher retires a selected Skill entry",
+    async (action) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      const imported = {
+        commit: git(upstream, ["rev-parse", "HEAD"]),
+        skills: ["first"],
+        source: upstream
+      };
+      const publisher = createRepo(path.join(sandbox, "publisher"), {
+        "monke.yml": stringify({ skills: [imported] })
+      });
+      await runCliAsync(
+        ["skills", "add", `${publisher}#HEAD`, "--repo", "--skill", "first"],
+        runtime
+      );
+      const acceptedConfig = read(repo, "monke.yml");
+      const acceptedSkill = read(repo, "skills/imported/first/SKILL.md");
+      write(
+        publisher,
+        "monke.yml",
+        stringify({ skills: [{ ...imported, skills: [{ kind: "reference", slug: "first" }] }] })
+      );
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Retire skill entry in favor of reference"]);
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      const args =
+        action === "add"
+          ? ["skills", "add", `${publisher}#HEAD`, "--repo", "--skill", "first"]
+          : ["skills", "update", "--repo", "--adapter", "codiff"];
+      await expect(runCliAsync(args, runtime)).rejects.toThrow(/entry/u);
+      expect(read(repo, "monke.yml")).toBe(acceptedConfig);
+      expect(read(repo, "skills/imported/first/SKILL.md")).toBe(acceptedSkill);
+      expect(existsSync(path.join(repo, "skills/imported/first/MAIN.md"))).toBeFalsy();
+    }
+  );
+
   test.each(["skills.lock.json", "skills/imported/.monke-imports.json"])(
     "repo restore and update obey YAML over %s",
     async (legacyFile) => {

@@ -245,6 +245,10 @@ function prepareStagedGuidance(
     if (item.kind === "reference") {
       transformPreparedReference(preparedPath);
     } else {
+      const entry = path.join(preparedPath, "SKILL.md");
+      if (!lstatSync(entry, { throwIfNoEntry: false })?.isFile()) {
+        throw new MonkeError(`Expected staged Skill entry document to be a regular file: ${entry}`);
+      }
       setSkillMetadata(preparedPath, item);
     }
   }

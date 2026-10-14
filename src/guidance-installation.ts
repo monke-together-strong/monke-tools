@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
+import { readRepoImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { restoreSkillImports } from "../scripts/skill-lock.ts";
 import { MonkeError } from "./errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "./global-config.ts";
@@ -44,7 +45,12 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
     throw new MonkeError("Active tool install is not configured; install monke-tools first");
   }
   if (!guidanceSourceRootOverride && activeInstall?.manifest.installKind === "local") {
-    await restoreSkillImports(guidanceSourceRoot);
+    await restoreSkillImports(
+      guidanceSourceRoot,
+      true,
+      undefined,
+      readRepoImportRecipeStore(guidanceSourceRoot)
+    );
   }
   resolveSkillSourceTree(guidanceSourceRoot);
 
@@ -114,7 +120,12 @@ export function runLocalInstallSkills(
         `Skills Local Install checkout does not match the Active Local install: ${activeInstall.manifest.sourceCheckout}`
       );
     }
-    await restoreSkillImports(requestedCheckout);
+    await restoreSkillImports(
+      requestedCheckout,
+      true,
+      undefined,
+      readRepoImportRecipeStore(requestedCheckout)
+    );
     await runInstallSkillsLocked(runtime, requestedCheckout, explicitTargets);
   });
 }

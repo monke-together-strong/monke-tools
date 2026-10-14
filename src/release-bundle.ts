@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { validate } from "zod";
 import type { output } from "zod";
 
+import { readRepoImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { restoreSkillImports } from "../scripts/skill-lock.ts";
 import { MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
 import {
@@ -120,7 +121,12 @@ export async function buildReleaseBundle(options: BuildReleaseBundleOptions) {
   const bundleRoot = path.join(temporaryRoot, "bundle");
 
   try {
-    await restoreSkillImports(repositoryRoot);
+    await restoreSkillImports(
+      repositoryRoot,
+      true,
+      undefined,
+      readRepoImportRecipeStore(repositoryRoot)
+    );
     mkdirSync(bundleRoot, { recursive: true });
     mkdirSync(outputDirectory, { recursive: true });
     await compileExecutable(path.join(bundleRoot, "mt"), platform, version);

@@ -19,6 +19,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import {
   readImportRecipeStore,
+  writeImportRecipeStore,
   writeRepoImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
 import { rememberRestoredRecipe } from "../scripts/skill-lock.ts";
@@ -158,7 +159,7 @@ describe("versioned installation lifecycle", () => {
     );
   });
 
-  test("Local installation restores missing pins, synchronizes a reverted lock, and rejects incomplete guidance before activation", async () => {
+  test("Local installation restores accepted pins and honors removed repo declarations", async () => {
     const sandbox = makeTempDir("local-install-locked-imports");
     const sourceCheckout = path.join(sandbox, "source");
     const home = path.join(sandbox, "home");
@@ -233,6 +234,48 @@ describe("versioned installation lifecycle", () => {
       ).rejects.toThrow("mt skills update --repo");
       expect(readlinkSync(path.join(monkeHome, "current"))).toBe("installs/locked-reverted");
       expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted one.");
+
+      write(sourceCheckout, "monke.yml", acceptedLock);
+      writeImportRecipeStore(sourceCheckout, readImportRecipeStore(sourceCheckout));
+      write(sourceCheckout, "monke.yml", "apps: {}\n");
+      await activateLocal({ home, installId: "locked-removed", monkeHome, sourceCheckout });
+      expect(existsSync(path.join(sourceCheckout, "skills/imported/alpha"))).toBeFalsy();
+      expect(existsSync(projectedEntry)).toBeFalsy();
+      await runCliAsync(["skills", "list"], runtime);
+      expect(
+        JSON.parse(
+          readFileSync(path.join(monkeHome, "skill-registry", "skills.lock.json"), "utf-8")
+        )
+      ).toMatchObject({ recipes: [], version: 4 });
+
+      rmSync(path.join(sourceCheckout, "monke.yml"));
+      write(sourceCheckout, "skills/imported/alpha/SKILL.md", "Leftover imported bytes.\n");
+      await runCliAsync(
+        ["skills", "configure"],
+        createTestRuntime({
+          cwd: sourceCheckout,
+          env: { HOME: home, MONKE_HOME: monkeHome },
+          multiSelectValues: [["codex"]],
+          onStderr() {},
+          onStdout() {}
+        })
+      );
+      expect(existsSync(path.join(sourceCheckout, "skills/imported/alpha"))).toBeFalsy();
+      expect(
+        JSON.parse(
+          readFileSync(path.join(monkeHome, "skill-registry", "skills.lock.json"), "utf-8")
+        )
+      ).toMatchObject({ recipes: [], version: 4 });
+
+      write(sourceCheckout, "skills/imported/alpha/SKILL.md", "Leftover imported bytes.\n");
+      await runCliAsync(["skills", "local-install", sourceCheckout], runtime);
+      expect(existsSync(path.join(sourceCheckout, "skills/imported/alpha"))).toBeFalsy();
+      expect(existsSync(projectedEntry)).toBeFalsy();
+      expect(
+        JSON.parse(
+          readFileSync(path.join(monkeHome, "skill-registry", "skills.lock.json"), "utf-8")
+        )
+      ).toMatchObject({ recipes: [], version: 4 });
     } finally {
       process.chdir(originalCwd);
       process.env.MONKE_HOME = originalMonkeHome;

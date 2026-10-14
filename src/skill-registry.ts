@@ -334,7 +334,11 @@ export function registryGuidanceRoot(runtime: Runtime, guidanceSourceRoot: strin
 
 function planRegistryImports(root: string, guidance: string, includeNewSources: boolean) {
   const store = readImportRecipeStore(root);
-  const bundledRecipes = readImportRecipeStore(guidance, false);
+  const bundledRecipes =
+    existsSync(path.join(guidance, "install-manifest.json")) &&
+    !existsSync(path.join(guidance, "monke.yml"))
+      ? readImportRecipeStore(guidance, false)
+      : readRepoImportRecipeStore(guidance);
   const sources = new Set([
     ...store.recipes.map((recipe) => recipe.source),
     ...(store.removedSources ?? [])
