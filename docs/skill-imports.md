@@ -76,6 +76,11 @@ editable checkout. Saved installer commands replay their installer without
 automatically editing the working directory's declarations. The command's
 current directory alone does not connect a repository.
 
+For a saved installer in an already-connected publisher, use
+`mt skills restore --repo`. The outer update advances that publisher first.
+A nested `mt skills update --repo` for the same publisher fails busy because
+Monke reserves its declarations until the outer update finishes.
+
 Run `mt skills update --repo` to pin missing commits and advance existing sources.
 Successful sources replace their files and pins. Failed sources retain their
 previous pins and restored files. If any source fails, Monke defers the final
