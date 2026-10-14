@@ -21,6 +21,7 @@ import path from "node:path";
 import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
 import { containsPath, samePath } from "../src/path-identity.ts";
 import { setSkillMetadata } from "../src/skill-metadata.ts";
+import { resolveSkillPath } from "../src/skill-path.ts";
 import { SKILL_SOURCE_CANDIDATES } from "../src/skill-source-discovery.ts";
 import { relativeMarkdownLinks } from "./check-skill-links.ts";
 import type { SkillImportRecipeSkill } from "./skill-import-recipes.ts";
@@ -447,26 +448,7 @@ function pathPointsIntoReference(candidate: string, referenceRoot: string) {
   if (containsPath(referenceRoot, path.resolve(candidate))) {
     return true;
   }
-  if (!existsSync(candidate)) {
-    return false;
-  }
-  try {
-    const resolvedTarget = realpathSync.native(candidate);
-    if (containsPath(referenceRoot, resolvedTarget)) {
-      return true;
-    }
-    const original = statSync(candidate);
-    const resolved = statSync(resolvedTarget);
-    if (original.dev !== resolved.dev || original.ino !== resolved.ino) {
-      throw new MonkeError("Native path resolution identifies a different filesystem entry");
-    }
-    return false;
-  } catch (error) {
-    throw new MonkeError(
-      `Cannot resolve existing reference dependency ${candidate} before pruning ${referenceRoot}`,
-      { cause: error }
-    );
-  }
+  return existsSync(candidate) && containsPath(referenceRoot, resolveSkillPath(candidate).resolved);
 }
 
 export function importedGuidancePath(

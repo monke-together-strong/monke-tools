@@ -679,9 +679,9 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     }
   );
 
-  test.each([false, true])(
-    "restore preserves a native dependency whose lexical spelling escapes with outside file=%s",
-    async (outsideFileExists) => {
+  test.each(["missing", "unrelated", "hardlink"] as const)(
+    "restore preserves a native dependency whose lexical spelling escapes with %s outside file",
+    async (outsideFile) => {
       const { repo, runtime, sandbox, upstream } = repoFixture();
       write(upstream, "skills/first/deep/deeper/keep.txt", "Accepted support bytes.\n");
       git(upstream, ["add", "."]);
@@ -695,8 +695,19 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
       write(repo, "skills/author/SKILL.md", author);
       const shortcut = "skills/references/imported/first/deep/deeper";
       symlinkSync(shortcut, path.join(repo, "shortcut"), "dir");
-      const outsideBytes = outsideFileExists ? "Unrelated outside file.\n" : undefined;
-      if (outsideBytes !== undefined) {
+      const outsideFileExists = outsideFile !== "missing";
+      const outsideBytes =
+        outsideFile === "hardlink"
+          ? "Pinned first.\n"
+          : outsideFile === "unrelated"
+            ? "Unrelated outside file.\n"
+            : undefined;
+      if (outsideFile === "hardlink") {
+        linkSync(
+          path.join(repo, "skills/references/imported/first/MAIN.md"),
+          path.join(sandbox, "MAIN.md")
+        );
+      } else if (outsideBytes !== undefined) {
         write(sandbox, "MAIN.md", outsideBytes);
       }
       const rawDependency = `${repo}/skills/author/${dependency}`;
@@ -706,7 +717,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
       const ignored = read(repo, ".gitignore");
 
       await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
-        /Cannot (?:resolve existing reference dependency|replace Imported reference first)/u
+        "Cannot replace Imported reference first"
       );
 
       expect(read(repo, "monke.yml")).toBe("skills: []\n");
