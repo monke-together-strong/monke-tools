@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 
 import { describe, expect, test } from "vite-plus/test";
 import { parseDocument, stringify } from "yaml";
@@ -988,7 +989,7 @@ else console.log(table);
       );
       messages.length = 0;
       await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
-      const output = messages.join("");
+      const output = stripVTControlCharacters(messages.join(""));
       const expectedReports = assessed ? 1 : 0;
       const risk = selection === "internal" ? "Med Risk" : "Critical Risk";
       const socket = selection === "internal" ? "1 alert" : "2 alerts";
