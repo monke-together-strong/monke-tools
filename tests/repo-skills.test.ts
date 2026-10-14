@@ -561,6 +561,122 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     expect(readlinkSync(path.join(repo, "skills/local/cycle"))).toBe(".");
   });
 
+  test.each(["leaf chain", "Markdown alias"] as const)(
+    "restore protects a reference consumed through a native %s dependency",
+    async (kind) => {
+      const { repo, runtime, upstream } = repoFixture();
+      await runCliAsync(
+        ["skills", "add", upstream, "--repo", "--ref", "--skill", "first"],
+        runtime
+      );
+      const dependency = kind === "leaf chain" ? "base.md" : "../../authored/base.md";
+      const link = kind === "leaf chain" ? dependency : `${dependency}#usage`;
+      const consumer = `---\nname: author\ndescription: Authored skill.\n---\nRead [base](${link}).\n`;
+      write(repo, "skills/author/SKILL.md", consumer);
+      mkdirSync(path.join(repo, "authored"));
+      symlinkSync(
+        "../skills/references/imported/first/MAIN.md",
+        path.join(repo, "authored/base.md")
+      );
+      if (kind === "leaf chain") {
+        symlinkSync("../../authored/base.md", path.join(repo, "skills/author/base.md"));
+      }
+      const aliases = [
+        "authored/base.md",
+        ...(kind === "leaf chain" ? ["skills/author/base.md"] : [])
+      ];
+      const aliasTargets = aliases.map((alias) => readlinkSync(path.join(repo, alias)));
+      expect(read(repo, `skills/author/${dependency}`)).toBe("Pinned first.\n");
+      write(repo, "monke.yml", "skills: []\n");
+      const marker = read(repo, "skills/.monke-restored.json");
+
+      await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
+        kind === "leaf chain" ? "skills/author/base.md" : "skills/author/SKILL.md"
+      );
+
+      expect(read(repo, "monke.yml")).toBe("skills: []\n");
+      expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+      expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
+      expect(read(repo, "skills/author/SKILL.md")).toBe(consumer);
+      expect(aliases.map((alias) => readlinkSync(path.join(repo, alias)))).toStrictEqual(
+        aliasTargets
+      );
+    }
+  );
+
+  test("restore protects a reference consumed by root Skill supporting files", async () => {
+    const { repo, runtime, upstream } = repoFixture();
+    await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
+    const author = "---\nname: root-author\ndescription: Root Skill.\n---\nRead guides/usage.md.\n";
+    const support = "Load [first](../skills/references/imported/first/MAIN.md).\n";
+    write(repo, "SKILL.md", author);
+    write(repo, "guides/usage.md", support);
+    write(repo, "monke.yml", "skills: []\n");
+    const marker = read(repo, "skills/.monke-restored.json");
+
+    await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
+      "guides/usage.md"
+    );
+
+    expect(read(repo, "monke.yml")).toBe("skills: []\n");
+    expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+    expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
+    expect(read(repo, "SKILL.md")).toBe(author);
+    expect(read(repo, "guides/usage.md")).toBe(support);
+  });
+
+  test("restore ignores removed consumers reached through a repo-root alias", async () => {
+    const { repo, runtime, sandbox, upstream } = repoFixture();
+    const dependent = createRepo(path.join(sandbox, "dependent"), {
+      "skills/dependent/SKILL.md":
+        "---\nname: dependent\ndescription: Dependent.\n---\nLoad ../../references/imported/first/MAIN.md.\n"
+    });
+    await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
+    await runCliAsync(["skills", "add", dependent, "--repo", "--skill", "dependent"], runtime);
+    mkdirSync(path.join(repo, ".codex"));
+    symlinkSync("..", path.join(repo, ".codex/skills"), "dir");
+    write(repo, "monke.yml", "skills: []\n");
+
+    await runCliAsync(["skills", "restore", "--repo"], runtime);
+
+    expect(existsSync(path.join(repo, "skills/imported/dependent"))).toBeFalsy();
+    expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
+    expect(readlinkSync(path.join(repo, ".codex/skills"))).toBe("..");
+    expect(
+      readdirSync(repo).some((name) => name.startsWith(".monke-guidance-backup-"))
+    ).toBeFalsy();
+  });
+
+  test("root Skill scanning ignores exact active restore staging directories", async () => {
+    const { repo, runtime, sandbox, upstream } = repoFixture();
+    await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
+    const replacement = createRepo(path.join(sandbox, "replacement"), {
+      "notes.md": "Unselected source notes mention skills/references/imported/first/MAIN.md.\n",
+      "skills/replacement/SKILL.md":
+        "---\nname: replacement\ndescription: Replacement.\n---\nSelf-contained replacement.\n"
+    });
+    const store = readRepoImportRecipeStore(repo);
+    store.recipes = [
+      {
+        commit: git(replacement, ["rev-parse", "HEAD"]),
+        skills: [{ kind: "skill", selector: "replacement", slug: "replacement" }],
+        source: replacement
+      }
+    ];
+    writeRepoImportRecipeStore(repo, store);
+    const rootSkill = "---\nname: root\ndescription: Root Skill.\n---\nSelf-contained root.\n";
+    write(repo, "SKILL.md", rootSkill);
+
+    await runCliAsync(["skills", "restore", "--repo"], runtime);
+
+    expect(read(repo, "skills/imported/replacement/SKILL.md")).toContain(
+      "Self-contained replacement."
+    );
+    expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
+    expect(read(repo, "SKILL.md")).toBe(rootSkill);
+    expect(readdirSync(path.join(repo, "tmp"))).toStrictEqual([]);
+  });
+
   test.each(["policy", "remove"] as const)(
     "%s validates the prospective retained consumer before pruning references",
     async (action) => {

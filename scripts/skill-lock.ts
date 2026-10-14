@@ -1210,6 +1210,7 @@ export async function restoreLockedImports(
       copyStagedGuidanceToManagedRoots({
         commitState: failed ? undefined : commitState,
         guidance,
+        ignoredConsumerRoots: stagingDirectories,
         obsoleteGuidance: obsolete,
         repoRoot,
         stagedGuidancePath(item) {

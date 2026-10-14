@@ -19,9 +19,10 @@ import {
 import path from "node:path";
 
 import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
-import { containsPath } from "../src/path-identity.ts";
+import { containsPath, samePath } from "../src/path-identity.ts";
 import { setSkillMetadata } from "../src/skill-metadata.ts";
 import { SKILL_SOURCE_CANDIDATES } from "../src/skill-source-discovery.ts";
+import { relativeMarkdownLinks } from "./check-skill-links.ts";
 import type { SkillImportRecipeSkill } from "./skill-import-recipes.ts";
 
 export const IMPORTED_SKILLS_ROOT = path.join("skills", "imported");
@@ -49,6 +50,7 @@ export function copyStagedGuidanceToManagedRoots(
     commitState?: () => void;
     defaultDisableModelInvocation?: boolean;
     guidance: readonly SkillImportRecipeSkill[];
+    ignoredConsumerRoots?: readonly string[];
     linkedSkills?: ReadonlyMap<string, string>;
     obsoleteGuidance?: readonly Pick<SkillImportRecipeSkill, "kind" | "slug">[];
     repoRoot: string;
@@ -59,15 +61,21 @@ export function copyStagedGuidanceToManagedRoots(
   move: (source: string, destination: string) => void = renameSync
 ) {
   assertManagedGuidanceRoots(options.repoRoot);
+  const obsoleteGuidance = options.obsoleteGuidance ?? [];
   const guidance = options.guidance.map((item) => ({
     ...item,
     disableModelInvocation: item.disableModelInvocation ?? options.defaultDisableModelInvocation
   }));
   // Validate every destination before copying staged content or moving any originals.
-  const destinations = [...options.guidance, ...(options.obsoleteGuidance ?? [])].map((item) => ({
+  const destinations = [...options.guidance, ...obsoleteGuidance].map((item) => ({
     item,
     targetPath: importedGuidancePath(options.repoRoot, item)
   }));
+  const obsoleteReferences = new Set(
+    obsoleteGuidance
+      .filter((item) => item.kind === "reference")
+      .map((item) => importedGuidancePath(options.repoRoot, item))
+  );
   const stagedSkillsRoot = path.join(options.stagingDirectory, ".agents", "skills");
   const backupRoot = mkdtempSync(path.join(options.repoRoot, ".monke-guidance-backup-"));
   const preparedRoot = path.join(backupRoot, "prepared");
@@ -76,22 +84,28 @@ export function copyStagedGuidanceToManagedRoots(
   const newAgentsDirectories = new Set<string>();
   let retainRecovery = false;
 
+  function moveToBackup(item: Pick<SkillImportRecipeSkill, "kind" | "slug">, targetPath: string) {
+    if (affectedPaths.has(targetPath)) {
+      return;
+    }
+    const backupPath = path.join(backupRoot, "originals", item.kind, item.slug);
+    if (lstatSync(targetPath, { throwIfNoEntry: false })) {
+      mkdirSync(path.dirname(backupPath), { recursive: true });
+      move(targetPath, backupPath);
+      affectedPaths.set(targetPath, backupPath);
+    } else {
+      affectedPaths.set(targetPath, null);
+    }
+  }
+
   try {
     prepareStagedGuidance(guidance, stagedSkillsRoot, preparedRoot, options.stagedGuidancePath);
 
     options.validatePrepared?.(preparedRoot);
-    for (const { item, targetPath } of destinations) {
-      if (affectedPaths.has(targetPath)) {
-        continue;
-      }
-      const backupPath = path.join(backupRoot, "originals", item.kind, item.slug);
-      if (lstatSync(targetPath, { throwIfNoEntry: false })) {
-        mkdirSync(path.dirname(backupPath), { recursive: true });
-        move(targetPath, backupPath);
-        affectedPaths.set(targetPath, backupPath);
-      } else {
-        affectedPaths.set(targetPath, null);
-      }
+    for (const { item, targetPath } of destinations.filter(
+      (destination) => !obsoleteReferences.has(destination.targetPath)
+    )) {
+      moveToBackup(item, targetPath);
     }
 
     for (const item of guidance) {
@@ -112,7 +126,18 @@ export function copyStagedGuidanceToManagedRoots(
       mkdirSync(path.dirname(targetPath), { recursive: true });
       publishPreparedGuidance(item, targetPath, preparedRoot, linkedSource);
     }
-    assertObsoleteReferencesAreUnconsumed(options.repoRoot, options.obsoleteGuidance ?? []);
+    // Keep reference targets resolvable until retained consumers have been checked.
+    assertObsoleteReferencesAreUnconsumed(options.repoRoot, obsoleteGuidance, [
+      backupRoot,
+      ...(options.ignoredConsumerRoots ?? []),
+      ...(samePath(options.stagingDirectory, options.repoRoot) ? [] : [options.stagingDirectory]),
+      ...obsoleteGuidance.map((item) => importedGuidancePath(options.repoRoot, item))
+    ]);
+    for (const { item, targetPath } of destinations.filter((destination) =>
+      obsoleteReferences.has(destination.targetPath)
+    )) {
+      moveToBackup(item, targetPath);
+    }
     options.commitState?.();
   } catch (error) {
     const failures = restoreLinkedMetadata(metadataCopies, newAgentsDirectories);
@@ -312,7 +337,10 @@ export function assertObsoleteReferencesAreUnconsumed(
         path.resolve(physicalRepoRoot, path.relative(repoRoot, root))
       )
     ];
-    const consumers = ["SKILL.md", ...SKILL_SOURCE_CANDIDATES]
+    const roots = existsSync(path.join(physicalRepoRoot, "SKILL.md"))
+      ? ["."]
+      : SKILL_SOURCE_CANDIDATES;
+    const consumers = roots
       .flatMap((root) =>
         listReferenceConsumers(
           physicalRepoRoot,
@@ -355,13 +383,12 @@ function listReferenceConsumers(
     }
     if (entry.isSymbolicLink()) {
       const linkTarget = readlinkSync(consumerPath);
-      const resolvedTarget = path.resolve(
-        realpathSync.native(path.dirname(consumerPath)),
-        linkTarget
-      );
+      const resolvedTarget = path.isAbsolute(linkTarget)
+        ? linkTarget
+        : `${realpathSync.native(path.dirname(consumerPath))}${path.sep}${linkTarget}`;
       if (
         linkTarget.includes(referencePathPrefix) ||
-        containsPath(obsoleteReferenceRoot, resolvedTarget)
+        pathPointsIntoReference(resolvedTarget, obsoleteReferenceRoot, repoRoot)
       ) {
         return [consumerPath];
       }
@@ -389,11 +416,7 @@ function listReferenceConsumers(
       const content = readFileSync(consumerPath, "utf-8");
       const consumesReference =
         content.includes(referencePathPrefix) ||
-        contentContainsRelativePathInto(
-          content,
-          realpathSync.native(path.dirname(consumerPath)),
-          obsoleteReferenceRoot
-        );
+        contentContainsRelativePathInto(content, consumerPath, obsoleteReferenceRoot, repoRoot);
       return consumesReference ? [consumerPath] : [];
     }
     return [];
@@ -403,12 +426,30 @@ function listReferenceConsumers(
 
 function contentContainsRelativePathInto(
   content: string,
-  consumerDirectory: string,
-  targetRoot: string
+  consumerPath: string,
+  targetRoot: string,
+  repoRoot: string
 ) {
   const relativePathPattern = /(?:\.\.?\/)+[^\s)"'`>]+/gu;
-  return [...content.matchAll(relativePathPattern)].some((match) =>
-    containsPath(targetRoot, path.resolve(consumerDirectory, match[0] ?? ""))
+  const destinations = [
+    ...content.matchAll(relativePathPattern).map((match) => match[0] ?? ""),
+    ...(consumerPath.endsWith(".md")
+      ? relativeMarkdownLinks(content).map((link) => link.destination)
+      : [])
+  ];
+  const consumerDirectory = realpathSync.native(path.dirname(consumerPath));
+  return destinations.some((destination) =>
+    pathPointsIntoReference(`${consumerDirectory}${path.sep}${destination}`, targetRoot, repoRoot)
+  );
+}
+
+function pathPointsIntoReference(candidate: string, referenceRoot: string, repoRoot: string) {
+  const lexicalTarget = path.resolve(candidate);
+  return (
+    containsPath(referenceRoot, lexicalTarget) ||
+    (containsPath(repoRoot, lexicalTarget) &&
+      existsSync(candidate) &&
+      containsPath(referenceRoot, realpathSync.native(candidate)))
   );
 }
 
