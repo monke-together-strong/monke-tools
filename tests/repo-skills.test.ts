@@ -1,4 +1,12 @@
-import { existsSync, linkSync, mkdirSync, renameSync, rmSync, symlinkSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  symlinkSync
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -84,6 +92,72 @@ if (installed === 0) throw new Error("No matching skills: " + selectors.join(", 
 }
 
 describe("repo import recipes through mt skills", () => {
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0).each(["add", "update"])(
+    "%s rejects an unwritable marker parent before changing accepted state",
+    async (action) => {
+      const { bin, repo, runtime, upstream } = repoFixture();
+      await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+      const config = read(repo, "monke.yml");
+      const first = read(repo, "skills/imported/first/SKILL.md");
+      const marker = read(repo, "skills/.monke-restored.json");
+      write(
+        upstream,
+        "skills/first/SKILL.md",
+        "---\nname: first\ndescription: First skill.\n---\nCandidate first.\n"
+      );
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Advance unwritable marker source"]);
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      const args =
+        action === "add"
+          ? ["skills", "add", upstream, "--repo", "--skill", "first", "second"]
+          : ["skills", "update", "--repo", "--adapter", "codiff"];
+      chmodSync(path.join(repo, "skills"), 0o555);
+      try {
+        await expect(runCliAsync(args, runtime)).rejects.toThrow(/EACCES|marker/iu);
+        expect(read(repo, "monke.yml")).toBe(config);
+        expect(read(repo, "skills/imported/first/SKILL.md")).toBe(first);
+        expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+        expect(existsSync(path.join(repo, "skills/imported/second"))).toBeFalsy();
+      } finally {
+        chmodSync(path.join(repo, "skills"), 0o755);
+      }
+    }
+  );
+
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0).each(["restore", "remove"])(
+    "%s with matching restored files does not need marker-parent writes",
+    async (action) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      const other = createRepo(path.join(sandbox, "other-source"), {
+        "skills/other/SKILL.md":
+          "---\nname: other\ndescription: Other skill.\n---\nAccepted other.\n"
+      });
+      await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+      await runCliAsync(["skills", "add", other, "--repo", "--skill", "other"], runtime);
+      const marker = read(repo, "skills/.monke-restored.json");
+      const acceptedOther = read(repo, "skills/imported/other/SKILL.md");
+      writeExecutable(path.join(bin, "npx"), "#!/bin/sh\nexit 42\n");
+      chmodSync(path.join(repo, "skills"), 0o555);
+      try {
+        await runCliAsync(
+          ["skills", action, ...(action === "remove" ? [upstream] : []), "--repo"],
+          runtime
+        );
+        const recipes = z
+          .object({ skills: z.array(z.unknown()) })
+          .parse(parseDocument(read(repo, "monke.yml")).toJS()).skills;
+        expect(recipes).toHaveLength(action === "remove" ? 1 : 2);
+        expect(read(repo, "skills/imported/other/SKILL.md")).toBe(acceptedOther);
+        expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+        expect(existsSync(path.join(repo, "skills/imported/first"))).toBe(action !== "remove");
+      } finally {
+        chmodSync(path.join(repo, "skills"), 0o755);
+      }
+    }
+  );
+
   test.each(["add", "update", "restore", "policy", "remove"])(
     "%s rejects an obstructed restore marker before changing accepted state",
     async (action) => {

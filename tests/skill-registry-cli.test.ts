@@ -162,6 +162,99 @@ done
   );
 }
 
+async function namedPublisherTransition(options: {
+  action: "update" | "readd";
+  candidateName: string;
+  initial: "own" | "reference" | "skill";
+  selector: string;
+}) {
+  const { action, candidateName, initial, selector } = options;
+  const fixture = registryFixture();
+  writeExecutable(
+    path.join(fixture.bin, "npx"),
+    `#!/usr/bin/env bun
+import { cpSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+const source = process.argv[5];
+const selectors = [];
+for (let index = 6; process.argv[index] === "--skill"; index += 2) selectors.push(process.argv[index + 1].toLowerCase());
+let installed = 0;
+for (const folder of readdirSync(path.join(source, "skills"))) {
+  const directory = path.join(source, "skills", folder);
+  const content = readFileSync(path.join(directory, "SKILL.md"), "utf8");
+  const name = /^name: (.+)$/m.exec(content)[1];
+  if (!selectors.includes("*") && !selectors.includes(name.toLowerCase())) continue;
+  const slug = name.toLowerCase().replace(/[^a-z0-9._]+/g, "-").replace(/^[.\\-]+|[.\\-]+$/g, "").substring(0, 255) || "unnamed-skill";
+  const destination = path.join(".agents", "skills", slug);
+  mkdirSync(path.dirname(destination), { recursive: true });
+  cpSync(directory, destination, { recursive: true });
+  installed += 1;
+}
+if (installed === 0) throw new Error("No matching skills: " + selectors.join(", "));
+`
+  );
+  const skill = (body: string, name = "Fancy Author") =>
+    `---\nname: ${name}\ndescription: Author trigger.\n---\n${body}\n`;
+  const declaredName = initial === "own" ? candidateName : "Fancy Author";
+  const upstream = createRepo(path.join(fixture.sandbox, "named-import"), {
+    "skills/author/SKILL.md": skill("Declared author.", declaredName)
+  });
+  const declaration = stringify({
+    skills: [
+      {
+        commit: git(upstream, ["rev-parse", "HEAD"]),
+        skills: [
+          {
+            kind: initial === "reference" ? "reference" : "skill",
+            selector: declaredName,
+            slug: "fancy-author"
+          }
+        ],
+        source: upstream
+      }
+    ]
+  });
+  const publisher = createRepo(
+    path.join(fixture.sandbox, "named-publisher"),
+    initial === "own"
+      ? { "skills/authors/SKILL.md": skill("Owned author.") }
+      : { "monke.yml": declaration }
+  );
+  const source = `${publisher}#HEAD`;
+  if (candidateName === "Unrelated") {
+    write(publisher, "skills/existing/SKILL.md", skill("Retained sibling.", "Existing"));
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Publish a selected sibling"]);
+  }
+  await runCliAsync(
+    [
+      "skills",
+      "add",
+      source,
+      "--skill",
+      selector,
+      ...(candidateName === "Unrelated" ? ["Existing"] : [])
+    ],
+    fixture.runtime
+  );
+  const acceptedRegistry = read(fixture.registry, "skills.lock.json");
+  const acceptedGuidance =
+    initial === "reference"
+      ? read(fixture.registry, "skills/references/imported/fancy-author/MAIN.md")
+      : read(fixture.installed.codex, "fancy-author/SKILL.md");
+  if (initial === "own") {
+    rmSync(path.join(publisher, "skills/authors"), { recursive: true });
+    write(publisher, "monke.yml", declaration);
+  } else {
+    write(publisher, "monke.yml", "skills: []\n");
+    write(publisher, "skills/new-folder/SKILL.md", skill("Owned replacement.", candidateName));
+  }
+  git(publisher, ["add", "-A"]);
+  git(publisher, ["commit", "-m", "Move the selected author"]);
+  const command = action === "update" ? ["skills", "update"] : ["skills", "add", source];
+  return { acceptedGuidance, acceptedRegistry, command, fixture, publisher };
+}
+
 describe("Skill import registry CLI", () => {
   test("Git publishers include declared imports, retain consumer overrides, and update accepted pins", async () => {
     const fixture = registryFixture();
@@ -431,6 +524,72 @@ done
     }
   );
 
+  test.each([
+    { action: "update", candidateName: "Fancy Author", initial: "skill", selector: "fancy-author" },
+    { action: "readd", candidateName: "Fancy Author", initial: "skill", selector: "fancy-author" },
+    {
+      action: "update",
+      candidateName: "Fancy Author",
+      initial: "reference",
+      selector: "fancy-author"
+    },
+    {
+      action: "readd",
+      candidateName: "Fancy Author",
+      initial: "reference",
+      selector: "fancy-author"
+    },
+    { action: "update", candidateName: "Fancy Author", initial: "own", selector: "fAnCy AuThOr" },
+    { action: "readd", candidateName: "Fancy Author", initial: "own", selector: "fAnCy AuThOr" },
+    { action: "update", candidateName: "Fancy+Author", initial: "skill", selector: "fancy-author" },
+    { action: "readd", candidateName: "Fancy+Author", initial: "own", selector: "fAnCy AuThOr" }
+  ] as const)(
+    "$action retains $selector when a publisher changes from $initial guidance to $candidateName",
+    async ({ action, candidateName, initial, selector }) => {
+      const { command, fixture, publisher } = await namedPublisherTransition({
+        action,
+        candidateName,
+        initial,
+        selector
+      });
+      await runCliAsync(command, fixture.runtime);
+      const expected = initial === "own" ? "Declared author." : "Owned replacement.";
+      expect(read(fixture.installed.codex, "fancy-author/SKILL.md")).toContain(expected);
+      expect(JSON.parse(read(fixture.registry, "skills.lock.json"))).toMatchObject({
+        recipes: [
+          {
+            commit: git(publisher, ["rev-parse", "HEAD"]),
+            selection: [candidateName === "Fancy Author" ? selector : "fancy-author"],
+            skills: [{ selector: candidateName, slug: "fancy-author" }]
+          }
+        ]
+      });
+      expect(
+        existsSync(path.join(fixture.registry, "skills/references/imported/fancy-author"))
+      ).toBeFalsy();
+      rmSync(path.join(fixture.registry, "skills/imported/fancy-author"), { recursive: true });
+      await runCliAsync(["skills", "update"], fixture.runtime);
+      expect(read(fixture.installed.codex, "fancy-author/SKILL.md")).toContain(expected);
+    }
+  );
+
+  test.each(["update", "readd"] as const)(
+    "%s rejects a missing retained publisher identity after a partial importer success",
+    async (action) => {
+      const { acceptedGuidance, acceptedRegistry, command, fixture } =
+        await namedPublisherTransition({
+          action,
+          candidateName: "Unrelated",
+          initial: "skill",
+          selector: "fancy-author"
+        });
+      await expect(runCliAsync(command, fixture.runtime)).rejects.toThrow(/fancy-author/u);
+      expect(read(fixture.registry, "skills.lock.json")).toBe(acceptedRegistry);
+      expect(read(fixture.installed.codex, "fancy-author/SKILL.md")).toBe(acceptedGuidance);
+      expect(existsSync(path.join(fixture.installed.codex, "unrelated"))).toBeFalsy();
+    }
+  );
+
   test.each(["git", "link"] as const)(
     "%s publisher selections span own skills and declared imports",
     async (kind) => {
@@ -666,7 +825,7 @@ done
         `#!/bin/sh
 set -eu
 mkdir -p .agents/skills
-cp -R upstream-validation/course/skills/typography .agents/skills/
+cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/skills/
 `
       );
       const source = `https://github.com/owner/repeated/tree/${updateRef}/course`;

@@ -30,6 +30,7 @@ import {
   assertRepoImportIgnoreFile,
   assertSkillRestoreMarker,
   ignoreRepoImports,
+  isSkillRecipeRestored,
   rememberRestoredRecipe,
   resolveSkillRevision,
   restoreLockedImports,
@@ -183,7 +184,7 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
             : store.recipes.map((item) =>
                 item === recipe ? setRecipePolicy(recipe, request) : item
               );
-        if (recipes.length > 0) {
+        if (recipes.some((nextRecipe) => !isSkillRecipeRestored(root, nextRecipe))) {
           assertSkillRestoreMarker(root);
         }
         ignoreRepoImports(root, runtime);
@@ -597,14 +598,7 @@ async function addGitSkillSource(
   assertSkillRestoreMarker(root);
   const revision = await resolveSkillRevision({ skills: [], source }, root);
   const previous = store.recipes.find((recipe) => recipe.source === revision.source);
-  const recipe: SkillImportRecipe = {
-    ...previous,
-    name: request.name ?? previous?.name,
-    skills: previous?.skills ?? [],
-    source: revision.source,
-    ...(!repo ? { selection: request.skills ?? previous?.selection ?? ["*"] } : {}),
-    ...(request.acceptOpenClawRisks ? { acceptOpenClawRisks: true as const } : {})
-  };
+  const recipe = gitSourceRecipe(revision.source, request, previous, repo);
   const selectors = request.skills ??
     previous?.selection ??
     previous?.skills.map((item) => item.selector) ?? ["*"];
@@ -615,6 +609,7 @@ async function addGitSkillSource(
       previousRecipe: repo ? undefined : previous,
       recipe: { ...recipe, commit: revision.commit, source: revision.source },
       repoRoot: root,
+      retainSelection: !repo && request.skills === undefined,
       runtime,
       selectors,
       stagingDirectory: staging
@@ -627,10 +622,21 @@ async function addGitSkillSource(
       preserveImportKinds: repo,
       reference: request.reference
     });
-    if (repo) {
-      assertRepoSkillSelectorsMatched(recipe.source, selectors, skills);
-    }
-    const nextRecipe = { ...recipe, commit: revision.commit, skills, source: revision.source };
+    assertGitSkillSelection({
+      previous,
+      recipe,
+      repo,
+      requestedSkills: request.skills,
+      selectors,
+      skills
+    });
+    const nextRecipe = {
+      ...recipe,
+      commit: revision.commit,
+      ...(installOutput.selection ? { selection: installOutput.selection } : {}),
+      skills,
+      source: revision.source
+    };
     const next = normalizeImportRecipeStore({
       ...store,
       recipes: [...store.recipes.filter((item) => item !== previous), nextRecipe]
@@ -671,6 +677,46 @@ async function addGitSkillSource(
     return revision.source;
   } finally {
     rmSync(staging, { force: true, recursive: true });
+  }
+}
+
+function gitSourceRecipe(
+  source: string,
+  request: Extract<SkillsRequest, { action: "add" }>,
+  previous: SkillImportRecipe | undefined,
+  repo: boolean
+): SkillImportRecipe {
+  return {
+    ...previous,
+    name: request.name ?? previous?.name,
+    skills: previous?.skills ?? [],
+    source,
+    ...(!repo ? { selection: request.skills ?? previous?.selection ?? ["*"] } : {}),
+    ...(request.acceptOpenClawRisks ? { acceptOpenClawRisks: true as const } : {})
+  };
+}
+
+function assertGitSkillSelection(options: {
+  previous?: SkillImportRecipe;
+  recipe: SkillImportRecipe;
+  repo: boolean;
+  requestedSkills?: string[];
+  selectors: string[];
+  skills: SkillImportRecipe["skills"];
+}) {
+  const { previous, recipe, repo, requestedSkills, selectors, skills } = options;
+  if (repo) {
+    assertRepoSkillSelectorsMatched(recipe.source, selectors, skills);
+    return;
+  }
+  if (requestedSkills !== undefined || !previous || selectors.includes("*")) {
+    return;
+  }
+  const missing = previous.skills.filter((item) => !skills.some((next) => next.slug === item.slug));
+  if (missing.length > 0) {
+    throw new MonkeError(
+      `Selected skills not found in ${recipe.source}: ${missing.map((item) => item.slug).join(", ")}`
+    );
   }
 }
 

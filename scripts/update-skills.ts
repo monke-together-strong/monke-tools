@@ -181,7 +181,12 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
         source: normalizedSource,
         stagingDirectory
       });
-      const nextStore = applySlugReplacementsToStore(store, recipe.source, stagedGuidance);
+      const nextStore = applySlugReplacementsToStore(
+        store,
+        recipe.source,
+        stagedGuidance,
+        installOutput.selection
+      );
       const nextRecipe = nextStore.recipes.find((item) => item.source === recipe.source);
       if (!nextRecipe) {
         throw new MonkeError(`Missing recipe for ${recipe.source}`);
@@ -341,6 +346,7 @@ async function prepareGitSkillUpdate(
       previousRecipe: repo ? undefined : recipe,
       recipe: { ...recipe, commit: revision.commit, source: revision.source },
       repoRoot,
+      retainSelection: !repo,
       runtime,
       selectors: recipe.selection ?? recipe.skills.map((skill) => skill.selector),
       stagingDirectory
@@ -436,12 +442,16 @@ async function resolveUpdatedGuidance(options: {
     });
   }
   const replacements = await resolveStagedSkillReplacements(options);
+  const staged = stagedSkillGuidance(stagingDirectory, recipe, options.declaredGuidance, {
+    preserveImportKinds: options.preserveImportKinds
+  });
   return applySlugReplacementsToGuidance(recipe, replacements).map((item) => ({
     ...item,
     kind: options.preserveImportKinds
       ? item.kind
       : (options.declaredGuidance.find((declared) => declared.slug === item.slug)?.kind ??
-        item.kind)
+        item.kind),
+    selector: staged.find((candidate) => candidate.slug === item.slug)?.selector ?? item.selector
   }));
 }
 
@@ -518,12 +528,15 @@ async function resolveStagedSkillReplacements(options: {
 function applySlugReplacementsToStore(
   store: SkillImportRecipeStore,
   source: string,
-  guidance: SkillImportRecipe["skills"]
+  guidance: SkillImportRecipe["skills"],
+  selection: SkillImportRecipe["selection"]
 ) {
   return normalizeImportRecipeStore({
     ...store,
     recipes: store.recipes.map((recipe) =>
-      recipe.source === source ? { ...recipe, skills: guidance } : recipe
+      recipe.source === source
+        ? { ...recipe, ...(selection ? { selection } : {}), skills: guidance }
+        : recipe
     )
   });
 }

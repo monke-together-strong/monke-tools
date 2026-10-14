@@ -1,4 +1,6 @@
 import {
+  accessSync,
+  constants as fsConstants,
   cpSync,
   existsSync,
   lstatSync,
@@ -43,12 +45,28 @@ import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from
 
 export const MATERIALIZER_VERSION = 1;
 export const SKILL_RESTORE_MARKER = "skills/.monke-restored.json";
-/** Atomic marker replacement accepts file aliases, but not directories or special entries. */
-export function assertSkillRestoreMarker(repoRoot: string) {
+function assertSkillRestoreMarkerEntry(repoRoot: string) {
   const file = path.join(repoRoot, SKILL_RESTORE_MARKER);
   const metadata = lstatSync(file, { throwIfNoEntry: false });
   if (metadata && !metadata.isFile() && !metadata.isSymbolicLink()) {
     throw new MonkeError(`Skill restore marker path is obstructed: ${file}`);
+  }
+  return file;
+}
+
+/** Require a replaceable marker and parent access before publishing accepted guidance. */
+export function assertSkillRestoreMarker(repoRoot: string) {
+  const file = assertSkillRestoreMarkerEntry(repoRoot);
+  let parent = path.dirname(file);
+  while (!lstatSync(parent, { throwIfNoEntry: false })) {
+    parent = path.dirname(parent);
+  }
+  try {
+    accessSync(parent, fsConstants.W_OK + fsConstants.X_OK);
+  } catch (error) {
+    throw new MonkeError(`Skill restore marker parent is not writable and searchable: ${parent}`, {
+      cause: error
+    });
   }
 }
 
@@ -82,6 +100,22 @@ function readRestoreMarkers(repoRoot: string) {
     return {};
   }
 }
+/** Matching accepted bytes need no marker write or upstream fetch. */
+export function isSkillRecipeRestored(repoRoot: string, recipe: SkillImportRecipe) {
+  assertSkillRestoreMarkerEntry(repoRoot);
+  const marker = readRestoreMarkers(repoRoot)[recipe.source];
+  try {
+    return (
+      Boolean(recipe.commit) &&
+      marker?.recipe === recipeIdentity(recipe) &&
+      marker.tooling === `${SKILLS_CLI_VERSION}/${MATERIALIZER_VERSION}` &&
+      guidanceDigest(repoRoot, recipe.skills) === marker.digest
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function rememberRestoredRecipe(repoRoot: string, recipe: SkillImportRecipe) {
   assertSkillRestoreMarker(repoRoot);
   const file = path.join(repoRoot, SKILL_RESTORE_MARKER);
@@ -355,6 +389,7 @@ export async function stageGitSkillSource(options: {
   previousRecipe?: SkillImportRecipe;
   recipe: SkillImportRecipe;
   repoRoot: string;
+  retainSelection?: boolean;
   runtime?: Runtime;
   selectors: string[];
   stagingDirectory: string;
@@ -380,8 +415,9 @@ export async function stageGitSkillSource(options: {
       : readRepoImportRecipeStore(checkout);
   const imported = declared.recipes.flatMap((entry) => entry.skills);
   const runtime = options.runtime ?? createRuntime({ cwd: stagingDirectory });
-  const { output, ownSkills } = await stageOwnGitSkills({
+  const { output, ownNames, ownSkills, selected, selection } = await stageOwnGitSkills({
     imported,
+    retainedSkills: options.retainSelection ? options.previousRecipe?.skills : undefined,
     runtime,
     selectors,
     source,
@@ -408,24 +444,23 @@ export async function stageGitSkillSource(options: {
     .filter((item) =>
       previousDeclared.some((old) => old.kind === "reference" && old.slug === item.slug)
     )
-    .map((item) => ({ kind: "skill" as const, selector: item.slug, slug: item.slug }));
-  if (imported.length > 0) {
-    for (const item of imported) {
-      if (ownSkills.has(item.slug)) {
-        throw new MonkeError(
-          `Imported ${item.kind} slug ${item.slug} collides with publishing source ${recipe.source}`
-        );
-      }
+    .map((item) => ({
+      kind: "skill" as const,
+      selector: ownNames.get(item.slug) ?? item.slug,
+      slug: item.slug
+    }));
+  for (const item of imported) {
+    if (ownSkills.has(item.slug)) {
+      throw new MonkeError(
+        `Imported ${item.kind} slug ${item.slug} collides with publishing source ${recipe.source}`
+      );
     }
   }
   if (declared.recipes.length > 0) {
     // Never follow imports declared by an imported source itself.
     await restoreLockedImports(checkout, false, runtime, declared);
     for (const item of imported) {
-      if (
-        !selectors.includes("*") &&
-        !selectors.some((selector) => selector === item.slug || selector === item.selector)
-      ) {
+      if (!publisherGuidanceSelected(item, selected)) {
         continue;
       }
       const target = path.join(stagingDirectory, ".agents", "skills", item.slug);
@@ -440,41 +475,54 @@ export async function stageGitSkillSource(options: {
       });
     }
   }
-  return { ...output, declaredGuidance: [...imported, ...ownReplacements], source };
+  return {
+    ...output,
+    declaredGuidance: [...imported, ...ownReplacements],
+    selection:
+      options.retainSelection &&
+      !selectors.includes("*") &&
+      selection.some((item, index) => item !== selectors[index])
+        ? selection
+        : undefined,
+    source
+  };
+}
+
+function publisherGuidanceSelected(item: SkillImportRecipeSkill, selectors: string[]) {
+  return (
+    selectors.includes("*") ||
+    selectors.some(
+      (selector) =>
+        selector.toLowerCase() === item.slug.toLowerCase() ||
+        selector.toLowerCase() === item.selector.toLowerCase()
+    )
+  );
 }
 
 async function stageOwnGitSkills(options: {
   imported: readonly SkillImportRecipeSkill[];
+  retainedSkills?: readonly SkillImportRecipeSkill[];
   runtime: Runtime;
   selectors: string[];
   source: string;
   sourceRoot: string;
   stagingDirectory: string;
 }) {
-  const { imported, runtime, selectors, source, sourceRoot, stagingDirectory } = options;
-  // Only skip the importer for declaration-only publishers. Upstream owns discovery
-  // and installed names, including hidden catalogs and names unlike their folders.
-  const hasOwnSkills =
-    imported.length === 0 ||
-    !new Bun.Glob("**/SKILL.md")
-      .scanSync({
-        cwd: sourceRoot,
-        dot: true,
-        onlyFiles: true
-      })
-      .next().done;
-  const declaredSelectors = new Set(imported.flatMap((item) => [item.slug, item.selector]));
-  const ownSelectors = selectors.filter(
-    (selector) => !declaredSelectors.has(selector) && (selector !== "*" || hasOwnSkills)
-  );
-  const inspectCollection = imported.length > 0 && hasOwnSkills;
-  const explicit = !selectors.includes("*");
+  const { imported, retainedSkills, runtime, selectors, source, sourceRoot, stagingDirectory } =
+    options;
+  const { explicit, inspectCollection, ownSelectors, selected } = publisherSkillSelection({
+    imported,
+    retainedSkills,
+    selectors,
+    sourceRoot
+  });
   const collectionDirectory =
     inspectCollection && explicit
       ? path.join(stagingDirectory, "publisher-collection")
       : stagingDirectory;
   let output = { exitCode: 0, stderr: "", stdout: "" };
   let ownSkills = new Set<string>();
+  let ownNames = new Map<string, string>();
   if (inspectCollection || ownSelectors.length > 0) {
     mkdirSync(collectionDirectory, { recursive: true });
     const installed = await runtime.execAsync(
@@ -487,6 +535,14 @@ async function stageOwnGitSkills(options: {
       }
     );
     ownSkills = new Set(listStagedSkillSlugs(collectionDirectory));
+    if (inspectCollection) {
+      ownNames = new Map(
+        stagedSkillGuidance(collectionDirectory, { skills: [], source }).map((item) => [
+          item.slug,
+          item.selector
+        ])
+      );
+    }
     if (!inspectCollection || !explicit) {
       output = installed;
     }
@@ -501,11 +557,66 @@ async function stageOwnGitSkills(options: {
   if (inspectCollection && explicit && ownSelectors.length > 0) {
     output = await runtime.execAsync(
       runtime.platform === "win32" ? "npx.cmd" : "npx",
-      buildSkillsInstallArgs({ selectors: ownSelectors, source }),
+      buildSkillsInstallArgs({
+        selectors: ownSelectors.map(
+          (selector) =>
+            ownNames.get(findRetainedSkill(retainedSkills, selector)?.slug ?? "") ?? selector
+        ),
+        source
+      }),
       { cwd: stagingDirectory }
     );
   }
-  return { output, ownSkills };
+  const selection = selectors.map((selector) => {
+    const previous = findRetainedSkill(retainedSkills, selector);
+    const currentName =
+      imported.find((item) => item.slug === previous?.slug)?.selector ??
+      ownNames.get(previous?.slug ?? "");
+    return previous && currentName && currentName.toLowerCase() !== previous.selector.toLowerCase()
+      ? previous.slug
+      : selector;
+  });
+  return { output, ownNames, ownSkills, selected, selection };
+}
+
+function findRetainedSkill(
+  retainedSkills: readonly SkillImportRecipeSkill[] | undefined,
+  selector: string
+) {
+  return (
+    retainedSkills?.find((item) => item.slug.toLowerCase() === selector.toLowerCase()) ??
+    retainedSkills?.find((item) => item.selector.toLowerCase() === selector.toLowerCase())
+  );
+}
+
+function publisherSkillSelection(options: {
+  imported: readonly SkillImportRecipeSkill[];
+  retainedSkills?: readonly SkillImportRecipeSkill[];
+  selectors: string[];
+  sourceRoot: string;
+}) {
+  const { imported, retainedSkills, selectors, sourceRoot } = options;
+  const selected = selectors.map((selector) => {
+    const previous = findRetainedSkill(retainedSkills, selector);
+    return imported.find((item) => item.slug === previous?.slug)?.slug ?? selector;
+  });
+  // Only skip the importer for declaration-only publishers. Upstream owns discovery
+  // and installed names, including hidden catalogs and names unlike their folders.
+  const hasOwnSkills =
+    imported.length === 0 ||
+    !new Bun.Glob("**/SKILL.md").scanSync({ cwd: sourceRoot, dot: true, onlyFiles: true }).next()
+      .done;
+  const declaredSelectors = new Set(
+    imported.flatMap((item) => [item.slug.toLowerCase(), item.selector.toLowerCase()])
+  );
+  const ownSelectors = selected.filter(
+    (selector) =>
+      !declaredSelectors.has(selector.toLowerCase()) && (selector !== "*" || hasOwnSkills)
+  );
+  const explicit = !selectors.includes("*");
+  const inspectCollection =
+    hasOwnSkills && (imported.length > 0 || (explicit && (retainedSkills?.length ?? 0) > 0));
+  return { explicit, inspectCollection, ownSelectors, selected };
 }
 
 /** Match the pinned importer's default exclusion after staging an entire publisher. */
@@ -570,20 +681,6 @@ export function stagedSkillGuidance(
   return listStagedSkillSlugs(stagingDirectory).map((slug) => {
     const entry = path.join(stagingDirectory, ".agents", "skills", slug, "SKILL.md");
     const imported = declared.find((item) => item.slug === slug);
-    const frontmatter =
-      imported?.kind === "reference"
-        ? null
-        : /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
-            readFileSync(entry, "utf-8")
-          );
-    if (!frontmatter && imported?.kind !== "reference") {
-      throw new MonkeError(`Expected leading YAML frontmatter at ${entry}`);
-    }
-    const metadata = parseOwnedYamlText(
-      frontmatter?.groups?.frontmatter ?? "{}",
-      entry,
-      z.looseObject({ name: z.string().optional() })
-    );
     const existing = previous.skills.find((item) => item.slug === slug);
     const kind = options.preserveImportKinds
       ? (existing?.kind ?? imported?.kind)
@@ -591,10 +688,28 @@ export function stagedSkillGuidance(
     return {
       ...existing,
       kind: options.reference ? ("reference" as const) : (kind ?? ("skill" as const)),
-      selector: metadata.name ?? slug,
+      selector: stagedSkillSelector(entry, slug, imported),
       slug
     };
   });
+}
+
+function stagedSkillSelector(entry: string, slug: string, imported?: SkillImportRecipeSkill) {
+  if (imported?.kind === "reference") {
+    return imported.selector;
+  }
+  const frontmatter = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
+    readFileSync(entry, "utf-8")
+  );
+  if (!frontmatter) {
+    throw new MonkeError(`Expected leading YAML frontmatter at ${entry}`);
+  }
+  const metadata = parseOwnedYamlText(
+    frontmatter.groups?.frontmatter ?? "{}",
+    entry,
+    z.looseObject({ name: z.string().optional() })
+  );
+  return metadata.name ?? imported?.selector ?? slug;
 }
 
 export async function stageLockedRecipe(
@@ -719,19 +834,10 @@ export async function restoreLockedRecipe(
       `Unpinned Skill import recipe: ${recipe.source}; run mt skills update --repo`
     );
   }
-  assertSkillRestoreMarker(repoRoot);
-  const marker = readRestoreMarkers(repoRoot)[recipe.source];
-  try {
-    if (
-      marker?.recipe === recipeIdentity(recipe) &&
-      marker.tooling === `${SKILLS_CLI_VERSION}/${MATERIALIZER_VERSION}` &&
-      guidanceDigest(repoRoot, recipe.skills) === marker.digest
-    ) {
-      return;
-    }
-  } catch {
-    // Missing or edited guidance must be restored from the pin.
+  if (isSkillRecipeRestored(repoRoot, recipe)) {
+    return;
   }
+  assertSkillRestoreMarker(repoRoot);
   const stagingDirectory = path.join(repoRoot, "tmp", `skill-restore-${crypto.randomUUID()}`);
   mkdirSync(stagingDirectory, { recursive: true });
   try {
@@ -757,9 +863,6 @@ export async function restoreLockedImports(
 ) {
   assertManagedGuidanceRoots(repoRoot);
   const { recipes } = store ?? readImportRecipeStore(repoRoot);
-  if (recipes.some((recipe) => !recipe.localSource)) {
-    assertSkillRestoreMarker(repoRoot);
-  }
   if (recipes.some((recipe) => !recipe.localSource && !recipe.commit)) {
     throw new MonkeError(
       "Skill lock is incomplete; run mt skills update --repo to pin every recipe before source installation"
