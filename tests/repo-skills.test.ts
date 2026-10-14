@@ -1569,6 +1569,137 @@ else console.log(table);
     expect(parseDocument(read(repo, "monke.yml")).toJS()).toStrictEqual({ skills: [] });
   });
 
+  test.each(["remove", "restore", "selection", "update", "empty", "policy"] as const)(
+    "%s rejects pruning a reference used by retained repo guidance",
+    async (action) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      write(upstream, "skills/first/assets/accepted.txt", "Accepted reference asset.\n");
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Publish reference asset"]);
+      await runCliAsync(
+        ["skills", "add", upstream, "--repo", "--ref", "--skill", "first"],
+        runtime
+      );
+      const consumer =
+        "---\nname: consumer\ndescription: Consumer.\n---\nLoad [first](../../references/imported/first/MAIN.md).\n";
+      const sameSource = action === "selection";
+      const source = sameSource
+        ? upstream
+        : createRepo(path.join(sandbox, "reference-consumer"), {
+            "skills/consumer/SKILL.md": consumer
+          });
+      if (sameSource) {
+        write(upstream, "skills/consumer/SKILL.md", consumer);
+        git(upstream, ["add", "."]);
+        git(upstream, ["commit", "-m", "Publish consuming skill"]);
+      }
+      const consumerFolder = action === "empty" ? "skills/internal" : "skills/imported";
+      if (action === "empty") {
+        write(repo, `${consumerFolder}/consumer/SKILL.md`, consumer);
+      } else {
+        await runCliAsync(
+          [
+            "skills",
+            "add",
+            source,
+            "--repo",
+            "--skill",
+            ...(sameSource ? ["first"] : []),
+            "consumer"
+          ],
+          runtime
+        );
+      }
+      if (action !== "remove") {
+        write(
+          repo,
+          "monke.yml",
+          stringify({
+            skills:
+              action === "empty"
+                ? []
+                : [
+                    {
+                      commit: git(source, ["rev-parse", "HEAD"]),
+                      skills: ["consumer"],
+                      source
+                    }
+                  ]
+          })
+        );
+      }
+      const config = read(repo, "monke.yml");
+      const reference = read(repo, "skills/references/imported/first/MAIN.md");
+      const referenceAsset = read(repo, "skills/references/imported/first/assets/accepted.txt");
+      const acceptedConsumer = read(repo, `${consumerFolder}/consumer/SKILL.md`);
+      const command =
+        action === "remove"
+          ? ["skills", "remove", upstream, "--repo"]
+          : action === "policy"
+            ? ["skills", "policy", source, "consumer", "--repo", "--description", "Changed."]
+            : ["skills", action === "update" ? "update" : "restore", "--repo"];
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+
+      await expect(runCliAsync(command, runtime)).rejects.toThrow(
+        /Cannot replace Imported reference first; it is used by/u
+      );
+
+      expect(read(repo, "monke.yml")).toBe(config);
+      expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe(reference);
+      expect(read(repo, "skills/references/imported/first/assets/accepted.txt")).toBe(
+        referenceAsset
+      );
+      expect(read(repo, `${consumerFolder}/consumer/SKILL.md`)).toBe(acceptedConsumer);
+      expect(
+        existsSync(
+          path.resolve(repo, consumerFolder, "consumer", "../../references/imported/first/MAIN.md")
+        )
+      ).toBeTruthy();
+    }
+  );
+
+  test.each(["remove", "restore", "update"] as const)(
+    "%s prunes references together with every obsolete consumer",
+    async (action) => {
+      const { bin, repo, runtime, upstream } = repoFixture();
+      write(
+        upstream,
+        "skills/second/SKILL.md",
+        "---\nname: second\ndescription: Consumer.\n---\nLoad ../../references/imported/first/MAIN.md.\n"
+      );
+      write(
+        upstream,
+        "skills/third/SKILL.md",
+        "---\nname: third\ndescription: Reference consumer.\n---\nLoad ../first/MAIN.md.\n"
+      );
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Publish skill and reference consumers"]);
+      await runCliAsync(
+        ["skills", "add", upstream, "--repo", "--ref", "--skill", "first", "third"],
+        runtime
+      );
+      await runCliAsync(
+        ["skills", "add", upstream, "--repo", "--skill", "first", "second", "third"],
+        runtime
+      );
+      expect(existsSync(path.join(repo, "skills/imported/second/SKILL.md"))).toBeTruthy();
+      expect(existsSync(path.join(repo, "skills/references/imported/third/MAIN.md"))).toBeTruthy();
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      if (action !== "remove") {
+        write(repo, "monke.yml", "skills: []\n");
+      }
+      await runCliAsync(
+        ["skills", action, ...(action === "remove" ? [upstream] : []), "--repo"],
+        runtime
+      );
+      expect(existsSync(path.join(repo, "skills/imported/second"))).toBeFalsy();
+      expect(existsSync(path.join(repo, "skills/references/imported/first"))).toBeFalsy();
+      expect(existsSync(path.join(repo, "skills/references/imported/third"))).toBeFalsy();
+    }
+  );
+
   test("repo reference choices remain authoritative for a source's own skills", async () => {
     const { bin, repo, runtime, sandbox, upstream } = repoFixture();
     const publisher = createRepo(path.join(sandbox, "reference-publisher"), {

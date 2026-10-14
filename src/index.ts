@@ -331,7 +331,7 @@ function createProgram(runtime: Runtime) {
   skills
     .command("list")
     .description("List registered imported Skill sources")
-    .option("--repo", "Declare imports published with this repo in monke.yml")
+    .option("--repo", "List imports declared in this repo's monke.yml")
     .option("--project", "List the clone-local registry that projects skills into this clone")
     .action((options) =>
       runSkillsRegistry(runtime, { action: "list" }, options.project, options.repo)
@@ -340,7 +340,7 @@ function createProgram(runtime: Runtime) {
   skills
     .command("update")
     .description("Update all imported skills and open one complete comparison")
-    .option("--repo", "Declare imports published with this repo in monke.yml")
+    .option("--repo", "Pin and advance imports declared in this repo's monke.yml")
     .option("--project", "Update the clone-local registry and its skill projections")
     .addOption(new Option("--adapter <adapter>").choices(["codiff", "lfv"]))
     .option("--interactive", "Prompt before accepting upstream Skill slug replacements")
@@ -361,7 +361,7 @@ function createProgram(runtime: Runtime) {
     .command("remove")
     .description("Remove an import registration while preserving its external source")
     .argument("<source>")
-    .option("--repo", "Declare imports published with this repo in monke.yml")
+    .option("--repo", "Remove a source from this repo's monke.yml")
     .option("--project", "Remove a source from the clone-local registry and its projections")
     .action((source, options) =>
       runSkillsRegistry(runtime, { action: "remove", source }, options.project, options.repo)
@@ -370,7 +370,7 @@ function createProgram(runtime: Runtime) {
   skills
     .command("policy")
     .description("Override an imported Skill's description or model invocation")
-    .option("--repo", "Declare imports published with this repo in monke.yml")
+    .option("--repo", "Set overrides in this repo's monke.yml")
     .option("--project", "Set overrides in the clone-local registry for skill projections")
     .argument("<source>")
     .argument("[skill]", "Skill slug; omit to set the source default, including future skills")

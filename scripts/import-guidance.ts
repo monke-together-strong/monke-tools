@@ -290,9 +290,11 @@ function removeLeadingYamlFrontmatter(markdown: string) {
   return markdown.slice(match[0].length);
 }
 
-function assertObsoleteReferencesAreUnconsumed(
+/** Ignore consumers removed in the same batch while protecting every retained consumer. */
+export function assertObsoleteReferencesAreUnconsumed(
   repoRoot: string,
-  obsoleteGuidance: readonly SkillImportRecipeSkill[]
+  obsoleteGuidance: readonly Pick<SkillImportRecipeSkill, "kind" | "slug">[],
+  ignoredConsumerRoots: readonly string[] = []
 ) {
   for (const guidance of obsoleteGuidance) {
     if (guidance.kind !== "reference") {
@@ -315,6 +317,7 @@ function assertObsoleteReferencesAreUnconsumed(
           referencePathPrefix
         )
       )
+      .filter((entryPath) => !ignoredConsumerRoots.some((root) => containsPath(root, entryPath)))
       .map((entryPath) => path.relative(repoRoot, entryPath))
       .toSorted();
 

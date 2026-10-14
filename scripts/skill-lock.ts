@@ -24,6 +24,7 @@ import type { ExecResult, Runtime } from "../src/types.ts";
 import { parseOwnedYamlText } from "../src/validation.ts";
 import {
   assertManagedGuidanceRoots,
+  assertObsoleteReferencesAreUnconsumed,
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath,
   IMPORTED_REFERENCES_ROOT,
@@ -1161,19 +1162,33 @@ export async function restoreLockedImports(
   );
 }
 
-/** Generated roots belong only to the current selected guidance. */
-export function pruneImportedGuidance(repoRoot: string, guidance: SkillImportRecipeSkill[]) {
+/** Return obsolete identities after checking that retained guidance does not need them. */
+export function assertImportedGuidanceCanBePruned(
+  repoRoot: string,
+  guidance: readonly SkillImportRecipeSkill[]
+) {
   assertManagedGuidanceRoots(repoRoot);
   const managedRoots = [
     { kind: "skill", root: path.join(repoRoot, IMPORTED_SKILLS_ROOT) },
     { kind: "reference", root: path.join(repoRoot, IMPORTED_REFERENCES_ROOT) }
-  ];
-  for (const { kind, root } of managedRoots) {
+  ] as const;
+  const obsolete = managedRoots.flatMap(({ kind, root }) => {
     const owned = new Set(guidance.filter((item) => item.kind === kind).map((item) => item.slug));
-    for (const name of existsSync(root) ? readdirSync(root) : []) {
-      if (!owned.has(name)) {
-        rmSync(path.join(root, name), { force: true, recursive: true });
-      }
-    }
+    return (existsSync(root) ? readdirSync(root) : [])
+      .filter((slug) => !owned.has(slug))
+      .map((slug) => ({ kind, slug }));
+  });
+  assertObsoleteReferencesAreUnconsumed(
+    repoRoot,
+    obsolete,
+    obsolete.map((item) => importedGuidancePath(repoRoot, item))
+  );
+  return obsolete;
+}
+
+/** Generated roots belong only to the current selected guidance. */
+export function pruneImportedGuidance(repoRoot: string, guidance: SkillImportRecipeSkill[]) {
+  for (const item of assertImportedGuidanceCanBePruned(repoRoot, guidance)) {
+    rmSync(importedGuidancePath(repoRoot, item), { force: true, recursive: true });
   }
 }
