@@ -37,7 +37,11 @@ mt materialize           # Refresh the session's env and bootstrap
 
 Spawn from the source checkout or any linked worktree to copy its `HEAD` and edits into a new session, leaving the original untouched. `--no-dirty` requires clean checkouts; `-m` uses default branches and resumes pinned refs on retry. Add `--codex` to open the session in Codex. See [Spawn usage](skills/internal/monke-worktrees/SKILL.md#create-and-resume-work) for details.
 
-When finished, `mt chop banana` removes the session's worktrees and runs its recorded cleanup commands, preserving local branches. Dirty files block removal; ignored files are deleted with the worktrees. Preview eligible Sessions across all Roots with `mt cleanup --dry-run`, then run `mt cleanup` to execute. Both commands work outside a repository and accept `--json`. Optional worktree paths restrict scope. Use `--archive-untracked` to preserve untracked notes before removal; see the reference below for missing-worktree recovery and `--include-unowned`. Global scope never bypasses whole-Session eligibility.
+When finished, `mt chop banana` removes the session's worktrees and runs its recorded cleanup commands, preserving local branches. Dirty files block removal; ignored files are deleted with the worktrees.
+
+Preview eligible Sessions across discovered Sources with `mt cleanup --dry-run`, then run `mt cleanup` to execute. Both commands work outside a repository and accept `--json`. Repeatable `--source <repo>` options add repositories to discovery without restricting Session selection. Reports list inspected and skipped Sources and count registered linked worktrees.
+
+Positional worktree paths restrict cleanup targets. Use `--archive-untracked` to preserve untracked notes before removal; see the reference below for missing-worktree recovery and `--include-unowned`. Global scope never bypasses whole-Session eligibility.
 
 The [session command reference](skills/internal/monke-worktrees/SKILL.md) covers branch reuse, PR navigation, and cleanup recovery. See [diff usage](skills/internal/monke-diff/SKILL.md) for comparisons and diff bases. Use `mt <command> --help` for available flags.
 

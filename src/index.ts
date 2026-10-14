@@ -155,7 +155,15 @@ function createProgram(runtime: Runtime) {
   program
     .command("cleanup")
     .argument("[targets...]", "Only inspect these session-member or unowned worktree paths")
-    .description("Clean eligible retained Sessions across all Roots; preserve local branches")
+    .description(
+      "Clean eligible retained Sessions across discovered Sources; preserve local branches"
+    )
+    .option(
+      "--source <repo>",
+      "Discover additional Source checkouts without restricting Session scope; repeatable",
+      (source: string, sources: string[]) => [...sources, source],
+      []
+    )
     .option("--dry-run", "Inspect without changes; report Sessions that would clean")
     .option("--json", "Write a versioned JSON report to stdout")
     .option("--eligible", "Hide skipped Sessions in human output")
@@ -179,6 +187,7 @@ function createProgram(runtime: Runtime) {
         includeUnowned: options.includeUnowned === true,
         json: options.json === true,
         recoveryCommand: options.recoverWith,
+        sources: options.source,
         targets
       })
     );

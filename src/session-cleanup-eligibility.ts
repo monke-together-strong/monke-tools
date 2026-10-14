@@ -86,9 +86,18 @@ export interface UnownedWorktree {
   worktreePath: string;
 }
 
+export interface CleanupSourceInspection {
+  message?: string;
+  sourceRoot: string;
+  status: "inspected" | "missing" | "unavailable";
+  /** Registered linked worktrees, including stale registrations, excluding the Source. */
+  worktreeCount: number | null;
+}
+
 /** Unowned-worktree discovery from an earlier pass; re-inspection reuses it instead of rescanning. */
 export interface SessionCleanupDiscovery {
   sourceRoots: string[];
+  sources: CleanupSourceInspection[];
   unavailableSources: string[];
   unownedWorktrees: UnownedWorktree[];
 }
@@ -378,7 +387,7 @@ export async function inspectSessionCleanup(
       }
     }
   }
-  const { sourceRoots, unavailableSources, unownedWorktrees } =
+  const { sourceRoots, sources, unavailableSources, unownedWorktrees } =
     options.discovered ?? discoverUnownedWorktrees(readOnly, states, knownSourceRoots);
   blockUnownedOverlaps(snapshots, unownedWorktrees);
   const changed = scanSessionStates(home).fingerprint !== scan.fingerprint;
@@ -422,6 +431,7 @@ export async function inspectSessionCleanup(
         ) ?? null
     })),
     sourceRoots,
+    sources,
     stateFingerprint: scan.fingerprint,
     unavailableSources,
     unboundedOwnership: scan.records.some(
@@ -438,23 +448,26 @@ function discoverUnownedWorktrees(
   knownSourceRoots: string[]
 ): SessionCleanupDiscovery {
   const unownedWorktrees: UnownedWorktree[] = [];
-  const unavailableSources: string[] = [];
-  const sources = new Set(
+  const sources: CleanupSourceInspection[] = [];
+  const sourceRoots = new Set(
     [
       ...knownSourceRoots,
       ...states.flatMap((state) => state.repos.map((repo) => repo.sourceRoot))
     ].map((source) => path.normalize(source))
   );
-  for (const sourceRoot of sources) {
+  for (const sourceRoot of sourceRoots) {
     if (!existsSync(sourceRoot)) {
-      // Nothing to discover; the owning Sessions report source-missing themselves.
+      sources.push({ sourceRoot, status: "missing", worktreeCount: null });
       continue;
     }
     try {
       assertCanonicalSourceCheckout(runtime, sourceRoot);
-      for (const worktree of listWorktrees(runtime, sourceRoot)) {
+      const worktrees = listWorktrees(runtime, sourceRoot).filter(
+        (worktree) => !samePath(worktree.path, sourceRoot)
+      );
+      sources.push({ sourceRoot, status: "inspected", worktreeCount: worktrees.length });
+      for (const worktree of worktrees) {
         if (
-          !samePath(worktree.path, sourceRoot) &&
           !states.some((state) =>
             state.repos.some((repo) => samePath(repo.worktreePath, worktree.path))
           )
@@ -467,15 +480,23 @@ function discoverUnownedWorktrees(
           });
         }
       }
-    } catch {
-      unavailableSources.push(sourceRoot);
+    } catch (error) {
+      sources.push({
+        message: errorMessage(ThrownValueSchema.parse(error)),
+        sourceRoot,
+        status: "unavailable",
+        worktreeCount: null
+      });
     }
   }
   return {
-    sourceRoots: [...sources].filter(
-      (source) => existsSync(source) && !unavailableSources.includes(source)
-    ),
-    unavailableSources,
+    sourceRoots: sources
+      .filter((source) => source.status === "inspected")
+      .map((source) => source.sourceRoot),
+    sources,
+    unavailableSources: sources
+      .filter((source) => source.status === "unavailable")
+      .map((source) => source.sourceRoot),
     unownedWorktrees
   };
 }
