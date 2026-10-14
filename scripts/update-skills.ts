@@ -159,16 +159,14 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
       // oxlint-disable-next-line no-await-in-loop
       const prepared = await prepare(recipe, index);
       const {
+        assessmentOutput,
         installOutput,
         normalizedSource,
         revision,
         stagingDirectory: preparedDirectory
       } = prepared;
       stagingDirectory = preparedDirectory;
-      reportSecurityRiskAssessment(
-        `${installOutput.stdout}\n${installOutput.stderr}`,
-        writeMessage
-      );
+      reportSecurityRiskAssessment(assessmentOutput, writeMessage);
 
       // Accepted slug replacements determine the next recipe before publication.
       // oxlint-disable-next-line no-await-in-loop
@@ -353,8 +351,10 @@ async function prepareGitSkillUpdate(
       selectors: recipe.selection ?? recipe.skills.map((skill) => skill.selector),
       stagingDirectory
     });
+    const assessmentOutput =
+      installOutput.securityAssessments ?? `${installOutput.stdout}\n${installOutput.stderr}`;
     const normalizedSource = installOutput.source;
-    return { installOutput, normalizedSource, revision, stagingDirectory };
+    return { assessmentOutput, installOutput, normalizedSource, revision, stagingDirectory };
   } catch (error) {
     rmSync(stagingDirectory, { force: true, recursive: true });
     throw error;

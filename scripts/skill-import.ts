@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import is from "@sindresorhus/is";
 import pc from "picocolors";
 import * as z from "zod";
 
@@ -54,10 +55,12 @@ export function extractSecurityRiskAssessment(output: string) {
 
 /** Writes a non-empty upstream security assessment when one is present. */
 export function reportSecurityRiskAssessment(
-  output: string,
+  output: string | readonly SecurityRiskAssessment[],
   writeMessage: (message: string) => void
 ) {
-  const assessment = extractSecurityRiskAssessment(output);
+  const assessment = is.string(output)
+    ? extractSecurityRiskAssessment(output)
+    : renderSecurityRiskAssessments(output);
   if (assessment) {
     writeMessage(assessment);
   }
@@ -107,7 +110,7 @@ export function readJsonSecurityRiskAssessments(output: string) {
 }
 
 /** Combines selected assessments into one report, or returns an empty string when none exist. */
-export function renderSecurityRiskAssessments(assessments: readonly SecurityRiskAssessment[]) {
+function renderSecurityRiskAssessments(assessments: readonly SecurityRiskAssessment[]) {
   if (assessments.length === 0) {
     return "";
   }

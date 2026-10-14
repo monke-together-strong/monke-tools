@@ -41,11 +41,7 @@ import type {
   SkillImportRecipeStore
 } from "./skill-import-recipes.ts";
 import { writeSkillImportState } from "./skill-import-state.ts";
-import {
-  readJsonSecurityRiskAssessments,
-  renderSecurityRiskAssessments,
-  sanitizeSkillMetadata
-} from "./skill-import.ts";
+import { readJsonSecurityRiskAssessments, sanitizeSkillMetadata } from "./skill-import.ts";
 import type { SecurityRiskAssessment } from "./skill-import.ts";
 import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from "./skills-cli.ts";
 
@@ -437,17 +433,18 @@ export async function stageGitSkillSource(options: {
       : readRepoImportRecipeStore(checkout);
   const imported = declared.recipes.flatMap((entry) => entry.skills);
   const runtime = options.runtime ?? createRuntime({ cwd: stagingDirectory });
-  const { output, ownNames, ownSkills, selected, selection } = await stageOwnGitSkills({
-    imported,
-    rejectAmbiguousSelection: options.rejectAmbiguousSelection,
-    retainedSkills: options.retainSelection ? options.previousRecipe?.skills : undefined,
-    runtime,
-    selectFromCollection: options.selectFromCollection,
-    selectors,
-    source,
-    sourceRoot: path.join(checkout, descriptor.subpath),
-    stagingDirectory
-  });
+  const { output, ownNames, ownSkills, securityAssessments, selected, selection } =
+    await stageOwnGitSkills({
+      imported,
+      rejectAmbiguousSelection: options.rejectAmbiguousSelection,
+      retainedSkills: options.retainSelection ? options.previousRecipe?.skills : undefined,
+      runtime,
+      selectFromCollection: options.selectFromCollection,
+      selectors,
+      source,
+      sourceRoot: path.join(checkout, descriptor.subpath),
+      stagingDirectory
+    });
   const retiredReferences =
     options.previousRecipe?.skills.filter(
       (item) =>
@@ -503,6 +500,7 @@ export async function stageGitSkillSource(options: {
     ...output,
     declaredGuidance: [...imported, ...ownReplacements],
     declaredSelectors: imported.flatMap((item) => [item.selector, item.slug]),
+    securityAssessments,
     selection:
       options.retainSelection &&
       !selectors.includes("*") &&
@@ -570,6 +568,7 @@ async function stageOwnGitSkills(options: {
   });
   const { catalog } = collection;
   let { output } = collection;
+  let securityAssessments: SecurityRiskAssessment[] | undefined;
   if (inspectCollection && (explicit || rejectAmbiguousSelection)) {
     await mergeAlternatePublisherCatalog({
       catalog,
@@ -584,11 +583,7 @@ async function stageOwnGitSkills(options: {
     });
   }
   if (selectFromCollection) {
-    output = {
-      ...output,
-      stderr: "",
-      stdout: copyPublisherSelection(catalog, ownSelectors, source, stagingDirectory)
-    };
+    securityAssessments = copyPublisherSelection(catalog, ownSelectors, source, stagingDirectory);
   } else if (inspectCollection && explicit && ownSelectors.length > 0) {
     output = await runtime.execAsync(
       runtime.platform === "win32" ? "npx.cmd" : "npx",
@@ -613,7 +608,14 @@ async function stageOwnGitSkills(options: {
       ? previous.slug
       : selector;
   });
-  return { output, ownNames: catalog.names, ownSkills: catalog.slugs, selected, selection };
+  return {
+    output,
+    ownNames: catalog.names,
+    ownSkills: catalog.slugs,
+    securityAssessments,
+    selected,
+    selection
+  };
 }
 
 function retainedPublisherSelector(
@@ -771,7 +773,7 @@ function copyPublisherSelection(
       });
     }
   }
-  return renderSecurityRiskAssessments(assessments);
+  return assessments;
 }
 
 async function installPublisherSkills(options: {

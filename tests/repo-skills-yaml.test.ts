@@ -32,7 +32,8 @@ mkdir -p .agents/skills
 source="$4"
 shift 4
 while [ "$1" = --skill ]; do
-  cp -R "$source/skills/$2" .agents/skills/
+  if [ "$2" = '*' ]; then cp -R "$source/skills/"* .agents/skills/;
+  else cp -R "$source/skills/$2" .agents/skills/; fi
   shift 2
 done
 `
@@ -138,9 +139,17 @@ mkdir -p .agents/skills
 source="$4"
 shift 4
 while [ "$1" = --skill ]; do
-  destination="$2"
-  if [ "$2" = Example ]; then destination=example; fi
-  cp -R "$source/skills/$2" ".agents/skills/$destination"
+  if [ "$2" = '*' ]; then
+    for skill in "$source/skills/"*; do
+      destination="$(basename "$skill")"
+      if [ "$destination" = Example ]; then destination=example; fi
+      cp -R "$skill" ".agents/skills/$destination"
+    done
+  else
+    destination="$2"
+    if [ "$2" = Example ]; then destination=example; fi
+    cp -R "$source/skills/$2" ".agents/skills/$destination"
+  fi
   shift 2
 done
 `

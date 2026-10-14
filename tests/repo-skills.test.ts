@@ -907,15 +907,21 @@ fi
   );
 
   test.each([
-    { assessed: true, selection: "public" },
-    { assessed: true, selection: "internal" },
-    { assessed: false, selection: "public" }
+    { assessed: true, selection: "public", suffix: "selected" },
+    { assessed: true, selection: "internal", suffix: "selected" },
+    { assessed: false, selection: "public", suffix: "selected" },
+    { assessed: true, selection: "public", suffix: "Generator" },
+    { assessed: true, selection: "public", suffix: "SocketGuide" },
+    { assessed: true, selection: "public", suffix: "SnykGuide" },
+    { assessed: true, selection: "public", suffix: "Installation complete" },
+    { assessed: true, selection: "public", suffix: "Installed Guide" },
+    { assessed: true, selection: "public", suffix: "Guide  Notes" }
   ])(
-    "repo update reports assessments only from chosen $selection catalog entries with assessed=$assessed",
-    async ({ assessed, selection }) => {
+    "repo update reports assessments only from chosen $selection catalog entries for $suffix with assessed=$assessed",
+    async ({ assessed, selection, suffix }) => {
       const { bin, messages, repo, runtime, sandbox } = repoFixture();
       runtime.env.INSTALL_INTERNAL_SKILLS = "";
-      const selected = "assessment-shared-prefix-12345678901234567890-selected";
+      const selected = `assessment-shared-prefix-12345678901234567890-${suffix}`;
       const unselected = "assessment-shared-prefix-12345678901234567890-unselected";
       const publisher = createRepo(path.join(sandbox, "assessed-publisher"), {
         "SKILL.md":
@@ -938,12 +944,14 @@ const results = [];
 for (const directory of directories) {
   const name = /^name: (.+)$/m.exec(readFileSync(path.join(directory, "SKILL.md"), "utf8"))[1];
   if (!selectors.includes("*") && !selectors.includes(name)) continue;
-  const destination = path.resolve(".agents/skills", name);
+  const slug = name.toLowerCase().replace(/[^a-z0-9._]+/g, "-");
+  const destination = path.resolve(".agents/skills", slug);
   mkdirSync(destination, { recursive: true });
   if (directory === source) cpSync(path.join(directory, "SKILL.md"), path.join(destination, "SKILL.md"));
   else cpSync(directory, destination, { recursive: true });
-  const security = name === "internal-root" ? { gen: "medium", socket: "1 alert", snyk: "low" } : name.endsWith("-selected") ? { gen: "critical", socket: "2 alerts", snyk: "high" } : { gen: "safe", socket: "0 alerts", snyk: "low" };
-  results.push({ name, path: destination, security: !${assessed} && name.endsWith("-selected") ? null : { ...security, details: "https://skills.sh/owner/assessed" }, status: "installed" });
+  const isSelected = name === ${JSON.stringify(selected)};
+  const security = name === "internal-root" ? { gen: "medium", socket: "1 alert", snyk: "low" } : isSelected ? { gen: "critical", socket: "2 alerts", snyk: "high" } : { gen: "safe", socket: "0 alerts", snyk: "low" };
+  results.push({ name, path: destination, security: !${assessed} && isSelected ? null : { ...security, details: "https://skills.sh/owner/assessed" }, status: "installed" });
 }
 const table = "Security Risk Assessments\\n" + results.map(item => item.name.slice(0, 35) + "…  Safe  0 alerts  Low Risk").join("\\n") + "\\nDetails: https://skills.sh/owner/assessed\\nInstallation complete\\n";
 if (args.includes("--json")) { console.error("UNSELECTED-INVENTORY-STDERR" + table); console.log(JSON.stringify(results)); }
@@ -970,7 +978,9 @@ else console.log(table);
           skills: [
             {
               commit: git(publisher, ["rev-parse", "HEAD"]),
-              skills: [chosen],
+              skills: [
+                { selector: chosen, slug: chosen.toLowerCase().replaceAll(/[^a-z0-9._]+/gu, "-") }
+              ],
               source: `${publisher}#HEAD`
             }
           ]
@@ -992,6 +1002,8 @@ else console.log(table);
       );
       for (const omitted of [
         "UNSELECTED-INVENTORY-STDERR",
+        "Safe",
+        "0 alerts",
         unselected,
         selection === "internal" ? selected : "internal-root"
       ]) {
