@@ -28,6 +28,11 @@ skills:
 Run `mt skills update --repo` to pin it. This also advances other declared
 sources.
 
+For hand-written pinned imports from a branch such as `feature/topic`, use
+`https://github.com/owner/repo/course#feature/topic` to select the `course` subpath.
+Add and update resolve ambiguous GitHub tree URLs and record this unambiguous
+form. Restore uses the accepted commit without resolving refs.
+
 A selection without overrides is its slug. An object can specify `slug`, a
 different upstream `selector`, `kind`, `modelInvocation`, and `description`.
 Source defaults use `modelInvocation` too.

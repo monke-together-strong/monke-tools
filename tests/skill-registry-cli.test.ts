@@ -877,6 +877,103 @@ done
     });
   });
 
+  test.each([
+    { replacement: false, scope: "machine" },
+    { replacement: true, scope: "machine" },
+    { replacement: false, scope: "repo" },
+    { replacement: true, scope: "repo" }
+  ])(
+    "re-adding a handwritten tree source in $scope scope preserves identity with replacement=$replacement",
+    async ({ replacement, scope }) => {
+      const fixture = registryFixture();
+      const upstream = createRepo(path.join(fixture.sandbox, "handwritten-tree-source"), {
+        "course/skills/color/SKILL.md":
+          "---\nname: color\ndescription: Color.\n---\nColor instructions.\n",
+        "course/skills/typography/SKILL.md":
+          "---\nname: typography\ndescription: Typography.\n---\nCourse instructions.\n"
+      });
+      git(upstream, ["branch", "feature/topic"]);
+      const repo = createRepo(path.join(fixture.sandbox, "tree-consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime =
+        scope === "repo"
+          ? createTestRuntime({ cwd: repo, env: fixture.runtime.env, onStderr() {}, onStdout() {} })
+          : fixture.runtime;
+      const flags = scope === "repo" ? ["--repo"] : [];
+      const gitConfig = path.join(fixture.sandbox, "git-config");
+      write(
+        fixture.sandbox,
+        "git-config",
+        `[url "${upstream}"]\n  insteadOf = https://github.com/owner/repeated.git\n`
+      );
+      runtime.env.GIT_CONFIG_GLOBAL = gitConfig;
+      writeExecutable(
+        path.join(fixture.bin, "npx"),
+        `#!/bin/sh
+set -eu
+shift 4
+mkdir -p .agents/skills
+while [ "$1" = --skill ]; do
+  if [ "$2" = '*' ]; then cp -R ${shellQuote(path.join(upstream, "course/skills"))}/* .agents/skills/;
+  else cp -R ${shellQuote(path.join(upstream, "course/skills"))}/"$2" .agents/skills/; fi
+  shift 2
+done
+`
+      );
+      const source = "https://github.com/owner/repeated/tree/feature/topic/course";
+      const canonical = "https://github.com/owner/repeated/course#feature/topic";
+      const root = scope === "repo" ? repo : fixture.registry;
+      const selected = replacement ? "color" : "typography";
+      vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
+      try {
+        await runCliAsync(["skills", "add", source, ...flags, "--skill", "typography"], runtime);
+        const recipe = {
+          commit: git(upstream, ["rev-parse", "HEAD"]),
+          modelInvocation: "deny",
+          ...(scope === "machine" ? { name: "course", selection: ["typography"] } : {}),
+          skills: [
+            { description: "Consumer trigger.", modelInvocation: "allow", slug: "typography" }
+          ],
+          source
+        };
+        write(
+          root,
+          scope === "repo" ? "monke.yml" : "skills.lock.json",
+          scope === "repo"
+            ? stringify({ skills: [recipe] })
+            : JSON.stringify({ recipes: [recipe], version: 4 })
+        );
+        await runCliAsync(
+          ["skills", "add", source, ...flags, ...(replacement ? ["--skill", selected] : [])],
+          runtime
+        );
+        const accepted: unknown =
+          scope === "repo"
+            ? parse(read(root, "monke.yml"))
+            : JSON.parse(read(root, "skills.lock.json"));
+        const expected = {
+          ...recipe,
+          ...(scope === "machine" ? { selection: [selected] } : {}),
+          skills: replacement ? ["color"] : recipe.skills,
+          source: canonical
+        };
+        expect(accepted).toStrictEqual(
+          scope === "repo" ? { skills: [expected] } : { recipes: [expected], version: 4 }
+        );
+        const installed =
+          scope === "repo" ? path.join(repo, "skills/imported") : fixture.installed.codex;
+        expect(read(installed, `${selected}/SKILL.md`)).toContain(
+          `disable-model-invocation: ${replacement ? "true" : "false"}`
+        );
+        expect(existsSync(path.join(installed, "typography"))).toBe(!replacement);
+        expect(existsSync(path.join(installed, "color"))).toBe(replacement);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
+  );
+
   test.each(["main", "feature/topic"])(
     "tree source at %s keeps its identity across registry changes",
     async (updateRef) => {

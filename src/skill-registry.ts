@@ -597,7 +597,9 @@ async function addGitSkillSource(
 ) {
   assertSkillRestoreMarker(root);
   const revision = await resolveSkillRevision({ skills: [], source }, root);
-  const previous = store.recipes.find((recipe) => recipe.source === revision.source);
+  const previous =
+    store.recipes.find((recipe) => recipe.source === source) ??
+    store.recipes.find((recipe) => recipe.source === revision.source);
   const recipe = gitSourceRecipe(revision.source, request, previous, repo);
   const selectors = request.skills ??
     previous?.selection ??
