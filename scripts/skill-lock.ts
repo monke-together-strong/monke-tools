@@ -963,7 +963,7 @@ export async function stageLockedRecipe(
     recipe,
     repoRoot,
     runtime,
-    selectFromCollection: recipe.selection === undefined || recipe.selection.includes("*"),
+    selectFromCollection: !includeDeclaredImports || recipe.selection?.includes("*"),
     selectors: recipe.skills.map((skill) => skill.selector),
     stagingDirectory
   });

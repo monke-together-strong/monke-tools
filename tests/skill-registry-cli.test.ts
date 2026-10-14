@@ -18,7 +18,7 @@ import { describe, expect, test, vi } from "vite-plus/test";
 import { parse, stringify } from "yaml";
 
 import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
-import { restoreLockedImports } from "../scripts/skill-lock.ts";
+import { guidanceDigest, restoreLockedImports } from "../scripts/skill-lock.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runInstallSkillsLocked } from "../src/guidance-installation.ts";
@@ -832,6 +832,110 @@ done
       expect(readImportRecipeStore(registry).recipes[0]?.selection).toStrictEqual(selectors);
       expect(read(registry, "skills/imported/internal-guide/SKILL.md")).toBe(accepted);
       expect(existsSync(path.join(registry, "skills/imported/course"))).toBe(composed);
+    }
+  );
+
+  test.each([
+    { project: false, version: 3 },
+    { project: true, version: 4 }
+  ])(
+    "implicit machine v$version selections recover cold internal guidance with project=$project",
+    async ({ project, version }) => {
+      const fixture = registryFixture();
+      installInternalRootImporter(fixture.bin);
+      fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const consumer = createRepo(path.join(fixture.sandbox, "implicit-consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = project
+        ? createTestRuntime({
+            cwd: consumer,
+            env: fixture.runtime.env,
+            onStderr() {},
+            onStdout() {}
+          })
+        : fixture.runtime;
+      const registry = project
+        ? path.join(consumer, ".git/monke-tools/skill-registry")
+        : fixture.registry;
+      const installed = project
+        ? path.join(consumer, ".agents/skills/monke-tools/imported")
+        : fixture.installed.codex;
+      const rootSkill = (body: string) =>
+        `---\nname: Guide\ndescription: Root.\nmetadata:\n  internal: true\n---\n${body}\n`;
+      const publisher = createRepo(path.join(fixture.sandbox, "implicit-publisher"), {
+        "SKILL.md": rootSkill("Accepted internal root."),
+        "skills/public/SKILL.md": "---\nname: Guide\ndescription: Child.\n---\nPublic child.\n"
+      });
+      const source = `${publisher}#HEAD`;
+      const flags = project ? ["--project"] : [];
+      await runCliAsync(["skills", "add", source, ...flags, "--skill", "Guide"], runtime);
+      await runCliAsync(
+        [
+          "skills",
+          "policy",
+          source,
+          "guide",
+          ...flags,
+          "--description",
+          "Consumer trigger.",
+          "--model-invocation",
+          "deny"
+        ],
+        runtime
+      );
+      const accepted = read(installed, "guide/SKILL.md");
+      const [recorded] = readImportRecipeStore(registry).recipes;
+      if (!recorded) {
+        throw new Error("Missing accepted machine recipe");
+      }
+      const { commit, selection: _selection, ...implicit } = recorded;
+      if (version === 3) {
+        write(
+          registry,
+          "skills.lock.json",
+          JSON.stringify({
+            recipes: [
+              {
+                ...implicit,
+                lock: {
+                  commit,
+                  digest: guidanceDigest(registry, recorded.skills),
+                  importerVersion: "1.7.0",
+                  materializerVersion: 1,
+                  repository: publisher,
+                  subpath: "",
+                  updateRef: "HEAD"
+                }
+              }
+            ],
+            version
+          })
+        );
+      } else {
+        writeImportRecipeStore(registry, { recipes: [{ ...implicit, commit }], version: 4 });
+      }
+      rmSync(path.join(registry, "skills/imported"), { recursive: true });
+      rmSync(path.join(registry, "skills/.monke-restored.json"));
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(read(installed, "guide/SKILL.md")).toBe(accepted);
+      expect(readImportRecipeStore(registry).recipes[0]).toMatchObject({
+        commit,
+        skills: [
+          { description: "Consumer trigger.", disableModelInvocation: true, selector: "Guide" }
+        ]
+      });
+
+      write(publisher, "SKILL.md", rootSkill("Updated internal root."));
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Advance the explicitly accepted internal root"]);
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(read(installed, "guide/SKILL.md")).toBe(
+        accepted.replace("Accepted internal root.", "Updated internal root.")
+      );
+      expect(readImportRecipeStore(registry).recipes[0]?.commit).toBe(
+        git(publisher, ["rev-parse", "HEAD"])
+      );
     }
   );
 
