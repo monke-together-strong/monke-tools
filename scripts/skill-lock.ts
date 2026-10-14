@@ -28,7 +28,8 @@ import {
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath,
   IMPORTED_REFERENCES_ROOT,
-  IMPORTED_SKILLS_ROOT
+  IMPORTED_SKILLS_ROOT,
+  prepareStagedGuidance
 } from "./import-guidance.ts";
 import {
   compareSkillLockStrings,
@@ -1166,7 +1167,17 @@ export async function restoreLockedImports(
               includeDeclaredImports,
               runtime
             );
-            return { recipe, stagingDirectory };
+            const guidance = recipe.skills.map((item) => ({
+              ...item,
+              disableModelInvocation: item.disableModelInvocation ?? recipe.disableModelInvocation
+            }));
+            const preparedRoot = path.join(stagingDirectory, "prepared");
+            prepareStagedGuidance(
+              guidance,
+              path.join(stagingDirectory, ".agents", "skills"),
+              preparedRoot
+            );
+            return { guidance, preparedRoot, recipe };
           })
         )
     );
@@ -1177,20 +1188,12 @@ export async function restoreLockedImports(
     if (failed && commitState) {
       throw failed.reason;
     }
-    const guidance = prepared.flatMap(({ recipe }) =>
-      recipe.skills.map((item) => ({
-        ...item,
-        disableModelInvocation: item.disableModelInvocation ?? recipe.disableModelInvocation
-      }))
-    );
+    const guidance = prepared.flatMap((result) => result.guidance);
     const stagedPaths = new Map(
-      prepared.flatMap(({ recipe, stagingDirectory }) =>
+      prepared.flatMap(({ preparedRoot, recipe }) =>
         recipe.skills.map(
           (item) =>
-            [
-              `${item.kind}:${item.slug}`,
-              path.join(stagingDirectory, ".agents", "skills", item.slug)
-            ] as const
+            [`${item.kind}:${item.slug}`, path.join(preparedRoot, item.kind, item.slug)] as const
         )
       )
     );

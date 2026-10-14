@@ -1979,6 +1979,45 @@ cpSync(path.join(args[3], "skills", slug), path.join(".agents/skills", slug), { 
     expect(read(repo, path.relative(repo, reviewLog)).split("--commit")).toHaveLength(2);
   });
 
+  test("restore publishes healthy siblings when reference conversion fails without pruning", async () => {
+    const { repo, runtime, sandbox, upstream } = repoFixture();
+    const malformed = createRepo(path.join(sandbox, "malformed-reference"), {
+      "skills/base/MAIN.md": "Conflicting reference entry.\n",
+      "skills/base/SKILL.md": "---\nname: base\ndescription: Base.\n---\nReference body.\n"
+    });
+    writeRepoImportRecipeStore(repo, {
+      recipes: [
+        {
+          commit: git(upstream, ["rev-parse", "HEAD"]),
+          skills: [{ kind: "skill", selector: "first", slug: "first" }],
+          source: upstream
+        },
+        {
+          commit: git(malformed, ["rev-parse", "HEAD"]),
+          skills: [{ kind: "reference", selector: "base", slug: "base" }],
+          source: malformed
+        }
+      ],
+      version: 4
+    });
+    const config = read(repo, "monke.yml");
+    write(repo, "skills/imported/obsolete/SKILL.md", "Retain until every source succeeds.\n");
+
+    await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
+      "upstream guidance already contains MAIN.md"
+    );
+
+    expect(read(repo, "skills/imported/first/SKILL.md")).toContain("Pinned first.");
+    expect(read(repo, "skills/.monke-restored.json")).toContain(upstream);
+    expect(read(repo, "skills/.monke-restored.json")).not.toContain(malformed);
+    expect(read(repo, "monke.yml")).toBe(config);
+    expect(read(repo, "skills/imported/obsolete/SKILL.md")).toBe(
+      "Retain until every source succeeds.\n"
+    );
+    expect(existsSync(path.join(repo, "skills/references/imported/base"))).toBeFalsy();
+    expect(readdirSync(path.join(repo, "tmp"))).toStrictEqual([]);
+  });
+
   test("update advances successful sources, retains failed pins, and opens one complete review", async () => {
     const { bin, messages, repo, runtime, sandbox, upstream } = repoFixture();
     const other = createRepo(path.join(sandbox, "other"), {

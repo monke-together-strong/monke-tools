@@ -222,7 +222,8 @@ function publishPreparedGuidance(
   }
 }
 
-function prepareStagedGuidance(
+/** Convert staged guidance and apply its recorded local metadata before publication. */
+export function prepareStagedGuidance(
   guidance: readonly SkillImportRecipeSkill[],
   stagedSkillsRoot: string,
   preparedRoot: string,
