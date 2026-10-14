@@ -597,6 +597,9 @@ async function addGitSkillSource(
     ...(!repo ? { selection: request.skills ?? previous?.selection ?? ["*"] } : {}),
     ...(request.acceptOpenClawRisks ? { acceptOpenClawRisks: true as const } : {})
   };
+  const selectors = request.skills ??
+    previous?.selection ??
+    previous?.skills.map((item) => item.selector) ?? ["*"];
   const staging = mkdtempSync(path.join(tmpdir(), "monke-skill-git-"));
   try {
     const installOutput = await stageGitSkillSource({
@@ -605,9 +608,7 @@ async function addGitSkillSource(
       recipe: { ...recipe, commit: revision.commit, source: revision.source },
       repoRoot: root,
       runtime,
-      selectors: request.skills ??
-        previous?.selection ??
-        previous?.skills.map((item) => item.selector) ?? ["*"],
+      selectors,
       stagingDirectory: staging
     });
     reportSecurityRiskAssessment(
@@ -618,6 +619,9 @@ async function addGitSkillSource(
       preserveImportKinds: repo,
       reference: request.reference
     });
+    if (repo) {
+      assertRepoSkillSelectorsMatched(recipe.source, selectors, skills);
+    }
     const nextRecipe = { ...recipe, commit: revision.commit, skills, source: revision.source };
     const next = normalizeImportRecipeStore({
       ...store,
@@ -655,6 +659,21 @@ async function addGitSkillSource(
     return revision.source;
   } finally {
     rmSync(staging, { force: true, recursive: true });
+  }
+}
+
+function assertRepoSkillSelectorsMatched(
+  source: string,
+  selectors: string[],
+  skills: SkillImportRecipe["skills"]
+) {
+  if (selectors.includes("*")) {
+    return;
+  }
+  const names = new Set(skills.map((skill) => skill.selector.toLowerCase()));
+  const missing = selectors.filter((selector) => !names.has(selector.toLowerCase()));
+  if (missing.length > 0) {
+    throw new MonkeError(`Selected skills not found in ${source}: ${missing.join(", ")}`);
   }
 }
 

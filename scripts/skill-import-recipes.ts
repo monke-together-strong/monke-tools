@@ -235,7 +235,7 @@ export function readRepoImportRecipeStore(repoRoot: string): SkillImportRecipeSt
   }
   const skills = document.get("skills", true);
   const recipes = unwrapBoundaryResult(
-    RepoImportRecipesSchema.safeParse(isNode(skills) ? skills.toJSON() : []),
+    RepoImportRecipesSchema.safeParse(isNode(skills) ? skills.toJS(document) : []),
     `Repo import recipes in ${file}`
   );
   return normalizeImportRecipeStore({ recipes, version: SKILL_IMPORT_RECIPE_STORE_VERSION });
@@ -297,7 +297,20 @@ export function writeRepoImportRecipeStore(repoRoot: string, store: SkillImportR
   }
   const recipes = normalizeImportRecipeStore(store).recipes.map(compactRecipe);
   unwrapBoundaryResult(RepoImportRecipesSchema.safeParse(recipes), "Repo import recipes");
-  writeSkillImportState(file, editRepoSkillsYaml(original, document, recipes));
+  const updated = editRepoSkillsYaml(original, document, recipes);
+  const updatedDocument = parseDocument(updated);
+  if (updatedDocument.errors.length) {
+    throw new MonkeError(`Invalid ${file}: ${updatedDocument.errors[0]?.message}`);
+  }
+  try {
+    updatedDocument.toJS();
+  } catch (error) {
+    throw new MonkeError(
+      `Cannot edit ${file} without invalidating YAML aliases; move anchors shared with other sections outside skills`,
+      { cause: error }
+    );
+  }
+  writeSkillImportState(file, updated);
 }
 
 function editRepoSkillsYaml(

@@ -5,7 +5,16 @@ import { describe, expect, test } from "vite-plus/test";
 import { parseDocument } from "yaml";
 
 import { runCliAsync } from "../src/index.ts";
-import { createRepo, git, makeTempDir, read, write, writeExecutable } from "./helpers.ts";
+import {
+  createRepo,
+  git,
+  installFakeCodexSummary,
+  installFakeCodiff,
+  makeTempDir,
+  read,
+  write,
+  writeExecutable
+} from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 function fixture() {
@@ -20,7 +29,12 @@ function fixture() {
     `#!/bin/sh
 set -eu
 mkdir -p .agents/skills
-cp -R "$4/skills/example" .agents/skills/
+source="$4"
+shift 4
+while [ "$1" = --skill ]; do
+  cp -R "$source/skills/$2" .agents/skills/
+  shift 2
+done
 `
   );
   const runtime = createTestRuntime({
@@ -38,10 +52,78 @@ cp -R "$4/skills/example" .agents/skills/
     skills: ["example"],
     source: upstream
   };
-  return { recipe, repo, runtime, sandbox, upstream };
+  return { bin, recipe, repo, runtime, sandbox, upstream };
 }
 
 describe("repo skill edits preserve unrelated YAML bytes", () => {
+  test("shared commit and source aliases resolve for restore, list, and update", async () => {
+    const { bin, repo, runtime, sandbox, upstream } = fixture();
+    write(
+      upstream,
+      "skills/other/SKILL.md",
+      "---\nname: other\ndescription: Other.\n---\nOther.\n"
+    );
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Add another selection"]);
+    const copy = path.join(sandbox, "upstream-copy");
+    git(sandbox, ["clone", "--quiet", "--", upstream, copy]);
+    const original = `# Shared values\napps:\n  upstream:\n    path: &source ${upstream}\nskills:\n  - source: *source\n    commit: &pin ${git(upstream, ["rev-parse", "HEAD"])}\n    skills: [example]\n  - source: ${copy}\n    commit: *pin\n    skills: [other]\n# Keep the tail.\n`;
+    write(repo, "monke.yml", original);
+    await runCliAsync(["skills", "restore", "--repo"], runtime);
+    await runCliAsync(["skills", "list", "--repo"], runtime);
+    expect(read(repo, "monke.yml")).toBe(original);
+    expect(read(repo, "skills/imported/example/SKILL.md")).toContain("Example.");
+    expect(read(repo, "skills/imported/other/SKILL.md")).toContain("Other.");
+    installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+    await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+    const updated = read(repo, "monke.yml");
+    expect(updated.startsWith(original.slice(0, original.indexOf("skills:")))).toBeTruthy();
+    expect(updated.endsWith("# Keep the tail.\n")).toBeTruthy();
+    expect(parseDocument(updated).toJS()).toMatchObject({
+      skills: [
+        { commit: git(upstream, ["rev-parse", "HEAD"]) },
+        { commit: git(upstream, ["rev-parse", "HEAD"]) }
+      ]
+    });
+  });
+
+  test.each(["add", "policy", "remove", "update"])(
+    "%s refuses to discard an anchor referenced outside skills",
+    async (action) => {
+      const { bin, recipe, repo, runtime, upstream } = fixture();
+      const original = `skills:\n  - source: ${upstream}\n    commit: ${recipe.commit}\n    skills:\n      - slug: example\n        description: &command "echo setup"\nbootstrapCommand: *command\n`;
+      write(repo, "monke.yml", original);
+      await runCliAsync(["skills", "restore", "--repo"], runtime);
+      const accepted = read(repo, "skills/imported/example/SKILL.md");
+      const marker = read(repo, "skills/.monke-restored.json");
+      write(
+        upstream,
+        "skills/example/SKILL.md",
+        "---\nname: example\ndescription: Example.\n---\nNew body.\n"
+      );
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Advance upstream"]);
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      const args =
+        action === "add"
+          ? ["skills", "add", upstream, "--repo", "--skill", "example"]
+          : action === "policy"
+            ? ["skills", "policy", upstream, "example", "--repo", "--model-invocation", "deny"]
+            : action === "remove"
+              ? ["skills", "remove", upstream, "--repo"]
+              : ["skills", "update", "--repo", "--adapter", "codiff"];
+      await expect(runCliAsync(args, runtime)).rejects.toThrow(/YAML aliases/u);
+      expect(read(repo, "monke.yml")).toBe(original);
+      expect(read(repo, "skills/imported/example/SKILL.md")).toBe(accepted);
+      expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+      expect(parseDocument(read(repo, "monke.yml")).toJS()).toMatchObject({
+        bootstrapCommand: "echo setup"
+      });
+    }
+  );
+
   test.each([
     { alias: "symlink", temporary: "monke.yml.tmp" },
     { alias: "hardlink", temporary: "monke.yml.tmp" },

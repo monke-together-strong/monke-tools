@@ -169,6 +169,7 @@ export function installFakeCodexSummary(bin: string) {
     `#!/bin/sh
 while [ "$#" -gt 0 ]; do
   if [ "$1" = --output-last-message ]; then
+    cat > /dev/null
     printf '# Skill update summary\\n\\n## Fixture skill\\n\\n- Updated guidance.\\n' > "$2"
     exit 0
   fi

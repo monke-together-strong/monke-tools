@@ -57,7 +57,149 @@ done
   return { bin, messages, repo, runtime, sandbox, upstream };
 }
 
+function installPartialSuccessImporter(bin: string) {
+  writeExecutable(
+    path.join(bin, "npx"),
+    `#!/usr/bin/env bun
+import { cpSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+const source = process.argv[5];
+const selectors = [];
+for (let index = 6; process.argv[index] === "--skill"; index += 2) selectors.push(process.argv[index + 1]);
+let installed = 0;
+for (const folder of readdirSync(path.join(source, "skills"))) {
+  const directory = path.join(source, "skills", folder);
+  const content = readFileSync(path.join(directory, "SKILL.md"), "utf8");
+  const name = /^name: (.+)$/m.exec(content)[1];
+  if (!selectors.includes("*") && !selectors.some(selector => selector.toLowerCase() === name.toLowerCase())) continue;
+  const slug = name.toLowerCase().replace(/[^a-z0-9._]+/g, "-").replace(/^[.\\-]+|[.\\-]+$/g, "").substring(0, 255) || "unnamed-skill";
+  const destination = path.join(".agents", "skills", slug);
+  mkdirSync(path.dirname(destination), { recursive: true });
+  cpSync(directory, destination, { recursive: true });
+  installed += 1;
+}
+if (installed === 0) throw new Error("No matching skills: " + selectors.join(", "));
+`
+  );
+}
+
 describe("repo import recipes through mt skills", () => {
+  test.each([
+    { nested: false, readd: false },
+    { nested: false, readd: true },
+    { nested: true, readd: false },
+    { nested: true, readd: true }
+  ])(
+    "repo add rejects a partially matched selection with nested=$nested readd=$readd",
+    async ({ nested, readd }) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      installPartialSuccessImporter(bin);
+      const publisher = createRepo(path.join(sandbox, "publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
+          ]
+        }),
+        "skills/own/SKILL.md": "---\nname: own\ndescription: Own skill.\n---\nOwn guidance.\n"
+      });
+      const source = `${nested ? publisher : upstream}#HEAD`;
+      const valid = nested ? "own" : "first";
+      const missing = nested ? "first" : "unavailable";
+      write(repo, "monke.yml", "# Keep consumer settings.\napps: {}\n");
+      if (readd) {
+        await runCliAsync(["skills", "add", source, "--repo", "--skill", valid], runtime);
+      }
+      const config = read(repo, "monke.yml");
+      const imported = path.join(repo, "skills/imported", valid, "SKILL.md");
+      const accepted = existsSync(imported) ? read(repo, path.relative(repo, imported)) : undefined;
+      await expect(
+        runCliAsync(["skills", "add", source, "--repo", "--skill", valid, missing], runtime)
+      ).rejects.toThrow(missing);
+      expect(read(repo, "monke.yml")).toBe(config);
+      expect(existsSync(imported) ? read(repo, path.relative(repo, imported)) : undefined).toBe(
+        accepted
+      );
+      expect(existsSync(path.join(repo, "skills/imported", missing))).toBeFalsy();
+    }
+  );
+
+  test("repo selectors match raw upstream names without case sensitivity and wildcard selects all", async () => {
+    const { bin, repo, runtime, upstream } = repoFixture();
+    installPartialSuccessImporter(bin);
+    write(
+      upstream,
+      "skills/different-folder/SKILL.md",
+      "---\nname: Fancy Author\ndescription: Named skill.\n---\nNamed instructions.\n"
+    );
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Publish named skill"]);
+    const source = `${upstream}#HEAD`;
+    await runCliAsync(
+      ["skills", "add", source, "--repo", "--skill", "FIRST", "fAnCy AuThOr"],
+      runtime
+    );
+    expect(parseDocument(read(repo, "monke.yml")).toJS()).toStrictEqual({
+      skills: [
+        {
+          commit: git(upstream, ["rev-parse", "HEAD"]),
+          skills: [{ selector: "Fancy Author", slug: "fancy-author" }, "first"],
+          source
+        }
+      ]
+    });
+    expect(read(repo, "skills/imported/fancy-author/SKILL.md")).toContain("Named instructions.");
+    const accepted = read(repo, "monke.yml");
+    await expect(
+      runCliAsync(["skills", "add", source, "--repo", "--skill", "first", "fancy-author"], runtime)
+    ).rejects.toThrow("fancy-author");
+    expect(read(repo, "monke.yml")).toBe(accepted);
+    await runCliAsync(["skills", "add", source, "--repo", "--skill", "*", "unavailable"], runtime);
+    expect(read(repo, "skills/imported/second/SKILL.md")).toContain("Pinned second.");
+    expect(read(repo, "monke.yml")).not.toContain("unavailable");
+  });
+
+  test("repo re-add, update, and restore reject a partially matched retained selection", async () => {
+    const { bin, repo, runtime, upstream } = repoFixture();
+    installPartialSuccessImporter(bin);
+    const source = `${upstream}#HEAD`;
+    await runCliAsync(["skills", "add", source, "--repo", "--skill", "first", "second"], runtime);
+    const config = read(repo, "monke.yml");
+    const first = read(repo, "skills/imported/first/SKILL.md");
+    const second = read(repo, "skills/imported/second/SKILL.md");
+    rmSync(path.join(upstream, "skills/second"), { recursive: true });
+    write(
+      upstream,
+      "skills/first/SKILL.md",
+      "---\nname: first\ndescription: First skill.\n---\nUnaccepted revision.\n"
+    );
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Retire selected skill"]);
+    await expect(runCliAsync(["skills", "add", source, "--repo"], runtime)).rejects.toThrow(
+      "second"
+    );
+    expect(read(repo, "monke.yml")).toBe(config);
+    installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+    await expect(
+      runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime)
+    ).rejects.toThrow("second");
+    expect(read(repo, "monke.yml")).toBe(config);
+    expect(read(repo, "skills/imported/first/SKILL.md")).toBe(first);
+    expect(read(repo, "skills/imported/second/SKILL.md")).toBe(second);
+    const edited = stringify({
+      skills: [
+        { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first", "second"], source }
+      ]
+    });
+    write(repo, "monke.yml", edited);
+    await expect(runCliAsync(["skills", "restore", "--repo"], runtime)).rejects.toThrow(
+      /slugs changed/u
+    );
+    expect(read(repo, "monke.yml")).toBe(edited);
+    expect(read(repo, "skills/imported/first/SKILL.md")).toBe(first);
+    expect(read(repo, "skills/imported/second/SKILL.md")).toBe(second);
+  });
+
   test("repo declarations select their source's own skills and Git and linked consumers resolve one level", async () => {
     const { bin, repo, runtime, sandbox, upstream } = repoFixture();
     const publisher = createRepo(path.join(sandbox, "publisher-b"), {

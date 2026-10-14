@@ -33,6 +33,9 @@ different upstream `selector`, `kind`, `modelInvocation`, and `description`.
 Source defaults use `modelInvocation` too.
 See the [configuration reference](../skills/internal/monke-config/references/monke-yml.md#imported-guidance).
 
+If another section uses a YAML anchor, define that anchor outside `skills`.
+Monke rejects recipe edits that would break those aliases.
+
 Run `mt skills restore --repo` after changing selections or overrides, reverting
 pins, or cloning a repo. Restore uses only accepted commits, replaces local edits,
 and prunes guidance no longer declared. An entry without a commit fails and names
@@ -46,11 +49,11 @@ update the pins to modify restored guidance.
 ## Review updates
 
 Run `mt skills update --repo` to pin missing commits and advance existing sources.
-Git preparation runs concurrently. Successful sources replace their files and
-pins. Failed sources retain their previous pins and restored files. If any source
-fails, Monke defers the final removal of undeclared files until a successful
-restore or update. Monke reports failures after opening one complete comparison,
-with a Codex summary of changed skills.
+Successful sources replace their files and pins. Failed sources retain their
+previous pins and restored files. If any source fails, Monke defers the final
+removal of undeclared files until a successful restore or update. Monke reports
+failures after opening one complete comparison, with a Codex summary of changed
+skills.
 Use `--interactive` to accept upstream slug changes and `--adapter codiff` or
 `--adapter lfv` to select the viewer.
 
