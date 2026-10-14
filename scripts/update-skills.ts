@@ -36,6 +36,7 @@ import {
   resolveSkillSelectorSlugMappings
 } from "./skill-import.ts";
 import {
+  assertSkillRestoreMarker,
   ignoreRepoImports,
   pruneImportedGuidance,
   rememberRestoredRecipe,
@@ -100,6 +101,9 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
     dependencies.runtime ??
     createRuntime({ cwd: repoRoot, writeStdout: dependencies.writeMessage });
   let store = (dependencies.repo ? readRepoImportRecipeStore : readImportRecipeStore)(repoRoot);
+  if (store.recipes.some((recipe) => !recipe.localSource)) {
+    assertSkillRestoreMarker(repoRoot);
+  }
   const writeMessage =
     dependencies.writeMessage ??
     ((message: string) => {
@@ -112,7 +116,7 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
   if (!dependencies.repo) {
     validateImportedGuidanceDirectoriesAreTracked(repoRoot, store);
   } else {
-    ignoreRepoImports(repoRoot);
+    ignoreRepoImports(repoRoot, runtime);
   }
   const reviewDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-review-"));
   const before = path.join(reviewDirectory, "before");
@@ -182,6 +186,7 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
       if (!nextRecipe) {
         throw new MonkeError(`Missing recipe for ${recipe.source}`);
       }
+      assertSkillRestoreMarker(repoRoot);
       copyStagedGuidanceToManagedRoots({
         commitState() {
           (dependencies.repo ? writeRepoImportRecipeStore : writeImportRecipeStore)(

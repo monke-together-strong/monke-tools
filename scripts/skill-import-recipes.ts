@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 import is from "@sindresorhus/is";
 import { Document, isMap, isNode, isScalar, isSeq, parseDocument } from "yaml";
@@ -303,14 +304,28 @@ export function writeRepoImportRecipeStore(repoRoot: string, store: SkillImportR
     throw new MonkeError(`Invalid ${file}: ${updatedDocument.errors[0]?.message}`);
   }
   try {
-    updatedDocument.toJS();
+    if (
+      !isDeepStrictEqual(
+        repoConfigWithoutSkills(document),
+        repoConfigWithoutSkills(updatedDocument)
+      )
+    ) {
+      throw new Error("Resolved YAML values outside skills would change");
+    }
   } catch (error) {
     throw new MonkeError(
-      `Cannot edit ${file} without invalidating YAML aliases; move anchors shared with other sections outside skills`,
+      `Cannot edit ${file} without changing YAML aliases outside skills; move anchors shared with other sections outside skills`,
       { cause: error }
     );
   }
   writeSkillImportState(file, updated);
+}
+
+function repoConfigWithoutSkills(document: Document.Parsed) {
+  const config: unknown = document.toJS();
+  return is.plainObject(config)
+    ? Object.fromEntries(Object.entries(config).filter(([key]) => key !== "skills"))
+    : {};
 }
 
 function editRepoSkillsYaml(

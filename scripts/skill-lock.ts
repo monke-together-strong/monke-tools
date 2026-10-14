@@ -43,6 +43,15 @@ import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from
 
 export const MATERIALIZER_VERSION = 1;
 export const SKILL_RESTORE_MARKER = "skills/.monke-restored.json";
+/** Atomic marker replacement accepts file aliases, but not directories or special entries. */
+export function assertSkillRestoreMarker(repoRoot: string) {
+  const file = path.join(repoRoot, SKILL_RESTORE_MARKER);
+  const metadata = lstatSync(file, { throwIfNoEntry: false });
+  if (metadata && !metadata.isFile() && !metadata.isSymbolicLink()) {
+    throw new MonkeError(`Skill restore marker path is obstructed: ${file}`);
+  }
+}
+
 const MarkerSchema = z.record(
   z.string(),
   z.strictObject({ digest: z.string(), recipe: z.string(), tooling: z.string() })
@@ -74,6 +83,7 @@ function readRestoreMarkers(repoRoot: string) {
   }
 }
 export function rememberRestoredRecipe(repoRoot: string, recipe: SkillImportRecipe) {
+  assertSkillRestoreMarker(repoRoot);
   const file = path.join(repoRoot, SKILL_RESTORE_MARKER);
   const markers = readRestoreMarkers(repoRoot);
   markers[recipe.source] = {
@@ -93,20 +103,59 @@ export function assertRepoImportIgnoreFile(repoRoot: string) {
   }
 }
 
-export function ignoreRepoImports(repoRoot: string) {
+export function ignoreRepoImports(repoRoot: string, runtime = createRuntime({ cwd: repoRoot })) {
   assertRepoImportIgnoreFile(repoRoot);
   const file = path.join(repoRoot, ".gitignore");
-  let text = existsSync(file) ? readFileSync(file, "utf-8") : "";
-  for (const entry of [
-    "/skills/imported/",
-    "/skills/references/imported/",
-    `/${SKILL_RESTORE_MARKER}`
-  ]) {
-    if (!text.split(/\r?\n/u).some((line) => line === entry || line === entry.slice(1))) {
+  const original = existsSync(file) ? readFileSync(file, "utf-8") : undefined;
+  let text = original ?? "";
+  const hasGit = existsSync(path.join(repoRoot, ".git"));
+  const isIgnored = (entry: string) => {
+    if (!hasGit) {
+      return true;
+    }
+    const result = runtime.exec(
+      "git",
+      ["check-ignore", "--quiet", "--no-index", "--", entry.slice(1)],
+      {
+        allowFailure: true,
+        cwd: repoRoot
+      }
+    );
+    if (result.exitCode !== 0 && result.exitCode !== 1) {
+      throw new MonkeError(`Cannot check Git ignore rules for ${entry}: ${result.stderr.trim()}`);
+    }
+    return result.exitCode === 0;
+  };
+  const entries = ["/skills/imported/", "/skills/references/imported/", `/${SKILL_RESTORE_MARKER}`];
+  for (const entry of entries) {
+    if (
+      !text.split(/\r?\n/u).some((line) => line === entry || line === entry.slice(1)) ||
+      !isIgnored(entry)
+    ) {
       text += `${text && !text.endsWith("\n") ? "\n" : ""}${entry}\n`;
     }
   }
-  writeFileSync(file, text);
+  if (text !== original) {
+    writeFileSync(file, text);
+  }
+  try {
+    for (const entry of entries) {
+      if (!isIgnored(entry)) {
+        throw new MonkeError(
+          `Cannot ignore ${entry}; remove conflicting rules from nested .gitignore files`
+        );
+      }
+    }
+  } catch (error) {
+    if (text !== original) {
+      if (original === undefined) {
+        rmSync(file);
+      } else {
+        writeFileSync(file, original);
+      }
+    }
+    throw error;
+  }
 }
 
 async function resolveExplicitSkillCommit(repository: string, revision: string, repoRoot: string) {
@@ -670,6 +719,7 @@ export async function restoreLockedRecipe(
       `Unpinned Skill import recipe: ${recipe.source}; run mt skills update --repo`
     );
   }
+  assertSkillRestoreMarker(repoRoot);
   const marker = readRestoreMarkers(repoRoot)[recipe.source];
   try {
     if (
@@ -686,6 +736,7 @@ export async function restoreLockedRecipe(
   mkdirSync(stagingDirectory, { recursive: true });
   try {
     await stageLockedRecipe(recipe, stagingDirectory, repoRoot, includeDeclaredImports, runtime);
+    assertSkillRestoreMarker(repoRoot);
     copyStagedGuidanceToManagedRoots({
       defaultDisableModelInvocation: recipe.disableModelInvocation,
       guidance: recipe.skills,
@@ -706,13 +757,16 @@ export async function restoreLockedImports(
 ) {
   assertManagedGuidanceRoots(repoRoot);
   const { recipes } = store ?? readImportRecipeStore(repoRoot);
+  if (recipes.some((recipe) => !recipe.localSource)) {
+    assertSkillRestoreMarker(repoRoot);
+  }
   if (recipes.some((recipe) => !recipe.localSource && !recipe.commit)) {
     throw new MonkeError(
       "Skill lock is incomplete; run mt skills update --repo to pin every recipe before source installation"
     );
   }
   if (existsSync(path.join(repoRoot, "monke.yml"))) {
-    ignoreRepoImports(repoRoot);
+    ignoreRepoImports(repoRoot, runtime);
   }
   const restore = pLimit(4);
   // Keep the mutation lock until every restore settles, even when a sibling fails.

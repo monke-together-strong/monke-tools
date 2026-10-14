@@ -34,13 +34,18 @@ Source defaults use `modelInvocation` too.
 See the [configuration reference](../skills/internal/monke-config/references/monke-yml.md#imported-guidance).
 
 If another section uses a YAML anchor, define that anchor outside `skills`.
-Monke rejects recipe edits that would break those aliases.
+Monke rejects recipe edits that would break aliases or change resolved values
+outside `skills`.
 
 Run `mt skills restore --repo` after changing selections or overrides, reverting
 pins, or cloning a repo. Restore uses only accepted commits, replaces local edits,
 and prunes guidance no longer declared. An entry without a commit fails and names
 `mt skills update --repo` as the command that pins it. Matching generated files
 and their local marker allow repeated restores without fetching.
+
+If a repo command reports an obstructed restoration marker or conflicting ignore
+rule, correct the reported path before retrying. Monke rejects these conditions
+before changing existing pins or guidance.
 
 Upstream symlinks must stay inside versioned source and outside Git metadata.
 The recipe's pins and overrides are authoritative. Change the overrides or

@@ -88,41 +88,46 @@ describe("repo skill edits preserve unrelated YAML bytes", () => {
     });
   });
 
-  test.each(["add", "policy", "remove", "update"])(
-    "%s refuses to discard an anchor referenced outside skills",
-    async (action) => {
-      const { bin, recipe, repo, runtime, upstream } = fixture();
-      const original = `skills:\n  - source: ${upstream}\n    commit: ${recipe.commit}\n    skills:\n      - slug: example\n        description: &command "echo setup"\nbootstrapCommand: *command\n`;
-      write(repo, "monke.yml", original);
-      await runCliAsync(["skills", "restore", "--repo"], runtime);
-      const accepted = read(repo, "skills/imported/example/SKILL.md");
-      const marker = read(repo, "skills/.monke-restored.json");
-      write(
-        upstream,
-        "skills/example/SKILL.md",
-        "---\nname: example\ndescription: Example.\n---\nNew body.\n"
-      );
-      git(upstream, ["add", "."]);
-      git(upstream, ["commit", "-m", "Advance upstream"]);
-      installFakeCodiff(bin);
-      installFakeCodexSummary(bin);
-      const args =
-        action === "add"
-          ? ["skills", "add", upstream, "--repo", "--skill", "example"]
-          : action === "policy"
-            ? ["skills", "policy", upstream, "example", "--repo", "--model-invocation", "deny"]
-            : action === "remove"
-              ? ["skills", "remove", upstream, "--repo"]
-              : ["skills", "update", "--repo", "--adapter", "codiff"];
-      await expect(runCliAsync(args, runtime)).rejects.toThrow(/YAML aliases/u);
-      expect(read(repo, "monke.yml")).toBe(original);
-      expect(read(repo, "skills/imported/example/SKILL.md")).toBe(accepted);
-      expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
-      expect(parseDocument(read(repo, "monke.yml")).toJS()).toMatchObject({
-        bootstrapCommand: "echo setup"
-      });
-    }
-  );
+  describe.each([
+    { prefix: "", state: "unresolved" },
+    { prefix: 'cleanupCommand: &command "echo cleanup"\n', state: "rebound" }
+  ])("$state aliases outside skills", ({ prefix }) => {
+    test.each(["add", "policy", "remove", "update"])(
+      "%s refuses to change an anchor referenced outside skills",
+      async (action) => {
+        const { bin, recipe, repo, runtime, upstream } = fixture();
+        const original = `${prefix}skills:\n  - source: ${upstream}\n    commit: ${recipe.commit}\n    skills:\n      - slug: example\n        description: &command "echo setup"\nbootstrapCommand: *command\n`;
+        write(repo, "monke.yml", original);
+        await runCliAsync(["skills", "restore", "--repo"], runtime);
+        const accepted = read(repo, "skills/imported/example/SKILL.md");
+        const marker = read(repo, "skills/.monke-restored.json");
+        write(
+          upstream,
+          "skills/example/SKILL.md",
+          "---\nname: example\ndescription: Example.\n---\nNew body.\n"
+        );
+        git(upstream, ["add", "."]);
+        git(upstream, ["commit", "-m", "Advance upstream"]);
+        installFakeCodiff(bin);
+        installFakeCodexSummary(bin);
+        const args =
+          action === "add"
+            ? ["skills", "add", upstream, "--repo", "--skill", "example"]
+            : action === "policy"
+              ? ["skills", "policy", upstream, "example", "--repo", "--model-invocation", "deny"]
+              : action === "remove"
+                ? ["skills", "remove", upstream, "--repo"]
+                : ["skills", "update", "--repo", "--adapter", "codiff"];
+        await expect(runCliAsync(args, runtime)).rejects.toThrow(/YAML aliases/u);
+        expect(read(repo, "monke.yml")).toBe(original);
+        expect(read(repo, "skills/imported/example/SKILL.md")).toBe(accepted);
+        expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
+        expect(parseDocument(read(repo, "monke.yml")).toJS()).toMatchObject({
+          bootstrapCommand: "echo setup"
+        });
+      }
+    );
+  });
 
   test.each([
     { alias: "symlink", temporary: "monke.yml.tmp" },
@@ -230,6 +235,123 @@ describe("repo skill edits preserve unrelated YAML bytes", () => {
       const beforeEndMarker = original.replace(/\.\.\.\n$/u, "");
       expect(updated.startsWith(beforeEndMarker)).toBeTruthy();
       expect(parseDocument(updated).getIn(["skills", 0, "source"])).toBe(upstream);
+    }
+  );
+});
+
+describe("repo skill imports stay ignored", () => {
+  test.each([
+    {
+      entry: "/skills/imported/",
+      reference: false,
+      target: "skills/imported/example/SKILL.md"
+    },
+    {
+      entry: "/skills/references/imported/",
+      reference: true,
+      target: "skills/references/imported/example/MAIN.md"
+    },
+    {
+      entry: "/skills/.monke-restored.json",
+      reference: false,
+      target: "skills/.monke-restored.json"
+    }
+  ])("add repairs a later negation of $entry once", async ({ entry, reference, target }) => {
+    const { repo, runtime, upstream } = fixture();
+    const original = `# Keep these bytes.\r\n${entry}\r\n!${entry}\r\n# Keep the tail.`;
+    write(repo, ".gitignore", original);
+    await runCliAsync(
+      ["skills", "add", upstream, "--repo", "--skill", "example", ...(reference ? ["--ref"] : [])],
+      runtime
+    );
+    expect(git(repo, ["check-ignore", "--", target])).toBe(target);
+    const repaired = read(repo, ".gitignore");
+    expect(repaired.startsWith(original)).toBeTruthy();
+    await runCliAsync(["skills", "restore", "--repo"], runtime);
+    expect(read(repo, ".gitignore")).toBe(repaired);
+  });
+
+  test.each([
+    { action: "add", ignore: "skills/.gitignore", pattern: "!imported/\n", reference: false },
+    {
+      action: "restore",
+      ignore: "skills/references/.gitignore",
+      pattern: "!imported/\n",
+      reference: true
+    },
+    {
+      action: "update",
+      ignore: "skills/.gitignore",
+      pattern: "!.monke-restored.json\n",
+      reference: false
+    },
+    { action: "remove", ignore: "skills/.gitignore", pattern: "!imported/\n", reference: false },
+    {
+      action: "policy",
+      ignore: "skills/.gitignore",
+      pattern: "!imported/\n",
+      reference: false
+    }
+  ])(
+    "$action refuses conflicting nested $ignore rules before accepted state changes",
+    async ({ action, ignore, pattern, reference }) => {
+      const { bin, repo, runtime, upstream } = fixture();
+      await runCliAsync(
+        [
+          "skills",
+          "add",
+          upstream,
+          "--repo",
+          "--skill",
+          "example",
+          ...(reference ? ["--ref"] : [])
+        ],
+        runtime
+      );
+      const guidance = reference
+        ? "skills/references/imported/example/MAIN.md"
+        : "skills/imported/example/SKILL.md";
+      const accepted = read(repo, guidance);
+      const config = read(repo, "monke.yml");
+      const marker = read(repo, "skills/.monke-restored.json");
+      const originalIgnore = read(repo, ".gitignore");
+      write(repo, ignore, pattern);
+      write(
+        upstream,
+        "skills/example/SKILL.md",
+        "---\nname: example\ndescription: Example.\n---\nNew upstream body.\n"
+      );
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Advance upstream"]);
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      const args =
+        action === "add"
+          ? [
+              "skills",
+              "add",
+              upstream,
+              "--repo",
+              "--skill",
+              "example",
+              ...(reference ? ["--ref"] : [])
+            ]
+          : action === "policy"
+            ? ["skills", "policy", upstream, "example", "--repo", "--description", "New trigger."]
+            : action === "remove"
+              ? ["skills", "remove", upstream, "--repo"]
+              : [
+                  "skills",
+                  action,
+                  "--repo",
+                  ...(action === "update" ? ["--adapter", "codiff"] : [])
+                ];
+      await expect(runCliAsync(args, runtime)).rejects.toThrow(/conflicting.*\.gitignore/u);
+      expect(read(repo, ".gitignore")).toBe(originalIgnore);
+      expect(read(repo, ignore)).toBe(pattern);
+      expect(read(repo, "monke.yml")).toBe(config);
+      expect(read(repo, guidance)).toBe(accepted);
+      expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
     }
   );
 });

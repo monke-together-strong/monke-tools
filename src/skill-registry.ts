@@ -28,6 +28,7 @@ import type { SkillImportRecipe, SkillImportRecipeStore } from "../scripts/skill
 import { reportSecurityRiskAssessment } from "../scripts/skill-import.ts";
 import {
   assertRepoImportIgnoreFile,
+  assertSkillRestoreMarker,
   ignoreRepoImports,
   rememberRestoredRecipe,
   resolveSkillRevision,
@@ -174,7 +175,6 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
           );
         }
         await addGitSkillSource(runtime, root, store, request.source, request, undefined, true);
-        ignoreRepoImports(root);
       } else if (request.action === "remove" || request.action === "policy") {
         const recipe = findRecipe(store, request.source);
         const recipes =
@@ -183,6 +183,10 @@ async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
             : store.recipes.map((item) =>
                 item === recipe ? setRecipePolicy(recipe, request) : item
               );
+        if (recipes.length > 0) {
+          assertSkillRestoreMarker(root);
+        }
+        ignoreRepoImports(root, runtime);
         writeRepoImportRecipeStore(root, { ...store, recipes });
         await restoreLockedImports(root, false, runtime, { ...store, recipes });
       } else {
@@ -368,6 +372,9 @@ function copyBundledImports(root: string, guidance: string, additions: SkillImpo
 function initializeSkillRegistry(runtime: Runtime, guidance: string, includeNewSources = false) {
   const root = path.join(getMonkeHome(runtime), "skill-registry");
   const { additions, next } = planRegistryImports(root, guidance, includeNewSources);
+  if (additions.length > 0) {
+    assertSkillRestoreMarker(root);
+  }
   mkdirSync(root, { recursive: true });
   copyBundledImports(root, guidance, additions);
   for (const folder of [
@@ -587,6 +594,7 @@ async function addGitSkillSource(
   scope?: SkillPublicationScope,
   repo = false
 ) {
+  assertSkillRestoreMarker(root);
   const revision = await resolveSkillRevision({ skills: [], source }, root);
   const previous = store.recipes.find((recipe) => recipe.source === revision.source);
   const recipe: SkillImportRecipe = {
@@ -628,6 +636,10 @@ async function addGitSkillSource(
       recipes: [...store.recipes.filter((item) => item !== previous), nextRecipe]
     });
 
+    assertSkillRestoreMarker(root);
+    if (repo) {
+      ignoreRepoImports(root, runtime);
+    }
     copyStagedGuidanceToManagedRoots({
       commitState() {
         (repo ? writeRepoImportRecipeStore : writeImportRecipeStore)(root, next);
@@ -740,6 +752,7 @@ async function applyRecipePolicy(
     });
     return;
   }
+  assertSkillRestoreMarker(root);
   const staging = mkdtempSync(path.join(tmpdir(), "monke-skill-policy-"));
   const next = normalizeImportRecipeStore({
     ...store,

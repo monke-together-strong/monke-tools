@@ -84,6 +84,112 @@ if (installed === 0) throw new Error("No matching skills: " + selectors.join(", 
 }
 
 describe("repo import recipes through mt skills", () => {
+  test.each(["add", "update", "restore", "policy", "remove"])(
+    "%s rejects an obstructed restore marker before changing accepted state",
+    async (action) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+      const other = createRepo(path.join(sandbox, "other-source"), {
+        "skills/other/SKILL.md":
+          "---\nname: other\ndescription: Other skill.\n---\nAccepted other.\n"
+      });
+      await runCliAsync(["skills", "add", other, "--repo", "--skill", "other"], runtime);
+      write(
+        upstream,
+        "skills/first/SKILL.md",
+        "---\nname: first\ndescription: First skill.\n---\nCandidate first.\n"
+      );
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Advance obstructed source"]);
+      const marker = path.join(repo, "skills/.monke-restored.json");
+      renameSync(marker, `${marker}.accepted`);
+      write(marker, "obstruction", "Marker obstruction must survive.\n");
+      if (action === "restore") {
+        write(repo, "skills/imported/first/SKILL.md", "Local bytes before failed restore.\n");
+      }
+      const config = read(repo, "monke.yml");
+      const first = read(repo, "skills/imported/first/SKILL.md");
+      const acceptedOther = read(repo, "skills/imported/other/SKILL.md");
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      const args =
+        action === "add"
+          ? ["skills", "add", upstream, "--repo", "--skill", "first", "second"]
+          : action === "policy"
+            ? ["skills", "policy", upstream, "first", "--repo", "--model-invocation", "deny"]
+            : action === "remove"
+              ? ["skills", "remove", upstream, "--repo"]
+              : [
+                  "skills",
+                  action,
+                  "--repo",
+                  ...(action === "update" ? ["--adapter", "codiff"] : [])
+                ];
+
+      await expect(runCliAsync(args, runtime)).rejects.toThrow(/\.monke-restored\.json/u);
+
+      expect(read(repo, "monke.yml")).toBe(config);
+      expect(read(repo, "skills/imported/first/SKILL.md")).toBe(first);
+      expect(read(repo, "skills/imported/other/SKILL.md")).toBe(acceptedOther);
+      expect(existsSync(path.join(repo, "skills/imported/second"))).toBeFalsy();
+      expect(read(marker, "obstruction")).toBe("Marker obstruction must survive.\n");
+    }
+  );
+
+  test.each(["symlink", "dangling symlink", "hardlink"])(
+    "update atomically replaces a safe marker %s without changing its target",
+    async (alias) => {
+      const { bin, repo, runtime, upstream } = repoFixture();
+      await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+      const marker = path.join(repo, "skills/.monke-restored.json");
+      const original = read(repo, "skills/.monke-restored.json");
+      const target = `${marker}.previous`;
+      renameSync(marker, target);
+      if (alias === "dangling symlink") {
+        rmSync(target);
+      }
+      if (alias === "hardlink") {
+        linkSync(target, marker);
+      } else {
+        symlinkSync(target, marker);
+      }
+      write(upstream, "skills/first/guide.md", "Accepted new guide.\n");
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Advance aliased marker source"]);
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+
+      await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+
+      expect(read(repo, "skills/.monke-restored.json")).toContain(
+        git(upstream, ["rev-parse", "HEAD"])
+      );
+      expect(read(repo, "skills/imported/first/guide.md")).toBe("Accepted new guide.\n");
+      const targetContent = existsSync(target)
+        ? read(repo, "skills/.monke-restored.json.previous")
+        : undefined;
+      expect(targetContent).toBe(alias === "dangling symlink" ? undefined : original);
+    }
+  );
+
+  test("removing the last recipe and empty restore or update do not need a restore marker", async () => {
+    const { bin, repo, runtime, upstream } = repoFixture();
+    await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
+    const marker = path.join(repo, "skills/.monke-restored.json");
+    renameSync(marker, `${marker}.accepted`);
+    write(marker, "obstruction", "Marker obstruction must survive.\n");
+    installFakeCodiff(bin);
+    installFakeCodexSummary(bin);
+
+    await runCliAsync(["skills", "remove", upstream, "--repo"], runtime);
+    await runCliAsync(["skills", "restore", "--repo"], runtime);
+    await runCliAsync(["skills", "update", "--repo", "--adapter", "codiff"], runtime);
+
+    expect(parseDocument(read(repo, "monke.yml")).toJS()).toStrictEqual({ skills: [] });
+    expect(existsSync(path.join(repo, "skills/imported/first"))).toBeFalsy();
+    expect(read(marker, "obstruction")).toBe("Marker obstruction must survive.\n");
+  });
+
   test.each([
     { nested: false, readd: false },
     { nested: false, readd: true },
