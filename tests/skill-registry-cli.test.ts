@@ -14,11 +14,11 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
-import { parse } from "yaml";
+import { describe, expect, test, vi } from "vite-plus/test";
+import { parse, stringify } from "yaml";
 
 import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
-import { restoreLockedImports } from "../scripts/skill-lock.ts";
+import { guidanceDigest, restoreLockedImports } from "../scripts/skill-lock.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runInstallSkillsLocked } from "../src/guidance-installation.ts";
@@ -30,6 +30,7 @@ import {
   git,
   installFakeCodexSummary,
   installFakeCodiff,
+  installInternalRootImporter,
   makeTempDir,
   read,
   write,
@@ -162,7 +163,1698 @@ done
   );
 }
 
+function installNamedGitImporter(fixture: ReturnType<typeof registryFixture>) {
+  writeExecutable(
+    path.join(fixture.bin, "npx"),
+    `#!/usr/bin/env bun
+import { cpSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+const source = process.argv[5];
+const selectors = [];
+for (let index = 6; process.argv[index] === "--skill"; index += 2) selectors.push(process.argv[index + 1].toLowerCase());
+let installed = 0;
+for (const folder of readdirSync(path.join(source, "skills"))) {
+  const directory = path.join(source, "skills", folder);
+  const content = readFileSync(path.join(directory, "SKILL.md"), "utf8");
+  const name = /^name: (.+)$/m.exec(content)[1];
+  if (!selectors.includes("*") && !selectors.includes(name.toLowerCase())) continue;
+  const slug = name.toLowerCase().replace(/[^a-z0-9._]+/g, "-").replace(/^[.\\-]+|[.\\-]+$/g, "").substring(0, 255) || "unnamed-skill";
+  const destination = path.join(".agents", "skills", slug);
+  mkdirSync(path.dirname(destination), { recursive: true });
+  cpSync(directory, destination, { recursive: true });
+  installed += 1;
+}
+if (installed === 0) throw new Error("No matching skills: " + selectors.join(", "));
+`
+  );
+}
+
+async function namedPublisherTransition(options: {
+  action: "update" | "readd";
+  candidateName: string;
+  initial: "own" | "reference" | "skill";
+  selector: string;
+}) {
+  const { action, candidateName, initial, selector } = options;
+  const fixture = registryFixture();
+  installNamedGitImporter(fixture);
+  const skill = (body: string, name = "Fancy Author") =>
+    `---\nname: ${name}\ndescription: Author trigger.\n---\n${body}\n`;
+  const declaredName = initial === "own" ? candidateName : "Fancy Author";
+  const upstream = createRepo(path.join(fixture.sandbox, "named-import"), {
+    "skills/author/SKILL.md": skill("Declared author.", declaredName)
+  });
+  const declaration = stringify({
+    skills: [
+      {
+        commit: git(upstream, ["rev-parse", "HEAD"]),
+        skills: [
+          {
+            kind: initial === "reference" ? "reference" : "skill",
+            selector: declaredName,
+            slug: "fancy-author"
+          }
+        ],
+        source: upstream
+      }
+    ]
+  });
+  const publisher = createRepo(
+    path.join(fixture.sandbox, "named-publisher"),
+    initial === "own"
+      ? { "skills/authors/SKILL.md": skill("Owned author.") }
+      : { "monke.yml": declaration }
+  );
+  const source = `${publisher}#HEAD`;
+  if (candidateName === "Unrelated") {
+    write(publisher, "skills/existing/SKILL.md", skill("Retained sibling.", "Existing"));
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Publish a selected sibling"]);
+  }
+  await runCliAsync(
+    [
+      "skills",
+      "add",
+      source,
+      "--skill",
+      selector,
+      ...(candidateName === "Unrelated" ? ["Existing"] : [])
+    ],
+    fixture.runtime
+  );
+  const acceptedRegistry = read(fixture.registry, "skills.lock.json");
+  const acceptedGuidance =
+    initial === "reference"
+      ? read(fixture.registry, "skills/references/imported/fancy-author/MAIN.md")
+      : read(fixture.installed.codex, "fancy-author/SKILL.md");
+  if (initial === "own") {
+    rmSync(path.join(publisher, "skills/authors"), { recursive: true });
+    write(publisher, "monke.yml", declaration);
+  } else {
+    write(publisher, "monke.yml", "skills: []\n");
+    write(publisher, "skills/new-folder/SKILL.md", skill("Owned replacement.", candidateName));
+  }
+  git(publisher, ["add", "-A"]);
+  git(publisher, ["commit", "-m", "Move the selected author"]);
+  const command = action === "update" ? ["skills", "update"] : ["skills", "add", source];
+  return { acceptedGuidance, acceptedRegistry, command, fixture, publisher };
+}
+
 describe("Skill import registry CLI", () => {
+  test.each([
+    { action: "add", scope: "global" },
+    { action: "update", scope: "global" },
+    { action: "add", scope: "project" },
+    { action: "update", scope: "project" },
+    { action: "add", scope: "repo" },
+    { action: "update", scope: "repo" },
+    { action: "restore", scope: "repo" }
+  ])(
+    "Git $action rejects unconfined support links before publishing $scope state",
+    async ({ action, scope }) => {
+      const fixture = registryFixture();
+      installInternalRootImporter(fixture.bin);
+      const consumer = createRepo(path.join(fixture.sandbox, "consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = createTestRuntime({
+        cwd: consumer,
+        env: fixture.runtime.env,
+        onStderr() {},
+        onStdout() {}
+      });
+      const flags = scope === "global" ? [] : [`--${scope}`];
+      const registry =
+        scope === "repo"
+          ? consumer
+          : scope === "project"
+            ? path.join(consumer, ".git/monke-tools/skill-registry")
+            : fixture.registry;
+      const storePath = scope === "repo" ? "monke.yml" : "skills.lock.json";
+      const upstream = createRepo(path.join(fixture.sandbox, "upstream"), {
+        "skills/base/SKILL.md":
+          "---\nname: base\ndescription: Base.\nmetadata:\n  internal: true\n---\nAccepted instructions.\n"
+      });
+      await runCliAsync(
+        ["skills", "add", `${upstream}#HEAD`, "--skill", "base", ...flags],
+        runtime
+      );
+      const accepted = {
+        guidance: read(registry, "skills/imported/base/SKILL.md"),
+        marker: read(registry, "skills/.monke-restored.json"),
+        store: read(registry, storePath)
+      };
+      const invalid =
+        action === "add"
+          ? createRepo(path.join(fixture.sandbox, "invalid"), {
+              "skills/invalid/SKILL.md":
+                "---\nname: invalid\ndescription: Invalid.\nmetadata:\n  internal: true\n---\nRejected instructions.\n"
+            })
+          : upstream;
+      const slug = action === "add" ? "invalid" : "base";
+      write(invalid, "shared.md", "Checkout support.\n");
+      write(
+        invalid,
+        `skills/${slug}/SKILL.md`,
+        `---\nname: ${slug}\ndescription: Changed.\nmetadata:\n  internal: true\n---\nRejected instructions.\n`
+      );
+      symlinkSync("../../shared.md", path.join(invalid, "skills", slug, "support.md"));
+      git(invalid, ["add", "."]);
+      git(invalid, ["commit", "-m", "Add checkout-confined support link"]);
+      if (action === "restore") {
+        write(
+          registry,
+          storePath,
+          stringify({
+            skills: [
+              {
+                commit: git(upstream, ["rev-parse", "HEAD"]),
+                skills: ["base"],
+                source: `${upstream}#HEAD`
+              }
+            ]
+          })
+        );
+        accepted.store = read(registry, storePath);
+      }
+      const command =
+        action === "add"
+          ? ["skills", "add", `${invalid}#HEAD`, "--skill", slug, ...flags]
+          : ["skills", action, ...flags];
+      await expect(runCliAsync(command, runtime)).rejects.toThrow(
+        "Imported symlink escapes its guidance directory"
+      );
+      expect(read(registry, storePath)).toBe(accepted.store);
+      expect(read(registry, "skills/.monke-restored.json")).toBe(accepted.marker);
+      expect(read(registry, "skills/imported/base/SKILL.md")).toBe(accepted.guidance);
+      expect(existsSync(path.join(registry, "skills/imported", slug, "support.md"))).toBeFalsy();
+      expect(existsSync(path.join(registry, "skills/imported/invalid"))).toBeFalsy();
+    }
+  );
+
+  test.each(["skill", "reference"] as const)(
+    "policy rejects an edited %s support link before changing accepted state",
+    async (kind) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "reference-source"), {
+        "skills/base/SKILL.md": "---\nname: base\ndescription: Base.\n---\nBase instructions.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            {
+              commit: git(upstream, ["rev-parse", "HEAD"]),
+              skills: [{ kind: "reference", slug: "base" }],
+              source: upstream
+            }
+          ]
+        }),
+        "skills/own-skill/SKILL.md":
+          "---\nname: own-skill\ndescription: Original trigger.\n---\nOwn instructions.\n"
+      });
+      await runCliAsync(
+        ["skills", "add", `${publisher}#HEAD`, "--name", "publisher"],
+        fixture.runtime
+      );
+      const link = path.join(
+        fixture.registry,
+        kind === "skill"
+          ? "skills/imported/own-skill/shared.md"
+          : "skills/references/imported/base/shared.md"
+      );
+      const support = path.resolve(path.dirname(link), "../../shared.md");
+      writeFileSync(support, "Shared local support.\n");
+      symlinkSync("../../shared.md", link);
+      const accepted = {
+        entry: read(fixture.registry, "skills/imported/own-skill/SKILL.md"),
+        marker: read(fixture.registry, "skills/.monke-restored.json"),
+        reference: read(fixture.registry, "skills/references/imported/base/MAIN.md"),
+        store: read(fixture.registry, "skills.lock.json")
+      };
+      const policy = [
+        "skills",
+        "policy",
+        "publisher",
+        "own-skill",
+        "--description",
+        "Next trigger."
+      ];
+
+      await expect(runCliAsync(policy, fixture.runtime)).rejects.toThrow(
+        "Imported symlink escapes its guidance directory"
+      );
+
+      expect(read(fixture.registry, "skills/imported/own-skill/SKILL.md")).toBe(accepted.entry);
+      expect(read(fixture.registry, "skills/.monke-restored.json")).toBe(accepted.marker);
+      expect(read(fixture.registry, "skills/references/imported/base/MAIN.md")).toBe(
+        accepted.reference
+      );
+      expect(read(fixture.registry, "skills.lock.json")).toBe(accepted.store);
+      expect(readlinkSync(link)).toBe("../../shared.md");
+      expect(readFileSync(support, "utf-8")).toBe("Shared local support.\n");
+
+      rmSync(link);
+      await runCliAsync(policy, fixture.runtime);
+      expect(read(fixture.registry, "skills/imported/own-skill/SKILL.md")).toContain(
+        "description: Next trigger."
+      );
+    }
+  );
+
+  test("Git publishers include declared imports, retain consumer overrides, and update accepted pins", async () => {
+    const fixture = registryFixture();
+    installGitImporter(fixture);
+    const upstream = createRepo(path.join(fixture.sandbox, "declared-source"), {
+      "README.md": "Declared source.\n"
+    });
+    writeSkill(path.join(upstream, "skills"), "imported-skill", "Imported first revision.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Upstream skill"]);
+    const publisher = createRepo(path.join(fixture.sandbox, "publisher"), {
+      "README.md": "Publisher.\n"
+    });
+    writeSkill(path.join(publisher, "skills"), "own-skill", "Publisher instructions.\n");
+    function pinPublisher() {
+      write(
+        publisher,
+        "monke.yml",
+        stringify({
+          skills: [
+            {
+              commit: git(upstream, ["rev-parse", "HEAD"]),
+              modelInvocation: "deny",
+              skills: [{ description: "Publisher trigger.", slug: "imported-skill" }],
+              source: upstream
+            }
+          ]
+        })
+      );
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Publish accepted imports"]);
+    }
+    pinPublisher();
+    await runCliAsync(
+      ["skills", "add", `${publisher}#HEAD`, "--name", "publisher"],
+      fixture.runtime
+    );
+    expect(read(fixture.installed.codex, "own-skill/SKILL.md")).toContain(
+      "Publisher instructions."
+    );
+    expect(read(fixture.installed.codex, "imported-skill/SKILL.md")).toContain(
+      "description: Publisher trigger."
+    );
+    expect(read(fixture.installed.codex, "imported-skill/SKILL.md")).toContain(
+      "disable-model-invocation: true"
+    );
+    await runCliAsync(
+      [
+        "skills",
+        "policy",
+        "publisher",
+        "imported-skill",
+        "--description",
+        "Consumer trigger.",
+        "--model-invocation",
+        "allow"
+      ],
+      fixture.runtime
+    );
+    writeSkill(path.join(upstream, "skills"), "imported-skill", "Imported second revision.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Advance imported skill"]);
+    pinPublisher();
+    await runCliAsync(["skills", "update"], fixture.runtime);
+    const entry = read(fixture.installed.codex, "imported-skill/SKILL.md");
+    expect(entry).toContain("Imported second revision.");
+    expect(entry).toContain("description: Consumer trigger.");
+    expect(entry).toContain("disable-model-invocation: false");
+    expect(readImportRecipeStore(fixture.registry).recipes).toHaveLength(1);
+  });
+
+  test.each([
+    { explicit: false, initial: "skill", readd: false },
+    { explicit: false, initial: "reference", readd: false },
+    { explicit: true, initial: "skill", readd: false },
+    { explicit: true, initial: "reference", readd: false },
+    { explicit: false, initial: "skill", readd: true },
+    { explicit: false, initial: "reference", readd: true },
+    { explicit: true, initial: "skill", readd: true },
+    { explicit: true, initial: "reference", readd: true }
+  ] as const)(
+    "Git consumers follow publisher kinds from $initial with explicit=$explicit readd=$readd",
+    async ({ explicit, initial, readd }) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "kind-source"), {
+        "skills/base/SKILL.md":
+          "---\nname: base\ndescription: Base trigger.\n---\nBase instructions.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "kind-publisher"), {
+        "skills/own/SKILL.md": "---\nname: own\ndescription: Own trigger.\n---\nOwn instructions.\n"
+      });
+      function publish(kind: "skill" | "reference") {
+        writeSkill(
+          path.join(publisher, "skills"),
+          "own",
+          kind === "reference"
+            ? "Load ../../references/imported/base/MAIN.md.\n"
+            : "Self-contained instructions.\n"
+        );
+        write(
+          publisher,
+          "monke.yml",
+          stringify({
+            skills: [
+              {
+                commit: git(upstream, ["rev-parse", "HEAD"]),
+                skills: [{ kind, slug: "base" }],
+                source: upstream
+              }
+            ]
+          })
+        );
+        git(publisher, ["add", "."]);
+        git(publisher, ["commit", "-m", `Publish ${kind}`]);
+      }
+      publish(initial);
+      const add = ["skills", "add", `${publisher}#HEAD`, ...(explicit ? ["--skill", "base"] : [])];
+      await runCliAsync(add, fixture.runtime);
+      const nextKind = initial === "skill" ? "reference" : "skill";
+      publish(nextKind);
+      await runCliAsync(readd ? add : ["skills", "update"], fixture.runtime);
+      const skill = path.join(fixture.registry, "skills/imported/base/SKILL.md");
+      const reference = path.join(fixture.registry, "skills/references/imported/base/MAIN.md");
+      expect(existsSync(skill)).toBe(nextKind === "skill");
+      expect(existsSync(reference)).toBe(nextKind === "reference");
+      const entry = readFileSync(nextKind === "skill" ? skill : reference, "utf-8");
+      expect(entry).toContain("Base instructions.");
+      expect(entry.startsWith("---")).toBe(nextKind === "skill");
+    }
+  );
+
+  test.each(["update", "readd", "remove"] as const)(
+    "%s can retire a publisher reference together with its consumer",
+    async (action) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "reference-source"), {
+        "skills/base/SKILL.md":
+          "---\nname: base\ndescription: Base trigger.\n---\nBase instructions.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "reference-publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            {
+              commit: git(upstream, ["rev-parse", "HEAD"]),
+              skills: [{ kind: "reference", slug: "base" }],
+              source: upstream
+            }
+          ]
+        }),
+        "skills/own/SKILL.md":
+          "---\nname: own\ndescription: Own trigger.\n---\nLoad ../../references/imported/base/MAIN.md.\n"
+      });
+      const source = `${publisher}#HEAD`;
+      await runCliAsync(["skills", "add", source], fixture.runtime);
+      if (action !== "remove") {
+        writeSkill(path.join(publisher, "skills"), "own", "Self-contained instructions.\n");
+        write(publisher, "monke.yml", "skills: []\n");
+        git(publisher, ["add", "."]);
+        git(publisher, ["commit", "-m", "Retire reference"]);
+      }
+      const command =
+        action === "readd"
+          ? ["skills", "add", source]
+          : ["skills", action, ...(action === "remove" ? [source] : [])];
+      const external = createRepo(path.join(fixture.sandbox, "external"), {
+        "skills/retained/SKILL.md":
+          "---\nname: retained\ndescription: Retained trigger.\n---\nLoad ../../references/imported/base/MAIN.md.\n"
+      });
+      await runCliAsync(["skills", "add", `${external}#HEAD`], fixture.runtime);
+      const acceptedRegistry = read(fixture.registry, "skills.lock.json");
+      const acceptedOwn = read(fixture.installed.codex, "own/SKILL.md");
+      await expect(runCliAsync(command, fixture.runtime)).rejects.toThrow(
+        /Cannot replace Imported reference base; it is used by skills\/imported\/retained\/SKILL.md/u
+      );
+      expect(read(fixture.registry, "skills.lock.json")).toBe(acceptedRegistry);
+      expect(read(fixture.installed.codex, "own/SKILL.md")).toBe(acceptedOwn);
+      expect(read(fixture.registry, "skills/references/imported/base/MAIN.md")).toBe(
+        "Base instructions.\n"
+      );
+      await runCliAsync(["skills", "remove", `${external}#HEAD`], fixture.runtime);
+      await runCliAsync(command, fixture.runtime);
+      expect(
+        existsSync(path.join(fixture.registry, "skills/references/imported/base"))
+      ).toBeFalsy();
+      const ownEntry = path.join(fixture.installed.codex, "own/SKILL.md");
+      expect(existsSync(ownEntry)).toBe(action !== "remove");
+      const ownContent = existsSync(ownEntry) ? readFileSync(ownEntry, "utf-8") : "";
+      expect(ownContent.includes("Self-contained instructions.")).toBe(action !== "remove");
+    }
+  );
+
+  test.each([
+    { explicit: false, readd: false, remote: false, removeConfig: false },
+    { explicit: true, readd: false, remote: false, removeConfig: false },
+    { explicit: false, readd: false, remote: false, removeConfig: true },
+    { explicit: true, readd: false, remote: false, removeConfig: true },
+    { explicit: false, readd: true, remote: false, removeConfig: false },
+    { explicit: true, readd: true, remote: false, removeConfig: false },
+    { explicit: false, readd: true, remote: false, removeConfig: true },
+    { explicit: true, readd: true, remote: true, removeConfig: true }
+  ])(
+    "owned skills replace inherited references with explicit=$explicit removeConfig=$removeConfig readd=$readd remote=$remote",
+    async ({ explicit, readd, remote, removeConfig }) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "owned-transition-source"), {
+        "skills/base/SKILL.md":
+          "---\nname: base\ndescription: Base trigger.\n---\nImported base instructions.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "owned-transition-publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            {
+              commit: git(upstream, ["rev-parse", "HEAD"]),
+              skills: [{ kind: "reference", slug: "base" }],
+              source: upstream
+            }
+          ]
+        })
+      });
+      const source = remote ? "https://github.com/owner/owned-transition" : publisher;
+      if (remote) {
+        const gitConfig = path.join(fixture.sandbox, "git-config");
+        write(fixture.sandbox, "git-config", `[url "${publisher}"]\n  insteadOf = ${source}.git\n`);
+        fixture.runtime.env.GIT_CONFIG_GLOBAL = gitConfig;
+        vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
+        writeExecutable(
+          path.join(fixture.bin, "npx"),
+          `#!/bin/sh
+set -eu
+source="$4"
+[ -d "$source" ] || source=upstream-validation
+shift 4
+mkdir -p .agents/skills
+while [ "$1" = --skill ]; do
+  if [ "$2" = '*' ]; then cp -R "$source/skills/"* .agents/skills/;
+  else cp -R "$source/skills/$2" .agents/skills/; fi
+  shift 2
+done
+`
+        );
+      }
+      try {
+        const add = ["skills", "add", `${source}#HEAD`, ...(explicit ? ["--skill", "base"] : [])];
+        await runCliAsync(add, fixture.runtime);
+        if (removeConfig) {
+          rmSync(path.join(publisher, "monke.yml"));
+        } else {
+          write(publisher, "monke.yml", "skills: []\n");
+        }
+        writeSkill(path.join(publisher, "skills"), "base", "Owned base instructions.\n");
+        git(publisher, ["add", "-A"]);
+        git(publisher, ["commit", "-m", "Replace declared reference with own skill"]);
+        await runCliAsync(readd ? add : ["skills", "update"], fixture.runtime);
+        expect(
+          existsSync(path.join(fixture.registry, "skills/references/imported/base"))
+        ).toBeFalsy();
+        expect(read(fixture.installed.codex, "base/SKILL.md")).toContain(
+          "Owned base instructions."
+        );
+        expect(read(fixture.installed.codex, "base/SKILL.md")).toContain("name: base");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
+  );
+
+  test.each([
+    { action: "update", candidateName: "Fancy Author", initial: "skill", selector: "fancy-author" },
+    { action: "readd", candidateName: "Fancy Author", initial: "skill", selector: "fancy-author" },
+    {
+      action: "update",
+      candidateName: "Fancy Author",
+      initial: "reference",
+      selector: "fancy-author"
+    },
+    {
+      action: "readd",
+      candidateName: "Fancy Author",
+      initial: "reference",
+      selector: "fancy-author"
+    },
+    { action: "update", candidateName: "Fancy Author", initial: "own", selector: "fAnCy AuThOr" },
+    { action: "readd", candidateName: "Fancy Author", initial: "own", selector: "fAnCy AuThOr" },
+    { action: "update", candidateName: "Fancy+Author", initial: "skill", selector: "fancy-author" },
+    { action: "readd", candidateName: "Fancy+Author", initial: "own", selector: "fAnCy AuThOr" }
+  ] as const)(
+    "$action retains $selector when a publisher changes from $initial guidance to $candidateName",
+    async ({ action, candidateName, initial, selector }) => {
+      const { command, fixture, publisher } = await namedPublisherTransition({
+        action,
+        candidateName,
+        initial,
+        selector
+      });
+      await runCliAsync(command, fixture.runtime);
+      const expected = initial === "own" ? "Declared author." : "Owned replacement.";
+      expect(read(fixture.installed.codex, "fancy-author/SKILL.md")).toContain(expected);
+      expect(JSON.parse(read(fixture.registry, "skills.lock.json"))).toMatchObject({
+        recipes: [
+          {
+            commit: git(publisher, ["rev-parse", "HEAD"]),
+            selection: [candidateName === "Fancy Author" ? selector : "fancy-author"],
+            skills: [{ selector: candidateName, slug: "fancy-author" }]
+          }
+        ]
+      });
+      expect(
+        existsSync(path.join(fixture.registry, "skills/references/imported/fancy-author"))
+      ).toBeFalsy();
+      rmSync(path.join(fixture.registry, "skills/imported/fancy-author"), { recursive: true });
+      await runCliAsync(["skills", "update"], fixture.runtime);
+      expect(read(fixture.installed.codex, "fancy-author/SKILL.md")).toContain(expected);
+    }
+  );
+
+  test.each(["update", "readd"] as const)(
+    "%s rejects a missing retained publisher identity after a partial importer success",
+    async (action) => {
+      const { acceptedGuidance, acceptedRegistry, command, fixture } =
+        await namedPublisherTransition({
+          action,
+          candidateName: "Unrelated",
+          initial: "skill",
+          selector: "fancy-author"
+        });
+      await expect(runCliAsync(command, fixture.runtime)).rejects.toThrow(/fancy-author/u);
+      expect(read(fixture.registry, "skills.lock.json")).toBe(acceptedRegistry);
+      expect(read(fixture.installed.codex, "fancy-author/SKILL.md")).toBe(acceptedGuidance);
+      expect(existsSync(path.join(fixture.installed.codex, "unrelated"))).toBeFalsy();
+    }
+  );
+
+  test.each([
+    { declared: false, project: false },
+    { declared: false, project: true },
+    { declared: true, project: false },
+    { declared: true, project: true }
+  ])(
+    "Git selections must be complete before publication with declared=$declared project=$project",
+    async ({ declared, project }) => {
+      const fixture = registryFixture();
+      installNamedGitImporter(fixture);
+      const consumer = createRepo(path.join(fixture.sandbox, "consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = project
+        ? createTestRuntime({
+            cwd: consumer,
+            env: fixture.runtime.env,
+            onStderr() {},
+            onStdout() {}
+          })
+        : fixture.runtime;
+      const registry = project
+        ? path.join(consumer, ".git/monke-tools/skill-registry")
+        : fixture.registry;
+      const installed = project
+        ? path.join(consumer, ".agents/skills/monke-tools/imported")
+        : fixture.installed.codex;
+      const publisher = createRepo(path.join(fixture.sandbox, "publisher"), {
+        "skills/author/SKILL.md":
+          "---\nname: Fancy Author\ndescription: Author trigger.\n---\nOwn instructions.\n"
+      });
+      if (declared) {
+        const upstream = createRepo(path.join(fixture.sandbox, "declared-source"), {
+          "skills/course/SKILL.md":
+            "---\nname: Course Import\ndescription: Course trigger.\n---\nDeclared instructions.\n"
+        });
+        write(
+          publisher,
+          "monke.yml",
+          stringify({
+            skills: [
+              {
+                commit: git(upstream, ["rev-parse", "HEAD"]),
+                skills: [{ selector: "Course Import", slug: "course-import" }],
+                source: upstream
+              }
+            ]
+          })
+        );
+        git(publisher, ["add", "."]);
+        git(publisher, ["commit", "-m", "Declare imported guidance"]);
+      }
+      const add = ["skills", "add", `${publisher}#HEAD`, ...(project ? ["--project"] : [])];
+      const selection = ["FANCY AUTHOR", ...(declared ? ["COURSE-IMPORT"] : [])];
+      const incomplete = [...add, "--skill", ...selection, "missing-course-skill"];
+      await expect(runCliAsync(incomplete, runtime)).rejects.toThrow(
+        /Selected skills not found.*missing-course-skill/u
+      );
+      expect(readImportRecipeStore(registry).recipes).toStrictEqual([]);
+      expect(existsSync(path.join(installed, "fancy-author"))).toBeFalsy();
+      expect(existsSync(path.join(installed, "course-import"))).toBeFalsy();
+
+      await runCliAsync([...add, "--skill", ...selection], runtime);
+      const guidance = [
+        { body: "Own instructions.", slug: "fancy-author" },
+        ...(declared ? [{ body: "Declared instructions.", slug: "course-import" }] : [])
+      ];
+      for (const { body, slug } of guidance) {
+        expect(read(installed, `${slug}/SKILL.md`)).toContain(body);
+      }
+      if (declared) {
+        await runCliAsync([...add, "--skill", "Fancy Author", "Course Import"], runtime);
+      }
+      const acceptedRegistry = read(registry, "skills.lock.json");
+      const acceptedMarker = read(registry, "skills/.monke-restored.json");
+      const acceptedGuidance = guidance.map(({ slug }) => read(installed, `${slug}/SKILL.md`));
+      await expect(runCliAsync(incomplete, runtime)).rejects.toThrow(
+        /Selected skills not found.*missing-course-skill/u
+      );
+      expect(read(registry, "skills.lock.json")).toBe(acceptedRegistry);
+      expect(read(registry, "skills/.monke-restored.json")).toBe(acceptedMarker);
+      expect(guidance.map(({ slug }) => read(installed, `${slug}/SKILL.md`))).toStrictEqual(
+        acceptedGuidance
+      );
+      await expect(
+        runCliAsync([...add, "--skill", ...selection, "fancy-author"], runtime)
+      ).rejects.toThrow(/Selected skills not found.*fancy-author/u);
+      expect(read(registry, "skills.lock.json")).toBe(acceptedRegistry);
+      expect(read(registry, "skills/.monke-restored.json")).toBe(acceptedMarker);
+      expect(existsSync(path.join(installed, "missing-course-skill"))).toBeFalsy();
+    }
+  );
+
+  test.each([
+    { nested: false, project: false },
+    { nested: true, project: true }
+  ])(
+    "explicit internal guidance rejects declaration collisions with nested=$nested project=$project",
+    async ({ nested, project }) => {
+      const fixture = registryFixture();
+      installInternalRootImporter(fixture.bin);
+      fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const consumer = createRepo(path.join(fixture.sandbox, "consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = project
+        ? createTestRuntime({
+            cwd: consumer,
+            env: fixture.runtime.env,
+            onStderr() {},
+            onStdout() {}
+          })
+        : fixture.runtime;
+      const registry = project
+        ? path.join(consumer, ".git/monke-tools/skill-registry")
+        : fixture.registry;
+      const installed = project
+        ? path.join(consumer, ".agents/skills/monke-tools/imported")
+        : fixture.installed.codex;
+      const upstream = createRepo(path.join(fixture.sandbox, "declared-internal"), {
+        "skills/internal/SKILL.md":
+          "---\nname: internal\ndescription: Declared skill.\n---\nDeclared guidance.\n"
+      });
+      const declaration = stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["internal"], source: upstream }
+        ]
+      });
+      const ownPath = nested ? "skills/internal/SKILL.md" : "SKILL.md";
+      const publisher = createRepo(path.join(fixture.sandbox, "internal-publisher"), {
+        "monke.yml": declaration,
+        [ownPath]:
+          "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nOwned guidance.\n",
+        "skills/public/SKILL.md":
+          "---\nname: public\ndescription: Public skill.\n---\nPublic guidance.\n"
+      });
+      const add = ["skills", "add", `${publisher}#HEAD`, ...(project ? ["--project"] : [])];
+      const explicit = [...add, "--skill", "internal"];
+      await expect(runCliAsync(explicit, runtime)).rejects.toThrow(/internal.*collides/u);
+      expect(readImportRecipeStore(registry).recipes).toStrictEqual([]);
+      expect(existsSync(path.join(installed, "internal"))).toBeFalsy();
+      await runCliAsync(add, runtime);
+      expect(read(installed, "internal/SKILL.md")).toContain("Declared guidance.");
+      await runCliAsync(
+        ["skills", "remove", `${publisher}#HEAD`, ...(project ? ["--project"] : [])],
+        runtime
+      );
+      rmSync(path.join(publisher, "monke.yml"));
+      git(publisher, ["add", "-A"]);
+      git(publisher, ["commit", "-m", "Remove declaration"]);
+      await runCliAsync(explicit, runtime);
+      const accepted = read(registry, "skills.lock.json");
+      const marker = read(registry, "skills/.monke-restored.json");
+      const guidance = read(installed, "internal/SKILL.md");
+      write(publisher, "monke.yml", declaration);
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Declare colliding skill"]);
+      for (const command of [
+        explicit,
+        add,
+        ["skills", "update", ...(project ? ["--project"] : [])]
+      ]) {
+        await expect(runCliAsync(command, runtime)).rejects.toThrow(/internal.*collides/u);
+        expect(read(registry, "skills.lock.json")).toBe(accepted);
+        expect(read(registry, "skills/.monke-restored.json")).toBe(marker);
+        expect(read(installed, "internal/SKILL.md")).toBe(guidance);
+      }
+      rmSync(path.join(publisher, ownPath));
+      git(publisher, ["add", "-A"]);
+      git(publisher, ["commit", "-m", "Retire own guidance"]);
+      await runCliAsync(["skills", "update", ...(project ? ["--project"] : [])], runtime);
+      expect(read(installed, "internal/SKILL.md")).toContain("Declared guidance.");
+    }
+  );
+
+  test.each([
+    { composed: false, project: false },
+    { composed: true, project: true }
+  ])(
+    "retained raw selectors survive update and re-add with composed=$composed project=$project",
+    async ({ composed, project }) => {
+      const fixture = registryFixture();
+      installInternalRootImporter(fixture.bin);
+      fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const consumer = createRepo(path.join(fixture.sandbox, "retained-consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = project
+        ? createTestRuntime({
+            cwd: consumer,
+            env: fixture.runtime.env,
+            onStderr() {},
+            onStdout() {}
+          })
+        : fixture.runtime;
+      const registry = project
+        ? path.join(consumer, ".git/monke-tools/skill-registry")
+        : fixture.registry;
+      const upstream = createRepo(path.join(fixture.sandbox, "retained-course"), {
+        "skills/course/SKILL.md":
+          "---\nname: course\ndescription: Course.\n---\nDeclared guidance.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "retained-publisher"), {
+        "SKILL.md":
+          "---\nname: Internal Guide\ndescription: Root.\nmetadata:\n  internal: true\n---\nAccepted internal root.\n",
+        "skills/public/SKILL.md":
+          "---\nname: Internal-Guide\ndescription: Child.\n---\nOther public child.\n",
+        ...(composed
+          ? {
+              "monke.yml": stringify({
+                skills: [
+                  {
+                    commit: git(upstream, ["rev-parse", "HEAD"]),
+                    skills: ["course"],
+                    source: upstream
+                  }
+                ]
+              })
+            }
+          : {})
+      });
+      const flags = project ? ["--project"] : [];
+      const add = ["skills", "add", `${publisher}#HEAD`, ...flags];
+      const selectors = composed ? ["Internal Guide", "course"] : ["Internal Guide"];
+      await runCliAsync([...add, "--skill", ...selectors], runtime);
+      const accepted = read(registry, "skills/imported/internal-guide/SKILL.md");
+      for (const command of [["skills", "update", ...flags], add, ["skills", "update", ...flags]]) {
+        await runCliAsync(command, runtime);
+        expect(readImportRecipeStore(registry).recipes[0]?.selection).toStrictEqual(selectors);
+        expect(read(registry, "skills/imported/internal-guide/SKILL.md")).toBe(accepted);
+      }
+      rmSync(path.join(registry, "skills/imported"), { recursive: true });
+      rmSync(path.join(registry, "skills/.monke-restored.json"));
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(readImportRecipeStore(registry).recipes[0]?.selection).toStrictEqual(selectors);
+      expect(read(registry, "skills/imported/internal-guide/SKILL.md")).toBe(accepted);
+      expect(existsSync(path.join(registry, "skills/imported/course"))).toBe(composed);
+    }
+  );
+
+  test.each([
+    { project: false, version: 3 },
+    { project: true, version: 4 }
+  ])(
+    "implicit machine v$version selections recover cold internal guidance with project=$project",
+    async ({ project, version }) => {
+      const fixture = registryFixture();
+      installInternalRootImporter(fixture.bin);
+      fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const consumer = createRepo(path.join(fixture.sandbox, "implicit-consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = project
+        ? createTestRuntime({
+            cwd: consumer,
+            env: fixture.runtime.env,
+            onStderr() {},
+            onStdout() {}
+          })
+        : fixture.runtime;
+      const registry = project
+        ? path.join(consumer, ".git/monke-tools/skill-registry")
+        : fixture.registry;
+      const installed = project
+        ? path.join(consumer, ".agents/skills/monke-tools/imported")
+        : fixture.installed.codex;
+      const rootSkill = (body: string) =>
+        `---\nname: Guide\ndescription: Root.\nmetadata:\n  internal: true\n---\n${body}\n`;
+      const publisher = createRepo(path.join(fixture.sandbox, "implicit-publisher"), {
+        "SKILL.md": rootSkill("Accepted internal root."),
+        "skills/public/SKILL.md": "---\nname: Guide\ndescription: Child.\n---\nPublic child.\n"
+      });
+      const source = `${publisher}#HEAD`;
+      const flags = project ? ["--project"] : [];
+      await runCliAsync(["skills", "add", source, ...flags, "--skill", "Guide"], runtime);
+      await runCliAsync(
+        [
+          "skills",
+          "policy",
+          source,
+          "guide",
+          ...flags,
+          "--description",
+          "Consumer trigger.",
+          "--model-invocation",
+          "deny"
+        ],
+        runtime
+      );
+      const accepted = read(installed, "guide/SKILL.md");
+      const [recorded] = readImportRecipeStore(registry).recipes;
+      if (!recorded) {
+        throw new Error("Missing accepted machine recipe");
+      }
+      const { commit, selection: _selection, ...implicit } = recorded;
+      if (version === 3) {
+        write(
+          registry,
+          "skills.lock.json",
+          JSON.stringify({
+            recipes: [
+              {
+                ...implicit,
+                lock: {
+                  commit,
+                  digest: guidanceDigest(registry, recorded.skills),
+                  importerVersion: "1.7.0",
+                  materializerVersion: 1,
+                  repository: publisher,
+                  subpath: "",
+                  updateRef: "HEAD"
+                }
+              }
+            ],
+            version
+          })
+        );
+      } else {
+        writeImportRecipeStore(registry, { recipes: [{ ...implicit, commit }], version: 4 });
+      }
+      rmSync(path.join(registry, "skills/imported"), { recursive: true });
+      rmSync(path.join(registry, "skills/.monke-restored.json"));
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(read(installed, "guide/SKILL.md")).toBe(accepted);
+      expect(readImportRecipeStore(registry).recipes[0]).toMatchObject({
+        commit,
+        skills: [
+          { description: "Consumer trigger.", disableModelInvocation: true, selector: "Guide" }
+        ]
+      });
+
+      write(publisher, "SKILL.md", rootSkill("Updated internal root."));
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Advance the explicitly accepted internal root"]);
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(read(installed, "guide/SKILL.md")).toBe(
+        accepted.replace("Accepted internal root.", "Updated internal root.")
+      );
+      expect(readImportRecipeStore(registry).recipes[0]?.commit).toBe(
+        git(publisher, ["rev-parse", "HEAD"])
+      );
+    }
+  );
+
+  test("machine explicit replay preserves internal guidance when a public child has the same name", async () => {
+    const fixture = registryFixture();
+    installInternalRootImporter(fixture.bin);
+    fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+    const upstream = createRepo(path.join(fixture.sandbox, "declared-source"), {
+      "skills/course/SKILL.md": "---\nname: course\ndescription: Course.\n---\nDeclared.\n",
+      "skills/internal/SKILL.md":
+        "---\nname: internal\ndescription: External.\n---\nConflicting external.\n"
+    });
+    const publisher = createRepo(path.join(fixture.sandbox, "equal-names"), {
+      "monke.yml": stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["course"], source: upstream }
+        ]
+      }),
+      "SKILL.md":
+        "---\nname: internal\ndescription: Root.\nmetadata:\n  internal: true\n---\nInternal root.\n",
+      "skills/public/SKILL.md": "---\nname: internal\ndescription: Child.\n---\nPublic child.\n"
+    });
+    await runCliAsync(
+      ["skills", "add", `${publisher}#HEAD`, "--skill", "internal"],
+      fixture.runtime
+    );
+    const accepted = read(fixture.registry, "skills/imported/internal/SKILL.md");
+    const lock = read(fixture.registry, "skills.lock.json");
+    rmSync(path.join(fixture.registry, "skills/imported"), { recursive: true });
+    rmSync(path.join(fixture.registry, "skills/.monke-restored.json"));
+    write(
+      publisher,
+      "monke.yml",
+      stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["internal"], source: upstream }
+        ]
+      })
+    );
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Declare conflicting external"]);
+    await expect(runCliAsync(["skills", "update"], fixture.runtime)).rejects.toThrow(
+      /internal.*collides/u
+    );
+    expect(read(fixture.registry, "skills.lock.json")).toBe(lock);
+    expect(read(fixture.registry, "skills/imported/internal/SKILL.md")).toBe(accepted);
+  });
+
+  test("machine wildcard acceptance rejects ambiguous discovery identities", async () => {
+    const fixture = registryFixture();
+    installInternalRootImporter(fixture.bin);
+    fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+    const publisher = createRepo(path.join(fixture.sandbox, "ambiguous-wildcard"), {
+      "skills/public/SKILL.md": "---\nname: internal\ndescription: Child.\n---\nAccepted child.\n"
+    });
+    const add = ["skills", "add", `${publisher}#HEAD`];
+    await runCliAsync(add, fixture.runtime);
+    const accepted = read(fixture.registry, "skills/imported/internal/SKILL.md");
+    const lock = read(fixture.registry, "skills.lock.json");
+    write(
+      publisher,
+      "SKILL.md",
+      "---\nname: internal\ndescription: Root.\nmetadata:\n  internal: true\n---\nDifferent root.\n"
+    );
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Introduce ambiguous root"]);
+    for (const command of [add, ["skills", "update"]]) {
+      await expect(runCliAsync(command, fixture.runtime)).rejects.toThrow(
+        "Ambiguous Skill selector internal"
+      );
+      expect(read(fixture.registry, "skills.lock.json")).toBe(lock);
+      expect(read(fixture.registry, "skills/imported/internal/SKILL.md")).toBe(accepted);
+    }
+  });
+
+  test.each([false, true])(
+    "composed wildcard selections recover cold guidance with project=%s",
+    async (project) => {
+      const fixture = registryFixture();
+      installInternalRootImporter(fixture.bin);
+      fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
+      const consumer = createRepo(path.join(fixture.sandbox, "consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = project
+        ? createTestRuntime({
+            cwd: consumer,
+            env: fixture.runtime.env,
+            onStderr() {},
+            onStdout() {}
+          })
+        : fixture.runtime;
+      const registry = project
+        ? path.join(consumer, ".git/monke-tools/skill-registry")
+        : fixture.registry;
+      const upstream = createRepo(path.join(fixture.sandbox, "declared-source"), {
+        "skills/course/SKILL.md":
+          "---\nname: course\ndescription: Declared course.\n---\nDeclared guidance.\n"
+      });
+      const publisher = createRepo(path.join(fixture.sandbox, "cold-publisher"), {
+        "monke.yml": stringify({
+          skills: [
+            { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["course"], source: upstream }
+          ]
+        }),
+        "SKILL.md":
+          "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nInternal.\n",
+        "skills/public/references/details.md": "Pinned support asset.\n",
+        "skills/public/SKILL.md":
+          "---\nname: public\ndescription: Public skill.\n---\nPublic guidance.\n"
+      });
+      const flags = project ? ["--project"] : [];
+      await runCliAsync(["skills", "add", `${publisher}#HEAD`, ...flags], runtime);
+      const accepted = read(registry, "skills.lock.json");
+      const guidance = read(registry, "skills/imported/public/SKILL.md");
+      rmSync(path.join(registry, "skills/imported"), { recursive: true });
+      rmSync(path.join(registry, "skills/.monke-restored.json"));
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(read(registry, "skills.lock.json")).toBe(accepted);
+      expect(read(registry, "skills/imported/public/SKILL.md")).toBe(guidance);
+      expect(read(registry, "skills/imported/public/references/details.md")).toBe(
+        "Pinned support asset.\n"
+      );
+      expect(read(registry, "skills/imported/course/SKILL.md")).toContain("Declared guidance.");
+      expect(existsSync(path.join(registry, "skills/imported/internal"))).toBeFalsy();
+    }
+  );
+
+  test.each(["git", "link"] as const)(
+    "%s publisher selections span own skills and declared imports",
+    async (kind) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "declared-source"), {
+        "README.md": "Declared source.\n"
+      });
+      writeSkill(path.join(upstream, "skills"), "selected-import", "Selected import.\n");
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Upstream skill"]);
+      const publisher = createRepo(path.join(fixture.sandbox, "publisher"), {
+        "README.md": "Publisher.\n"
+      });
+      writeSkill(path.join(publisher, "skills"), "own-skill", "Publisher instructions.\n");
+      write(
+        publisher,
+        "monke.yml",
+        stringify({
+          skills: [
+            {
+              commit: git(upstream, ["rev-parse", "HEAD"]),
+              skills: ["selected-import"],
+              source: upstream
+            }
+          ]
+        })
+      );
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", "Publish accepted imports"]);
+      await runCliAsync(
+        [
+          "skills",
+          "add",
+          kind === "git" ? `${publisher}#HEAD` : publisher,
+          ...(kind === "link" ? ["--link"] : []),
+          "--skill",
+          "selected-import"
+        ],
+        fixture.runtime
+      );
+      expect(read(fixture.installed.codex, "selected-import/SKILL.md")).toContain(
+        "Selected import."
+      );
+      expect(existsSync(path.join(fixture.installed.codex, "own-skill"))).toBeFalsy();
+      expect(existsSync(path.join(publisher, "skills/imported/selected-import/SKILL.md"))).toBe(
+        kind === "link"
+      );
+      const ignored =
+        kind === "link"
+          ? git(publisher, ["check-ignore", "skills/imported/selected-import/SKILL.md"])
+          : "";
+      expect(ignored).toBe(kind === "link" ? "skills/imported/selected-import/SKILL.md" : "");
+    }
+  );
+
+  test("a declared import collision fails without publishing a recipe or agent skill", async () => {
+    const fixture = registryFixture();
+    installGitImporter(fixture);
+    const upstream = createRepo(path.join(fixture.sandbox, "declared-source"), {
+      "README.md": "Source.\n"
+    });
+    writeSkill(path.join(upstream, "skills"), "collision", "Imported instructions.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Upstream skill"]);
+    const publisher = createRepo(path.join(fixture.sandbox, "publisher"), {
+      "README.md": "Publisher.\n"
+    });
+    writeSkill(path.join(publisher, "skills"), "collision", "Owned instructions.\n");
+    write(
+      publisher,
+      "monke.yml",
+      stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["collision"], source: upstream }
+        ]
+      })
+    );
+    git(publisher, ["add", "."]);
+    git(publisher, ["commit", "-m", "Conflicting collection"]);
+    await expect(
+      runCliAsync(["skills", "add", `${publisher}#HEAD`, "--skill", "collision"], fixture.runtime)
+    ).rejects.toThrow(/collision.*collides/u);
+    expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
+    expect(existsSync(path.join(fixture.installed.codex, "collision"))).toBeFalsy();
+  });
+
+  test("a publisher can publish only declared imports without resolving another level", async () => {
+    const fixture = registryFixture();
+    installGitImporter(fixture);
+    const upstream = createRepo(path.join(fixture.sandbox, "declared-source"), {
+      "monke.yml": "skills:\n  - source: owner/unavailable\n    skills: [unwanted-nested]\n",
+      "README.md": "Source.\n"
+    });
+    writeSkill(path.join(upstream, "skills"), "selected-import", "One level only.\n");
+    git(upstream, ["add", "."]);
+    git(upstream, ["commit", "-m", "Upstream skill"]);
+    const publisher = createRepo(path.join(fixture.sandbox, "publisher"), {
+      "monke.yml": stringify({
+        skills: [
+          {
+            commit: git(upstream, ["rev-parse", "HEAD"]),
+            skills: ["selected-import"],
+            source: upstream
+          }
+        ]
+      })
+    });
+    await runCliAsync(["skills", "add", `${publisher}#HEAD`], fixture.runtime);
+    expect(read(fixture.installed.codex, "selected-import/SKILL.md")).toContain("One level only.");
+    expect(existsSync(path.join(fixture.installed.codex, "unwanted-nested"))).toBeFalsy();
+  });
+
+  test.each([
+    { selection: "implicit", version: 3 },
+    { selection: "implicit", version: 4 },
+    { selection: "wildcard", version: 4 },
+    { selection: "explicit", version: 4 }
+  ] as const)(
+    "re-add preserves $selection selections from v$version recipes",
+    async ({ selection, version }) => {
+      const fixture = registryFixture();
+      installGitImporter(fixture);
+      const upstream = createRepo(path.join(fixture.sandbox, "legacy-subset"), {
+        "skills/other/SKILL.md":
+          "---\nname: other\ndescription: Other trigger.\n---\nOther first revision.\n",
+        "skills/selected/SKILL.md":
+          "---\nname: selected\ndescription: Original trigger.\n---\nSelected first revision.\n"
+      });
+      const source = `${upstream}#HEAD`;
+      await runCliAsync(["skills", "add", source, "--skill", "selected"], fixture.runtime);
+      const commit = git(upstream, ["rev-parse", "HEAD"]);
+      write(
+        fixture.registry,
+        "skills.lock.json",
+        JSON.stringify({
+          recipes: [
+            {
+              ...(version === 3
+                ? { lock: { commit, repository: upstream, subpath: "", updateRef: "HEAD" } }
+                : { commit }),
+              ...(selection === "wildcard" ? { selection: ["*"] } : {}),
+              skills: [
+                {
+                  description: "Accepted trigger.",
+                  ...(version === 3
+                    ? { disableModelInvocation: true, kind: "skill", selector: "selected" }
+                    : { modelInvocation: "deny" }),
+                  slug: "selected"
+                }
+              ],
+              source
+            }
+          ],
+          version
+        })
+      );
+      await runCliAsync(["skills", "list"], fixture.runtime);
+      await runCliAsync(
+        ["skills", "add", source, ...(selection === "explicit" ? ["--skill", "other"] : [])],
+        fixture.runtime
+      );
+      const selected = selection !== "explicit";
+      const other = selection !== "implicit";
+      const expectedSelection = { explicit: "other", implicit: "selected", wildcard: "*" }[
+        selection
+      ];
+      expect(existsSync(path.join(fixture.installed.codex, "selected/SKILL.md"))).toBe(selected);
+      expect(existsSync(path.join(fixture.installed.codex, "other/SKILL.md"))).toBe(other);
+      expect(JSON.parse(read(fixture.registry, "skills.lock.json"))).toMatchObject({
+        recipes: [{ selection: [expectedSelection] }]
+      });
+      writeSkill(path.join(upstream, "skills"), "selected", "Selected second revision.\n");
+      writeSkill(path.join(upstream, "skills"), "other", "Other second revision.\n");
+      git(upstream, ["add", "."]);
+      git(upstream, ["commit", "-m", "Advance both skills"]);
+      await runCliAsync(["skills", "update"], fixture.runtime);
+      expect(existsSync(path.join(fixture.installed.codex, "selected/SKILL.md"))).toBe(selected);
+      expect(existsSync(path.join(fixture.installed.codex, "other/SKILL.md"))).toBe(other);
+      const selectedContent = selected ? read(fixture.installed.codex, "selected/SKILL.md") : "";
+      const otherContent = other ? read(fixture.installed.codex, "other/SKILL.md") : "";
+      expect(selectedContent.includes("Selected second revision.")).toBe(selected);
+      expect(selectedContent.includes("description: Accepted trigger.")).toBe(selected);
+      expect(selectedContent.includes("disable-model-invocation: true")).toBe(selected);
+      expect(otherContent.includes("Other second revision.")).toBe(other);
+    }
+  );
+
+  test("old machine registries migrate their pins and overrides on first read", async () => {
+    const fixture = registryFixture();
+    write(
+      fixture.registry,
+      "skills.lock.json",
+      JSON.stringify({
+        recipes: [
+          {
+            disableModelInvocation: true,
+            lock: {
+              commit: "a".repeat(40),
+              digest: "b".repeat(64),
+              importerVersion: "1.7.0",
+              materializerVersion: 1,
+              repository: "https://github.com/owner/legacy.git",
+              subpath: "course",
+              updateRef: "feature/topic"
+            },
+            name: "legacy",
+            skills: [
+              {
+                description: "Legacy trigger.",
+                disableModelInvocation: false,
+                kind: "skill",
+                selector: "upstream-legacy",
+                slug: "legacy"
+              }
+            ],
+            source: "https://github.com/owner/legacy/tree/feature/topic/course"
+          }
+        ],
+        version: 3
+      })
+    );
+    await runCliAsync(["skills", "list"], fixture.runtime);
+    const registry = read(fixture.registry, "skills.lock.json");
+    expect(registry).toContain('"version": 4');
+    expect(registry).toContain('"source": "https://github.com/owner/legacy/course#feature/topic"');
+    expect(registry).toContain(`"commit": "${"a".repeat(40)}"`);
+    expect(registry).toContain('"modelInvocation": "deny"');
+    expect(registry).toContain('"modelInvocation": "allow"');
+    expect(registry).toContain("Legacy trigger.");
+    expect(registry).not.toContain('"lock"');
+    expect(registry).not.toContain("importerVersion");
+  });
+
+  test("installation preserves a migrated bundled source and its accepted guidance", async () => {
+    const fixture = registryFixture();
+    const source = "https://github.com/owner/bundled/tree/main/course";
+    const accepted =
+      "---\nname: bundled\ndescription: Consumer trigger.\n---\nAccepted instructions.\n";
+    write(fixture.registry, "skills/imported/bundled/SKILL.md", accepted);
+    write(fixture.guidance, "skills/imported/bundled/SKILL.md", "New bundled instructions.\n");
+    write(
+      fixture.guidance,
+      "monke.yml",
+      stringify({ skills: [{ commit: "b".repeat(40), skills: ["bundled"], source }] })
+    );
+    write(
+      fixture.registry,
+      "skills.lock.json",
+      JSON.stringify({
+        recipes: [
+          {
+            lock: {
+              commit: "a".repeat(40),
+              repository: "https://github.com/owner/bundled.git",
+              subpath: "course",
+              updateRef: "main"
+            },
+            skills: [
+              {
+                description: "Consumer trigger.",
+                kind: "skill",
+                selector: "bundled",
+                slug: "bundled"
+              }
+            ],
+            source
+          }
+        ],
+        version: 3
+      })
+    );
+    await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+    expect(read(fixture.installed.codex, "bundled/SKILL.md")).toBe(accepted);
+    const migrated: unknown = JSON.parse(read(fixture.registry, "skills.lock.json"));
+    expect(migrated).toStrictEqual({
+      recipes: [
+        {
+          commit: "a".repeat(40),
+          skills: [{ description: "Consumer trigger.", slug: "bundled" }],
+          source
+        }
+      ],
+      version: 4
+    });
+  });
+
+  test.each([
+    { replacement: false, scope: "machine" },
+    { replacement: true, scope: "machine" },
+    { replacement: false, scope: "repo" },
+    { replacement: true, scope: "repo" }
+  ])(
+    "re-adding a handwritten tree source in $scope scope preserves identity with replacement=$replacement",
+    async ({ replacement, scope }) => {
+      const fixture = registryFixture();
+      const upstream = createRepo(path.join(fixture.sandbox, "handwritten-tree-source"), {
+        "course/skills/color/SKILL.md":
+          "---\nname: color\ndescription: Color.\n---\nColor instructions.\n",
+        "course/skills/typography/SKILL.md":
+          "---\nname: typography\ndescription: Typography.\n---\nCourse instructions.\n"
+      });
+      git(upstream, ["branch", "feature/topic"]);
+      const repo = createRepo(path.join(fixture.sandbox, "tree-consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime =
+        scope === "repo"
+          ? createTestRuntime({ cwd: repo, env: fixture.runtime.env, onStderr() {}, onStdout() {} })
+          : fixture.runtime;
+      const flags = scope === "repo" ? ["--repo"] : [];
+      const gitConfig = path.join(fixture.sandbox, "git-config");
+      write(
+        fixture.sandbox,
+        "git-config",
+        `[url "${upstream}"]\n  insteadOf = https://github.com/owner/repeated.git\n`
+      );
+      runtime.env.GIT_CONFIG_GLOBAL = gitConfig;
+      writeExecutable(
+        path.join(fixture.bin, "npx"),
+        `#!/bin/sh
+set -eu
+shift 4
+mkdir -p .agents/skills
+while [ "$1" = --skill ]; do
+  if [ "$2" = '*' ]; then cp -R ${shellQuote(path.join(upstream, "course/skills"))}/* .agents/skills/;
+  else cp -R ${shellQuote(path.join(upstream, "course/skills"))}/"$2" .agents/skills/; fi
+  shift 2
+done
+`
+      );
+      const source = "https://github.com/owner/repeated/tree/feature/topic/course";
+      const canonical = "https://github.com/owner/repeated/course#feature/topic";
+      const root = scope === "repo" ? repo : fixture.registry;
+      const selected = replacement ? "color" : "typography";
+      vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
+      try {
+        await runCliAsync(["skills", "add", source, ...flags, "--skill", "typography"], runtime);
+        const recipe = {
+          commit: git(upstream, ["rev-parse", "HEAD"]),
+          modelInvocation: "deny",
+          ...(scope === "machine" ? { name: "course", selection: ["typography"] } : {}),
+          skills: [
+            { description: "Consumer trigger.", modelInvocation: "allow", slug: "typography" }
+          ],
+          source
+        };
+        write(
+          root,
+          scope === "repo" ? "monke.yml" : "skills.lock.json",
+          scope === "repo"
+            ? stringify({ skills: [recipe] })
+            : JSON.stringify({ recipes: [recipe], version: 4 })
+        );
+        await runCliAsync(
+          ["skills", "add", source, ...flags, ...(replacement ? ["--skill", selected] : [])],
+          runtime
+        );
+        const accepted: unknown =
+          scope === "repo"
+            ? parse(read(root, "monke.yml"))
+            : JSON.parse(read(root, "skills.lock.json"));
+        const expected = {
+          ...recipe,
+          ...(scope === "machine" ? { selection: [selected] } : {}),
+          skills: replacement ? ["color"] : recipe.skills,
+          source: canonical
+        };
+        expect(accepted).toStrictEqual(
+          scope === "repo" ? { skills: [expected] } : { recipes: [expected], version: 4 }
+        );
+        const installed =
+          scope === "repo" ? path.join(repo, "skills/imported") : fixture.installed.codex;
+        expect(read(installed, `${selected}/SKILL.md`)).toContain(
+          `disable-model-invocation: ${replacement ? "true" : "false"}`
+        );
+        expect(existsSync(path.join(installed, "typography"))).toBe(!replacement);
+        expect(existsSync(path.join(installed, "color"))).toBe(replacement);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
+  );
+
+  test.each([
+    { linkedEdit: false, scope: "global" },
+    { linkedEdit: true, scope: "global" },
+    { linkedEdit: false, scope: "project" },
+    { linkedEdit: true, scope: "project" }
+  ])(
+    "canonical re-add refreshes the $scope review baseline with linkedEdit=$linkedEdit",
+    async ({ linkedEdit, scope }) => {
+      const fixture = registryFixture();
+      const upstream = createRepo(path.join(fixture.sandbox, "baseline-tree-source"), {
+        "course/skills/color/SKILL.md":
+          "---\nname: color\ndescription: Color.\n---\nColor instructions.\n",
+        "course/skills/typography/SKILL.md":
+          "---\nname: typography\ndescription: Typography.\n---\nCourse instructions.\n"
+      });
+      git(upstream, ["branch", "feature/topic"]);
+      const consumer = createRepo(path.join(fixture.sandbox, "baseline-consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      let stdout = "";
+      const runtime = createTestRuntime({
+        cwd: consumer,
+        env: fixture.runtime.env,
+        onStderr() {},
+        onStdout(message) {
+          stdout += message;
+        }
+      });
+      const flags = scope === "project" ? ["--project"] : [];
+      const root =
+        scope === "project"
+          ? path.join(consumer, ".git/monke-tools/skill-registry")
+          : fixture.registry;
+      const installed =
+        scope === "project"
+          ? path.join(consumer, ".agents/skills/monke-tools/imported")
+          : fixture.installed.codex;
+      const linked = path.join(fixture.sandbox, "unrelated-linked-source");
+      writeSkill(linked, "notes", "Accepted notes.\n");
+      writeExecutable(
+        path.join(fixture.bin, "npx"),
+        `#!/bin/sh
+set -eu
+shift 4
+mkdir -p .agents/skills
+while [ "$1" = --skill ]; do
+  if [ "$2" = '*' ]; then cp -R ${shellQuote(path.join(upstream, "course/skills"))}/* .agents/skills/;
+  else cp -R ${shellQuote(path.join(upstream, "course/skills"))}/"$2" .agents/skills/; fi
+  shift 2
+done
+`
+      );
+      const gitConfig = path.join(fixture.sandbox, "git-config");
+      write(
+        fixture.sandbox,
+        "git-config",
+        `[url "${upstream}"]\n  insteadOf = https://github.com/owner/repeated.git\n`
+      );
+      runtime.env.GIT_CONFIG_GLOBAL = gitConfig;
+      const source = "https://github.com/owner/repeated/tree/feature/topic/course";
+      const canonical = "https://github.com/owner/repeated/course#feature/topic";
+      vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
+      try {
+        await runCliAsync(["skills", "add", linked, "--link", ...flags], runtime);
+        await runCliAsync(["skills", "add", source, ...flags, "--skill", "typography"], runtime);
+        write(
+          root,
+          "skills.lock.json",
+          read(root, "skills.lock.json").replace(
+            `"source": "${canonical}"`,
+            `"source": "${source}"`
+          )
+        );
+        if (linkedEdit) {
+          writeSkill(linked, "notes", "Unreviewed notes.\n");
+        }
+        await runCliAsync(["skills", "add", source, ...flags, "--skill", "color"], runtime);
+        expect(existsSync(path.join(installed, "typography"))).toBeFalsy();
+        expect(read(installed, "color/SKILL.md")).toContain("Color instructions.");
+
+        const beforeUpdate = stdout.length;
+        await runCliAsync(["skills", "update", ...flags], runtime);
+        expect(stdout.slice(beforeUpdate).includes("No skill changes.")).toBe(!linkedEdit);
+        expect(existsSync(fixture.codiffLog)).toBe(linkedEdit);
+        const launch = existsSync(fixture.codiffLog)
+          ? readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")
+          : [];
+        const reviewRepo = launch[2] ?? "";
+        const commit = launch[1] ?? "";
+        const diff = reviewRepo ? git(reviewRepo, ["diff", `${commit}^`, commit]) : "";
+        expect(diff).not.toContain("typography");
+        expect(diff.includes("-Accepted notes.")).toBe(linkedEdit);
+        expect(diff.includes("+Unreviewed notes.")).toBe(linkedEdit);
+
+        const beforeRepeatedUpdate = stdout.length;
+        await runCliAsync(["skills", "update", ...flags], runtime);
+        expect(stdout.slice(beforeRepeatedUpdate)).toContain("No skill changes.");
+        const repeatedLaunch = existsSync(fixture.codiffLog)
+          ? readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")
+          : [];
+        expect(repeatedLaunch).toStrictEqual(launch);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
+  );
+
+  test.each([
+    { kind: "link", scope: "global", source: "foo" },
+    { kind: "link", scope: "global", source: "./foo" },
+    { kind: "command", scope: "global", source: "foo" },
+    { kind: "command", scope: "global", source: "./foo" },
+    { kind: "link", scope: "project", source: "foo" },
+    { kind: "link", scope: "project", source: "./foo" },
+    { kind: "command", scope: "project", source: "foo" },
+    { kind: "command", scope: "project", source: "./foo" }
+  ])(
+    "$scope $kind add from $source preserves an unrelated source's review baseline",
+    async ({ kind, scope, source }) => {
+      const fixture = registryFixture();
+      const consumer = createRepo(path.join(fixture.sandbox, "baseline-consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const original = path.join(fixture.sandbox, "original-collection");
+      writeSkill(original, "notes", "Accepted notes.\n");
+      writeSkill(path.join(consumer, "foo"), "color", "New collection.\n");
+      let stdout = "";
+      const runtime = createTestRuntime({
+        cwd: consumer,
+        env: fixture.runtime.env,
+        onStderr() {},
+        onStdout(message) {
+          stdout += message;
+        }
+      });
+      const flags = scope === "project" ? ["--project"] : [];
+      await runCliAsync(["skills", "add", original, "--link", "--name", "foo", ...flags], runtime);
+      writeSkill(original, "notes", "Unreviewed notes.\n");
+      await runCliAsync(
+        [
+          "skills",
+          "add",
+          source,
+          "--name",
+          "bar",
+          ...(kind === "link" ? ["--link"] : ["--command", "true"]),
+          ...flags
+        ],
+        runtime
+      );
+
+      const beforeUpdate = stdout.length;
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(stdout.slice(beforeUpdate)).not.toContain("No skill changes.");
+      const launch = readFileSync(fixture.codiffLog, "utf-8").trim().split("\n");
+      expect(launch).toHaveLength(3);
+      const reviewRepo = launch[2] ?? "";
+      const commit = launch[1] ?? "";
+      const diff = git(reviewRepo, ["diff", `${commit}^`, commit]);
+      expect(diff).toContain("-Accepted notes.");
+      expect(diff).toContain("+Unreviewed notes.");
+      expect(diff).not.toContain("skills/imported/color");
+
+      const beforeRepeatedUpdate = stdout.length;
+      await runCliAsync(["skills", "update", ...flags], runtime);
+      expect(stdout.slice(beforeRepeatedUpdate)).toContain("No skill changes.");
+      expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toStrictEqual(launch);
+    }
+  );
+
+  test.each(["main", "feature/topic"])(
+    "tree source at %s keeps its identity across registry changes",
+    async (updateRef) => {
+      const fixture = registryFixture();
+      const upstream = createRepo(path.join(fixture.sandbox, "tree-source"), {
+        "course/skills/typography/SKILL.md":
+          "---\nname: typography\ndescription: Typography.\n---\nCourse instructions.\n"
+      });
+      if (updateRef !== "main") {
+        git(upstream, ["branch", updateRef]);
+      }
+      const gitConfig = path.join(fixture.sandbox, "git-config");
+      write(
+        fixture.sandbox,
+        "git-config",
+        `[url "${upstream}"]\n  insteadOf = https://github.com/owner/repeated.git\n`
+      );
+      fixture.runtime.env.GIT_CONFIG_GLOBAL = gitConfig;
+      writeExecutable(
+        path.join(fixture.bin, "npx"),
+        `#!/bin/sh
+set -eu
+mkdir -p .agents/skills
+cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/skills/
+`
+      );
+      const source = `https://github.com/owner/repeated/tree/${updateRef}/course`;
+      const expectedSource = updateRef.includes("/")
+        ? `https://github.com/owner/repeated/course#${updateRef}`
+        : source;
+      vi.stubEnv("GIT_CONFIG_GLOBAL", gitConfig);
+      try {
+        await runCliAsync(
+          ["skills", "add", source, "--name", "course", "--skill", "typography"],
+          fixture.runtime
+        );
+        await runCliAsync(
+          ["skills", "policy", "course", "typography", "--description", "Consumer trigger."],
+          fixture.runtime
+        );
+        await runCliAsync(["skills", "add", source, "--skill", "typography"], fixture.runtime);
+        await runCliAsync(["skills", "update"], fixture.runtime);
+        const registry = read(fixture.registry, "skills.lock.json");
+        expect(registry.match(/"source":/gu)).toHaveLength(1);
+        expect(registry).toContain(`"source": "${expectedSource}"`);
+        expect(registry).toContain('"name": "course"');
+        expect(read(fixture.installed.codex, "typography/SKILL.md")).toContain(
+          "description: Consumer trigger."
+        );
+        write(fixture.guidance, "skills/imported/typography/SKILL.md", "Bundled instructions.\n");
+        write(
+          fixture.guidance,
+          "monke.yml",
+          stringify({
+            skills: [
+              {
+                commit: git(upstream, ["rev-parse", "HEAD"]),
+                skills: ["typography"],
+                source: expectedSource
+              }
+            ]
+          })
+        );
+        await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+        expect(read(fixture.installed.codex, "typography/SKILL.md")).toContain(
+          "description: Consumer trigger."
+        );
+        await runCliAsync(["skills", "remove", expectedSource], fixture.runtime);
+        await runInstallSkillsLocked(fixture.runtime, fixture.guidance);
+        expect(existsSync(path.join(fixture.installed.codex, "typography"))).toBeFalsy();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    }
+  );
+
   test.each(["git", "link", "command"] as const)(
     "%s description overrides preserve other metadata and survive updates",
     async (kind) => {
@@ -361,7 +2053,7 @@ describe("Skill import registry CLI", () => {
           source: "example/bundled"
         }
       ],
-      version: 3
+      version: 4
     });
     const occupied = path.join(fixture.installed.claude, scenario.name);
     write(occupied, "SKILL.md", "User-owned instructions.\n");
@@ -1005,7 +2697,7 @@ describe("Skill import registry CLI", () => {
           source: "example/bundled"
         }
       ],
-      version: 3
+      version: 4
     });
     writeSkill(fixture.source, "healthy", "Healthy instructions.\n");
     writeSkill(fixture.installed.claude, "typography", "Divergent instructions.\n");
@@ -1646,7 +3338,7 @@ describe("Skill import registry CLI", () => {
     );
     writeImportRecipeStore(fixture.guidance, {
       recipes: [{ skills: [{ kind: "skill", selector: "git-skill", slug: "git-skill" }], source }],
-      version: 3
+      version: 4
     });
     await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
     await runCliAsync(["skills", "remove", source], fixture.runtime);
@@ -1774,9 +3466,7 @@ describe("Skill import registry CLI", () => {
         { slug: "typography" }
       ]
     });
-    expect(recipes.find((recipe) => recipe.name === "git-source")?.lock?.commit).toBe(
-      expectedCommit
-    );
+    expect(recipes.find((recipe) => recipe.name === "git-source")?.commit).toBe(expectedCommit);
     expect(read(fixture.sandbox, "installer-cwd").trim().split("\n")).toStrictEqual([
       path.join(fixture.monkeHome, "skill-sources/course"),
       path.join(fixture.monkeHome, "skill-sources/course")
@@ -2163,6 +3853,7 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
   test("repeat Git add preserves references and selected-skill policies", async () => {
     const fixture = registryFixture();
     const upstream = createRepo(path.join(fixture.sandbox, "git-source"), {
+      "monke.yml": "apps: {}\n",
       "README.md": "Git skills.\n"
     });
     writeSkill(path.join(upstream, "skills"), "alpha", "Alpha instructions.\n");
@@ -2173,8 +3864,14 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
     const source = `${upstream}#HEAD`;
     write(fixture.guidance, "skills/references/imported/alpha/MAIN.md", "Alpha instructions.\n");
     writeImportRecipeStore(fixture.guidance, {
-      recipes: [{ skills: [{ kind: "reference", selector: "alpha", slug: "alpha" }], source }],
-      version: 3
+      recipes: [
+        {
+          commit: git(upstream, ["rev-parse", "HEAD"]),
+          skills: [{ kind: "reference", selector: "alpha", slug: "alpha" }],
+          source
+        }
+      ],
+      version: 4
     });
     await runCliAsync(["skills", "add", source, "--name", "git-source"], fixture.runtime);
     expect(read(fixture.registry, "skills/references/imported/alpha/MAIN.md")).toContain(

@@ -4,7 +4,6 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync
@@ -12,29 +11,43 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import * as z from "zod";
-
 import {
+  assertManagedGuidanceRoots,
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath
 } from "../scripts/import-guidance.ts";
-import { reportSecurityRiskAssessment } from "../scripts/import-skills.ts";
 import {
   normalizeImportRecipeStore,
   readImportRecipeStore,
+  readRepoImportRecipeStore,
+  writeRepoImportRecipeStore,
   SKILL_LOCK_PATH,
   writeImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
 import type { SkillImportRecipe, SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
-import { guidanceDigest, pinnedSkillSource, resolveSkillRevision } from "../scripts/skill-lock.ts";
+import { reportSecurityRiskAssessment } from "../scripts/skill-import.ts";
+import {
+  assertRepoImportIgnoreFile,
+  assertSkillRestoreMarker,
+  guidanceDigest,
+  ignoreRepoImports,
+  isSkillRecipeRestored,
+  rememberRestoredRecipe,
+  resolveSkillRevision,
+  restoreLockedImports,
+  stageGitSkillSource,
+  stagedSkillGuidance,
+  withSkillImportMutation,
+  withSkillImportUpdate
+} from "../scripts/skill-lock.ts";
 import { rememberSkillGuidance } from "../scripts/skill-review.ts";
-import { buildSkillsInstallArgs, listStagedSkillSlugs } from "../scripts/skills-cli.ts";
 import { runUpdateSkills } from "../scripts/update-skills.ts";
 import { MonkeError } from "./errors.ts";
+import { resolveGitRepoRoot } from "./git.ts";
 import { loadGlobalMonkeConfig } from "./global-config.ts";
 import { loadActiveToolInstall } from "./install-manifest.ts";
 import { withInstallMutationLockAsync } from "./install-recovery.ts";
-import { resolveSkillSourceFolder, updateLocalSkillSource } from "./local-skill-source.ts";
+import { updateLocalSkillSource } from "./local-skill-source.ts";
 import { acquireManagedSkillSource } from "./managed-skill-source.ts";
 import {
   initializeProjectSkillRegistry,
@@ -45,6 +58,7 @@ import {
 } from "./project-skills.ts";
 import { getHomeDirectory, getMonkeHome } from "./runtime.ts";
 import { withSkillPublicationTransaction } from "./skill-publication-transaction.ts";
+import { resolveSkillSourceFolder } from "./skill-source-discovery.ts";
 import {
   preflightAdoptedSkillLinks,
   preflightInstallGuidance,
@@ -54,27 +68,46 @@ import {
 } from "./skills.ts";
 import type { ExplicitSkillTargetSelection, SkillPublicationScope } from "./skills.ts";
 import type { Runtime } from "./types.ts";
-import { parseOwnedYamlText } from "./validation.ts";
 
 type SkillsRequest =
   | { action: "create"; description?: string; name: string }
   | { action: "adopt"; name?: string; skills?: string[]; source: string }
   | {
+      acceptOpenClawRisks?: boolean;
       action: "add";
       command?: string;
       cwd?: string;
       link?: boolean;
       name?: string;
+      reference?: boolean;
       skills?: string[];
       source?: string;
     }
   | { action: "policy"; description?: string; disable?: boolean; skill?: string; source: string }
   | { action: "remove"; source: string }
   | { action: "update"; adapter?: string; interactive?: boolean }
-  | { action: "list" };
+  | { action: "list" }
+  | { action: "restore" };
 
 /** Register imports, get their content, and distribute the resulting shared collection. */
-export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest, project = false) {
+export function runSkillsRegistry(
+  runtime: Runtime,
+  request: SkillsRequest,
+  project = false,
+  repo = false
+) {
+  if (request.action === "add" && request.reference && !repo) {
+    throw new MonkeError("--ref requires --repo");
+  }
+  if (repo && project) {
+    throw new MonkeError("--repo and --project are mutually exclusive");
+  }
+  if (repo) {
+    return runRepoSkillsRegistry(runtime, request);
+  }
+  if (request.action === "restore") {
+    throw new MonkeError("Restore requires --repo");
+  }
   if (project) {
     const context = projectSkillRegistry(runtime);
     return withProjectSkillsLock(runtime, context, async () => {
@@ -83,6 +116,25 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest, proj
         return;
       }
       const scope = initializeProjectSkillRegistry(runtime, context);
+      if (request.action === "update") {
+        // Agent roots can overlap publishers, so snapshot recovery after publisher updates.
+        await runSkillsRegistryLocked(
+          runtime,
+          request,
+          context.root,
+          context.root,
+          scope,
+          (publish, withSnapshotLocks) =>
+            withProjectSkillPublicationTransaction(
+              runtime,
+              context,
+              scope,
+              publish,
+              withSnapshotLocks
+            )
+        );
+        return;
+      }
       await withProjectSkillPublicationTransaction(runtime, context, scope, () =>
         runSkillsRegistryLocked(runtime, request, context.root, context.root, scope)
       );
@@ -110,12 +162,77 @@ export function runSkillsRegistry(runtime: Runtime, request: SkillsRequest, proj
   });
 }
 
+async function runRepoSkillsRegistry(runtime: Runtime, request: SkillsRequest) {
+  const root = resolveGitRepoRoot(runtime, runtime.cwd);
+  if (request.action === "update") {
+    await runUpdateSkills(
+      [
+        ...(request.adapter ? ["--adapter", request.adapter] : []),
+        ...(request.interactive ? ["--interactive"] : [])
+      ],
+      { repo: true, repoRoot: root, runtime, writeMessage: runtime.writeStdout }
+    );
+    return;
+  }
+  const mutate = () =>
+    withSkillImportMutation(
+      root,
+      async () => {
+        if (request.action !== "list") {
+          assertManagedGuidanceRoots(root);
+          assertRepoImportIgnoreFile(root);
+        }
+        const store = readRepoImportRecipeStore(root);
+        if (request.action === "list") {
+          for (const recipe of store.recipes) {
+            runtime.writeStdout(
+              `${recipe.source}\t${recipe.commit ?? "unpinned"}\t${recipe.skills.length} skills\n`
+            );
+          }
+        } else if (request.action === "restore") {
+          await restoreLockedImports(root, false, runtime, store);
+        } else if (request.action === "add") {
+          if (!request.source || request.command || request.link || request.cwd || request.name) {
+            throw new MonkeError(
+              "Repo recipes require a Git source; --command, --link, --cwd and --name are machine-local"
+            );
+          }
+          await addGitSkillSource(runtime, root, store, request.source, request, undefined, true);
+        } else if (request.action === "remove" || request.action === "policy") {
+          const recipe = findRecipe(store, request.source);
+          const recipes =
+            request.action === "remove"
+              ? store.recipes.filter((item) => item !== recipe)
+              : store.recipes.map((item) =>
+                  item === recipe ? setRecipePolicy(recipe, request) : item
+                );
+          if (recipes.some((nextRecipe) => !isSkillRecipeRestored(root, nextRecipe))) {
+            assertSkillRestoreMarker(root);
+          }
+          await restoreLockedImports(root, false, runtime, { ...store, recipes }, () => {
+            writeRepoImportRecipeStore(root, { ...store, recipes });
+          });
+        } else {
+          throw new MonkeError(`${request.action} is machine-local and does not accept --repo`);
+        }
+      },
+      runtime
+    );
+  await (request.action === "restore" || request.action === "list"
+    ? mutate()
+    : withSkillImportUpdate(root, mutate, runtime));
+}
+
 async function runSkillsRegistryLocked(
   runtime: Runtime,
-  request: SkillsRequest,
+  request: Exclude<SkillsRequest, { action: "restore" }>,
   guidance: string,
   projectRoot?: string,
-  scope?: SkillPublicationScope
+  scope?: SkillPublicationScope,
+  publishUpdate?: (
+    publish: () => Promise<void>,
+    withSnapshotLocks: (recover: () => Promise<void>) => Promise<void>
+  ) => Promise<void>
 ) {
   const root = projectRoot ?? initializeSkillRegistry(runtime, guidance);
   const store = readImportRecipeStore(root);
@@ -128,38 +245,47 @@ async function runSkillsRegistryLocked(
     return;
   }
   if (request.action === "update") {
-    try {
-      await runUpdateSkills(
-        [
-          ...(request.adapter ? ["--adapter", request.adapter] : []),
-          ...(request.interactive ? ["--interactive"] : [])
-        ],
-        {
-          repoRoot: root,
-          runtime,
-          validatePrepared(prepared, recipe) {
-            const previous = readImportRecipeStore(root).recipes.find(
-              (item) => item.source === recipe.source
-            );
-            preflightRegistryChange(
-              runtime,
-              root,
-              prepared,
-              recipe.skills,
-              previous?.skills ?? [],
-              scope
-            );
-          },
-          writeMessage: runtime.writeStdout
-        }
-      );
-    } finally {
-      retireAdoptedSkillLinks(root, store);
-      distributeRegistry(runtime, root, scope);
-    }
+    const repositories = localSkillRepositories(runtime, store, scope === undefined);
+    await runUpdateSkills(
+      [
+        ...(request.adapter ? ["--adapter", request.adapter] : []),
+        ...(request.interactive ? ["--interactive"] : [])
+      ],
+      {
+        connectedRepos: repositories.connected,
+        publishCollection(update, withSnapshotLocks) {
+          const publish = async () => {
+            try {
+              await update();
+            } finally {
+              retireAdoptedSkillLinks(root, store);
+              distributeRegistry(runtime, root, scope);
+            }
+          };
+          return publishUpdate ? publishUpdate(publish, withSnapshotLocks) : publish();
+        },
+        publisherRepos: repositories.publishers,
+        repoRoot: root,
+        runtime,
+        validatePrepared(prepared, recipe) {
+          const previous = readImportRecipeStore(root).recipes.find(
+            (item) => item.source === recipe.source
+          );
+          preflightRegistryChange(
+            runtime,
+            root,
+            prepared,
+            recipe.skills,
+            previous?.skills ?? [],
+            scope
+          );
+        },
+        writeMessage: runtime.writeStdout
+      }
+    );
     return;
   }
-  let changedSource: string;
+  let changedSources: string[];
   if (request.action === "create" || request.action === "adopt") {
     await acquireManagedSkillSource({
       guidanceRoot: guidance,
@@ -182,10 +308,10 @@ async function runSkillsRegistryLocked(
     });
     return;
   } else if (request.action === "add") {
-    changedSource = await addSkillSource(runtime, root, store, request, scope);
+    changedSources = await addSkillSource(runtime, root, store, request, scope);
   } else {
     const recipe = findRecipe(store, request.source);
-    changedSource = recipe.source;
+    changedSources = [recipe.source];
     if (request.action === "remove") {
       await withSkillPublicationTransaction(
         runtime,
@@ -204,7 +330,7 @@ async function runSkillsRegistryLocked(
             repoRoot: root,
             stagingDirectory: root
           });
-          completeRegistryChange(runtime, root, store, changedSource, scope);
+          completeRegistryChange(runtime, root, store, changedSources, scope);
         }
       );
       return;
@@ -212,14 +338,14 @@ async function runSkillsRegistryLocked(
     const nextRecipe = setRecipePolicy(recipe, request);
     await applyRecipePolicy(runtime, root, store, nextRecipe, scope);
   }
-  completeRegistryChange(runtime, root, store, changedSource, scope);
+  completeRegistryChange(runtime, root, store, changedSources, scope);
 }
 
 function completeRegistryChange(
   runtime: Runtime,
   root: string,
   store: SkillImportRecipeStore,
-  changedSource: string,
+  changedSources: readonly string[],
   scope?: SkillPublicationScope
 ) {
   retireAdoptedSkillLinks(root, store);
@@ -228,9 +354,59 @@ function completeRegistryChange(
   rememberSkillGuidance(
     root,
     [...store.recipes, ...nextStore.recipes]
-      .filter((recipe) => recipe.source === changedSource)
+      .filter((recipe) => changedSources.includes(recipe.source))
       .flatMap((recipe) => recipe.skills)
   );
+}
+
+function localSkillRepositories(
+  runtime: Runtime,
+  store: SkillImportRecipeStore,
+  includeInstall: boolean
+) {
+  const active = includeInstall ? loadActiveToolInstall(getMonkeHome(runtime)) : null;
+  const directories = [
+    ...(active?.manifest.installKind === "local"
+      ? [{ connected: true, cwd: active.manifest.sourceCheckout }]
+      : []),
+    ...store.recipes.flatMap((recipe) =>
+      recipe.localSource
+        ? [
+            {
+              connected: recipe.localSource.kind === "link",
+              cwd: recipe.localSource.workingDirectory
+            }
+          ]
+        : []
+    )
+  ];
+  const connected: string[] = [];
+  const publishers: string[] = [];
+  for (const { connected: update, cwd } of directories) {
+    if (!update) {
+      // An installer may initialize a repository in this directory during the update.
+      publishers.push(cwd);
+    }
+    if (!existsSync(cwd)) {
+      continue;
+    }
+    try {
+      const result = runtime.exec("git", ["rev-parse", "--show-toplevel"], {
+        allowFailure: true,
+        cwd
+      });
+      if (result.exitCode === 0) {
+        const root = result.stdout.trim();
+        publishers.push(root);
+        if (update) {
+          connected.push(root);
+        }
+      }
+    } catch {
+      // The ordinary source update reports broken links while healthy sources continue.
+    }
+  }
+  return { connected, publishers };
 }
 
 function activeGuidanceRoot(runtime: Runtime) {
@@ -253,7 +429,11 @@ export function registryGuidanceRoot(runtime: Runtime, guidanceSourceRoot: strin
 
 function planRegistryImports(root: string, guidance: string, includeNewSources: boolean) {
   const store = readImportRecipeStore(root);
-  const bundledRecipes = readImportRecipeStore(guidance);
+  const bundledRecipes =
+    existsSync(path.join(guidance, "install-manifest.json")) &&
+    !existsSync(path.join(guidance, "monke.yml"))
+      ? readImportRecipeStore(guidance, false)
+      : readRepoImportRecipeStore(guidance);
   const sources = new Set([
     ...store.recipes.map((recipe) => recipe.source),
     ...(store.removedSources ?? [])
@@ -274,12 +454,16 @@ function copyBundledImports(root: string, guidance: string, additions: SkillImpo
       mkdirSync(path.dirname(target), { recursive: true });
       cpSync(source, target, { recursive: true, verbatimSymlinks: true });
     }
+    rememberRestoredRecipe(root, recipe);
   }
 }
 
 function initializeSkillRegistry(runtime: Runtime, guidance: string, includeNewSources = false) {
   const root = path.join(getMonkeHome(runtime), "skill-registry");
   const { additions, next } = planRegistryImports(root, guidance, includeNewSources);
+  if (additions.length > 0) {
+    assertSkillRestoreMarker(root);
+  }
   mkdirSync(root, { recursive: true });
   copyBundledImports(root, guidance, additions);
   for (const folder of [
@@ -355,8 +539,7 @@ async function addSkillSource(
         "Provide a Git source, an existing linked directory, or --command with --name"
       );
     }
-    await addGitSkillSource(runtime, root, store, request.source, request, scope);
-    return request.source;
+    return await addGitSkillSource(runtime, root, store, request.source, request, scope);
   }
   const recipe = localSourceRecipe(
     runtime,
@@ -383,7 +566,7 @@ async function addSkillSource(
       );
     }
   });
-  return recipe.source;
+  return [recipe.source];
 }
 
 /** Validate the retained imports together with a candidate install's owned guidance. */
@@ -478,7 +661,11 @@ function localSourceOptions(
     command: request.command ?? previous?.command,
     kind: (request.command ?? previous?.command) ? "command" : "link",
     skillSourceFolder: directory
-      ? resolveSkillSourceFolder(realpathSync.native(directory), false, registryRoot !== undefined)
+      ? resolveSkillSourceFolder(
+          realpathSync.native(directory),
+          false,
+          registryRoot !== undefined || existsSync(path.join(directory, "monke.yml"))
+        )
       : request.cwd
         ? resolveSkillSourceFolder(cwd, false, registryRoot !== undefined)
         : (previous?.skillSourceFolder ??
@@ -493,61 +680,67 @@ async function addGitSkillSource(
   store: SkillImportRecipeStore,
   source: string,
   request: Extract<SkillsRequest, { action: "add" }>,
-  scope?: SkillPublicationScope
+  scope?: SkillPublicationScope,
+  repo = false
 ) {
-  const previous = store.recipes.find((recipe) => recipe.source === source);
-  const recipe: SkillImportRecipe = {
-    ...previous,
-    name: request.name ?? previous?.name,
-    skills: previous?.skills ?? [],
-    source
-  };
+  assertSkillRestoreMarker(root);
+  const revision = await resolveSkillRevision({ skills: [], source }, root);
+  const previous =
+    store.recipes.find((recipe) => recipe.source === source) ??
+    store.recipes.find((recipe) => recipe.source === revision.source);
+  const recipe = gitSourceRecipe(revision.source, request, previous, repo);
+  const selectors = request.skills ??
+    previous?.selection ??
+    previous?.skills.map((item) => item.selector) ?? ["*"];
   const staging = mkdtempSync(path.join(tmpdir(), "monke-skill-git-"));
   try {
-    const revision = await resolveSkillRevision(recipe, root);
-    const normalized = await pinnedSkillSource({ ...revision, digest: "" }, staging);
-    const installOutput = await runtime.execAsync(
-      runtime.platform === "win32" ? "npx.cmd" : "npx",
-      buildSkillsInstallArgs({
-        selectors: request.skills ?? previous?.skills.map((item) => item.selector) ?? ["*"],
-        source: normalized
-      }),
-      { cwd: staging }
-    );
+    const installOutput = await stageGitSkillSource({
+      includeDeclaredImports: !repo,
+      previousRecipe: repo ? undefined : previous,
+      recipe: { ...recipe, commit: revision.commit, source: revision.source },
+      rejectAmbiguousSelection: repo || selectors.includes("*"),
+      repoRoot: root,
+      retainSelection: !repo && request.skills === undefined,
+      runtime,
+      selectors,
+      stagingDirectory: staging
+    });
     reportSecurityRiskAssessment(
       `${installOutput.stdout}\n${installOutput.stderr}`,
       runtime.writeStdout
     );
-    const skills = listStagedSkillSlugs(staging).map((slug) => {
-      const entry = path.join(staging, ".agents", "skills", slug, "SKILL.md");
-      const frontmatter = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
-        readFileSync(entry, "utf-8")
-      );
-      if (!frontmatter) {
-        throw new MonkeError(`Expected leading YAML frontmatter at ${entry}`);
-      }
-      const metadata = parseOwnedYamlText(
-        frontmatter.groups?.frontmatter ?? "",
-        entry,
-        z.looseObject({ name: z.string().optional() })
-      );
-      const existing = previous?.skills.find((item) => item.slug === slug);
-      return {
-        ...existing,
-        kind: existing?.kind ?? ("skill" as const),
-        selector: metadata.name ?? slug,
-        slug
-      };
+    const skills = stagedSkillGuidance(staging, recipe, installOutput.declaredGuidance, {
+      preserveImportKinds: repo,
+      reference: request.reference
     });
-    const nextRecipe = { ...recipe, skills };
+    assertGitSkillSelection({
+      declaredSelectors: installOutput.declaredSelectors,
+      previous,
+      recipe,
+      repo,
+      requestedSkills: request.skills,
+      selectors,
+      skills
+    });
+    const nextRecipe = {
+      ...recipe,
+      commit: revision.commit,
+      ...(installOutput.selection ? { selection: installOutput.selection } : {}),
+      skills,
+      source: revision.source
+    };
     const next = normalizeImportRecipeStore({
       ...store,
       recipes: [...store.recipes.filter((item) => item !== previous), nextRecipe]
     });
-    const recorded = findRecipe(next, source);
+
+    assertSkillRestoreMarker(root);
+    if (repo) {
+      ignoreRepoImports(root, runtime);
+    }
     copyStagedGuidanceToManagedRoots({
       commitState() {
-        writeImportRecipeStore(root, next);
+        (repo ? writeRepoImportRecipeStore : writeImportRecipeStore)(root, next);
       },
       defaultDisableModelInvocation: recipe.disableModelInvocation,
       guidance: nextRecipe.skills,
@@ -560,19 +753,88 @@ async function addGitSkillSource(
       repoRoot: root,
       stagingDirectory: staging,
       validatePrepared(prepared) {
-        preflightRegistryChange(
-          runtime,
-          root,
-          prepared,
-          nextRecipe.skills,
-          previous?.skills ?? [],
-          scope
-        );
-        recorded.lock = { ...revision, digest: guidanceDigest(prepared, nextRecipe.skills, true) };
+        guidanceDigest(prepared, nextRecipe.skills, true);
+        if (!repo) {
+          preflightRegistryChange(
+            runtime,
+            root,
+            prepared,
+            nextRecipe.skills,
+            previous?.skills ?? [],
+            scope
+          );
+        }
       }
     });
+    rememberRestoredRecipe(root, nextRecipe);
+    return previous ? [previous.source, revision.source] : [revision.source];
   } finally {
     rmSync(staging, { force: true, recursive: true });
+  }
+}
+
+function gitSourceRecipe(
+  source: string,
+  request: Extract<SkillsRequest, { action: "add" }>,
+  previous: SkillImportRecipe | undefined,
+  repo: boolean
+): SkillImportRecipe {
+  return {
+    ...previous,
+    name: request.name ?? previous?.name,
+    skills: previous?.skills ?? [],
+    source,
+    ...(!repo
+      ? {
+          selection: request.skills ??
+            previous?.selection ??
+            previous?.skills.map((item) => item.selector) ?? ["*"]
+        }
+      : {}),
+    ...(request.acceptOpenClawRisks ? { acceptOpenClawRisks: true as const } : {})
+  };
+}
+
+function assertGitSkillSelection(options: {
+  declaredSelectors: string[];
+  previous?: SkillImportRecipe;
+  recipe: SkillImportRecipe;
+  repo: boolean;
+  requestedSkills?: string[];
+  selectors: string[];
+  skills: SkillImportRecipe["skills"];
+}) {
+  const { declaredSelectors, previous, recipe, repo, requestedSkills, selectors, skills } = options;
+  if (repo || requestedSkills !== undefined) {
+    assertSkillSelectorsMatched(recipe.source, selectors, skills, declaredSelectors);
+    return;
+  }
+  if (!previous || selectors.includes("*")) {
+    return;
+  }
+  const missing = previous.skills.filter((item) => !skills.some((next) => next.slug === item.slug));
+  if (missing.length > 0) {
+    throw new MonkeError(
+      `Selected skills not found in ${recipe.source}: ${missing.map((item) => item.slug).join(", ")}`
+    );
+  }
+}
+
+function assertSkillSelectorsMatched(
+  source: string,
+  selectors: string[],
+  skills: SkillImportRecipe["skills"],
+  aliases: string[]
+) {
+  if (selectors.includes("*")) {
+    return;
+  }
+  const names = new Set(
+    [...skills.map((skill) => skill.selector), ...aliases].map((name) => name.toLowerCase())
+  );
+  const missing = selectors.filter((selector) => !names.has(selector.toLowerCase()));
+  if (missing.length > 0) {
+    throw new MonkeError(`Selected skills not found in ${source}: ${missing.join(", ")}`);
   }
 }
 
@@ -639,12 +901,13 @@ async function applyRecipePolicy(
     });
     return;
   }
+  assertSkillRestoreMarker(root);
   const staging = mkdtempSync(path.join(tmpdir(), "monke-skill-policy-"));
   const next = normalizeImportRecipeStore({
     ...store,
     recipes: store.recipes.map((item) => (item.source === recipe.source ? recipe : item))
   });
-  const recorded = findRecipe(next, recipe.source);
+
   try {
     const skills = recipe.skills.filter((item) => item.kind === "skill");
     for (const item of skills) {
@@ -669,11 +932,10 @@ async function applyRecipePolicy(
             verbatimSymlinks: true
           });
         }
-        if (recorded.lock) {
-          recorded.lock.digest = guidanceDigest(prepared, recipe.skills, true);
-        }
+        guidanceDigest(prepared, recipe.skills, true);
       }
     });
+    rememberRestoredRecipe(root, recipe);
   } finally {
     rmSync(staging, { force: true, recursive: true });
   }

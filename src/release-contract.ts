@@ -374,6 +374,7 @@ function assertArchiveContract(entries: string[]) {
         "install-manifest.json",
         "install.sh",
         "mt",
+        "monke.yml",
         "skills.lock.json",
         "LICENSE",
         "THIRD_PARTY_NOTICES.md"

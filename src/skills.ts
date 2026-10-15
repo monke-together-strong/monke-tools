@@ -348,7 +348,7 @@ export function reconcileSkillNamespaces(options: {
 /** Additional projections replace pre-existing copies without enabling their harness. */
 export function preflightAdoptedSkillLinks(root: string) {
   const links = new Map<string, string>();
-  for (const recipe of readImportRecipeStore(root).recipes) {
+  for (const recipe of readImportRecipeStore(root, false).recipes) {
     for (const skill of recipe.skills) {
       const source = path.join(root, "skills", "imported", skill.slug);
       for (const destination of skill.adoptedPaths ?? []) {
@@ -364,7 +364,7 @@ export function preflightAdoptedSkillLinks(root: string) {
 }
 
 function reconcileAdoptedSkillLinks(root: string, targets: ResolvedSkillInstallTarget[]) {
-  for (const recipe of readImportRecipeStore(root).recipes) {
+  for (const recipe of readImportRecipeStore(root, false).recipes) {
     for (const skill of recipe.skills) {
       const source = path.join(root, "skills", "imported", skill.slug);
       for (const destination of skill.adoptedPaths ?? []) {
@@ -390,7 +390,7 @@ function reconcileAdoptedSkillLinks(root: string, targets: ResolvedSkillInstallT
 /** Retire only projections still pointing at their recorded registry owner. */
 export function retireAdoptedSkillLinks(root: string, previous: SkillImportRecipeStore) {
   const retained = new Set(
-    readImportRecipeStore(root).recipes.flatMap((recipe) =>
+    readImportRecipeStore(root, false).recipes.flatMap((recipe) =>
       recipe.skills.flatMap((skill) => skill.adoptedPaths ?? [])
     )
   );
@@ -425,7 +425,7 @@ export function skillPublicationPaths(
     preference: preference ?? { targets: [] },
     project: scope !== undefined
   });
-  const paths = readImportRecipeStore(root).recipes.flatMap((recipe) =>
+  const paths = readImportRecipeStore(root, false).recipes.flatMap((recipe) =>
     recipe.skills.flatMap((skill) => skill.adoptedPaths ?? [])
   );
   for (const target of targets) {

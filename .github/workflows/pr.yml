@@ -34,7 +34,7 @@ jobs:
         run: vp check
 
       - name: Restore locked guidance
-        run: vpr skills:restore
+        run: bun run src/index.ts skills restore --repo
 
       - name: Check packaged skill links
         run: vpr skills:check-links

@@ -38,6 +38,7 @@ interface ReleaseFixtureOptions {
   executableContents?: string;
   executableVersion?: string;
   extraPath?: string;
+  legacySkillLock?: string;
   manifest?: ManifestOverrides;
   missingPath?: string;
   platform?: "linux-x64" | "macos-arm64";
@@ -77,6 +78,9 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   writeFileSync(path.join(bundleRoot, "install.sh"), "#!/bin/sh\nexit 0\n");
   chmodSync(path.join(bundleRoot, "mt"), 0o755);
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
+  if (options.legacySkillLock !== undefined) {
+    writeFileSync(path.join(bundleRoot, "skills.lock.json"), options.legacySkillLock);
+  }
   writeFileSync(
     path.join(bundleRoot, "install-manifest.json"),
     `${JSON.stringify(
@@ -85,6 +89,9 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
         artifactName: archiveName,
         createdAt: "2026-08-21T12:34:56.000Z",
         guidanceHashes: {
+          ...(options.legacySkillLock === undefined
+            ? {}
+            : { "skills.lock.json": hash("sha256", options.legacySkillLock, "hex") }),
           "instructions/GLOBAL.md": hash("sha256", "# Global\n", "hex"),
           "skills/internal/example/SKILL.md": hash("sha256", skillContents, "hex"),
           "skills/references/internal/example.md": hash("sha256", referenceContents, "hex")
@@ -148,6 +155,22 @@ describe("Release bundle verifier", () => {
     expect(manifest.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
     expect(manifest.createdAt).toBe("2026-08-21T12:34:56.000Z");
     expect(manifest.guidanceHashes).toHaveProperty("skills/internal/example/SKILL.md");
+  });
+
+  test("accepts an existing schema-version-1 archive with its hashed skills.lock.json", () => {
+    const fixture = makeReleaseArchive({
+      legacySkillLock: '{"recipes":[],"version":3}\n'
+    });
+    const manifest = verifyReleaseArchive({
+      archivePath: fixture.archivePath,
+      checksumPath: fixture.checksumPath,
+      expectedGuidanceRoot: fixture.bundleRoot,
+      expectedPlatform: "macos-arm64",
+      expectedSourceCommit: SOURCE_COMMIT,
+      expectedVersion: RELEASE_VERSION
+    });
+
+    expect(manifest.guidanceHashes).toHaveProperty("skills.lock.json");
   });
 
   const invalidBundles = [
@@ -352,12 +375,8 @@ describe("Release bundle verifier", () => {
         expectedVersion: RELEASE_VERSION
       });
 
-      expect(manifest.guidanceHashes["skills.lock.json"]).toBe(
-        hash(
-          "sha256",
-          readFileSync(path.join(import.meta.dirname, "..", "skills.lock.json")),
-          "hex"
-        )
+      expect(manifest.guidanceHashes["monke.yml"]).toBe(
+        hash("sha256", readFileSync(path.join(import.meta.dirname, "..", "monke.yml")), "hex")
       );
       for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
         const content = spawnSync("tar", ["-xOzf", archivePath, `./${file}`], {
@@ -414,8 +433,9 @@ describe("Mainline Release selection", () => {
     ["skills/internal/implement/SKILL.md", true],
     ["install.sh", true],
     ["scripts/install-release.sh", true],
-    ["skills.lock.json", true],
+    ["monke.yml", true],
     ["scripts/skill-lock.ts", true],
+    ["scripts/skill-import-state.ts", true],
     ["scripts/import-guidance.ts", true],
     [".github/actions/setup-mainline/action.yml", true],
     [".github/workflows/publish.yml", true],

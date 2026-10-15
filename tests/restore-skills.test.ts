@@ -4,11 +4,60 @@ import path from "node:path";
 import { describe, expect, test } from "vite-plus/test";
 
 import { writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
-import { guidanceDigest, restoreSkillImports } from "../scripts/skill-lock.ts";
+import { rememberRestoredRecipe, restoreSkillImports } from "../scripts/skill-lock.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
-import { makeTempDir, read, write } from "./helpers.ts";
+import { createRepo, git, makeTempDir, read, write, writeExecutable } from "./helpers.ts";
+import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("parallel locked skill restore", () => {
+  test("batch restore preserves distinct skill and reference sources sharing a slug", async () => {
+    const sandbox = makeTempDir("cross-kind-skill-restore");
+    const recipes = (["skill", "reference"] as const).map((kind) => {
+      const source = createRepo(path.join(sandbox, `source-${kind}`), {
+        "skills/shared/SKILL.md": `---\nname: shared\ndescription: Shared fixture.\n---\nDistinct ${kind} bytes.\n`
+      });
+      return {
+        commit: git(source, ["rev-parse", "HEAD"]),
+        disableModelInvocation: true,
+        skills: [{ kind, selector: "shared", slug: "shared" }],
+        source
+      };
+    });
+    const target = path.join(sandbox, "target");
+    writeImportRecipeStore(target, { recipes, version: 4 });
+    const bin = path.join(sandbox, "bin");
+    writeExecutable(
+      path.join(bin, "npx"),
+      `#!/bin/sh
+set -eu
+mkdir -p .agents/skills
+cp -R "$4/skills/shared" .agents/skills/shared
+`
+    );
+    const runtime = createTestRuntime({
+      cwd: target,
+      env: {
+        MONKE_HOME: path.join(sandbox, "home"),
+        PATH: `${bin}${path.delimiter}${process.env.PATH}`
+      }
+    });
+
+    await restoreSkillImports(target, false, runtime);
+
+    expect(read(target, "skills/imported/shared/SKILL.md")).toContain("Distinct skill bytes.");
+    expect(read(target, "skills/imported/shared/SKILL.md")).toContain(
+      "disable-model-invocation: true"
+    );
+    expect(read(target, "skills/references/imported/shared/MAIN.md")).toBe(
+      "Distinct reference bytes.\n"
+    );
+    const marker = read(target, "skills/.monke-restored.json");
+    writeExecutable(path.join(bin, "git"), "#!/bin/sh\nexit 42\n");
+    writeExecutable(path.join(bin, "npx"), "#!/bin/sh\nexit 42\n");
+    await restoreSkillImports(target, false, runtime);
+    expect(read(target, "skills/.monke-restored.json")).toBe(marker);
+  });
+
   test.each([
     { expectedFailure: null, failImport: false },
     {
@@ -22,26 +71,26 @@ describe("parallel locked skill restore", () => {
       const home = path.join(sandbox, "home");
       const bin = path.join(sandbox, "bin");
       mkdirSync(bin);
-      const recipes = Array.from({ length: 7 }, (_, index) => {
+      const skillContents = Array.from(
+        { length: 7 },
+        (_, index) =>
+          `---\nname: skill-${index}\ndescription: Fixture Skill\n---\naccepted skill-${index}\n`
+      );
+      const recipes = skillContents.map((content, index) => {
         const slug = `skill-${index}`;
         const skills = [{ kind: "skill" as const, selector: slug, slug }];
-        write(sandbox, `skills/imported/${slug}/SKILL.md`, `accepted ${slug}\n`);
+        write(sandbox, `skills/imported/${slug}/SKILL.md`, content);
         return {
-          lock: {
-            commit: String(index).padStart(40, "0"),
-            digest: guidanceDigest(sandbox, skills),
-            importerVersion: "1.7.0",
-            materializerVersion: 1,
-            repository: `https://github.com/owner/source-${index}.git`,
-            subpath: "",
-            updateRef: "HEAD"
-          },
+          commit: String(index).padStart(40, "0"),
           skills,
           source: `owner/source-${index}`
         };
       });
-      writeImportRecipeStore(sandbox, { recipes, version: 3 });
+      writeImportRecipeStore(sandbox, { recipes, version: 4 });
       const acceptedLock = read(sandbox, "skills.lock.json");
+      for (const recipe of recipes) {
+        rememberRestoredRecipe(sandbox, recipe);
+      }
       for (let index = 0; index < 6; index += 1) {
         rmSync(path.join(sandbox, `skills/imported/skill-${index}`), { recursive: true });
       }
@@ -52,11 +101,12 @@ import path from "node:path";
 const root = ${JSON.stringify(sandbox)};
 const home = ${JSON.stringify(home)};
 const failImport = ${failImport};
+const skillContents = ${JSON.stringify(skillContents)};
 const args = process.argv.slice(2);
 const importer = path.basename(process.argv[1]) === "npx";
 if (!importer && args[0] !== "fetch") process.exit(0);
 const index = importer
-  ? Number(args[args.indexOf("--skill") + 1].split("-")[1])
+  ? Number(/source-([0-9]+)/u.exec(args[args.indexOf("add") + 1])?.[1])
   : Number(args.at(-1));
 const phase = importer ? "import" : "fetch";
 const marker = (name) => path.join(root, name);
@@ -94,7 +144,7 @@ if (importer) {
   const slug = "skill-" + index;
   const target = path.join(".agents", "skills", slug);
   mkdirSync(target, { recursive: true });
-  writeFileSync(path.join(target, "SKILL.md"), "accepted " + slug + "\\n");
+  writeFileSync(path.join(target, "SKILL.md"), skillContents[index]);
 }
 rmSync(active);
 writeFileSync(marker(phase + "-done-" + index), "");
@@ -124,7 +174,7 @@ writeFileSync(marker(phase + "-done-" + index), "");
         )) {
           expect(existsSync(path.join(sandbox, `import-done-${index}`))).toBeTruthy();
           expect(read(sandbox, `skills/imported/skill-${index}/SKILL.md`)).toBe(
-            `accepted skill-${index}\n`
+            skillContents[index]
           );
         }
         expect(existsSync(path.join(sandbox, "fetch-start-6"))).toBeFalsy();

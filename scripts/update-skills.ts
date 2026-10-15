@@ -1,30 +1,35 @@
-#!/usr/bin/env bun
-
-import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  renameSync,
+  rmSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 import { confirm, isCancel } from "@clack/prompts";
 import { Command } from "@commander-js/extra-typings";
 import pLimit from "p-limit";
 
-import { configureCliParser, reportCliFailure } from "../src/cli-errors.ts";
-import { errorMessage, MonkeError, ThrownValueSchema } from "../src/errors.ts";
+import { configureCliParser } from "../src/cli-errors.ts";
+import { MonkeError } from "../src/errors.ts";
 import { updateLocalSkillSource } from "../src/local-skill-source.ts";
-import { createRuntime } from "../src/runtime.ts";
+import { createRuntime, getMonkeHome } from "../src/runtime.ts";
+import { sha256 } from "../src/sha256.ts";
+import { resolveSkillPath } from "../src/skill-path.ts";
 import type { Runtime } from "../src/types.ts";
 import {
+  assertManagedGuidanceRoots,
   copyStagedGuidanceToManagedRoots,
   importedGuidancePath,
   IMPORTED_REFERENCES_ROOT,
   IMPORTED_SKILLS_ROOT
 } from "./import-guidance.ts";
-import {
-  assertSkillSelectorSlugMappingsMatchStagedSlugs,
-  reportSecurityRiskAssessment,
-  resolveSkillSelectorSlugMappings,
-  runInstallCommand
-} from "./import-skills.ts";
 import type {
   SkillImportRecipe,
   SkillImportRecipeSkill,
@@ -33,14 +38,29 @@ import type {
 import {
   normalizeImportRecipeStore,
   readImportRecipeStore,
-  writeImportRecipeStore
+  readRepoImportRecipeStore,
+  writeImportRecipeStore,
+  writeRepoImportRecipeStore
 } from "./skill-import-recipes.ts";
 import {
+  assertSkillSelectorSlugMappingsMatchStagedSlugs,
+  reportSecurityRiskAssessment,
+  resolveSkillSelectorSlugMappings
+} from "./skill-import.ts";
+import {
+  assertSkillRestoreMarker,
+  describeSkillSource,
   guidanceDigest,
-  pinnedSkillSource,
+  ignoreRepoImports,
+  pruneImportedGuidance,
+  rememberRestoredRecipe,
+  stageGitSkillSource,
+  SKILL_RESTORE_MARKER,
+  stagedSkillGuidance,
   resolveSkillRevision,
   restoreLockedRecipe,
-  withSkillImportMutation
+  withSkillImportMutation,
+  withSkillImportUpdate
 } from "./skill-lock.ts";
 import {
   openSkillComparison,
@@ -50,11 +70,7 @@ import {
   snapshotSkillUpdateBaseline
 } from "./skill-review.ts";
 import { summarizeSkillChanges } from "./skill-summary.ts";
-import {
-  buildSkillsInstallArgs,
-  listStagedSkillSlugs,
-  runSkillsCapturedAsync
-} from "./skills-cli.ts";
+import { listStagedSkillSlugs } from "./skills-cli.ts";
 
 /** Details for an interactive staged Skill slug replacement. */
 export interface SlugReplacementRequest {
@@ -72,9 +88,17 @@ export interface SlugReplacementRequest {
 export interface UpdateSkillsDependencies {
   /** Confirms whether an interactive update should accept a staged slug replacement. */
   confirmSlugReplacement?: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
+  /** Editable publisher checkouts whose declarations advance before installed copies. */
+  connectedRepos?: string[];
+  /** Publish the installed collection, completing recovery before final review snapshots. */
+  publishCollection?: (
+    update: () => Promise<void>,
+    withSnapshotLocks: (recover: () => Promise<void>) => Promise<void>
+  ) => Promise<void>;
+  /** Local publisher checkouts whose files may overlap project recovery snapshots. */
+  publisherRepos?: string[];
+  repo?: boolean;
   repoRoot?: string;
-  /** Runs local install after all recipe updates complete when requested. */
-  runInstallCommand?: (repoRoot: string) => void;
   runtime?: Runtime;
   validatePrepared?: (preparedRoot: string, recipe: SkillImportRecipe) => void;
   /** Receives user-facing status and security assessment text. */
@@ -82,44 +106,189 @@ export interface UpdateSkillsDependencies {
 }
 
 /** Reruns all recorded Skill import recipes into their recorded managed roots. */
-export async function runUpdateSkills(
-  argv: string[] = process.argv.slice(2),
-  dependencies: UpdateSkillsDependencies = {}
-) {
+export async function runUpdateSkills(argv: string[], dependencies: UpdateSkillsDependencies) {
+  const options = parseCommand(argv);
   const repoRoot = dependencies.repoRoot ?? process.cwd();
-  const { failure, install } = await withSkillImportMutation(
-    repoRoot,
-    () => updateSkills(argv, dependencies),
-    dependencies.runtime
-  );
-  if (install) {
-    (dependencies.writeMessage ?? ((message: string) => process.stdout.write(message)))(
-      "Installing imported skills into configured agent roots...\n"
-    );
+  const runtime = dependencies.runtime ?? createRuntime({ cwd: repoRoot });
+  const writeMessage = dependencies.writeMessage ?? runtime.writeStdout;
+  const reviewDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-review-"));
+  const before = path.join(reviewDirectory, "before");
+  const after = path.join(reviewDirectory, "after");
+  const collections: string[] = [];
+  const updatedCollections: Awaited<ReturnType<typeof updateSkills>>[] = [];
+  const revisions = new Map<string, ReturnType<typeof resolveSkillRevision>>();
+  const failures: string[] = [];
+  let comparison: Awaited<ReturnType<typeof saveSkillComparison>>;
+  const connected = new Set<string>();
+  const connectedDirectories = new Set(dependencies.connectedRepos);
+  const registryRoot = realpathSync.native(repoRoot);
+  const lockedRepositories = new Set([registryRoot]);
+  for (const directory of [...connectedDirectories, ...(dependencies.publisherRepos ?? [])]) {
     try {
-      (dependencies.runInstallCommand ?? runInstallCommand)(repoRoot);
-    } catch (error) {
-      if (failure) {
-        throw new MonkeError(
-          `${failure.message}\nSkill installation failed: ${errorMessage(ThrownValueSchema.parse(error))}`,
-          { cause: error }
-        );
+      const root = resolveSkillPath(directory).resolved;
+      lockedRepositories.add(root);
+      if (connectedDirectories.has(directory) && root !== registryRoot) {
+        connected.add(root);
       }
-      throw error;
+    } catch (error) {
+      failures.push(`${directory}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  if (failure) {
-    throw failure;
+  try {
+    const roots = [...lockedRepositories].toSorted();
+    await withSkillLocks([registryRoot, ...connected].toSorted(), runtime, async () => {
+      for (const root of connected) {
+        const collection = path.join(
+          "repositories",
+          `${path.basename(root)}-${sha256(root).slice(0, 8)}`
+        );
+        collections.push(collection);
+        try {
+          if (
+            readRepoImportRecipeStore(root).recipes.length === 0 &&
+            !existsSync(path.join(root, SKILL_RESTORE_MARKER))
+          ) {
+            collections.pop();
+            continue;
+          }
+          writeMessage(`Updating repo imports: ${root}\n`);
+          // Publisher updates run in connection order before consumer publication.
+          // oxlint-disable-next-line no-await-in-loop
+          const result = await withSkillImportMutation(
+            root,
+            () =>
+              updateSkills(
+                options.interactive,
+                {
+                  confirmSlugReplacement: dependencies.confirmSlugReplacement,
+                  repo: true,
+                  repoRoot: root,
+                  runtime,
+                  writeMessage
+                },
+                path.join(before, collection),
+                path.join(after, collection),
+                revisions,
+                registryRoot
+              ),
+            runtime
+          );
+          if (result.failure) {
+            failures.push(`${root}: ${result.failure.message}`);
+          }
+          updatedCollections.push(result);
+        } catch (error) {
+          failures.push(`${root}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      try {
+        const update = async () => {
+          const result = await withSkillImportMutation(
+            repoRoot,
+            () =>
+              updateSkills(
+                options.interactive,
+                dependencies,
+                before,
+                after,
+                revisions,
+                registryRoot
+              ),
+            runtime
+          );
+          updatedCollections.push(result);
+          if (result.failure) {
+            failures.push(result.failure.message);
+          }
+        };
+        await (dependencies.publishCollection
+          ? dependencies.publishCollection(update, (recover) =>
+              withSkillLocks(roots, runtime, recover, withSkillImportMutation)
+            )
+          : update());
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : String(error));
+      }
+      // Consumer restoration can change publisher files, so capture final bytes last.
+      let capturedCollections = 0;
+      for (const collection of updatedCollections) {
+        try {
+          // oxlint-disable-next-line no-await-in-loop
+          await collection.snapshotAfter();
+          capturedCollections += 1;
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : String(error));
+        }
+      }
+      // Include every publisher and the consumer before saving or accepting baselines.
+      if (capturedCollections !== collections.length + 1) {
+        return;
+      }
+      try {
+        await summarizeSkillChanges({ after, before, collections, runtime, writeMessage });
+        comparison = await saveSkillComparison(before, after, runtime);
+        // A failed save must leave prior baselines available for the next review.
+        for (const collection of updatedCollections) {
+          try {
+            collection.rememberBaseline();
+          } catch (error) {
+            failures.push(error instanceof Error ? error.message : String(error));
+          }
+        }
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : String(error));
+      }
+    });
+    try {
+      if (comparison) {
+        await openSkillComparison(comparison, { adapter: options.adapter, runtime, writeMessage });
+      } else if (failures.length === 0) {
+        writeMessage("No skill changes.\n");
+      }
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  } finally {
+    rmSync(reviewDirectory, { force: true, recursive: true });
+  }
+  if (failures.length > 0) {
+    throw new MonkeError(failures.join("\n"));
   }
 }
 
-async function updateSkills(argv: string[], dependencies: UpdateSkillsDependencies) {
-  const { adapter, install, interactive } = parseCommand(argv);
+// Reserve accepted declarations for the update; materialization locks also protect snapshots.
+async function withSkillLocks(
+  roots: string[],
+  runtime: Runtime,
+  update: () => Promise<void>,
+  lock = withSkillImportUpdate
+): Promise<void> {
+  const [root, ...remaining] = roots;
+  if (root === undefined) {
+    await update();
+    return;
+  }
+  await lock(root, () => withSkillLocks(remaining, runtime, update, lock), runtime);
+}
+
+async function updateSkills(
+  interactive: boolean,
+  dependencies: UpdateSkillsDependencies,
+  before: string,
+  after: string,
+  revisions: Map<string, ReturnType<typeof resolveSkillRevision>>,
+  reviewOwner: string
+) {
   const repoRoot = dependencies.repoRoot ?? process.cwd();
+  assertManagedGuidanceRoots(repoRoot);
   const runtime =
     dependencies.runtime ??
     createRuntime({ cwd: repoRoot, writeStdout: dependencies.writeMessage });
-  let store = readImportRecipeStore(repoRoot);
+  const readStore = dependencies.repo ? readRepoImportRecipeStore : readImportRecipeStore;
+  let store = readStore(repoRoot);
+  if (store.recipes.some((recipe) => !recipe.localSource)) {
+    assertSkillRestoreMarker(repoRoot);
+  }
   const writeMessage =
     dependencies.writeMessage ??
     ((message: string) => {
@@ -127,16 +296,33 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
     });
   const failures: string[] = [];
   const acceptedGuidance: SkillImportRecipeSkill[] = [];
-  let reviewFailure: string | undefined;
+  const pendingMarkers: SkillImportRecipe[] = [];
 
-  validateImportedGuidanceDirectoriesAreTracked(repoRoot, store);
-  const reviewDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-review-"));
-  const before = path.join(reviewDirectory, "before");
-  const migrating = store.recipes.some((recipe) => !recipe.localSource && !recipe.lock);
-  snapshotSkillUpdateBaseline(repoRoot, before, migrating);
+  if (!dependencies.repo) {
+    validateImportedGuidanceDirectoriesAreTracked(repoRoot, store);
+  } else {
+    ignoreRepoImports(repoRoot, runtime);
+  }
+  const migrating = store.recipes.some((recipe) => !recipe.localSource && !recipe.commit);
+  const forgetBefore = snapshotUpdateBefore({
+    before,
+    migrating,
+    repo: dependencies.repo,
+    repoRoot,
+    reviewOwner,
+    runtime,
+    store
+  });
 
   const { recipes } = store;
-  const prepare = createGitSkillPreparer({ before, migrating, recipes, repoRoot, runtime });
+  const prepare = createGitSkillPreparer({
+    before,
+    recipes,
+    repo: dependencies.repo,
+    repoRoot,
+    revisions,
+    runtime
+  });
 
   // Every recipe reaches the loop tail; Oxlint currently misclassifies the try/finally body.
   // oxlint-disable-next-line no-unreachable-loop
@@ -165,49 +351,64 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
       // oxlint-disable-next-line no-await-in-loop
       const prepared = await prepare(recipe, index);
       const {
+        assessmentOutput,
         installOutput,
         normalizedSource,
         revision,
         stagingDirectory: preparedDirectory
       } = prepared;
       stagingDirectory = preparedDirectory;
-      reportSecurityRiskAssessment(
-        `${installOutput.stdout}\n${installOutput.stderr}`,
-        writeMessage
-      );
+      reportSecurityRiskAssessment(assessmentOutput, writeMessage);
 
-      // Recipe updates are serial because each accepted replacement updates the store for the next.
+      // Accepted slug replacements determine the next recipe before publication.
       // oxlint-disable-next-line no-await-in-loop
-      const slugReplacements = await resolveStagedSkillReplacements({
+      const stagedGuidance = await resolveUpdatedGuidance({
         confirmSlugReplacement: dependencies.confirmSlugReplacement ?? promptForSlugReplacement,
+        declaredGuidance: installOutput.declaredGuidance,
         interactive,
+        preserveImportKinds: dependencies.repo,
         recipe,
         source: normalizedSource,
         stagingDirectory
       });
-      const stagedGuidance = applySlugReplacementsToGuidance(recipe, slugReplacements);
-      const nextStore = applySlugReplacementsToStore(store, recipe.source, stagedGuidance);
+      const nextStore = applySlugReplacementsToStore(
+        store,
+        recipe.source,
+        stagedGuidance,
+        installOutput.selection
+      );
       const nextRecipe = nextStore.recipes.find((item) => item.source === recipe.source);
       if (!nextRecipe) {
         throw new MonkeError(`Missing recipe for ${recipe.source}`);
       }
+      assertSkillRestoreMarker(repoRoot);
       copyStagedGuidanceToManagedRoots({
         commitState() {
-          writeImportRecipeStore(repoRoot, nextStore);
+          (dependencies.repo ? writeRepoImportRecipeStore : writeImportRecipeStore)(
+            repoRoot,
+            nextStore
+          );
         },
         defaultDisableModelInvocation: recipe.disableModelInvocation,
         guidance: stagedGuidance,
-        obsoleteGuidance: guidanceReplacedBySlugChanges(recipe, slugReplacements),
+        obsoleteGuidance: recipe.skills.filter(
+          (item) =>
+            !stagedGuidance.some((next) => next.kind === item.kind && next.slug === item.slug)
+        ),
         repoRoot,
         stagingDirectory,
         validatePrepared(preparedRoot) {
+          guidanceDigest(preparedRoot, nextRecipe.skills, true);
           dependencies.validatePrepared?.(preparedRoot, nextRecipe);
-          nextRecipe.lock = {
-            ...revision,
-            digest: guidanceDigest(preparedRoot, stagedGuidance, true)
-          };
+          nextRecipe.commit = revision.commit;
+          nextRecipe.source = revision.source;
         }
       });
+      if (isDeepStrictEqual(recipe, nextRecipe)) {
+        pendingMarkers.push(nextRecipe);
+      } else {
+        rememberRestoredRecipe(repoRoot, nextRecipe);
+      }
       store = nextStore;
       acceptedGuidance.push(...recipe.skills, ...nextRecipe.skills);
     } catch (error) {
@@ -220,51 +421,142 @@ async function updateSkills(argv: string[], dependencies: UpdateSkillsDependenci
     }
   }
 
-  if (store.recipes.every((recipe) => recipe.localSource ?? recipe.lock)) {
-    rmSync(path.join(repoRoot, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
-  }
+  const finalizationFailure = finalizeUpdatedImports({
+    failedRecipes: failures.length > 0,
+    pendingMarkers,
+    repo: Boolean(dependencies.repo),
+    repoRoot,
+    store
+  });
   for (const failure of failures) {
     writeMessage(`Skill source failed: ${failure}\n`);
   }
-  try {
-    await reviewSkillUpdate(
-      repoRoot,
-      reviewDirectory,
-      before,
-      runtime,
-      adapter,
-      writeMessage,
-      acceptedGuidance
-    );
-  } catch (error) {
-    reviewFailure = error instanceof Error ? error.message : String(error);
-  } finally {
-    rmSync(reviewDirectory, { force: true, recursive: true });
+  if (finalizationFailure) {
+    writeMessage(`${finalizationFailure}\n`);
   }
+  let reviewedStore: SkillImportRecipeStore | undefined;
+  return {
+    failure: skillUpdateFailure(failures, finalizationFailure),
+    rememberBaseline: () => {
+      if (reviewedStore) {
+        if (existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
+          rememberSkillGuidance(repoRoot, acceptedGuidance, reviewedStore);
+        }
+        forgetBefore?.();
+      }
+    },
+    snapshotAfter: () =>
+      withSkillImportMutation(
+        repoRoot,
+        () => {
+          // Publication recovery may have restored the installed collection's store.
+          const currentStore = readStore(repoRoot);
+          snapshotSkillGuidance(repoRoot, after, currentStore);
+          snapshotRepoDeclaration(repoRoot, after, dependencies.repo);
+          reviewedStore = currentStore;
+        },
+        runtime
+      )
+  };
+}
 
-  const failure =
-    failures.length > 0 || reviewFailure
-      ? new MonkeError(
-          [
-            ...(failures.length > 0
-              ? [`Skill update failed for ${failures.length} recipe(s):\n${failures.join("\n")}`]
-              : []),
-            ...(reviewFailure ? [reviewFailure] : [])
-          ].join("\n")
-        )
-      : undefined;
+function snapshotUpdateBefore(options: {
+  before: string;
+  migrating: boolean;
+  repo?: boolean;
+  repoRoot: string;
+  reviewOwner: string;
+  runtime: Runtime;
+  store: SkillImportRecipeStore;
+}) {
+  const { before, migrating, repoRoot, runtime, store } = options;
+  if (!options.repo) {
+    snapshotSkillUpdateBaseline(repoRoot, before, migrating, store);
+    return;
+  }
+  const home = getMonkeHome(runtime);
+  const key = sha256(realpathSync.native(repoRoot));
+  const retained = path.join(home, "skill-update-baselines", key, sha256(options.reviewOwner));
+  // Each consumer owns its retry baseline, even if another consumer saves a review.
+  // The lock on accepted declarations covers this snapshot until the review is saved.
+  if (!existsSync(retained)) {
+    mkdirSync(path.dirname(retained), { mode: 0o700, recursive: true });
+    const staging = mkdtempSync(`${retained}-`);
+    try {
+      snapshotSkillUpdateBaseline(repoRoot, staging, migrating, store);
+      snapshotRepoDeclaration(repoRoot, staging, true);
+      renameSync(staging, retained);
+    } finally {
+      rmSync(staging, { force: true, recursive: true });
+    }
+  }
+  cpSync(retained, before, { recursive: true, verbatimSymlinks: true });
+  return () => {
+    rmSync(retained, { force: true, recursive: true });
+  };
+}
 
-  return { failure, install };
+function snapshotRepoDeclaration(repoRoot: string, destination: string, repo = false) {
+  const file = path.join(repoRoot, "monke.yml");
+  if (repo && existsSync(file)) {
+    cpSync(file, path.join(destination, "monke.yml"));
+  }
+}
+
+function finalizeUpdatedImports(options: {
+  failedRecipes: boolean;
+  pendingMarkers: SkillImportRecipe[];
+  repo: boolean;
+  repoRoot: string;
+  store: SkillImportRecipeStore;
+}) {
+  const { failedRecipes, pendingMarkers, repo, repoRoot, store } = options;
+  let failure: string | undefined;
+  try {
+    if (repo && !failedRecipes) {
+      // A rejected hand-edited selection may omit the last accepted files.
+      pruneImportedGuidance(
+        repoRoot,
+        store.recipes.flatMap((recipe) => recipe.skills)
+      );
+    }
+    if (!repo || !failedRecipes) {
+      for (const recipe of pendingMarkers) {
+        rememberRestoredRecipe(repoRoot, recipe);
+      }
+    }
+    if (
+      store.recipes.every(
+        (recipe) => recipe.localSource !== undefined || recipe.commit !== undefined
+      )
+    ) {
+      rmSync(path.join(repoRoot, IMPORTED_SKILLS_ROOT, ".monke-imports.json"), { force: true });
+    }
+  } catch (error) {
+    failure = `Skill update finalization failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  return failure;
+}
+
+function skillUpdateFailure(failures: string[], ...otherFailures: (string | undefined)[]) {
+  const messages = [
+    ...(failures.length > 0
+      ? [`Skill update failed for ${failures.length} recipe(s):\n${failures.join("\n")}`]
+      : []),
+    ...otherFailures.filter((message) => message !== undefined)
+  ];
+  return messages.length > 0 ? new MonkeError(messages.join("\n")) : undefined;
 }
 
 function createGitSkillPreparer(options: {
   before: string;
-  migrating: boolean;
   recipes: SkillImportRecipe[];
+  repo?: boolean;
   repoRoot: string;
+  revisions: Map<string, ReturnType<typeof resolveSkillRevision>>;
   runtime: Runtime;
 }) {
-  const { before, migrating, recipes, repoRoot, runtime } = options;
+  const { before, recipes, repoRoot, runtime } = options;
   const limit = pLimit(4);
   const prepared = new Map<
     string,
@@ -282,7 +574,16 @@ function createGitSkillPreparer(options: {
       // Installer commands are barriers; wait for every preparation before publication.
       const results = await Promise.allSettled(
         group.map((candidate) =>
-          limit(() => prepareGitSkillUpdate(repoRoot, candidate, before, migrating, runtime))
+          limit(() =>
+            prepareGitSkillUpdate(
+              repoRoot,
+              candidate,
+              before,
+              runtime,
+              options.revisions,
+              options.repo
+            )
+          )
         )
       );
       for (const [position, candidate] of group.entries()) {
@@ -308,13 +609,16 @@ async function prepareGitSkillUpdate(
   repoRoot: string,
   recipe: SkillImportRecipe,
   before: string,
-  migrating: boolean,
-  runtime: Runtime
+  runtime: Runtime,
+  revisions: Map<string, ReturnType<typeof resolveSkillRevision>>,
+  repo?: boolean
 ) {
   const stagingDirectory = mkdtempSync(path.join(tmpdir(), "monke-skills-update-"));
   try {
-    if (!migrating) {
-      await restoreLockedRecipe(repoRoot, recipe);
+    // Hand-edited repo selections may not exist at the accepted pin, so preserve
+    // the captured review baseline instead of restoring that selection first.
+    if (recipe.commit && !repo) {
+      await restoreLockedRecipe(repoRoot, recipe, true, runtime);
       for (const item of recipe.skills) {
         const target = importedGuidancePath(before, item);
         rmSync(target, { force: true, recursive: true });
@@ -324,51 +628,42 @@ async function prepareGitSkillUpdate(
         });
       }
     }
-    const revision = await resolveSkillRevision(recipe, repoRoot);
-    const normalizedSource = await pinnedSkillSource({ ...revision, digest: "" }, stagingDirectory);
-    const installOutput = await runSkillsCapturedAsync(
-      buildSkillsInstallArgs({
-        selectors: recipe.skills.map((skill) => skill.selector),
-        source: normalizedSource
-      }),
-      stagingDirectory,
-      runtime
-    );
-    return { installOutput, normalizedSource, revision, stagingDirectory };
+    const revisionKey = JSON.stringify([
+      recipe.source,
+      describeSkillSource(recipe.source, repoRoot)
+    ]);
+    let pendingRevision = revisions.get(revisionKey);
+    if (!pendingRevision) {
+      pendingRevision = resolveSkillRevision(recipe, repoRoot);
+      revisions.set(revisionKey, pendingRevision);
+    }
+    const revision = await pendingRevision;
+    const installOutput = await stageGitSkillSource({
+      includeDeclaredImports: !repo,
+      previousRecipe: repo ? undefined : recipe,
+      recipe: { ...recipe, commit: revision.commit, source: revision.source },
+      rejectAmbiguousSelection: recipe.selection?.includes("*"),
+      repoRoot,
+      retainSelection: !repo,
+      runtime,
+      selectFromCollection: repo,
+      selectors: recipe.selection ?? recipe.skills.map((skill) => skill.selector),
+      stagingDirectory
+    });
+    const assessmentOutput =
+      installOutput.securityAssessments ?? `${installOutput.stdout}\n${installOutput.stderr}`;
+    const normalizedSource = installOutput.source;
+    return { assessmentOutput, installOutput, normalizedSource, revision, stagingDirectory };
   } catch (error) {
     rmSync(stagingDirectory, { force: true, recursive: true });
     throw error;
   }
 }
 
-async function reviewSkillUpdate(
-  repoRoot: string,
-  reviewDirectory: string,
-  before: string,
-  runtime: Runtime,
-  adapter: string | undefined,
-  writeMessage: (message: string) => void,
-  acceptedGuidance: readonly SkillImportRecipeSkill[]
-) {
-  const after = path.join(reviewDirectory, "after");
-  snapshotSkillGuidance(repoRoot, after);
-  await summarizeSkillChanges({ after, before, runtime, writeMessage });
-  const comparison = await saveSkillComparison(before, after, runtime);
-  if (existsSync(path.join(repoRoot, ".monke-skill-baseline"))) {
-    rememberSkillGuidance(repoRoot, acceptedGuidance);
-  }
-  if (comparison) {
-    await openSkillComparison(comparison, { adapter, runtime, writeMessage });
-  } else {
-    writeMessage("No skill changes.\n");
-  }
-}
-
 function parseCommand(argv: string[]) {
   const program = new Command()
-    .name("bun run skills:update")
+    .name("mt skills update --repo")
     .description("Update imported agent guidance from recorded recipes")
-    .option("-i, --install", "Run the monke-tools skill install command after updating")
     .option("--interactive", "Prompt before accepting staged Skill slug replacements")
     .option("--adapter <adapter>", "Complete review adapter: codiff or lfv")
     .allowExcessArguments(false);
@@ -379,7 +674,6 @@ function parseCommand(argv: string[]) {
   const options = program.opts();
   return {
     adapter: options.adapter,
-    install: Boolean(options.install),
     interactive: Boolean(options.interactive)
   };
 }
@@ -401,6 +695,41 @@ function validateImportedGuidanceDirectoriesAreTracked(
       throw new MonkeError(`Untracked imported ${kind} directories: ${untrackedSlugs.join(", ")}`);
     }
   }
+}
+
+async function resolveUpdatedGuidance(options: {
+  confirmSlugReplacement: (request: SlugReplacementRequest) => boolean | Promise<boolean>;
+  declaredGuidance: SkillImportRecipeSkill[];
+  interactive: boolean;
+  preserveImportKinds?: boolean;
+  recipe: SkillImportRecipe;
+  source: string;
+  stagingDirectory: string;
+}) {
+  const { recipe, stagingDirectory } = options;
+  const stagedSlugs = listStagedSkillSlugs(stagingDirectory);
+  if (
+    recipe.selection?.includes("*") &&
+    !recipe.skills.some(
+      (skill) => (skill.adoptedPaths?.length ?? 0) > 0 && !stagedSlugs.includes(skill.slug)
+    )
+  ) {
+    return stagedSkillGuidance(stagingDirectory, recipe, options.declaredGuidance, {
+      preserveImportKinds: options.preserveImportKinds
+    });
+  }
+  const replacements = await resolveStagedSkillReplacements(options);
+  const staged = stagedSkillGuidance(stagingDirectory, recipe, options.declaredGuidance, {
+    preserveImportKinds: options.preserveImportKinds
+  });
+  return applySlugReplacementsToGuidance(recipe, replacements).map((item) => ({
+    ...item,
+    kind: options.preserveImportKinds
+      ? item.kind
+      : (options.declaredGuidance.find((declared) => declared.slug === item.slug)?.kind ??
+        item.kind),
+    selector: staged.find((candidate) => candidate.slug === item.slug)?.selector ?? item.selector
+  }));
 }
 
 async function resolveStagedSkillReplacements(options: {
@@ -476,12 +805,15 @@ async function resolveStagedSkillReplacements(options: {
 function applySlugReplacementsToStore(
   store: SkillImportRecipeStore,
   source: string,
-  guidance: SkillImportRecipe["skills"]
+  guidance: SkillImportRecipe["skills"],
+  selection: SkillImportRecipe["selection"]
 ) {
   return normalizeImportRecipeStore({
     ...store,
     recipes: store.recipes.map((recipe) =>
-      recipe.source === source ? { ...recipe, skills: guidance } : recipe
+      recipe.source === source
+        ? { ...recipe, ...(selection ? { selection } : {}), skills: guidance }
+        : recipe
     )
   });
 }
@@ -497,14 +829,6 @@ function applySlugReplacementsToGuidance(
     ...skill,
     slug: stagedSlugBySelector.get(skill.selector) ?? skill.slug
   }));
-}
-
-function guidanceReplacedBySlugChanges(
-  recipe: SkillImportRecipe,
-  replacements: readonly SlugReplacementRequest[]
-) {
-  const replacedSelectors = new Set(replacements.map((replacement) => replacement.selector));
-  return recipe.skills.filter((skill) => replacedSelectors.has(skill.selector));
 }
 
 function renderSlugMismatchMessage(
@@ -541,16 +865,4 @@ function listGuidanceDirectories(root: string) {
     .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
     .map((entry) => entry.name)
     .toSorted();
-}
-
-async function main() {
-  try {
-    await runUpdateSkills();
-  } catch (error) {
-    reportCliFailure(ThrownValueSchema.parse(error));
-  }
-}
-
-if (import.meta.main) {
-  void main();
 }

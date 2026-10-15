@@ -17,7 +17,7 @@ import path from "node:path";
 
 import { number, strictObject } from "zod";
 
-import { restoreSkillImports } from "../scripts/skill-lock.ts";
+import { restoreRepoSkillImports } from "../scripts/skill-lock.ts";
 import { reconcileCodiff, MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { runInstallSkillsLocked, runReleaseInstallSkillsLocked } from "./guidance-installation.ts";
@@ -265,7 +265,7 @@ export async function runActivateLocalInstall(
   const monkeHome = getMonkeHome(runtime);
   const homeDirectory = getHomeDirectory(runtime);
   const sourceCheckout = path.resolve(options.sourceCheckout);
-  await restoreSkillImports(sourceCheckout);
+  await restoreRepoSkillImports(sourceCheckout);
   preflightSkillRegistryInstall(runtime, sourceCheckout, options.explicitTargets);
   const activate = async () => {
     const stagedInstall = path.resolve(options.stagedInstall);

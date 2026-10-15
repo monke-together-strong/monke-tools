@@ -10,6 +10,7 @@ logs/
 tmp/
 plans/
 
-# Reproduced from the tracked Skill lock.
+# Reproduced from the Repo import recipes in monke.yml.
 skills/imported/
 skills/references/imported/
+/skills/.monke-restored.json

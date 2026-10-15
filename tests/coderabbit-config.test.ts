@@ -433,7 +433,7 @@ reviews:
 
     expect(output).toBe("false\n");
 
-    write(repoRoot, "skills.lock.json", '{"version":3,"recipes":[]}\n');
+    write(repoRoot, "monke.yml", "skills: []\n");
     git(repoRoot, ["add", "."]);
     git(repoRoot, ["commit", "-m", "change locked guidance"]);
     const afterLock = git(repoRoot, ["rev-parse", "HEAD"]);

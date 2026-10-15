@@ -13,23 +13,34 @@ export const SKILL_SUMMARY_FILE = "SKILL_UPDATE_SUMMARY.md";
 export async function summarizeSkillChanges(options: {
   after: string;
   before: string;
+  collections?: string[];
   runtime: Runtime;
   writeMessage: (message: string) => void;
 }) {
   const { after, before, runtime, writeMessage } = options;
   const output = path.join(after, SKILL_SUMMARY_FILE);
   try {
-    const guidance = new Map(
-      [before, after]
-        .flatMap((root) => readImportRecipeStore(root).recipes.flatMap((recipe) => recipe.skills))
-        .map((item) => [`${item.kind}:${item.slug}`, item])
-    );
-    const changed = [...guidance.values()].filter((item) => {
-      const had = existsSync(importedGuidancePath(before, item));
-      const has = existsSync(importedGuidancePath(after, item));
-      return (
-        had !== has || (had && guidanceDigest(before, [item]) !== guidanceDigest(after, [item]))
+    const changed = ["", ...(options.collections ?? [])].flatMap((collection) => {
+      const previous = path.join(before, collection);
+      const next = path.join(after, collection);
+      const guidance = new Map(
+        [previous, next]
+          .flatMap((root) => readImportRecipeStore(root).recipes.flatMap((recipe) => recipe.skills))
+          .map((item) => [`${item.kind}:${item.slug}`, item])
       );
+      return [...guidance.values()]
+        .filter((item) => {
+          const had = existsSync(importedGuidancePath(previous, item));
+          const has = existsSync(importedGuidancePath(next, item));
+          return (
+            had !== has ||
+            (had && guidanceDigest(previous, [item]) !== guidanceDigest(next, [item]))
+          );
+        })
+        .map((item) => ({
+          after: importedGuidancePath(next, item),
+          before: importedGuidancePath(previous, item)
+        }));
     });
     if (changed.length === 0) {
       return;
@@ -60,12 +71,7 @@ export async function summarizeSkillChanges(options: {
           "Explain changed guidance or behavior, including supporting files. Identify additions and removals.",
           "Include changed references in their own headings. Omit unchanged skills and lock-only pin changes.",
           "Describe observable changes, not speculative benefits. These are the before and after paths for each changed skill or reference:",
-          JSON.stringify(
-            changed.map((item) => ({
-              after: importedGuidancePath(after, item),
-              before: importedGuidancePath(before, item)
-            }))
-          )
+          JSON.stringify(changed)
         ].join("\n"),
         timeoutSeconds: 120
       }

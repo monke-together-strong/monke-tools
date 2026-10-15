@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { validate } from "zod";
 import type { output } from "zod";
 
-import { restoreSkillImports } from "../scripts/skill-lock.ts";
+import { restoreRepoSkillImports } from "../scripts/skill-lock.ts";
 import { MINIMUM_CODIFF_VERSION_TEXT } from "./codiff.ts";
 import {
   FullCommitSchema,
@@ -56,14 +56,14 @@ const RELEASE_INPUTS = [
   "scripts/install-release.sh",
   "scripts/release-bundle.ts",
   "scripts/import-guidance.ts",
-  "scripts/import-skills.ts",
-  "scripts/restore-skills.ts",
+  "scripts/skill-import.ts",
   "scripts/skill-lock.ts",
   "scripts/skill-import-recipes.ts",
+  "scripts/skill-import-state.ts",
   "scripts/skill-review.ts",
   "scripts/update-skills.ts",
   "scripts/skills-cli.ts",
-  "skills.lock.json",
+  "monke.yml",
   "src/",
   "skills/codex/",
   "skills/imported/",
@@ -121,7 +121,7 @@ export async function buildReleaseBundle(options: BuildReleaseBundleOptions) {
   const bundleRoot = path.join(temporaryRoot, "bundle");
 
   try {
-    await restoreSkillImports(repositoryRoot);
+    await restoreRepoSkillImports(repositoryRoot);
     mkdirSync(bundleRoot, { recursive: true });
     mkdirSync(outputDirectory, { recursive: true });
     await compileExecutable(path.join(bundleRoot, "mt"), platform, version);
@@ -275,7 +275,7 @@ async function compileExecutable(
 }
 
 function copyBundleInputs(bundleRoot: string) {
-  for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md", "skills.lock.json"]) {
+  for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md", "monke.yml"]) {
     cpSync(path.join(repositoryRoot, file), path.join(bundleRoot, file));
   }
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {

@@ -10,7 +10,8 @@ import type { Runtime } from "./types.ts";
 export async function withSkillPublicationTransaction<T>(
   runtime: Runtime,
   paths: string[],
-  publish: () => Promise<T> | T
+  publish: () => Promise<T> | T,
+  withSnapshotLocks?: (recover: () => Promise<void>) => Promise<void>
 ) {
   const recoveryRoot = getMonkeHome(runtime);
   mkdirSync(recoveryRoot, { recursive: true });
@@ -20,8 +21,8 @@ export async function withSkillPublicationTransaction<T>(
       !all.some((parent, parentIndex) => parentIndex !== index && containsPath(parent, item))
   );
   const missingParents = new Set<string>();
-  const snapshots = [];
-  try {
+  const snapshots: { backup: string; original: string; present: boolean }[] = [];
+  const capture = async () => {
     for (const [index, original] of roots.entries()) {
       let parent = path.dirname(original);
       while (!existsSync(parent)) {
@@ -36,6 +37,9 @@ export async function withSkillPublicationTransaction<T>(
       snapshots.push({ backup, original, present });
     }
     await Bun.write(path.join(recovery, "recovery.json"), JSON.stringify(snapshots, null, 2));
+  };
+  try {
+    await (withSnapshotLocks ? withSnapshotLocks(capture) : capture());
   } catch (error) {
     rmSync(recovery, { recursive: true });
     throw error;
@@ -45,23 +49,37 @@ export async function withSkillPublicationTransaction<T>(
     result = await publish();
   } catch (error) {
     const failures: string[] = [];
-    for (const { backup, original, present } of snapshots.toReversed()) {
-      try {
-        rmSync(original, { force: true, recursive: true });
-        if (present) {
-          mkdirSync(path.dirname(original), { recursive: true });
-          cpSync(backup, original, { recursive: true, verbatimSymlinks: true });
+    const restore = () => {
+      for (const { backup, original, present } of snapshots.toReversed()) {
+        try {
+          rmSync(original, { force: true, recursive: true });
+          if (present) {
+            mkdirSync(path.dirname(original), { recursive: true });
+            cpSync(backup, original, { recursive: true, verbatimSymlinks: true });
+          }
+        } catch (restoreError) {
+          failures.push(`${original}: ${errorMessage(ThrownValueSchema.parse(restoreError))}`);
         }
-      } catch (restoreError) {
-        failures.push(`${original}: ${errorMessage(ThrownValueSchema.parse(restoreError))}`);
       }
-    }
-    for (const parent of [...missingParents].toSorted((a, b) => b.length - a.length)) {
-      try {
-        rmdirSync(parent);
-      } catch {
-        // Keep nonempty parents, including anything created by another writer.
+      for (const parent of [...missingParents].toSorted((a, b) => b.length - a.length)) {
+        try {
+          rmdirSync(parent);
+        } catch {
+          // Keep nonempty parents, including anything created by another writer.
+        }
       }
+    };
+    try {
+      if (withSnapshotLocks) {
+        await withSnapshotLocks(() => {
+          restore();
+          return Promise.resolve();
+        });
+      } else {
+        restore();
+      }
+    } catch (restoreError) {
+      failures.push(errorMessage(ThrownValueSchema.parse(restoreError)));
     }
     if (failures.length > 0) {
       throw new MonkeError(

@@ -4,6 +4,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   readlinkSync,
   realpathSync,
@@ -15,100 +16,37 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { copyStagedGuidanceToManagedRoots } from "../scripts/import-guidance.ts";
+import { parseDocument } from "yaml";
+
+import {
+  copyStagedGuidanceToManagedRoots,
+  importedGuidancePath
+} from "../scripts/import-guidance.ts";
 import {
   normalizeImportRecipeStore,
+  readRepoImportRecipeStore,
   writeImportRecipeStore
 } from "../scripts/skill-import-recipes.ts";
-import type { SkillImportRecipe, SkillImportRecipeStore } from "../scripts/skill-import-recipes.ts";
+import type {
+  SkillImportRecipe,
+  SkillImportRecipeSkill,
+  SkillImportRecipeStore
+} from "../scripts/skill-import-recipes.ts";
+import {
+  restoreLockedImports,
+  withSkillImportMutation,
+  SKILL_RESTORE_MARKER
+} from "../scripts/skill-lock.ts";
 import { errorMessage, MonkeError, ThrownValueSchema } from "./errors.ts";
 import { containsPath } from "./path-identity.ts";
 import { getMonkeHome } from "./runtime.ts";
+import {
+  discoverSourceSkills,
+  resolveSkillSourceFolder,
+  scanSkillSource,
+  SKILL_SOURCE_CANDIDATES
+} from "./skill-source-discovery.ts";
 import type { Runtime } from "./types.ts";
-
-const SKILL_SOURCE_CANDIDATES = [
-  ".agents/skills",
-  "skills",
-  ".claude/skills",
-  ".codex/skills",
-  ".cursor/skills"
-];
-
-/** Choose one skill source folder from a checkout or installer output. */
-export function resolveSkillSourceFolder(
-  directory: string,
-  preserveAlias = false,
-  preferPublishedSkills = false
-) {
-  if (existsSync(path.join(directory, "SKILL.md"))) {
-    return preserveAlias ? directory : realpathSync.native(directory);
-  }
-  // A project may publish skills/ while consuming unrelated skills in .agents/skills.
-  const folders = preferPublishedSkills
-    ? ["skills", ...SKILL_SOURCE_CANDIDATES.filter((candidate) => candidate !== "skills")]
-    : SKILL_SOURCE_CANDIDATES;
-  const candidates = folders.map((candidate) => path.join(directory, candidate));
-  const root = candidates.find((candidate) => existsSync(candidate)) ?? directory;
-  return existsSync(root) && !preserveAlias ? realpathSync.native(root) : root;
-}
-
-/** Scan Skill directories and their existing ancestors without following cycles. */
-function scanSkillSource(root: string, includeNestedSkills = false) {
-  if (!existsSync(root)) {
-    throw new MonkeError(`Skill source is missing: ${root}`);
-  }
-  const skills: string[] = [];
-  const directories = new Set<string>();
-  const ancestors = new Set<string>();
-  function visit(directory: string) {
-    const physicalDirectory = realpathSync.native(directory);
-    if (ancestors.has(physicalDirectory)) {
-      return;
-    }
-    directories.add(directory);
-    if (existsSync(path.join(directory, "SKILL.md"))) {
-      skills.push(directory);
-      if (!includeNestedSkills) {
-        return;
-      }
-    }
-    ancestors.add(physicalDirectory);
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (
-        (entry.isDirectory() ||
-          (entry.isSymbolicLink() &&
-            statSync(path.join(directory, entry.name), {
-              throwIfNoEntry: false
-            })?.isDirectory())) &&
-        !entry.name.startsWith(".") &&
-        !["node_modules", "references"].includes(entry.name)
-      ) {
-        visit(path.join(directory, entry.name));
-      }
-    }
-    ancestors.delete(physicalDirectory);
-  }
-  visit(root);
-  return { directories, skills };
-}
-
-/** Discover Skills without asking which agent should receive them. */
-export function discoverSourceSkills(root: string) {
-  const skills = new Map<string, string>();
-  for (const directory of scanSkillSource(root).skills) {
-    const slug = path.basename(directory);
-    if (skills.has(slug)) {
-      throw new MonkeError(`Duplicate Skill slug ${slug} in ${root}`);
-    }
-    skills.set(slug, directory);
-  }
-  return skills;
-}
-
-/** Keep duplicate slugs visible so adoption can compare them before publishing. */
-export function discoverSourceSkillCopies(root: string) {
-  return scanSkillSource(root).skills;
-}
 
 /** Back up Skill folders without treating an existing project as disposable installer output. */
 function backupSourceFolders(
@@ -346,6 +284,106 @@ function restoreSourceFolders(
   return failures;
 }
 
+function resolveLocalSourceRoot(
+  localSource: NonNullable<SkillImportRecipe["localSource"]>,
+  workingDirectory: string
+) {
+  return localSource.skillSourceFolder === workingDirectory
+    ? resolveSkillSourceFolder(
+        localSource.workingDirectory,
+        false,
+        existsSync(path.join(localSource.workingDirectory, "monke.yml"))
+      )
+    : localSource.skillSourceFolder;
+}
+
+/** Reject ambiguous published slugs before restoring imports into the linked checkout. */
+function validateDeclaredSlugs(
+  discovered: Map<string, string>,
+  declared: SkillImportRecipeSkill[],
+  publisher: string,
+  source: string
+) {
+  const declaredSlugs = new Set<string>();
+  for (const item of declared) {
+    const ownPath = discovered.get(item.slug);
+    const isOwnSkill =
+      ownPath !== undefined && !containsPath(path.join(publisher, "skills/imported"), ownPath);
+    if (isOwnSkill || declaredSlugs.has(item.slug)) {
+      throw new MonkeError(
+        `Imported ${item.kind} slug ${item.slug} collides with publishing source ${source}`
+      );
+    }
+    declaredSlugs.add(item.slug);
+  }
+}
+
+/** Include the publisher's reference imports without treating them as linked Skills. */
+async function discoverLocalGuidance(
+  recipe: SkillImportRecipe & { localSource: NonNullable<SkillImportRecipe["localSource"]> },
+  workingDirectory: string,
+  runtime: Runtime
+) {
+  const repository = runtime.exec("git", ["rev-parse", "--show-toplevel"], {
+    allowFailure: true,
+    cwd: workingDirectory
+  });
+  const publisher = repository.exitCode === 0 ? repository.stdout.trim() : undefined;
+  const declaredStore = publisher
+    ? await withSkillImportMutation(
+        publisher,
+        async () => {
+          const store = readRepoImportRecipeStore(publisher);
+          const declaresImports =
+            existsSync(path.join(publisher, "monke.yml")) &&
+            parseDocument(readFileSync(path.join(publisher, "monke.yml"), "utf-8")).has("skills");
+          if (existsSync(path.join(publisher, SKILL_RESTORE_MARKER)) || declaresImports) {
+            validateDeclaredSlugs(
+              discoverSourceSkills(
+                resolveLocalSourceRoot(recipe.localSource, workingDirectory),
+                path.join(publisher, "skills/imported")
+              ),
+              store.recipes.flatMap((item) => item.skills),
+              publisher,
+              recipe.source
+            );
+            await restoreLockedImports(publisher, false, runtime, store);
+          }
+          return store;
+        },
+        runtime
+      )
+    : { recipes: [] };
+  const declared = declaredStore.recipes.flatMap((item) => item.skills);
+  const root = resolveLocalSourceRoot(recipe.localSource, workingDirectory);
+  const own = discoverSourceSkills(root);
+  const importedRoots = publisher
+    ? declared.map((item) => realpathSync.native(importedGuidancePath(publisher, item)))
+    : [];
+  const linkedSkills = new Map(
+    [...own].filter(
+      ([, sourcePath]) =>
+        !importedRoots.some((importedRoot) =>
+          containsPath(importedRoot, realpathSync.native(sourcePath))
+        )
+    )
+  );
+  const discovered = new Map<
+    string,
+    { kind: SkillImportRecipeSkill["kind"]; selector?: string; sourcePath: string }
+  >([...own].map(([slug, sourcePath]) => [slug, { kind: "skill", sourcePath }]));
+  if (publisher) {
+    for (const item of declared) {
+      discovered.set(item.slug, {
+        kind: item.kind,
+        selector: item.selector,
+        sourcePath: importedGuidancePath(publisher, item)
+      });
+    }
+  }
+  return { discovered, linkedSkills, root };
+}
+
 /** Refresh a command or linked source and publish it through the existing import materializer. */
 export async function updateLocalSkillSource(options: {
   executeCommand?: boolean;
@@ -405,34 +443,45 @@ export async function updateLocalSkillSource(options: {
         );
       }
     }
-    const root =
-      localSource.skillSourceFolder === workingDirectory
-        ? resolveSkillSourceFolder(localSource.workingDirectory)
-        : localSource.skillSourceFolder;
-    const discovered = discoverSourceSkills(root);
+    const { discovered, linkedSkills, root } = await discoverLocalGuidance(
+      { ...recipe, localSource },
+      workingDirectory,
+      runtime
+    );
     if (discovered.size === 0) {
       throw new MonkeError(`No skills found in ${root}`);
     }
     const selected = recipe.selection ?? [...discovered.keys()];
-    const skills = selected.map((slug) => {
-      const sourcePath = discovered.get(slug);
-      if (!sourcePath) {
-        throw new MonkeError(`Selected Skill ${slug} is missing from ${root}`);
+    const entries = [...discovered];
+    const matchesSelection = ([slug, source]: (typeof entries)[number], selector: string) =>
+      discovered.has(selector)
+        ? slug === selector
+        : source.selector !== undefined &&
+          [slug, source.selector].some((name) => name.toLowerCase() === selector.toLowerCase());
+    for (const selector of selected) {
+      if (!entries.some((entry) => matchesSelection(entry, selector))) {
+        throw new MonkeError(`Selected Skill ${selector} is missing from ${root}`);
       }
-      cpSync(sourcePath, path.join(staging, ".agents", "skills", slug), {
-        dereference: true,
-        recursive: true
+    }
+    const skills = entries
+      .filter((entry) => selected.some((selector) => matchesSelection(entry, selector)))
+      .map(([slug, source]) => {
+        const target = path.join(staging, ".agents", "skills", slug);
+        cpSync(source.sourcePath, target, {
+          dereference: true,
+          recursive: true
+        });
+        return {
+          ...recipe.skills.find((item) => item.slug === slug),
+          kind: source.kind,
+          selector: source.selector ?? slug,
+          slug
+        };
       });
-      return {
-        ...recipe.skills.find((item) => item.slug === slug),
-        kind: "skill" as const,
-        selector: slug,
-        slug
-      };
-    });
     const nextRecipe = {
       ...recipe,
       localSource: { ...localSource, skillSourceFolder: root },
+      selection: recipe.selection ? skills.map((item) => item.slug) : undefined,
       skills
     };
     const next = normalizeImportRecipeStore({
@@ -445,8 +494,11 @@ export async function updateLocalSkillSource(options: {
       },
       defaultDisableModelInvocation: recipe.disableModelInvocation,
       guidance: nextRecipe.skills,
-      linkedSkills: discovered,
-      obsoleteGuidance: previous?.skills.filter((item) => !selected.includes(item.slug)),
+      linkedSkills,
+      obsoleteGuidance: previous?.skills.filter(
+        (item) =>
+          !skills.some((candidate) => candidate.slug === item.slug && candidate.kind === item.kind)
+      ),
       repoRoot,
       stagingDirectory: staging,
       validatePrepared(prepared) {

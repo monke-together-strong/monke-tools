@@ -1,2 +1,68 @@
 apps: {}
 bootstrapCommand: vp install --frozen-lockfile
+skills:
+  - commit: 124f622bcaeac490e7e9dac6af83f3ef9611d554
+    source: https://github.com/backnotprop/pstack
+    skills:
+      - slug: technical-writing
+        modelInvocation: allow
+      - slug: unslop
+        modelInvocation: allow
+        description: Cut AI tells from any writing.
+  - commit: de9b41538822b189795539d5bd2d920edf7db52c
+    source: https://github.com/haydenbleasel/ultracite/tree/main/skills/ultracite
+    skills:
+      - slug: ultracite
+        kind: reference
+  - commit: ca7c8088db69e315a8b2deea43820270457f8f3c
+    source: https://github.com/humanlayer/skills/tree/main/plugins/show-me/skills/show-me
+    skills:
+      - show-me
+  - commit: 4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d
+    source: https://github.com/mattpocock/skills
+    skills:
+      - slug: code-review
+        kind: reference
+      - codebase-design
+      - diagnosing-bugs
+      - domain-modeling
+      - grill-with-docs
+      - grilling
+      - handoff
+      - slug: implement
+        kind: reference
+      - improve-codebase-architecture
+      - prototype
+      - research
+      - retro
+      - setup-matt-pocock-skills
+      - tdd
+      - teach
+      - to-questionnaire
+      - to-spec
+      - to-tickets
+      - triage
+      - wait-what
+      - wayfinder
+      - wizard
+      - slug: writing-for-agents
+        modelInvocation: allow
+  - commit: 4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d
+    source: https://github.com/mattpocock/skills/tree/main/skills/engineering/pr
+    skills:
+      - slug: pr
+        kind: reference
+  - commit: 6b59cf2da4b0d0273a5e2cb34b433b2086c0056d
+    source: https://github.com/pbakaus/impeccable
+    skills:
+      - impeccable
+  - commit: 0e3abd65a97707f4a9cc3ed07bf5006e1cb67b13
+    source: https://github.com/shadcn-ui/ui
+    skills:
+      - shadcn
+  - acceptOpenClawRisks: true
+    commit: 3d3034af58d4c0a137b8ffe42b4c190fcd5bdd38
+    source: openclaw/agent-skills
+    skills:
+      - autoreview
+      - behavior-validator

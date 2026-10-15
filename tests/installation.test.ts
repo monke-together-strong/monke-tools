@@ -1,4 +1,5 @@
 import { ok } from "node:assert/strict";
+import { hash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -16,9 +17,12 @@ import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
-import { runImportSkills } from "../scripts/import-skills.ts";
-import { readImportRecipeStore, writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
-import { guidanceDigest } from "../scripts/skill-lock.ts";
+import {
+  readImportRecipeStore,
+  writeImportRecipeStore,
+  writeRepoImportRecipeStore
+} from "../scripts/skill-import-recipes.ts";
+import { rememberRestoredRecipe } from "../scripts/skill-lock.ts";
 import { errorMessage, ThrownValueSchema } from "../src/errors.ts";
 import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
@@ -33,14 +37,141 @@ import {
   prepareSource
 } from "./installation-fixtures.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
+import { prepareActiveRelease, release as catalogRelease } from "./update-fixtures.ts";
 
 describe("versioned installation lifecycle", () => {
-  test("Local installation restores missing pins, synchronizes a reverted lock, and rejects incomplete guidance before activation", async () => {
+  test("installing and seeding a legacy Release preserves its original hashed lock", async () => {
+    const sandbox = makeTempDir("legacy-release-registry-seeding");
+    const home = path.join(sandbox, "home");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const candidate = prepareReleaseBundle(sandbox);
+    const importedSkill = "---\nname: legacy\ndescription: Legacy bundled skill.\n---\nAccepted.\n";
+    const legacyLock = `${JSON.stringify({
+      recipes: [
+        {
+          lock: {
+            commit: "f".repeat(40),
+            digest: "0".repeat(64),
+            importerVersion: "1.7.0",
+            materializerVersion: 1,
+            repository: "https://example.invalid/legacy.git",
+            subpath: "",
+            updateRef: "HEAD"
+          },
+          skills: [{ kind: "skill", selector: "legacy", slug: "legacy" }],
+          source: "https://example.invalid/legacy.git"
+        }
+      ],
+      version: 3
+    })}\n`;
+    write(candidate.bundleRoot, "skills.lock.json", legacyLock);
+    write(candidate.bundleRoot, "skills/imported/legacy/SKILL.md", importedSkill);
+    write(
+      candidate.bundleRoot,
+      "install-manifest.json",
+      `${JSON.stringify({
+        ...candidate.manifest,
+        guidanceHashes: {
+          ...candidate.manifest.guidanceHashes,
+          "skills.lock.json": hash("sha256", legacyLock, "hex"),
+          "skills/imported/legacy/SKILL.md": hash("sha256", importedSkill, "hex")
+        }
+      })}\n`
+    );
+
+    await activateRelease({
+      args: ["--targets", "codex"],
+      bundleRoot: candidate.bundleRoot,
+      home,
+      monkeHome,
+      sandbox
+    });
+    const installRoot = path.join(monkeHome, "installs", "release-1.2.3-linux-x64");
+    let stdout = "";
+    await runCliAsync(
+      ["skills", "list"],
+      createTestRuntime({
+        cwd: sandbox,
+        env: { HOME: home, MONKE_HOME: monkeHome },
+        onStderr() {},
+        onStdout(message) {
+          stdout += message;
+        },
+        toolInstallRoot: installRoot
+      })
+    );
+
+    expect(stdout).toContain("https://example.invalid/legacy.git\tgit\t1 skills");
+    expect(readFileSync(path.join(candidate.bundleRoot, "skills.lock.json"), "utf-8")).toBe(
+      legacyLock
+    );
+    expect(readFileSync(path.join(installRoot, "skills.lock.json"), "utf-8")).toBe(legacyLock);
+    expect(
+      readFileSync(path.join(monkeHome, "skill-registry", "skills.lock.json"), "utf-8")
+    ).toContain('"version": 4');
+    expect(
+      readFileSync(path.join(home, ".codex/skills/monke-tools/imported/legacy/SKILL.md"), "utf-8")
+    ).toBe(importedSkill);
+  });
+
+  test("current tooling can check an unchanged legacy Release and detects changes to its lock", async () => {
+    const sandbox = makeTempDir("legacy-release-update-check");
+    const monkeHome = path.join(sandbox, "monke-home");
+    const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
+    const legacyLock = '{"recipes":[],"version":3}\n';
+    const manifest = ReleaseInstallManifestSchema.parse(
+      JSON.parse(readFileSync(path.join(installRoot, "install-manifest.json"), "utf-8"))
+    );
+    manifest.guidanceHashes["skills.lock.json"] = hash("sha256", legacyLock, "hex");
+    write(installRoot, "skills.lock.json", legacyLock);
+    write(installRoot, "install-manifest.json", `${JSON.stringify(manifest)}\n`);
+    let stderr = "";
+    const runtime = createTestRuntime({
+      architecture: "x64",
+      cwd: sandbox,
+      env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+      onStderr(text) {
+        stderr += text;
+      },
+      onStdout() {},
+      platform: "linux",
+      releaseDistribution: {
+        async downloadReleaseAsset() {
+          throw new Error("Update check must not download assets");
+        },
+        async listReleases(page) {
+          return page === 1 ? [catalogRelease("1.2.3")] : [];
+        }
+      },
+      toolBuildIdentity: "1.2.4",
+      toolInstallRoot: installRoot
+    });
+
+    await runCliAsync(["update", "--check"], runtime);
+    expect(stderr).toContain(
+      "Active tool install 1.2.3 already matches the selected stable Release"
+    );
+    expect(readFileSync(path.join(installRoot, "skills.lock.json"), "utf-8")).toBe(legacyLock);
+
+    write(installRoot, "skills.lock.json", "Edited legacy recipe.\n");
+    await expect(runCliAsync(["update", "--check"], runtime)).rejects.toThrow(
+      "Changed guidance paths:\n- skills.lock.json"
+    );
+  });
+
+  test("Local installation restores accepted pins and honors removed repo declarations", async () => {
     const sandbox = makeTempDir("local-install-locked-imports");
     const sourceCheckout = path.join(sandbox, "source");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
     prepareSource(sourceCheckout);
+    createRepo(sourceCheckout, { "monke.yml": "skills: []\n" });
+    const runtime = createTestRuntime({
+      cwd: sourceCheckout,
+      env: { HOME: home, MONKE_HOME: monkeHome },
+      onStderr() {},
+      onStdout() {}
+    });
     const upstream = createRepo(path.join(sandbox, "upstream"), {
       "alpha/SKILL.md": "---\nname: alpha\ndescription: Lifecycle fixture\n---\n\nAccepted one.\n"
     });
@@ -49,8 +180,8 @@ describe("versioned installation lifecycle", () => {
     try {
       process.chdir(sourceCheckout);
       process.env.MONKE_HOME = monkeHome;
-      await runImportSkills([upstream], { selectSkills: () => ["alpha"], writeMessage() {} });
-      const acceptedLock = readFileSync(path.join(sourceCheckout, "skills.lock.json"), "utf-8");
+      await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "alpha"], runtime);
+      const acceptedLock = readFileSync(path.join(sourceCheckout, "monke.yml"), "utf-8");
       rmSync(path.join(sourceCheckout, "skills/imported"), { recursive: true });
       await activateLocal({ home, installId: "locked-one", monkeHome, sourceCheckout });
       const projectedEntry = path.join(home, ".codex/skills/monke-tools/imported/alpha/SKILL.md");
@@ -80,31 +211,71 @@ describe("versioned installation lifecycle", () => {
       );
       git(upstream, ["add", "."]);
       git(upstream, ["commit", "-m", "Next pin"]);
-      await runImportSkills([upstream], {
-        selectSkills: () => ["alpha", "bravo"],
-        writeMessage() {}
-      });
+      await runCliAsync(
+        ["skills", "add", upstream, "--repo", "--skill", "alpha", "bravo"],
+        runtime
+      );
       expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted two.");
       expect(existsSync(path.join(sourceCheckout, "skills/imported/bravo/SKILL.md"))).toBeTruthy();
-      write(sourceCheckout, "skills.lock.json", acceptedLock);
+      write(sourceCheckout, "monke.yml", acceptedLock);
       await activateLocal({ home, installId: "locked-reverted", monkeHome, sourceCheckout });
       expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted one.");
       expect(existsSync(path.join(sourceCheckout, "skills/imported/bravo"))).toBeFalsy();
       expect(existsSync(path.join(home, ".codex/skills/monke-tools/imported/bravo"))).toBeFalsy();
-      expect(readFileSync(path.join(sourceCheckout, "skills.lock.json"), "utf-8")).toBe(
-        acceptedLock
-      );
+      expect(readFileSync(path.join(sourceCheckout, "monke.yml"), "utf-8")).toBe(acceptedLock);
 
       const invalid = readImportRecipeStore(sourceCheckout);
-      const invalidPin = invalid.recipes[0]?.lock;
+      const [invalidPin] = invalid.recipes;
       ok(invalidPin);
-      invalidPin.digest = "0".repeat(64);
-      write(sourceCheckout, "skills.lock.json", JSON.stringify(invalid));
+      delete invalidPin.commit;
+      writeRepoImportRecipeStore(sourceCheckout, invalid);
       await expect(
         activateLocal({ home, installId: "locked-invalid", monkeHome, sourceCheckout })
-      ).rejects.toThrow("digest mismatch");
+      ).rejects.toThrow("mt skills update --repo");
       expect(readlinkSync(path.join(monkeHome, "current"))).toBe("installs/locked-reverted");
       expect(readFileSync(projectedEntry, "utf-8")).toContain("Accepted one.");
+
+      write(sourceCheckout, "monke.yml", acceptedLock);
+      writeImportRecipeStore(sourceCheckout, readImportRecipeStore(sourceCheckout));
+      write(sourceCheckout, "monke.yml", "apps: {}\n");
+      await activateLocal({ home, installId: "locked-removed", monkeHome, sourceCheckout });
+      expect(existsSync(path.join(sourceCheckout, "skills/imported/alpha"))).toBeFalsy();
+      expect(existsSync(projectedEntry)).toBeFalsy();
+      await runCliAsync(["skills", "list"], runtime);
+      expect(
+        JSON.parse(
+          readFileSync(path.join(monkeHome, "skill-registry", "skills.lock.json"), "utf-8")
+        )
+      ).toMatchObject({ recipes: [], version: 4 });
+
+      rmSync(path.join(sourceCheckout, "monke.yml"));
+      write(sourceCheckout, "skills/imported/alpha/SKILL.md", "Leftover imported bytes.\n");
+      await runCliAsync(
+        ["skills", "configure"],
+        createTestRuntime({
+          cwd: sourceCheckout,
+          env: { HOME: home, MONKE_HOME: monkeHome },
+          multiSelectValues: [["codex"]],
+          onStderr() {},
+          onStdout() {}
+        })
+      );
+      expect(existsSync(path.join(sourceCheckout, "skills/imported/alpha"))).toBeFalsy();
+      expect(
+        JSON.parse(
+          readFileSync(path.join(monkeHome, "skill-registry", "skills.lock.json"), "utf-8")
+        )
+      ).toMatchObject({ recipes: [], version: 4 });
+
+      write(sourceCheckout, "skills/imported/alpha/SKILL.md", "Leftover imported bytes.\n");
+      await runCliAsync(["skills", "local-install", sourceCheckout], runtime);
+      expect(existsSync(path.join(sourceCheckout, "skills/imported/alpha"))).toBeFalsy();
+      expect(existsSync(projectedEntry)).toBeFalsy();
+      expect(
+        JSON.parse(
+          readFileSync(path.join(monkeHome, "skill-registry", "skills.lock.json"), "utf-8")
+        )
+      ).toMatchObject({ recipes: [], version: 4 });
     } finally {
       process.chdir(originalCwd);
       process.env.MONKE_HOME = originalMonkeHome;
@@ -972,24 +1143,19 @@ skillInstallPreference:
         `skills/imported/${slug}/SKILL.md`,
         `---\nname: ${slug}\n---\nBundled instructions.\n`
       );
-      writeImportRecipeStore(sourceCheckout, {
+      writeRepoImportRecipeStore(sourceCheckout, {
         recipes: [
           {
-            lock: {
-              commit: "0".repeat(40),
-              digest: guidanceDigest(sourceCheckout, skills),
-              importerVersion: "1.7.0",
-              materializerVersion: 1,
-              repository: "https://example.com/bundled.git",
-              subpath: "",
-              updateRef: "HEAD"
-            },
+            commit: "0".repeat(40),
             skills,
             source: "https://example.com/bundled"
           }
         ],
-        version: 3
+        version: 4
       });
+      for (const recipe of readImportRecipeStore(sourceCheckout).recipes) {
+        rememberRestoredRecipe(sourceCheckout, recipe);
+      }
       if (scenario === "provider collision") {
         write(home, ".claude/skills/bundled/SKILL.md", "User-owned skill.\n");
       }

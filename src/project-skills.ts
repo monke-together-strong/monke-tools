@@ -142,7 +142,8 @@ export function withProjectSkillPublicationTransaction<T>(
   runtime: Runtime,
   context: ProjectSkillRegistry,
   scope: SkillPublicationScope,
-  publish: () => T | Promise<T>
+  publish: () => T | Promise<T>,
+  withSnapshotLocks?: (recover: () => Promise<void>) => Promise<void>
 ) {
   const exclude = path.join(context.gitCommonDir, "info", "exclude");
   preflightProjectSkillExclusions(exclude);
@@ -159,7 +160,8 @@ export function withProjectSkillPublicationTransaction<T>(
         return [target.agentSkillRoot, ...physical];
       })
     ],
-    publish
+    publish,
+    withSnapshotLocks
   );
 }
 

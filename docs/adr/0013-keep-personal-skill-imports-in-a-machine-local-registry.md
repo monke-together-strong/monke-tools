@@ -1,5 +1,8 @@
 # Keep personal skill imports in a machine-local registry
 
+Amended by [ADR 0015](0015-declare-repo-skill-import-recipes.md). Bundled import
+recipes are now monke-tools' Repo import recipes in `monke.yml`.
+
 Personal and private guidance, including course-provided skills, must be usable
 without adding its content or import recipes to the public monke-tools
 repository. `mt skills add` registers these imports in a machine-local Skill

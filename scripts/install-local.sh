@@ -112,8 +112,8 @@ trap release_installation_lock 0
 trap 'exit 1' 1 2 15
 acquire_installation_lock
 
-if [ -f "$ROOT_DIR/skills.lock.json" ]; then
-  (cd "$ROOT_DIR" && bun run scripts/restore-skills.ts)
+if [ -f "$ROOT_DIR/monke.yml" ]; then
+  (cd "$ROOT_DIR" && bun run src/index.ts skills restore --repo)
 fi
 
 if ! capture_source_state; then
@@ -150,8 +150,8 @@ chmod +x "$STAGED_MT"
 cleanup_old_bun_builds
 
 # Generated imports are ignored by Git; validate them again before activation.
-if [ -f "$ROOT_DIR/skills.lock.json" ]; then
-  (cd "$ROOT_DIR" && bun run scripts/restore-skills.ts)
+if [ -f "$ROOT_DIR/monke.yml" ]; then
+  (cd "$ROOT_DIR" && bun run src/index.ts skills restore --repo)
 fi
 
 if ! capture_source_state ||

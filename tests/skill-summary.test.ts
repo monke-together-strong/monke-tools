@@ -19,7 +19,7 @@ function snapshot(root: string, slugs: string[]) {
           }
         ]
       : [],
-    version: 3
+    version: 4
   });
   for (const slug of slugs) {
     write(root, `skills/imported/${slug}/SKILL.md`, `Guidance for ${slug}.`);
