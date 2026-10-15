@@ -51,12 +51,13 @@ export interface CleanupOptions {
   includeUnowned?: boolean;
   json: boolean;
   recoveryCommand?: string;
+  sources?: string[];
   targets?: string[];
 }
 
 /** Both modes use the same eligibility policy. Only execution acquires the operation lock. */
 export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
-  const { home, inspectionOptions, knownSources, ordinary, validateTargets } = prepareCleanup(
+  const { home, inspectionOptions, knownSources, ordinary, validateInputs } = prepareCleanup(
     runtime,
     options
   );
@@ -66,7 +67,7 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
   try {
     if (options.dryRun) {
       inventory = await inspectSessionCleanup(runtime, home, [...knownSources], inspectionOptions);
-      validateTargets(inventory);
+      validateInputs(inventory);
       for (const row of inventory.sessions) {
         sessions.push(
           reportSession(
@@ -85,7 +86,7 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
           ...inspectionOptions,
           operationLock: lock
         });
-        validateTargets(inventory);
+        validateInputs(inventory);
         assertGlobalSafety(lock, inventory);
         await executeInventory(runtime, home, lock, inventory, sessions, options);
         await ordinary(inventory, lock);
@@ -115,10 +116,11 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
     inspectedAt: inventory?.inspectedAt ?? new Date().toISOString(),
     schemaVersion: 1,
     sessions,
+    sources: inventory?.sources ?? [],
     unavailableSources: inventory?.unavailableSources ?? [],
     unownedWorktrees: inventory?.unownedWorktrees ?? []
   };
-  writeCleanupReport(runtime, report, options);
+  writeCleanupReport(runtime, { ...report, summary: cleanupSummary(report) }, options);
   if (exitCode !== 0) {
     throw new MonkeError(
       "Cleanup incomplete; see the report for inspection errors, failed actions, and retained Sessions."
@@ -143,19 +145,42 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
     targets
   };
   const knownSources = new Set<string>();
-  for (const candidate of [runtime.cwd, ...(targets ?? [])]) {
+  const explicitSources = new Set<string>();
+  const sources = options.sources?.map((source) => path.resolve(runtime.cwd, source)) ?? [];
+  for (const candidate of [runtime.cwd, ...(targets ?? []), ...sources]) {
+    const explicit = sources.includes(candidate);
     if (!existsSync(candidate)) {
+      if (explicit) {
+        knownSources.add(candidate);
+        explicitSources.add(candidate);
+      }
       continue;
     }
     try {
-      knownSources.add(
-        resolveRepoContext(runtime, candidate, null, { inferSessionName: false }).sourceRoot
-      );
+      const source = resolveRepoContext(runtime, candidate, null, {
+        inferSessionName: false
+      }).sourceRoot;
+      knownSources.add(source);
+      if (explicit) {
+        explicitSources.add(source);
+      }
     } catch {
       // Discovery also works from outside a checkout.
+      if (explicit) {
+        knownSources.add(candidate);
+        explicitSources.add(candidate);
+      }
     }
   }
-  const validateTargets = (inventory: Inventory) => {
+  const validateInputs = (inventory: Inventory) => {
+    for (const sourceRoot of explicitSources) {
+      const source = inventory.sources.find((row) => samePath(row.sourceRoot, sourceRoot));
+      if (source?.status !== "inspected") {
+        throw new MonkeError(
+          `Cannot inspect requested Source ${sourceRoot}: ${source?.message ?? source?.status ?? "not discovered"}`
+        );
+      }
+    }
     for (const target of targets ?? []) {
       const owned = inventory.sessions.some(
         (row) =>
@@ -194,7 +219,7 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
       (repo) => results.find((result) => result.worktreePath === repo.worktreePath) ?? repo
     );
   };
-  return { home, inspectionOptions, knownSources, ordinary, validateTargets };
+  return { home, inspectionOptions, knownSources, ordinary, validateInputs };
 }
 
 function cleanupExitCode(
@@ -234,6 +259,7 @@ async function executeInventory(
       archiveUntracked: options.archiveUntracked,
       discovered: {
         sourceRoots: inventory.sourceRoots,
+        sources: inventory.sources,
         unavailableSources: inventory.unavailableSources,
         unownedWorktrees: inventory.unownedWorktrees
       },
@@ -268,15 +294,43 @@ async function executeInventory(
   }
 }
 
+interface CleanupReport {
+  dryRun: boolean;
+  globalFailure: string | null;
+  sessions: SessionReport[];
+  sources: Inventory["sources"];
+  unavailableSources: string[];
+  unownedWorktrees: Inventory["unownedWorktrees"];
+}
+
+function cleanupSummary(report: CleanupReport) {
+  const planned = report.sessions
+    .filter((session) => session.outcome === "would-clean")
+    .flatMap((session) => session.plannedActions);
+  const completed = report.sessions.flatMap((session) => session.execution.completedActions ?? []);
+  const removalCount = (actions: SessionAction[], outcome: "would-clean" | "cleaned") =>
+    actions.filter((action) => action.step === "worktree-removal").length +
+    report.unownedWorktrees.filter((worktree) => worktree.outcome === outcome).length;
+  return {
+    registeredWorktrees: report.sources.reduce(
+      (total, source) => total + (source.worktreeCount ?? 0),
+      0
+    ),
+    removedWorktrees: removalCount(completed, "cleaned"),
+    sessionsInspected: report.sessions.length,
+    sourcesInspected: report.sources.filter((source) => source.status === "inspected").length,
+    sourcesSkipped: report.sources.filter((source) => source.status !== "inspected").length,
+    wouldRemoveWorktrees: removalCount(planned, "would-clean")
+  };
+}
+
+function quantity(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 function writeCleanupReport(
   runtime: Runtime,
-  report: {
-    dryRun: boolean;
-    globalFailure: string | null;
-    sessions: SessionReport[];
-    unavailableSources: string[];
-    unownedWorktrees: Inventory["unownedWorktrees"];
-  },
+  report: CleanupReport & { summary: ReturnType<typeof cleanupSummary> },
   options: Pick<CleanupOptions, "eligibleOnly" | "json">
 ) {
   const { globalFailure, sessions } = report;
@@ -284,6 +338,11 @@ function writeCleanupReport(
     runtime.writeStdout(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     runtime.writeStdout(`${summarizeCleanup(report)}\n`);
+    for (const source of report.sources) {
+      runtime.writeStdout(
+        `Source (${source.status}): ${source.sourceRoot}${source.worktreeCount !== null ? `; ${quantity(source.worktreeCount, "registered worktree")}` : ""}${source.message ? `: ${source.message}` : ""}\n`
+      );
+    }
     for (const session of sessions) {
       if (!options.eligibleOnly || session.outcome !== "skipped") {
         runtime.writeStdout(formatSessionCleanupReport(session));
@@ -294,24 +353,14 @@ function writeCleanupReport(
         `Unowned (${worktree.outcome ?? "untouched"}): ${worktree.sourceRoot} — ${worktree.worktreePath}${worktree.reason ? `: ${worktree.reason}` : ""}\n`
       );
     }
-    for (const source of report.unavailableSources) {
-      runtime.writeStdout(`Source unavailable for unowned-worktree inspection: ${source}\n`);
-    }
     if (globalFailure) {
       runtime.writeStdout(`Cleanup stopped: ${globalFailure}\n`);
     }
   }
 }
 
-function summarizeCleanup(report: {
-  sessions: SessionReport[];
-  unavailableSources: string[];
-  unownedWorktrees: unknown[];
-}) {
+function summarizeCleanup(report: CleanupReport & { summary: ReturnType<typeof cleanupSummary> }) {
   const { sessions } = report;
-  if (sessions.length === 0) {
-    return "No retained Sessions inspected.";
-  }
   const count = (outcome: SessionReport["outcome"]) =>
     sessions.filter((session) => session.outcome === outcome).length;
   const inspectionErrors = sessions.filter((session) => session.inspectionFailed).length;
@@ -327,15 +376,19 @@ function summarizeCleanup(report: {
     .filter(([, total]) => total > 0)
     .map(([label, total]) => `${total} ${label}`);
   const notes = [
+    report.summary.sourcesSkipped > 0 ? `${report.summary.sourcesSkipped} Sources skipped` : null,
+    report.summary.wouldRemoveWorktrees > 0
+      ? `would remove ${report.summary.wouldRemoveWorktrees} worktrees`
+      : null,
+    report.summary.removedWorktrees > 0
+      ? `${report.summary.removedWorktrees} worktrees removed`
+      : null,
     inspectionErrors > 0 ? `${inspectionErrors} with inspection errors` : null,
     report.unownedWorktrees.length > 0
       ? `${report.unownedWorktrees.length} unowned worktrees reported`
-      : null,
-    report.unavailableSources.length > 0
-      ? `${report.unavailableSources.length} Sources unavailable`
       : null
   ].filter((note) => note !== null);
-  return `Inspected ${sessions.length} Session${sessions.length === 1 ? "" : "s"}: ${parts.join(", ")}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`;
+  return `Inspected ${quantity(report.summary.sourcesInspected, "Source")}, ${quantity(report.summary.registeredWorktrees, "registered worktree")}, ${quantity(sessions.length, "Session")}${parts.length > 0 ? `: ${parts.join(", ")}` : "."}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`;
 }
 
 function assertGlobalSafety(lock: OperationLock, inventory: Inventory) {

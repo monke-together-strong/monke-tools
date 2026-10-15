@@ -60,6 +60,21 @@ const ReportSchema = z.object({
       session: z.string().nullable()
     })
   ),
+  sources: z.array(
+    z.object({
+      sourceRoot: z.string(),
+      status: z.enum(["inspected", "missing", "unavailable"]),
+      worktreeCount: z.number().nullable()
+    })
+  ),
+  summary: z.object({
+    registeredWorktrees: z.number(),
+    removedWorktrees: z.number(),
+    sessionsInspected: z.number(),
+    sourcesInspected: z.number(),
+    sourcesSkipped: z.number(),
+    wouldRemoveWorktrees: z.number()
+  }),
   unavailableSources: z.array(z.string()),
   unownedWorktrees: z.array(z.unknown())
 });
@@ -108,6 +123,15 @@ describe("global Session cleanup", () => {
       exitCode: 0,
       schemaVersion: 1,
       sessions: [],
+      sources: [],
+      summary: {
+        registeredWorktrees: 0,
+        removedWorktrees: 0,
+        sessionsInspected: 0,
+        sourcesInspected: 0,
+        sourcesSkipped: 0,
+        wouldRemoveWorktrees: 0
+      },
       unownedWorktrees: []
     });
     expect(existsSync(home)).toBeFalsy();
@@ -206,6 +230,68 @@ describe("global Session cleanup", () => {
     return { addSession, cwd, home, root, run, runtime, sources };
   }
 
+  test("repeatable Sources discover repositories without Sessions and canonicalize checkout paths", async () => {
+    const f = fixture();
+    const [dependency] = f.sources;
+    if (!dependency) {
+      throw new Error("Missing fixture Source");
+    }
+    const worktree = path.join(f.cwd, "ordinary");
+    git(f.root, ["worktree", "add", "-b", "ordinary", worktree]);
+    const before = files(f.cwd);
+    const preview = await f.run(true, f.cwd, [
+      "--source",
+      "root",
+      "--source",
+      dependency,
+      "--source",
+      worktree
+    ]);
+    expect(preview.error).toBeUndefined();
+    expect(preview.report.sources).toStrictEqual([
+      { sourceRoot: f.root, status: "inspected", worktreeCount: 1 },
+      { sourceRoot: f.sources[0], status: "inspected", worktreeCount: 0 }
+    ]);
+    expect(preview.report.summary).toMatchObject({
+      registeredWorktrees: 1,
+      removedWorktrees: 0,
+      sessionsInspected: 0,
+      sourcesInspected: 2,
+      sourcesSkipped: 0,
+      wouldRemoveWorktrees: 0
+    });
+    expect(preview.report.unownedWorktrees).toContainEqual(
+      expect.objectContaining({ worktreePath: worktree })
+    );
+    expect(files(f.cwd)).toStrictEqual(before);
+    expect(existsSync(f.home)).toBeFalsy();
+  });
+
+  test.each(["missing", "unavailable"])(
+    "a requested %s Source prevents all cleanup effects",
+    async (status) => {
+      const f = fixture();
+      const state = f.addSession("feature/keep");
+      const source = path.join(f.cwd, "invalid-source");
+      if (status === "unavailable") {
+        mkdirSync(source);
+      }
+      const result = await f.run(false, f.cwd, ["--source", source]);
+      expect(result.error).toBeDefined();
+      expect(result.report.globalFailure).toContain("Cannot inspect requested Source");
+      expect(result.report.sources).toContainEqual({
+        sourceRoot: source,
+        status,
+        worktreeCount: null
+      });
+      expect(result.report.summary).toMatchObject({ removedWorktrees: 0, sourcesSkipped: 1 });
+      expect(state.repos.every((repo) => existsSync(repo.worktreePath))).toBeTruthy();
+      expect(
+        existsSync(getSessionStateFilePath(f.home, state.rootSourceRoot, state.session))
+      ).toBeTruthy();
+    }
+  );
+
   test.each([
     ["", "nonempty recovery command"],
     ["   ", "nonempty recovery command"],
@@ -229,7 +315,7 @@ describe("global Session cleanup", () => {
     member.worktreePath = `${path.dirname(target)}/./${path.basename(target)}`;
     saveSessionState(f.home, state);
 
-    const result = await f.run(false, f.cwd, [target]);
+    const result = await f.run(false, f.cwd, [target, "--source", f.root]);
 
     expect(result.error).toBeUndefined();
     expect(result.report.sessions).toHaveLength(1);
@@ -746,20 +832,26 @@ describe("global Session cleanup", () => {
     const unowned = path.join(f.cwd, "ordinary");
     git(f.root, ["worktree", "add", "-b", "ordinary", unowned]);
     const before = files(f.cwd);
-    const preview = await f.run(true);
+    const preview = await f.run(true, f.cwd, ["--source", f.root]);
     expect(preview.error).toBeUndefined();
     expect(preview.report.sessions.map((row: { outcome: string }) => row.outcome)).toStrictEqual([
       "would-clean",
       "would-clean"
     ]);
     expect(preview.report.unownedWorktrees).toHaveLength(1);
+    expect(preview.report.summary).toMatchObject({
+      registeredWorktrees: 4,
+      sourcesInspected: 2,
+      wouldRemoveWorktrees: 3
+    });
     expect(files(f.cwd)).toStrictEqual(before);
-    const result = await f.run();
+    const result = await f.run(false, f.cwd, ["--source", f.root]);
     expect(result.error).toBeUndefined();
     expect(result.report.sessions.map((row: { outcome: string }) => row.outcome)).toStrictEqual([
       "cleaned",
       "cleaned"
     ]);
+    expect(result.report.summary).toMatchObject({ registeredWorktrees: 4, removedWorktrees: 3 });
     for (const state of [a, b]) {
       expect(
         existsSync(getSessionStateFilePath(f.home, state.rootSourceRoot, state.session))
@@ -790,7 +882,9 @@ describe("global Session cleanup", () => {
     };
     await runCliAsync(["cleanup", "--dry-run"], runtime);
     const [summary] = stdout.split("\n");
-    expect(summary).toBe("Inspected 2 Sessions: 1 would clean, 1 skipped");
+    expect(summary).toBe(
+      "Inspected 2 Sources, 4 registered worktrees, 2 Sessions: 1 would clean, 1 skipped (would remove 2 worktrees)"
+    );
     expect(stdout).toContain("Skipped: root / feature/blocked");
     expect(stdout).toContain("       M tracked.txt");
     stdout = "";
@@ -1102,6 +1196,7 @@ describe("global Session cleanup", () => {
       return original(command, args, options);
     };
     const result = await f.run();
+    expect(result.report.summary.removedWorktrees).toBe(1);
     expect(result.report.sessions[0]).toMatchObject({
       execution: {
         completedActions: [{ sourceRoot: f.sources[0], step: "worktree-removal" }],
@@ -1118,6 +1213,7 @@ describe("global Session cleanup", () => {
     f.runtime.exec = original;
     const retry = await f.run();
     expect(retry.error).toBeUndefined();
+    expect(retry.report.summary.removedWorktrees).toBe(1);
     expect(retry.report.sessions[0]?.outcome).toBe("cleaned");
   }, 30_000);
 
@@ -1279,6 +1375,11 @@ describe("global Session cleanup", () => {
     expect(preview.error).toBeUndefined();
     expect(preview.report.exitCode).toBe(0);
     expect(preview.report.unavailableSources).toStrictEqual([]);
+    expect(preview.report.sources).toContainEqual({
+      sourceRoot: missing,
+      status: "missing",
+      worktreeCount: null
+    });
     const row = preview.report.sessions.find((session) => session.session === dead.session);
     expect(row?.outcome).toBe("skipped");
     expect(row?.inspectionFailed).toBeFalsy();

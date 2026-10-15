@@ -39,6 +39,8 @@ target. Dirty files block removal; ignored files are deleted with the worktree.
 Use `--force` only when discarding that work is authorized. Preserve local branches.
 
 Preview global Cleanup with `mt cleanup --dry-run` before running `mt cleanup`;
-optional paths restrict its scope. Cleanup may stop old attached processes and skips
-Sessions with recently active ones. For archives, missing or ordinary worktrees,
+positional worktree paths restrict cleanup targets. Repeatable `--source <repo>`
+options add repositories to discovery without restricting Session selection.
+Cleanup may stop old attached processes and skips Sessions with recently active
+ones. For archives, missing or ordinary worktrees,
 and failed teardown, read [cleanup recovery](../../references/internal/CLEANUP_RECOVERY.md).
