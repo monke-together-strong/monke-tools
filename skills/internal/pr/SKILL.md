@@ -13,11 +13,13 @@ Rebase the PR branch onto the latest base before analyzing or verifying it.
 Exclude research and exploration artifacts,
 including `docs/research/` and `docs/explorations/`, unless requested.
 
-## Edit branch documentation
-Consolidate new ADRs where possible and have a subagent edit the full diff
-against the base, including pending edits and new files. Apply
-[technical-writing](../../imported/technical-writing/SKILL.md) to all changed
-docs and [writing-for-agents](../../imported/writing-for-agents/SKILL.md) to agent facing docs.
+## Review branch documentation, comments, and terminology
+
+Have a subagent apply
+[documentation standards](../documentation-standards/SKILL.md) to documentation,
+code comments, and domain terminology in the full diff against the base, including
+pending edits and new files. Review its edits and code findings before verification
+and publishing.
 
 ## Load PR requirements
 

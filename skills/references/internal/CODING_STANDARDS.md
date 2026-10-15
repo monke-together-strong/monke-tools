@@ -7,9 +7,11 @@
 - Follow non-conflicting rules in the [Ultracite coding standards](../imported/ultracite/references/code-standards.md).
 - Do not wrap code in `try/catch` just to rethrow; use `try/catch` only for meaningful handling, cleanup, logging, fallback, or preserving `cause`.
 
-## Documentation
+## Documentation, comments, and terminology
 
-When reviewing documentation:
+Apply [documentation standards](../../internal/documentation-standards/SKILL.md)
+to documentation, all code comments, and domain terminology in code and user-facing
+labels.
 
 - Keep documentation that helps its intended reader act or make a decision.
 - Delete implementation narration, repeated configuration, and facts already explained elsewhere; link to the authoritative source when needed.

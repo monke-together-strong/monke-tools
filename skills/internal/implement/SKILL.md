@@ -4,7 +4,7 @@ description: Only use when explicitly mentioned with /implement or $implement.
 ---
 
 The user's primary Spec, issue, plan, or direct request is the Work target.
-Implement it.
+Implement it. Use Codex for reviews.
 
 When assigned a checkout, read its repo instructions, use absolute file paths,
 and anchor every command to it. Confirm its root and branch before editing.
