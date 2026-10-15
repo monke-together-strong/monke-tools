@@ -50,6 +50,7 @@ import {
 import {
   assertSkillRestoreMarker,
   describeSkillSource,
+  guidanceDigest,
   ignoreRepoImports,
   pruneImportedGuidance,
   rememberRestoredRecipe,
@@ -397,6 +398,7 @@ async function updateSkills(
         repoRoot,
         stagingDirectory,
         validatePrepared(preparedRoot) {
+          guidanceDigest(preparedRoot, nextRecipe.skills, true);
           dependencies.validatePrepared?.(preparedRoot, nextRecipe);
           nextRecipe.commit = revision.commit;
           nextRecipe.source = revision.source;

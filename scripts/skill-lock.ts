@@ -1136,7 +1136,10 @@ export async function restoreLockedRecipe(
       defaultDisableModelInvocation: recipe.disableModelInvocation,
       guidance: recipe.skills,
       repoRoot,
-      stagingDirectory
+      stagingDirectory,
+      validatePrepared(prepared) {
+        guidanceDigest(prepared, recipe.skills, true);
+      }
     });
     rememberRestoredRecipe(repoRoot, recipe);
   } finally {
@@ -1195,6 +1198,7 @@ export async function restoreLockedImports(
               path.join(stagingDirectory, ".agents", "skills"),
               preparedRoot
             );
+            guidanceDigest(preparedRoot, recipe.skills, true);
             return { guidance, preparedRoot, recipe };
           })
         )

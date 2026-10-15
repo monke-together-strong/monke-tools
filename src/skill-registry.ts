@@ -753,6 +753,7 @@ async function addGitSkillSource(
       repoRoot: root,
       stagingDirectory: staging,
       validatePrepared(prepared) {
+        guidanceDigest(prepared, nextRecipe.skills, true);
         if (!repo) {
           preflightRegistryChange(
             runtime,

@@ -261,6 +261,97 @@ async function namedPublisherTransition(options: {
 }
 
 describe("Skill import registry CLI", () => {
+  test.each([
+    { action: "add", scope: "global" },
+    { action: "update", scope: "global" },
+    { action: "add", scope: "project" },
+    { action: "update", scope: "project" },
+    { action: "add", scope: "repo" },
+    { action: "update", scope: "repo" },
+    { action: "restore", scope: "repo" }
+  ])(
+    "Git $action rejects unconfined support links before publishing $scope state",
+    async ({ action, scope }) => {
+      const fixture = registryFixture();
+      installInternalRootImporter(fixture.bin);
+      const consumer = createRepo(path.join(fixture.sandbox, "consumer"), {
+        "README.md": "Consumer.\n"
+      });
+      const runtime = createTestRuntime({
+        cwd: consumer,
+        env: fixture.runtime.env,
+        onStderr() {},
+        onStdout() {}
+      });
+      const flags = scope === "global" ? [] : [`--${scope}`];
+      const registry =
+        scope === "repo"
+          ? consumer
+          : scope === "project"
+            ? path.join(consumer, ".git/monke-tools/skill-registry")
+            : fixture.registry;
+      const storePath = scope === "repo" ? "monke.yml" : "skills.lock.json";
+      const upstream = createRepo(path.join(fixture.sandbox, "upstream"), {
+        "skills/base/SKILL.md":
+          "---\nname: base\ndescription: Base.\nmetadata:\n  internal: true\n---\nAccepted instructions.\n"
+      });
+      await runCliAsync(
+        ["skills", "add", `${upstream}#HEAD`, "--skill", "base", ...flags],
+        runtime
+      );
+      const accepted = {
+        guidance: read(registry, "skills/imported/base/SKILL.md"),
+        marker: read(registry, "skills/.monke-restored.json"),
+        store: read(registry, storePath)
+      };
+      const invalid =
+        action === "add"
+          ? createRepo(path.join(fixture.sandbox, "invalid"), {
+              "skills/invalid/SKILL.md":
+                "---\nname: invalid\ndescription: Invalid.\nmetadata:\n  internal: true\n---\nRejected instructions.\n"
+            })
+          : upstream;
+      const slug = action === "add" ? "invalid" : "base";
+      write(invalid, "shared.md", "Checkout support.\n");
+      write(
+        invalid,
+        `skills/${slug}/SKILL.md`,
+        `---\nname: ${slug}\ndescription: Changed.\nmetadata:\n  internal: true\n---\nRejected instructions.\n`
+      );
+      symlinkSync("../../shared.md", path.join(invalid, "skills", slug, "support.md"));
+      git(invalid, ["add", "."]);
+      git(invalid, ["commit", "-m", "Add checkout-confined support link"]);
+      if (action === "restore") {
+        write(
+          registry,
+          storePath,
+          stringify({
+            skills: [
+              {
+                commit: git(upstream, ["rev-parse", "HEAD"]),
+                skills: ["base"],
+                source: `${upstream}#HEAD`
+              }
+            ]
+          })
+        );
+        accepted.store = read(registry, storePath);
+      }
+      const command =
+        action === "add"
+          ? ["skills", "add", `${invalid}#HEAD`, "--skill", slug, ...flags]
+          : ["skills", action, ...flags];
+      await expect(runCliAsync(command, runtime)).rejects.toThrow(
+        "Imported symlink escapes its guidance directory"
+      );
+      expect(read(registry, storePath)).toBe(accepted.store);
+      expect(read(registry, "skills/.monke-restored.json")).toBe(accepted.marker);
+      expect(read(registry, "skills/imported/base/SKILL.md")).toBe(accepted.guidance);
+      expect(existsSync(path.join(registry, "skills/imported", slug, "support.md"))).toBeFalsy();
+      expect(existsSync(path.join(registry, "skills/imported/invalid"))).toBeFalsy();
+    }
+  );
+
   test.each(["skill", "reference"] as const)(
     "policy rejects an edited %s support link before changing accepted state",
     async (kind) => {
