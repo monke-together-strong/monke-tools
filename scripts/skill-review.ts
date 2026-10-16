@@ -3,11 +3,9 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   readdirSync,
   renameSync,
-  rmSync,
-  writeFileSync
+  rmSync
 } from "node:fs";
 import path from "node:path";
 
@@ -190,8 +188,10 @@ function reviewPaths(runtime: Runtime) {
   };
 }
 
-function readReviews(index: string) {
-  return existsSync(index) ? ReviewsSchema.parse(JSON.parse(readFileSync(index, "utf-8"))) : [];
+async function readReviews(index: string) {
+  return existsSync(index)
+    ? ReviewsSchema.parse(JSON.parse(Buffer.from(await Bun.file(index).bytes()).toString("utf-8")))
+    : [];
 }
 
 /** Publish independent commit pairs and retain three comparisons in one stable repository. */
@@ -200,7 +200,7 @@ export async function saveSkillComparison(
   after: string,
   runtime = createRuntime()
 ) {
-  return await withScopedLockAsync(getMonkeHome(runtime), "skill-review-cache", () => {
+  return await withScopedLockAsync(getMonkeHome(runtime), "skill-review-cache", async () => {
     const paths = reviewPaths(runtime);
     mkdirSync(paths.root, { recursive: true });
     mkdirSync(paths.repository, { recursive: true });
@@ -217,11 +217,11 @@ export async function saveSkillComparison(
     git(["config", "core.symlinks", "true"]);
     git(["config", "gc.auto", "0"]);
     mkdirSync(path.join(paths.repository, ".git", "info"), { recursive: true });
-    writeFileSync(
+    await Bun.write(
       path.join(paths.repository, ".git", "info", "attributes"),
       "* -text -filter -ident\n"
     );
-    const reviews = readReviews(paths.index);
+    const reviews = await readReviews(paths.index);
     const replaceRetainedRefs = (from: typeof reviews, to: typeof reviews) => {
       const retainedIds = new Set(to.map((review) => review.id));
       git(
@@ -300,7 +300,7 @@ export async function saveSkillComparison(
       try {
         // Prepare metadata before changing retention. A failed publication leaves
         // the previous ledger and all its commit pairs available for retry.
-        writeFileSync(nextIndex, `${JSON.stringify(retained, null, 2)}\n`);
+        await Bun.write(nextIndex, `${JSON.stringify(retained, null, 2)}\n`);
         replaceRetainedRefs(reviews, retained);
         refsChanged = true;
         git(["symbolic-ref", "HEAD", `refs/heads/skill-review-${id}`]);
@@ -390,7 +390,10 @@ export async function reviewSkillRevisions(
         const config = path.join(checkout, "monke.yml");
         if (
           existsSync(path.join(checkout, SKILL_LOCK_PATH)) ||
-          (existsSync(config) && parseDocument(readFileSync(config, "utf-8")).has("skills"))
+          (existsSync(config) &&
+            parseDocument(Buffer.from(await Bun.file(config).bytes()).toString("utf-8")).has(
+              "skills"
+            ))
         ) {
           // Reconstruct accepted pins with current tooling. Pre-lock history has only
           // committed imported bytes, so preserve those when no repo recipe is declared.

@@ -4,7 +4,6 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   readdirSync,
   readlinkSync,
   realpathSync,
@@ -336,7 +335,11 @@ async function discoverLocalGuidance(
           const store = readRepoImportRecipeStore(publisher);
           const declaresImports =
             existsSync(path.join(publisher, "monke.yml")) &&
-            parseDocument(readFileSync(path.join(publisher, "monke.yml"), "utf-8")).has("skills");
+            parseDocument(
+              Buffer.from(await Bun.file(path.join(publisher, "monke.yml")).bytes()).toString(
+                "utf-8"
+              )
+            ).has("skills");
           if (existsSync(path.join(publisher, SKILL_RESTORE_MARKER)) || declaresImports) {
             validateDeclaredSlugs(
               discoverSourceSkills(
