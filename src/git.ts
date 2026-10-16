@@ -321,7 +321,7 @@ function prepareSessionWorktree(
   validateSessionBranchName(runtime, sourceRoot, session);
 
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
-  const worktrees = listWorktreesAfterPruningSession(runtime, sourceRoot, session, expectedPath);
+  const worktrees = listWorktreesForSessionPreparation(runtime, sourceRoot, session, expectedPath);
 
   const branchMatch = worktrees.find(
     (entry) => entry.branch === session && !entry.prunable && existsSync(entry.path)
@@ -413,7 +413,7 @@ export function assertFreshSessionWorktreeAvailable(
   validateSessionBranchName(runtime, sourceRoot, session);
 
   const expectedPath = getExpectedWorktreePath(home, sourceRoot, session);
-  const worktrees = listWorktreesAfterPruningSession(runtime, sourceRoot, session, expectedPath);
+  const worktrees = listWorktreesForSessionPreparation(runtime, sourceRoot, session, expectedPath);
 
   if (branchExists(runtime, sourceRoot, session)) {
     throw new MonkeError(
@@ -502,22 +502,22 @@ function validateSessionBranchName(runtime: Runtime, sourceRoot: string, session
   }
 }
 
-function listWorktreesAfterPruningSession(
+function listWorktreesForSessionPreparation(
   runtime: Runtime,
   sourceRoot: string,
   session: string,
   expectedPath: string
 ) {
-  let worktrees = listWorktrees(runtime, sourceRoot);
-
-  const shouldPruneCachedEntries = worktrees.some(
+  const worktrees = listWorktrees(runtime, sourceRoot);
+  const stale = worktrees.find(
     (entry) =>
       (entry.branch === session || path.normalize(entry.path) === path.normalize(expectedPath)) &&
       (entry.prunable || !existsSync(entry.path))
   );
-  if (shouldPruneCachedEntries) {
-    runGit(runtime, sourceRoot, ["worktree", "prune"]);
-    worktrees = listWorktrees(runtime, sourceRoot);
+  if (stale) {
+    throw new MonkeError(
+      `Worktree registration needs recovery: ${stale.path}. Missing worktrees can retain staged changes. Inspect it with mt cleanup --dry-run --include-unowned from the Source checkout before retrying.`
+    );
   }
 
   return worktrees;

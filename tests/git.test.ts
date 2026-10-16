@@ -1,9 +1,10 @@
-import { rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vite-plus/test";
 
 import {
+  assertFreshSessionWorktreeAvailable,
   ensureSessionWorktreeAsync,
   getExpectedWorktreePath,
   inferSessionName,
@@ -106,7 +107,7 @@ prunable gitdir file points to non-existent location
     ]);
   });
 
-  test("ensureSessionWorktreeAsync recreates missing cached worktrees", async () => {
+  test("ensureSessionWorktreeAsync requires cleanup before recreating missing worktrees", async () => {
     const sandbox = makeTempDir("git-recreate-worktree");
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "PORT=3000\n",
@@ -128,10 +129,54 @@ prunable gitdir file points to non-existent location
     git(sourceRoot, ["worktree", "add", expectedPath, session]);
     rmSync(expectedPath, { force: true, recursive: true });
 
+    await expect(ensureSessionWorktreeAsync(runtime, home, sourceRoot, session)).rejects.toThrow(
+      /Worktree registration needs recovery.*mt cleanup --dry-run/u
+    );
+    git(sourceRoot, ["worktree", "remove", expectedPath]);
+
     const result = await ensureSessionWorktreeAsync(runtime, home, sourceRoot, session);
 
     expect(result).toStrictEqual({ created: true, path: expectedPath });
     expect(git(expectedPath, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(session);
+  });
+
+  test.each(["recreate", "fresh"])("%s preserves missing worktree indexes", async (mode) => {
+    const sandbox = makeTempDir("git-preserve-missing-index");
+    const sourceRoot = createRepo(path.join(sandbox, "root"), { "note.txt": "base\n" });
+    const runtime = createRuntime({ cwd: sourceRoot });
+    const home = path.join(sandbox, "home");
+    const session = "banana";
+    const retained = [session, "unrelated"].map((branch) => {
+      const worktree = getExpectedWorktreePath(home, sourceRoot, branch);
+      git(sourceRoot, ["worktree", "add", "-b", branch, worktree]);
+      writeFileSync(path.join(worktree, "note.txt"), `${branch} staged copy\n`);
+      git(worktree, ["add", "note.txt"]);
+      const admin = git(worktree, ["rev-parse", "--absolute-git-dir"]);
+      const index = readFileSync(path.join(admin, "index"));
+      rmSync(worktree, { force: true, recursive: true });
+      return { admin, branch, index, worktree };
+    });
+
+    let failure;
+    try {
+      if (mode === "fresh") {
+        assertFreshSessionWorktreeAvailable(runtime, home, sourceRoot, session);
+      } else {
+        await ensureSessionWorktreeAsync(runtime, home, sourceRoot, session);
+      }
+    } catch (error) {
+      failure = error;
+    }
+
+    for (const entry of retained) {
+      expect(existsSync(path.join(entry.admin, "index"))).toBeTruthy();
+      expect(readFileSync(path.join(entry.admin, "index"))).toStrictEqual(entry.index);
+      expect(git(sourceRoot, [`--git-dir=${entry.admin}`, "show", ":note.txt"])).toBe(
+        `${entry.branch} staged copy`
+      );
+      expect(existsSync(entry.worktree)).toBeFalsy();
+    }
+    expect(failure).toBeInstanceOf(Error);
   });
 
   test("ensureSessionWorktreeAsync rejects invalid session names before worktree operations", async () => {
