@@ -1,20 +1,16 @@
 core:changelogs:
-  - content: "---\nsubject: Update Ultracite and required Oxc versions\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: minor\n---\n\n## Update Ultracite and required Oxc versions\n\nUpgrade Ultracite from 7.10.4 to 7.10.8 so consumers inherit its updated core, anti-slop, Vitest, and formatting presets. Require Oxlint ^1.79.0 and Oxfmt ^0.64.0 to support the updated rules and configuration types. Existing shared rule overrides remain in place.\n"
-    filename: 2026-09-05-update-ultracite.md
+  - content: "---\nsubject: Add framework presets to oxc-config\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: minor\n---\n\n## Add framework presets\n\n`createOxlintConfig` accepts `frameworks`, which enables Ultracite's React, TanStack, and shadcn presets and React Doctor's rules in the listed directories. `\".\"` covers the whole repository. Consumers no longer need to depend on `ultracite` or wire up plugin settings themselves. Root `rules` for a directory-scoped framework's plugins apply inside its directories.\n\n`createOxlintConfig` now throws when the root or a workspace `package.json` depends on `react`, `@tanstack/react-router`, `@tanstack/react-start`, `@shadcn/lint`, or `oxlint-plugin-react-doctor` without a matching `frameworks` entry. Set the framework to the directories it lints, or to `false` to decline it. Pass `root` when the config is not at the repository root.\n\nThe `oxlint` entry point no longer exports `oxlintConfig` or a default config, because building either would run the dependency check on import. Use `export default createOxlintConfig()` instead.\n"
+    filename: 2026-10-17-oxc-config-frameworks.md
     v: 0.0.0
-  - content: "---\nsubject: Disable noisy conditional empty object spread rule\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: patch\n---\n\n## Allow conditional optional fields\n\nDisable `anti-slop/no-conditional-empty-object-spread` so idiomatic conditional optional fields no longer produce lint errors.\n"
-    filename: 2026-09-06-disable-conditional-empty-spread.md
-    v: 0.0.0
-  - content: "---\nsubject: Format first-party skill code\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: patch\n---\n\n## Format first-party skill code\n\nThe shared formatter now checks first-party code and metadata under `skills/`. Imported skills, imported references, and skill Markdown remain excluded so upstream assets and authored instructions retain their formatting.\n"
-    filename: 2026-09-04-format-owned-skill-code.md
+  - content: "---\nsubject: Update to Ultracite 8\npackages:\n  \"@monke-together-strong/oxc-config\":\n    type: minor\n---\n\n## Update to Ultracite 8\n\nUpgrade Ultracite from 7.10.8 to 8.0.1. Require Oxlint ^1.86.0 and Oxfmt >=0.71.0 <1, matching Ultracite 8's peer ranges. Require oxlint-tsgolint 7.0.2004 or newer, the version Vite+ 1.3 bundles. Build the presets against Oxlint 1.88.0 and Oxfmt 0.73.0.\n\nUltracite 8 enables these rules for consumers:\n\n- `anti-slop/require-readable-spacing` requires blank lines between top-level statements, around functions, classes, types, and multiline bindings, before control flow and `return`, and after blocks. Adjacent single-line bindings may stay together. Its autofix only inserts blank lines.\n- `vitest/consistent-test-it` requires `test` at the top level and `it` inside `describe`. Its autofix renames calls but not imports.\n- `anti-slop/no-reduce-accumulator-copy` rejects copying a growing `reduce` accumulator with `Object.assign`, `Array.from`, or array copy methods.\n- `typescript/no-generated-empty-object-type`.\n\nUltracite's Vitest rules and the preset's test-file policy now also apply to `.mts`, `.cts`, `.mjs`, and `.cjs` test files.\n\nThe preset disables `anti-slop/no-array-filter-map` because its suggested rewrites run slower than `filter().map()` on Bun.\n"
+    filename: 2026-10-17-ultracite-8.md
     v: 0.0.0
 core:packages:
   - id: npm:monke-tools
     updated: false
   - changelogIds:
-      - 2026-09-05-update-ultracite.md
-      - 2026-09-06-disable-conditional-empty-spread.md
-      - 2026-09-04-format-owned-skill-code.md
+      - 2026-10-17-oxc-config-frameworks.md
+      - 2026-10-17-ultracite-8.md
     id: npm:@monke-together-strong/oxc-config
     updated: true
 npm:packages:
