@@ -36,7 +36,7 @@ off a next check.
 
 Investigate and recommend for diagnosis requests. Implement a correction only
 when implementation is in scope. Make the correction at the root cause per
-`$principle-fix-root-causes`.
+[principle-fix-root-causes](../../imported/principle-fix-root-causes/SKILL.md).
 
 ## Maintain the tracker
 

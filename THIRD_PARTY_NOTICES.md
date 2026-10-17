@@ -7,7 +7,7 @@ monke-tools redistributes the guidance listed below under its upstream licenses.
 ### pstack
 
 - Source: <https://github.com/backnotprop/pstack>
-- Included skills: `skills/imported/technical-writing`, `skills/imported/unslop`
+- Included skills: `skills/imported/principle-fix-root-causes`, `skills/imported/technical-writing`, `skills/imported/unslop`
 - Copyright: Copyright (c) 2026 Lauren Tan
 - License: [MIT](https://github.com/backnotprop/pstack/blob/124f622bcaeac490e7e9dac6af83f3ef9611d554/LICENSE)
 
@@ -28,8 +28,8 @@ monke-tools redistributes the guidance listed below under its upstream licenses.
 ### Matt Pocock skills
 
 - Source: <https://github.com/mattpocock/skills>
-- Included skills: `skills/imported/codebase-design`, `skills/imported/diagnosing-bugs`, `skills/imported/domain-modeling`, `skills/imported/grill-with-docs`, `skills/imported/grilling`, `skills/imported/handoff`, `skills/imported/improve-codebase-architecture`, `skills/imported/prototype`, `skills/imported/research`, `skills/imported/retro`, `skills/imported/setup-matt-pocock-skills`, `skills/imported/tdd`, `skills/imported/teach`, `skills/imported/to-questionnaire`, `skills/imported/to-spec`, `skills/imported/to-tickets`, `skills/imported/triage`, `skills/imported/wait-what`, `skills/imported/wayfinder`, `skills/imported/wizard`, `skills/imported/writing-for-agents`
-- Included references: `skills/references/imported/code-review`, `skills/references/imported/implement`, `skills/references/imported/pr`
+- Included skills: `skills/imported/codebase-design`, `skills/imported/domain-modeling`, `skills/imported/grill-with-docs`, `skills/imported/grilling`, `skills/imported/handoff`, `skills/imported/improve-codebase-architecture`, `skills/imported/prototype`, `skills/imported/research`, `skills/imported/retro`, `skills/imported/setup-matt-pocock-skills`, `skills/imported/tdd`, `skills/imported/teach`, `skills/imported/to-questionnaire`, `skills/imported/to-spec`, `skills/imported/to-tickets`, `skills/imported/triage`, `skills/imported/wait-what`, `skills/imported/wayfinder`, `skills/imported/wizard`, `skills/imported/writing-for-agents`
+- Included references: `skills/references/imported/code-review`, `skills/references/imported/diagnosing-bugs`, `skills/references/imported/implement`, `skills/references/imported/pr`
 - Copyright: Copyright (c) 2026 Matt Pocock
 - License: [MIT](https://github.com/mattpocock/skills/blob/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/LICENSE)
 

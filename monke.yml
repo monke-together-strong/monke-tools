@@ -4,8 +4,7 @@ skills:
   - commit: 6f131f137de64fdaf928278c0fd9ecec520ccbee
     source: https://github.com/backnotprop/pstack
     skills:
-      - slug: principle-fix-root-causes
-        modelInvocation: allow
+      - principle-fix-root-causes
       - slug: technical-writing
         modelInvocation: allow
       - slug: unslop
@@ -26,7 +25,8 @@ skills:
       - slug: code-review
         kind: reference
       - codebase-design
-      - diagnosing-bugs
+      - slug: diagnosing-bugs
+        kind: reference
       - domain-modeling
       - grill-with-docs
       - grilling
