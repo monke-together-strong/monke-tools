@@ -57,7 +57,7 @@ function simulateDeveloperGitEnvironment(sandbox: string) {
 describe("Git test environment", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("fixtures ignore developer signing, hooks, ignores and injected Git settings", () => {
+  it("ignores developer signing, hooks, ignores and injected Git settings in fixtures", () => {
     const sandbox = makeTempDir("git-environment-fixtures");
     simulateDeveloperGitEnvironment(sandbox);
 
@@ -81,7 +81,7 @@ describe("Git test environment", () => {
   });
 
   it.each(["sync", "async", "worker"] as const)(
-    "%s CLI carries files ignored by developer config and preserves repository hooks",
+    "carries files ignored by developer config and preserves repository hooks in the %s CLI",
     async (mode) => {
       const sandbox = makeTempDir(`git-environment-${mode}`);
       simulateDeveloperGitEnvironment(sandbox);

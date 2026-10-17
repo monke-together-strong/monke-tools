@@ -12,7 +12,7 @@ import { makeTempDir } from "./helpers.ts";
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("CLI", () => {
-  it("Home prints the default Monke home", () => {
+  it("prints the default Monke home for mt home", () => {
     const env = { ...process.env };
     delete env.MONKE_HOME;
 
@@ -27,7 +27,7 @@ describe("CLI", () => {
     expect(result.stderr).toBe("");
   });
 
-  it("Home prints the configured Monke home without creating it", () => {
+  it("prints the configured Monke home for mt home without creating it", () => {
     const home = path.join(makeTempDir("cli-home"), "custom-monke-home");
 
     const result = spawnSync("bun", ["run", "src/index.ts", "home"], {
@@ -42,7 +42,7 @@ describe("CLI", () => {
     expect(existsSync(home)).toBeFalsy();
   });
 
-  it("Home resolves a relative MONKE_HOME against the current directory", () => {
+  it("resolves a relative MONKE_HOME against the current directory for mt home", () => {
     const result = spawnSync("bun", ["run", "src/index.ts", "home"], {
       cwd: projectRoot,
       encoding: "utf-8",
@@ -54,14 +54,14 @@ describe("CLI", () => {
     expect(result.stderr).toBe("");
   });
 
-  it("Chop accepts at most one target", async () => {
+  it("accepts at most one target for Chop", async () => {
     await expect(runCliAsync(["chop", "first", "second"])).rejects.toThrow(/too many arguments/u);
   });
 
   it.each([
     ["root", [], "Usage: mt [options] [command]"],
     ["nested", ["shell"], "Usage: mt shell [options] [command]"]
-  ])("main CLI shows %s command help when no command is selected", (_name, args, usage) => {
+  ])("shows %s command help for the main CLI when no command is selected", (_name, args, usage) => {
     const result = spawnSync("bun", ["run", "src/index.ts", ...args], {
       cwd: projectRoot,
       encoding: "utf-8"
@@ -76,7 +76,7 @@ describe("CLI", () => {
     ["main", "src/index.ts", ["chop", "first", "second"]],
     ["skill import", "src/index.ts", ["skills", "add", "unexpected", "extra"]],
     ["skill update", "src/index.ts", ["skills", "update", "extra"]]
-  ])("%s CLI reports one concise process failure", (_name, script, args) => {
+  ])("reports one concise process failure for the %s CLI", (_name, script, args) => {
     const result = spawnSync("bun", ["run", script, ...args], {
       cwd: projectRoot,
       encoding: "utf-8"
@@ -92,7 +92,7 @@ describe("CLI", () => {
     ["main nested", "src/index.ts", ["help", "shell"], "Usage: mt shell [options] [command]"],
     ["skill import", "src/index.ts", ["skills", "add", "--help"], "Usage: mt skills add"],
     ["skill update", "src/index.ts", ["skills", "update", "--help"], "Usage: mt skills update"]
-  ])("%s CLI help is successful", (_name, script, args, usage) => {
+  ])("succeeds for %s CLI help", (_name, script, args, usage) => {
     const result = spawnSync("bun", ["run", script, ...args], {
       cwd: projectRoot,
       encoding: "utf-8"
@@ -103,7 +103,7 @@ describe("CLI", () => {
     expect(result.stderr).toBe("");
   });
 
-  it("Chop help documents force, ignored-file disposal, and explicit recovery", () => {
+  it("documents force, ignored-file disposal, and explicit recovery in Chop help", () => {
     const result = spawnSync("bun", ["run", "src/index.ts", "chop", "--help"], {
       cwd: projectRoot,
       encoding: "utf-8"

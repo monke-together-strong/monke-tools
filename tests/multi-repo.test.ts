@@ -36,7 +36,7 @@ function makeRepoTempDir(prefix: string) {
 }
 
 describe("multi-repo sessions", () => {
-  it("spawn materializes direct dependencies before the root repo and propagates external ports", () => {
+  it("materializes direct dependencies before the root repo and propagates external ports on spawn", () => {
     const sandbox = makeTempDir("multi-repo");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -95,7 +95,7 @@ external:
     expect(sessionState.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
   });
 
-  it("missing Root config cannot discard retained dependency Cleanup obligations", () => {
+  it("keeps retained dependency Cleanup obligations when Root config is missing", () => {
     const sandbox = makeTempDir("multi-repo-missing-root-config");
     const home = path.join(sandbox, "home");
 
@@ -153,7 +153,7 @@ external:
     expect(before.repos.map((repo) => repo.cleanupCommand)).toStrictEqual(["true", "true"]);
   });
 
-  it("spawn warns when skipped dependency source dirt is not carried", () => {
+  it("warns on spawn when skipped dependency source dirt is not carried", () => {
     const sandbox = makeTempDir("multi-repo-skipped-dep-dirty");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -212,7 +212,7 @@ external:
     );
   });
 
-  it("spawn --no-dirty fails dirty dependency source checkouts before creating any worktrees", () => {
+  it("fails dirty dependency source checkouts for spawn --no-dirty before creating any worktrees", () => {
     const sandbox = makeRepoTempDir("multi-repo-dirty-preflight");
 
     try {
@@ -299,7 +299,7 @@ external:
     }
   });
 
-  it("spawn carries dirty state across multi-repo graph by default", () => {
+  it("carries dirty state across multi-repo graph on spawn by default", () => {
     const sandbox = makeTempDir("multi-repo-dirty-carry");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -354,7 +354,7 @@ external:
     );
   });
 
-  it("dirty spawn fails before creating any graph worktrees when a dependency session branch diverged", () => {
+  it("fails dirty spawn before creating any graph worktrees when a dependency session branch diverged", () => {
     const sandbox = makeTempDir("multi-repo-dirty-diverged-dep");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -413,7 +413,7 @@ external:
     expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeFalsy();
   });
 
-  it("spawn -m discovers dependencies from default branch config", () => {
+  it("discovers dependencies from default branch config for spawn -m", () => {
     const sandbox = makeTempDir("multi-repo-main-config");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -510,7 +510,7 @@ external:
     expect(cleanupResult.stderr).toBe("");
   });
 
-  it("spawn -m uses dependency resolved default branch env files", () => {
+  it("uses dependency resolved default branch env files for spawn -m", () => {
     const sandbox = makeTempDir("multi-repo-main-local-env");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -567,7 +567,7 @@ external:
     );
   });
 
-  it("spawn -m materializes mixed main and master repos in one graph", () => {
+  it("materializes mixed main and master repos in one graph for spawn -m", () => {
     const sandbox = makeTempDir("multi-repo-main-master");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -629,7 +629,7 @@ external:
     );
   });
 
-  it("spawn fails clearly when two repos collide on repo-name session worktree paths", () => {
+  it("fails spawn clearly when two repos collide on repo-name session worktree paths", () => {
     const sandbox = makeTempDir("multi-repo-worktree-collision");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -679,7 +679,7 @@ external:
     { previous: [], secondSession: "alpha", symbol: "SOL/USDT:USDT" },
     { previous: ["SOL/USDT:USDT"], secondSession: "beta", symbol: "LINK/USDT:USDT" }
   ])(
-    "resource commands share checkout ownership across root graphs when the second Session is $secondSession",
+    "shares checkout ownership for resource commands across root graphs when the second Session is $secondSession",
     ({ previous, secondSession, symbol }) => {
       const sandbox = makeTempDir("multi-repo-resource-command-declaring-scope");
       const binDirectory = path.join(sandbox, "bin");
@@ -781,7 +781,7 @@ external:
     }
   );
 
-  it("resource command return violation records an incomplete root repo and rerun heals external path env", () => {
+  it("records an incomplete root repo on resource command return violation and heals external path env on rerun", () => {
     const sandbox = makeTempDir("multi-repo-resource-command-partial-root");
     const binDirectory = path.join(sandbox, "bin");
     installShShim(binDirectory);
@@ -881,7 +881,7 @@ external:
     ]);
   });
 
-  it("spawn fans out one dependency-owned port to multiple local targets", () => {
+  it("fans out one dependency-owned port to multiple local targets on spawn", () => {
     const sandbox = makeTempDir("multi-repo-fanout");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -947,7 +947,7 @@ external:
     expect(depRoot).toBeTruthy();
   });
 
-  it("materialize overwrites stale root path env values and preserves unrelated entries", () => {
+  it("overwrites stale root path env values on materialize and preserves unrelated entries", () => {
     const sandbox = makeTempDir("multi-repo-pathenv-refresh");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1006,7 +1006,7 @@ external:
     );
   });
 
-  it("root path env file only includes direct externals", { timeout: 30_000 }, () => {
+  it("includes only direct externals in the root path env file", { timeout: 30_000 }, () => {
     const sandbox = makeTempDir("multi-repo-direct-pathenvs");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1075,7 +1075,7 @@ external:
     );
   });
 
-  it("bootstrap commands receive direct external path env bindings", () => {
+  it("passes direct external path env bindings to bootstrap commands", () => {
     const sandbox = makeTempDir("multi-repo-bootstrap-pathenv");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1123,7 +1123,7 @@ external:
     expect(read(rootWorktree, ".bootstrap-path")).toBe(path.relative(rootWorktree, depWorktree));
   });
 
-  it("Dependency repo bootstrap runs before Root repo bootstrap and the Root repo can rely on synced Path env values", () => {
+  it("runs Dependency repo bootstrap before Root repo bootstrap and lets the Root repo rely on synced Path env values", () => {
     const sandbox = makeTempDir("multi-repo-bootstrap");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1174,7 +1174,7 @@ external:
     expect(read(rootWorktree, "root-saw-dep")).toBe(path.relative(rootWorktree, depWorktree));
   });
 
-  it("current-head Dependency repo bootstrap failure leaves the Root repo Session worktree prepared", () => {
+  it("leaves the Root repo Session worktree prepared after current-head Dependency repo bootstrap failure", () => {
     const sandbox = makeTempDir("multi-repo-failed-dependency-preparation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1233,7 +1233,7 @@ external:
     expect(existsSync(getExpectedWorktreePath(home, depRoot, "failed-dependency"))).toBeTruthy();
   });
 
-  it("a failed sibling does not stop independent materialization and retry reuses its checkpoint", () => {
+  it("continues independent materialization past a failed sibling and reuses the successful sibling's checkpoint on retry", () => {
     const sandbox = makeTempDir("multi-repo-quiescent-retry");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1349,7 +1349,7 @@ external:
     expect(completeState.generation).toStrictEqual({ number: 1, status: "complete" });
   });
 
-  it("Materialize does not reuse a materialized Dependency repo on the wrong branch", () => {
+  it("does not reuse a materialized Dependency repo on the wrong branch during Materialize", () => {
     const sandbox = makeTempDir("multi-repo-invalid-materialized-dependency");
     const home = path.join(sandbox, "home");
     const depRuns = path.join(sandbox, "dep-runs");
@@ -1424,7 +1424,7 @@ external:
     expect(read(rootWorktree, "root-runs")).toBe("x");
   });
 
-  it("a ready repo materializes without waiting for unrelated Worktree preparation", () => {
+  it("materializes a ready repo without waiting for unrelated Worktree preparation", () => {
     const sandbox = makeTempDir("multi-repo-preparation-overlap");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1505,7 +1505,7 @@ external:
     expect(existsSync(getExpectedWorktreePath(home, readyRoot, "overlap"))).toBeTruthy();
   });
 
-  it("ready siblings materialize concurrently without losing either checkpoint", () => {
+  it("materializes ready siblings concurrently without losing either checkpoint", () => {
     const sandbox = makeTempDir("multi-repo-sibling-materialization-concurrency");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1597,7 +1597,7 @@ external:
     });
   });
 
-  it("default-branch dependency bootstrap failure retains every prepared worktree", () => {
+  it("retains every prepared worktree after default-branch dependency bootstrap failure", () => {
     const sandbox = makeTempDir("multi-repo-default-failed-dependency-preparation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1676,7 +1676,7 @@ external:
     ).toBe("complete");
   });
 
-  it("a Dependency repo Worktree preparation failure does not stop Root repo Worktree preparation", () => {
+  it("continues Root repo Worktree preparation after a Dependency repo Worktree preparation failure", () => {
     const sandbox = makeTempDir("multi-repo-preparation-failure-settlement");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1752,7 +1752,7 @@ external:
     expect(read(rootWorktree, "bootstrap-runs")).toBe("x");
   });
 
-  it("public async Spawn starts worktree preparations concurrently", async () => {
+  it("starts worktree preparations concurrently in public async Spawn", async () => {
     const sandbox = makeTempDir("multi-repo-bounded-preparation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1797,7 +1797,7 @@ external:
     expect(existsSync(getExpectedWorktreePath(home, root, "bounded-preparation"))).toBeTruthy();
   });
 
-  it("spawn -m seeds untracked dependency env files from the dependency source checkout", () => {
+  it("seeds untracked dependency env files from the dependency source checkout for spawn -m", () => {
     const sandbox = makeTempDir("multi-repo-main-untracked-seeds");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");

@@ -160,7 +160,7 @@ cp -R "$4/skills/first" .agents/skills/first
 }
 
 describe("repo import recipes through mt skills", () => {
-  it("repo add rejects a name that normalizes to an empty selector before publication", async () => {
+  it("rejects a repo add name that normalizes to an empty selector before publication", async () => {
     const { bin, repo, runtime, sandbox, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
     const config = read(repo, "monke.yml");
@@ -188,7 +188,7 @@ cp -R "$4/skills/Fancy Folder" .agents/skills/fancy-folder
     expect(existsSync(path.join(repo, "skills/imported/fancy-folder"))).toBeFalsy();
   });
 
-  it("root Skill removal ignores a removed mixed recipe's description metadata", async () => {
+  it("ignores a removed mixed recipe's description metadata during root Skill removal", async () => {
     const { repo, rootSkill, runtime, upstream } = await rootSkillWithReferenceDescription();
 
     await runCliAsync(["skills", "remove", upstream, "--repo"], runtime);
@@ -199,7 +199,7 @@ cp -R "$4/skills/Fancy Folder" .agents/skills/fancy-folder
     expect(read(repo, "SKILL.md")).toBe(rootSkill);
   });
 
-  it("root Skill policy checks the retained description instead of stale recipe metadata", async () => {
+  it("checks the retained description instead of stale recipe metadata for root Skill policy", async () => {
     const { repo, rootSkill, runtime, upstream } = await rootSkillWithReferenceDescription();
     const store = readRepoImportRecipeStore(repo);
     store.recipes = store.recipes.map((recipe) => ({
@@ -242,7 +242,7 @@ cp -R "$4/skills/Fancy Folder" .agents/skills/fancy-folder
     { action: "update", selectors: ["first"] },
     { action: "readd", selectors: ["first"] }
   ])(
-    "$action accepts a declared selection $selectors after upstream discovers no authored skills",
+    "accepts a declared selection $selectors for $action after upstream discovers no authored skills",
     async ({ action, selectors }) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
       installEmptyPublisherImporter(bin);
@@ -326,7 +326,7 @@ cp -R "$4/skills/Fancy Folder" .agents/skills/fancy-folder
         { error: "Importer transport failed", status: "failed" }
       ]
     }
-  ])("declared imports preserve the importer's $label", async ({ exitCode, results }) => {
+  ])("preserves the importer's $label for declared imports", async ({ exitCode, results }) => {
     const { bin, repo, runtime, sandbox, upstream } = repoFixture();
     installEmptyPublisherImporter(bin, { exitCode, results });
 
@@ -352,7 +352,7 @@ cp -R "$4/skills/Fancy Folder" .agents/skills/fancy-folder
     { declarations: false, selectors: ["first"] },
     { declarations: true, selectors: ["first", "missing"] }
   ])(
-    "empty authored discovery rejects missing selectors $selectors with declarations=$declarations",
+    "rejects missing selectors $selectors on empty authored discovery with declarations=$declarations",
     async ({ declarations, selectors }) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
       installEmptyPublisherImporter(bin);
@@ -390,7 +390,7 @@ cp -R "$4/skills/Fancy Folder" .agents/skills/fancy-folder
     { name: "multiline", rawName: "Fancy\r\nAuthor" },
     { name: "terminal escape", rawName: "\u001B[31mFancy Author\u001B[0m" },
     { name: "control", rawName: "Fancy\u0000\u0085 Author" }
-  ])("repo selectors replay the importer's normalized $name name", async ({ rawName }) => {
+  ])("replays the importer's normalized $name name in repo selectors", async ({ rawName }) => {
     const { bin, repo, runtime, sandbox } = repoFixture();
     const content = `---\n${stringify({ description: "Author trigger.", name: rawName })}---\nAccepted author.\n`;
 
@@ -429,7 +429,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
   });
 
   it.skipIf(process.platform === "win32" || process.getuid?.() === 0).each(["add", "update"])(
-    "%s rejects an unwritable marker parent before changing accepted state",
+    "rejects an unwritable marker parent for %s before changing accepted state",
     async (action) => {
       const { bin, repo, runtime, upstream } = repoFixture();
       await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
@@ -466,7 +466,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
   );
 
   it.skipIf(process.platform === "win32" || process.getuid?.() === 0).each(["restore", "remove"])(
-    "%s with matching restored files does not need marker-parent writes",
+    "does not need marker-parent writes for %s with matching restored files",
     async (action) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
 
@@ -503,7 +503,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
   );
 
   it.each(["add", "update", "restore", "policy", "remove"])(
-    "%s rejects an obstructed restore marker before changing accepted state",
+    "rejects an obstructed restore marker for %s before changing accepted state",
     async (action) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
       await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
@@ -560,7 +560,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
   );
 
   it.each(["remove", "restore", "update"] as const)(
-    "%s protects references consumed by ordinary authored skills",
+    "protects references consumed by ordinary authored skills for %s",
     async (action) => {
       const { bin, repo, runtime, upstream } = repoFixture();
       await runCliAsync(
@@ -623,7 +623,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
       kind: "candidate-root",
       targetPath: "authored/local-dependent/SKILL.md"
     }
-  ])("restore protects a reference consumed through a $kind alias", async (fixture) => {
+  ])("protects a reference consumed through a $kind alias during restore", async (fixture) => {
     const { repo, runtime, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
     const consumer = `---\nname: local-dependent\ndescription: Local skill.\n---\nLoad [first](${fixture.dependencyPath}).\n`;
@@ -661,7 +661,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     expect(readlinkSync(path.join(repo, fixture.aliasPath))).toBe(fixture.aliasTarget);
   });
 
-  it("restore can prune an unused reference beside a harmless authored directory cycle", async () => {
+  it("lets restore prune an unused reference beside a harmless authored directory cycle", async () => {
     const { repo, runtime, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
     const consumer = "---\nname: local\ndescription: Local skill.\n---\nSelf-contained.\n";
@@ -683,7 +683,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     "raw fragment alias",
     "raw query alias"
   ] as const)(
-    "restore protects a reference consumed through a native %s dependency",
+    "protects a reference consumed through a native %s dependency during restore",
     async (kind) => {
       const { repo, runtime, upstream } = repoFixture();
       await runCliAsync(
@@ -731,7 +731,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
   );
 
   it.each(["missing", "unrelated", "hardlink"] as const)(
-    "restore preserves a native dependency whose lexical spelling escapes with %s outside file",
+    "preserves a native dependency whose lexical spelling escapes with %s outside file during restore",
     async (outsideFile) => {
       const { repo, runtime, sandbox, upstream } = repoFixture();
       write(upstream, "skills/first/deep/deeper/keep.txt", "Accepted support bytes.\n");
@@ -799,7 +799,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
   );
 
   it.each(["markdown", "symlink"] as const)(
-    "restore preserves a $0 dependency that traverses an Imported reference before leaving it",
+    "preserves a $0 dependency that traverses an Imported reference before leaving it during restore",
     async (kind) => {
       const { repo, runtime, upstream } = repoFixture();
       write(upstream, "skills/first/deep/deeper/keep.txt", "Keep traversal directories.\n");
@@ -854,7 +854,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     }
   );
 
-  it("restore can prune beside an ordinary existing dependency outside the repo", async () => {
+  it("lets restore prune beside an ordinary existing dependency outside the repo", async () => {
     const { repo, runtime, sandbox, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
 
@@ -872,7 +872,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     expect(read(sandbox, "outside.md")).toBe("Unrelated outside guidance.\n");
   });
 
-  it("restore protects a reference consumed by root Skill supporting files", async () => {
+  it("protects a reference consumed by root Skill supporting files during restore", async () => {
     const { repo, runtime, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
     const author = "---\nname: root-author\ndescription: Root Skill.\n---\nRead guides/usage.md.\n";
@@ -893,7 +893,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     expect(read(repo, "guides/usage.md")).toBe(support);
   });
 
-  it("restore ignores removed consumers reached through a repo-root alias", async () => {
+  it("ignores removed consumers reached through a repo-root alias during restore", async () => {
     const { repo, runtime, sandbox, upstream } = repoFixture();
 
     const dependent = createRepo(path.join(sandbox, "dependent"), {
@@ -917,7 +917,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     ).toBeFalsy();
   });
 
-  it("root Skill scanning ignores exact active restore staging directories", async () => {
+  it("ignores exact active restore staging directories during root Skill scanning", async () => {
     const { repo, runtime, sandbox, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
 
@@ -950,7 +950,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
   });
 
   it.each(["policy", "remove"] as const)(
-    "%s validates the prospective retained consumer before pruning references",
+    "validates the prospective retained consumer for %s before pruning references",
     async (action) => {
       const { repo, runtime, sandbox, upstream } = repoFixture();
       const link = "Load [first](../../references/imported/first/MAIN.md).";
@@ -1011,7 +1011,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     ".claude/skills/local-dependent/SKILL.md",
     ".codex/skills/local-dependent/SKILL.md",
     ".cursor/skills/local-dependent/SKILL.md"
-  ])("restore protects a reference consumed by authored %s", async (consumerPath) => {
+  ])("protects a reference consumed by authored %s during restore", async (consumerPath) => {
     const { repo, runtime, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
     write(
@@ -1030,7 +1030,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     expect(read(repo, "skills/.monke-restored.json")).toBe(marker);
   });
 
-  it("policy preparation failure preserves bytes and markers for its uncommitted override", async () => {
+  it("preserves bytes and markers for the uncommitted override when policy preparation fails", async () => {
     const { repo, runtime, sandbox, upstream } = repoFixture();
 
     const other = createRepo(path.join(sandbox, "other"), {
@@ -1068,7 +1068,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     expect(read(repo, "skills/imported/first/SKILL.md")).toBe(first);
   });
 
-  it("pruning rejection reviews accepted source advances and cleans review snapshots", async () => {
+  it("reviews accepted source advances and cleans review snapshots after a pruning rejection", async () => {
     const { bin, messages, repo, runtime, sandbox, upstream } = repoFixture();
 
     const provider = createRepo(path.join(sandbox, "provider"), {
@@ -1124,7 +1124,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
   });
 
   it.each(["symlink", "dangling symlink", "hardlink"])(
-    "update atomically replaces a safe marker %s without changing its target",
+    "atomically replaces a safe marker %s during update without changing its target",
     async (alias) => {
       const { bin, repo, runtime, upstream } = repoFixture();
       await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
@@ -1164,7 +1164,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     }
   );
 
-  it("removing the last recipe and empty restore or update do not need a restore marker", async () => {
+  it("does not need a restore marker for removing the last recipe or an empty restore or update", async () => {
     const { bin, repo, runtime, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
     const marker = path.join(repo, "skills/.monke-restored.json");
@@ -1188,7 +1188,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     { nested: true, readd: false },
     { nested: true, readd: true }
   ])(
-    "repo add rejects a partially matched selection with nested=$nested readd=$readd",
+    "rejects a partially matched repo add selection with nested=$nested readd=$readd",
     async ({ nested, readd }) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
       installPartialSuccessImporter(bin);
@@ -1225,7 +1225,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     }
   );
 
-  it("repo selectors match raw upstream names without case sensitivity and wildcard selects all", async () => {
+  it("matches raw upstream names without case sensitivity in repo selectors and selects all with a wildcard", async () => {
     const { bin, repo, runtime, upstream } = repoFixture();
     installPartialSuccessImporter(bin);
     write(
@@ -1260,7 +1260,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     expect(read(repo, "monke.yml")).not.toContain("unavailable");
   });
 
-  it("repo re-add, update, and restore reject a partially matched retained selection", async () => {
+  it("rejects a partially matched retained selection for repo re-add, update, and restore", async () => {
     const { bin, repo, runtime, upstream } = repoFixture();
     installPartialSuccessImporter(bin);
     const source = `${upstream}#HEAD`;
@@ -1304,7 +1304,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     expect(read(repo, "skills/imported/second/SKILL.md")).toBe(second);
   });
 
-  it("repo declarations select their source's own skills and Git and linked consumers resolve one level", async () => {
+  it("selects the source's own skills for repo declarations and resolves Git and linked consumers one level", async () => {
     const { bin, repo, runtime, sandbox, upstream } = repoFixture();
 
     const publisher = createRepo(path.join(sandbox, "publisher-b"), {
@@ -1409,7 +1409,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     expect(read(repo, "skills/own-a/SKILL.md")).toContain("A guidance.");
   });
 
-  it("wildcard imports discover upstream hidden catalogs", async () => {
+  it("discovers upstream hidden catalogs for wildcard imports", async () => {
     const { bin, repo, runtime, sandbox } = repoFixture();
 
     const upstream = createRepo(path.join(sandbox, "curated-source"), {
@@ -1427,7 +1427,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
   });
 
   it.each(["add", "restore", "update"])(
-    "repo %s rejects selections available only through its source's declarations",
+    "rejects repo %s selections available only through their source's declarations",
     async (action) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
 
@@ -1466,7 +1466,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
     }
   );
 
-  it("a failed replacement selection keeps accepted files while another source advances", async () => {
+  it("keeps accepted files for a failed replacement selection while another source advances", async () => {
     const { bin, repo, runtime, sandbox, upstream } = repoFixture();
 
     const other = createRepo(path.join(sandbox, "other"), {
@@ -1521,7 +1521,7 @@ cp -R "$4/skills/authors" .agents/skills/fancy-author
   });
 
   it.each([false, true])(
-    "publisher collisions use installed names with explicit=%s",
+    "uses installed names for publisher collisions with explicit=%s",
     async (explicit) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
       const registry = path.join(repo, ".git/monke-tools/skill-registry");
@@ -1584,7 +1584,7 @@ fi
     { includeInternal: true, selection: "*" },
     { includeInternal: false, selection: "internal" }
   ])(
-    "publishers preserve discovery with internal=$includeInternal selection=$selection",
+    "preserves publisher discovery with internal=$includeInternal selection=$selection",
     async ({ includeInternal, selection }) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
       const projected = path.join(repo, ".agents/skills/monke-tools/imported");
@@ -1628,7 +1628,7 @@ fi
     { assessed: true, selection: "public", suffix: "Installed Guide" },
     { assessed: true, selection: "public", suffix: "Guide  Notes" }
   ])(
-    "repo update reports assessments only from chosen $selection catalog entries for $suffix with assessed=$assessed",
+    "reports repo update assessments only from chosen $selection catalog entries for $suffix with assessed=$assessed",
     async ({ assessed, selection, suffix }) => {
       const { bin, messages, repo, runtime, sandbox } = repoFixture();
       runtime.env.INSTALL_INTERNAL_SKILLS = "";
@@ -1726,7 +1726,7 @@ else console.log(table);
     }
   );
 
-  it("recorded repo selections distinguish raw names sharing a slug", async () => {
+  it("distinguishes raw names sharing a slug in recorded repo selections", async () => {
     const { bin, repo, runtime, sandbox } = repoFixture();
     installInternalRootImporter(bin);
     runtime.env.INSTALL_INTERNAL_SKILLS = "";
@@ -1754,7 +1754,7 @@ else console.log(table);
     { optin: true, selector: "*" },
     { optin: false, selector: "internal" }
   ])(
-    "repo add rejects ambiguous discovery identities for $selector atomically with optin=$optin",
+    "atomically rejects ambiguous discovery identities for $selector in repo add with optin=$optin",
     async ({ optin, selector }) => {
       const { bin, repo, runtime, sandbox } = repoFixture();
       installInternalRootImporter(bin);
@@ -1804,7 +1804,7 @@ else console.log(table);
   );
 
   it.each([false, true])(
-    "recorded repo selections replay public children with ignored declarations=%s",
+    "replays public children for recorded repo selections with ignored declarations=%s",
     async (declared) => {
       const { bin, repo, runtime, sandbox } = repoFixture();
       installInternalRootImporter(bin);
@@ -1870,58 +1870,61 @@ else console.log(table);
   it.each([
     { action: "update", change: "root" },
     { action: "readd", change: "declarations" }
-  ])("$action retains public skills when a publisher adds $change", async ({ action, change }) => {
-    const { bin, repo, runtime, sandbox, upstream } = repoFixture();
-    installInternalRootImporter(bin);
-    installFakeCodiff(bin);
-    installFakeCodexSummary(bin);
-    runtime.env.INSTALL_INTERNAL_SKILLS = "";
+  ])(
+    "retains public skills for $action when a publisher adds $change",
+    async ({ action, change }) => {
+      const { bin, repo, runtime, sandbox, upstream } = repoFixture();
+      installInternalRootImporter(bin);
+      installFakeCodiff(bin);
+      installFakeCodexSummary(bin);
+      runtime.env.INSTALL_INTERNAL_SKILLS = "";
 
-    const root =
-      "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nInternal.\n";
+      const root =
+        "---\nname: internal\ndescription: Internal skill.\nmetadata:\n  internal: true\n---\nInternal.\n";
 
-    const declarations = stringify({
-      skills: [
-        { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
-      ]
-    });
+      const declarations = stringify({
+        skills: [
+          { commit: git(upstream, ["rev-parse", "HEAD"]), skills: ["first"], source: upstream }
+        ]
+      });
 
-    const publisher = createRepo(path.join(sandbox, "changing-publisher"), {
-      "skills/public/SKILL.md":
-        "---\nname: public\ndescription: Public skill.\n---\nRetained public guidance.\n",
-      ...(change === "root" ? { "monke.yml": declarations } : { "SKILL.md": root })
-    });
+      const publisher = createRepo(path.join(sandbox, "changing-publisher"), {
+        "skills/public/SKILL.md":
+          "---\nname: public\ndescription: Public skill.\n---\nRetained public guidance.\n",
+        ...(change === "root" ? { "monke.yml": declarations } : { "SKILL.md": root })
+      });
 
-    const add = ["skills", "add", `${publisher}#HEAD`, "--project"];
-    const projected = path.join(repo, ".agents/skills/monke-tools/imported");
-    await runCliAsync(add, runtime);
-    const acceptedPublic = read(projected, "public/SKILL.md");
-    write(
-      publisher,
-      change === "root" ? "SKILL.md" : "monke.yml",
-      change === "root" ? root : declarations
-    );
-    git(publisher, ["add", "."]);
-    git(publisher, ["commit", "-m", `Add publisher ${change}`]);
-    await runCliAsync(
-      action === "readd" ? add : ["skills", "update", "--project", "--adapter", "codiff"],
-      runtime
-    );
-    expect(read(projected, "public/SKILL.md")).toBe(acceptedPublic);
-    expect(read(projected, "first/SKILL.md")).toContain("Pinned first.");
-    expect(existsSync(path.join(projected, "internal"))).toBeFalsy();
+      const add = ["skills", "add", `${publisher}#HEAD`, "--project"];
+      const projected = path.join(repo, ".agents/skills/monke-tools/imported");
+      await runCliAsync(add, runtime);
+      const acceptedPublic = read(projected, "public/SKILL.md");
+      write(
+        publisher,
+        change === "root" ? "SKILL.md" : "monke.yml",
+        change === "root" ? root : declarations
+      );
+      git(publisher, ["add", "."]);
+      git(publisher, ["commit", "-m", `Add publisher ${change}`]);
+      await runCliAsync(
+        action === "readd" ? add : ["skills", "update", "--project", "--adapter", "codiff"],
+        runtime
+      );
+      expect(read(projected, "public/SKILL.md")).toBe(acceptedPublic);
+      expect(read(projected, "first/SKILL.md")).toContain("Pinned first.");
+      expect(existsSync(path.join(projected, "internal"))).toBeFalsy();
 
-    const accepted: unknown = JSON.parse(
-      read(repo, ".git/monke-tools/skill-registry/skills.lock.json")
-    );
+      const accepted: unknown = JSON.parse(
+        read(repo, ".git/monke-tools/skill-registry/skills.lock.json")
+      );
 
-    expect(accepted).toMatchObject({
-      recipes: [{ selection: ["*"], skills: ["first", "public"] }]
-    });
-  });
+      expect(accepted).toMatchObject({
+        recipes: [{ selection: ["*"], skills: ["first", "public"] }]
+      });
+    }
+  );
 
   it.each(["*", "first"])(
-    "internal roots do not hide authored collisions from selection %s",
+    "does not let internal roots hide authored collisions from selection %s",
     async (selection) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
       installInternalRootImporter(bin);
@@ -1963,7 +1966,7 @@ else console.log(table);
     { action: "policy", alias: "symlink" },
     { action: "add", alias: "hardlink" }
   ])(
-    "$action rejects a $alias .gitignore before changing accepted state",
+    "rejects a $alias .gitignore for $action before changing accepted state",
     async ({ action, alias }) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
       await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
@@ -2010,7 +2013,7 @@ else console.log(table);
   );
 
   it.each(["skills.lock.json", "skills/imported/.monke-imports.json"])(
-    "repo restore and update obey YAML over %s",
+    "obeys YAML over %s for repo restore and update",
     async (legacyFile) => {
       const { bin, repo, runtime, upstream } = repoFixture();
       const commit = git(upstream, ["rev-parse", "HEAD"]);
@@ -2085,7 +2088,7 @@ else console.log(table);
     { action: "restore", kind: "reference" },
     { action: "update", kind: "reference" }
   ] as const)(
-    "$action rejects a symlinked $kind root before changing external files",
+    "rejects a symlinked $kind root for $action before changing external files",
     async ({ action, kind }) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
 
@@ -2133,7 +2136,7 @@ else console.log(table);
     }
   );
 
-  it("add pins a compact declaration, preserves YAML, and restores ignored guidance", async () => {
+  it("pins a compact declaration, preserves YAML, and restores ignored guidance on add", async () => {
     const { repo, runtime, upstream } = repoFixture();
     const original = "# Keep this comment\nbootstrapCommand: 'echo setup' # Keep this too\n";
     write(repo, "monke.yml", original);
@@ -2154,7 +2157,7 @@ else console.log(table);
     expect(read(repo, ".gitignore").split("/skills/imported/")).toHaveLength(2);
   });
 
-  it("hand edits restore new selections at their pin, reapply overrides, prune removals, and replace local edits", async () => {
+  it("applies hand edits by restoring new selections at their pin, reapplying overrides, pruning removals, and replacing local edits", async () => {
     const { bin, repo, runtime, upstream } = repoFixture();
     const commit = git(upstream, ["rev-parse", "HEAD"]);
     write(
@@ -2207,7 +2210,7 @@ else console.log(table);
     expect(read(repo, "monke.yml")).toBe(config);
   });
 
-  it("restore refuses an unpinned entry and update pins it with one comparison", async () => {
+  it("refuses an unpinned entry during restore and pins it with one comparison during update", async () => {
     const { bin, repo, runtime, upstream } = repoFixture();
     const reviewLog = installFakeCodiff(bin);
     installFakeCodexSummary(bin);
@@ -2221,7 +2224,7 @@ else console.log(table);
     expect(read(repo, path.relative(repo, reviewLog))).toContain("--commit");
   });
 
-  it("update accepts a handwritten selection first published after its recorded pin", async () => {
+  it("lets update accept a handwritten selection first published after its recorded pin", async () => {
     const { bin, repo, runtime, sandbox } = repoFixture();
 
     const upstream = createRepo(path.join(sandbox, "expanded-source"), {
@@ -2274,7 +2277,7 @@ else console.log(table);
     );
   });
 
-  it("a failed expanded selection retains its recorded pin and accepted files", async () => {
+  it("retains the recorded pin and accepted files of a failed expanded selection", async () => {
     const { bin, repo, runtime, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
     const originalPin = git(upstream, ["rev-parse", "HEAD"]);
@@ -2304,7 +2307,7 @@ else console.log(table);
     expect(existsSync(path.join(repo, "skills/imported/unpublished"))).toBeFalsy();
   });
 
-  it("reference imports and policy and remove commands update the repo declaration", async () => {
+  it("updates the repo declaration for reference imports and policy and remove commands", async () => {
     const { repo, runtime, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--ref", "--skill", "first"], runtime);
     expect(read(repo, "skills/references/imported/first/MAIN.md")).toBe("Pinned first.\n");
@@ -2331,7 +2334,7 @@ else console.log(table);
   });
 
   it.each(["remove", "restore", "selection", "update", "empty", "policy"] as const)(
-    "%s rejects pruning a reference used by retained repo guidance",
+    "rejects pruning a reference used by retained repo guidance for %s",
     async (action) => {
       const { bin, repo, runtime, sandbox, upstream } = repoFixture();
       write(upstream, "skills/first/assets/accepted.txt", "Accepted reference asset.\n");
@@ -2433,7 +2436,7 @@ else console.log(table);
   );
 
   it.each(["remove", "restore", "update"] as const)(
-    "%s prunes references together with every obsolete consumer",
+    "prunes references together with every obsolete consumer for %s",
     async (action) => {
       const { bin, repo, runtime, upstream } = repoFixture();
       write(
@@ -2475,7 +2478,7 @@ else console.log(table);
     }
   );
 
-  it("repo reference choices remain authoritative for a source's own skills", async () => {
+  it("keeps repo reference choices authoritative for a source's own skills", async () => {
     const { bin, repo, runtime, sandbox, upstream } = repoFixture();
 
     const publisher = createRepo(path.join(sandbox, "reference-publisher"), {
@@ -2508,7 +2511,7 @@ else console.log(table);
     ).rejects.toThrow("--ref requires --repo");
   });
 
-  it("update prepares Git sources concurrently and prunes guidance removed by hand", async () => {
+  it("prepares Git sources concurrently during update and prunes guidance removed by hand", async () => {
     const { bin, repo, runtime, sandbox, upstream } = repoFixture();
     await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
 
@@ -2559,7 +2562,7 @@ cpSync(path.join(args[3], "skills", slug), path.join(".agents/skills", slug), { 
     expect(read(repo, path.relative(repo, reviewLog)).split("--commit")).toHaveLength(2);
   });
 
-  it("restore publishes healthy siblings when reference conversion fails without pruning", async () => {
+  it("publishes healthy siblings during restore when reference conversion fails without pruning", async () => {
     const { repo, runtime, sandbox, upstream } = repoFixture();
 
     const malformed = createRepo(path.join(sandbox, "malformed-reference"), {
@@ -2600,7 +2603,7 @@ cpSync(path.join(args[3], "skills", slug), path.join(".agents/skills", slug), { 
     expect(readdirSync(path.join(repo, "tmp"))).toStrictEqual([]);
   });
 
-  it("update advances successful sources, retains failed pins, and opens one complete review", async () => {
+  it("advances successful sources, retains failed pins, and opens one complete review during update", async () => {
     const { bin, messages, repo, runtime, sandbox, upstream } = repoFixture();
 
     const other = createRepo(path.join(sandbox, "other"), {

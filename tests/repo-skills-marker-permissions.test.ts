@@ -39,7 +39,7 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
     { action: "add", denied: true, marker: "symlink", name: "target owner", owner: "foreign" },
     { action: "add", denied: false, marker: "absent", name: "absent marker", owner: "foreign" },
     { action: "restore", denied: false, marker: "file", name: "cached marker", owner: "foreign" }
-  ])("$action respects sticky marker permissions for $name", async (scenario) => {
+  ])("respects sticky marker permissions on $action for $name", async (scenario) => {
     const sandbox = makeTempDir("sticky-marker");
     const repo = createRepo(path.join(sandbox, "consumer"), { "README.md": "Consumer.\n" });
 

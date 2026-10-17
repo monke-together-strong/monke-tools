@@ -53,7 +53,7 @@ function fixture(): SessionCleanupEvidence {
 }
 
 describe("Session cleanup explanations", () => {
-  it("archive readiness does not hide a blocking sibling or hold", () => {
+  it("does not let archive readiness hide a blocking sibling or hold", () => {
     const snapshot = fixture();
     const [dependency, root] = snapshot.members;
     ok(dependency?.evidence && root?.evidence);
@@ -132,7 +132,7 @@ describe("Session cleanup explanations", () => {
     }
   );
 
-  it("a dirty dependency names its path and distinguishes skipped PR checks from passing Root proof", () => {
+  it("names a dirty dependency's path and distinguishes skipped PR checks from passing Root proof", () => {
     const snapshot = fixture();
     const [dependency] = snapshot.members;
     ok(dependency?.evidence, "Missing fixture member");
@@ -189,7 +189,7 @@ describe("Session cleanup explanations", () => {
     expect(formatSessionCleanupReport(report)).toContain("also recorded by Session other");
   });
 
-  it("failed member revalidation cannot leave a passing local check in the explanation", () => {
+  it("does not leave a passing local check in the explanation after failed member revalidation", () => {
     const snapshot = fixture();
     snapshot.blockers = ["member-changed-during-inspection"];
     snapshot.problems = [
@@ -204,7 +204,7 @@ describe("Session cleanup explanations", () => {
     expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
   });
 
-  it("older evidence with a member problem keeps unknown check coverage", () => {
+  it("keeps unknown check coverage for older evidence with a member problem", () => {
     const snapshot = fixture();
     const [member] = snapshot.members;
     ok(member?.evidence, "Missing fixture member");
@@ -222,7 +222,7 @@ describe("Session cleanup explanations", () => {
     expect(formatSessionCleanupReport(report)).not.toContain("Committed work [not-checked]");
   });
 
-  it("verified absent members need no PR check while the remaining member must still pass", () => {
+  it("requires no PR check for verified absent members while the remaining member must still pass", () => {
     const snapshot = fixture();
     const [dependency] = snapshot.members;
     ok(dependency, "Missing fixture member");
@@ -235,7 +235,7 @@ describe("Session cleanup explanations", () => {
     expect(formatSessionCleanupReport(report)).toContain("Eligible (not attempted)");
   });
 
-  it("failed teardown reports its step and repo without claiming the whole Session was retained", () => {
+  it("reports a failed teardown's step and repo without claiming the whole Session was retained", () => {
     const report = createSessionCleanupReport(fixture(), {
       message: "Channel deletion failed",
       outcome: "failed",
@@ -250,7 +250,7 @@ describe("Session cleanup explanations", () => {
     expect(text).not.toContain("Entire Session retained");
   });
 
-  it("only an execution result can label a Session cleaned", () => {
+  it("labels a Session cleaned only from an execution result", () => {
     const snapshot = fixture();
     expect(createSessionCleanupReport(snapshot).outcome).toBe("eligible");
     expect(createSessionCleanupReport(snapshot, { outcome: "cleaned" }).outcome).toBe("cleaned");

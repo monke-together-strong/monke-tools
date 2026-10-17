@@ -16,7 +16,7 @@ import type { Runtime } from "../src/types.ts";
 import { createRepo, git, makeTempDir } from "./helpers.ts";
 
 describe("Git operations", () => {
-  it("inferSessionName supports slash-delimited session names", () => {
+  it("supports slash-delimited session names in inferSessionName", () => {
     const sourceRoot = path.join("/tmp", "monke-root");
     const home = path.join("/tmp", "monke-home");
     const worktreeRoot = getExpectedWorktreePath(home, sourceRoot, "feature/foo");
@@ -24,7 +24,7 @@ describe("Git operations", () => {
     expect(inferSessionName(home, sourceRoot, worktreeRoot, "feature/foo")).toBe("feature/foo");
   });
 
-  it("validateWorktreeForSession rejects worktrees from a different repository", () => {
+  it("rejects worktrees from a different repository in validateWorktreeForSession", () => {
     const sandbox = makeTempDir("git-repo-identity");
 
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
@@ -68,7 +68,7 @@ describe("Git operations", () => {
     }).toThrow(/Expected worktree .* to belong to /u);
   });
 
-  it("listWorktrees parses prunable entries from porcelain output", () => {
+  it("parses prunable entries from porcelain output in listWorktrees", () => {
     const runtime: Runtime = {
       ...createRuntime({ cwd: "/tmp" }),
       cwd: "/tmp",
@@ -111,7 +111,7 @@ prunable gitdir file points to non-existent location
     ]);
   });
 
-  it("ensureSessionWorktreeAsync requires cleanup before recreating missing worktrees", async () => {
+  it("requires cleanup in ensureSessionWorktreeAsync before recreating missing worktrees", async () => {
     const sandbox = makeTempDir("git-recreate-worktree");
 
     const sourceRoot = createRepo(path.join(sandbox, "root"), {
@@ -146,7 +146,7 @@ prunable gitdir file points to non-existent location
     expect(git(expectedPath, ["rev-parse", "--abbrev-ref", "HEAD"])).toBe(session);
   });
 
-  it.each(["recreate", "fresh"])("%s preserves missing worktree indexes", async (mode) => {
+  it.each(["recreate", "fresh"])("preserves missing worktree indexes on %s", async (mode) => {
     const sandbox = makeTempDir("git-preserve-missing-index");
     const sourceRoot = createRepo(path.join(sandbox, "root"), { "note.txt": "base\n" });
     const runtime = createRuntime({ cwd: sourceRoot });
@@ -189,7 +189,7 @@ prunable gitdir file points to non-existent location
     expect(failure).toBeInstanceOf(Error);
   });
 
-  it("ensureSessionWorktreeAsync rejects invalid session names before worktree operations", async () => {
+  it("rejects invalid session names in ensureSessionWorktreeAsync before worktree operations", async () => {
     const sandbox = makeTempDir("git-invalid-session");
 
     const sourceRoot = createRepo(path.join(sandbox, "root"), {

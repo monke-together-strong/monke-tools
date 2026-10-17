@@ -28,11 +28,11 @@ describe("Tegami release entries", () => {
     name.endsWith(".md")
   );
 
-  it("the release config names at least one package", () => {
+  it("names at least one package in the release config", () => {
     expect(published.size).toBeGreaterThan(0);
   });
 
-  it.each(entries)("%s names only packages Tegami publishes", (entry) => {
+  it.each(entries)("names only packages Tegami publishes in %s", (entry) => {
     const text = readFileSync(path.join(repositoryRoot, ".tegami", entry), "utf-8");
     const frontmatter = /^---\n(?<yaml>[\s\S]*?)\n---(?:\n|$)/u.exec(text)?.groups?.yaml;
     expect(frontmatter, "missing frontmatter").toBeDefined();

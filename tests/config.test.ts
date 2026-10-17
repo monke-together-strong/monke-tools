@@ -7,7 +7,7 @@ import { createRuntime } from "../src/runtime.ts";
 import { createFiles, createRepo, makeTempDir, write } from "./helpers.ts";
 
 describe("configuration", () => {
-  it("loadResolvedGraph accepts valid local and external config", () => {
+  it("accepts valid local and external config in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-valid");
 
     const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -59,7 +59,7 @@ external:
     expect(graph.reposByRoot.get(root)?.bootstrapCommand).toBeUndefined();
   });
 
-  it("loadResolvedGraph accepts bootstrapCommand when present", () => {
+  it("accepts bootstrapCommand in loadResolvedGraph when present", () => {
     const sandbox = makeTempDir("config-bootstrap");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -80,7 +80,7 @@ apps:
     expect(graph.reposByRoot.get(root)?.bootstrapCommand).toBe("pnpm install && pnpm generate");
   });
 
-  it("loadResolvedGraph accepts repo-level seedPaths", () => {
+  it("accepts repo-level seedPaths in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-seedpaths");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -108,7 +108,7 @@ apps:
     ]);
   });
 
-  it("loadResolvedGraph accepts in-repo paths whose names begin with two dots", () => {
+  it("accepts in-repo paths whose names begin with two dots in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-dotdot-prefix");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -136,7 +136,7 @@ apps:
     expect(repo?.seedPaths).toStrictEqual(["..seed"]);
   });
 
-  it("loadResolvedGraph rejects non-string bootstrapCommand", () => {
+  it("rejects non-string bootstrapCommand in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-bootstrap-non-string");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -158,7 +158,7 @@ apps:
     );
   });
 
-  it("loadResolvedGraph rejects empty bootstrapCommand", () => {
+  it("rejects empty bootstrapCommand in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-bootstrap-empty");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -179,7 +179,7 @@ apps:
     );
   });
 
-  it("loadResolvedGraph rejects invalid cleanupCommand values", () => {
+  it("rejects invalid cleanupCommand values in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-invalid-cleanup");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -200,7 +200,7 @@ apps:
     );
   });
 
-  it("loadResolvedGraph rejects non-array seedPaths", () => {
+  it("rejects non-array seedPaths in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-seedpaths-not-array");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -221,7 +221,7 @@ apps:
     );
   });
 
-  it("loadResolvedGraph rejects seedPaths that escape the repo root", () => {
+  it("rejects seedPaths that escape the repo root in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-seedpaths-escape");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -243,7 +243,7 @@ apps:
     );
   });
 
-  it("loadResolvedGraph rejects duplicate normalized seedPaths", () => {
+  it("rejects duplicate normalized seedPaths in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-seedpaths-duplicate");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -267,7 +267,7 @@ apps:
     );
   });
 
-  it("loadResolvedGraph rejects seedPaths that point at the repo root", () => {
+  it("rejects seedPaths that point at the repo root in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-seedpaths-root");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -289,7 +289,7 @@ apps:
     );
   });
 
-  it("loadResolvedGraph rejects seedPaths that normalize to the repo root", () => {
+  it("rejects seedPaths that normalize to the repo root in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-seedpaths-normalized-root");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -312,7 +312,7 @@ apps:
     );
   });
 
-  it("loadResolvedGraph rejects missing external pathEnv", () => {
+  it("rejects missing external pathEnv in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-missing-pathenv");
     createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `apps:
@@ -346,7 +346,7 @@ external:
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/pathEnv/u);
   });
 
-  it("loadResolvedGraph rejects invalid external pathEnv", () => {
+  it("rejects invalid external pathEnv in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-invalid-pathenv");
     createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `apps:
@@ -383,7 +383,7 @@ external:
     );
   });
 
-  it("loadResolvedGraph rejects duplicate external pathEnv names", () => {
+  it("rejects duplicate external pathEnv names in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-duplicate-pathenv");
     createRepo(path.join(sandbox, "dep-a"), {
       "monke.yml": `apps:
@@ -439,7 +439,7 @@ external:
     );
   });
 
-  it("loadResolvedGraph rejects duplicate yaml keys", () => {
+  it("rejects duplicate yaml keys in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-duplicate-keys");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -459,7 +459,7 @@ external:
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/Invalid/u);
   });
 
-  it("loadResolvedGraph rejects duplicate rewrite targets", () => {
+  it("rejects duplicate rewrite targets in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-duplicate-targets");
 
     const depRoot = createRepo(path.join(sandbox, "dep"), {
@@ -500,7 +500,7 @@ external:
     expect(depRoot).toBeTruthy();
   });
 
-  it("loadResolvedGraph rejects direct dependency references to non-local ports", () => {
+  it("rejects direct dependency references to non-local ports in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-direct-only");
 
     const leafRoot = createRepo(path.join(sandbox, "leaf"), {
@@ -560,7 +560,7 @@ external:
     expect(depRoot).toBeTruthy();
   });
 
-  it("loadResolvedGraph rejects unused zero-port apps", () => {
+  it("rejects unused zero-port apps in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-unused-zero-port");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -587,7 +587,7 @@ external:
     );
   });
 
-  it("loadResolvedGraph rejects duplicate local port keys across the resolved session graph", () => {
+  it("rejects duplicate local port keys across the resolved session graph in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-duplicate-port-keys");
     createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `apps:
@@ -629,7 +629,7 @@ external:
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/owned by both/u);
   });
 
-  it("loadResolvedGraph allows one local port key to rewrite multiple same-repo app envs", () => {
+  it("allows one local port key to rewrite multiple same-repo app envs in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-shared-local-port");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -660,7 +660,7 @@ external:
     ]);
   });
 
-  it("loadResolvedGraph rejects dependency cycles instead of returning cached partial config", () => {
+  it("rejects dependency cycles in loadResolvedGraph instead of returning cached partial config", () => {
     const sandbox = makeTempDir("config-cycle");
     const root = path.join(sandbox, "root");
     const dep = path.join(sandbox, "dep");
@@ -710,7 +710,7 @@ external:
     );
   });
 
-  it("loadResolvedGraph rejects envFile paths that escape the app directory", () => {
+  it("rejects envFile paths that escape the app directory in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-envfile-escape");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -731,7 +731,7 @@ external:
     );
   });
 
-  it("loadResolvedGraph accepts an app at the repo root", () => {
+  it("accepts an app at the repo root in loadResolvedGraph", () => {
     const sandbox = makeTempDir("config-root-app");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -757,7 +757,7 @@ external:
     expect(graph.reposByRoot.get(root)?.localPortOrder).toStrictEqual(["WEB_PORT"]);
   });
 
-  it("loadResolvedGraph defaults envFile to .env when omitted", () => {
+  it("defaults envFile to .env in loadResolvedGraph when omitted", () => {
     const sandbox = makeTempDir("config-default-envfile");
 
     const root = createFiles(path.join(sandbox, "root"), {

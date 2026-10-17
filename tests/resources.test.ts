@@ -11,7 +11,7 @@ import { makeTempDir } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("resources", () => {
-  it("resource runner output with a BOM is a protocol violation", async () => {
+  it("treats resource runner output with a BOM as a protocol violation", async () => {
     const sourceRoot = makeTempDir("resources-output-bom");
 
     const runtime: Runtime = {
@@ -37,7 +37,7 @@ describe("resources", () => {
   });
 
   it.each([false, true])(
-    "checkpointing a new command retains each retired output once for legacy=%s",
+    "retains each retired output once when checkpointing a new command for legacy=%s",
     async (legacy) => {
       const sandbox = makeTempDir("resources-retired-output-checkpoint");
       const sourceRoot = path.join(sandbox, "repo");
@@ -110,7 +110,7 @@ describe("resources", () => {
     }
   );
 
-  it("resource command lock covers command execution and immediate persistence", async () => {
+  it("covers command execution and immediate persistence with the resource command lock", async () => {
     const sandbox = makeTempDir("resources-command-lock");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "repo");
@@ -202,7 +202,7 @@ describe("resources", () => {
     ]);
   });
 
-  it("pnpm workspaces run resource modules through pnpm-mediated bun", async () => {
+  it("runs resource modules in pnpm workspaces through pnpm-mediated bun", async () => {
     const sandbox = makeTempDir("resources-command-pnpm-runner");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "repo");

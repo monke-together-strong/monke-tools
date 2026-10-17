@@ -108,7 +108,7 @@ describe("global Session cleanup", () => {
     }
   });
 
-  it("dry-run outside a repository reports an empty inventory without creating Monke home", async () => {
+  it("reports an empty inventory for dry-run outside a repository without creating Monke home", async () => {
     const cwd = sandbox();
     const home = path.join(cwd, "absent");
     let stdout = "";
@@ -256,7 +256,7 @@ describe("global Session cleanup", () => {
     return { addSession, cwd, home, root, run, runtime, sources };
   }
 
-  it("repeatable Sources discover repositories without Sessions and canonicalize checkout paths", async () => {
+  it("discovers repositories without Sessions from repeatable Sources and canonicalizes checkout paths", async () => {
     const f = fixture();
     const [dependency] = f.sources;
 
@@ -298,7 +298,7 @@ describe("global Session cleanup", () => {
   });
 
   it.each(["missing", "unavailable"])(
-    "a requested %s Source prevents all cleanup effects",
+    "prevents all cleanup effects when a requested Source is %s",
     async (status) => {
       const f = fixture();
       const state = f.addSession("feature/keep");
@@ -598,7 +598,7 @@ describe("global Session cleanup", () => {
     "worktree-after-recovery",
     "source-unavailable",
     "worktree-unavailable"
-  ])("ordinary cleanup retains a cross-repository nested %s", async (kind) => {
+  ])("retains a cross-repository nested %s during ordinary cleanup", async (kind) => {
     const f = fixture();
     const selected = path.join(f.cwd, "ordinary-parent");
     const nested = path.join(selected, "nested");
@@ -672,7 +672,7 @@ describe("global Session cleanup", () => {
   });
 
   it.each(["staged", "detached", "operation", "clean"])(
-    "Session cleanup preserves recovery metadata for a %s stale registration",
+    "preserves recovery metadata for a %s stale registration during Session cleanup",
     async (kind) => {
       const f = fixture();
       const state = f.addSession("feature/stale-recovery", f.root);
@@ -698,7 +698,7 @@ describe("global Session cleanup", () => {
     }
   );
 
-  it("a stale Session index changed by recovery is retained", async () => {
+  it("retains a stale Session index changed by recovery", async () => {
     const f = fixture();
     const state = f.addSession("feature/stale-index-race");
     const [repo] = state.repos;
@@ -734,7 +734,7 @@ describe("global Session cleanup", () => {
   });
 
   it.each(["source", "worktree"])(
-    "Session cleanup retains a nested %s when its Source cannot be inspected",
+    "retains a nested %s during Session cleanup when its Source cannot be inspected",
     async (kind) => {
       const f = fixture();
       const state = f.addSession("feature/unknown-overlap");
@@ -776,7 +776,7 @@ describe("global Session cleanup", () => {
   );
 
   it.each(["before", "after"])(
-    "ordinary cleanup outside Monke home retains a recent process started %s recovery",
+    "retains a recent process started %s recovery during ordinary cleanup outside Monke home",
     async (when) => {
       const f = fixture();
       const selected = path.join(f.cwd, "external-ordinary");
@@ -805,7 +805,7 @@ describe("global Session cleanup", () => {
   );
 
   it.each([false, true])(
-    "archive readiness retains an open PR blocker, missing sibling=%s",
+    "retains an open PR blocker in archive readiness, missing sibling=%s",
     async (missingSibling) => {
       const f = fixture();
       const state = f.addSession("feature/active-notes");
@@ -839,7 +839,7 @@ describe("global Session cleanup", () => {
     }
   );
 
-  it("dirty ordinary worktrees are settled skips", async () => {
+  it("treats dirty ordinary worktrees as settled skips", async () => {
     const f = fixture();
     const selected = path.join(f.cwd, "dirty-ordinary");
     git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
@@ -906,7 +906,7 @@ describe("global Session cleanup", () => {
     );
   }
 
-  it("global preview is immutable and execution cleans whole Sessions across Roots, preserving branches and unowned worktrees", async () => {
+  it("keeps global preview immutable and cleans whole Sessions across Roots on execution, preserving branches and unowned worktrees", async () => {
     const f = fixture();
     expect(() => f.runtime.exec("git", ["rev-parse", "--show-toplevel"])).toThrow(
       /not a git repository/u
@@ -951,7 +951,7 @@ describe("global Session cleanup", () => {
     expect(existsSync(unowned)).toBeTruthy();
   }, 30_000);
 
-  it("human output leads with a summary and --eligible hides skipped Sessions", async () => {
+  it("leads human output with a summary and hides skipped Sessions with --eligible", async () => {
     const f = fixture();
     f.addSession("feature/clean");
     const blocked = f.addSession("feature/blocked");
@@ -984,7 +984,7 @@ describe("global Session cleanup", () => {
     expect(stdout).not.toContain("Skipped:");
   }, 30_000);
 
-  it("one dirty member skips the whole Session before any effect", async () => {
+  it("skips the whole Session before any effect when one member is dirty", async () => {
     const f = fixture();
     const state = f.addSession("feature/blocked");
     const [dependency] = state.repos;
@@ -1008,7 +1008,7 @@ describe("global Session cleanup", () => {
     expect({ ...after, home: before.home }).toStrictEqual(before);
   }, 30_000);
 
-  it("foreign locks block execution and dry-run leaves them untouched", async () => {
+  it("blocks execution on foreign locks and leaves them untouched in dry-run", async () => {
     const f = fixture();
     const state = f.addSession("feature/locked");
     const contents = JSON.stringify({ acquiredAt: Date.now(), pid: process.pid });
@@ -1026,7 +1026,7 @@ describe("global Session cleanup", () => {
     }
   }, 30_000);
 
-  it("losing the acquired lock stops the run without deleting its replacement", async () => {
+  it("stops the run after losing the acquired lock without deleting its replacement", async () => {
     const f = fixture();
     const state = f.addSession("feature/replaced-lock");
     const original = f.runtime.execAsync;
@@ -1106,7 +1106,7 @@ describe("global Session cleanup", () => {
     return state.length > 0 && !state.startsWith("Z");
   }
 
-  it("a day-old attached process tree is stopped before removal and reported", async () => {
+  it("stops a day-old attached process tree before removal and reports it", async () => {
     const f = fixture();
     const state = f.addSession("feature/served");
     const [dependency] = state.repos;
@@ -1144,7 +1144,7 @@ describe("global Session cleanup", () => {
     expect(existsSync(dependency.worktreePath)).toBeFalsy();
   }, 30_000);
 
-  it("a child spawned during shutdown retains every Session member", async () => {
+  it("retains every Session member when a child spawns during shutdown", async () => {
     const f = fixture();
     const state = f.addSession("feature/respawning");
     const [repo] = state.repos;
@@ -1169,7 +1169,7 @@ describe("global Session cleanup", () => {
     { attached: true, label: "attached" },
     { attached: false, label: "unattached" }
   ])(
-    "a recent $label process retains the Session before any effect",
+    "retains the Session before any effect for a recent $label process",
     async ({ attached }) => {
       const f = fixture();
       const state = f.addSession("feature/busy");
@@ -1197,7 +1197,7 @@ describe("global Session cleanup", () => {
     30_000
   );
 
-  it("failed process shutdown inspection prevents ordinary resource recovery", async () => {
+  it("prevents ordinary resource recovery when process shutdown inspection fails", async () => {
     const f = fixture();
     const selected = path.join(f.cwd, "ordinary-shutdown-failure");
     git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
@@ -1225,7 +1225,7 @@ describe("global Session cleanup", () => {
   }, 30_000);
 
   it.each(["lsof", "ps"])(
-    "failed %s inspection retains Session and ordinary worktrees",
+    "retains Session and ordinary worktrees when %s inspection fails",
     async (failedCommand) => {
       const f = fixture();
       const state = f.addSession("feature/scan-failure");
@@ -1263,7 +1263,7 @@ describe("global Session cleanup", () => {
   );
 
   it.each(["root", "dependency"])(
-    "a recent process started by recovery retains every Session member: %s",
+    "retains every Session member for a recent process started by recovery: %s",
     async (member) => {
       const f = fixture();
       const state = f.addSession("feature/recovery-process");
@@ -1295,7 +1295,7 @@ describe("global Session cleanup", () => {
     30_000
   );
 
-  it("an old process merely inside the worktree is left running and does not block", async () => {
+  it("leaves an old process merely inside the worktree running without blocking", async () => {
     const f = fixture();
     const state = f.addSession("feature/visited");
     const [dependency] = state.repos;
@@ -1316,7 +1316,7 @@ describe("global Session cleanup", () => {
     expect(existsSync(dependency.worktreePath)).toBeFalsy();
   }, 30_000);
 
-  it("removal failure reports completed work, retains state, and retries the remaining worktree", async () => {
+  it("reports completed work, retains state, and retries the remaining worktree after removal failure", async () => {
     const f = fixture();
     const state = f.addSession("feature/partial");
     const original = f.runtime.exec;
@@ -1350,7 +1350,7 @@ describe("global Session cleanup", () => {
     expect(retry.report.sessions[0]?.outcome).toBe("cleaned");
   }, 30_000);
 
-  it("a member that changes after another removal stops the Session and preserves its new work", async () => {
+  it("stops the Session and preserves a member's new work when the member changes after another removal", async () => {
     const f = fixture();
     const state = f.addSession("feature/race");
     const rootRepo = state.repos.find((repo) => repo.sourceRoot === f.root);
@@ -1384,7 +1384,7 @@ describe("global Session cleanup", () => {
     );
   }, 30_000);
 
-  it("cleanup runs in each Session worktree before removing any member", async () => {
+  it("runs cleanup in each Session worktree before removing any member", async () => {
     const f = fixture();
     const state = f.addSession("feature/cleanup-cwd");
     const log = path.join(f.cwd, "cleanup-cwd.log");
@@ -1413,7 +1413,7 @@ describe("global Session cleanup", () => {
     expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeFalsy();
   }, 30_000);
 
-  it("Cleanup commands rerun from the beginning after failure while independent Sessions continue", async () => {
+  it("reruns Cleanup commands from the beginning after failure while independent Sessions continue", async () => {
     const f = fixture();
     const state = f.addSession("feature/retry");
     const independent = f.addSession("feature/independent", f.sources[0]);
@@ -1455,7 +1455,7 @@ describe("global Session cleanup", () => {
     expect(readFileSync(log, "utf-8")).toBe("root\ndependency\nroot\ndependency\n");
   }, 30_000);
 
-  it("a Cleanup command that dirties a later Session causes fresh inspection to skip it", async () => {
+  it("skips a later Session on fresh inspection when a Cleanup command dirties it", async () => {
     const f = fixture();
 
     const states = [f.addSession("feature/first"), f.addSession("feature/later")].toSorted((a, b) =>
@@ -1497,7 +1497,7 @@ describe("global Session cleanup", () => {
     }
   }, 30_000);
 
-  it("JSON stays valid when cleanup removes the invoking dependency, and planned order matches execution", async () => {
+  it("keeps JSON valid when cleanup removes the invoking dependency, and executes in planned order", async () => {
     const f = fixture();
     const state = f.addSession("feature/current");
     const [dependency] = state.repos;
@@ -1513,7 +1513,7 @@ describe("global Session cleanup", () => {
     expect(row?.plannedActions[0]?.sourceRoot).toBe(f.root);
   }, 30_000);
 
-  it("a missing Source is a settled skip, not an inspection error", async () => {
+  it("treats a missing Source as a settled skip, not an inspection error", async () => {
     const f = fixture();
     const [missing] = f.sources;
 
@@ -1552,7 +1552,7 @@ describe("global Session cleanup", () => {
     ).toBeTruthy();
   }, 30_000);
 
-  it("an unavailable Source retains Sessions until overlap can be ruled out", async () => {
+  it("retains Sessions for an unavailable Source until overlap can be ruled out", async () => {
     const f = fixture();
     const state = f.addSession("feature/available");
     const [missing] = f.sources;
@@ -1578,7 +1578,7 @@ describe("global Session cleanup", () => {
     expect(result.report.exitCode).toBe(1);
   }, 30_000);
 
-  it("a waiting operation's reclaim marker does not invalidate or strand cleanup's own lock", async () => {
+  it("does not let a waiting operation's reclaim marker invalidate or strand cleanup's own lock", async () => {
     const f = fixture();
     f.addSession("feature/contended");
     const original = f.runtime.execAsync;
@@ -1597,7 +1597,7 @@ describe("global Session cleanup", () => {
   }, 30_000);
 
   it.each(["dirty", "held"])(
-    "%s eligibility does not hide unknown member evidence in either mode",
+    "does not hide unknown member evidence behind %s eligibility in either mode",
     async (blocker) => {
       const f = fixture();
       const state = f.addSession("feature/unknown");
@@ -1645,7 +1645,7 @@ describe("global Session cleanup", () => {
     }
   }
 
-  it("Cleanup removes members with a verified forward bundle using member-specific permission", async () => {
+  it("removes members with a verified forward bundle in Cleanup using member-specific permission", async () => {
     const f = fixture();
     const state = f.addSession("feature/forward");
     preserveForwardBundle(state);
@@ -1658,7 +1658,7 @@ describe("global Session cleanup", () => {
     }
   }, 30_000);
 
-  it("an unpreserved sibling prevents all effects even when another member has a forward bundle", async () => {
+  it("prevents all effects when a sibling is unpreserved, even when another member has a forward bundle", async () => {
     const f = fixture();
     const state = f.addSession("feature/blocked-bundle");
     preserveForwardBundle(state);
@@ -1691,7 +1691,7 @@ describe("global Session cleanup", () => {
     }
   }, 30_000);
 
-  it("a cleanup command changing an accepted dirty file preserves the worktree despite unchanged status", async () => {
+  it("preserves the worktree when a cleanup command changes an accepted dirty file despite unchanged status", async () => {
     const f = fixture();
     const state = f.addSession("feature/bundle-cleanup-race");
     preserveForwardBundle(state);
@@ -1724,7 +1724,7 @@ describe("global Session cleanup", () => {
     }
   }, 30_000);
 
-  it("process shutdown that changes an accepted dirty file prevents removal", async () => {
+  it("prevents removal when process shutdown changes an accepted dirty file", async () => {
     const f = fixture();
     const state = f.addSession("feature/bundle-stop-race");
     preserveForwardBundle(state);
@@ -1758,7 +1758,7 @@ describe("global Session cleanup", () => {
     }
   }, 30_000);
 
-  it("a detached member gets a durable ref before removal and a recovery command in the report", async () => {
+  it("gives a detached member a durable ref before removal and a recovery command in the report", async () => {
     const f = fixture();
     const state = f.addSession("feature/detached-preserved");
     const [dependency] = state.repos;
@@ -1784,7 +1784,7 @@ describe("global Session cleanup", () => {
   }, 30_000);
 
   it.each(["write-failure", "collision"])(
-    "detached retention %s retains every worktree",
+    "retains every worktree on detached retention %s",
     async (failure) => {
       const f = fixture();
       const state = f.addSession("feature/detached-failure");
@@ -1827,7 +1827,7 @@ describe("global Session cleanup", () => {
     30_000
   );
 
-  it("a detached retention ref survives a subsequent worktree removal failure", async () => {
+  it("keeps a detached retention ref through a subsequent worktree removal failure", async () => {
     const f = fixture();
     const state = f.addSession("feature/detached-partial");
     const [dependency] = state.repos;
@@ -1860,7 +1860,7 @@ describe("global Session cleanup", () => {
     }
   }, 30_000);
 
-  it("Cleanup removes the exact pnpm bootstrap deletion with HEAD already in default", async () => {
+  it("removes the exact pnpm bootstrap deletion in Cleanup with HEAD already in default", async () => {
     const f = fixture();
 
     const before = readFileSync(

@@ -96,7 +96,7 @@ describe("cleanup preservation proofs", () => {
       expect(f.proof()).toBeFalsy();
     });
 
-    it("witness paths are literal, including names that look like exclusion pathspecs", () => {
+    it("treats witness paths literally, including names that look like exclusion pathspecs", () => {
       const name = ":(exclude)a.txt";
       const f = fixture({ "a.txt": "old\n", [name]: "keep this file\n" });
       rmSync(path.join(f.root, name));
@@ -236,7 +236,7 @@ describe("cleanup preservation proofs", () => {
     });
   });
 
-  it("replacement objects cannot make a unique HEAD tree equal default history", () => {
+  it("prevents replacement objects from making a unique HEAD tree equal default history", () => {
     const f = fixture();
     write(f.root, "a.txt", "unique committed work\n");
     git(f.root, ["add", "."]);
@@ -249,7 +249,7 @@ describe("cleanup preservation proofs", () => {
     expect(inspectDefaultTree(f.runtime, f.source, head, f.head)).toBeFalsy();
   });
 
-  it("whole tree equality includes path and mode, and records the historical witness", () => {
+  it("includes path and mode in whole tree equality and records the historical witness", () => {
     const f = fixture();
     git(f.root, ["commit", "--allow-empty", "-m", "different commit same tree"]);
     const head = git(f.root, ["rev-parse", "HEAD"]);

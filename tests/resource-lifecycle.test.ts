@@ -6,7 +6,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { createRepo, makeTempDir, read, runMonke, spawnMonkeWorker, write } from "./helpers.ts";
 
 describe("checkout resources", () => {
-  it("Session resource operations validate apps in the executing checkout", () => {
+  it("validates apps in the executing checkout for Session resource operations", () => {
     const sandbox = makeTempDir("checkout-resource-app-paths");
     const home = path.join(sandbox, "home");
     const root = createRepo(path.join(sandbox, "repo"), { "monke.yml": "apps: {}\n" });
@@ -34,7 +34,7 @@ describe("checkout resources", () => {
     }
   });
 
-  it("a source checkout acquires once and exec uses recorded values without exporting them to dotenv", () => {
+  it("acquires once in a source checkout and uses recorded values in exec without exporting them to dotenv", () => {
     const sandbox = makeTempDir("checkout-resources");
     const home = path.join(sandbox, "home");
 
@@ -67,7 +67,7 @@ describe("checkout resources", () => {
     expect(() => run("resources", "exec", "--", "bun", "consume.ts")).toThrow(/acquire/u);
   });
 
-  it("setup establishes source infrastructure identity before live acquisition", () => {
+  it("establishes source infrastructure identity in setup before live acquisition", () => {
     const sandbox = makeTempDir("checkout-resource-static-setup");
     const home = path.join(sandbox, "home");
 
@@ -90,7 +90,7 @@ describe("checkout resources", () => {
     expect(read(cwd, "acquired")).toBe("yes");
   });
 
-  it("source and Session allocations share collision protection and chop releases before teardown", () => {
+  it("shares collision protection between source and Session allocations and releases before teardown on chop", () => {
     const sandbox = makeTempDir("checkout-resource-sessions");
     const home = path.join(sandbox, "home");
 
@@ -121,7 +121,7 @@ describe("checkout resources", () => {
     );
   });
 
-  it("partial acquisition is resumable and release checkpoints each successful resource", () => {
+  it("resumes partial acquisition and checkpoints each successful resource on release", () => {
     const sandbox = makeTempDir("checkout-resource-retry");
     const home = path.join(sandbox, "home");
 
@@ -152,7 +152,7 @@ describe("checkout resources", () => {
     );
   });
 
-  it("config changes retain the original release payload and cannot replace an allocation", () => {
+  it("retains the original release payload across config changes and does not let them replace an allocation", () => {
     const sandbox = makeTempDir("checkout-resource-config-drift");
     const home = path.join(sandbox, "home");
 
@@ -176,7 +176,7 @@ describe("checkout resources", () => {
     expect(JSON.parse(read(cwd, "released"))).toStrictEqual({ AUX: "two", SLOT: "one" });
   });
 
-  it("exec uses current declarations while retaining retired outputs for release", () => {
+  it("uses current declarations in exec while retaining retired outputs for release", () => {
     const sandbox = makeTempDir("checkout-resource-replacement");
     const home = path.join(sandbox, "home");
 
@@ -197,7 +197,7 @@ describe("checkout resources", () => {
   });
 
   it.each(["wrapper", "group"])(
-    "terminating the %s stops shell descendants before releasing resources",
+    "stops shell descendants before releasing resources when terminating the %s",
     async (target) => {
       const sandbox = makeTempDir("checkout-resource-shell-signal");
       const home = path.join(sandbox, "home");
@@ -264,7 +264,7 @@ describe("checkout resources", () => {
     }
   );
 
-  it("an active exec blocks release and chop but leaves other checkouts usable", async () => {
+  it("blocks release and chop during an active exec but leaves other checkouts usable", async () => {
     const sandbox = makeTempDir("checkout-resource-use");
     const home = path.join(sandbox, "home");
 
@@ -307,7 +307,7 @@ describe("checkout resources", () => {
     expect(read(cwd, "released")).toBe("yes");
   });
 
-  it("exec preserves the child exit code and forwards output", async () => {
+  it("preserves the child exit code and forwards output in exec", async () => {
     const sandbox = makeTempDir("checkout-resource-exit");
     const cwd = createRepo(path.join(sandbox, "repo"), { "monke.yml": "apps: {}\n" });
 
@@ -335,7 +335,7 @@ describe("checkout resources", () => {
     await expect(new Response(child.stderr).text()).resolves.toBe("diagnostic\n");
   });
 
-  it("exec forwards termination and keeps surviving children protected if the wrapper is killed", async () => {
+  it("forwards termination in exec and keeps surviving children protected if the wrapper is killed", async () => {
     const sandbox = makeTempDir("checkout-resource-signals");
     const home = path.join(sandbox, "home");
 

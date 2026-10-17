@@ -93,7 +93,7 @@ const INTERRUPTIONS: InterruptionCase[] = [
 ];
 
 describe("abrupt Session interruption recovery", () => {
-  it.each(INTERRUPTIONS)("spawn recovers after $checkpoint", (interruption) => {
+  it.each(INTERRUPTIONS)("recovers spawn after $checkpoint", (interruption) => {
     const sandbox = makeTempDir(`session-interruption-${interruption.checkpoint}`);
     const home = path.join(sandbox, "home");
 
@@ -166,7 +166,7 @@ export default function () {
     );
   });
 
-  it("repo-progress interruption retains Cleanup command A before replacement command B is eligible", () => {
+  it("retains Cleanup command A on repo-progress interruption before replacement command B is eligible", () => {
     const sandbox = makeTempDir("session-interruption-retained-cleanup");
     const home = path.join(sandbox, "home");
     const oldCleanupMarker = path.join(sandbox, "old-cleanup-ran");

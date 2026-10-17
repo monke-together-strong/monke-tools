@@ -144,7 +144,7 @@ describe("cleanup preservation collection", () => {
       });
     });
 
-    it("a merged PR does not waive the age gate for accepted dirt", async () => {
+    it("does not let a merged PR waive the age gate for accepted dirt", async () => {
       const item = fixture({ recent: true });
       landPending(item);
       item.prs.push(pullRequest(git(item.worktreePath, ["rev-parse", "HEAD"])));
@@ -156,7 +156,7 @@ describe("cleanup preservation collection", () => {
       });
     });
 
-    it("an exact merged PR cannot excuse unpreserved pending bytes", async () => {
+    it("does not let an exact merged PR excuse unpreserved pending bytes", async () => {
       const item = fixture();
       landPending(item);
       item.prs.push(pullRequest(git(item.worktreePath, ["rev-parse", "HEAD"])));
@@ -259,7 +259,7 @@ describe("cleanup preservation collection", () => {
     it.each([
       { label: "retained Session branch", ref: BRANCH, sameHead: false },
       { label: "same-repository exact head", ref: "another-branch", sameHead: true }
-    ])("an open PR on $label blocks detached ancestry", async ({ ref, sameHead }) => {
+    ])("blocks detached ancestry with an open PR on $label", async ({ ref, sameHead }) => {
       const item = fixture({ detached: true });
       const head = sameHead ? git(item.worktreePath, ["rev-parse", "HEAD"]) : "f".repeat(40);
       item.prs.push(
@@ -280,7 +280,7 @@ describe("cleanup preservation collection", () => {
       { code: "detached-head", ordinary: true, recent: false },
       { code: "recent-worktree", ordinary: false, recent: true }
     ])(
-      "detached ordinary=$ordinary recent=$recent stays blocked",
+      "keeps detached ordinary=$ordinary recent=$recent blocked",
       async ({ code, ordinary, recent }) => {
         const item = fixture({ detached: true, ordinary, recent });
         const snapshot = await collectCleanupEvidence(item.runtime, item.candidate);

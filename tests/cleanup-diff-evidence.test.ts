@@ -167,7 +167,7 @@ describe("complete merged change evidence", () => {
     expect(inspectMatchingMergeDiff(f.runtime, f.source, head, merge, merge)).toBeFalsy();
   });
 
-  it("missing objects and shallow history remain unavailable", () => {
+  it("remains unavailable for missing objects and shallow history", () => {
     const f = fixture();
     expect(
       inspectMatchingMergeDiff(f.runtime, f.source, f.head, f.merge, "a".repeat(40))

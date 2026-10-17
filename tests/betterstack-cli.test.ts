@@ -12,7 +12,7 @@ const cliPath = path.resolve(
 
 describe("Better Stack content I/O", () => {
   it.each(["explicit", "variable", "demo"])(
-    "Better Stack loads %s env credentials before sending SQL file contents",
+    "loads %s Better Stack env credentials before sending SQL file contents",
     async (selection) => {
       const directory = makeTempDir("betterstack-content-io");
       const envFile = path.join(directory, selection === "demo" ? ".env.demo" : "query.env");
@@ -96,7 +96,7 @@ describe("Better Stack content I/O", () => {
     }
   );
 
-  it("Better Stack ignores missing env files and propagates other read errors", async () => {
+  it("ignores missing Better Stack env files and propagates other read errors", async () => {
     const directory = makeTempDir("betterstack-env-read-errors");
     await expect(
       loadEnvFileIfPresent(path.join(directory, "missing.env"))

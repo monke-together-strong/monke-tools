@@ -79,7 +79,7 @@ function dependencyRuntime(options: {
 }
 
 describe("dependency installation", () => {
-  it("compatible Codiff is a no-op", async () => {
+  it("treats compatible Codiff as a no-op", async () => {
     const sandbox = makeTempDir("install-dependencies-compatible");
     const binDirectory = path.join(sandbox, "bin");
     const versionFile = path.join(sandbox, "codiff-version");
@@ -93,7 +93,7 @@ describe("dependency installation", () => {
     expect(existsSync(brewLog)).toBeFalsy();
   });
 
-  it("missing Codiff is installed through the checksummed narrowly trusted cask", async () => {
+  it("installs missing Codiff through the checksummed narrowly trusted cask", async () => {
     const sandbox = makeTempDir("install-dependencies-missing");
     const binDirectory = path.join(sandbox, "bin");
     const versionFile = path.join(sandbox, "codiff-version");
@@ -108,7 +108,7 @@ describe("dependency installation", () => {
     expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.14.0\n");
   });
 
-  it("a successful Homebrew install resolves Codiff outside PATH from the prefix", async () => {
+  it("resolves Codiff outside PATH from the prefix after a successful Homebrew install", async () => {
     const sandbox = makeTempDir("install-dependencies-prefix-fallback");
     const binDirectory = path.join(sandbox, "shim-bin");
     const homebrewBinDirectory = path.join(sandbox, "homebrew", "bin");
@@ -127,7 +127,7 @@ describe("dependency installation", () => {
     expect(readFileSync(path.join(homebrewBinDirectory, "codiff"), "utf-8")).toContain(versionFile);
   });
 
-  it("below-minimum Homebrew-owned Codiff is upgraded", async () => {
+  it("upgrades below-minimum Homebrew-owned Codiff", async () => {
     const sandbox = makeTempDir("install-dependencies-upgrade");
     const binDirectory = path.join(sandbox, "bin");
     const versionFile = path.join(sandbox, "codiff-version");
@@ -144,7 +144,7 @@ describe("dependency installation", () => {
     expect(readFileSync(versionFile, "utf-8")).toBe("codiff v1.14.0\n");
   });
 
-  it("the running Release manifest supplies the required Codiff minimum", async () => {
+  it("takes the required Codiff minimum from the running Release manifest", async () => {
     const sandbox = makeTempDir("install-dependencies-release-minimum");
     const binDirectory = path.join(sandbox, "bin");
     const versionFile = path.join(sandbox, "codiff-version");
@@ -190,7 +190,7 @@ describe("dependency installation", () => {
   });
 
   it.each(["codiff v1.8.9\n", "not the official Codiff CLI\n"])(
-    "Codiff with unknown ownership is not overwritten automatically: %j",
+    "does not automatically overwrite Codiff with unknown ownership: %j",
     async (versionOutput) => {
       const sandbox = makeTempDir("install-dependencies-unknown-owner");
       const binDirectory = path.join(sandbox, "bin");
@@ -209,7 +209,7 @@ describe("dependency installation", () => {
     }
   );
 
-  it("an installed cask does not claim a PATH-shadowing Codiff", async () => {
+  it("does not let an installed cask claim a PATH-shadowing Codiff", async () => {
     const sandbox = makeTempDir("install-dependencies-shadowed");
     const shadowBin = path.join(sandbox, "shadow", "bin");
     const homebrewBin = path.join(sandbox, "homebrew", "bin");
@@ -244,7 +244,7 @@ describe("dependency installation", () => {
     expect(readFileSync(shadowVersionFile, "utf-8")).toBe("codiff v1.8.9\n");
   });
 
-  it("missing Homebrew produces retryable guidance", async () => {
+  it("produces retryable guidance when Homebrew is missing", async () => {
     const sandbox = makeTempDir("install-dependencies-no-brew");
     const binDirectory = path.join(sandbox, "bin");
     mkdirSync(binDirectory, { recursive: true });
@@ -254,7 +254,7 @@ describe("dependency installation", () => {
     ).rejects.toThrow(/Homebrew is unavailable.*mt install-dependencies/u);
   });
 
-  it("Homebrew failure is reported without accepting the dependency", async () => {
+  it("reports Homebrew failure without accepting the dependency", async () => {
     const sandbox = makeTempDir("install-dependencies-brew-failure");
     const binDirectory = path.join(sandbox, "bin");
     const versionFile = path.join(sandbox, "codiff-version");
@@ -267,7 +267,7 @@ describe("dependency installation", () => {
     expect(existsSync(path.join(binDirectory, "codiff"))).toBeFalsy();
   });
 
-  it("non-macOS platforms never invoke Homebrew", async () => {
+  it("never invokes Homebrew on non-macOS platforms", async () => {
     const sandbox = makeTempDir("install-dependencies-linux");
     const binDirectory = path.join(sandbox, "bin");
     const versionFile = path.join(sandbox, "codiff-version");

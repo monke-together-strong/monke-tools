@@ -23,7 +23,7 @@ import {
 } from "./helpers.ts";
 
 describe("Diff", () => {
-  it("diff verifies the official Codiff CLI before showing a picker", async () => {
+  it("verifies the official Codiff CLI before diff shows a picker", async () => {
     const sandbox = makeTempDir("diff-missing-codiff");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -66,7 +66,7 @@ describe("Diff", () => {
       name: "malformed version output",
       version: "codiff banana"
     }
-  ])("diff rejects $name before interaction", async ({ expected, version }) => {
+  ])("rejects $name before diff interaction", async ({ expected, version }) => {
     const sandbox = makeTempDir("diff-codiff-version");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -88,7 +88,7 @@ describe("Diff", () => {
     expect(prompt).toBeUndefined();
   });
 
-  it("diff accepts Codiff versions newer than the minimum", async () => {
+  it("accepts Codiff versions newer than the minimum for diff", async () => {
     const sandbox = makeTempDir("diff-new-codiff");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -105,7 +105,7 @@ describe("Diff", () => {
     expect(result.stdout).toBe("No changes.\n");
   });
 
-  it("Diff overlaps Codiff verification with repository and candidate discovery", async () => {
+  it("overlaps Codiff verification with repository and candidate discovery", async () => {
     const sandbox = makeTempDir("diff-concurrent-startup");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -141,7 +141,7 @@ touch "${discoveryReached}"`
     expect(existsSync(discoveryReached)).toBeTruthy();
   });
 
-  it("diff rejects extra targets and unsupported options", async () => {
+  it("rejects extra diff targets and unsupported options", async () => {
     const sandbox = makeTempDir("diff-cli-shape");
     const home = path.join(sandbox, "home");
     const repoRoot = createRepo(path.join(sandbox, "root"), { "README.md": "hello\n" });
@@ -154,7 +154,7 @@ touch "${discoveryReached}"`
     ).rejects.toThrow(/unknown option '--against'/u);
   });
 
-  it("fresh attached Spawn records its full source ref and plain diff launches it from a nested directory", async () => {
+  it("records the full source ref on fresh attached Spawn and launches it with plain diff from a nested directory", async () => {
     const sandbox = makeTempDir("diff-remembered-base");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -193,7 +193,7 @@ touch "${discoveryReached}"`
     expect(readFileSync(codiffLog, "utf-8")).toBe(`--branch\nrefs/heads/main\n${worktreeRoot}\n`);
   });
 
-  it("plain Diff follows its remembered source branch after the Session is rebased onto its advanced tip", async () => {
+  it("follows the remembered source branch in plain Diff after the Session is rebased onto its advanced tip", async () => {
     const sandbox = makeTempDir("diff-rebased-remembered-base");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -228,7 +228,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("plain Diff infers main for an adopted Session rebased onto its advanced tip", async () => {
+  it("infers main in plain Diff for an adopted Session rebased onto its advanced tip", async () => {
     const sandbox = makeTempDir("diff-rebased-adopted-session");
     const binDirectory = path.join(sandbox, "bin");
     const failingBinDirectory = path.join(sandbox, "failing-bin");
@@ -282,7 +282,7 @@ touch "${discoveryReached}"`
   });
 
   it.each(["Source", "Ordinary", "Session"])(
-    "plain Diff infers main after rebasing a %s checkout without a remembered base",
+    "infers main in plain Diff after rebasing a %s checkout without a remembered base",
     async (kind) => {
       const sandbox = makeTempDir("diff-rebased-checkout");
       const binDirectory = path.join(sandbox, "bin");
@@ -338,7 +338,7 @@ touch "${discoveryReached}"`
   );
 
   it.each(["main", "master", "feature"])(
-    "plain Diff on %s at the default tip shows only local changes despite other worktrees",
+    "shows only local changes in plain Diff on %s at the default tip despite other worktrees",
     async (branch) => {
       const sandbox = makeTempDir("diff-default-tip");
       const binDirectory = path.join(sandbox, "bin");
@@ -386,7 +386,7 @@ touch "${discoveryReached}"`
     }
   );
 
-  it("plain Diff does not infer a default branch from unrelated history", async () => {
+  it("does not infer a default branch in plain Diff from unrelated history", async () => {
     const sandbox = makeTempDir("diff-unrelated-default");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -415,7 +415,7 @@ touch "${discoveryReached}"`
     expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBeUndefined();
   });
 
-  it("plain Diff does not infer main for a Session stacked on another branch", async () => {
+  it("does not infer main in plain Diff for a Session stacked on another branch", async () => {
     const sandbox = makeTempDir("diff-stacked-session");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -445,7 +445,7 @@ touch "${discoveryReached}"`
     expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBeUndefined();
   });
 
-  it("plain Diff does not infer a default branch with multiple best merge bases", async () => {
+  it("does not infer a default branch in plain Diff with multiple best merge bases", async () => {
     const sandbox = makeTempDir("diff-ambiguous-initial-default");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -485,7 +485,7 @@ touch "${discoveryReached}"`
     expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBeUndefined();
   });
 
-  it("forced Diff picker does not infer a base for an adopted Session", async () => {
+  it("does not infer a base in the forced Diff picker for an adopted Session", async () => {
     const sandbox = makeTempDir("diff-forced-picker-without-base");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -515,7 +515,7 @@ touch "${discoveryReached}"`
     expect(loadSessionState(home, repoRoot, "session").repos[0]?.diffBaseRef).toBeUndefined();
   });
 
-  it("Diff warns when a Session branch is checked out somewhere else", async () => {
+  it("warns when a Session branch is checked out somewhere else", async () => {
     const sandbox = makeTempDir("diff-swapped-session-branch");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -544,7 +544,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("plain Diff replaces a stale remembered base after the Session is rebased onto newer upstream default-branch history", async () => {
+  it("replaces a stale remembered base in plain Diff after the Session is rebased onto newer upstream default-branch history", async () => {
     const sandbox = makeTempDir("diff-rebased-new-default-base");
     const binDirectory = path.join(sandbox, "bin");
     const failingBinDirectory = path.join(sandbox, "failing-bin");
@@ -597,7 +597,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("plain Diff preserves its remembered base when the default branch has no newer shared history", async () => {
+  it("preserves the remembered base in plain Diff when the default branch has no newer shared history", async () => {
     const sandbox = makeTempDir("diff-equal-default-merge-base");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -629,7 +629,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("plain Diff preserves its remembered base when default-branch history is incomparable", async () => {
+  it("preserves the remembered base in plain Diff when default-branch history is incomparable", async () => {
     const sandbox = makeTempDir("diff-incomparable-default-merge-base");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -665,7 +665,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("plain Diff preserves its remembered base when default-branch history has multiple best merge bases", async () => {
+  it("preserves the remembered base in plain Diff when default-branch history has multiple best merge bases", async () => {
     const sandbox = makeTempDir("diff-ambiguous-default-merge-base");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -707,7 +707,7 @@ touch "${discoveryReached}"`
   });
 
   it.each([false, true])(
-    "Diff picker offers default refs once with main worktree attached: %s",
+    "offers default refs once in the Diff picker with main worktree attached: %s",
     async (attached) => {
       const sandbox = makeTempDir("diff-default-picker");
       const binDirectory = path.join(sandbox, "bin");
@@ -749,7 +749,7 @@ touch "${discoveryReached}"`
     }
   );
 
-  it("forced Diff picker remains explicit when only local changes are available", async () => {
+  it("keeps the forced Diff picker explicit when only local changes are available", async () => {
     const sandbox = makeTempDir("diff-explicit-local-picker");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -773,7 +773,7 @@ touch "${discoveryReached}"`
     expect(result.stdout).toBe("No changes.\n");
   });
 
-  it("a default ref deleted during selection refreshes the picker without persisting it", async () => {
+  it("refreshes the picker without persisting a default ref deleted during selection", async () => {
     const sandbox = makeTempDir("diff-default-ref-race");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -810,7 +810,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("forced Diff picker preserves local target ordering and launches the selected committed branch", async () => {
+  it("preserves local target ordering in the forced Diff picker and launches the selected committed branch", async () => {
     const sandbox = makeTempDir("diff-picker-order");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -850,7 +850,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("a Session picker deduplicates its remembered base and preserves worktree ordering", async () => {
+  it("deduplicates the remembered base in a Session picker and preserves worktree ordering", async () => {
     const sandbox = makeTempDir("diff-picker-persist");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -899,7 +899,7 @@ touch "${discoveryReached}"`
     { base: "refs/heads/main", kind: "main" },
     { base: "refs/remotes/origin/main", kind: "origin/main" }
   ])(
-    "a Session remembers a selected $kind branch only after launch succeeds",
+    "remembers a selected $kind branch for a Session only after launch succeeds",
     async ({ base, kind }) => {
       const sandbox = makeTempDir("diff-branch-persistence");
       const binDirectory = path.join(sandbox, "bin");
@@ -958,7 +958,7 @@ touch "${discoveryReached}"`
     }
   );
 
-  it("cancelling the standard Diff picker launches nothing and preserves Session state", async () => {
+  it("launches nothing and preserves Session state when the standard Diff picker is cancelled", async () => {
     const sandbox = makeTempDir("diff-cancel");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -982,7 +982,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("Diff from an Ordinary worktree stays in that checkout and performs no workflow side effects", async () => {
+  it("stays in the Ordinary worktree it runs from and performs no workflow side effects", async () => {
     const sandbox = makeTempDir("diff-ordinary-current");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1016,7 +1016,7 @@ touch "${discoveryReached}"`
     ).toBeFalsy();
   });
 
-  it("plain and forced remembered Diff warn when the attached base has local changes", async () => {
+  it("warns in plain and forced remembered Diff when the attached base has local changes", async () => {
     const sandbox = makeTempDir("diff-dirty-remembered");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1051,7 +1051,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("remembered Diff still launches when its base worktree is removed while picking", async () => {
+  it("still launches remembered Diff when its base worktree is removed while picking", async () => {
     const sandbox = makeTempDir("diff-remembered-worktree-race");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1086,7 +1086,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("local-only Diff skips a meaningless picker and avoids an empty Codiff window", async () => {
+  it("skips a meaningless picker for local-only Diff and avoids an empty Codiff window", async () => {
     const sandbox = makeTempDir("diff-local-only");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1113,7 +1113,7 @@ touch "${discoveryReached}"`
     expect(readFileSync(codiffLog, "utf-8")).toBe(`${repoRoot}\n`);
   });
 
-  it("a deleted remembered ref falls back to the picker without clearing Session state", async () => {
+  it("falls back to the picker without clearing Session state when a remembered ref is deleted", async () => {
     const sandbox = makeTempDir("diff-invalid-remembered");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1147,7 +1147,7 @@ touch "${discoveryReached}"`
     expect(unchanged.repos[0]?.diffBaseRef).toBe("refs/heads/deleted-base");
   });
 
-  it("a remembered ref with no merge base falls back without mutating Session state", async () => {
+  it("falls back without mutating Session state when a remembered ref has no merge base", async () => {
     const sandbox = makeTempDir("diff-unrelated-remembered");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1185,7 +1185,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("a failed Codiff launch leaves the remembered Session base unchanged", async () => {
+  it("leaves the remembered Session base unchanged after a failed Codiff launch", async () => {
     const sandbox = makeTempDir("diff-launch-failure");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1210,7 +1210,7 @@ touch "${discoveryReached}"`
     expect(state.repos[0]?.diffBaseRef).toBe("refs/heads/main");
   });
 
-  it("a selected base invalidated before launch reports the race and offers the picker again", async () => {
+  it("reports the race and offers the picker again when a selected base is invalidated before launch", async () => {
     const sandbox = makeTempDir("diff-selection-race");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1248,7 +1248,7 @@ touch "${discoveryReached}"`
     );
   });
 
-  it("a selected checkout replaced by another repository fails same-repo preflight", async () => {
+  it("fails same-repo preflight when a selected checkout is replaced by another repository", async () => {
     const sandbox = makeTempDir("diff-cross-repo-race");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1291,7 +1291,7 @@ mv "${replacementRepo}" "${racyWorktree}"`
     );
   });
 
-  it("concurrent successful Session selections launch together and last completion wins", async () => {
+  it("launches concurrent successful Session selections together and lets the last completion win", async () => {
     const sandbox = makeTempDir("diff-concurrent-persistence");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1331,7 +1331,7 @@ mv "${replacementRepo}" "${racyWorktree}"`
     );
   });
 
-  it("a dirty detached target warns, launches its exact commit, and is never remembered", async () => {
+  it("warns for a dirty detached target, launches its exact commit, and never remembers it", async () => {
     const sandbox = makeTempDir("diff-detached-base");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1362,7 +1362,7 @@ mv "${replacementRepo}" "${racyWorktree}"`
     expect(state.repos[0]?.diffBaseRef).toBe("refs/heads/main");
   });
 
-  it("Spawn records a Diff base only for fresh attached or default-branch creation", () => {
+  it("records a Diff base on Spawn only for fresh attached or default-branch creation", () => {
     const sandbox = makeTempDir("diff-spawn-base-rules");
     const home = path.join(sandbox, "home");
 
@@ -1393,7 +1393,7 @@ mv "${replacementRepo}" "${racyWorktree}"`
     expect(defaultStates.repos[0]?.diffBaseRef).toBe("refs/heads/main");
   });
 
-  it("repeated Spawn and Materialize preserve an existing Diff base", () => {
+  it("preserves an existing Diff base across repeated Spawn and Materialize", () => {
     const sandbox = makeTempDir("diff-lifecycle-preservation");
     const home = path.join(sandbox, "home");
 
@@ -1422,7 +1422,7 @@ mv "${replacementRepo}" "${racyWorktree}"`
     );
   });
 
-  it("Diff launched in a dependency Session repo opens only that containing checkout", async () => {
+  it("opens only the containing checkout when launched in a dependency Session repo", async () => {
     const sandbox = makeTempDir("diff-dependency-repo");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");

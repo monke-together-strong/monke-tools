@@ -314,7 +314,7 @@ describe("Desktop Diff", () => {
     }
   );
 
-  it("adapter launch failure reports its failure without substituting another comparison", async () => {
+  it("reports adapter launch failure without substituting another comparison", async () => {
     const { binDirectory, home, repo } = fixture();
     const log = installFakeCodiff(binDirectory, { exitCode: 9 });
     await expect(
@@ -323,7 +323,7 @@ describe("Desktop Diff", () => {
     expect(readFileSync(log, "utf-8")).toBe(`${repo}\n`);
   });
 
-  it("interactive configuration saves the selected adapter without needing a repository or executable", async () => {
+  it("saves the selected adapter from interactive configuration without needing a repository or executable", async () => {
     const sandbox = makeTempDir("diff-configure");
     const home = path.join(sandbox, "home");
     await runMonkeAsync({
@@ -335,7 +335,7 @@ describe("Desktop Diff", () => {
     expect(readFileSync(path.join(home, "config.yml"), "utf-8")).toContain("diffAdapter: codiff");
   });
 
-  it("desktop preference persists across invocations and explicit commit bypasses selection", async () => {
+  it("persists the desktop preference across invocations and bypasses selection for an explicit commit", async () => {
     const sandbox = makeTempDir("diff-desktop");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");

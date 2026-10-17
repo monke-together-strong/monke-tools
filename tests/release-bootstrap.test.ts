@@ -214,7 +214,7 @@ describe("public Release bootstrap", () => {
     expect(readFileSync(fixture.curlLog, "utf-8")).not.toContain(secret);
   });
 
-  it("unsupported platforms fail before network access or installation changes", () => {
+  it("fails on unsupported platforms before network access or installation changes", () => {
     const fixture = prepareBootstrapFixture({ machine: "x86_64", system: "Darwin" });
     const result = runBootstrap(fixture);
 
@@ -224,7 +224,7 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  it("checksum failure prevents bundle-owned installer delegation", () => {
+  it("prevents bundle-owned installer delegation on checksum failure", () => {
     const fixture = prepareBootstrapFixture({ corruptChecksum: true });
     const result = runBootstrap(fixture);
 
@@ -233,7 +233,7 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  it("invalid selected commit metadata prevents bundle-owned installer delegation", () => {
+  it("prevents bundle-owned installer delegation on invalid selected commit metadata", () => {
     const fixture = prepareBootstrapFixture({ sourceCommit: "main" });
     const result = runBootstrap(fixture);
 
@@ -242,7 +242,7 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  it("a mismatched catalog tag prevents bundle-owned installer delegation", () => {
+  it("prevents bundle-owned installer delegation on a mismatched catalog tag", () => {
     const fixture = prepareBootstrapFixture({ catalogTag: "monke-tools-v9.9.9" });
     const result = runBootstrap(fixture);
 
@@ -256,7 +256,7 @@ describe("public Release bootstrap", () => {
     { expected: "archive download failed", options: { failDownload: true } },
     { expected: "missing valid platform asset digest", options: { missingAsset: true } },
     { expected: "archive extraction failed", options: { invalidArchive: true } }
-  ])("$expected prevents installer delegation", ({ expected, options }) => {
+  ])("prevents installer delegation when $expected", ({ expected, options }) => {
     const fixture = prepareBootstrapFixture(options);
     const monkeHome = path.join(fixture.sandbox, "monke-home");
     const result = runBootstrap(fixture);

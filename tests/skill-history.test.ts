@@ -178,7 +178,7 @@ cp -R "$4/skills/"* .agents/skills/
     expect(after).toContain("description: Consumer trigger.");
   });
 
-  it("an explicit empty repo declaration removes historical guidance", async () => {
+  it("removes historical guidance for an explicit empty repo declaration", async () => {
     const fixture = historyFixture();
     const base = git(fixture.repo, ["rev-parse", "HEAD"]);
     write(fixture.repo, "monke.yml", "skills: []\n");

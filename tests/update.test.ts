@@ -37,7 +37,7 @@ function releaseAssetResponse(contents: Uint8Array) {
 }
 
 describe("Release update", () => {
-  it("install recovery ignores stray backups and absent retained roots", () => {
+  it("ignores stray backups and absent retained roots during install recovery", () => {
     const sandbox = makeTempDir("release-update-recovery-strays");
     const monkeHome = path.join(sandbox, "monke-home");
     const active = prepareActiveRelease(monkeHome, "1.2.3");
@@ -58,7 +58,7 @@ describe("Release update", () => {
     expect(existsSync(inactive)).toBeFalsy();
   });
 
-  it("check resolves an Active tool install through a symlinked Monke home", async () => {
+  it("resolves an Active tool install through a symlinked Monke home during check", async () => {
     const sandbox = makeTempDir("release-update-symlinked-home");
     const physicalRoot = path.join(sandbox, "physical-root");
     const aliasedRoot = path.join(sandbox, "aliased-root");
@@ -102,7 +102,7 @@ describe("Release update", () => {
     );
   });
 
-  it("check rejects a symbolic-link managed installs root", async () => {
+  it("rejects a symbolic-link managed installs root during check", async () => {
     const sandbox = makeTempDir("release-update-symlinked-installs-root");
     const monkeHome = path.join(sandbox, "monke-home");
     const externalRoot = path.join(sandbox, "external-installs");
@@ -138,7 +138,7 @@ describe("Release update", () => {
     expect(existsSync(path.join(externalRoot, "release-1.2.3-linux-x64"))).toBeTruthy();
   });
 
-  it("update through a symlinked Monke home retains its predecessor", async () => {
+  it("retains the predecessor when updating through a symlinked Monke home", async () => {
     const sandbox = makeTempDir("release-update-symlinked-home-retention");
     const physicalRoot = path.join(sandbox, "physical-root");
     const aliasedRoot = path.join(sandbox, "aliased-root");
@@ -194,7 +194,7 @@ describe("Release update", () => {
     );
   });
 
-  it("check reports the highest compatible stable Release without changing installation", async () => {
+  it("reports the highest compatible stable Release during check without changing installation", async () => {
     const sandbox = makeTempDir("release-update-check");
     const monkeHome = path.join(sandbox, "monke-home");
     prepareActiveRelease(monkeHome, "1.2.3");
@@ -242,7 +242,7 @@ describe("Release update", () => {
     expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
   });
 
-  it("interactive checks show colored progress while redirected output stays stable", async () => {
+  it("shows colored progress for interactive checks while redirected output stays stable", async () => {
     const sandbox = makeTempDir("release-update-tty");
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
@@ -282,7 +282,7 @@ describe("Release update", () => {
     expect(stderr).toContain("\u001B[");
   });
 
-  it("update verifies and atomically activates a complete Release while retaining its predecessor", async () => {
+  it("verifies and atomically activates a complete Release during update while retaining its predecessor", async () => {
     const sandbox = makeTempDir("release-update-activate");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -357,7 +357,7 @@ describe("Release update", () => {
     expect(stderr).toContain("Updated monke-tools to 1.2.4");
   });
 
-  it("a Customized release install reports every changed guidance path before lookup or staging", async () => {
+  it("reports every changed guidance path of a Customized release install before lookup or staging", async () => {
     const sandbox = makeTempDir("release-update-customized");
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
@@ -397,7 +397,7 @@ describe("Release update", () => {
     expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
   });
 
-  it("guidance customized during download stops update before activation", async () => {
+  it("stops update before activation when guidance is customized during download", async () => {
     const sandbox = makeTempDir("release-update-customized-during-download");
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
@@ -442,7 +442,7 @@ describe("Release update", () => {
     ["clean at the Release commit", false, SOURCE_COMMIT],
     ["clean at a different commit", false, "f".repeat(40)]
   ])(
-    "a Release update replaces a %s Local tool install without touching its source checkout",
+    "replaces a %s Local tool install during a Release update without touching its source checkout",
     async (_state, sourceDirty, sourceCommit) => {
       const sandbox = makeTempDir("local-to-release-update");
       const home = path.join(sandbox, "home");
@@ -500,7 +500,7 @@ describe("Release update", () => {
     }
   );
 
-  it("a predictable projection collision preserves the Local tool install", async () => {
+  it("preserves the Local tool install on a predictable projection collision", async () => {
     const sandbox = makeTempDir("local-to-release-partial-update");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -551,7 +551,7 @@ describe("Release update", () => {
   });
 
   it.each([["update"], ["update", "--check"]])(
-    "%s on the matching clean Release install performs no replacement",
+    "performs no replacement for %s on the matching clean Release install",
     async (...arguments_) => {
       const sandbox = makeTempDir("release-update-current");
       const monkeHome = path.join(sandbox, "monke-home");
@@ -602,7 +602,7 @@ describe("Release update", () => {
     }
   );
 
-  it("a failed download preserves installs while cleaning recognized stale staging", async () => {
+  it("preserves installs after a failed download while cleaning recognized stale staging", async () => {
     const sandbox = makeTempDir("release-update-download-failure");
     const monkeHome = path.join(sandbox, "monke-home");
     const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
@@ -641,7 +641,7 @@ describe("Release update", () => {
     expect(readdirSync(stagingRoot)).toStrictEqual([]);
   });
 
-  it("concurrent updates serialize and the follower rechecks the Active tool install", async () => {
+  it("serializes concurrent updates and rechecks the Active tool install in the follower", async () => {
     const sandbox = makeTempDir("release-update-concurrent");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -710,7 +710,7 @@ describe("Release update", () => {
     expect(downloads).toBe(2);
   });
 
-  it("an unsupported platform fails before catalog access or installation mutation", async () => {
+  it("fails on an unsupported platform before catalog access or installation mutation", async () => {
     const sandbox = makeTempDir("release-update-unsupported");
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
@@ -753,87 +753,90 @@ describe("Release update", () => {
     ["archive structure", /tar .* failed/u],
     ["manifest provenance", /source commit does not match/u],
     ["manifest platform", /platform does not match linux-x64/u]
-  ])("a %s failure preserves the complete previous installation", async (failure, expected) => {
-    const sandbox = makeTempDir("release-update-failure");
-    const monkeHome = path.join(sandbox, "monke-home");
-    const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
-    const olderInstall = prepareActiveRelease(monkeHome, "1.2.2", false);
-    let fixtureOptions: Parameters<typeof prepareReleaseAsset>[2] = {};
+  ])(
+    "preserves the complete previous installation after a %s failure",
+    async (failure, expected) => {
+      const sandbox = makeTempDir("release-update-failure");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
+      const olderInstall = prepareActiveRelease(monkeHome, "1.2.2", false);
+      let fixtureOptions: Parameters<typeof prepareReleaseAsset>[2] = {};
 
-    if (failure === "manifest provenance") {
-      fixtureOptions = { manifestSourceCommit: "f".repeat(40) };
-    } else if (failure === "manifest platform") {
-      fixtureOptions = { manifestPlatform: "macos-arm64" };
-    }
+      if (failure === "manifest provenance") {
+        fixtureOptions = { manifestSourceCommit: "f".repeat(40) };
+      } else if (failure === "manifest platform") {
+        fixtureOptions = { manifestPlatform: "macos-arm64" };
+      }
 
-    const candidate = prepareReleaseAsset(sandbox, "1.2.4", fixtureOptions);
-    const [archiveAsset, checksumsAsset] = candidate.metadata.assets;
+      const candidate = prepareReleaseAsset(sandbox, "1.2.4", fixtureOptions);
+      const [archiveAsset, checksumsAsset] = candidate.metadata.assets;
 
-    if (!archiveAsset || !checksumsAsset) {
-      throw new Error("Release test fixture assets are missing");
-    }
+      if (!archiveAsset || !checksumsAsset) {
+        throw new Error("Release test fixture assets are missing");
+      }
 
-    if (failure === "GitHub digest") {
-      archiveAsset.digest = `sha256:${"0".repeat(64)}`;
-    }
+      if (failure === "GitHub digest") {
+        archiveAsset.digest = `sha256:${"0".repeat(64)}`;
+      }
 
-    if (failure === "published checksum") {
-      candidate.checksums = new TextEncoder().encode(
-        `${"0".repeat(64)}  ${candidate.archiveName}\n`
-      );
-      checksumsAsset.digest = `sha256:${hash("sha256", candidate.checksums, "hex")}`;
-    }
+      if (failure === "published checksum") {
+        candidate.checksums = new TextEncoder().encode(
+          `${"0".repeat(64)}  ${candidate.archiveName}\n`
+        );
+        checksumsAsset.digest = `sha256:${hash("sha256", candidate.checksums, "hex")}`;
+      }
 
-    if (failure === "archive structure") {
-      candidate.archive = new TextEncoder().encode("not a Release archive\n");
-      candidate.checksums = new TextEncoder().encode(
-        `${hash("sha256", candidate.archive, "hex")}  ${candidate.archiveName}\n`
-      );
-      archiveAsset.digest = `sha256:${hash("sha256", candidate.archive, "hex")}`;
-      checksumsAsset.digest = `sha256:${hash("sha256", candidate.checksums, "hex")}`;
-    }
+      if (failure === "archive structure") {
+        candidate.archive = new TextEncoder().encode("not a Release archive\n");
+        candidate.checksums = new TextEncoder().encode(
+          `${hash("sha256", candidate.archive, "hex")}  ${candidate.archiveName}\n`
+        );
+        archiveAsset.digest = `sha256:${hash("sha256", candidate.archive, "hex")}`;
+        checksumsAsset.digest = `sha256:${hash("sha256", candidate.checksums, "hex")}`;
+      }
 
-    const update = runCliAsync(
-      ["update"],
-      createTestRuntime({
-        architecture: "x64",
-        cwd: sandbox,
-        env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
-        onStderr() {},
-        onStdout() {},
-        platform: "linux",
-        releaseDistribution: {
-          async downloadReleaseAsset(url) {
-            return releaseAssetResponse(
-              url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
-            );
-          },
-          async listReleases(page) {
-            if (failure === "catalog lookup") {
-              throw new Error("injected catalog failure");
+      const update = runCliAsync(
+        ["update"],
+        createTestRuntime({
+          architecture: "x64",
+          cwd: sandbox,
+          env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+          onStderr() {},
+          onStdout() {},
+          platform: "linux",
+          releaseDistribution: {
+            async downloadReleaseAsset(url) {
+              return releaseAssetResponse(
+                url.endsWith(candidate.archiveName) ? candidate.archive : candidate.checksums
+              );
+            },
+            async listReleases(page) {
+              if (failure === "catalog lookup") {
+                throw new Error("injected catalog failure");
+              }
+
+              return page === 1 ? [candidate.metadata] : [];
             }
+          },
+          toolBuildIdentity: "1.2.3",
+          toolInstallRoot: predecessor
+        })
+      );
 
-            return page === 1 ? [candidate.metadata] : [];
-          }
-        },
-        toolBuildIdentity: "1.2.3",
-        toolInstallRoot: predecessor
-      })
-    );
-
-    await expect(update).rejects.toThrow(expected);
-    expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
-      path.join("installs", "release-1.2.3-linux-x64")
-    );
-    expect(existsSync(predecessor)).toBeTruthy();
-    expect(existsSync(olderInstall)).toBeTruthy();
-    expect(existsSync(path.join(monkeHome, "installs", "release-1.2.4-linux-x64"))).toBeFalsy();
-    const stagingRoot = path.join(monkeHome, "install-staging");
-    expect(existsSync(stagingRoot) ? readdirSync(stagingRoot) : []).toStrictEqual([]);
-  });
+      await expect(update).rejects.toThrow(expected);
+      expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
+        path.join("installs", "release-1.2.3-linux-x64")
+      );
+      expect(existsSync(predecessor)).toBeTruthy();
+      expect(existsSync(olderInstall)).toBeTruthy();
+      expect(existsSync(path.join(monkeHome, "installs", "release-1.2.4-linux-x64"))).toBeFalsy();
+      const stagingRoot = path.join(monkeHome, "install-staging");
+      expect(existsSync(stagingRoot) ? readdirSync(stagingRoot) : []).toStrictEqual([]);
+    }
+  );
 
   it.each(["final-rename", "pointer-replacement"] as const)(
-    "an injected %s failure preserves the Active install and all predecessors",
+    "preserves the Active install and all predecessors after an injected %s failure",
     async (phase) => {
       const sandbox = makeTempDir(`release-update-${phase}`);
       const home = path.join(sandbox, "home");
@@ -906,7 +909,7 @@ describe("Release update", () => {
     ["force replacement", ["update", "--force"]],
     ["quiet mode", ["update", "--quiet"]],
     ["channels", ["update", "--channel", "stable"]]
-  ])("the v1 CLI rejects %s", async (_feature, arguments_) => {
+  ])("rejects %s in the v1 CLI", async (_feature, arguments_) => {
     const sandbox = makeTempDir("release-update-cli-surface");
     let catalogCalled = false;
 
@@ -949,37 +952,40 @@ describe("Release update", () => {
       },
       /full Git commit SHA/u
     ]
-  ])("check rejects %s without downloading or staging", async (_failure, mutate, expected) => {
-    const sandbox = makeTempDir("release-update-check-failure");
-    const monkeHome = path.join(sandbox, "monke-home");
-    const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
-    const candidate = release("1.2.4");
-    mutate(candidate);
+  ])(
+    "rejects %s during check without downloading or staging",
+    async (_failure, mutate, expected) => {
+      const sandbox = makeTempDir("release-update-check-failure");
+      const monkeHome = path.join(sandbox, "monke-home");
+      const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
+      const candidate = release("1.2.4");
+      mutate(candidate);
 
-    const check = runCliAsync(
-      ["update", "--check"],
-      createTestRuntime({
-        architecture: "x64",
-        cwd: sandbox,
-        env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
-        onStderr() {},
-        onStdout() {},
-        platform: "linux",
-        releaseDistribution: {
-          async downloadReleaseAsset() {
-            throw new Error("check must not download malformed Release assets");
+      const check = runCliAsync(
+        ["update", "--check"],
+        createTestRuntime({
+          architecture: "x64",
+          cwd: sandbox,
+          env: { HOME: path.join(sandbox, "home"), MONKE_HOME: monkeHome },
+          onStderr() {},
+          onStdout() {},
+          platform: "linux",
+          releaseDistribution: {
+            async downloadReleaseAsset() {
+              throw new Error("check must not download malformed Release assets");
+            },
+            async listReleases(page) {
+              return page === 1 ? [candidate] : [];
+            }
           },
-          async listReleases(page) {
-            return page === 1 ? [candidate] : [];
-          }
-        },
-        toolBuildIdentity: "1.2.3",
-        toolInstallRoot: installRoot
-      })
-    );
+          toolBuildIdentity: "1.2.3",
+          toolInstallRoot: installRoot
+        })
+      );
 
-    await expect(check).rejects.toThrow(expected);
-    expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
-    expect(existsSync(path.join(monkeHome, "locks"))).toBeFalsy();
-  });
+      await expect(check).rejects.toThrow(expected);
+      expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
+      expect(existsSync(path.join(monkeHome, "locks"))).toBeFalsy();
+    }
+  );
 });

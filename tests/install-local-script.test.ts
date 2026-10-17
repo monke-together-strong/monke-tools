@@ -157,7 +157,7 @@ describe("Local install refresh script", () => {
     expect(existsSync(path.join(monkeHome, "locks", "installation.lock"))).toBeFalsy();
   });
 
-  it("two builds from the same commit receive distinct install identities", () => {
+  it("gives two builds from the same commit distinct install identities", () => {
     const sandbox = makeTempDir("install-local-unique");
     const checkout = path.join(sandbox, "checkout");
     const binDirectory = path.join(sandbox, "bin");
@@ -221,7 +221,7 @@ describe("Local install refresh script", () => {
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
   });
 
-  it("compiled Local executables report their Tool build identity", () => {
+  it("reports the Tool build identity of compiled Local executables", () => {
     const sandbox = makeTempDir("install-local-version");
     const executablePath = path.join(sandbox, "mt");
 
@@ -246,7 +246,7 @@ describe("Local install refresh script", () => {
     expect(version.stdout).toBe("local+0123456-dirty\n");
   });
 
-  it("the real Local refresh activates the compiled executable through the stable symlink", () => {
+  it("activates the compiled executable through the stable symlink in the real Local refresh", () => {
     const sandbox = makeTempDir("install-local-end-to-end");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");

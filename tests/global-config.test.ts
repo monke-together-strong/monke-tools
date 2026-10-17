@@ -8,7 +8,7 @@ import { loadGlobalMonkeConfig, saveGlobalMonkeConfig } from "../src/global-conf
 import { makeTempDir, read, write } from "./helpers.ts";
 
 describe("global configuration", () => {
-  it("global monke config stores preferences without Active install identity", () => {
+  it("stores preferences in global monke config without Active install identity", () => {
     const home = makeTempDir("global-config");
     const customSkillRoot = path.join(home, "custom-skills");
 
@@ -41,7 +41,7 @@ describe("global configuration", () => {
       { kind: "custom", path: "/tmp/first" },
       { kind: "custom", path: "/tmp/second" }
     ]
-  ])("global monke config rejects repeated target kinds: %j, %j", (first, second) => {
+  ])("rejects repeated target kinds in global monke config: %j, %j", (first, second) => {
     const home = makeTempDir("global-config-duplicate-target");
     write(
       home,
@@ -52,7 +52,7 @@ describe("global configuration", () => {
     expect(() => loadGlobalMonkeConfig(home)).toThrow(/targets\[1\]\.kind/u);
   });
 
-  it("global monke config rejects empty preferences and relative custom paths", () => {
+  it("rejects empty preferences and relative custom paths in global monke config", () => {
     const emptyPreferenceHome = makeTempDir("global-config-empty-preference");
     writeInvalidConfig(
       emptyPreferenceHome,
@@ -78,7 +78,7 @@ skillInstallPreference:
     expect(() => loadGlobalMonkeConfig(relativeCustomHome)).toThrow(/absolute path/u);
   });
 
-  it("global monke config rejects unknown future versions with the file and field path", () => {
+  it("rejects unknown future global monke config versions with the file and field path", () => {
     const home = makeTempDir("global-config-future-version");
     writeInvalidConfig(home, "version: 2\n");
 

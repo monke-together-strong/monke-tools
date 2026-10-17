@@ -75,7 +75,7 @@ printf '%s\\n%s\\n' "$PWD" "$mt_status"
 }
 
 describe("shell navigation", () => {
-  it("spawn writes an active shell directory directive", () => {
+  it("writes an active shell directory directive on spawn", () => {
     const sandbox = makeTempDir("shell-spawn-active");
     const home = path.join(sandbox, "home");
     const directivePath = path.join(sandbox, "directive");
@@ -103,7 +103,7 @@ describe("shell navigation", () => {
     );
   });
 
-  it("spawn distinguishes configured but inactive shell integration", () => {
+  it("distinguishes configured but inactive shell integration on spawn", () => {
     const sandbox = makeTempDir("shell-spawn-configured-inactive");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
@@ -141,7 +141,7 @@ describe("shell navigation", () => {
     );
   });
 
-  it("spawn treats unreadable shell startup files as inactive integration", () => {
+  it("treats unreadable shell startup files as inactive integration on spawn", () => {
     const sandbox = makeTempDir("shell-spawn-unreadable-startup");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
@@ -176,7 +176,7 @@ describe("shell navigation", () => {
     }
   });
 
-  it("repo commands cannot write an active shell directory directive", () => {
+  it("prevents repo commands from writing an active shell directory directive", () => {
     const sandbox = makeTempDir("shell-directive-child-env");
     const home = path.join(sandbox, "home");
     const directivePath = path.join(sandbox, "directive");
@@ -254,7 +254,7 @@ apps:
     ["bash", ".bashrc", ".zshrc"],
     ["zsh", ".zshrc", ".bashrc"]
   ] as const)(
-    "%s shell install reports and idempotently refreshes only its startup file",
+    "reports and idempotently refreshes only the startup file for %s shell install",
     (shell, startupFile, otherStartupFile) => {
       const sandbox = makeTempDir(`shell-install-${shell}`);
       const monkeHome = path.join(sandbox, "monke-home");
@@ -290,7 +290,7 @@ apps:
     }
   );
 
-  it("zsh install and configured-state detection honor relative ZDOTDIR", () => {
+  it("honors relative ZDOTDIR for zsh install and configured-state detection", () => {
     const sandbox = makeTempDir("shell-install-zdotdir");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
@@ -327,7 +327,7 @@ apps:
     expect(result.stderr).toContain("Shell integration is configured but not active");
   });
 
-  it("shell install leaves startup files untouched for an unsupported current shell", () => {
+  it("leaves startup files untouched on shell install for an unsupported current shell", () => {
     const sandbox = makeTempDir("shell-install-unsupported");
     const shellHome = path.join(sandbox, "shell-home");
 

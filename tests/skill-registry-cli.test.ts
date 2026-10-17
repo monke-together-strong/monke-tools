@@ -287,7 +287,7 @@ describe("Skill import registry CLI", () => {
     { action: "update", scope: "repo" },
     { action: "restore", scope: "repo" }
   ])(
-    "Git $action rejects unconfined support links before publishing $scope state",
+    "rejects unconfined support links on Git $action before publishing $scope state",
     async ({ action, scope }) => {
       const fixture = registryFixture();
       installInternalRootImporter(fixture.bin);
@@ -383,7 +383,7 @@ describe("Skill import registry CLI", () => {
   );
 
   it.each(["skill", "reference"] as const)(
-    "policy rejects an edited %s support link before changing accepted state",
+    "rejects an edited %s support link during mt skills policy before changing accepted state",
     async (kind) => {
       const fixture = registryFixture();
       installGitImporter(fixture);
@@ -459,7 +459,7 @@ describe("Skill import registry CLI", () => {
     }
   );
 
-  it("Git publishers include declared imports, retain consumer overrides, and update accepted pins", async () => {
+  it("includes declared imports of Git publishers, retains consumer overrides, and updates accepted pins", async () => {
     const fixture = registryFixture();
     installGitImporter(fixture);
 
@@ -545,7 +545,7 @@ describe("Skill import registry CLI", () => {
     { explicit: true, initial: "skill", readd: true },
     { explicit: true, initial: "reference", readd: true }
   ] as const)(
-    "Git consumers follow publisher kinds from $initial with explicit=$explicit readd=$readd",
+    "follows publisher kinds from $initial in Git consumers with explicit=$explicit readd=$readd",
     async ({ explicit, initial, readd }) => {
       const fixture = registryFixture();
       installGitImporter(fixture);
@@ -601,7 +601,7 @@ describe("Skill import registry CLI", () => {
   );
 
   it.each(["update", "readd", "remove"] as const)(
-    "%s can retire a publisher reference together with its consumer",
+    "retires a publisher reference together with its consumer on %s",
     async (action) => {
       const fixture = registryFixture();
       installGitImporter(fixture);
@@ -678,7 +678,7 @@ describe("Skill import registry CLI", () => {
     { explicit: false, readd: true, remote: false, removeConfig: true },
     { explicit: true, readd: true, remote: true, removeConfig: true }
   ])(
-    "owned skills replace inherited references with explicit=$explicit removeConfig=$removeConfig readd=$readd remote=$remote",
+    "replaces inherited references with owned skills (explicit=$explicit removeConfig=$removeConfig readd=$readd remote=$remote)",
     async ({ explicit, readd, remote, removeConfig }) => {
       const fixture = registryFixture();
       installGitImporter(fixture);
@@ -771,7 +771,7 @@ done
     { action: "update", candidateName: "Fancy+Author", initial: "skill", selector: "fancy-author" },
     { action: "readd", candidateName: "Fancy+Author", initial: "own", selector: "fAnCy AuThOr" }
   ] as const)(
-    "$action retains $selector when a publisher changes from $initial guidance to $candidateName",
+    "retains $selector on $action when a publisher changes from $initial guidance to $candidateName",
     async ({ action, candidateName, initial, selector }) => {
       const { command, fixture, publisher } = await namedPublisherTransition({
         action,
@@ -802,7 +802,7 @@ done
   );
 
   it.each(["update", "readd"] as const)(
-    "%s rejects a missing retained publisher identity after a partial importer success",
+    "rejects a missing retained publisher identity on %s after a partial importer success",
     async (action) => {
       const { acceptedGuidance, acceptedRegistry, command, fixture } =
         await namedPublisherTransition({
@@ -825,7 +825,7 @@ done
     { declared: true, project: false },
     { declared: true, project: true }
   ])(
-    "Git selections must be complete before publication with declared=$declared project=$project",
+    "requires complete Git selections before publication with declared=$declared project=$project",
     async ({ declared, project }) => {
       const fixture = registryFixture();
       installNamedGitImporter(fixture);
@@ -928,7 +928,7 @@ done
     { nested: false, project: false },
     { nested: true, project: true }
   ])(
-    "explicit internal guidance rejects declaration collisions with nested=$nested project=$project",
+    "rejects declaration collisions for explicit internal guidance with nested=$nested project=$project",
     async ({ nested, project }) => {
       const fixture = registryFixture();
       installInternalRootImporter(fixture.bin);
@@ -1021,7 +1021,7 @@ done
     { composed: false, project: false },
     { composed: true, project: true }
   ])(
-    "retained raw selectors survive update and re-add with composed=$composed project=$project",
+    "keeps retained raw selectors across update and re-add with composed=$composed project=$project",
     async ({ composed, project }) => {
       const fixture = registryFixture();
       installInternalRootImporter(fixture.bin);
@@ -1094,7 +1094,7 @@ done
     { project: false, version: 3 },
     { project: true, version: 4 }
   ])(
-    "implicit machine v$version selections recover cold internal guidance with project=$project",
+    "recovers cold internal guidance from implicit machine v$version selections with project=$project",
     async ({ project, version }) => {
       const fixture = registryFixture();
       installInternalRootImporter(fixture.bin);
@@ -1205,7 +1205,7 @@ done
     }
   );
 
-  it("machine explicit replay preserves internal guidance when a public child has the same name", async () => {
+  it("preserves internal guidance during machine explicit replay when a public child has the same name", async () => {
     const fixture = registryFixture();
     installInternalRootImporter(fixture.bin);
     fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
@@ -1253,7 +1253,7 @@ done
     expect(read(fixture.registry, "skills/imported/internal/SKILL.md")).toBe(accepted);
   });
 
-  it("machine wildcard acceptance rejects ambiguous discovery identities", async () => {
+  it("rejects ambiguous discovery identities during machine wildcard acceptance", async () => {
     const fixture = registryFixture();
     installInternalRootImporter(fixture.bin);
     fixture.runtime.env.INSTALL_INTERNAL_SKILLS = "";
@@ -1284,7 +1284,7 @@ done
   });
 
   it.each([false, true])(
-    "composed wildcard selections recover cold guidance with project=%s",
+    "recovers cold guidance from composed wildcard selections with project=%s",
     async (project) => {
       const fixture = registryFixture();
       installInternalRootImporter(fixture.bin);
@@ -1343,7 +1343,7 @@ done
   );
 
   it.each(["git", "link"] as const)(
-    "%s publisher selections span own skills and declared imports",
+    "spans own skills and declared imports in %s publisher selections",
     async (kind) => {
       const fixture = registryFixture();
       installGitImporter(fixture);
@@ -1404,7 +1404,7 @@ done
     }
   );
 
-  it("a declared import collision fails without publishing a recipe or agent skill", async () => {
+  it("fails on a declared import collision without publishing a recipe or agent skill", async () => {
     const fixture = registryFixture();
     installGitImporter(fixture);
 
@@ -1439,7 +1439,7 @@ done
     expect(existsSync(path.join(fixture.installed.codex, "collision"))).toBeFalsy();
   });
 
-  it("a publisher can publish only declared imports without resolving another level", async () => {
+  it("lets a publisher publish only declared imports without resolving another level", async () => {
     const fixture = registryFixture();
     installGitImporter(fixture);
 
@@ -1475,7 +1475,7 @@ done
     { selection: "wildcard", version: 4 },
     { selection: "explicit", version: 4 }
   ] as const)(
-    "re-add preserves $selection selections from v$version recipes",
+    "preserves $selection selections from v$version recipes on re-add",
     async ({ selection, version }) => {
       const fixture = registryFixture();
       installGitImporter(fixture);
@@ -1548,7 +1548,7 @@ done
     }
   );
 
-  it("old machine registries migrate their pins and overrides on first read", async () => {
+  it("migrates the pins and overrides of old machine registries on first read", async () => {
     const fixture = registryFixture();
     write(
       fixture.registry,
@@ -1594,7 +1594,7 @@ done
     expect(registry).not.toContain("importerVersion");
   });
 
-  it("installation preserves a migrated bundled source and its accepted guidance", async () => {
+  it("preserves a migrated bundled source and its accepted guidance during installation", async () => {
     const fixture = registryFixture();
     const source = "https://github.com/owner/bundled/tree/main/course";
 
@@ -1655,7 +1655,7 @@ done
     { replacement: false, scope: "repo" },
     { replacement: true, scope: "repo" }
   ])(
-    "re-adding a handwritten tree source in $scope scope preserves identity with replacement=$replacement",
+    "preserves identity when re-adding a handwritten tree source in $scope scope with replacement=$replacement",
     async ({ replacement, scope }) => {
       const fixture = registryFixture();
 
@@ -1765,7 +1765,7 @@ done
     { linkedEdit: false, scope: "project" },
     { linkedEdit: true, scope: "project" }
   ])(
-    "canonical re-add refreshes the $scope review baseline with linkedEdit=$linkedEdit",
+    "refreshes the $scope review baseline on canonical re-add with linkedEdit=$linkedEdit",
     async ({ linkedEdit, scope }) => {
       const fixture = registryFixture();
 
@@ -1892,7 +1892,7 @@ done
     { kind: "command", scope: "project", source: "foo" },
     { kind: "command", scope: "project", source: "./foo" }
   ])(
-    "$scope $kind add from $source preserves an unrelated source's review baseline",
+    "preserves an unrelated source's review baseline on $scope $kind add from $source",
     async ({ kind, scope, source }) => {
       const fixture = registryFixture();
 
@@ -1950,7 +1950,7 @@ done
   );
 
   it.each(["main", "feature/topic"])(
-    "tree source at %s keeps its identity across registry changes",
+    "keeps the identity of a tree source at %s across registry changes",
     async (updateRef) => {
       const fixture = registryFixture();
 
@@ -2032,7 +2032,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each(["git", "link", "command"] as const)(
-    "%s description overrides preserve other metadata and survive updates",
+    "keeps %s description overrides across updates while preserving other metadata",
     async (kind) => {
       const fixture = registryFixture();
       const installedDescription = "Cut AI tells from any writing.";
@@ -2173,7 +2173,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     { args: ["typography", "--description", "  "], error: /non-empty/u },
     { args: ["unknown", "--description", "Use for writing."], error: /Unknown Skill/u }
   ])(
-    "invalid description policy leaves the source and recipe unchanged ($args)",
+    "leaves the source and recipe unchanged on invalid description policy ($args)",
     async ({ args, error }) => {
       const fixture = registryFixture();
       await runCliAsync(["skills", "add", fixture.checkout, "--link"], fixture.runtime);
@@ -2188,7 +2188,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each(["create", "adopt"] as const)(
-    "cold %s keeps publication coherent when recovery cleanup fails",
+    "keeps publication coherent for cold %s when recovery cleanup fails",
     async (action) => {
       const fixture = registryFixture();
       const recoveryPaths = new Set<string>();
@@ -2236,7 +2236,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   it.each([
     { error: /lowercase Skill source name/u, name: "InvalidName" },
     { error: /non-managed/u, name: "new-workflow" }
-  ])("a cold create failure restores the absent registry ($name)", async (scenario) => {
+  ])("restores the absent registry after a cold create failure ($name)", async (scenario) => {
     const fixture = registryFixture();
     writeSkill(
       path.join(fixture.guidance, "skills/imported"),
@@ -2265,7 +2265,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   });
 
   it.each(["create", "adopt"] as const)(
-    "a required baseline failure rolls back %s before reporting success",
+    "rolls back %s on a required baseline failure before reporting success",
     async (action) => {
       const fixture = registryFixture();
       await runCliAsync(["skills", "list"], fixture.runtime);
@@ -2296,7 +2296,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each(["Monke home", "active guidance"] as const)(
-    "an independent protected copy in %s does not report its registered slug unchanged",
+    "does not report the registered slug unchanged for an independent protected copy in %s",
     async (storage) => {
       const fixture = registryFixture();
       await runCliAsync(["skills", "create", "registered"], fixture.runtime);
@@ -2321,7 +2321,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("an interactive Git slug change reports adopted projections before confirmation or publication", async () => {
+  it("reports adopted projections for an interactive Git slug change before confirmation or publication", async () => {
     const fixture = registryFixture();
     const config = loadGlobalMonkeConfig(fixture.monkeHome);
     saveGlobalMonkeConfig(fixture.monkeHome, {
@@ -2366,7 +2366,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   });
 
   it.each(["Monke home", "active guidance"] as const)(
-    "an unregistered skill inside %s reports a protected-source error",
+    "reports a protected-source error for an unregistered skill inside %s",
     async (storage) => {
       const fixture = registryFixture();
 
@@ -2386,7 +2386,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("adoption reports a missing selected registered owner before publication", async () => {
+  it("reports a missing selected registered owner during adoption before publication", async () => {
     const fixture = registryFixture();
     await runCliAsync(["skills", "add", fixture.source, "--link"], fixture.runtime);
     const previous = readImportRecipeStore(fixture.registry);
@@ -2411,7 +2411,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
       preservesLeftover: true
     }
   ] as const)(
-    "adoption preserves a registered physical owner in a raw $harness harness path",
+    "preserves a registered physical owner in a raw $harness harness path during adoption",
     async (scenario) => {
       const fixture = registryFixture();
       const config = loadGlobalMonkeConfig(fixture.monkeHome);
@@ -2477,7 +2477,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     { alias: "missing-parent", claudeFirst: false, registered: false },
     { alias: "dangling-root", claudeFirst: true, registered: false }
   ])(
-    "adoption rejects overlapping Claude/custom layouts before mutation ($registered, $claudeFirst, $alias)",
+    "rejects overlapping Claude/custom layouts during adoption before mutation ($registered, $claudeFirst, $alias)",
     async ({ alias, claudeFirst, registered }) => {
       const fixture = registryFixture();
       const config = loadGlobalMonkeConfig(fixture.monkeHome);
@@ -2565,7 +2565,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("policy publication preserves an incidental projection replaced by a user-owned entry", async () => {
+  it("preserves an incidental projection replaced by a user-owned entry during policy publication", async () => {
     const fixture = registryFixture();
     const config = loadGlobalMonkeConfig(fixture.monkeHome);
     saveGlobalMonkeConfig(fixture.monkeHome, {
@@ -2599,7 +2599,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   });
 
   it.each(["Markdown", "symlink"] as const)(
-    "a detected external %s dependency stops the complete batch with actionable paths",
+    "stops the complete batch with actionable paths on a detected external %s dependency",
     async (dependency) => {
       const fixture = registryFixture();
       const original = path.join(fixture.source, "typography");
@@ -2623,7 +2623,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each(["Markdown", "symlink"] as const)(
-    "adoption refuses an internal %s reference tied to its original parent",
+    "refuses to adopt an internal %s reference tied to its original parent",
     async (reference) => {
       const fixture = registryFixture();
       const collection = path.join(fixture.sandbox, "original-collection");
@@ -2651,7 +2651,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each(["absolute", "physical-name"] as const)(
-    "adoption protects a logical alias with a %s source-bound symlink",
+    "protects a logical alias with a %s source-bound symlink during adoption",
     async (kind) => {
       const fixture = registryFixture();
       const owner = path.join(fixture.sandbox, "external/physical-owner");
@@ -2684,7 +2684,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("adoption protects managed storage through ordinary ancestor aliases", async () => {
+  it("protects managed storage through ordinary ancestor aliases during adoption", async () => {
     const fixture = registryFixture();
     const protectedCollection = path.join(fixture.monkeHome, "orphans");
     writeSkill(protectedCollection, "foo", "Protected instructions.\n");
@@ -2700,7 +2700,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   });
 
   it.each(["Monke home", "active guidance"] as const)(
-    "adoption protects terminal aliases into %s",
+    "protects terminal aliases into %s during adoption",
     async (storage) => {
       const fixture = registryFixture();
 
@@ -2724,7 +2724,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each([false, true])(
-    "adoption preserves undiscovered registered owner roots (materialized link absent=%s)",
+    "preserves undiscovered registered owner roots during adoption (materialized link absent=%s)",
     async (missingLink) => {
       const fixture = registryFixture();
       const external = path.join(fixture.sandbox, "external/alpha");
@@ -2771,7 +2771,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each([false, true])(
-    "adoption protects unprojected registered owner dependencies (materialized link absent=%s)",
+    "protects unprojected registered owner dependencies during adoption (materialized link absent=%s)",
     async (missingLink) => {
       const fixture = registryFixture();
       const collection = path.join(fixture.sandbox, "external-collection");
@@ -2801,7 +2801,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each([false, true])(
-    "publication failure restores the whole batch or retains recovery when restoration is obstructed (%s)",
+    "restores the whole batch after publication failure or retains recovery when restoration is obstructed (%s)",
     async (obstructRecovery) => {
       const fixture = registryFixture();
       await runCliAsync(["skills", "create", "existing"], fixture.runtime);
@@ -2879,7 +2879,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each(["bytes", "metadata", "executable", "symlink", "directory"] as const)(
-    "a %s difference preserves the complete selected adoption batch",
+    "preserves the complete selected adoption batch on a %s difference",
     async (difference) => {
       const fixture = registryFixture();
       writeSkill(fixture.source, "healthy", "Healthy instructions.\n");
@@ -2931,7 +2931,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("a cold adoption conflict restores the absent registry including bundled registrations", async () => {
+  it("restores the absent registry including bundled registrations after a cold adoption conflict", async () => {
     const fixture = registryFixture();
     writeSkill(
       path.join(fixture.guidance, "skills/imported"),
@@ -2967,7 +2967,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(existsSync(path.join(fixture.monkeHome, "skill-sources/private-course"))).toBeFalsy();
   });
 
-  it("adoption preserves scripts and internal aliases and keeps differently named skills separate", async () => {
+  it("preserves scripts and internal aliases during adoption and keeps differently named skills separate", async () => {
     const fixture = registryFixture();
     const custom = path.join(fixture.sandbox, "custom-skills");
     const config = loadGlobalMonkeConfig(fixture.monkeHome);
@@ -3008,7 +3008,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     );
   });
 
-  it("adoption preserves native symlink traversal before parent components", async () => {
+  it("preserves native symlink traversal before parent components during adoption", async () => {
     const fixture = registryFixture();
     const original = path.join(fixture.source, "typography");
     write(original, "references/guide.md", "Native internal guide.\n");
@@ -3028,7 +3028,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   });
 
   it.each([false, true])(
-    "adoption preserves same-owner replacement projections (Claude configured=%s)",
+    "preserves same-owner replacement projections during adoption (Claude configured=%s)",
     async (configured) => {
       const fixture = registryFixture();
       saveGlobalMonkeConfig(fixture.monkeHome, {
@@ -3061,7 +3061,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("native symlink parent traversal still protects removed supporting entries", async () => {
+  it("still protects removed supporting entries under native symlink parent traversal", async () => {
     const fixture = registryFixture();
     const owner = path.join(fixture.sandbox, "external/alpha");
     writeSkill(path.dirname(owner), "alpha", "Retained owner.\n");
@@ -3081,7 +3081,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(existsSync(path.join(fixture.monkeHome, "skill-sources/references"))).toBeFalsy();
   });
 
-  it("identical copies reuse a registered owner and repeat adoption reports unchanged", async () => {
+  it("reuses a registered owner for identical copies and reports unchanged on repeat adoption", async () => {
     const fixture = registryFixture();
     await runCliAsync(["skills", "add", fixture.checkout, "--link"], fixture.runtime);
     const previous = readImportRecipeStore(fixture.registry);
@@ -3115,7 +3115,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
       sameResource: false
     }
   ])(
-    "adoption compares external reference resolution for an existing owner (same resource=$sameResource)",
+    "compares external reference resolution for an existing owner during adoption (same resource=$sameResource)",
     async ({ error: pattern, preservesLeftover, sameResource }) => {
       const fixture = registryFixture();
       const shared = path.join(fixture.sandbox, "shared-dependencies");
@@ -3153,7 +3153,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     { alias: true, reference: "symlink", selectedOwner: true },
     { alias: true, reference: "Markdown", selectedOwner: false }
   ] as const)(
-    "batch removal preserves a retained owner's $reference dependency (alias=$alias, selected owner=$selectedOwner)",
+    "preserves a retained owner's $reference dependency during batch removal (alias=$alias, selected owner=$selectedOwner)",
     async ({ alias, reference, selectedOwner }) => {
       const fixture = registryFixture();
       const collection = path.join(fixture.sandbox, "dependent-batch");
@@ -3206,7 +3206,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("adoption consolidates identical global copies without enabling an unconfigured harness", async () => {
+  it("consolidates identical global copies during adoption without enabling an unconfigured harness", async () => {
     const fixture = registryFixture();
     const config = loadGlobalMonkeConfig(fixture.monkeHome);
     saveGlobalMonkeConfig(fixture.monkeHome, {
@@ -3246,7 +3246,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(existsSync(path.join(owner, "SKILL.md"))).toBeTruthy();
   });
 
-  it("creation shares editable files across targets and retains them through installation and removal", async () => {
+  it("shares editable files across targets on creation and retains them through installation and removal", async () => {
     const fixture = registryFixture();
     await runCliAsync(
       [
@@ -3293,7 +3293,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(existsSync(path.join(fixture.installed.codex, "weekly-report"))).toBeFalsy();
   });
 
-  it("adoption replaces an unmanaged Claude skill with shared links and preserves supporting files", async () => {
+  it("replaces an unmanaged Claude skill with shared links during adoption and preserves supporting files", async () => {
     const fixture = registryFixture();
     const original = path.join(fixture.installed.claude, "personal");
     writeSkill(fixture.installed.claude, "personal", "My instructions.\n");
@@ -3321,7 +3321,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     ]);
   });
 
-  it("adoption selects collection skills, removes old entries, and leaves alias targets intact", async () => {
+  it("selects collection skills for adoption, removes old entries, and leaves alias targets intact", async () => {
     const fixture = registryFixture();
     const original = path.join(fixture.source, "typography");
     const external = path.join(fixture.sandbox, "external", "linked");
@@ -3360,7 +3360,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   });
 
   it.each(["physical", "alias", "chain"] as const)(
-    "adoption reports an unselected alias before removing its selected %s or another selected skill",
+    "reports an unselected alias during adoption before removing its selected %s or another selected skill",
     async (kind) => {
       const fixture = registryFixture();
       writeSkill(fixture.source, "healthy", "Healthy instructions.\n");
@@ -3394,7 +3394,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("adoption preserves an independent unselected alias to the same external source", async () => {
+  it("preserves an independent unselected alias to the same external source during adoption", async () => {
     const fixture = registryFixture();
     const external = path.join(fixture.sandbox, "external");
     cpSync(path.join(fixture.source, "typography"), external, { recursive: true });
@@ -3411,7 +3411,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(existsSync(path.join(fixture.source, "typography"))).toBeFalsy();
   });
 
-  it("an unselected known-harness alias stops deletion of the selected alias chain", async () => {
+  it("lets an unselected known-harness alias stop deletion of the selected alias chain", async () => {
     const fixture = registryFixture();
     const codexRoot = path.resolve(fixture.installed.codex, "../..");
     const cursorRoot = path.resolve(fixture.installed.cursor, "../..");
@@ -3433,7 +3433,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     { configured: false, harness: "cursor" },
     { configured: true, harness: "claude" }
   ] as const)(
-    "adoption reports a nested $harness owner layout (configured=$configured) before changing the batch",
+    "reports a nested $harness owner layout (configured=$configured) during adoption before changing the batch",
     async ({ configured, harness }) => {
       const fixture = registryFixture();
       const config = loadGlobalMonkeConfig(fixture.monkeHome);
@@ -3472,7 +3472,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each(["skill", "collection"] as const)(
-    "adoption accepts an ordinary ancestor alias above a supplied %s",
+    "accepts an ordinary ancestor alias above a supplied %s during adoption",
     async (scope) => {
       const fixture = registryFixture();
       const ancestor = path.join(fixture.sandbox, "ancestor-alias");
@@ -3496,7 +3496,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("adoption reports an explicit collection alias and preserves its external skills", async () => {
+  it("reports an explicit collection alias during adoption and preserves its external skills", async () => {
     const fixture = registryFixture();
     const collection = path.join(fixture.sandbox, "collection-alias");
     symlinkSync(fixture.source, collection, "dir");
@@ -3508,7 +3508,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
   });
 
-  it("adopting a single Codex alias removes duplicate discovery and preserves the external source", async () => {
+  it("removes duplicate discovery and preserves the external source when adopting a single Codex alias", async () => {
     const fixture = registryFixture();
     const external = path.join(fixture.sandbox, "external", "original");
     const codexRoot = path.join(fixture.sandbox, "home", ".codex", "skills");
@@ -3526,7 +3526,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     );
   });
 
-  it("adopting an entire harness root skips skills Monke already manages", async () => {
+  it("skips skills Monke already manages when adopting an entire harness root", async () => {
     const fixture = registryFixture();
     await runCliAsync(["skills", "create", "already-managed"], fixture.runtime);
     const codexRoot = path.join(fixture.sandbox, "home", ".codex", "skills");
@@ -3548,7 +3548,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     ).toContain("Internal instructions.");
   });
 
-  it("divergent global copies are reported before adoption changes files", async () => {
+  it("reports divergent global copies before adoption changes files", async () => {
     const fixture = registryFixture();
     const original = path.join(fixture.source, "typography");
     writeSkill(fixture.installed.claude, "typography", "Unrelated target.\n");
@@ -3563,7 +3563,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(readImportRecipeStore(fixture.registry).recipes).toStrictEqual([]);
   });
 
-  it("invalid selections fail without changes and already managed sources report unchanged", async () => {
+  it("rejects invalid selections without changes and reports already managed sources unchanged", async () => {
     const fixture = registryFixture();
     await expect(
       runCliAsync(
@@ -3587,7 +3587,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(existsSync(path.join(fixture.monkeHome, "skill-sources/monke-tools-core"))).toBeFalsy();
   });
 
-  it("explicit removal survives installation and explicit re-add enables a bundled source again", async () => {
+  it("keeps explicit removal through installation and re-enables a bundled source on explicit re-add", async () => {
     const fixture = registryFixture();
 
     const gitSource = createRepo(path.join(fixture.sandbox, "git-source"), {
@@ -3626,7 +3626,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(readImportRecipeStore(fixture.registry).removedSources ?? []).toStrictEqual([]);
   });
 
-  it("linked imports use existing provider layouts and write learned changes back to their source", async () => {
+  it("uses existing provider layouts for linked imports and writes learned changes back to their source", async () => {
     const fixture = registryFixture();
     const actualSkill = path.join(fixture.sandbox, "skill-repo", "typography");
     writeSkill(path.dirname(actualSkill), "typography", "Course instructions.\n");
@@ -3653,7 +3653,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(existsSync(path.join(fixture.guidance, "skills/imported/typography"))).toBeFalsy();
   });
 
-  it("one update replays command and Git imports, reapplies policies, and reviews linked file bytes", async () => {
+  it("replays command and Git imports, reapplies policies, and reviews linked file bytes in one update", async () => {
     const fixture = registryFixture();
     const { command, upstream } = installer(fixture);
     writeSkill(upstream, "typography", "First installer version.\n");
@@ -3769,7 +3769,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   });
 
   it.each(["exit", "collision", "metadata"] as const)(
-    "an installer %s failure restores source bytes and symlinks while later sources still update",
+    "restores source bytes and symlinks after an installer %s failure while later sources still update",
     async (failure) => {
       const fixture = registryFixture();
       const { command, upstream } = installer(fixture);
@@ -3815,7 +3815,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("failed adopted-link retirement preserves the recipe for removal retry", async () => {
+  it("preserves the recipe for removal retry when adopted-link retirement fails", async () => {
     const fixture = registryFixture();
     saveGlobalMonkeConfig(fixture.monkeHome, {
       ...loadGlobalMonkeConfig(fixture.monkeHome),
@@ -3853,7 +3853,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(read(owner, "SKILL.md")).toBe(ownerBytes);
   });
 
-  it("selection replacement and removal retire managed projections while keeping the external source", async () => {
+  it("retires managed projections on selection replacement and removal while keeping the external source", async () => {
     const fixture = registryFixture();
     writeSkill(fixture.source, "color", "Color instructions.\n");
     await runCliAsync(
@@ -3879,7 +3879,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   });
 
   it.each(["link", "command"] as const)(
-    "a missing %s source does not prevent healthy sources updating",
+    "updates healthy sources despite a missing %s source",
     async (kind) => {
       const fixture = registryFixture();
       const { command, upstream } = installer(fixture);
@@ -3926,7 +3926,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     }
   );
 
-  it("re-adding a command with a new working directory publishes its new source", async () => {
+  it("publishes the new source when re-adding a command with a new working directory", async () => {
     const fixture = registryFixture();
     const { command, upstream } = installer(fixture);
     writeSkill(upstream, "typography", "First directory.\n");
@@ -3943,7 +3943,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     expect(read(fixture.installed.claude, "typography/SKILL.md")).toContain("Second directory.");
   });
 
-  it("a failed first installer leaves no source or registered recipe", async () => {
+  it("leaves no source or registered recipe after a failed first installer", async () => {
     const fixture = registryFixture();
     const { command, upstream } = installer(fixture);
     writeSkill(upstream, "typography", "Partial install.\n");
@@ -3965,7 +3965,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
     "alias",
     "root_entry"
   ] as const)(
-    "a failed installer in an existing %s project preserves unrelated edits and restores only skills",
+    "preserves unrelated edits and restores only skills after a failed installer in an existing %s project",
     async (layout) => {
       const fixture = registryFixture();
 
@@ -4097,7 +4097,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each(["collection", "nested"] as const)(
-    "recovery detaches a replaced %s alias without changing the unrelated target",
+    "detaches a replaced %s alias during recovery without changing the unrelated target",
     async (layout) => {
       const fixture = registryFixture();
       const foreign = path.join(fixture.sandbox, "foreign-skills");
@@ -4125,7 +4125,7 @@ cp -R ${shellQuote(path.join(upstream, "course/skills/typography"))} .agents/ski
   );
 
   it.each([undefined, "codiff"])(
-    "updates honor the configured LFV adapter unless overridden with %s",
+    "honors the configured LFV adapter in updates unless overridden with %s",
     async (adapter) => {
       const fixture = registryFixture();
       const config = loadGlobalMonkeConfig(fixture.monkeHome);
@@ -4156,7 +4156,7 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
     }
   );
 
-  it("repeat Git add preserves references and selected-skill policies", async () => {
+  it("preserves references and selected-skill policies on repeat Git add", async () => {
     const fixture = registryFixture();
 
     const upstream = createRepo(path.join(fixture.sandbox, "git-source"), {
@@ -4201,7 +4201,7 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
     });
   });
 
-  it("policy refresh rejects a newly occupied target before publishing policy or new skills", async () => {
+  it("rejects a newly occupied target on policy refresh before publishing policy or new skills", async () => {
     const fixture = registryFixture();
     await runCliAsync(["skills", "add", fixture.checkout], fixture.runtime);
     const previous = readImportRecipeStore(fixture.registry);
@@ -4220,7 +4220,7 @@ printf '%s\\n' '{"version":1,"ok":true,"command":"review.create","data":{"url":"
   });
 
   it.each(["policy", "installer", "new linked target"] as const)(
-    "failed %s publication restores bytes in external symlinked skill directories",
+    "restores bytes in external symlinked skill directories after failed %s publication",
     async (operation) => {
       const fixture = registryFixture();
       const actual = path.join(fixture.sandbox, "actual-skills");
@@ -4291,7 +4291,7 @@ SKILL
     }
   );
 
-  it("an unavailable Git pin does not block healthy local source updates", async () => {
+  it("updates healthy local sources despite an unavailable Git pin", async () => {
     const fixture = registryFixture();
     installGitImporter(fixture);
 
@@ -4314,7 +4314,7 @@ SKILL
     expect(readFileSync(fixture.codiffLog, "utf-8").trim().split("\n")).toHaveLength(3);
   });
 
-  it("an unrelated target blocks source publication before source policy or target changes", async () => {
+  it("blocks source publication when an unrelated skill occupies the target, before source policy or target changes", async () => {
     const fixture = registryFixture();
     const occupied = path.join(fixture.installed.claude, "typography");
     write(occupied, "SKILL.md", "Unrelated skill.\n");

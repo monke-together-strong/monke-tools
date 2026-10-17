@@ -10,7 +10,7 @@ import { createRepo, git, makeTempDir, read, write, writeExecutable } from "./he
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("parallel locked skill restore", () => {
-  it("batch restore preserves distinct skill and reference sources sharing a slug", async () => {
+  it("preserves distinct skill and reference sources sharing a slug in batch restore", async () => {
     const sandbox = makeTempDir("cross-kind-skill-restore");
 
     const recipes = (["skill", "reference"] as const).map((kind) => {

@@ -14,7 +14,7 @@ const skillPath = path.join("skills", "internal", "monke-install", "SKILL.md");
 
 describe("Installation guidance in errors", () => {
   it.each(["local", "release"] as const)(
-    "%s install failures point to their own guidance source",
+    "points %s install failures to their own guidance source",
     async (kind) => {
       const sandbox = makeTempDir(`install-guidance-${kind}`);
       const monkeHome = path.join(sandbox, "monke-home");
@@ -59,7 +59,7 @@ describe("Installation guidance in errors", () => {
     }
   );
 
-  it("a broken active install still points to guidance shipped with the running tool", async () => {
+  it("still points to guidance shipped with the running tool for a broken active install", async () => {
     const sandbox = makeTempDir("install-guidance-broken-pointer");
     const monkeHome = path.join(sandbox, "monke-home");
     const toolInstallRoot = path.join(sandbox, "running-tool");
@@ -80,7 +80,7 @@ describe("Installation guidance in errors", () => {
     );
   });
 
-  it("missing Codiff points to installation guidance while retaining the install command", async () => {
+  it("points to installation guidance for missing Codiff while retaining the install command", async () => {
     const sandbox = makeTempDir("install-guidance-codiff");
     await expect(
       verifyCodiffAsync(
@@ -94,7 +94,7 @@ describe("Installation guidance in errors", () => {
     );
   });
 
-  it("the executable prints the installation error and source guidance path", () => {
+  it("prints the installation error and source guidance path from the executable", () => {
     const sandbox = makeTempDir("install-guidance-cli");
 
     const result = spawnSync("bun", ["run", "src/index.ts", "update", "--check"], {

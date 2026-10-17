@@ -28,7 +28,7 @@ function guidanceFixture() {
 }
 
 describe("guidance transaction recovery", () => {
-  it("a failed description publication restores linked source bytes without touching agent metadata", () => {
+  it("restores linked source bytes after a failed description publication without touching agent metadata", () => {
     const fixture = guidanceFixture();
     const source = path.join(fixture.repoRoot, "linked-alpha");
     const original = "---\nname: alpha\ndescription: Original description.\n---\n\nInstructions.\n";
@@ -88,7 +88,7 @@ describe("guidance transaction recovery", () => {
     expect(fs.existsSync(fixture.target("new"))).toBeFalsy();
   });
 
-  it("a recipe commit failure restores originals and removes newly installed guidance", () => {
+  it("restores originals and removes newly installed guidance after a recipe commit failure", () => {
     const fixture = guidanceFixture();
     expect(() => {
       copyStagedGuidanceToManagedRoots({
@@ -106,7 +106,7 @@ describe("guidance transaction recovery", () => {
     ).toStrictEqual([]);
   });
 
-  it("a failed backup move does not make the original eligible for deletion", () => {
+  it("keeps the original ineligible for deletion after a failed backup move", () => {
     const fixture = guidanceFixture();
 
     const move = (from: string, to: string) => {
@@ -124,7 +124,7 @@ describe("guidance transaction recovery", () => {
     expect(read(fixture.target("beta"), "SKILL.md")).toBe("original beta");
   });
 
-  it("a failed restore retains its recovery copy and still restores other targets", () => {
+  it("retains a failed restore's recovery copy and still restores other targets", () => {
     const fixture = guidanceFixture();
 
     const move = (from: string, to: string) => {

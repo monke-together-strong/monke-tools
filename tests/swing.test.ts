@@ -29,7 +29,7 @@ import {
 } from "./helpers.ts";
 
 describe("Swing", () => {
-  it("swing navigates to an existing root repo Session worktree without creating one", () => {
+  it("navigates via swing to an existing root repo Session worktree without creating one", () => {
     const sandbox = makeTempDir("swing-session");
     const home = path.join(sandbox, "home");
 
@@ -47,7 +47,7 @@ describe("Swing", () => {
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
   });
 
-  it("swing picker navigates to a Session worktree on another branch and warns", async () => {
+  it("navigates from the swing picker to a Session worktree on another branch and warns", async () => {
     const sandbox = makeTempDir("swing-session-branch-mismatch");
     const home = path.join(sandbox, "home");
 
@@ -72,7 +72,7 @@ describe("Swing", () => {
     );
   });
 
-  it("swing can leave a managed Session worktree after its branch changes", () => {
+  it("lets swing leave a managed Session worktree after its branch changes", () => {
     const sandbox = makeTempDir("swing-current-session-branch-mismatch");
     const home = path.join(sandbox, "home");
 
@@ -90,7 +90,7 @@ describe("Swing", () => {
     expect(result.stderr).toContain(`Switch to ${repoRoot}`);
   });
 
-  it("swing without a target opens a Swing picker and selects a Session", async () => {
+  it("opens a Swing picker for swing without a target and selects a Session", async () => {
     const sandbox = makeTempDir("swing-picker-number");
     const home = path.join(sandbox, "home");
 
@@ -112,7 +112,7 @@ describe("Swing", () => {
     expect(result.stderr).toContain(worktreeRoot);
   });
 
-  it("swing detects a linked worktree outside Monke home by branch name", () => {
+  it("detects a linked worktree outside Monke home by branch name during swing", () => {
     const sandbox = makeTempDir("swing-linked-worktree");
     const home = path.join(sandbox, "home");
 
@@ -131,7 +131,7 @@ describe("Swing", () => {
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
   });
 
-  it("swing picker includes linked worktrees outside Monke home", async () => {
+  it("includes linked worktrees outside Monke home in the swing picker", async () => {
     const sandbox = makeTempDir("swing-picker-linked-worktree");
     const home = path.join(sandbox, "home");
 
@@ -160,7 +160,7 @@ describe("Swing", () => {
     expect(result.stdout.endsWith(`${worktreeRoot}\n`)).toBeTruthy();
   });
 
-  it("swing picker hides paths and lists recently updated Sessions first", async () => {
+  it("hides paths and lists recently updated Sessions first in the swing picker", async () => {
     const sandbox = makeTempDir("swing-picker-recency");
     const home = path.join(sandbox, "home");
 
@@ -198,7 +198,7 @@ describe("Swing", () => {
     expect(prompt?.options.every((option) => option.hint === undefined)).toBeTruthy();
   });
 
-  it("swing picker sorts Sessions and ordinary worktrees by shared recency", async () => {
+  it("sorts Sessions and ordinary worktrees by shared recency in the swing picker", async () => {
     const sandbox = makeTempDir("swing-picker-shared-recency");
     const home = path.join(sandbox, "home");
 
@@ -232,7 +232,7 @@ describe("Swing", () => {
     ]);
   });
 
-  it("swing picker can select the Source checkout from a Session worktree", async () => {
+  it("lets the swing picker select the Source checkout from a Session worktree", async () => {
     const sandbox = makeTempDir("swing-picker-source");
     const home = path.join(sandbox, "home");
 
@@ -254,7 +254,7 @@ describe("Swing", () => {
     expect(result.stderr).toContain(repoRoot);
   });
 
-  it("swing picker omits the current target", async () => {
+  it("omits the current target from the swing picker", async () => {
     const sandbox = makeTempDir("swing-picker-current-history");
     const home = path.join(sandbox, "home");
 
@@ -288,7 +288,7 @@ describe("Swing", () => {
     expect(backToSource.stdout.endsWith(`${repoRoot}\n`)).toBeTruthy();
   });
 
-  it("swing picker rejects unknown selections", async () => {
+  it("rejects unknown swing picker selections", async () => {
     const sandbox = makeTempDir("swing-picker-invalid");
     const home = path.join(sandbox, "home");
 
@@ -308,7 +308,7 @@ describe("Swing", () => {
     ).rejects.toThrow(/Unknown selection: missing/u);
   });
 
-  it("swing fails clearly when the Session does not exist", () => {
+  it("fails clearly during swing when the Session does not exist", () => {
     const sandbox = makeTempDir("swing-missing");
     const home = path.join(sandbox, "home");
 
@@ -321,7 +321,7 @@ describe("Swing", () => {
     );
   });
 
-  it("swing treats @ inside Session names as ordinary branch text", () => {
+  it("treats @ inside Session names as ordinary branch text during swing", () => {
     const sandbox = makeTempDir("swing-at-session");
     const home = path.join(sandbox, "home");
 
@@ -338,7 +338,7 @@ describe("Swing", () => {
     expect(result.stderr).toContain(`Switch to ${worktreeRoot}`);
   });
 
-  it("swing caret returns from a Session worktree to the Source checkout", () => {
+  it("returns from a Session worktree to the Source checkout with swing caret", () => {
     const sandbox = makeTempDir("swing-source");
     const home = path.join(sandbox, "home");
 
@@ -355,7 +355,7 @@ describe("Swing", () => {
     expect(result.stderr).toContain(`Switch to ${repoRoot}`);
   });
 
-  it("swing allows the current Session worktree to live outside Monke home with a warning", () => {
+  it("allows the current Session worktree to live outside Monke home during swing with a warning", () => {
     const sandbox = makeTempDir("swing-external-worktree");
     const home = path.join(sandbox, "home");
 
@@ -378,7 +378,7 @@ describe("Swing", () => {
     expect(result.stderr).toContain(`Switch to ${repoRoot}`);
   });
 
-  it("swing dash toggles to the Previous Swing target scoped by Root repo", () => {
+  it("toggles to the Previous Swing target scoped by Root repo with swing dash", () => {
     const sandbox = makeTempDir("swing-previous");
     const home = path.join(sandbox, "home");
 
@@ -404,7 +404,7 @@ describe("Swing", () => {
     );
   });
 
-  it("swing rejects corrupt Previous Swing target history with its file and field path", () => {
+  it("rejects corrupt Previous Swing target history during swing with its file and field path", () => {
     const sandbox = makeTempDir("swing-corrupt-history");
     const home = path.join(sandbox, "home");
 
@@ -448,7 +448,7 @@ previous:
       expected: /version/u,
       name: "unknown future Swing history versions"
     }
-  ])("swing rejects $name", ({ contents, expected }) => {
+  ])("rejects $name during swing", ({ contents, expected }) => {
     const sandbox = makeTempDir("swing-history-versioning");
     const home = path.join(sandbox, "home");
 
@@ -465,7 +465,7 @@ previous:
     );
   });
 
-  it("swing resolves same-repo GitHub PR numbers and URLs to existing Sessions", () => {
+  it("resolves same-repo GitHub PR numbers and URLs to existing Sessions during swing", () => {
     const sandbox = makeTempDir("swing-pr");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -532,7 +532,7 @@ previous:
     expect(readFileSync(openLogPath, "utf-8")).toBe(`${codexWorkspaceUrl}\n`);
   });
 
-  it("swing reports malformed GitHub PR fields with the response field path", () => {
+  it("reports malformed GitHub PR fields during swing with the response field path", () => {
     const sandbox = makeTempDir("swing-pr-malformed");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -559,7 +559,7 @@ previous:
     ).toThrow(/Invalid GitHub PR #404:[\s\S]*headRefName/u);
   });
 
-  it("swing creates a missing same-repo GitHub PR Session and retains its source identity", () => {
+  it("creates a missing same-repo GitHub PR Session during swing and retains its source identity", () => {
     const sandbox = makeTempDir("swing-pr-create");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -629,7 +629,7 @@ apps:
     expect(loadSessionState(home, repoRoot, prBranch)).toStrictEqual(completed);
   });
 
-  it("swing refuses to navigate to a newly prepared config-less PR Session", () => {
+  it("refuses to navigate via swing to a newly prepared config-less PR Session", () => {
     const sandbox = makeTempDir("swing-pr-config-less");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -678,7 +678,7 @@ apps:
     });
   });
 
-  it("swing validates completed pinned-default identity before recreating its PR branch", () => {
+  it("validates completed pinned-default identity during swing before recreating its PR branch", () => {
     const sandbox = makeTempDir("swing-pr-pinned-default-recovery");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -719,7 +719,7 @@ apps:
     expect(loadSessionState(home, repoRoot, prBranch)).toStrictEqual(before);
   });
 
-  it("swing rejects an invalid existing PR Session path without creating the PR branch", () => {
+  it("rejects an invalid existing PR Session path during swing without creating the PR branch", () => {
     const sandbox = makeTempDir("swing-pr-invalid-path");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -756,7 +756,7 @@ apps:
     expect(localBranchExists(repoRoot, prBranch)).toBeFalsy();
   });
 
-  it("swing rejects an existing PR Session whose branch diverged from the PR head", () => {
+  it("rejects swing to an existing PR Session whose branch diverged from the PR head", () => {
     const sandbox = makeTempDir("swing-pr-stale-existing");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -809,7 +809,7 @@ apps:
     expect(readFileSync(path.join(worktreeRoot, "README.md"), "utf-8")).toBe("pr head\n");
   });
 
-  it("swing navigates to an existing in-sync PR Session after re-fetching", () => {
+  it("navigates via swing to an existing in-sync PR Session after re-fetching", () => {
     const sandbox = makeTempDir("swing-pr-existing-in-sync");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -853,7 +853,7 @@ apps:
     expect(secondSwing.stderr).toContain(`Moved Swing target to ${worktreeRoot}`);
   });
 
-  it("swing rejects missing PR Session when a local PR branch diverges", () => {
+  it("rejects swing to a missing PR Session when a local PR branch diverges", () => {
     const sandbox = makeTempDir("swing-pr-stale-local");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -890,7 +890,7 @@ apps:
     expect(existsSync(getExpectedWorktreePath(home, repoRoot, prBranch))).toBeFalsy();
   });
 
-  it("swing --codex escapes percent-encoded URLs for the Windows launcher", () => {
+  it("escapes percent-encoded URLs for the Windows launcher in swing --codex", () => {
     const sandbox = makeTempDir("swing-codex-windows");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -920,7 +920,7 @@ apps:
     );
   });
 
-  it("swing rejects unsupported PR and target forms clearly", () => {
+  it("rejects unsupported PR and target forms clearly during swing", () => {
     const sandbox = makeTempDir("swing-unsupported");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");

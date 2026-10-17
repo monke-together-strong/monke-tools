@@ -12,7 +12,7 @@ import {
 import { makeTempDir, write, writeGlobalInstructionsSource } from "./helpers.ts";
 
 describe("skills", () => {
-  it("explicit Skill target selection rejects an empty preference before mutation", () => {
+  it("rejects an empty preference for explicit Skill target selection before mutation", () => {
     const sandbox = makeTempDir("skill-target-empty-explicit");
     const homeDirectory = path.join(sandbox, "home");
 
@@ -29,7 +29,7 @@ describe("skills", () => {
     expect(existsSync(homeDirectory)).toBeFalsy();
   });
 
-  it("skill install targets resolve built-ins against OS home and normalize custom skill roots", () => {
+  it("resolves built-in skill install targets against OS home and normalizes custom skill roots", () => {
     const homeDirectory = makeTempDir("skill-target-home");
     const monkeHome = makeTempDir("skill-target-monke-home");
 
@@ -54,7 +54,7 @@ describe("skills", () => {
     expect(targets.map((target) => target.agentSkillRoot)).not.toContain(monkeHome);
   });
 
-  it("custom skill roots reject the managed namespace path itself", () => {
+  it("rejects the managed namespace path itself as a custom skill root", () => {
     const homeDirectory = makeTempDir("skill-target-custom-invalid");
 
     expect(() =>
@@ -67,7 +67,7 @@ describe("skills", () => {
     ).toThrow(/Agent skill root/u);
   });
 
-  it("skill namespace reconciliation projects Codex-only skills only into Codex", () => {
+  it("projects Codex-only skills only into Codex during skill namespace reconciliation", () => {
     const sandbox = makeTempDir("skill-reconcile-project");
     const sourceCheckout = path.join(sandbox, "source");
     writeGlobalInstructionsSource(sourceCheckout);
@@ -111,7 +111,7 @@ describe("skills", () => {
     }
   });
 
-  it("Claude skill reconciliation flattens source categories into the Agent skill root", () => {
+  it("flattens source categories into the Agent skill root during Claude skill reconciliation", () => {
     const sandbox = makeTempDir("skill-reconcile-claude-flat");
     const sourceCheckout = path.join(sandbox, "source");
     writeGlobalInstructionsSource(sourceCheckout);
@@ -182,7 +182,7 @@ describe("skills", () => {
     expect(lstatSync(path.join(codexNamespace, "codex")).isSymbolicLink()).toBeTruthy();
   });
 
-  it("Reference-backed skills resolve packaged references from namespaced and Claude flat targets", () => {
+  it("resolves packaged references for Reference-backed skills from namespaced and Claude flat targets", () => {
     const sandbox = makeTempDir("skill-reconcile-reference-backed");
     const sourceCheckout = path.join(sandbox, "source");
     writeGlobalInstructionsSource(sourceCheckout);
@@ -263,7 +263,7 @@ describe("skills", () => {
     expect(existsSync(path.join(sandbox, ".claude", "references"))).toBeFalsy();
   });
 
-  it("Claude skill reconciliation rejects unknown future flat manifest versions", () => {
+  it("rejects unknown future flat manifest versions during Claude skill reconciliation", () => {
     const sandbox = makeTempDir("skill-reconcile-future-manifest");
     const sourceCheckout = path.join(sandbox, "source");
     writeGlobalInstructionsSource(sourceCheckout);
@@ -292,7 +292,7 @@ describe("skills", () => {
   });
 
   it.each(["../unrelated", "nested/skill", ".", "..", "skill\0name"])(
-    "Claude manifest rejects unsafe Skill name %j before removing links",
+    "rejects unsafe Skill slug %j in the Claude manifest before removing links",
     (name) => {
       const sandbox = makeTempDir("skill-manifest-name-boundary");
       const sourceCheckout = path.join(sandbox, "source");
@@ -327,7 +327,7 @@ describe("skills", () => {
     }
   );
 
-  it("Claude manifest rejects supporting links outside its references destination before removal", () => {
+  it("rejects supporting links outside the Claude manifest's references destination before removal", () => {
     const sandbox = makeTempDir("skill-manifest-supporting-boundary");
     const sourceCheckout = path.join(sandbox, "source");
     writeGlobalInstructionsSource(sourceCheckout);
@@ -361,7 +361,7 @@ describe("skills", () => {
     expect(readlinkSync(unrelated)).toBe(sourcePath);
   });
 
-  it("skill namespace reconciliation attempts every selected target before failing on unmanaged namespaces", () => {
+  it("attempts every selected target during skill namespace reconciliation before failing on unmanaged namespaces", () => {
     const sandbox = makeTempDir("skill-reconcile-partial");
     const sourceCheckout = path.join(sandbox, "source");
     writeGlobalInstructionsSource(sourceCheckout);
@@ -391,7 +391,7 @@ describe("skills", () => {
     expect(lstatSync(path.join(blockedSkillRoot, "monke-tools")).isDirectory()).toBeTruthy();
   });
 
-  it("skill namespace reconciliation continues after deselected target cleanup failures", () => {
+  it("continues skill namespace reconciliation after deselected target cleanup failures", () => {
     const sandbox = makeTempDir("skill-reconcile-cleanup-partial");
     const sourceCheckout = path.join(sandbox, "source");
     writeGlobalInstructionsSource(sourceCheckout);
@@ -422,7 +422,7 @@ describe("skills", () => {
     ).toBeTruthy();
   });
 
-  it("skill namespace reconciliation removes deselected managed namespaces", () => {
+  it("removes deselected managed namespaces during skill namespace reconciliation", () => {
     const sandbox = makeTempDir("skill-reconcile-deselect");
     const sourceCheckout = path.join(sandbox, "source");
     writeGlobalInstructionsSource(sourceCheckout);

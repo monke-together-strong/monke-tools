@@ -63,7 +63,7 @@ done
 
 describe("repo skill edits preserve unrelated YAML bytes", () => {
   it.each([false, true])(
-    "repo add rejects a slug shared by skills and references with reference first=%s",
+    "rejects a slug shared by skills and references on repo add with reference first=%s",
     async (referenceFirst) => {
       const { repo, runtime, sandbox, upstream } = fixture();
 
@@ -120,7 +120,7 @@ describe("repo skill edits preserve unrelated YAML bytes", () => {
   );
 
   it.each(["restore", "update"])(
-    "repo %s rejects handwritten mixed-kind slug ownership before changing restored state",
+    "rejects handwritten mixed-kind slug ownership on repo %s before changing restored state",
     async (action) => {
       const { bin, recipe, repo, runtime, sandbox, upstream } = fixture();
 
@@ -187,7 +187,7 @@ done
     }
   );
 
-  it("shared commit and source aliases resolve for restore, list, and update", async () => {
+  it("resolves shared commit and source aliases for restore, list, and update", async () => {
     const { bin, repo, runtime, sandbox, upstream } = fixture();
     write(
       upstream,
@@ -224,7 +224,7 @@ done
     { prefix: 'cleanupCommand: &command "echo cleanup"\n', state: "rebound" }
   ])("$state aliases outside skills", ({ prefix }) => {
     it.each(["add", "policy", "remove", "update"])(
-      "%s refuses to change an anchor referenced outside skills",
+      "refuses on %s to change an anchor referenced outside skills",
       async (action) => {
         const { bin, recipe, repo, runtime, upstream } = fixture();
         const original = `${prefix}skills:\n  - source: ${upstream}\n    commit: ${recipe.commit}\n    skills:\n      - slug: example\n        description: &command "echo setup"\nbootstrapCommand: *command\n`;
@@ -268,7 +268,7 @@ done
     { alias: "symlink", temporary: "skills/.monke-restored.json.tmp" },
     { alias: "hardlink", temporary: "skills/.monke-restored.json.tmp" }
   ])(
-    "add leaves a $alias at $temporary and its external bytes untouched",
+    "leaves a $alias at $temporary and its external bytes untouched on add",
     async ({ alias, temporary }) => {
       const { recipe, repo, runtime, sandbox, upstream } = fixture();
       const external = path.join(sandbox, "external");
@@ -292,7 +292,7 @@ done
     }
   );
 
-  it("add appends skills without changing four-space indentation or quoting", async () => {
+  it("appends skills on add without changing four-space indentation or quoting", async () => {
     const { repo, runtime, upstream } = fixture();
 
     const original =
@@ -305,7 +305,7 @@ done
     expect(parseDocument(updated).getIn(["skills", 0, "source"])).toBe(upstream);
   });
 
-  it("add preserves indented root keys", async () => {
+  it("preserves indented root keys on add", async () => {
     const { repo, runtime, upstream } = fixture();
     const original = "    apps: {}\n    bootstrapCommand: 'echo setup'\n";
     write(repo, "monke.yml", original);
@@ -317,7 +317,7 @@ done
   });
 
   it.each(["block", "flow", "flow root"])(
-    "policy replaces a %s skills value without changing surrounding comments and formatting",
+    "replaces a %s skills value on policy without changing surrounding comments and formatting",
     async (style) => {
       const { recipe, repo, runtime, upstream } = fixture();
       const block = style === "block";
@@ -355,7 +355,7 @@ done
     "{apps: {}, bootstrapCommand: 'echo setup'} # End\n",
     "{apps: {web: {path: '.'}}, # Keep trailing comma\n} # End\n",
     "{ # Empty config\n} # End\n"
-  ])("add appends inside a flow mapping: %s", async (original) => {
+  ])("appends inside a flow mapping on add: %s", async (original) => {
     const { repo, runtime, upstream } = fixture();
     write(repo, "monke.yml", original);
     const insertion = original.lastIndexOf("}");
@@ -367,7 +367,7 @@ done
   });
 
   it.each(["", "# Guidance only\n", "---\n# Guidance only\n...\n"])(
-    "add handles an empty YAML document: %j",
+    "handles an empty YAML document on add: %j",
     async (original) => {
       const { repo, runtime, upstream } = fixture();
       write(repo, "monke.yml", original);
@@ -397,7 +397,7 @@ describe("repo skill imports stay ignored", () => {
       reference: false,
       target: "skills/.monke-restored.json"
     }
-  ])("add repairs a later negation of $entry once", async ({ entry, reference, target }) => {
+  ])("repairs a later negation of $entry once on add", async ({ entry, reference, target }) => {
     const { repo, runtime, upstream } = fixture();
     const original = `# Keep these bytes.\r\n${entry}\r\n!${entry}\r\n# Keep the tail.`;
     write(repo, ".gitignore", original);
@@ -434,7 +434,7 @@ describe("repo skill imports stay ignored", () => {
       reference: false
     }
   ])(
-    "$action refuses conflicting nested $ignore rules before accepted state changes",
+    "refuses conflicting nested $ignore rules on $action before accepted state changes",
     async ({ action, ignore, pattern, reference }) => {
       const { bin, repo, runtime, upstream } = fixture();
       await runCliAsync(

@@ -41,7 +41,7 @@ const AuditCaseSchema = z.object({
 
 describe("independently labeled local worktree inventory, 2026-09-06", () => {
   it.each(z.array(AuditCaseSchema).parse(auditCases))(
-    "worktree $id returns $expected",
+    "returns $expected for worktree $id",
     ({ expected, snapshot }) => {
       expect(decideCleanupEligibility(snapshot).eligible).toBe(expected);
     }

@@ -13,7 +13,7 @@ const STATE_POLL_ATTEMPTS = 200;
 const STATE_POLL_DELAY_MS = 10;
 
 describe("Cleanup authority", () => {
-  it("a migrated release supersedes legacy snapshots and Chop does not repeat it", () => {
+  it("supersedes legacy snapshots with a migrated release that Chop does not repeat", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-migration");
     runMonke({ args: ["spawn", "retained"], cwd: fixture.repoRoot, monkeHome: fixture.home });
     const store = new CheckoutResourceStore(fixture.home);
@@ -57,7 +57,7 @@ describe("Cleanup authority", () => {
   });
 
   it.each(["materialize", "acquire"])(
-    "%s retains deterministic inputs required by pending infrastructure cleanup",
+    "retains deterministic inputs required by pending infrastructure cleanup on %s",
     (operation) => {
       const sandbox = makeTempDir("cleanup-static-authority");
       const home = path.join(sandbox, "home");
@@ -85,7 +85,7 @@ describe("Cleanup authority", () => {
     }
   );
 
-  it("all-reused Resource command outputs retain Cleanup authority A", () => {
+  it("retains Cleanup authority A for all-reused Resource command outputs", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-reuse");
     runMonke({
       args: ["spawn", "retained"],
@@ -128,7 +128,7 @@ describe("Cleanup authority", () => {
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe("A|old-value|old-output\n");
   });
 
-  it("removing external-effect commands retains Cleanup authority A and its env", () => {
+  it("retains Cleanup authority A and its env after removing external-effect commands", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-removed-command");
     runMonke({
       args: ["spawn", "retained"],
@@ -151,7 +151,7 @@ describe("Cleanup authority", () => {
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe("A|old-value|old-output\n");
   });
 
-  it("interruption while waiting for a Resource command lock retains Cleanup authority A", async () => {
+  it("retains Cleanup authority A on interruption while waiting for a Resource command lock", async () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-lock-wait");
     runMonke({
       args: ["spawn", "retained"],

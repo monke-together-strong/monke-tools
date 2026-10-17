@@ -68,7 +68,7 @@ const inventory = z
   .parse(cases);
 
 describe("local whole-Session evidence, 2026-09-06", () => {
-  it.each(inventory)("Session $id returns $expected", ({ expected, snapshot }) => {
+  it.each(inventory)("returns $expected for Session $id", ({ expected, snapshot }) => {
     expect(decideSessionCleanupEligibility(snapshot).eligible).toBe(expected);
   });
 });

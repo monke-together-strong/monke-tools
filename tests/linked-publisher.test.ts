@@ -86,7 +86,7 @@ done
 }
 
 describe("linked publisher collections", () => {
-  it.each([false, true])("publisher YAML overrides stale JSON with linked=%s", async (linked) => {
+  it.each([false, true])("prefers publisher YAML to stale JSON with linked=%s", async (linked) => {
     const { installed, publisher, runtime, upstream } = fixture();
     write(
       publisher,
@@ -121,7 +121,7 @@ describe("linked publisher collections", () => {
     { body: "---\nKeep this section.\n---\nKeep the tail.\n", linked: false },
     { body: "---\nKeep this section.\n---\nKeep the tail.\n", linked: true }
   ])(
-    "published reference bodies retain horizontal rules with linked=$linked",
+    "retains horizontal rules in published reference bodies with linked=$linked",
     async ({ body, linked }) => {
       const { declare, installed, publisher, runtime, upstream } = fixture();
       write(
@@ -144,7 +144,7 @@ describe("linked publisher collections", () => {
     }
   );
 
-  it("default selection publishes declared references beside linked own skills", async () => {
+  it("publishes declared references beside linked own skills under default selection", async () => {
     const { installed, publisher, runtime } = fixture();
     await runCliAsync(["skills", "add", publisher, "--link", "--project"], runtime);
     expect(read(installed, "references/imported/base/MAIN.md")).toBe("Base instructions.\n");
@@ -160,7 +160,7 @@ describe("linked publisher collections", () => {
     );
   });
 
-  it("selection can install only a declared reference", async () => {
+  it("lets selection install only a declared reference", async () => {
     const { installed, publisher, runtime } = fixture();
     await runCliAsync(
       ["skills", "add", publisher, "--link", "--project", "--skill", "base"],
@@ -170,7 +170,7 @@ describe("linked publisher collections", () => {
     expect(existsSync(path.join(installed, "imported/own"))).toBeFalsy();
   });
 
-  it("linked publisher imports isolate consumer overrides from publisher restores", async () => {
+  it("isolates consumer overrides from publisher restores in linked publisher imports", async () => {
     const { consumer, declare, installed, publisher, runtime } = fixture();
 
     const runtimeAt = (cwd: string) =>
@@ -221,7 +221,7 @@ describe("linked publisher collections", () => {
     );
   });
 
-  it("aliases into declared publisher imports keep consumer metadata local", async () => {
+  it("keeps consumer metadata local for aliases into declared publisher imports", async () => {
     const { declare, installed, publisher, runtime } = fixture();
     declare("skill");
     await runCliAsync(["skills", "add", publisher, "--link", "--project"], runtime);
@@ -240,7 +240,7 @@ describe("linked publisher collections", () => {
   });
 
   it.each(["skill", "reference"] as const)(
-    "declared %s selections accept selectors and slugs without duplicate publication",
+    "accepts selectors and slugs for declared %s selections without duplicate publication",
     async (kind) => {
       const { declare, installed, publisher, runtime, upstream } = fixture();
       write(
@@ -310,7 +310,7 @@ describe("linked publisher collections", () => {
   );
 
   it.each(["guide", "Base Skill"])(
-    "exact own slug selection excludes the %s alias",
+    "excludes the %s alias from exact own slug selection",
     async (other) => {
       const { declare, installed, publisher, runtime, upstream } = fixture();
       const slug = other === "guide" ? "Guide" : "Base Skill";
@@ -374,7 +374,7 @@ describe("linked publisher collections", () => {
     }
   );
 
-  it("a declared reference collision fails before restoring or publishing guidance", async () => {
+  it("fails on a declared reference collision before restoring or publishing guidance", async () => {
     const { consumer, declare, installed, publisher, runtime } = fixture();
     declare("reference", "own");
     await expect(
@@ -387,7 +387,7 @@ describe("linked publisher collections", () => {
     );
   });
 
-  it("updates follow publisher kind changes and preserve consumer metadata overrides", async () => {
+  it("follows publisher kind changes in updates and preserves consumer metadata overrides", async () => {
     const { declare, installed, publisher, runtime } = fixture();
     await runCliAsync(
       ["skills", "add", publisher, "--link", "--project", "--skill", "base"],
@@ -423,7 +423,7 @@ describe("linked publisher collections", () => {
     { action: "readd", removeConfig: true },
     { action: "update", removeConfig: true }
   ])(
-    "$action replaces a retired import with an own skill, removeConfig=$removeConfig",
+    "replaces a retired import with an own skill on $action, removeConfig=$removeConfig",
     async ({ action, removeConfig }) => {
       const { declare, installed, publisher, runtime } = fixture();
       const add = ["skills", "add", publisher, "--link", "--project"];
@@ -468,7 +468,7 @@ describe("linked publisher collections", () => {
     }
   );
 
-  it("a Sessions-only config preserves a legacy linked collection without a restore marker", async () => {
+  it("preserves a legacy linked collection without a restore marker under a Sessions-only config", async () => {
     const { installed, publisher, runtime } = fixture();
     write(publisher, "monke.yml", "apps: {}\n");
     const legacy = "---\nname: base\ndescription: Legacy base.\n---\nLegacy instructions.\n";
