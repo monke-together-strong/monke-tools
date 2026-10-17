@@ -6,10 +6,12 @@ import { afterAll } from "vite-plus/test";
 
 const configDirectory = mkdtempSync(path.join(tmpdir(), "monke-test-git-"));
 const globalConfigPath = path.join(configDirectory, "config");
+
 writeFileSync(
   globalConfigPath,
   `[core]\n  excludesFile = ${JSON.stringify(devNull)}\n  attributesFile = ${JSON.stringify(devNull)}\n`
 );
+
 afterAll(() => {
   rmSync(configDirectory, { force: true, recursive: true });
 });

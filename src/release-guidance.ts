@@ -5,6 +5,7 @@ import { MonkeError } from "./errors.ts";
 import { sha256 } from "./sha256.ts";
 
 export const BUNDLED_GUIDANCE_FOLDERS = ["codex", "imported", "internal", "references"] as const;
+
 // Earlier schema-version-1 Releases bundled their recipes in skills.lock.json.
 const RECIPE_FILENAMES = ["monke.yml", "skills.lock.json"];
 
@@ -12,28 +13,36 @@ const RECIPE_FILENAMES = ["monke.yml", "skills.lock.json"];
 export function hashReleaseGuidance(bundleRoot: string) {
   const globalInstructions = path.join(bundleRoot, "instructions", "GLOBAL.md");
   const globalStat = lstatSync(globalInstructions, { throwIfNoEntry: false });
+
   if (!globalStat?.isFile() || globalStat.isSymbolicLink()) {
     throw new MonkeError(`Release guidance file is missing: ${globalInstructions}`);
   }
+
   const hashes = new Map([["instructions/GLOBAL.md", sha256(readFileSync(globalInstructions))]]);
+
   for (const filename of RECIPE_FILENAMES) {
     const recipe = path.join(bundleRoot, filename);
     const recipeStat = lstatSync(recipe, { throwIfNoEntry: false });
+
     if (recipeStat) {
       if (!recipeStat.isFile() || recipeStat.isSymbolicLink()) {
         throw new MonkeError(`Release Skill recipes must be a regular file: ${recipe}`);
       }
+
       hashes.set(filename, sha256(readFileSync(recipe)));
     }
   }
+
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     const root = path.join(bundleRoot, "skills", folder);
     assertGuidanceDirectory(root);
+
     for (const filePath of listRegularFiles(root)) {
       const relativePath = path.relative(bundleRoot, filePath).replaceAll(path.sep, "/");
       hashes.set(relativePath, sha256(readFileSync(filePath)));
     }
   }
+
   return Object.fromEntries([...hashes].toSorted(([left], [right]) => left.localeCompare(right)));
 }
 
@@ -44,6 +53,7 @@ export function assertReleaseGuidanceHashes(
 ) {
   const expectedPaths = Object.keys(expected).toSorted();
   const actualPaths = Object.keys(actual).toSorted();
+
   if (
     JSON.stringify(expectedPaths) !== JSON.stringify(actualPaths) ||
     expectedPaths.some((filePath) => expected[filePath] !== actual[filePath])
@@ -66,9 +76,11 @@ export function findChangedReleaseGuidancePaths(
       ? sha256(readFileSync(globalInstructions))
       : null
   );
+
   for (const filename of RECIPE_FILENAMES) {
     const recipe = path.join(bundleRoot, filename);
     const recipeStat = lstatSync(recipe, { throwIfNoEntry: false });
+
     if (recipeStat) {
       actual.set(
         filename,
@@ -76,9 +88,11 @@ export function findChangedReleaseGuidancePaths(
       );
     }
   }
+
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     collectGuidanceEntries(path.join(bundleRoot, "skills", folder), bundleRoot, actual);
   }
+
   return [...new Set([...Object.keys(expected), ...actual.keys()])]
     .filter((filePath) => actual.get(filePath) !== expected[filePath])
     .toSorted((left, right) => left.localeCompare(right));
@@ -90,12 +104,15 @@ function collectGuidanceEntries(
   entries: Map<string, string | null>
 ) {
   const stat = lstatSync(root, { throwIfNoEntry: false });
+
   if (!stat?.isDirectory() || stat.isSymbolicLink()) {
     return;
   }
+
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     const entryPath = path.join(root, entry.name);
     const relativePath = path.relative(bundleRoot, entryPath).replaceAll(path.sep, "/");
+
     if (entry.isDirectory() && !entry.isSymbolicLink()) {
       collectGuidanceEntries(entryPath, bundleRoot, entries);
     } else if (entry.isFile()) {
@@ -108,8 +125,10 @@ function collectGuidanceEntries(
 
 function listRegularFiles(root: string): string[] {
   const files: string[] = [];
+
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     const entryPath = path.join(root, entry.name);
+
     if (entry.isDirectory()) {
       for (const filePath of listRegularFiles(entryPath)) {
         files.push(filePath);
@@ -120,11 +139,13 @@ function listRegularFiles(root: string): string[] {
       throw new MonkeError(`Release guidance contains an unsupported entry: ${entryPath}`);
     }
   }
+
   return files;
 }
 
 function assertGuidanceDirectory(directory: string) {
   const stat = lstatSync(directory, { throwIfNoEntry: false });
+
   if (!stat?.isDirectory() || stat.isSymbolicLink()) {
     throw new MonkeError(`Release guidance folder is missing: ${directory}`);
   }

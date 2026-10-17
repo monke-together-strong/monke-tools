@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   readImportRecipeStore,
@@ -40,12 +40,13 @@ import { createTestRuntime } from "./runtime-fixture.ts";
 import { prepareActiveRelease, release as catalogRelease } from "./update-fixtures.ts";
 
 describe("versioned installation lifecycle", () => {
-  test("installing and seeding a legacy Release preserves its original hashed lock", async () => {
+  it("preserves the original hashed lock when installing and seeding a legacy Release", async () => {
     const sandbox = makeTempDir("legacy-release-registry-seeding");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
     const candidate = prepareReleaseBundle(sandbox);
     const importedSkill = "---\nname: legacy\ndescription: Legacy bundled skill.\n---\nAccepted.\n";
+
     const legacyLock = `${JSON.stringify({
       recipes: [
         {
@@ -64,6 +65,7 @@ describe("versioned installation lifecycle", () => {
       ],
       version: 3
     })}\n`;
+
     write(candidate.bundleRoot, "skills.lock.json", legacyLock);
     write(candidate.bundleRoot, "skills/imported/legacy/SKILL.md", importedSkill);
     write(
@@ -114,18 +116,21 @@ describe("versioned installation lifecycle", () => {
     ).toBe(importedSkill);
   });
 
-  test("current tooling can check an unchanged legacy Release and detects changes to its lock", async () => {
+  it("lets current tooling check an unchanged legacy Release and detect changes to its lock", async () => {
     const sandbox = makeTempDir("legacy-release-update-check");
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
     const legacyLock = '{"recipes":[],"version":3}\n';
+
     const manifest = ReleaseInstallManifestSchema.parse(
       JSON.parse(readFileSync(path.join(installRoot, "install-manifest.json"), "utf-8"))
     );
+
     manifest.guidanceHashes["skills.lock.json"] = hash("sha256", legacyLock, "hex");
     write(installRoot, "skills.lock.json", legacyLock);
     write(installRoot, "install-manifest.json", `${JSON.stringify(manifest)}\n`);
     let stderr = "";
+
     const runtime = createTestRuntime({
       architecture: "x64",
       cwd: sandbox,
@@ -159,24 +164,28 @@ describe("versioned installation lifecycle", () => {
     );
   });
 
-  test("Local installation restores accepted pins and honors removed repo declarations", async () => {
+  it("restores accepted pins and honors removed repo declarations during Local tool install", async () => {
     const sandbox = makeTempDir("local-install-locked-imports");
     const sourceCheckout = path.join(sandbox, "source");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
     prepareSource(sourceCheckout);
     createRepo(sourceCheckout, { "monke.yml": "skills: []\n" });
+
     const runtime = createTestRuntime({
       cwd: sourceCheckout,
       env: { HOME: home, MONKE_HOME: monkeHome },
       onStderr() {},
       onStdout() {}
     });
+
     const upstream = createRepo(path.join(sandbox, "upstream"), {
       "alpha/SKILL.md": "---\nname: alpha\ndescription: Lifecycle fixture\n---\n\nAccepted one.\n"
     });
+
     const originalCwd = process.cwd();
     const originalMonkeHome = process.env.MONKE_HOME;
+
     try {
       process.chdir(sourceCheckout);
       process.env.MONKE_HOME = monkeHome;
@@ -282,7 +291,7 @@ describe("versioned installation lifecycle", () => {
     }
   }, 30_000);
 
-  test("a verified bundle activates one complete Release install with writable projected guidance", async () => {
+  it("activates one complete Release install with writable projected guidance from a verified bundle", async () => {
     const sandbox = makeTempDir("release-install-activation");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -305,6 +314,7 @@ describe("versioned installation lifecycle", () => {
     });
 
     const installRoot = path.join(monkeHome, "installs", "release-1.2.3-linux-x64");
+
     const projectedSkill = path.join(
       home,
       ".codex",
@@ -314,6 +324,7 @@ describe("versioned installation lifecycle", () => {
       "example",
       "SKILL.md"
     );
+
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
       path.join("installs", "release-1.2.3-linux-x64")
     );
@@ -339,7 +350,7 @@ describe("versioned installation lifecycle", () => {
     );
   });
 
-  test("a noninteractive Release install without targets activates core and recommends repair", async () => {
+  it("activates core and recommends repair for a noninteractive Release install without targets", async () => {
     const sandbox = makeTempDir("release-install-noninteractive");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -389,7 +400,7 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "install-backups"))).toBeFalsy();
   });
 
-  test("automation can install Release guidance into an explicit Custom Skill target", async () => {
+  it("lets automation install Release guidance into an explicit Custom Skill target", async () => {
     const sandbox = makeTempDir("release-install-custom-target");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -413,7 +424,7 @@ describe("versioned installation lifecycle", () => {
     );
   });
 
-  test("an interactive Release install asks for targets only after core activation", async () => {
+  it("asks for targets in an interactive Release install only after core activation", async () => {
     const sandbox = makeTempDir("release-install-interactive");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -440,7 +451,7 @@ describe("versioned installation lifecycle", () => {
     );
   });
 
-  test("known Global instruction failures are rejected before Release activation", async () => {
+  it("rejects known Global instruction failures before Release activation", async () => {
     const sandbox = makeTempDir("release-install-preflight");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -461,10 +472,10 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     ["read-only", 0o555],
     ["unsearchable", 0o666]
-  ])("a %s Skill destination is rejected before Release activation", async (_state, mode) => {
+  ])("rejects a %s Skill destination before Release activation", async (_state, mode) => {
     const sandbox = makeTempDir("release-install-read-only-skills");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -491,7 +502,7 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
   });
 
-  test("invalid Release guidance leaves installation state unchanged", async () => {
+  it("leaves installation state unchanged for invalid Release guidance", async () => {
     const sandbox = makeTempDir("release-install-invalid-guidance");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -511,8 +522,8 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(monkeHome)).toBeFalsy();
   });
 
-  test.each(["destination", "parent"])(
-    "unwritable Global instruction %s is rejected before Release activation",
+  it.each(["destination", "parent"])(
+    "rejects an unwritable Global instruction %s before Release activation",
     async (unwritablePathKind) => {
       const sandbox = makeTempDir("release-install-unwritable-instructions");
       const home = path.join(sandbox, "home");
@@ -520,6 +531,7 @@ describe("versioned installation lifecycle", () => {
       const release = prepareReleaseBundle(sandbox);
       const configDirectory = path.join(home, ".codex");
       const instructionsPath = path.join(home, ".codex", "AGENTS.md");
+
       if (unwritablePathKind === "destination") {
         write(home, ".codex/AGENTS.md", "User instructions.\n");
         chmodSync(instructionsPath, 0o444);
@@ -550,7 +562,7 @@ describe("versioned installation lifecycle", () => {
     }
   );
 
-  test("saved deselected Global instructions are preflighted before Release activation", async () => {
+  it("preflights saved deselected Global instructions before Release activation", async () => {
     const sandbox = makeTempDir("release-install-saved-target-preflight");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -575,8 +587,8 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "installs"))).toBeFalsy();
   });
 
-  test.each(["absent", "unmanaged"])(
-    "saved deselected %s Global instructions remain a no-op during preflight",
+  it.each(["absent", "unmanaged"])(
+    "treats saved deselected %s Global instructions as a no-op during preflight",
     async (instructionState) => {
       const sandbox = makeTempDir("release-install-noop-removal-preflight");
       const home = path.join(sandbox, "home");
@@ -588,6 +600,7 @@ describe("versioned installation lifecycle", () => {
         skillInstallPreference: { targets: [{ kind: "claude" }] },
         version: 1
       });
+
       if (instructionState === "unmanaged") {
         write(home, ".claude/CLAUDE.md", "User instructions.\n");
         chmodSync(instructionsPath, 0o444);
@@ -617,7 +630,7 @@ describe("versioned installation lifecycle", () => {
     }
   );
 
-  test("predictable Skill projection collisions fail before Release activation", async () => {
+  it("fails on predictable Skill projection collisions before Release activation", async () => {
     const sandbox = makeTempDir("release-install-projection-failure");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -639,7 +652,7 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
   });
 
-  test("Codiff failure after activation leaves the new Release install active", async () => {
+  it("leaves the new Release install active on Codiff failure after activation", async () => {
     const sandbox = makeTempDir("release-install-codiff-failure");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -666,7 +679,7 @@ describe("versioned installation lifecycle", () => {
     );
   });
 
-  test("rejects a manifest whose Codiff minimum cannot be consumed", () => {
+  it("rejects a manifest whose Codiff minimum cannot be consumed", () => {
     const installRoot = makeTempDir("invalid-install-manifest");
     writeFileSync(
       path.join(installRoot, "install-manifest.json"),
@@ -688,7 +701,7 @@ describe("versioned installation lifecycle", () => {
     expect(() => loadToolInstall(installRoot)).toThrow(/minimumCodiffVersion/u);
   });
 
-  test("Local refresh atomically activates a self-describing install behind the stable command", async () => {
+  it("atomically activates a self-describing install behind the stable command during Local install refresh", async () => {
     const sandbox = makeTempDir("local-install-activation");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -745,7 +758,7 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "locks", "installation.lock"))).toBeFalsy();
   });
 
-  test("Local refresh rejects a staged mt without execute permission", async () => {
+  it("rejects a staged mt without execute permission during Local install refresh", async () => {
     const sandbox = makeTempDir("local-install-not-executable");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -764,7 +777,7 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
   });
 
-  test("Release activation identifies a missing installer", async () => {
+  it("identifies a missing installer during Release install activation", async () => {
     const sandbox = makeTempDir("release-install-missing-installer");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -782,7 +795,7 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
   });
 
-  test("Release activation rejects a manifest outside the selected catalog identity", async () => {
+  it("rejects a manifest outside the selected catalog identity during Release install activation", async () => {
     const sandbox = makeTempDir("release-install-catalog-mismatch");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -807,7 +820,7 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(monkeHome)).toBeFalsy();
   });
 
-  test("Local refresh rejects an unwritable stable command destination before activation", async () => {
+  it("rejects an unwritable stable command destination during Local install refresh before activation", async () => {
     const sandbox = makeTempDir("local-install-stable-command-preflight");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -824,7 +837,7 @@ describe("versioned installation lifecycle", () => {
     chmodSync(path.join(home, ".local", "bin"), 0o755);
   });
 
-  test("Local refresh replaces a Release install and projects source-backed guidance", async () => {
+  it("replaces a Release install during Local install refresh and projects source-backed guidance", async () => {
     const sandbox = makeTempDir("release-to-local-refresh");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -857,7 +870,7 @@ describe("versioned installation lifecycle", () => {
     );
   });
 
-  test("ordinary CLI commands do not acquire or wait for the installation lock", async () => {
+  it("does not acquire or wait for the installation lock in ordinary CLI commands", async () => {
     const sandbox = makeTempDir("ordinary-command-installation-lock");
     const monkeHome = path.join(sandbox, "monke-home");
     const lockPath = path.join(monkeHome, "locks", "installation.lock");
@@ -881,7 +894,7 @@ describe("versioned installation lifecycle", () => {
     expect(existsSync(lockPath)).toBeTruthy();
   });
 
-  test("Local refresh keeps the stable command link and only one predecessor", async () => {
+  it("keeps the stable command link and only one predecessor during Local install refresh", async () => {
     const sandbox = makeTempDir("local-install-retention");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -917,7 +930,7 @@ describe("versioned installation lifecycle", () => {
     ).toBeTruthy();
   });
 
-  test("Local refresh preserves the configured Skill preference", async () => {
+  it("preserves the configured Skill preference during Local install refresh", async () => {
     const sandbox = makeTempDir("local-install-config");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -950,7 +963,7 @@ skillInstallPreference:
     );
   });
 
-  test("failed activation preserves the previous Active tool install and skips cleanup", async () => {
+  it("preserves the previous Active tool install and skips cleanup on failed activation", async () => {
     const sandbox = makeTempDir("local-install-failed-activation");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -1002,7 +1015,7 @@ skillInstallPreference:
     expect(existsSync(path.join(monkeHome, "installs", "local-second"))).toBeTruthy();
   });
 
-  test("Local refresh preflights predictable Skill collisions before activation", async () => {
+  it("preflights predictable Skill collisions during Local install refresh before activation", async () => {
     const sandbox = makeTempDir("local-install-projection-preflight");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -1029,8 +1042,8 @@ skillInstallPreference:
     expect(existsSync(path.join(monkeHome, "installs", "local-collision"))).toBeFalsy();
   });
 
-  test.each(["personal target", "owned duplicate", "removed bundled import"] as const)(
-    "Local refresh preflights the retained registry for a %s",
+  it.each(["personal target", "owned duplicate", "removed bundled import"] as const)(
+    "preflights the retained registry for a %s during Local install refresh",
     async (scenario) => {
       const sandbox = makeTempDir("local-install-registry-preflight");
       const home = path.join(sandbox, "home");
@@ -1050,17 +1063,20 @@ skillInstallPreference:
         "personal/SKILL.md",
         "---\nname: personal\ndescription: Personal skill\n---\nPersonal instructions.\n"
       );
+
       const runtime = createTestRuntime({
         cwd: sandbox,
         env: { HOME: home, MONKE_HOME: monkeHome },
         onStderr() {},
         onStdout() {}
       });
+
       await runCliAsync(["skills", "add", personal], runtime);
       const registryLink = path.join(monkeHome, "skill-registry/skills/internal");
       const previousLink = readlinkSync(registryLink);
       const candidate = path.join(sandbox, "candidate");
       prepareSource(candidate);
+
       if (scenario === "removed bundled import") {
         // The registry's selection is authoritative, even when the candidate still bundles this slug.
         write(
@@ -1070,6 +1086,7 @@ skillInstallPreference:
         );
         write(home, ".claude/skills/obsolete/SKILL.md", "User-owned obsolete skill.\n");
       }
+
       if (scenario === "personal target") {
         rmSync(path.join(home, ".claude/skills/personal"));
         write(home, ".claude/skills/personal/SKILL.md", "User-owned personal skill.\n");
@@ -1080,14 +1097,17 @@ skillInstallPreference:
           "---\nname: personal\n---\nNew owned skill.\n"
         );
       }
+
       const protectedEntry = path.join(
         home,
         ".claude/skills",
         scenario === "removed bundled import" ? "obsolete" : "personal",
         "SKILL.md"
       );
+
       const protectedBytes = readFileSync(protectedEntry, "utf-8");
       let outcome = "activated";
+
       try {
         await activateLocal({
           home,
@@ -1099,6 +1119,7 @@ skillInstallPreference:
       } catch (error) {
         outcome = errorMessage(ThrownValueSchema.parse(error));
       }
+
       const succeeds = scenario === "removed bundled import";
       expect(outcome).toMatch(succeeds ? /^activated$/u : /preflight failed/u);
       expect(readlinkSync(path.join(monkeHome, "current"))).toBe(
@@ -1112,8 +1133,8 @@ skillInstallPreference:
     }
   );
 
-  test.each(["retained imports", "provider collision", "registry collision"] as const)(
-    "Local refresh reconciles a newly bundled source with %s",
+  it.each(["retained imports", "provider collision", "registry collision"] as const)(
+    "reconciles a newly bundled source with %s during Local install refresh",
     async (scenario) => {
       const sandbox = makeTempDir("local-install-new-bundle");
       const home = path.join(sandbox, "home");
@@ -1123,12 +1144,14 @@ skillInstallPreference:
       await activateLocal({ home, installId: "local-first", monkeHome, sourceCheckout });
       const personal = path.join(sandbox, "personal-source");
       write(personal, "personal/SKILL.md", "---\nname: personal\n---\nPersonal instructions.\n");
+
       const runtime = createTestRuntime({
         cwd: sandbox,
         env: { HOME: home, MONKE_HOME: monkeHome },
         onStderr() {},
         onStdout() {}
       });
+
       await runCliAsync(["skills", "add", personal, "--link", "--command", "exit 42"], runtime);
       await runCliAsync(
         ["skills", "policy", "personal-source", "--model-invocation", "deny"],
@@ -1153,13 +1176,17 @@ skillInstallPreference:
         ],
         version: 4
       });
+
       for (const recipe of readImportRecipeStore(sourceCheckout).recipes) {
         rememberRestoredRecipe(sourceCheckout, recipe);
       }
+
       if (scenario === "provider collision") {
         write(home, ".claude/skills/bundled/SKILL.md", "User-owned skill.\n");
       }
+
       let outcome = "activated";
+
       try {
         await activateLocal({
           home,
@@ -1171,6 +1198,7 @@ skillInstallPreference:
       } catch (error) {
         outcome = errorMessage(ThrownValueSchema.parse(error));
       }
+
       const succeeds = scenario === "retained imports";
       expect(outcome).toMatch(
         succeeds
@@ -1193,6 +1221,7 @@ skillInstallPreference:
       expect(readFileSync(path.join(personal, "personal/SKILL.md"), "utf-8")).toContain(
         "disable-model-invocation: true"
       );
+
       for (const relative of [
         ".claude/skills",
         ".codex/skills/monke-tools/imported",
@@ -1211,7 +1240,7 @@ skillInstallPreference:
     }
   );
 
-  test("Local activation completes guidance and reports both shell and Codiff failures", async () => {
+  it("completes guidance during Local install activation and reports both shell and Codiff failures", async () => {
     const sandbox = makeTempDir("local-install-codiff-failure");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -1277,7 +1306,7 @@ skillInstallPreference:
     );
   });
 
-  test("unexpected Local projection failure reports the Active core and repair command", async () => {
+  it("reports the Active core and repair command on unexpected Local projection failure", async () => {
     const sandbox = makeTempDir("local-install-projection-failure");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -1294,9 +1323,11 @@ skillInstallPreference:
         if (collisionInjected || !existsSync(path.join(monkeHome, "current"))) {
           return;
         }
+
         if (readlinkSync(path.join(monkeHome, "current")) !== path.join("installs", installId)) {
           return;
         }
+
         mkdirSync(path.join(home, ".cursor", "skills", "monke-tools", "internal"), {
           recursive: true
         });
@@ -1313,7 +1344,7 @@ skillInstallPreference:
     expect(readlinkSync(path.join(monkeHome, "current"))).toBe(path.join("installs", installId));
   });
 
-  test("Skills Configure rejects a fixed install root that stopped being Active", async () => {
+  it("rejects a fixed install root in Skills Configure after it stops being Active", async () => {
     const sandbox = makeTempDir("local-install-configure");
     const home = path.join(sandbox, "home");
     const physicalRoot = path.join(sandbox, "physical-root");
@@ -1349,6 +1380,7 @@ skillInstallPreference:
       onStdout() {},
       toolInstallRoot: fixedToolAlias
     });
+
     await activateLocal({
       home,
       installId: "local-second",

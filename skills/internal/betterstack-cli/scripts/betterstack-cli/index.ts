@@ -17,8 +17,10 @@ import { getFirstEnvValue, loadEnvFileIfPresent } from "./env";
 
 async function main() {
   const program = createProgram();
+
   if (process.argv.slice(2).length === 0) {
     program.outputHelp();
+
     return;
   }
 
@@ -118,14 +120,20 @@ function addCredentialOptions<
 }
 
 type PaginationCommand = ReturnType<typeof createPaginatedListCommand>;
+
 type PaginationOptions = ReturnType<PaginationCommand["opts"]>;
+
 type SourceGetCommand = ReturnType<typeof createSourceGetCommand>;
+
 type SourceGetOptions = ReturnType<SourceGetCommand["opts"]>;
+
 type QueryRunCommand = ReturnType<typeof createQueryRunCommand>;
+
 type QueryRunOptions = ReturnType<QueryRunCommand["opts"]>;
 
 function parseIntegerOption(value: string) {
   const parsed = Number(value);
+
   if (!Number.isInteger(parsed)) {
     throw new InvalidArgumentError("must be an integer.");
   }
@@ -136,12 +144,15 @@ function parseIntegerOption(value: string) {
 async function initializeEnvironment(envFilePath?: string) {
   if (envFilePath !== undefined && envFilePath !== "") {
     await loadEnvFileIfPresent(envFilePath);
+
     return;
   }
 
   const defaultEnvFile = process.env.BETTERSTACK_ENV_FILE;
+
   if (defaultEnvFile !== undefined && defaultEnvFile !== "") {
     await loadEnvFileIfPresent(defaultEnvFile);
+
     return;
   }
 
@@ -184,8 +195,10 @@ async function handleQueryRun(options: QueryRunOptions) {
 
   const { sourceId, table } = options;
   const sql = await resolveSql(options);
+
   const metadataToken =
     options.token ?? getFirstEnvValue(["BETTER_STACK_TOKEN", "BETTERSTACK_API_TOKEN"]);
+
   const resolvedCredentials = await resolveQueryCredentials(options, {
     metadataToken,
     sourceId,
@@ -253,12 +266,14 @@ async function resolveQueryCredentials(options: QueryRunOptions, context: Resolv
       `a Better Stack connection for team/source ${sourceMetadata?.teamName ?? context.sourceId}`
     }.`
   );
+
   const username = requireQueryCredential(
     options.username ??
       getFirstEnvValue(["BETTERSTACK_QUERY_USERNAME", "BETTERSTACK_SQL_USERNAME"]) ??
       matchingConnection?.username,
     "Missing query username. Provide --username or set BETTERSTACK_QUERY_USERNAME or BETTERSTACK_SQL_USERNAME."
   );
+
   const password = requireQueryCredential(
     options.password ??
       getFirstEnvValue(["BETTERSTACK_QUERY_PASSWORD", "BETTERSTACK_SQL_PASSWORD"]),
@@ -286,16 +301,20 @@ async function loadQueryMetadata(context: ResolvedQueryContext) {
   }
 
   const sourceMetadata = await tryLoadSourceMetadata(context.metadataToken, context.sourceId);
+
   if (sourceMetadata === null) {
     return { matchingConnection: null, sourceMetadata };
   }
+
   const connections = await tryLoadConnections(context.metadataToken);
   const regionHost = queryHostForRegion(sourceMetadata.dataRegion);
+
   const matchingConnection =
     connections.find(
       (connection) =>
         connection.host === regionHost && connection.teamIds.includes(sourceMetadata.teamId)
     ) ?? null;
+
   return { matchingConnection, sourceMetadata };
 }
 
@@ -314,12 +333,14 @@ function requireQueryCredential(value: string | undefined, message: string) {
   if (value === undefined || value === "") {
     fail(message);
   }
+
   return value;
 }
 
 async function loadSourceMetadata(token: string, sourceId: number) {
   const client = createMetadataClient(token);
   const raw = await client.getSource(sourceId);
+
   const parsed = parseMetadataResponse(
     raw,
     BetterStackSourceResponseSchema,
@@ -339,6 +360,7 @@ async function loadSourceMetadata(token: string, sourceId: number) {
 async function loadConnections(token: string) {
   const client = createMetadataClient(token);
   const raw = await client.listConnections(1, 100);
+
   const parsed = parseMetadataResponse(
     raw,
     BetterStackConnectionsResponseSchema,
@@ -451,12 +473,14 @@ function formatHostAndPort(host: string, port: number) {
 function parseMetadataResponse<T extends ZodType>(raw: string, schema: T, errorMessage: string) {
   try {
     const parsed = schema.safeParse(JSON.parse(raw));
+
     if (parsed.success) {
       return parsed.data;
     }
   } catch {
     // The shared contract error below covers malformed JSON and invalid payloads.
   }
+
   return invalidResponse(errorMessage);
 }
 
@@ -476,6 +500,7 @@ async function resolveSql(options: QueryRunOptions) {
   const inlineSql = options.sql;
   const { sqlFile } = options;
   const useStdin = options.stdin === true;
+
   const selectedInputs = [inlineSql !== undefined, sqlFile !== undefined, useStdin].filter(
     Boolean
   ).length;
@@ -526,6 +551,7 @@ function reportFailure(cause: unknown) {
     }
 
     process.exitCode = 1;
+
     return;
   }
 
@@ -535,6 +561,7 @@ function reportFailure(cause: unknown) {
       : cause instanceof Error
         ? (cause.stack ?? `${cause.name}: ${cause.message}`)
         : String(cause);
+
   process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 }

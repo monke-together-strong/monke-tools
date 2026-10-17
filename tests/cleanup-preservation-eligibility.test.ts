@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
   collectCleanupEvidence,
@@ -16,6 +16,7 @@ import { createTestRuntime } from "./runtime-fixture.ts";
 const REPOSITORY = "owner/preservation";
 const BRANCH = "feature/preserved";
 const sandboxes: string[] = [];
+
 type PullRequest = CleanupRepositoryEvidence["pullRequests"][number];
 
 describe("cleanup preservation collection", () => {
@@ -30,31 +31,39 @@ describe("cleanup preservation collection", () => {
     mkdirSync(tempRoot, { recursive: true });
     const sandbox = mkdtempSync(path.join(tempRoot, "cleanup-preservation-"));
     sandboxes.push(sandbox);
+
     const sourceRoot = createRepo(path.join(sandbox, "source"), {
       "other.txt": "unchanged\n",
       "tracked.txt": "original\n"
     });
+
     const worktreePath = path.join(sandbox, "worktree");
     git(sourceRoot, ["remote", "add", "origin", `git@github.com:${REPOSITORY}.git`]);
     git(sourceRoot, ["worktree", "add", "-b", BRANCH, worktreePath]);
+
     if (options.detached) {
       git(worktreePath, ["checkout", "--detach"]);
     }
+
     if (!options.recent) {
       ageWorktree(worktreePath);
     }
+
     const candidate: CleanupCandidate = {
       sourceRoot,
       worktreePath,
       ...(options.ordinary ? {} : { sessionBranch: BRANCH })
     };
+
     const prs: PullRequest[] = [];
     const baseRuntime = createTestRuntime({ cwd: sourceRoot });
+
     const runtime: Runtime = {
       ...baseRuntime,
       async execAsync(command, args) {
         expect(command).toBe("gh");
         const endpoint = args?.[1];
+
         const responses = {
           [`repos/${REPOSITORY}/git/ref/heads/main`]: {
             object: { sha: git(sourceRoot, ["rev-parse", "main"]) }
@@ -62,16 +71,20 @@ describe("cleanup preservation collection", () => {
           [`repos/${REPOSITORY}/pulls?state=all&per_page=100`]: [prs],
           [`repos/${REPOSITORY}`]: { default_branch: "main", full_name: REPOSITORY }
         };
+
         const response =
           endpoint?.includes("/commits/") && endpoint.endsWith("/pulls?per_page=100")
             ? [[]]
             : Object.entries(responses).find(([key]) => key === endpoint)?.[1];
+
         if (!response) {
           throw new Error(`Unexpected API endpoint: ${endpoint}`);
         }
+
         return { exitCode: 0, stderr: "", stdout: JSON.stringify(response) };
       }
     };
+
     return { candidate, prs, runtime, sourceRoot, worktreePath };
   }
 
@@ -79,12 +92,14 @@ describe("cleanup preservation collection", () => {
     write(root, "tracked.txt", contents);
     git(root, ["add", "."]);
     git(root, ["commit", "-m", message]);
+
     return git(root, ["rev-parse", "HEAD"]);
   }
 
   function landPending(item: ReturnType<typeof fixture>) {
     const witness = commit(item.sourceRoot, "landed\n", "land pending changes");
     write(item.worktreePath, "tracked.txt", "landed\n");
+
     return witness;
   }
 
@@ -101,7 +116,7 @@ describe("cleanup preservation collection", () => {
   }
 
   describe("managed pending-work evidence", () => {
-    test("collects a forward bundle and committed ancestry together", async () => {
+    it("collects a forward bundle and committed ancestry together", async () => {
       const item = fixture();
       const witness = landPending(item);
       const snapshot = await collectCleanupEvidence(item.runtime, item.candidate);
@@ -118,7 +133,7 @@ describe("cleanup preservation collection", () => {
       expect(revalidateCleanupEvidence(item.runtime, snapshot)).toBeNull();
     });
 
-    test("does not apply pending-work exceptions to an ordinary worktree", async () => {
+    it("does not apply pending-work exceptions to an ordinary worktree", async () => {
       const item = fixture({ ordinary: true });
       landPending(item);
       const snapshot = await collectCleanupEvidence(item.runtime, item.candidate);
@@ -129,7 +144,7 @@ describe("cleanup preservation collection", () => {
       });
     });
 
-    test("a merged PR does not waive the age gate for accepted dirt", async () => {
+    it("does not let a merged PR waive the age gate for accepted dirt", async () => {
       const item = fixture({ recent: true });
       landPending(item);
       item.prs.push(pullRequest(git(item.worktreePath, ["rev-parse", "HEAD"])));
@@ -141,7 +156,7 @@ describe("cleanup preservation collection", () => {
       });
     });
 
-    test("an exact merged PR cannot excuse unpreserved pending bytes", async () => {
+    it("does not let an exact merged PR excuse unpreserved pending bytes", async () => {
       const item = fixture();
       landPending(item);
       item.prs.push(pullRequest(git(item.worktreePath, ["rev-parse", "HEAD"])));
@@ -154,15 +169,17 @@ describe("cleanup preservation collection", () => {
       });
     });
 
-    test("rejects changed dirty bytes with identical status during provider reads", async () => {
+    it("rejects changed dirty bytes with identical status during provider reads", async () => {
       const item = fixture();
       landPending(item);
       const status = git(item.worktreePath, ["status", "--porcelain=v1"]);
       const original = item.runtime.execAsync;
       item.runtime.execAsync = async (...args) => {
         write(item.worktreePath, "tracked.txt", "unique!\n");
+
         return await original(...args);
       };
+
       const snapshot = await collectCleanupEvidence(item.runtime, item.candidate);
       expect(decideCleanupEligibility(snapshot)).toMatchObject({
         code: "changed-during-inspection",
@@ -171,7 +188,7 @@ describe("cleanup preservation collection", () => {
       expect(git(item.worktreePath, ["status", "--porcelain=v1"])).toBe(status);
     });
 
-    test("rejects changed dirty bytes with identical status after collection", async () => {
+    it("rejects changed dirty bytes with identical status after collection", async () => {
       const item = fixture();
       landPending(item);
       const status = git(item.worktreePath, ["status", "--porcelain=v1"]);
@@ -184,7 +201,7 @@ describe("cleanup preservation collection", () => {
       expect(git(item.worktreePath, ["status", "--porcelain=v1"])).toBe(status);
     });
 
-    test("rejects hidden index entries even when another path is visibly dirty", async () => {
+    it("rejects hidden index entries even when another path is visibly dirty", async () => {
       const item = fixture();
       landPending(item);
       git(item.worktreePath, ["update-index", "--assume-unchanged", "other.txt"]);
@@ -198,7 +215,7 @@ describe("cleanup preservation collection", () => {
   });
 
   describe("complete default-tree and detached evidence", () => {
-    test.each([false, true])(
+    it.each([false, true])(
       "accepts an exact historical whole tree after a rewrite, detached=%s",
       async (detached) => {
         const item = fixture({ detached });
@@ -225,7 +242,7 @@ describe("cleanup preservation collection", () => {
       }
     );
 
-    test("accepts old managed detached ancestry and invalidates a changed detached HEAD", async () => {
+    it("accepts old managed detached ancestry and invalidates a changed detached HEAD", async () => {
       const item = fixture({ detached: true });
       const snapshot = await collectCleanupEvidence(item.runtime, item.candidate);
       expect(snapshot.branch).toBeNull();
@@ -239,10 +256,10 @@ describe("cleanup preservation collection", () => {
       );
     });
 
-    test.each([
+    it.each([
       { label: "retained Session branch", ref: BRANCH, sameHead: false },
       { label: "same-repository exact head", ref: "another-branch", sameHead: true }
-    ])("an open PR on $label blocks detached ancestry", async ({ ref, sameHead }) => {
+    ])("blocks detached ancestry with an open PR on $label", async ({ ref, sameHead }) => {
       const item = fixture({ detached: true });
       const head = sameHead ? git(item.worktreePath, ["rev-parse", "HEAD"]) : "f".repeat(40);
       item.prs.push(
@@ -259,11 +276,11 @@ describe("cleanup preservation collection", () => {
       });
     });
 
-    test.each([
+    it.each([
       { code: "detached-head", ordinary: true, recent: false },
       { code: "recent-worktree", ordinary: false, recent: true }
     ])(
-      "detached ordinary=$ordinary recent=$recent stays blocked",
+      "keeps detached ordinary=$ordinary recent=$recent blocked",
       async ({ code, ordinary, recent }) => {
         const item = fixture({ detached: true, ordinary, recent });
         const snapshot = await collectCleanupEvidence(item.runtime, item.candidate);

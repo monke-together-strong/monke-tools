@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "../src/shell.ts";
@@ -18,9 +18,11 @@ function runGeneratedAdapter(shell: SupportedShell, mtStatus: number, targetExis
   const sandbox = makeTempDir(`shell-adapter-${shell}-${mtStatus}-${targetExists}`);
   const targetPath = path.join(sandbox, targetExists ? "target" : "missing");
   const binaryPath = path.join(sandbox, "fake-mt");
+
   if (targetExists) {
     mkdirSync(targetPath);
   }
+
   writeFileSync(
     binaryPath,
     `#!/bin/sh
@@ -30,11 +32,13 @@ exit ${mtStatus}
     "utf-8"
   );
   chmodSync(binaryPath, 0o755);
+
   const adapter = runMonke({
     args: ["shell", "init", shell, "--binary", binaryPath],
     cwd: sandbox,
     monkeHome: path.join(sandbox, "monke-home")
   }).stdout;
+
   const result = spawnSync(
     shell,
     [
@@ -54,10 +58,13 @@ printf '%s\\n%s\\n' "$PWD" "$mt_status"
       }
     }
   );
+
   if (result.error !== undefined || result.stdout === null) {
     throw new Error(`Could not run ${shell}: ${String(result.error ?? "no output")}`);
   }
+
   const [reportedPath = "", reportedStatus = ""] = result.stdout.trim().split("\n");
+
   return {
     processStatus: result.status,
     reportedPath,
@@ -68,11 +75,12 @@ printf '%s\\n%s\\n' "$PWD" "$mt_status"
 }
 
 describe("shell navigation", () => {
-  test("spawn writes an active shell directory directive", () => {
+  it("writes an active shell directory directive on spawn", () => {
     const sandbox = makeTempDir("shell-spawn-active");
     const home = path.join(sandbox, "home");
     const directivePath = path.join(sandbox, "directive");
     writeFileSync(directivePath, "", "utf-8");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
@@ -95,10 +103,11 @@ describe("shell navigation", () => {
     );
   });
 
-  test("spawn distinguishes configured but inactive shell integration", () => {
+  it("distinguishes configured but inactive shell integration on spawn", () => {
     const sandbox = makeTempDir("shell-spawn-configured-inactive");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
@@ -132,15 +141,17 @@ describe("shell navigation", () => {
     );
   });
 
-  test("spawn treats unreadable shell startup files as inactive integration", () => {
+  it("treats unreadable shell startup files as inactive integration on spawn", () => {
     const sandbox = makeTempDir("shell-spawn-unreadable-startup");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
     const startupFile = path.join(shellHome, ".zshrc");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
+
     mkdirSync(shellHome, { recursive: true });
     writeFileSync(startupFile, "# >>> monke-tools shell integration >>>\n", "utf-8");
     chmodSync(startupFile, 0o000);
@@ -165,11 +176,12 @@ describe("shell navigation", () => {
     }
   });
 
-  test("repo commands cannot write an active shell directory directive", () => {
+  it("prevents repo commands from writing an active shell directory directive", () => {
     const sandbox = makeTempDir("shell-directive-child-env");
     const home = path.join(sandbox, "home");
     const directivePath = path.join(sandbox, "directive");
     writeFileSync(directivePath, "", "utf-8");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env": "PORT=3000\n",
       "monke.yml": `bootstrapCommand: |
@@ -184,6 +196,7 @@ apps:
         env: PORT
 `
     });
+
     runMonke({ args: ["spawn", "banana"], cwd: repoRoot, monkeHome: home });
     const worktreeRoot = getExpectedWorktreePath(home, repoRoot, "banana");
 
@@ -203,7 +216,7 @@ apps:
     const available = isShellAvailable(shell);
     const availability = available ? "" : " (shell unavailable)";
 
-    test.skipIf(!available)(
+    it.skipIf(!available)(
       `honors a directory request and preserves a nonzero mt status${availability}`,
       () => {
         const result = runGeneratedAdapter(shell, 23, true);
@@ -214,7 +227,7 @@ apps:
       }
     );
 
-    test.skipIf(!available)(
+    it.skipIf(!available)(
       `handles a failed directory request after mt status 0${availability}`,
       () => {
         const result = runGeneratedAdapter(shell, 0, false);
@@ -225,7 +238,7 @@ apps:
       }
     );
 
-    test.skipIf(!available)(
+    it.skipIf(!available)(
       `handles a failed directory request after mt status 23${availability}`,
       () => {
         const result = runGeneratedAdapter(shell, 23, false);
@@ -237,11 +250,11 @@ apps:
     );
   });
 
-  test.each([
+  it.each([
     ["bash", ".bashrc", ".zshrc"],
     ["zsh", ".zshrc", ".bashrc"]
   ] as const)(
-    "%s shell install reports and idempotently refreshes only its startup file",
+    "reports and idempotently refreshes only the startup file for %s shell install",
     (shell, startupFile, otherStartupFile) => {
       const sandbox = makeTempDir(`shell-install-${shell}`);
       const monkeHome = path.join(sandbox, "monke-home");
@@ -267,6 +280,7 @@ apps:
       expect(contents.match(/monke-tools shell integration/gu)).toHaveLength(2);
       expect(contents).toContain(`'${stableBinary}' shell init`);
       expect(existsSync(path.join(shellHome, otherStartupFile))).toBeFalsy();
+
       for (const result of results) {
         expect(result.stderr).toContain(
           `Installed shell integration in ${path.join(shellHome, startupFile)}`
@@ -276,15 +290,18 @@ apps:
     }
   );
 
-  test("zsh install and configured-state detection honor relative ZDOTDIR", () => {
+  it("honors relative ZDOTDIR for zsh install and configured-state detection", () => {
     const sandbox = makeTempDir("shell-install-zdotdir");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": "apps: {}\n",
       "README.md": "hello\n"
     });
+
     const startupFile = path.join(repoRoot, "config", "zsh", ".zshrc");
+
     const shellEnvironment = {
       HOME: shellHome,
       SHELL: "/bin/zsh",
@@ -297,6 +314,7 @@ apps:
       extraEnv: shellEnvironment,
       monkeHome
     });
+
     const result = runMonke({
       args: ["spawn", "banana"],
       cwd: repoRoot,
@@ -309,7 +327,7 @@ apps:
     expect(result.stderr).toContain("Shell integration is configured but not active");
   });
 
-  test("shell install leaves startup files untouched for an unsupported current shell", () => {
+  it("leaves startup files untouched on shell install for an unsupported current shell", () => {
     const sandbox = makeTempDir("shell-install-unsupported");
     const shellHome = path.join(sandbox, "shell-home");
 

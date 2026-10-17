@@ -2,7 +2,7 @@ import { ok } from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
   collectCleanupEvidence,
@@ -52,7 +52,7 @@ function evidence(patch: Partial<CleanupEvidence> = {}): CleanupEvidence {
 }
 
 describe("cleanup committed-work policy", () => {
-  test.each([
+  it.each([
     { code: "open-pr", label: "open", merged_at: null, state: "open" },
     { code: "closed-unmerged-pr", label: "closed unmerged", merged_at: null, state: "closed" }
   ] as const)("rejects an $label PR", ({ code, merged_at, state }) => {
@@ -60,7 +60,7 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, eligible: false });
   });
 
-  test("a moved branch whose HEAD is inside the default branch passes despite a stale merged PR", () => {
+  it("passes a moved branch whose HEAD is inside the default branch despite a stale merged PR", () => {
     const snapshot = evidence({ ancestorOfDefault: true, head: OTHER_HEAD });
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       code: "unchanged-branch",
@@ -68,35 +68,38 @@ describe("cleanup committed-work policy", () => {
     });
   });
 
-  test("rejects a clean worktree with commits after merge, even for a dependency", () => {
+  it("rejects a clean worktree with commits after merge, even for a dependency", () => {
     const snapshot = evidence({
       ancestorOfDefault: false,
       candidate: { role: "dependency", sourceRoot: "/source", worktreePath: "/worktree" },
       head: OTHER_HEAD
     });
+
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       code: "head-mismatch",
       eligible: false
     });
   });
 
-  test("uses the exact head to distinguish older uses of the same branch", () => {
+  it("uses the exact head to distinguish older uses of the same branch", () => {
     const snapshot = withPrs([
       mergedPr(),
       { ...mergedPr(), head: { ...mergedPr().head, sha: OTHER_HEAD }, number: 2 }
     ]);
+
     expect(decideCleanupEligibility(snapshot).eligible).toBeTruthy();
   });
 
-  test("a new open PR on a reused branch blocks an older exact merged match", () => {
+  it("lets a new open PR on a reused branch block an older exact merged match", () => {
     const snapshot = withPrs([
       mergedPr(),
       { ...mergedPr(), merged_at: null, number: 2, state: "open" }
     ]);
+
     expect(decideCleanupEligibility(snapshot).code).toBe("open-pr");
   });
 
-  test("a Root with no merged PR and unique commits is a settled ineligible, not unknown", () => {
+  it("treats a Root with no merged PR and unique commits as a settled ineligible, not unknown", () => {
     const snapshot = withPrs([]);
     snapshot.ancestorOfDefault = false;
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
@@ -106,7 +109,7 @@ describe("cleanup committed-work policy", () => {
     });
   });
 
-  test("ambiguous exact merged matches remain unknown", () => {
+  it("keeps ambiguous exact merged matches unknown", () => {
     const snapshot = withPrs([mergedPr(), { ...mergedPr(), number: 2 }]);
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       eligible: false,
@@ -114,19 +117,20 @@ describe("cleanup committed-work policy", () => {
     });
   });
 
-  test("a fork's matching branch and commit do not prove this repo's PR", () => {
+  it("does not accept a fork's matching branch and commit as proof of this repo's PR", () => {
     const snapshot = withPrs([
       { ...mergedPr(), head: { ...mergedPr().head, repo: { full_name: "fork/repo" } } }
     ]);
+
     expect(decideCleanupEligibility(snapshot).eligible).toBeFalsy();
   });
 
-  test("a PR merged to a non-default base does not prove completion", () => {
+  it("does not accept a PR merged to a non-default base as proof of completion", () => {
     const snapshot = withPrs([{ ...mergedPr(), base: { ...mergedPr().base, ref: "release" } }]);
     expect(decideCleanupEligibility(snapshot).eligible).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     { ancestor: true, code: "unchanged-branch", expected: true, role: "dependency" },
     { ancestor: false, code: "no-merged-pr", expected: false, role: "dependency" },
     { ancestor: null, code: "ancestry-unavailable", expected: false, role: "dependency" },
@@ -134,7 +138,7 @@ describe("cleanup committed-work policy", () => {
     { ancestor: false, code: "no-merged-pr", expected: false, role: "root" },
     { ancestor: null, code: "ancestry-unavailable", expected: false, role: "root" }
   ] as const)(
-    "ancestry=$ancestor, role=$role gives $code without a PR",
+    "gives $code without a PR for ancestry=$ancestor, role=$role",
     ({ ancestor, code, expected, role }) => {
       const snapshot = withPrs([]);
       snapshot.ancestorOfDefault = ancestor;
@@ -143,28 +147,33 @@ describe("cleanup committed-work policy", () => {
     }
   );
 
-  test.each([
+  it.each([
     { age: RECENT_WORKTREE_MS - 1, code: "recent-worktree", status: "ineligible" },
     { age: null, code: "recent-worktree", status: "unknown" },
     { age: undefined, code: "recent-worktree", status: "unknown" },
     { age: RECENT_WORKTREE_MS, code: "unchanged-branch", status: "eligible" }
-  ] as const)("ancestry-only proof with worktree age $age is $code", ({ age, code, status }) => {
-    const snapshot = withPrs([]);
-    snapshot.ancestorOfDefault = true;
-    if (age === undefined) {
-      delete snapshot.worktreeAgeMs;
-    } else {
-      snapshot.worktreeAgeMs = age;
-    }
-    expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, status });
-  });
+  ] as const)(
+    "classifies ancestry-only proof with worktree age $age as $code",
+    ({ age, code, status }) => {
+      const snapshot = withPrs([]);
+      snapshot.ancestorOfDefault = true;
 
-  test("an exact merged PR does not wait for worktree age", () => {
+      if (age === undefined) {
+        delete snapshot.worktreeAgeMs;
+      } else {
+        snapshot.worktreeAgeMs = age;
+      }
+
+      expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, status });
+    }
+  );
+
+  it("does not wait for worktree age with an exact merged PR", () => {
     const snapshot = evidence({ ancestorOfDefault: true, worktreeAgeMs: 0 });
     expect(decideCleanupEligibility(snapshot).code).toBe("exact-merged-pr");
   });
 
-  test("ancestry proof never overrides a dirty worktree", () => {
+  it("never lets ancestry proof override a dirty worktree", () => {
     const snapshot = withPrs([]);
     snapshot.ancestorOfDefault = true;
     snapshot.localBlock = {
@@ -176,12 +185,12 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot).code).toBe("dirty-worktree");
   });
 
-  test.each([
+  it.each([
     { age: RECENT_WORKTREE_MS - 1, code: "recent-worktree", status: "ineligible" },
     { age: null, code: "recent-worktree", status: "unknown" },
     { age: RECENT_WORKTREE_MS, code: "merged-pr-head", status: "eligible" }
   ] as const)(
-    "an exact HEAD merged under another branch waits for age $age",
+    "makes an exact HEAD merged under another branch wait for age $age",
     ({ age, code, status }) => {
       const snapshot = withPrs([]);
       snapshot.ancestorOfDefault = false;
@@ -208,7 +217,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   });
 
-  test.each(["ordinary", "squash", "rebase"])(
+  it.each(["ordinary", "squash", "rebase"])(
     "proves a real %s merge from the PR head",
     async (strategy) => {
       const fixture = createFixture();
@@ -220,6 +229,7 @@ describe("cleanup evidence from real Git worktrees", () => {
       write(sourceRoot, "base.txt", "base work\n");
       git(sourceRoot, ["add", "."]);
       git(sourceRoot, ["commit", "-m", "base advanced"]);
+
       if (strategy === "ordinary") {
         git(sourceRoot, ["merge", "--no-ff", BRANCH, "-m", "merge feature"]);
       } else if (strategy === "squash") {
@@ -231,13 +241,14 @@ describe("cleanup evidence from real Git worktrees", () => {
         git(rebased, ["rebase", "main"]);
         git(sourceRoot, ["merge", "--ff-only", "integration"]);
       }
+
       const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
       expect(snapshot.repository?.defaultHead).not.toBe(snapshot.head);
       expect(decideCleanupEligibility(snapshot).eligible).toBeTruthy();
     }
   );
 
-  test("accepts a recorded path with a different branch name and an arbitrary verified default", async () => {
+  it("accepts a recorded path with a different branch name and an arbitrary verified default", async () => {
     const fixture = createFixture();
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
     expect(snapshot.branch).toBe(BRANCH);
@@ -246,7 +257,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(decideCleanupEligibility(snapshot).eligible).toBeTruthy();
   });
 
-  test.each(["identical", "changed", "missing", "shallow"])(
+  it.each(["identical", "changed", "missing", "shallow"])(
     "checks the complete merge tree after a history rewrite: %s",
     async (kind) => {
       const fixture = createCommitPrFixture();
@@ -257,26 +268,32 @@ describe("cleanup evidence from real Git worktrees", () => {
       git(sourceRoot, ["commit", "--amend", "-m", "original merge"]);
       const originalMerge = git(sourceRoot, ["rev-parse", "HEAD"]);
       fixture.commitPr.merge_commit_sha = originalMerge;
+
       if (kind === "changed") {
         write(sourceRoot, "feature.txt", "different implementation\n");
         git(sourceRoot, ["add", "."]);
       }
+
       git(sourceRoot, ["commit", "--amend", "-m", "rewritten merge"]);
       const rewrittenMerge = git(sourceRoot, ["rev-parse", "HEAD"]);
       expect(rewrittenMerge).not.toBe(originalMerge);
       expect(git(sourceRoot, ["rev-parse", "HEAD^{tree}"])).not.toBe(
         git(worktreePath, ["rev-parse", "HEAD^{tree}"])
       );
+
       if (kind === "missing") {
         fixture.commitPr.merge_commit_sha = OTHER_HEAD;
       }
+
       if (kind === "shallow") {
         write(sourceRoot, ".git/shallow", `${rewrittenMerge}\n`);
       }
+
       const snapshot = await collectCleanupEvidence(fixture.runtime, {
         ...fixture.candidate,
         sessionBranch: BRANCH
       });
+
       expect(snapshot.commitPullRequests?.[0]?.ancestorOfDefault).not.toBeTruthy();
       expect(decideCleanupEligibility(snapshot).eligible).toBe(kind === "identical");
       expect(
@@ -288,7 +305,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     15_000
   );
 
-  test("finds an exact squash-merged HEAD on another branch, including later API pages", async () => {
+  it("finds an exact squash-merged HEAD on another branch, including later API pages", async () => {
     const fixture = createCommitPrFixture();
     const cache = createCleanupEvidenceCache();
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
@@ -314,7 +331,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toBe("dirty-worktree");
   });
 
-  test.each([
+  it.each([
     "intermediate",
     "fork",
     "wrong-base",
@@ -326,6 +343,7 @@ describe("cleanup evidence from real Git worktrees", () => {
   ] as const)("does not accept %s commit-associated PR evidence", async (kind) => {
     const fixture = createCommitPrFixture();
     const pr = fixture.commitPr;
+
     switch (kind) {
       case "intermediate": {
         pr.head.sha = OTHER_HEAD;
@@ -334,40 +352,49 @@ describe("cleanup evidence from real Git worktrees", () => {
         pr.merge_commit_sha = git(fixture.candidate.sourceRoot, ["rev-parse", "HEAD"]);
         break;
       }
+
       case "fork": {
         pr.head.repo.full_name = "fork/repo";
         break;
       }
+
       case "wrong-base": {
         pr.base.ref = "release";
         break;
       }
+
       case "wrong-repo": {
         pr.base.repo.full_name = "another/repo";
         break;
       }
+
       case "unmerged": {
         pr.merged_at = null;
         break;
       }
+
       case "open": {
         pr.state = "open";
         break;
       }
+
       case "missing-merge": {
         pr.merge_commit_sha = null;
         break;
       }
+
       case "rewritten": {
         write(fixture.candidate.sourceRoot, "feature.txt", "changed during rewrite\n");
         git(fixture.candidate.sourceRoot, ["add", "."]);
         git(fixture.candidate.sourceRoot, ["commit", "--amend", "-m", "different merge tree"]);
         break;
       }
+
       default: {
         throw new Error("Unexpected PR fixture variant");
       }
     }
+
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       code: "no-merged-pr",
@@ -376,7 +403,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     });
   });
 
-  test("accepts an older checkout of the same merged PR, but rejects a post-merge commit", async () => {
+  it("accepts an older checkout of the same merged PR, but rejects a post-merge commit", async () => {
     const fixture = createCommitPrFixture();
     const { sourceRoot, worktreePath } = fixture.candidate;
     const oldHead = git(worktreePath, ["rev-parse", "HEAD"]);
@@ -405,7 +432,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     "unavailable",
     "malformed",
     "ambiguous",
@@ -432,13 +459,16 @@ describe("cleanup evidence from real Git worktrees", () => {
           ])
         };
       }
+
       if (args?.[1]?.includes("/commits/")) {
         if (kind === "unavailable") {
           throw new Error("offline");
         }
+
         if (kind === "malformed") {
           return { exitCode: 0, stderr: "", stdout: "[[{}]]" };
         }
+
         if (kind === "ambiguous") {
           return {
             exitCode: 0,
@@ -446,18 +476,23 @@ describe("cleanup evidence from real Git worktrees", () => {
             stdout: JSON.stringify([[fixture.commitPr, { ...fixture.commitPr, number: 2 }]])
           };
         }
+
         if (kind === "merge-ancestry-unavailable") {
           fixture.commitPr.merge_commit_sha = OTHER_HEAD;
         }
+
         if (kind === "changed-head") {
           write(fixture.candidate.worktreePath, "after.txt", "after lookup\n");
           git(fixture.candidate.worktreePath, ["add", "."]);
           git(fixture.candidate.worktreePath, ["commit", "-m", "changed during lookup"]);
         }
       }
+
       return await original(command, args, options);
     };
+
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
+
     const codes = {
       ambiguous: "ambiguous-pr",
       "changed-head": "changed-during-inspection",
@@ -466,13 +501,14 @@ describe("cleanup evidence from real Git worktrees", () => {
       "open-branch": "open-pr",
       unavailable: "commit-pr-unavailable"
     };
+
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       code: codes[kind],
       eligible: false
     });
   });
 
-  test.each([1, 3])(
+  it.each([1, 3])(
     "matches the complete change of %s rebased commits without relying on PR HEAD equality",
     async (commits) => {
       const fixture = createCommitPrFixture(commits);
@@ -506,8 +542,8 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test.each(["missing-object", "ambiguous", "changed-head", "open-branch", "wrong-base"] as const)(
-    "complete-change proof still rejects %s",
+  it.each(["missing-object", "ambiguous", "changed-head", "open-branch", "wrong-base"] as const)(
+    "still rejects %s with complete-change proof",
     async (kind) => {
       const fixture = createCommitPrFixture();
       fixture.commitPr.head.sha = OTHER_HEAD;
@@ -517,9 +553,11 @@ describe("cleanup evidence from real Git worktrees", () => {
           if (kind === "missing-object") {
             fixture.commitPr.merge_commit_sha = OTHER_HEAD;
           }
+
           if (kind === "wrong-base") {
             fixture.commitPr.base.ref = "release";
           }
+
           if (kind === "ambiguous") {
             return {
               exitCode: 0,
@@ -527,12 +565,14 @@ describe("cleanup evidence from real Git worktrees", () => {
               stdout: JSON.stringify([[fixture.commitPr, { ...fixture.commitPr, number: 2 }]])
             };
           }
+
           if (kind === "changed-head") {
             write(fixture.candidate.worktreePath, "new.txt", "new unique work\n");
             git(fixture.candidate.worktreePath, ["add", "."]);
             git(fixture.candidate.worktreePath, ["commit", "-m", "new work"]);
           }
         }
+
         if (kind === "missing-object" && args?.[1]?.includes("/compare/")) {
           return {
             exitCode: 0,
@@ -544,6 +584,7 @@ describe("cleanup evidence from real Git worktrees", () => {
             })
           };
         }
+
         if (kind === "open-branch" && args?.[1]?.includes("/pulls?state=")) {
           return {
             exitCode: 0,
@@ -560,8 +601,10 @@ describe("cleanup evidence from real Git worktrees", () => {
             ])
           };
         }
+
         return await original(command, args, options);
       };
+
       const codes = {
         ambiguous: "ambiguous-pr",
         "changed-head": "changed-during-inspection",
@@ -569,13 +612,14 @@ describe("cleanup evidence from real Git worktrees", () => {
         "open-branch": "open-pr",
         "wrong-base": "no-merged-pr"
       };
+
       expect(
         decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
       ).toMatchObject({ code: codes[kind], eligible: false });
     }
   );
 
-  test("verifies a missing local merge commit through remote comparison without fetching", async () => {
+  it("verifies a missing local merge commit through remote comparison without fetching", async () => {
     const fixture = createCommitPrFixture();
     fixture.commitPr.merge_commit_sha = OTHER_HEAD;
     const original = fixture.runtime.execAsync;
@@ -591,16 +635,18 @@ describe("cleanup evidence from real Git worktrees", () => {
           })
         };
       }
+
       return await original(command, args, options);
     };
+
     expect(
       decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
         .code
     ).toBe("merged-pr-head");
   });
 
-  test.each([404, 422])(
-    "a commit GitHub has never seen remains a settled skip (HTTP %s)",
+  it.each([404, 422])(
+    "keeps a commit GitHub has never seen as a settled skip (HTTP %s)",
     async (status) => {
       const fixture = createCommitPrFixture();
       const original = fixture.runtime.execAsync;
@@ -610,6 +656,7 @@ describe("cleanup evidence from real Git worktrees", () => {
             status === 404
               ? "gh: Not Found (HTTP 404)"
               : `gh: No commit found for SHA: ${fixture.commitPr.head.sha} (HTTP 422)`;
+
           // Exercise the real command adapter: without allowFailure it throws before HTTP classification.
           return await fixture.baseRuntime.execAsync(
             "bun",
@@ -617,29 +664,33 @@ describe("cleanup evidence from real Git worktrees", () => {
             options
           );
         }
+
         return await original(command, args, options);
       };
+
       expect(
         decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
       ).toMatchObject({ code: "no-merged-pr", status: "ineligible" });
     }
   );
 
-  test("an unrelated HTTP 422 remains an unavailable provider check", async () => {
+  it("treats an unrelated HTTP 422 as an unavailable provider check", async () => {
     const fixture = createCommitPrFixture();
     const original = fixture.runtime.execAsync;
     fixture.runtime.execAsync = async (command, args, options) => {
       if (args?.[1]?.includes("/commits/")) {
         return { exitCode: 1, stderr: "gh: Validation Failed (HTTP 422)", stdout: "" };
       }
+
       return await original(command, args, options);
     };
+
     expect(
       decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
     ).toMatchObject({ code: "commit-pr-unavailable", status: "unknown" });
   });
 
-  test.each(["root", "dependency"] as const)(
+  it.each(["root", "dependency"] as const)(
     "proves an unchanged %s against the current default without a PR",
     async (role) => {
       const fixture = createFixture();
@@ -663,7 +714,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test.each([
+  it.each([
     { comparison: "ahead", expected: true, label: "remote ancestry proof" },
     { comparison: "behind", expected: false, label: "unique dependency commits" },
     { comparison: "unavailable", expected: false, label: "unavailable ancestry" },
@@ -674,16 +725,20 @@ describe("cleanup evidence from real Git worktrees", () => {
     const original = fixture.runtime.execAsync;
     fixture.runtime.execAsync = async (command, args, options) => {
       const endpoint = args?.[1] ?? "";
+
       if (endpoint.includes("/git/ref/heads/")) {
         return { exitCode: 0, stderr: "", stdout: JSON.stringify({ object: { sha: OTHER_HEAD } }) };
       }
+
       if (endpoint.includes("/compare/")) {
         if (comparison === "unavailable") {
           throw new Error("comparison unavailable");
         }
+
         if (comparison === "not-found") {
           return { exitCode: 1, stderr: "gh: Not Found (HTTP 404)", stdout: "" };
         }
+
         return {
           exitCode: 0,
           stderr: "",
@@ -694,28 +749,35 @@ describe("cleanup evidence from real Git worktrees", () => {
           })
         };
       }
+
       return await original(command, args, options);
     };
+
     const snapshot = await collectCleanupEvidence(fixture.runtime, {
       ...fixture.candidate,
       role: "dependency"
     });
+
     expect(decideCleanupEligibility(snapshot).eligible).toBe(expected);
+
     const expectedStatus =
       comparison === "unavailable" ? "unknown" : expected ? "eligible" : "ineligible";
+
     expect(decideCleanupEligibility(snapshot).status).toBe(expectedStatus);
   });
 
-  test.each(["staged", "unstaged", "untracked"] as const)("rejects %s changes", async (kind) => {
+  it.each(["staged", "unstaged", "untracked"] as const)("rejects %s changes", async (kind) => {
     const fixture = createFixture();
     write(
       fixture.candidate.worktreePath,
       kind === "untracked" ? "new.txt" : "tracked.txt",
       "edited\n"
     );
+
     if (kind === "staged") {
       git(fixture.candidate.worktreePath, ["add", "."]);
     }
+
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
     expect(snapshot.committedWorkAttempted).toBeFalsy();
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
@@ -731,23 +793,27 @@ describe("cleanup evidence from real Git worktrees", () => {
     });
   });
 
-  test("dirty evidence lists at most five paths and counts the rest", async () => {
+  it("lists at most five paths in dirty evidence and counts the rest", async () => {
     const fixture = createFixture();
+
     for (const index of [1, 2, 3, 4, 5, 6, 7]) {
       write(fixture.candidate.worktreePath, `new-${index}.txt`, "edited\n");
     }
+
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
     const { evidence: details } = decideCleanupEligibility(snapshot);
     expect(details).toHaveLength(6);
     expect(details.at(-1)).toBe("and 2 more");
   });
 
-  test("detects dirty submodules even when repository config hides them", async () => {
+  it("detects dirty submodules even when repository config hides them", async () => {
     const fixture = createFixture();
     const { sourceRoot, worktreePath } = fixture.candidate;
+
     const dependency = createRepo(path.join(fixture.sandbox, "dependency"), {
       "sub.txt": "original\n"
     });
+
     git(worktreePath, ["-c", "protocol.file.allow=always", "submodule", "add", dependency, "dep"]);
     git(worktreePath, ["commit", "-am", "add submodule"]);
     git(sourceRoot, ["config", "submodule.dep.ignore", "all"]);
@@ -758,7 +824,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(decideCleanupEligibility(snapshot).code).toBe("dirty-worktree");
   });
 
-  test.each(["--assume-unchanged", "--skip-worktree"])(
+  it.each(["--assume-unchanged", "--skip-worktree"])(
     "does not trust hidden index entries: %s",
     async (flag) => {
       const fixture = createFixture();
@@ -772,14 +838,16 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test.each(["--assume-unchanged", "--skip-worktree"])(
+  it.each(["--assume-unchanged", "--skip-worktree"])(
     "rejects concealed submodule edits across all cleanup checks: %s",
     async (flag) => {
       const fixture = createFixture();
       const { worktreePath } = fixture.candidate;
+
       const dependency = createRepo(path.join(fixture.sandbox, "dependency"), {
         "sub.txt": "original\n"
       });
+
       git(worktreePath, [
         "-c",
         "protocol.file.allow=always",
@@ -806,11 +874,12 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test.each(["during lookup", "between cached calls"])(
+  it.each(["during lookup", "between cached calls"])(
     "revalidates repository identity %s",
     async (when) => {
       const fixture = createFixture();
       const cache = createCleanupEvidenceCache();
+
       const replaceRemote = () =>
         git(fixture.candidate.sourceRoot, [
           "remote",
@@ -818,8 +887,10 @@ describe("cleanup evidence from real Git worktrees", () => {
           "origin",
           "git@github.com:different/repo.git"
         ]);
+
       const initial = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
       expect(decideCleanupEligibility(initial).eligible).toBeTruthy();
+
       if (when === "between cached calls") {
         replaceRemote();
       } else {
@@ -828,51 +899,60 @@ describe("cleanup evidence from real Git worktrees", () => {
         const original = fixture.runtime.execAsync;
         fixture.runtime.execAsync = async (...args) => {
           replaceRemote();
+
           return await original(...args);
         };
       }
+
       const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
       expect(decideCleanupEligibility(snapshot).eligible).toBeFalsy();
     }
   );
 
-  test.each(["source", "detached", "locked", "missing", "wrong-source"])(
+  it.each(["source", "detached", "locked", "missing", "wrong-source"])(
     "excludes a %s target",
     async (kind) => {
       const fixture = createFixture();
       const candidate = { ...fixture.candidate };
+
       if (kind === "source") {
         candidate.worktreePath = candidate.sourceRoot;
       }
+
       if (kind === "detached") {
         git(candidate.worktreePath, ["checkout", "--detach"]);
       }
+
       if (kind === "locked") {
         git(candidate.sourceRoot, ["worktree", "lock", candidate.worktreePath]);
       }
+
       if (kind === "missing") {
         candidate.worktreePath = path.join(fixture.sandbox, "missing");
       }
+
       if (kind === "wrong-source") {
         candidate.sourceRoot = createRepo(path.join(fixture.sandbox, "other"), { a: "a" });
       }
+
       expect(
         decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, candidate)).eligible
       ).toBeFalsy();
     }
   );
 
-  test("provider failure is unknown, and never becomes a clean/unmerged success", async () => {
+  it("treats provider failure as unknown, never as a clean/unmerged success", async () => {
     const fixture = createFixture();
     fixture.runtime.execAsync = async () => {
       throw new Error("offline");
     };
+
     expect(
       decideCleanupEligibility(await collectCleanupEvidence(fixture.runtime, fixture.candidate))
     ).toMatchObject({ code: "repository-unavailable", eligible: false, status: "unknown" });
   });
 
-  test("malformed provider evidence fails closed", async () => {
+  it("fails closed on malformed provider evidence", async () => {
     const fixture = createFixture();
     fixture.runtime.execAsync = async () => ({ exitCode: 0, stderr: "", stdout: "{}" });
     expect(
@@ -881,7 +961,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toBeFalsy();
   });
 
-  test.each(["head", "dirty"])(
+  it.each(["head", "dirty"])(
     "rechecks %s after provider lookup, even with a shared cache",
     async (change) => {
       const fixture = createFixture();
@@ -889,15 +969,19 @@ describe("cleanup evidence from real Git worktrees", () => {
       let changed = false;
       fixture.runtime.execAsync = async (...args) => {
         const result = await original(...args);
+
         if (!changed) {
           changed = true;
           write(fixture.candidate.worktreePath, "tracked.txt", "new work\n");
+
           if (change === "head") {
             git(fixture.candidate.worktreePath, ["commit", "-am", "new work"]);
           }
         }
+
         return result;
       };
+
       const cache = createCleanupEvidenceCache();
       const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
       expect(decideCleanupEligibility(snapshot).eligible).toBeFalsy();
@@ -912,9 +996,11 @@ describe("cleanup evidence from real Git worktrees", () => {
 
 function withPrs(pullRequests: CleanupRepositoryEvidence["pullRequests"]) {
   const snapshot = evidence();
+
   if (snapshot.repository) {
     snapshot.repository.pullRequests = pullRequests;
   }
+
   return snapshot;
 }
 
@@ -924,14 +1010,17 @@ function createCommitPrFixture(commits = 1) {
   write(worktreePath, "feature.txt", "work merged under a different branch\n");
   git(worktreePath, ["add", "."]);
   git(worktreePath, ["commit", "-m", "feature"]);
+
   for (let index = 1; index < commits; index += 1) {
     write(worktreePath, `part-${index}.txt`, `part ${index}\n`);
     git(worktreePath, ["add", "."]);
     git(worktreePath, ["commit", "-m", `part ${index}`]);
   }
+
   const head = git(worktreePath, ["rev-parse", "HEAD"]);
   git(sourceRoot, ["merge", "--squash", BRANCH]);
   git(sourceRoot, ["commit", "-m", "squashed feature"]);
+
   const commitPr: Omit<ReturnType<typeof mergedPr>, "state" | "merged_at"> & {
     merge_commit_sha: string | null;
     merged_at: string | null;
@@ -943,6 +1032,7 @@ function createCommitPrFixture(commits = 1) {
     merged_at: "2026-09-06T00:00:00Z",
     state: "closed"
   };
+
   let lookups = 0;
   const requests: string[][] = [];
   const original = fixture.runtime.execAsync;
@@ -950,13 +1040,17 @@ function createCommitPrFixture(commits = 1) {
     if (args?.[1]?.includes("/commits/")) {
       lookups += 1;
       requests.push(args);
+
       return { exitCode: 0, stderr: "", stdout: JSON.stringify([[], [commitPr]]) };
     }
+
     if (args?.[1]?.includes("/pulls?state=")) {
       return { exitCode: 0, stderr: "", stdout: "[[]]" };
     }
+
     return await original(command, args, options);
   };
+
   return { ...fixture, commitPr, lookups: () => lookups, requests };
 }
 
@@ -973,6 +1067,7 @@ function createFixture() {
   const pr = mergedPr();
   pr.head.sha = git(worktreePath, ["rev-parse", "HEAD"]);
   const baseRuntime = createTestRuntime({ cwd: sourceRoot, env: { GH_REPO: "wrong/repo" } });
+
   const runtime: Runtime = {
     ...baseRuntime,
     exec(command, args, options) {
@@ -990,10 +1085,13 @@ function createFixture() {
                   number: 1
                 }
               ];
+
         return { exitCode: 0, stderr: "", stdout: JSON.stringify(result) };
       }
+
       expect(options?.env).toMatchObject({ GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0" });
       expect(args).not.toContain("fetch");
+
       return baseRuntime.exec(command, args, options);
     },
     async execAsync(command, args) {
@@ -1001,9 +1099,11 @@ function createFixture() {
       expect(args).toContain("--hostname");
       expect(args).toContain("github.com");
       const endpoint = args?.[1];
+
       if (endpoint?.includes("/commits/") && endpoint.endsWith("/pulls?per_page=100")) {
         return { exitCode: 0, stderr: "", stdout: "[[]]" };
       }
+
       const responses = {
         [`repos/${REPOSITORY}/git/ref/heads/develop`]: {
           object: { sha: git(sourceRoot, ["rev-parse", "HEAD"]) }
@@ -1011,12 +1111,16 @@ function createFixture() {
         [`repos/${REPOSITORY}/pulls?state=all&per_page=100`]: [[pr]],
         [`repos/${REPOSITORY}`]: { default_branch: "develop", full_name: REPOSITORY }
       };
+
       const value = Object.entries(responses).find(([key]) => key === endpoint)?.[1];
+
       if (!value) {
         throw new Error(`Unexpected API endpoint: ${endpoint}`);
       }
+
       return { exitCode: 0, stderr: "", stdout: JSON.stringify(value) };
     }
   };
+
   return { baseRuntime, candidate: { sourceRoot, worktreePath }, pr, runtime, sandbox };
 }

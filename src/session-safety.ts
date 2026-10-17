@@ -17,6 +17,7 @@ export function inspectSessionRepoRegistration(
   assertCanonicalSourceCheckout(runtime, repo.sourceRoot);
   const expectedPath = getExpectedWorktreePath(home, repo.sourceRoot, state.session);
   const sessionParent = path.join(home, "worktrees", path.basename(repo.sourceRoot));
+
   if (
     !path.relative(sessionParent, expectedPath) ||
     !containsPath(sessionParent, expectedPath) ||
@@ -30,9 +31,11 @@ export function inspectSessionRepoRegistration(
 
   const worktrees = listWorktrees(runtime, repo.sourceRoot);
   const exact = worktrees.find((entry) => samePath(entry.path, repo.worktreePath));
+
   const conflicts = worktrees.filter(
     (entry) => entry.branch === state.session && !samePath(entry.path, repo.worktreePath)
   );
+
   if (conflicts.length > 0) {
     throw new MonkeError(
       `Session branch ${state.session} is registered at unexpected path${conflicts.length === 1 ? "" : "s"} ${conflicts
@@ -45,6 +48,7 @@ export function inspectSessionRepoRegistration(
     if (exact !== undefined) {
       assertWorktreeUnlocked(exact);
     }
+
     return {
       forceGitRemoval: false,
       mode: exact === undefined ? ("gone" as const) : ("stale" as const),
@@ -58,6 +62,7 @@ export function inspectSessionRepoRegistration(
       `Session worktree exists but is not registered; delete the directory by hand, then rerun Cleanup`
     );
   }
+
   return {
     forceGitRemoval: false,
     mode: "live" as const,
@@ -77,7 +82,9 @@ export function assertNoOtherStateOwnsSessionRepos(state: SessionState, allState
       `Multiple records claim Session ${state.session} at ${state.rootSourceRoot}`
     );
   }
+
   const paths = state.repos.map((repo) => repo.worktreePath);
+
   for (const other of allStates) {
     if (
       other === state ||
@@ -85,9 +92,11 @@ export function assertNoOtherStateOwnsSessionRepos(state: SessionState, allState
     ) {
       continue;
     }
+
     const collision = other.repos.find((repo) =>
       paths.some((candidate) => worktreePathsOverlap(candidate, repo.worktreePath))
     );
+
     if (collision !== undefined) {
       throw new MonkeError(
         paths.some((candidate) => samePath(candidate, collision.worktreePath))

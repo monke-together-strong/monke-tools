@@ -40,12 +40,14 @@ export async function runCliAsync(argv: string[], runtime = createRuntime()) {
       (command.parent?.name() === "skills" &&
         ["configure", "local-install"].includes(command.name()));
   });
+
   try {
     await program.parseAsync(argv, { from: "user" });
   } catch (error) {
     if (installationCommand && error instanceof MonkeError) {
       addInstallGuidance(runtime, error);
     }
+
     throw error;
   }
 }
@@ -115,10 +117,12 @@ function createProgram(runtime: Runtime) {
   program.command("materialize").action(() => runMaterialize(runtime));
 
   program.enablePositionalOptions();
+
   const resources = program
     .command("resources")
     .description("Manage resources owned by the current checkout")
     .enablePositionalOptions();
+
   resources.command("acquire").action(() => runResources(runtime, "acquire"));
   resources.command("release").action(() => runResources(runtime, "release"));
   resources
@@ -435,6 +439,7 @@ function explicitSkillTargets(
   if (builtInTargetKinds === undefined && customTargetPath === undefined) {
     return undefined;
   }
+
   return { builtInTargetKinds, customTargetPath };
 }
 

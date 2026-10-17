@@ -8,6 +8,7 @@ export function samePath(left: string, right: string) {
 /** Whether a path is the parent itself or one of its lexical descendants. */
 export function containsPath(parent: string, child: string) {
   const relative = path.relative(parent, child);
+
   return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 

@@ -133,6 +133,7 @@ export function decideSessionCleanupEligibility(
         : "unknown"
     };
   }
+
   if (
     !snapshot.session ||
     !snapshot.rootSourceRoot ||
@@ -141,6 +142,7 @@ export function decideSessionCleanupEligibility(
   ) {
     return { eligible: false, kind: "blocked", reasons: ["invalid-state"], status: "unknown" };
   }
+
   if (snapshot.members.every((member) => member.mode === "gone" || member.mode === "stale")) {
     return {
       eligible: true,
@@ -149,10 +151,13 @@ export function decideSessionCleanupEligibility(
       status: "eligible"
     };
   }
+
   const decisions = snapshot.members.map((member) =>
     decideSessionCleanupMember(snapshot.rootSourceRoot, member)
   );
+
   const blocked = decisions.filter((decision) => !decision.eligible);
+
   return {
     eligible: blocked.length === 0,
     kind:
@@ -181,6 +186,7 @@ export function decideSessionCleanupMember(
   if (member.mode === "gone" || member.mode === "stale") {
     return { code: "owned-worktree-gone", eligible: true, evidence: [], status: "eligible" };
   }
+
   if (
     member.mode !== "live" ||
     !member.evidence ||
@@ -194,6 +200,7 @@ export function decideSessionCleanupMember(
       status: "unknown"
     };
   }
+
   // Roles come from this Session, never a caller's worktree/path-name assumption.
   return decideCleanupEligibility({
     ...member.evidence,
@@ -228,6 +235,7 @@ export async function inspectSessionCleanup(
   const states = scan.records.flatMap((record) => (record.state ? [record.state] : []));
   const cache = createCleanupEvidenceCache();
   const limit = pLimit(4);
+
   const lockPresent = () => {
     if (options.operationLock) {
       return (
@@ -235,9 +243,12 @@ export async function inspectSessionCleanup(
         !options.operationLock.isHeld()
       );
     }
+
     return existsSync(path.join(home, "lock")) || existsSync(path.join(home, "lock.reclaim"));
   };
+
   const operationAtStart = lockPresent();
+
   const snapshots = await Promise.all(
     scan.records
       .filter(
@@ -252,6 +263,7 @@ export async function inspectSessionCleanup(
       )
       .map(async (record) => {
         const { state } = record;
+
         const snapshot: SessionCleanupEvidence = {
           blockers: [],
           filePath: record.filePath,
@@ -260,16 +272,21 @@ export async function inspectSessionCleanup(
           rootSourceRoot: state?.rootSourceRoot ?? null,
           session: state?.session ?? null
         };
+
         if (!state) {
           snapshot.blockers.push("invalid-state");
+
           return snapshot;
         }
+
         if (state.cleanupHold) {
           snapshot.blockers.push("held");
         }
+
         if (scan.records.some((other) => !other.state && invalidRecordMayOverlap(other, state))) {
           snapshot.blockers.push("invalid-state-overlap");
         }
+
         try {
           assertNoOtherStateOwnsSessionRepos(state, states);
         } catch (error) {
@@ -279,6 +296,7 @@ export async function inspectSessionCleanup(
             message: errorMessage(ThrownValueSchema.parse(error))
           });
         }
+
         snapshot.members = await Promise.all(
           state.repos.map((repo) =>
             limit(async () => {
@@ -288,6 +306,7 @@ export async function inspectSessionCleanup(
                 sourceRoot: repo.sourceRoot,
                 worktreePath: repo.worktreePath
               };
+
               // A Source that no longer exists is a settled fact, not missing evidence.
               if (!existsSync(repo.sourceRoot)) {
                 snapshot.blockers.push("source-missing");
@@ -296,8 +315,10 @@ export async function inspectSessionCleanup(
                   message: `Recorded Source checkout does not exist at ${repo.sourceRoot}`,
                   worktreePath: repo.worktreePath
                 });
+
                 return member;
               }
+
               try {
                 const registration = inspectSessionRepoRegistration(
                   collectorReadOnly,
@@ -305,6 +326,7 @@ export async function inspectSessionCleanup(
                   state,
                   repo
                 );
+
                 if (
                   registration.mode !== "live" &&
                   repo.cleanupEligible &&
@@ -313,17 +335,21 @@ export async function inspectSessionCleanup(
                 ) {
                   snapshot.blockers.push("resource-recovery-required");
                 }
+
                 if (registration.mode === "stale") {
                   const stale = inspectStaleRegistration(
                     collectorReadOnly,
                     repo.sourceRoot,
                     repo.worktreePath
                   );
+
                   if (!stale) {
                     throw new Error("Stale worktree reappeared during inspection");
                   }
+
                   member.staleRegistration = stale;
                 }
+
                 member.mode = registration.mode;
                 member.registeredBranch = registration.registeredBranch;
               } catch (error) {
@@ -333,8 +359,10 @@ export async function inspectSessionCleanup(
                   message: errorMessage(ThrownValueSchema.parse(error)),
                   worktreePath: repo.worktreePath
                 });
+
                 return member;
               }
+
               if (member.mode === "live") {
                 member.evidence = await collectCleanupEvidence(
                   collector,
@@ -348,10 +376,12 @@ export async function inspectSessionCleanup(
                   cache
                 );
               }
+
               return member;
             })
           )
         );
+
         return snapshot;
       })
   );
@@ -361,20 +391,25 @@ export async function inspectSessionCleanup(
   // This pass never yields, so one structure read per Source is as fresh as many.
   const recheck = memoizeRepoStructure(runtime);
   const recheckReadOnly = readOnlyCleanupRuntime(recheck);
+
   for (const snapshot of snapshots) {
     const state = states.find(
       (candidate) =>
         candidate.session === snapshot.session &&
         candidate.rootSourceRoot === snapshot.rootSourceRoot
     );
+
     if (!state) {
       continue;
     }
+
     for (const [index, repo] of state.repos.entries()) {
       const member = snapshot.members[index];
+
       if (!member || member.mode === "unverified") {
         continue;
       }
+
       try {
         revalidateSessionMember(recheck, recheckReadOnly, home, state, repo, member);
       } catch (error) {
@@ -387,20 +422,26 @@ export async function inspectSessionCleanup(
       }
     }
   }
+
   const { sourceRoots, sources, unavailableSources, unownedWorktrees } =
     options.discovered ?? discoverUnownedWorktrees(readOnly, states, knownSourceRoots);
+
   blockUnownedOverlaps(snapshots, unownedWorktrees);
   const changed = scanSessionStates(home).fingerprint !== scan.fingerprint;
   const operationPresent = operationAtStart || lockPresent();
+
   for (const snapshot of snapshots) {
     if (changed) {
       snapshot.blockers.push("state-changed-during-inspection");
     }
+
     if (operationPresent) {
       snapshot.blockers.push("operation-lock-present");
     }
+
     snapshot.blockers = [...new Set(snapshot.blockers)].toSorted();
   }
+
   return {
     inspectedAt: new Date().toISOString(),
     sessions: snapshots.map((snapshot) => ({
@@ -449,23 +490,29 @@ function discoverUnownedWorktrees(
 ): SessionCleanupDiscovery {
   const unownedWorktrees: UnownedWorktree[] = [];
   const sources: CleanupSourceInspection[] = [];
+
   const sourceRoots = new Set(
     [
       ...knownSourceRoots,
       ...states.flatMap((state) => state.repos.map((repo) => repo.sourceRoot))
     ].map((source) => path.normalize(source))
   );
+
   for (const sourceRoot of sourceRoots) {
     if (!existsSync(sourceRoot)) {
       sources.push({ sourceRoot, status: "missing", worktreeCount: null });
       continue;
     }
+
     try {
       assertCanonicalSourceCheckout(runtime, sourceRoot);
+
       const worktrees = listWorktrees(runtime, sourceRoot).filter(
         (worktree) => !samePath(worktree.path, sourceRoot)
       );
+
       sources.push({ sourceRoot, status: "inspected", worktreeCount: worktrees.length });
+
       for (const worktree of worktrees) {
         if (
           !states.some((state) =>
@@ -489,6 +536,7 @@ function discoverUnownedWorktrees(
       });
     }
   }
+
   return {
     sourceRoots: sources
       .filter((source) => source.status === "inspected")
@@ -510,6 +558,7 @@ function blockUnownedOverlaps(
       const overlap = unownedWorktrees.find((worktree) =>
         worktreePathsOverlap(worktree.worktreePath, member.worktreePath)
       );
+
       if (overlap) {
         snapshot.blockers.push("ownership-conflict");
         snapshot.problems?.push({
@@ -531,9 +580,11 @@ export function revalidateSessionMember(
   member: SessionCleanupMember
 ) {
   const current = inspectSessionRepoRegistration(readOnly, home, state, repo);
+
   if (current.mode !== member.mode || current.registeredBranch !== member.registeredBranch) {
     throw new Error("Member presence or registered branch changed");
   }
+
   if (
     current.mode === "stale" &&
     inspectStaleRegistration(readOnly, repo.sourceRoot, repo.worktreePath) !==
@@ -541,8 +592,10 @@ export function revalidateSessionMember(
   ) {
     throw new Error("Stale registration changed after inspection");
   }
+
   if (member.evidence) {
     const invalidation = revalidateCleanupEvidence(runtime, member.evidence);
+
     if (invalidation) {
       member.evidence.localBlock = invalidation;
       throw new Error(`Member evidence changed: ${invalidation.code}`);
@@ -557,10 +610,12 @@ function invalidRecordMayOverlap(
   if (record.references.length === 0) {
     return true;
   }
+
   const paths = [
     state.rootSourceRoot,
     ...state.repos.flatMap((repo) => [repo.sourceRoot, repo.worktreePath])
   ];
+
   return record.references.some((reference) =>
     paths.some(
       (candidate) =>

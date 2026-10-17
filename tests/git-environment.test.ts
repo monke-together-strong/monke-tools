@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { afterEach, describe, expect, test, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import {
@@ -35,6 +35,7 @@ function simulateDeveloperGitEnvironment(sandbox: string) {
   write(xdgConfig, "git/attributes", "*.txt developer-attribute\n");
   write(sandbox, "global-config", config);
   write(sandbox, "system-config", config);
+
   for (const [key, value] of Object.entries({
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_GLOBAL: globalConfig,
@@ -56,9 +57,10 @@ function simulateDeveloperGitEnvironment(sandbox: string) {
 describe("Git test environment", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  test("fixtures ignore developer signing, hooks, ignores and injected Git settings", () => {
+  it("ignores developer signing, hooks, ignores and injected Git settings in fixtures", () => {
     const sandbox = makeTempDir("git-environment-fixtures");
     simulateDeveloperGitEnvironment(sandbox);
+
     const repoRoot = createConfiguredRepo(path.join(sandbox, "repo"), {
       ".gitattributes": "*.txt fixture-attribute\n",
       "fixture.txt": "tracked fixture\n"
@@ -78,14 +80,16 @@ describe("Git test environment", () => {
     ).toBe("Explicit Test Author");
   });
 
-  test.each(["sync", "async", "worker"] as const)(
-    "%s CLI carries files ignored by developer config and preserves repository hooks",
+  it.each(["sync", "async", "worker"] as const)(
+    "carries files ignored by developer config and preserves repository hooks in the %s CLI",
     async (mode) => {
       const sandbox = makeTempDir(`git-environment-${mode}`);
       simulateDeveloperGitEnvironment(sandbox);
+
       const repoRoot = createConfiguredRepo(path.join(sandbox, "repo"), {
         "fixture.txt": "tracked fixture\n"
       });
+
       const localHooks = path.join(sandbox, "local-hooks");
       writeExecutable(
         path.join(localHooks, "post-checkout"),
@@ -93,6 +97,7 @@ describe("Git test environment", () => {
       );
       git(repoRoot, ["config", "core.hooksPath", localHooks]);
       write(repoRoot, "dirty.txt", "untracked work\n");
+
       const options = {
         args: ["spawn", "isolated"],
         cwd: repoRoot,
@@ -106,6 +111,7 @@ describe("Git test environment", () => {
       } else {
         const worker = spawnMonkeWorker(options);
         const exitCode = await worker.exited;
+
         if (exitCode !== 0) {
           throw new Error(`mt worker exited with ${exitCode}`);
         }

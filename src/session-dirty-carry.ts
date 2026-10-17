@@ -27,6 +27,7 @@ export interface DirtySnapshot {
 
 export function captureDirtySnapshot(runtime: Runtime, source: CheckoutSource) {
   const sourceRoot = source.checkoutRoot;
+
   const untrackedOutput = runGit(runtime, sourceRoot, [
     "ls-files",
     "--others",
@@ -55,7 +56,9 @@ export function assertDirtyCarrySource(source: CheckoutSource, state?: SessionRe
   if (state?.dirtyCarryStatus !== "pending" || !state.dirtyCarrySource) {
     return;
   }
+
   const retained = state.dirtyCarrySource;
+
   if (
     !samePath(source.checkoutRoot, retained.checkoutRoot) ||
     source.headCommit !== retained.headCommit
@@ -94,6 +97,7 @@ export function assertDirtyCarryBoundary(
 
   const branchTip = runGit(runtime, sourceRoot, ["rev-parse", `refs/heads/${session}`]).trim();
   const headTip = snapshot.source.headCommit;
+
   if (branchTip !== headTip) {
     throw new MonkeError(
       `Session branch "${session}" already exists at ${branchTip.slice(0, 8)} but the content checkout HEAD is ${headTip.slice(0, 8)}; carrying dirty changes onto a diverged branch is unsafe. Re-run with --no-dirty, or align the branch with HEAD first.`
@@ -126,20 +130,25 @@ async function applyPatchAsync(runtime: Runtime, worktreePath: string, patch: st
   if (!patch) {
     return;
   }
+
   const forward = await runtime.execAsync("git", ["apply", "--3way", "--check"], {
     allowFailure: true,
     cwd: worktreePath,
     stdin: patch
   });
+
   if (forward.exitCode === 0) {
     await runtime.execAsync("git", ["apply", "--3way"], { cwd: worktreePath, stdin: patch });
+
     return;
   }
+
   const reverse = await runtime.execAsync("git", ["apply", "--reverse", "--check"], {
     allowFailure: true,
     cwd: worktreePath,
     stdin: patch
   });
+
   if (reverse.exitCode !== 0) {
     throw new MonkeError(
       `Cannot resume dirty carry without overwriting Session-local tracked changes at ${worktreePath}`
@@ -156,6 +165,7 @@ function copyUntrackedPaths(
   const temporaryParent = path.join(home, "tmp");
   mkdirSync(temporaryParent, { recursive: true });
   const temporaryRoot = mkdtempSync(path.join(temporaryParent, "dirty-carry-"));
+
   try {
     for (const [index, relativePath] of untrackedPaths.entries()) {
       copyUntrackedPath(
@@ -175,6 +185,7 @@ function copyUntrackedPath(sourcePath: string, targetPath: string, temporaryPath
       if (untrackedPathsMatch(conflict)) {
         return;
       }
+
       throw new MonkeError(
         `Refusing to overwrite Session-local path during dirty carry: ${conflict.targetPath}`
       );
@@ -196,6 +207,7 @@ function untrackedPathsMatch({ sourcePath, sourceStat, targetPath, targetStat }:
   if (sourceStat.isSymbolicLink() && targetStat.isSymbolicLink()) {
     return readlinkSync(sourcePath) === readlinkSync(targetPath);
   }
+
   return (
     sourceStat.isFile() &&
     targetStat.isFile() &&

@@ -23,6 +23,7 @@ export function prepareStagedInstall(monkeHome: string, installId: string) {
   const executable = path.join(stagedInstall, "mt");
   writeFileSync(executable, "#!/bin/sh\nexit 0\n", "utf-8");
   chmodSync(executable, 0o755);
+
   return stagedInstall;
 }
 
@@ -44,6 +45,7 @@ export function prepareReleaseBundle(
   write(bundleRoot, "mt", executableContents);
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
   chmodSync(path.join(bundleRoot, "mt"), 0o755);
+
   const manifest = {
     artifactDigest: hash("sha256", executableContents, "hex"),
     artifactName: `monke-tools-v1.2.3-${platform}.tar.gz`,
@@ -64,7 +66,9 @@ export function prepareReleaseBundle(
     sourceCommit: "0123456789abcdef0123456789abcdef01234567",
     toolBuildIdentity: "1.2.3"
   } as const;
+
   write(bundleRoot, "install-manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
+
   return { bundleRoot, manifest };
 }
 
@@ -79,9 +83,11 @@ export async function activateLocal(options: {
   targetKinds?: string[];
 }) {
   const stagedInstall = prepareStagedInstall(options.monkeHome, options.installId);
+
   if (options.executableMode !== undefined) {
     chmodSync(path.join(stagedInstall, "mt"), options.executableMode);
   }
+
   const args = [
     "activate-local-install",
     stagedInstall,
@@ -95,10 +101,13 @@ export async function activateLocal(options: {
     "--platform",
     "darwin-arm64"
   ];
+
   const targetKinds = options.targetKinds ?? ["codex"];
+
   if (targetKinds.length > 0) {
     args.push("--targets", ...targetKinds);
   }
+
   if (options.dirty === true) {
     args.push("--dirty");
   }
@@ -136,6 +145,7 @@ export function activateRelease(options: {
   sandbox: string;
 }) {
   const runtimeOptions = options.runtime ?? {};
+
   return runCliAsync(
     ["activate-release-install", options.bundleRoot, ...(options.args ?? [])],
     createTestRuntime({

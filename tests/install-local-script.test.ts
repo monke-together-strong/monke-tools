@@ -11,7 +11,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { object, string } from "zod";
 
 import { makeTempDir, writeExecutable } from "./helpers.ts";
@@ -80,7 +80,7 @@ ${changeDuringBuild ? `/usr/bin/touch ${JSON.stringify(sourceChangedMarker)}` : 
 }
 
 describe("Local install refresh script", () => {
-  test("recovers an installation lock left by a dead process", () => {
+  it("recovers an installation lock left by a dead process", () => {
     const sandbox = makeTempDir("install-local-dead-lock");
     const checkout = path.join(sandbox, "checkout");
     const binDirectory = path.join(sandbox, "bin");
@@ -108,7 +108,7 @@ describe("Local install refresh script", () => {
     expect(existsSync(`${lockPath}.reclaim`)).toBeFalsy();
   });
 
-  test("builds a unique versioned Local install and delegates activation with provenance", () => {
+  it("builds a unique versioned Local install and delegates activation with provenance", () => {
     const sandbox = makeTempDir("install-local-script");
     const checkout = path.join(sandbox, "checkout");
     const binDirectory = path.join(sandbox, "bin");
@@ -143,9 +143,11 @@ describe("Local install refresh script", () => {
     const activation = readFileSync(monkeToolsLog, "utf-8").trim();
     const [command, stagedInstall, sourceCheckout] = activation.split(" ");
     expect(command).toBe("activate-local-install");
+
     if (stagedInstall === undefined) {
       throw new Error("activation did not include a staged install path");
     }
+
     expect(path.dirname(stagedInstall)).toBe(path.join(monkeHome, "install-staging"));
     expect(path.basename(stagedInstall)).toMatch(/^local-0123456-/u);
     expect(sourceCheckout).toBe(checkout);
@@ -155,7 +157,7 @@ describe("Local install refresh script", () => {
     expect(existsSync(path.join(monkeHome, "locks", "installation.lock"))).toBeFalsy();
   });
 
-  test("two builds from the same commit receive distinct install identities", () => {
+  it("gives two builds from the same commit distinct install identities", () => {
     const sandbox = makeTempDir("install-local-unique");
     const checkout = path.join(sandbox, "checkout");
     const binDirectory = path.join(sandbox, "bin");
@@ -164,6 +166,7 @@ describe("Local install refresh script", () => {
     const bunLog = path.join(sandbox, "bun.log");
     const monkeToolsLog = path.join(sandbox, "monke-tools.log");
     prepareInstallFixture(checkout, binDirectory, false);
+
     const environment = {
       ...process.env,
       BUN_LOG: bunLog,
@@ -179,6 +182,7 @@ describe("Local install refresh script", () => {
         encoding: "utf-8",
         env: environment
       });
+
       expect(result.status).toBe(0);
     }
 
@@ -186,10 +190,11 @@ describe("Local install refresh script", () => {
       .trim()
       .split("\n")
       .map((line) => INSTALL_ID_ARGUMENT_PATTERN.exec(line)?.groups?.identity);
+
     expect(new Set(installIdentities).size).toBe(2);
   });
 
-  test("aborts before activation when the source changes during compilation", () => {
+  it("aborts before activation when the source changes during compilation", () => {
     const sandbox = makeTempDir("install-local-source-change");
     const checkout = path.join(sandbox, "checkout");
     const binDirectory = path.join(sandbox, "bin");
@@ -216,9 +221,10 @@ describe("Local install refresh script", () => {
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
   });
 
-  test("compiled Local executables report their Tool build identity", () => {
+  it("reports the Tool build identity of compiled Local executables", () => {
     const sandbox = makeTempDir("install-local-version");
     const executablePath = path.join(sandbox, "mt");
+
     const build = spawnSync(
       "bun",
       [
@@ -232,6 +238,7 @@ describe("Local install refresh script", () => {
       ],
       { cwd: projectRoot, encoding: "utf-8" }
     );
+
     expect(build.status).toBe(0);
 
     const version = spawnSync(executablePath, ["--version"], { encoding: "utf-8" });
@@ -239,7 +246,7 @@ describe("Local install refresh script", () => {
     expect(version.stdout).toBe("local+0123456-dirty\n");
   });
 
-  test("the real Local refresh activates the compiled executable through the stable symlink", () => {
+  it("activates the compiled executable through the stable symlink in the real Local refresh", () => {
     const sandbox = makeTempDir("install-local-end-to-end");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -265,15 +272,18 @@ describe("Local install refresh script", () => {
         }
       }
     );
+
     expect(install.status).toBe(0);
 
     const stableCommand = path.join(home, ".local", "bin", "mt");
     expect(readlinkSync(stableCommand)).toBe(path.join(monkeHome, "current", "mt"));
     const activeRoot = realpathSync(path.join(monkeHome, "current"));
     expect(realpathSync(stableCommand)).toBe(path.join(activeRoot, "mt"));
+
     const manifest = object({ sourceCheckout: string(), toolBuildIdentity: string() }).parse(
       JSON.parse(readFileSync(path.join(activeRoot, "install-manifest.json"), "utf-8"))
     );
+
     const version = spawnSync(stableCommand, ["--version"], { encoding: "utf-8" });
     expect(version.status).toBe(0);
     expect(version.stdout.trim()).toBe(manifest.toolBuildIdentity);

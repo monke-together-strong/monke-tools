@@ -1,7 +1,7 @@
 import { symlinkSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { parse } from "yaml";
 import { array as arraySchema, looseObject, string as stringSchema } from "zod";
 
@@ -51,11 +51,12 @@ function makeCodeRabbitRepo(name: string) {
   write(repoRoot, "config/coderabbit/sources.yaml", "excerpts: []\n");
   write(repoRoot, "config/coderabbit/template.yaml", "reviews: {}\n");
   write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "# Team baseline\n");
+
   return repoRoot;
 }
 
 describe("CodeRabbit central configuration", () => {
-  test("renders configured Markdown excerpts without source metadata", () => {
+  it("renders configured Markdown excerpts without source metadata", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-excerpt");
     write(
       repoRoot,
@@ -105,7 +106,7 @@ Do not include these sub-agent instructions.
     expect(baseline?.instructions).not.toContain("Excerpt anchor:");
   });
 
-  test.each([
+  it.each([
     ["missing", "No matching paragraph.\n", "matched 0"],
     [
       "ambiguous",
@@ -129,7 +130,7 @@ Do not include these sub-agent instructions.
     expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).toThrow(expected);
   });
 
-  test.each([
+  it.each([
     ["manifest", "excerpts: []\nunexpected: true\n"],
     [
       "excerpt",
@@ -150,7 +151,7 @@ Do not include these sub-agent instructions.
     );
   });
 
-  test("renders recursively linked Team coding baseline documents with provenance", () => {
+  it("renders recursively linked Team coding baseline documents with provenance", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-recursive");
     write(
       repoRoot,
@@ -204,7 +205,7 @@ Follow the [shared rules](../imported/shared.md).
     );
   });
 
-  test("terminates cycles and follows used reference-style Markdown links once", () => {
+  it("terminates cycles and follows used reference-style Markdown links once", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-cycle");
     write(repoRoot, "config/coderabbit/template.yaml", "reviews:\n  path_instructions: []\n");
     write(
@@ -226,7 +227,7 @@ Follow the [shared rules](../imported/shared.md).
     ]);
   });
 
-  test("fails clearly when a linked local Markdown file is missing", () => {
+  it("fails clearly when a linked local Markdown file is missing", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-missing");
     write(
       repoRoot,
@@ -239,7 +240,7 @@ Follow the [shared rules](../imported/shared.md).
     );
   });
 
-  test("rejects Markdown dependencies outside skills/references", () => {
+  it("rejects Markdown dependencies outside skills/references", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-boundary");
     write(repoRoot, "outside.md", "Not an owned reference.\n");
     write(
@@ -253,7 +254,7 @@ Follow the [shared rules](../imported/shared.md).
     );
   });
 
-  test("rejects symlinked Markdown dependencies that escape skills/references", () => {
+  it("rejects symlinked Markdown dependencies that escape skills/references", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-symlink-boundary");
     write(repoRoot, "outside.md", "Not an owned reference.\n");
     write(repoRoot, "skills/references/imported/.keep", "");
@@ -272,7 +273,7 @@ Follow the [shared rules](../imported/shared.md).
     );
   });
 
-  test("does not traverse external, image, anchor, or non-Markdown links", () => {
+  it("does not traverse external, image, anchor, or non-Markdown links", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-non-dependencies");
     write(
       repoRoot,
@@ -290,7 +291,7 @@ Follow the [shared rules](../imported/shared.md).
     expect(rendered.sources).toStrictEqual(["skills/references/internal/CODING_STANDARDS.md"]);
   });
 
-  test("rejects a hand-authored path instruction that collides with the generated path", () => {
+  it("rejects a hand-authored path instruction that collides with the generated path", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-template-collision");
     write(
       repoRoot,
@@ -307,7 +308,7 @@ Follow the [shared rules](../imported/shared.md).
     );
   });
 
-  test("preserves hand-authored settings and narrower path instructions", () => {
+  it("preserves hand-authored settings and narrower path instructions", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-customization");
     write(
       repoRoot,
@@ -341,7 +342,7 @@ reviews:
     });
   });
 
-  test("rejects a generated instruction over CodeRabbit's 20,000-character limit", () => {
+  it("rejects a generated instruction over CodeRabbit's 20,000-character limit", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-size-limit");
     write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "a".repeat(20_000));
 
@@ -350,12 +351,14 @@ reviews:
     );
   });
 
-  test("accepts a generated instruction at CodeRabbit's 20,000-character limit", () => {
+  it("accepts a generated instruction at CodeRabbit's 20,000-character limit", () => {
     const repoRoot = makeCodeRabbitRepo("coderabbit-config-exact-size-limit");
     write(repoRoot, "skills/references/internal/CODING_STANDARDS.md", "");
+
     const [emptyBaseline] = BaselineConfigSchema.parse(
       parse(renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" }).yaml)
     ).reviews.path_instructions;
+
     expect(emptyBaseline).toBeDefined();
     write(
       repoRoot,
@@ -366,7 +369,7 @@ reviews:
     expect(() => renderCodeRabbitConfig({ repoRoot, sourceCommit: "abc123" })).not.toThrow();
   });
 
-  test("syncs only for renderer inputs or a document in the current dependency graph", () => {
+  it("syncs only for renderer inputs or a document in the current dependency graph", () => {
     const sources = [
       "skills/references/internal/CODING_STANDARDS.md",
       "skills/references/imported/code-review/MAIN.md",
@@ -379,6 +382,7 @@ reviews:
         sources
       })
     ).toBeFalsy();
+
     for (const changedPath of [
       "skills/references/internal/CODING_STANDARDS.md",
       "skills/references/imported/code-review/MAIN.md",
@@ -394,7 +398,7 @@ reviews:
     }
   });
 
-  test("reports push relevance from the current graph and Git commit range", async () => {
+  it("reports push relevance from the current graph and Git commit range", async () => {
     const repoRoot = createRepo(makeTempDir("coderabbit-config-relevance-cli"), {
       "config/coderabbit/sources.yaml": "excerpts: []\n",
       "config/coderabbit/template.yaml": "reviews: {}\n",
@@ -402,6 +406,7 @@ reviews:
       "skills/references/imported/unrelated.md": "# Unrelated\n",
       "skills/references/internal/CODING_STANDARDS.md": "Read [shared](../imported/shared.md).\n"
     });
+
     const beforeRelevant = git(repoRoot, ["rev-parse", "HEAD"]);
     write(repoRoot, "skills/references/imported/shared.md", "# Shared\n\nChanged.\n");
     git(repoRoot, ["add", "."]);
@@ -450,6 +455,7 @@ reviews:
       "0".repeat(beforeRelevant.length),
       "f".repeat(beforeRelevant.length)
     ];
+
     const fallbackOutputs = await Promise.all(
       fallbackBeforeCommits.map(async (before) => {
         let fallbackOutput = "";
@@ -459,9 +465,11 @@ reviews:
             fallbackOutput += message;
           }
         );
+
         return fallbackOutput;
       })
     );
+
     expect(fallbackOutputs).toStrictEqual(["true\n", "true\n"]);
   });
 });

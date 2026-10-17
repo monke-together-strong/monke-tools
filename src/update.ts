@@ -37,9 +37,11 @@ const RELEASE_ASSET_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
   const monkeHome = getMonkeHome(runtime);
   const active = loadActiveToolInstall(monkeHome);
+
   if (active === null) {
     throw new MonkeError("No Active tool install was found; install monke-tools before updating");
   }
+
   assertReleaseInstallNotCustomized(active);
   const platform = releasePlatform(runtime);
 
@@ -48,21 +50,26 @@ export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
     const selected = await selectLatestStableRelease(runtime);
     assertSelectedReleaseContract(selected, platform);
     reportAvailability(runtime, active.manifest, selected.version);
+
     return;
   }
 
   await withInstallMutationLockAsync(monkeHome, async () => {
     const lockedActive = loadActiveToolInstall(monkeHome);
+
     if (lockedActive === null) {
       throw new MonkeError("The Active tool install disappeared while update was starting");
     }
+
     assertReleaseInstallNotCustomized(lockedActive);
     cleanupStaleStagingDirectories(monkeHome);
     createLogger(runtime).progress("Checking the stable monke-tools Release catalog...");
     const selected = await selectLatestStableRelease(runtime);
     const contract = assertSelectedReleaseContract(selected, platform);
+
     if (!isUpdateAvailable(lockedActive.manifest, selected.version)) {
       reportAvailability(runtime, lockedActive.manifest, selected.version);
+
       return;
     }
 
@@ -81,10 +88,13 @@ export async function runUpdate(runtime: Runtime, options: { check: boolean }) {
       ) {
         reportLocalTransition(runtime, lockedActive.manifest.sourceCheckout);
       }
+
       throw error;
     }
+
     const logger = createLogger(runtime);
     logger.success(`Updated monke-tools to ${selected.version}`);
+
     if (lockedActive.manifest.installKind === "local") {
       reportLocalTransition(runtime, lockedActive.manifest.sourceCheckout);
     }
@@ -97,10 +107,12 @@ function assertReleaseInstallNotCustomized(
   if (active.manifest.installKind !== "release") {
     return;
   }
+
   const changedPaths = findChangedReleaseGuidancePaths(
     active.installRoot,
     active.manifest.guidanceHashes
   );
+
   if (changedPaths.length > 0) {
     throw new MonkeError(
       `Customized release install cannot be updated. Changed guidance paths:\n${changedPaths.map((filePath) => `- ${filePath}`).join("\n")}\nNo files were changed. V1 does not automatically back up, migrate, reset, or discard customized guidance.`
@@ -111,26 +123,33 @@ function assertReleaseInstallNotCustomized(
 async function selectLatestStableRelease(runtime: Runtime) {
   let selected: ReleaseCatalogEntry | null = null;
   let selectedVersion = "";
+
   for (let page = 1; page <= MAX_RELEASE_PAGES; page += 1) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- GitHub pagination stops at the first empty page.
     const releases = await runtime.releaseDistribution.listReleases(page);
+
     for (const release of releases) {
       if (release.draft || release.prerelease || !validate(ReleaseTagSchema, release.tag_name)) {
         continue;
       }
+
       const version = release.tag_name.slice(RELEASE_TAG_PREFIX.length);
+
       if (selected === null || compareStableSemanticVersions(version, selectedVersion) > 0) {
         selected = release;
         selectedVersion = version;
       }
     }
+
     if (releases.length === 0) {
       if (selected === null) {
         throw new MonkeError("No stable monke-tools Release was found");
       }
+
       return { release: selected, version: selectedVersion };
     }
   }
+
   throw new MonkeError("GitHub Release lookup exceeded the pagination safety limit");
 }
 
@@ -146,15 +165,19 @@ function assertSelectedReleaseContract(
   const checksumsName = releaseChecksumsName(selected.version);
   const archive = selectAsset(selected.release.assets, archiveName);
   const checksums = selectAsset(selected.release.assets, checksumsName);
+
   for (const asset of [archive, checksums]) {
     if (!RELEASE_ASSET_DIGEST_PATTERN.test(asset.digest ?? "")) {
       throw new MonkeError(`Selected Release asset has no valid SHA-256 digest: ${asset.name}`);
     }
+
     const expectedUrl = `https://github.com/monke-together-strong/monke-tools/releases/download/${selected.release.tag_name}/${asset.name}`;
+
     if (asset.browser_download_url !== expectedUrl) {
       throw new MonkeError(`Selected Release asset has an unexpected download URL: ${asset.name}`);
     }
   }
+
   return { archive, archiveName, checksums, checksumsName, platform };
 }
 
@@ -169,15 +192,18 @@ async function downloadAndActivate(
   const stagingRoot = path.join(monkeHome, "install-staging");
   mkdirSync(stagingRoot, { recursive: true });
   const updateRoot = mkdtempSync(path.join(stagingRoot, "update-"));
+
   try {
     const archivePath = path.join(updateRoot, contract.archiveName);
     const checksumsPath = path.join(updateRoot, contract.checksumsName);
     const logger = createLogger(runtime);
     logger.progress(`Downloading monke-tools ${version} for ${contract.platform}...`);
+
     const [archiveResponse, checksumsResponse] = await Promise.all([
       runtime.releaseDistribution.downloadReleaseAsset(contract.archive.browser_download_url),
       runtime.releaseDistribution.downloadReleaseAsset(contract.checksums.browser_download_url)
     ]);
+
     await Promise.all([
       Bun.write(archivePath, archiveResponse),
       Bun.write(checksumsPath, checksumsResponse)
@@ -187,6 +213,7 @@ async function downloadAndActivate(
       assertAssetDigest(checksumsPath, contract.checksums)
     ]);
     logger.progress(`Verifying monke-tools ${version}...`);
+
     try {
       verifyReleaseArchive({
         archivePath,
@@ -205,9 +232,11 @@ async function downloadAndActivate(
     mkdirSync(bundleRoot);
     runtime.exec("tar", ["-xzf", archivePath, "-C", bundleRoot]);
     const activeBeforeActivation = loadActiveToolInstall(monkeHome);
+
     if (activeBeforeActivation?.installRoot !== expectedActive.installRoot) {
       throw new MonkeError("The Active tool install changed while update was in progress");
     }
+
     assertReleaseInstallNotCustomized(activeBeforeActivation);
     await runActivateReleaseInstall(runtime, { bundleRoot, installationLockHeld: true });
   } finally {
@@ -218,6 +247,7 @@ async function downloadAndActivate(
 function isSelectedReleaseActive(monkeHome: string, selectedVersion: string) {
   try {
     const active = loadActiveToolInstall(monkeHome);
+
     return (
       active?.manifest.installKind === "release" &&
       active.manifest.releaseVersion === selectedVersion
@@ -238,6 +268,7 @@ function reportLocalTransition(runtime: Runtime, sourceCheckout: string) {
 async function assertAssetDigest(filePath: string, asset: ReleaseCatalogAsset) {
   const expected = asset.digest?.slice("sha256:".length);
   const actual = await sha256File(filePath);
+
   if (actual !== expected) {
     throw new MonkeError(
       `Downloaded Release asset digest does not match GitHub metadata: ${asset.name}`
@@ -252,7 +283,9 @@ function reportAvailability(
 ) {
   const activeToolBuildIdentity =
     manifest.installKind === "release" ? manifest.releaseVersion : manifest.toolBuildIdentity;
+
   const logger = createLogger(runtime);
+
   if (isUpdateAvailable(manifest, selectedVersion)) {
     logger.info(`Release update available: ${activeToolBuildIdentity} -> ${selectedVersion}`);
   } else {
@@ -271,6 +304,7 @@ function isUpdateAvailable(manifest: ToolInstallManifest, selectedVersion: strin
 
 function selectAsset(assets: ReleaseCatalogAsset[], name: string) {
   const matches = assets.filter((asset) => asset.name === name);
+
   if (matches.length !== 1) {
     throw new MonkeError(
       matches.length === 0
@@ -278,9 +312,12 @@ function selectAsset(assets: ReleaseCatalogAsset[], name: string) {
         : `Selected Release asset metadata is ambiguous: ${name}`
     );
   }
+
   const [asset] = matches;
+
   if (!asset) {
     throw new MonkeError(`Selected Release is missing required asset ${name}`);
   }
+
   return asset;
 }

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { parse } from "yaml";
 import * as z from "zod";
 
@@ -11,6 +11,7 @@ const repositoryRoot = path.resolve(import.meta.dirname, "..");
 function tegamiPackages() {
   const source = readFileSync(path.join(repositoryRoot, "scripts/tegami.mts"), "utf-8");
   const block = /packages:\s*\{(?<body>[\s\S]*?)\n {2}\}/u.exec(source)?.groups?.body ?? "";
+
   return new Set([...block.matchAll(/"(?<name>[^"]+)":/gu)].map((match) => match.groups?.name));
 }
 
@@ -22,19 +23,21 @@ const FrontmatterSchema = z.object({
 
 describe("Tegami release entries", () => {
   const published = tegamiPackages();
+
   const entries = readdirSync(path.join(repositoryRoot, ".tegami")).filter((name) =>
     name.endsWith(".md")
   );
 
-  test("the release config names at least one package", () => {
+  it("names at least one package in the release config", () => {
     expect(published.size).toBeGreaterThan(0);
   });
 
-  test.each(entries)("%s names only packages Tegami publishes", (entry) => {
+  it.each(entries)("names only packages Tegami publishes in %s", (entry) => {
     const text = readFileSync(path.join(repositoryRoot, ".tegami", entry), "utf-8");
     const frontmatter = /^---\n(?<yaml>[\s\S]*?)\n---(?:\n|$)/u.exec(text)?.groups?.yaml;
     expect(frontmatter, "missing frontmatter").toBeDefined();
     const { packages } = FrontmatterSchema.parse(parse(frontmatter ?? ""));
+
     for (const name of Object.keys(packages)) {
       expect(published, `${entry} names ${name}, which Tegami does not publish`).toContain(name);
     }

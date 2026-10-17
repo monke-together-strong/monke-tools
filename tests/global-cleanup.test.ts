@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import * as z from "zod";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -29,6 +29,7 @@ const ActionSchema = z.object({
   step: z.string(),
   worktreePath: z.string().optional()
 });
+
 const ReportSchema = z.object({
   exitCode: z.number(),
   globalFailure: z.string().nullable(),
@@ -78,13 +79,16 @@ const ReportSchema = z.object({
   unavailableSources: z.array(z.string()),
   unownedWorktrees: z.array(z.unknown())
 });
+
 const sandboxes: string[] = [];
 const children: number[] = [];
 const host = createTestRuntime();
+
 function sandbox() {
   mkdirSync("tmp", { recursive: true });
   const directory = mkdtempSync(path.resolve("tmp/global-cleanup-"));
   sandboxes.push(directory);
+
   return directory;
 }
 
@@ -98,15 +102,17 @@ describe("global Session cleanup", () => {
         /* already gone */
       }
     }
+
     for (const directory of sandboxes.splice(0)) {
       rmSync(directory, { force: true, recursive: true });
     }
   });
 
-  test("dry-run outside a repository reports an empty inventory without creating Monke home", async () => {
+  it("reports an empty inventory for dry-run outside a repository without creating Monke home", async () => {
     const cwd = sandbox();
     const home = path.join(cwd, "absent");
     let stdout = "";
+
     const runtime = createTestRuntime({
       cwd,
       env: { GIT_CEILING_DIRECTORIES: path.dirname(cwd), MONKE_HOME: home },
@@ -114,6 +120,7 @@ describe("global Session cleanup", () => {
         stdout += text;
       }
     });
+
     expect(() => runtime.exec("git", ["rev-parse", "--show-toplevel"])).toThrow(
       /not a git repository/u
     );
@@ -140,16 +147,22 @@ describe("global Session cleanup", () => {
   function fixture() {
     const cwd = sandbox();
     const home = path.join(cwd, "home");
+
     const sources = ["dependency", "root"].map((name) => {
       const source = createRepo(path.join(cwd, name), { "tracked.txt": `${name}\n` });
       git(source, ["remote", "add", "origin", `https://github.com/owner/${name}.git`]);
+
       return source;
     });
+
     const root = sources.at(1);
+
     if (!root) {
       throw new Error("Missing fixture Root");
     }
+
     const states: SessionState[] = [];
+
     function addSession(session: string, rootSourceRoot: string = root ?? "") {
       const state: SessionState = {
         generation: { number: 1, status: "complete" },
@@ -159,6 +172,7 @@ describe("global Session cleanup", () => {
             const worktreePath = getExpectedWorktreePath(home, sourceRoot, session);
             git(sourceRoot, ["worktree", "add", "-b", session, worktreePath]);
             ageWorktree(worktreePath);
+
             return {
               assignedPorts: [],
               cleanupEligible: true,
@@ -172,11 +186,15 @@ describe("global Session cleanup", () => {
         session,
         version: 2
       };
+
       saveSessionState(home, state);
       states.push(state);
+
       return state;
     }
+
     let stdout = "";
+
     const runtime = createTestRuntime({
       cwd,
       env: { GIT_CEILING_DIRECTORIES: path.dirname(cwd), MONKE_HOME: home },
@@ -184,14 +202,17 @@ describe("global Session cleanup", () => {
         stdout += text;
       }
     });
+
     runtime.execAsync = async (command, args) => {
       expect(command).toBe("gh");
       const endpoint = args?.[1] ?? "";
       const name = endpoint.includes("owner/dependency") ? "dependency" : "root";
       const source = sources.find((candidate) => path.basename(candidate) === name);
+
       if (!source) {
         throw new Error("Missing fixture Source");
       }
+
       const value = endpoint.includes("/git/ref/heads/")
         ? { object: { sha: git(source, ["rev-parse", "main"]) } }
         : endpoint.includes("/pulls?")
@@ -212,11 +233,14 @@ describe("global Session cleanup", () => {
                 }))
             ]
           : { default_branch: "main", full_name: `owner/${name}` };
+
       return { exitCode: 0, stderr: "", stdout: JSON.stringify(value) };
     };
+
     async function run(dryRun = false, invocationCwd = runtime.cwd, extra: string[] = []) {
       stdout = "";
       let failure: unknown;
+
       try {
         await runCliAsync(["cleanup", "--json", ...(dryRun ? ["--dry-run"] : []), ...extra], {
           ...runtime,
@@ -225,20 +249,25 @@ describe("global Session cleanup", () => {
       } catch (error) {
         failure = error;
       }
+
       return { error: failure, report: ReportSchema.parse(JSON.parse(stdout)) };
     }
+
     return { addSession, cwd, home, root, run, runtime, sources };
   }
 
-  test("repeatable Sources discover repositories without Sessions and canonicalize checkout paths", async () => {
+  it("discovers repositories without Sessions from repeatable Sources and canonicalizes checkout paths", async () => {
     const f = fixture();
     const [dependency] = f.sources;
+
     if (!dependency) {
       throw new Error("Missing fixture Source");
     }
+
     const worktree = path.join(f.cwd, "ordinary");
     git(f.root, ["worktree", "add", "-b", "ordinary", worktree]);
     const before = files(f.cwd);
+
     const preview = await f.run(true, f.cwd, [
       "--source",
       "root",
@@ -247,6 +276,7 @@ describe("global Session cleanup", () => {
       "--source",
       worktree
     ]);
+
     expect(preview.error).toBeUndefined();
     expect(preview.report.sources).toStrictEqual([
       { sourceRoot: f.root, status: "inspected", worktreeCount: 1 },
@@ -267,15 +297,17 @@ describe("global Session cleanup", () => {
     expect(existsSync(f.home)).toBeFalsy();
   });
 
-  test.each(["missing", "unavailable"])(
-    "a requested %s Source prevents all cleanup effects",
+  it.each(["missing", "unavailable"])(
+    "prevents all cleanup effects when a requested Source is %s",
     async (status) => {
       const f = fixture();
       const state = f.addSession("feature/keep");
       const source = path.join(f.cwd, "invalid-source");
+
       if (status === "unavailable") {
         mkdirSync(source);
       }
+
       const result = await f.run(false, f.cwd, ["--source", source]);
       expect(result.error).toBeDefined();
       expect(result.report.globalFailure).toContain("Cannot inspect requested Source");
@@ -292,7 +324,7 @@ describe("global Session cleanup", () => {
     }
   );
 
-  test.each([
+  it.each([
     ["", "nonempty recovery command"],
     ["   ", "nonempty recovery command"],
     ["true", "explicit worktree targets"]
@@ -305,7 +337,7 @@ describe("global Session cleanup", () => {
     expect(state.repos.every((repo) => existsSync(repo.worktreePath))).toBeTruthy();
   });
 
-  test("selects a Session whose recorded member path is lexically equivalent to the target", async () => {
+  it("selects a Session whose recorded member path is lexically equivalent to the target", async () => {
     const f = fixture();
     const state = f.addSession("feature/equivalent-target");
     const untouched = f.addSession("feature/untouched");
@@ -324,7 +356,7 @@ describe("global Session cleanup", () => {
     expect(untouched.repos.every((repo) => existsSync(repo.worktreePath))).toBeTruthy();
   }, 15_000);
 
-  test("reports missing cleanup worktrees and runs explicitly selected recovery with saved resources", async () => {
+  it("reports missing cleanup worktrees and runs explicitly selected recovery with saved resources", async () => {
     const f = fixture();
     const state = f.addSession("feature/recover");
     const root = state.repos.at(-1);
@@ -338,8 +370,10 @@ describe("global Session cleanup", () => {
       outcome: "skipped",
       reasons: [{ code: "resource-recovery-required" }]
     });
+
     const command =
       'test "$RESOURCE_ID" != "owned-resource" || printf "%s" "$MONKE_WORKTREE_PATH" > recovery.txt';
+
     const result = await f.run(false, f.cwd, [root.worktreePath, "--recover-with", command]);
     expect(result.error).toBeUndefined();
     expect(result.report.sessions[0]?.outcome).toBe("cleaned");
@@ -349,7 +383,7 @@ describe("global Session cleanup", () => {
     expect(existsSync(state.repos[0]?.worktreePath ?? "")).toBeFalsy();
   }, 15_000);
 
-  test("archives untracked files before removal and keeps tracked edits blocked", async () => {
+  it("archives untracked files before removal and keeps tracked edits blocked", async () => {
     const f = fixture();
     const state = f.addSession("feature/notes");
     const [member] = state.repos;
@@ -386,7 +420,7 @@ describe("global Session cleanup", () => {
     });
   }, 15_000);
 
-  test("selectively removes audited ordinary worktrees and retains detached HEADs", async () => {
+  it("selectively removes audited ordinary worktrees and retains detached HEADs", async () => {
     const f = fixture();
     f.addSession("feature/keep");
     const selected = path.join(f.cwd, "selected");
@@ -395,12 +429,14 @@ describe("global Session cleanup", () => {
     git(f.root, ["worktree", "add", "-b", "ordinary", untouched]);
     ageWorktree(selected);
     const head = git(selected, ["rev-parse", "HEAD"]);
+
     const result = await f.run(false, f.cwd, [
       selected,
       "--include-unowned",
       "--recover-with",
       "true"
     ]);
+
     expect(result.error).toBeUndefined();
     expect(existsSync(selected)).toBeFalsy();
     expect(existsSync(untouched)).toBeTruthy();
@@ -412,7 +448,7 @@ describe("global Session cleanup", () => {
     );
   }, 15_000);
 
-  test("prunes only selected stale registrations, preserving their unmerged branches", async () => {
+  it("prunes only selected stale registrations, preserving their unmerged branches", async () => {
     const f = fixture();
     const selected = path.join(f.cwd, "stale");
     const untouched = path.join(f.cwd, "other-stale");
@@ -450,7 +486,7 @@ describe("global Session cleanup", () => {
     expect(git(f.root, ["rev-parse", "unmerged"])).toBe(head);
   }, 15_000);
 
-  test.each([
+  it.each([
     "staged",
     "intent-to-add",
     "hidden-index",
@@ -466,54 +502,70 @@ describe("global Session cleanup", () => {
       const selected = path.join(f.cwd, "stale");
       git(f.root, ["worktree", "add", "-b", "unfinished", selected]);
       const admin = git(selected, ["rev-parse", "--absolute-git-dir"]);
+
       if (kind === "staged") {
         write(selected, "tracked.txt", "unique staged work\n");
         git(selected, ["add", "."]);
       }
+
       if (kind === "intent-to-add") {
         write(selected, "new.txt", "pending work\n");
         git(selected, ["add", "--intent-to-add", "new.txt"]);
       }
+
       if (kind === "hidden-index") {
         git(selected, ["update-index", "--assume-unchanged", "tracked.txt"]);
       }
+
       if (kind === "operation") {
         write(admin, "MERGE_HEAD", `${git(selected, ["rev-parse", "HEAD"])}\n`);
       }
+
       if (kind === "locked") {
         git(f.root, ["worktree", "lock", selected]);
       }
+
       if (kind === "detached") {
         git(selected, ["checkout", "--detach"]);
       }
+
       rmSync(selected, { recursive: true });
+
       if (kind === "missing-index") {
         rmSync(path.join(admin, "index"));
       }
+
       if (kind === "reappeared") {
         const original = f.runtime.exec;
         f.runtime.exec = (command, args, options) => {
           const result = original(command, args, options);
+
           if (command === "git" && args?.includes("diff") && args.includes("--cached")) {
             write(selected, "new.txt", "a new checkout owns this path\n");
           }
+
           return result;
         };
       }
+
       await f.run(false, f.root, [selected, "--include-unowned"]);
       expect(git(f.root, ["worktree", "list", "--porcelain"])).toContain(selected);
       expect(existsSync(admin)).toBeTruthy();
+
       const staged =
         kind === "staged" ? git(f.root, [`--git-dir=${admin}`, "show", ":tracked.txt"]) : null;
+
       expect(staged).toBe(kind === "staged" ? "unique staged work" : null);
+
       const reappeared =
         kind === "reappeared" ? readFileSync(path.join(selected, "new.txt"), "utf-8") : null;
+
       expect(reappeared).toBe(kind === "reappeared" ? "a new checkout owns this path\n" : null);
     },
     15_000
   );
 
-  test.each(["remove", "mode"])(
+  it.each(["remove", "mode"])(
     "retains worktrees when a cleanup hook corrupts their required archive: %s",
     async (corruption) => {
       const f = fixture();
@@ -540,13 +592,13 @@ describe("global Session cleanup", () => {
     15_000
   );
 
-  test.each([
+  it.each([
     "worktree",
     "source",
     "worktree-after-recovery",
     "source-unavailable",
     "worktree-unavailable"
-  ])("ordinary cleanup retains a cross-repository nested %s", async (kind) => {
+  ])("retains a cross-repository nested %s during ordinary cleanup", async (kind) => {
     const f = fixture();
     const selected = path.join(f.cwd, "ordinary-parent");
     const nested = path.join(selected, "nested");
@@ -555,27 +607,34 @@ describe("global Session cleanup", () => {
     write(f.root, ".git/info/exclude", "nested/\n");
     git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
     ageWorktree(selected);
+
     const createNested = () => {
       if (kind.startsWith("source")) {
         createRepo(nested, { "tracked.txt": "nested source" });
       } else {
         git(dependency, ["worktree", "add", "-b", "nested", nested]);
       }
+
       write(nested, "unfinished.txt", "unique work");
     };
+
     if (kind === "worktree-after-recovery") {
       const original = f.runtime.exec;
       f.runtime.exec = (command, args, options) => {
         const result = original(command, args, options);
+
         if (command === "sh" && args?.[1] === "true") {
           createNested();
         }
+
         return result;
       };
     } else {
       createNested();
     }
+
     const invocation = kind.startsWith("source") ? nested : dependency;
+
     if (kind.endsWith("unavailable")) {
       const original = f.runtime.exec;
       f.runtime.exec = (command, args, options) => {
@@ -587,15 +646,18 @@ describe("global Session cleanup", () => {
         ) {
           throw new Error("Known Source registration inspection failed");
         }
+
         return original(command, args, options);
       };
     }
+
     const result = await f.run(false, invocation, [
       selected,
       "--include-unowned",
       "--recover-with",
       "true"
     ]);
+
     expect(result.report.unavailableSources).toStrictEqual(
       kind.endsWith("unavailable") ? [invocation] : []
     );
@@ -609,14 +671,15 @@ describe("global Session cleanup", () => {
     );
   });
 
-  test.each(["staged", "detached", "operation", "clean"])(
-    "Session cleanup preserves recovery metadata for a %s stale registration",
+  it.each(["staged", "detached", "operation", "clean"])(
+    "preserves recovery metadata for a %s stale registration during Session cleanup",
     async (kind) => {
       const f = fixture();
       const state = f.addSession("feature/stale-recovery", f.root);
       const [repo] = state.repos;
       ok(repo);
       const admin = git(repo.worktreePath, ["rev-parse", "--absolute-git-dir"]);
+
       if (kind === "staged") {
         write(repo.worktreePath, "unique.txt", "recoverable work");
         git(repo.worktreePath, ["add", "unique.txt"]);
@@ -625,6 +688,7 @@ describe("global Session cleanup", () => {
       } else if (kind === "operation") {
         write(admin, "MERGE_HEAD", git(repo.worktreePath, ["rev-parse", "HEAD"]));
       }
+
       rmSync(repo.worktreePath, { recursive: true });
       const result = await f.run();
       const retained = kind !== "clean";
@@ -634,7 +698,7 @@ describe("global Session cleanup", () => {
     }
   );
 
-  test("a stale Session index changed by recovery is retained", async () => {
+  it("retains a stale Session index changed by recovery", async () => {
     const f = fixture();
     const state = f.addSession("feature/stale-index-race");
     const [repo] = state.repos;
@@ -646,6 +710,7 @@ describe("global Session cleanup", () => {
     const original = f.runtime.exec;
     f.runtime.exec = (command, args, options) => {
       const result = original(command, args, options);
+
       if (command === "sh" && args?.[1] === "true") {
         git(repo.sourceRoot, [
           `--git-dir=${admin}`,
@@ -655,8 +720,10 @@ describe("global Session cleanup", () => {
           `100644,${blob},unique.txt`
         ]);
       }
+
       return result;
     };
+
     const result = await f.run(false, f.cwd, [repo.worktreePath, "--recover-with", "true"]);
     expect(result.report.sessions[0]?.outcome).toBe("failed");
     expect(git(repo.sourceRoot, [`--git-dir=${admin}`, "show", ":unique.txt"])).toBe(
@@ -666,8 +733,8 @@ describe("global Session cleanup", () => {
     expect(existsSync(state.repos.at(-1)?.worktreePath ?? "")).toBeTruthy();
   });
 
-  test.each(["source", "worktree"])(
-    "Session cleanup retains a nested %s when its Source cannot be inspected",
+  it.each(["source", "worktree"])(
+    "retains a nested %s during Session cleanup when its Source cannot be inspected",
     async (kind) => {
       const f = fixture();
       const state = f.addSession("feature/unknown-overlap");
@@ -678,11 +745,13 @@ describe("global Session cleanup", () => {
       ok(root && dependency);
       const nested = path.join(root.worktreePath, "nested");
       write(f.root, ".git/info/exclude", "nested/\n");
+
       if (kind === "source") {
         createRepo(nested, { "tracked.txt": "nested source" });
       } else {
         git(dependency, ["worktree", "add", "-b", "nested", nested]);
       }
+
       write(nested, "unfinished.txt", "unique work");
       const invocation = kind === "source" ? nested : dependency;
       const original = f.runtime.exec;
@@ -695,8 +764,10 @@ describe("global Session cleanup", () => {
         ) {
           throw new Error("Known Source registration inspection failed");
         }
+
         return original(command, args, options);
       };
+
       const result = await f.run(false, invocation, [root.worktreePath]);
       expect(readFileSync(path.join(nested, "unfinished.txt"), "utf-8")).toBe("unique work");
       expect(result.report.sessions[0]?.outcome).toBe("skipped");
@@ -704,24 +775,28 @@ describe("global Session cleanup", () => {
     }
   );
 
-  test.each(["before", "after"])(
-    "ordinary cleanup outside Monke home retains a recent process started %s recovery",
+  it.each(["before", "after"])(
+    "retains a recent process started %s recovery during ordinary cleanup outside Monke home",
     async (when) => {
       const f = fixture();
       const selected = path.join(f.cwd, "external-ordinary");
       git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
       ageWorktree(selected);
       let pid = when === "before" ? processIn(selected, true) : undefined;
+
       if (when === "after") {
         const original = f.runtime.exec;
         f.runtime.exec = (command, args, options) => {
           const result = original(command, args, options);
+
           if (command === "sh" && args?.[1] === "true") {
             pid = processIn(selected, true);
           }
+
           return result;
         };
       }
+
       await f.run(false, f.cwd, [selected, "--include-unowned", "--recover-with", "true"]);
       expect(existsSync(selected)).toBeTruthy();
       ok(pid !== undefined);
@@ -729,8 +804,8 @@ describe("global Session cleanup", () => {
     }
   );
 
-  test.each([false, true])(
-    "archive readiness retains an open PR blocker, missing sibling=%s",
+  it.each([false, true])(
+    "retains an open PR blocker in archive readiness, missing sibling=%s",
     async (missingSibling) => {
       const f = fixture();
       const state = f.addSession("feature/active-notes");
@@ -738,18 +813,22 @@ describe("global Session cleanup", () => {
       const [dependency] = state.repos;
       ok(root && dependency);
       write(root.worktreePath, "notes.md", "untracked notes");
+
       if (missingSibling) {
         git(dependency.sourceRoot, ["worktree", "remove", dependency.worktreePath]);
         dependency.cleanupCommand = "true";
         saveSessionState(f.home, state);
       }
+
       const original = f.runtime.execAsync;
       f.runtime.execAsync = async (command, args, options) => {
         const result = await original(command, args, options);
+
         return args?.[1]?.includes("/pulls?")
           ? { ...result, stdout: result.stdout.replaceAll('"state":"closed"', '"state":"open"') }
           : result;
       };
+
       const preview = await f.run(true);
       expect(preview.report.sessions[0]?.readiness).toBe("blocked");
       expect(preview.report.sessions[0]?.members.at(-1)?.checks.committedWork).toMatchObject({
@@ -760,17 +839,19 @@ describe("global Session cleanup", () => {
     }
   );
 
-  test("dirty ordinary worktrees are settled skips", async () => {
+  it("treats dirty ordinary worktrees as settled skips", async () => {
     const f = fixture();
     const selected = path.join(f.cwd, "dirty-ordinary");
     git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
     write(selected, "unfinished.txt", "keep me");
+
     const result = await f.run(false, f.cwd, [
       selected,
       "--include-unowned",
       "--recover-with",
       "true"
     ]);
+
     expect(result.error).toBeUndefined();
     expect(result.report.unownedWorktrees).toContainEqual(
       expect.objectContaining({
@@ -782,19 +863,21 @@ describe("global Session cleanup", () => {
     expect(readFileSync(path.join(selected, "unfinished.txt"), "utf-8")).toBe("keep me");
   });
 
-  test.each(["exit 23", 'printf "new work" > "$MONKE_WORKTREE_PATH/new.txt"'])(
+  it.each(["exit 23", 'printf "new work" > "$MONKE_WORKTREE_PATH/new.txt"'])(
     "retains ordinary worktrees after unsuccessful recovery: %s",
     async (command) => {
       const f = fixture();
       const selected = path.join(f.cwd, "ordinary-recovery");
       git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
       ageWorktree(selected);
+
       const result = await f.run(false, f.cwd, [
         selected,
         "--include-unowned",
         "--recover-with",
         command
       ]);
+
       expect(existsSync(selected)).toBeTruthy();
       expect(result.report.unownedWorktrees).toStrictEqual(
         expect.arrayContaining([
@@ -810,6 +893,7 @@ describe("global Session cleanup", () => {
       readdirSync(directory, { encoding: "utf-8", recursive: true }).map((relative) => {
         const target = path.join(directory, relative);
         const stat = lstatSync(target);
+
         return [
           relative,
           {
@@ -822,7 +906,7 @@ describe("global Session cleanup", () => {
     );
   }
 
-  test("global preview is immutable and execution cleans whole Sessions across Roots, preserving branches and unowned worktrees", async () => {
+  it("keeps global preview immutable and cleans whole Sessions across Roots on execution, preserving branches and unowned worktrees", async () => {
     const f = fixture();
     expect(() => f.runtime.exec("git", ["rev-parse", "--show-toplevel"])).toThrow(
       /not a git repository/u
@@ -852,34 +936,41 @@ describe("global Session cleanup", () => {
       "cleaned"
     ]);
     expect(result.report.summary).toMatchObject({ registeredWorktrees: 4, removedWorktrees: 3 });
+
     for (const state of [a, b]) {
       expect(
         existsSync(getSessionStateFilePath(f.home, state.rootSourceRoot, state.session))
       ).toBeFalsy();
+
       for (const repo of state.repos) {
         expect(existsSync(repo.worktreePath)).toBeFalsy();
         expect(git(repo.sourceRoot, ["rev-parse", "--verify", state.session])).toBeTruthy();
       }
     }
+
     expect(existsSync(unowned)).toBeTruthy();
   }, 30_000);
 
-  test("human output leads with a summary and --eligible hides skipped Sessions", async () => {
+  it("leads human output with a summary and hides skipped Sessions with --eligible", async () => {
     const f = fixture();
     f.addSession("feature/clean");
     const blocked = f.addSession("feature/blocked");
     const [dependency] = blocked.repos;
+
     if (!dependency) {
       throw new Error("Missing dependency");
     }
+
     write(dependency.worktreePath, "tracked.txt", "unfinished\n");
     let stdout = "";
+
     const runtime = {
       ...f.runtime,
       writeStdout(text: string) {
         stdout += text;
       }
     };
+
     await runCliAsync(["cleanup", "--dry-run"], runtime);
     const [summary] = stdout.split("\n");
     expect(summary).toBe(
@@ -893,27 +984,31 @@ describe("global Session cleanup", () => {
     expect(stdout).not.toContain("Skipped:");
   }, 30_000);
 
-  test("one dirty member skips the whole Session before any effect", async () => {
+  it("skips the whole Session before any effect when one member is dirty", async () => {
     const f = fixture();
     const state = f.addSession("feature/blocked");
     const [dependency] = state.repos;
+
     if (!dependency) {
       throw new Error("Missing dependency");
     }
+
     write(dependency.worktreePath, "tracked.txt", "unfinished\n");
     const before = files(f.cwd);
     const result = await f.run();
     expect(result.error).toBeUndefined();
     expect(result.report.sessions[0]?.outcome).toBe("skipped");
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
     }
+
     // Real execution may create its lock, but no Session or Git files change on a skip.
     const after = files(f.cwd);
     expect({ ...after, home: before.home }).toStrictEqual(before);
   }, 30_000);
 
-  test("foreign locks block execution and dry-run leaves them untouched", async () => {
+  it("blocks execution on foreign locks and leaves them untouched in dry-run", async () => {
     const f = fixture();
     const state = f.addSession("feature/locked");
     const contents = JSON.stringify({ acquiredAt: Date.now(), pid: process.pid });
@@ -925,23 +1020,27 @@ describe("global Session cleanup", () => {
     const result = await f.run();
     expect(result.report.globalFailure).toContain("Timed out waiting for lock");
     expect(readFileSync(path.join(f.home, "lock"), "utf-8")).toBe(contents);
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
     }
   }, 30_000);
 
-  test("losing the acquired lock stops the run without deleting its replacement", async () => {
+  it("stops the run after losing the acquired lock without deleting its replacement", async () => {
     const f = fixture();
     const state = f.addSession("feature/replaced-lock");
     const original = f.runtime.execAsync;
     f.runtime.execAsync = async (command, args, options) => {
       const result = await original(command, args, options);
       write(f.home, "lock", "replacement lock");
+
       return result;
     };
+
     const result = await f.run();
     expect(result.report.globalFailure).toContain("lock ownership lost");
     expect(readFileSync(path.join(f.home, "lock"), "utf-8")).toBe("replacement lock");
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
     }
@@ -958,12 +1057,16 @@ describe("global Session cleanup", () => {
       detached: true,
       stdio: "ignore"
     });
+
     child.unref();
     const { pid } = child;
+
     if (pid === undefined) {
       throw new Error("Missing child pid");
     }
+
     children.push(pid);
+
     return pid;
   }
 
@@ -974,9 +1077,11 @@ describe("global Session cleanup", () => {
     const stamp = `${started.toDateString().slice(0, 3)} ${started.toDateString().slice(4, 7)} ${String(started.getDate()).padStart(2, " ")} ${started.toTimeString().slice(0, 8)} ${started.getFullYear()}`;
     runtime.exec = (command, args, options) => {
       const result = original(command, args, options);
+
       if (command !== "ps") {
         return result;
       }
+
       const stdout = result.stdout
         .split("\n")
         .map((line) =>
@@ -985,6 +1090,7 @@ describe("global Session cleanup", () => {
             : line
         )
         .join("\n");
+
       return { ...result, stdout };
     };
   }
@@ -996,16 +1102,19 @@ describe("global Session cleanup", () => {
   function alive(pid: number) {
     const stat = host.exec("ps", ["-o", "stat=", "-p", String(pid)], { allowFailure: true });
     const state = stat.stdout.trim();
+
     return state.length > 0 && !state.startsWith("Z");
   }
 
-  test("a day-old attached process tree is stopped before removal and reported", async () => {
+  it("stops a day-old attached process tree before removal and reports it", async () => {
     const f = fixture();
     const state = f.addSession("feature/served");
     const [dependency] = state.repos;
+
     if (!dependency) {
       throw new Error("Missing dependency");
     }
+
     const pid = processIn(dependency.worktreePath, true);
     ageProcess(f.runtime, pid, 2);
     let descendants: number[] = [];
@@ -1016,14 +1125,17 @@ describe("global Session cleanup", () => {
           .stdout.split("\n")
           .filter(Boolean)
           .map(Number);
+
         return descendants.length;
       })
       .toBeGreaterThan(0);
     const result = await f.run();
     expect(result.error).toBeUndefined();
+
     for (const member of [pid, ...descendants]) {
       expect(alive(member), `pid ${member} should be stopped`).toBeFalsy();
     }
+
     expect(result.report.sessions[0]).toMatchObject({ outcome: "cleaned" });
     expect(result.report.sessions[0]?.execution.completedActions?.[0]).toMatchObject({
       sourceRoot: dependency.sourceRoot,
@@ -1032,7 +1144,7 @@ describe("global Session cleanup", () => {
     expect(existsSync(dependency.worktreePath)).toBeFalsy();
   }, 30_000);
 
-  test("a child spawned during shutdown retains every Session member", async () => {
+  it("retains every Session member when a child spawns during shutdown", async () => {
     const f = fixture();
     const state = f.addSession("feature/respawning");
     const [repo] = state.repos;
@@ -1045,24 +1157,28 @@ describe("global Session cleanup", () => {
     const result = await f.run();
     expect(result.report.sessions[0]).toMatchObject({ outcome: "failed" });
     expect(result.report.sessions[0]?.execution.message).toContain("is in use");
+
     for (const member of state.repos) {
       expect(existsSync(member.worktreePath)).toBeTruthy();
     }
+
     expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeTruthy();
   }, 30_000);
 
-  test.each([
+  it.each([
     { attached: true, label: "attached" },
     { attached: false, label: "unattached" }
   ])(
-    "a recent $label process retains the Session before any effect",
+    "retains the Session before any effect for a recent $label process",
     async ({ attached }) => {
       const f = fixture();
       const state = f.addSession("feature/busy");
       const [dependency] = state.repos;
+
       if (!dependency) {
         throw new Error("Missing dependency");
       }
+
       const pid = processIn(dependency.worktreePath, attached);
       const result = await f.run();
       expect(alive(pid)).toBeTruthy();
@@ -1071,15 +1187,17 @@ describe("global Session cleanup", () => {
         outcome: "skipped"
       });
       expect(result.report.sessions[0]?.execution.message).toContain("is in use");
+
       for (const repo of state.repos) {
         expect(existsSync(repo.worktreePath)).toBeTruthy();
       }
+
       expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeTruthy();
     },
     30_000
   );
 
-  test("failed process shutdown inspection prevents ordinary resource recovery", async () => {
+  it("prevents ordinary resource recovery when process shutdown inspection fails", async () => {
     const f = fixture();
     const selected = path.join(f.cwd, "ordinary-shutdown-failure");
     git(f.root, ["worktree", "add", "-b", "ordinary", selected]);
@@ -1092,20 +1210,22 @@ describe("global Session cleanup", () => {
       command === "ps" && args?.some((arg) => arg.includes("stat="))
         ? { exitCode: 2, stderr: "Process inspection failed", stdout: "" }
         : original(command, args, options);
+
     const result = await f.run(false, f.cwd, [
       selected,
       "--include-unowned",
       "--recover-with",
       "touch recovery-started"
     ]);
+
     expect(existsSync(path.join(f.root, "recovery-started"))).toBeFalsy();
     expect(existsSync(selected)).toBeTruthy();
     expect(alive(pid)).toBeTruthy();
     expect(result.report.exitCode).toBe(1);
   }, 30_000);
 
-  test.each(["lsof", "ps"])(
-    "failed %s inspection retains Session and ordinary worktrees",
+  it.each(["lsof", "ps"])(
+    "retains Session and ordinary worktrees when %s inspection fails",
     async (failedCommand) => {
       const f = fixture();
       const state = f.addSession("feature/scan-failure");
@@ -1121,6 +1241,7 @@ describe("global Session cleanup", () => {
         command === failedCommand
           ? { exitCode: 1, stderr: "Process inspection failed", stdout: "" }
           : original(command, args, options);
+
       const result = await f.run(false, f.cwd, [
         root.worktreePath,
         ordinary,
@@ -1128,18 +1249,21 @@ describe("global Session cleanup", () => {
         "--recover-with",
         "true"
       ]);
+
       expect(result.report.exitCode).toBe(1);
+
       for (const candidate of [...state.repos.map((repo) => repo.worktreePath), ordinary]) {
         expect(existsSync(candidate)).toBeTruthy();
       }
+
       expect(pids.every(alive)).toBeTruthy();
       expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeTruthy();
     },
     30_000
   );
 
-  test.each(["root", "dependency"])(
-    "a recent process started by recovery retains every Session member: %s",
+  it.each(["root", "dependency"])(
+    "retains every Session member for a recent process started by recovery: %s",
     async (member) => {
       const f = fixture();
       const state = f.addSession("feature/recovery-process");
@@ -1149,30 +1273,37 @@ describe("global Session cleanup", () => {
       const original = f.runtime.exec;
       f.runtime.exec = (command, args, options) => {
         const result = original(command, args, options);
+
         if (command === "sh" && args?.[1] === "true" && pid === undefined) {
           pid = processIn(repo.worktreePath, true);
         }
+
         return result;
       };
+
       const result = await f.run(false, f.cwd, [repo.worktreePath, "--recover-with", "true"]);
       ok(pid !== undefined);
       expect(alive(pid)).toBeTruthy();
       expect(result.report.sessions[0]?.outcome).toBe("failed");
+
       for (const candidate of state.repos) {
         expect(existsSync(candidate.worktreePath)).toBeTruthy();
       }
+
       expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeTruthy();
     },
     30_000
   );
 
-  test("an old process merely inside the worktree is left running and does not block", async () => {
+  it("leaves an old process merely inside the worktree running without blocking", async () => {
     const f = fixture();
     const state = f.addSession("feature/visited");
     const [dependency] = state.repos;
+
     if (!dependency) {
       throw new Error("Missing dependency");
     }
+
     const pid = processIn(dependency.worktreePath, false);
     ageProcess(f.runtime, pid, 30);
     const result = await f.run();
@@ -1185,7 +1316,7 @@ describe("global Session cleanup", () => {
     expect(existsSync(dependency.worktreePath)).toBeFalsy();
   }, 30_000);
 
-  test("removal failure reports completed work, retains state, and retries the remaining worktree", async () => {
+  it("reports completed work, retains state, and retries the remaining worktree after removal failure", async () => {
     const f = fixture();
     const state = f.addSession("feature/partial");
     const original = f.runtime.exec;
@@ -1193,8 +1324,10 @@ describe("global Session cleanup", () => {
       if (command === "git" && args?.includes("remove") && options?.cwd === f.root) {
         throw new Error("removal failed");
       }
+
       return original(command, args, options);
     };
+
     const result = await f.run();
     expect(result.report.summary.removedWorktrees).toBe(1);
     expect(result.report.sessions[0]).toMatchObject({
@@ -1217,21 +1350,26 @@ describe("global Session cleanup", () => {
     expect(retry.report.sessions[0]?.outcome).toBe("cleaned");
   }, 30_000);
 
-  test("a member that changes after another removal stops the Session and preserves its new work", async () => {
+  it("stops the Session and preserves a member's new work when the member changes after another removal", async () => {
     const f = fixture();
     const state = f.addSession("feature/race");
     const rootRepo = state.repos.find((repo) => repo.sourceRoot === f.root);
+
     if (!rootRepo) {
       throw new Error("Missing Root member");
     }
+
     const original = f.runtime.exec;
     f.runtime.exec = (command, args, options) => {
       const result = original(command, args, options);
+
       if (command === "git" && args?.includes("remove")) {
         write(rootRepo.worktreePath, "tracked.txt", "late change\n");
       }
+
       return result;
     };
+
     const result = await f.run();
     expect(result.report.sessions[0]).toMatchObject({
       execution: {
@@ -1246,13 +1384,15 @@ describe("global Session cleanup", () => {
     );
   }, 30_000);
 
-  test("cleanup runs in each Session worktree before removing any member", async () => {
+  it("runs cleanup in each Session worktree before removing any member", async () => {
     const f = fixture();
     const state = f.addSession("feature/cleanup-cwd");
     const log = path.join(f.cwd, "cleanup-cwd.log");
+
     const requireWorktrees = state.repos
       .map((repo) => `test -d '${repo.worktreePath}'`)
       .join(" && ");
+
     saveSessionState(f.home, {
       ...state,
       repos: state.repos.map((repo) => ({
@@ -1265,18 +1405,21 @@ describe("global Session cleanup", () => {
     expect(readFileSync(log, "utf-8").trim().split("\n")).toStrictEqual(
       [...state.repos].toReversed().map((repo) => repo.worktreePath)
     );
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeFalsy();
     }
+
     expect(existsSync(getSessionStateFilePath(f.home, f.root, state.session))).toBeFalsy();
   }, 30_000);
 
-  test("Cleanup commands rerun from the beginning after failure while independent Sessions continue", async () => {
+  it("reruns Cleanup commands from the beginning after failure while independent Sessions continue", async () => {
     const f = fixture();
     const state = f.addSession("feature/retry");
     const independent = f.addSession("feature/independent", f.sources[0]);
     const log = path.join(f.cwd, "commands.log");
     const allow = path.join(f.cwd, "allow");
+
     const withCommands = {
       ...state,
       repos: state.repos.map((repo) => ({
@@ -1287,6 +1430,7 @@ describe("global Session cleanup", () => {
             : `printf 'dependency\\n' >> '${log}'; test -f '${allow}'`
       }))
     };
+
     saveSessionState(f.home, withCommands);
     const result = await f.run();
     const failed = result.report.sessions.find((row) => row.session === state.session);
@@ -1295,9 +1439,11 @@ describe("global Session cleanup", () => {
       outcome: "failed"
     });
     expect(failed?.execution.retryCleanupCommands).toHaveLength(2);
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
     }
+
     expect(result.report.sessions.find((row) => row.session === independent.session)?.outcome).toBe(
       "cleaned"
     );
@@ -1309,21 +1455,27 @@ describe("global Session cleanup", () => {
     expect(readFileSync(log, "utf-8")).toBe("root\ndependency\nroot\ndependency\n");
   }, 30_000);
 
-  test("a Cleanup command that dirties a later Session causes fresh inspection to skip it", async () => {
+  it("skips a later Session on fresh inspection when a Cleanup command dirties it", async () => {
     const f = fixture();
+
     const states = [f.addSession("feature/first"), f.addSession("feature/later")].toSorted((a, b) =>
       getSessionStateFilePath(f.home, f.root, a.session).localeCompare(
         getSessionStateFilePath(f.home, f.root, b.session)
       )
     );
+
     const [first, later] = states;
+
     if (!first || !later) {
       throw new Error("Missing Sessions");
     }
+
     const laterRoot = later.repos.find((repo) => repo.sourceRoot === f.root);
+
     if (!laterRoot) {
       throw new Error("Missing later Root");
     }
+
     saveSessionState(f.home, {
       ...first,
       repos: first.repos.map((repo) => ({
@@ -1339,18 +1491,21 @@ describe("global Session cleanup", () => {
     expect(readFileSync(path.join(laterRoot.worktreePath, "tracked.txt"), "utf-8")).toBe(
       "new work\n"
     );
+
     for (const repo of later.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
     }
   }, 30_000);
 
-  test("JSON stays valid when cleanup removes the invoking dependency, and planned order matches execution", async () => {
+  it("keeps JSON valid when cleanup removes the invoking dependency, and executes in planned order", async () => {
     const f = fixture();
     const state = f.addSession("feature/current");
     const [dependency] = state.repos;
+
     if (!dependency) {
       throw new Error("Missing dependency");
     }
+
     const result = await f.run(false, dependency.worktreePath);
     expect(result.error).toBeUndefined();
     const [row] = result.report.sessions;
@@ -1358,12 +1513,14 @@ describe("global Session cleanup", () => {
     expect(row?.plannedActions[0]?.sourceRoot).toBe(f.root);
   }, 30_000);
 
-  test("a missing Source is a settled skip, not an inspection error", async () => {
+  it("treats a missing Source as a settled skip, not an inspection error", async () => {
     const f = fixture();
     const [missing] = f.sources;
+
     if (!missing) {
       throw new Error("Missing fixture Source");
     }
+
     const clean = f.addSession("feature/clean");
     saveSessionState(f.home, {
       ...clean,
@@ -1395,13 +1552,15 @@ describe("global Session cleanup", () => {
     ).toBeTruthy();
   }, 30_000);
 
-  test("an unavailable Source retains Sessions until overlap can be ruled out", async () => {
+  it("retains Sessions for an unavailable Source until overlap can be ruled out", async () => {
     const f = fixture();
     const state = f.addSession("feature/available");
     const [missing] = f.sources;
+
     if (!missing) {
       throw new Error("Missing fixture Source");
     }
+
     const unavailable = f.addSession("feature/unavailable", missing);
     saveSessionState(f.home, {
       ...state,
@@ -1419,15 +1578,17 @@ describe("global Session cleanup", () => {
     expect(result.report.exitCode).toBe(1);
   }, 30_000);
 
-  test("a waiting operation's reclaim marker does not invalidate or strand cleanup's own lock", async () => {
+  it("does not let a waiting operation's reclaim marker invalidate or strand cleanup's own lock", async () => {
     const f = fixture();
     f.addSession("feature/contended");
     const original = f.runtime.execAsync;
     f.runtime.execAsync = async (command, args, options) => {
       const result = await original(command, args, options);
       mkdirSync(path.join(f.home, "lock.reclaim"), { recursive: true });
+
       return result;
     };
+
     const result = await f.run();
     expect(result.error).toBeUndefined();
     expect(result.report.sessions[0]?.outcome).toBe("cleaned");
@@ -1435,33 +1596,39 @@ describe("global Session cleanup", () => {
     expect(existsSync(path.join(f.home, "lock.reclaim"))).toBeTruthy();
   }, 30_000);
 
-  test.each(["dirty", "held"])(
-    "%s eligibility does not hide unknown member evidence in either mode",
+  it.each(["dirty", "held"])(
+    "does not hide unknown member evidence behind %s eligibility in either mode",
     async (blocker) => {
       const f = fixture();
       const state = f.addSession("feature/unknown");
       const [dependency] = state.repos;
+
       if (!dependency) {
         throw new Error("Missing dependency");
       }
+
       if (blocker === "dirty") {
         write(dependency.worktreePath, "tracked.txt", "unfinished\n");
       } else {
         saveSessionState(f.home, { ...state, cleanupHold: true });
       }
+
       const original = f.runtime.execAsync;
       f.runtime.execAsync = (command, args, options) => {
         if (args?.[1]?.includes("owner/root")) {
           throw new Error("GitHub unavailable");
         }
+
         return original(command, args, options);
       };
+
       const preview = await f.run(true);
       expect(preview.report.exitCode).toBe(1);
       expect(preview.report.sessions[0]?.outcome).toBe("skipped");
       const execution = await f.run();
       expect(execution.report.exitCode).toBe(1);
       expect(execution.report.sessions[0]?.outcome).toBe("skipped");
+
       for (const repo of state.repos) {
         expect(existsSync(repo.worktreePath)).toBeTruthy();
       }
@@ -1478,26 +1645,29 @@ describe("global Session cleanup", () => {
     }
   }
 
-  test("Cleanup removes members with a verified forward bundle using member-specific permission", async () => {
+  it("removes members with a verified forward bundle in Cleanup using member-specific permission", async () => {
     const f = fixture();
     const state = f.addSession("feature/forward");
     preserveForwardBundle(state);
     const result = await f.run();
     expect(result.error).toBeUndefined();
     expect(result.report.sessions[0]?.outcome).toBe("cleaned");
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeFalsy();
     }
   }, 30_000);
 
-  test("an unpreserved sibling prevents all effects even when another member has a forward bundle", async () => {
+  it("prevents all effects when a sibling is unpreserved, even when another member has a forward bundle", async () => {
     const f = fixture();
     const state = f.addSession("feature/blocked-bundle");
     preserveForwardBundle(state);
     const [dependency] = state.repos;
+
     if (!dependency) {
       throw new Error("Missing dependency");
     }
+
     write(dependency.worktreePath, "tracked.txt", "unique sibling work\n");
     const effects: string[] = [];
     const original = f.runtime.exec;
@@ -1508,24 +1678,29 @@ describe("global Session cleanup", () => {
       ) {
         effects.push(command);
       }
+
       return original(command, args, options);
     };
+
     const result = await f.run();
     expect(result.report.sessions[0]?.outcome).toBe("skipped");
     expect(effects).toStrictEqual([]);
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
     }
   }, 30_000);
 
-  test("a cleanup command changing an accepted dirty file preserves the worktree despite unchanged status", async () => {
+  it("preserves the worktree when a cleanup command changes an accepted dirty file despite unchanged status", async () => {
     const f = fixture();
     const state = f.addSession("feature/bundle-cleanup-race");
     preserveForwardBundle(state);
     const laterRoot = state.repos.find((repo) => repo.sourceRoot === f.root);
+
     if (!laterRoot) {
       throw new Error("Missing Root member");
     }
+
     const before = git(laterRoot.worktreePath, ["status", "--porcelain"]);
     saveSessionState(f.home, {
       ...state,
@@ -1543,46 +1718,55 @@ describe("global Session cleanup", () => {
     expect(readFileSync(path.join(laterRoot.worktreePath, "tracked.txt"), "utf-8")).toBe(
       "late authored work\n"
     );
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
     }
   }, 30_000);
 
-  test("process shutdown that changes an accepted dirty file prevents removal", async () => {
+  it("prevents removal when process shutdown changes an accepted dirty file", async () => {
     const f = fixture();
     const state = f.addSession("feature/bundle-stop-race");
     preserveForwardBundle(state);
     const laterRoot = state.repos.find((repo) => repo.sourceRoot === f.root);
+
     if (!laterRoot) {
       throw new Error("Missing Root member");
     }
+
     const pid = processIn(laterRoot.worktreePath, true);
     ageProcess(f.runtime, pid, 2);
     const original = f.runtime.exec;
     f.runtime.exec = (command, args, options) => {
       const result = original(command, args, options);
+
       if (command === "kill") {
         write(laterRoot.worktreePath, "tracked.txt", "shutdown authored work\n");
       }
+
       return result;
     };
+
     const result = await f.run();
     expect(result.report.sessions[0]?.outcome).toBe("failed");
     expect(readFileSync(path.join(laterRoot.worktreePath, "tracked.txt"), "utf-8")).toBe(
       "shutdown authored work\n"
     );
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
     }
   }, 30_000);
 
-  test("a detached member gets a durable ref before removal and a recovery command in the report", async () => {
+  it("gives a detached member a durable ref before removal and a recovery command in the report", async () => {
     const f = fixture();
     const state = f.addSession("feature/detached-preserved");
     const [dependency] = state.repos;
+
     if (!dependency) {
       throw new Error("Missing dependency");
     }
+
     git(dependency.worktreePath, ["checkout", "--detach"]);
     ageWorktree(dependency.worktreePath);
     const head = git(dependency.worktreePath, ["rev-parse", "HEAD"]);
@@ -1599,17 +1783,20 @@ describe("global Session cleanup", () => {
     });
   }, 30_000);
 
-  test.each(["write-failure", "collision"])(
-    "detached retention %s retains every worktree",
+  it.each(["write-failure", "collision"])(
+    "retains every worktree on detached retention %s",
     async (failure) => {
       const f = fixture();
       const state = f.addSession("feature/detached-failure");
       const [dependency] = state.repos;
+
       if (!dependency) {
         throw new Error("Missing dependency");
       }
+
       git(dependency.worktreePath, ["checkout", "--detach"]);
       const head = git(dependency.worktreePath, ["rev-parse", "HEAD"]);
+
       if (failure === "collision") {
         write(dependency.sourceRoot, "other.txt", "another commit\n");
         git(dependency.sourceRoot, ["add", "other.txt"]);
@@ -1621,15 +1808,18 @@ describe("global Session cleanup", () => {
           if (command === "git" && args?.includes("update-ref")) {
             throw new Error("ref write failed");
           }
+
           return original(command, args, options);
         };
       }
+
       ageWorktree(dependency.worktreePath);
       const result = await f.run();
       expect(result.report.sessions[0]).toMatchObject({
         execution: { step: "head-preservation" },
         outcome: "failed"
       });
+
       for (const repo of state.repos) {
         expect(existsSync(repo.worktreePath)).toBeTruthy();
       }
@@ -1637,13 +1827,15 @@ describe("global Session cleanup", () => {
     30_000
   );
 
-  test("a detached retention ref survives a subsequent worktree removal failure", async () => {
+  it("keeps a detached retention ref through a subsequent worktree removal failure", async () => {
     const f = fixture();
     const state = f.addSession("feature/detached-partial");
     const [dependency] = state.repos;
+
     if (!dependency) {
       throw new Error("Missing dependency");
     }
+
     git(dependency.worktreePath, ["checkout", "--detach"]);
     ageWorktree(dependency.worktreePath);
     const head = git(dependency.worktreePath, ["rev-parse", "HEAD"]);
@@ -1652,43 +1844,53 @@ describe("global Session cleanup", () => {
       if (command === "git" && args?.includes("remove")) {
         throw new Error("removal failed after preservation");
       }
+
       return original(command, args, options);
     };
+
     const result = await f.run();
     expect(result.report.sessions[0]).toMatchObject({
       execution: { completedActions: [{ step: "head-preservation" }], step: "worktree-removal" },
       outcome: "failed"
     });
     expect(git(dependency.sourceRoot, ["rev-parse", `refs/monke/retained/${head}`])).toBe(head);
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeTruthy();
     }
   }, 30_000);
 
-  test("Cleanup removes the exact pnpm bootstrap deletion with HEAD already in default", async () => {
+  it("removes the exact pnpm bootstrap deletion in Cleanup with HEAD already in default", async () => {
     const f = fixture();
+
     const before = readFileSync(
       path.join(import.meta.dirname, "fixtures/cleanup-pnpm-bootstrap-before.txt"),
       "utf-8"
     );
+
     const after = readFileSync(
       path.join(import.meta.dirname, "fixtures/cleanup-pnpm-bootstrap-after.txt"),
       "utf-8"
     );
+
     for (const source of f.sources) {
       write(source, "package.json", JSON.stringify({ packageManager: "pnpm@12.1.0" }));
       write(source, "pnpm-lock.yaml", before);
       git(source, ["add", "package.json", "pnpm-lock.yaml"]);
       git(source, ["commit", "-m", "pin package manager"]);
     }
+
     const state = f.addSession("feature/bootstrap-preserved");
+
     for (const repo of state.repos) {
       write(repo.worktreePath, "pnpm-lock.yaml", after);
       ageWorktree(repo.worktreePath);
     }
+
     const result = await f.run();
     expect(result.error).toBeUndefined();
     expect(result.report.sessions[0]?.outcome).toBe("cleaned");
+
     for (const repo of state.repos) {
       expect(existsSync(repo.worktreePath)).toBeFalsy();
     }

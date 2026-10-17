@@ -1,7 +1,7 @@
 import { chmodSync, lstatSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { runCliAsync } from "../src/index.ts";
 import {
@@ -18,6 +18,7 @@ import { createTestRuntime } from "./runtime-fixture.ts";
 
 const uid = process.geteuid?.() ?? -1;
 const setupRuntime = createTestRuntime();
+
 // Ownership fixtures require an unprivileged caller and passwordless sudo for chown.
 const canChangeFixtureOwner =
   process.platform !== "win32" &&
@@ -30,7 +31,7 @@ function changeOwner(file: string, owner: number) {
 }
 
 describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () => {
-  test.each([
+  it.each([
     { action: "add", denied: true, marker: "file", name: "foreign owners", owner: "foreign" },
     { action: "update", denied: true, marker: "file", name: "foreign owners", owner: "foreign" },
     { action: "add", denied: false, marker: "file", name: "directory owner", owner: "directory" },
@@ -38,12 +39,14 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
     { action: "add", denied: true, marker: "symlink", name: "target owner", owner: "foreign" },
     { action: "add", denied: false, marker: "absent", name: "absent marker", owner: "foreign" },
     { action: "restore", denied: false, marker: "file", name: "cached marker", owner: "foreign" }
-  ])("$action respects sticky marker permissions for $name", async (scenario) => {
+  ])("respects sticky marker permissions on $action for $name", async (scenario) => {
     const sandbox = makeTempDir("sticky-marker");
     const repo = createRepo(path.join(sandbox, "consumer"), { "README.md": "Consumer.\n" });
+
     const upstream = createRepo(path.join(sandbox, "upstream"), {
       "skills/first/SKILL.md": "---\nname: first\ndescription: First.\n---\nAccepted.\n"
     });
+
     const bin = path.join(sandbox, "bin");
     writeExecutable(
       path.join(bin, "npx"),
@@ -51,6 +54,7 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
     );
     installFakeCodiff(bin);
     installFakeCodexSummary(bin);
+
     const runtime = createTestRuntime({
       cwd: repo,
       env: {
@@ -61,6 +65,7 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
       onStderr() {},
       onStdout() {}
     });
+
     await runCliAsync(["skills", "add", upstream, "--repo", "--skill", "first"], runtime);
     const acceptedPin = git(upstream, ["rev-parse", "HEAD"]);
     const config = read(repo, "monke.yml");
@@ -71,16 +76,19 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
     const target = path.join(sandbox, "marker-target");
     const entryOwner = scenario.owner === "entry" ? uid : 65_534;
     const parentOwner = scenario.owner === "directory" ? uid : 65_534;
+
     if (scenario.marker === "symlink") {
       renameSync(marker, target);
       symlinkSync(target, marker);
       changeOwner(target, scenario.owner === "entry" ? 65_534 : uid);
     }
+
     if (scenario.marker === "absent") {
       rmSync(marker);
     } else {
       changeOwner(marker, entryOwner);
     }
+
     try {
       chmodSync(parent, 0o1777);
       changeOwner(parent, parentOwner);
@@ -90,6 +98,7 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
       expect(lstatSync(marker, { throwIfNoEntry: false })?.uid).toBe(
         scenario.marker === "absent" ? undefined : entryOwner
       );
+
       if (scenario.action === "restore") {
         writeExecutable(path.join(bin, "npx"), "#!/bin/sh\nexit 42\n");
       } else {
@@ -101,6 +110,7 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
         git(upstream, ["add", "."]);
         git(upstream, ["commit", "-m", "Advance source"]);
       }
+
       const operation = runCliAsync(
         scenario.action === "add"
           ? ["skills", "add", upstream, "--repo", "--skill", "first"]
@@ -112,6 +122,7 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
             ],
         runtime
       );
+
       const failure = await operation.then(() => "", String);
       expect(Boolean(failure)).toBe(scenario.denied);
       expect(failure.includes(".monke-restored.json")).toBe(scenario.denied);
@@ -125,13 +136,16 @@ describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () =>
       expect(read(repo, "skills/imported/first/SKILL.md")).toContain(
         unchanged ? "Accepted." : "Candidate."
       );
+
       const targetBytes =
         scenario.marker === "symlink" ? read(sandbox, "marker-target") : undefined;
+
       expect(targetBytes).toBe(scenario.marker === "symlink" ? markerBytes : undefined);
     } finally {
       changeOwner(parent, uid);
       chmodSync(parent, 0o755);
       changeOwner(marker, uid);
+
       if (scenario.marker === "symlink") {
         changeOwner(target, uid);
       }

@@ -1,7 +1,7 @@
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -13,7 +13,7 @@ const STATE_POLL_ATTEMPTS = 200;
 const STATE_POLL_DELAY_MS = 10;
 
 describe("Cleanup authority", () => {
-  test("a migrated release supersedes legacy snapshots and Chop does not repeat it", () => {
+  it("supersedes legacy snapshots with a migrated release that Chop does not repeat", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-migration");
     runMonke({ args: ["spawn", "retained"], cwd: fixture.repoRoot, monkeHome: fixture.home });
     const store = new CheckoutResourceStore(fixture.home);
@@ -21,9 +21,11 @@ describe("Cleanup authority", () => {
     const record = store.get(owner);
     const legacy = loadSessionState(fixture.home, fixture.repoRoot, "retained");
     const [repo] = legacy.repos;
+
     if (!repo) {
       throw new Error("Missing fixture repo");
     }
+
     Object.assign(repo, {
       resourceCommandOutputs: record.resourceCommandOutputs.map(({ name, outputs }) => ({
         name,
@@ -54,11 +56,12 @@ describe("Cleanup authority", () => {
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe("A|old-value|old-output\n");
   });
 
-  test.each(["materialize", "acquire"])(
-    "%s retains deterministic inputs required by pending infrastructure cleanup",
+  it.each(["materialize", "acquire"])(
+    "retains deterministic inputs required by pending infrastructure cleanup on %s",
     (operation) => {
       const sandbox = makeTempDir("cleanup-static-authority");
       const home = path.join(sandbox, "home");
+
       const root = createRepo(path.join(sandbox, "root"), {
         "monke.yml":
           'apps: {}\nbootstrapCommand: true\ncleanupCommand: test "$OWNER" = original\nresources:\n  values:\n    OWNER: original\n'.replace(
@@ -66,6 +69,7 @@ describe("Cleanup authority", () => {
             "bootstrapCommand: 'true'"
           )
       });
+
       runMonke({ args: ["spawn", "retained"], cwd: root, monkeHome: home });
       const cwd = getExpectedWorktreePath(home, root, "retained");
       write(root, "monke.yml", "apps: {}\n");
@@ -81,7 +85,7 @@ describe("Cleanup authority", () => {
     }
   );
 
-  test("all-reused Resource command outputs retain Cleanup authority A", () => {
+  it("retains Cleanup authority A for all-reused Resource command outputs", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-reuse");
     runMonke({
       args: ["spawn", "retained"],
@@ -124,7 +128,7 @@ describe("Cleanup authority", () => {
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe("A|old-value|old-output\n");
   });
 
-  test("removing external-effect commands retains Cleanup authority A and its env", () => {
+  it("retains Cleanup authority A and its env after removing external-effect commands", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-removed-command");
     runMonke({
       args: ["spawn", "retained"],
@@ -147,7 +151,7 @@ describe("Cleanup authority", () => {
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe("A|old-value|old-output\n");
   });
 
-  test("interruption while waiting for a Resource command lock retains Cleanup authority A", async () => {
+  it("retains Cleanup authority A on interruption while waiting for a Resource command lock", async () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-lock-wait");
     runMonke({
       args: ["spawn", "retained"],
@@ -155,16 +159,19 @@ describe("Cleanup authority", () => {
       monkeHome: fixture.home
     });
     replaceCleanupAuthorityConfig(fixture, "B", { commandName: "replacement" });
+
     const lockPath = path.join(
       fixture.home,
       "locks",
       `${hashKey(`resource-command\u0000${fixture.repoRoot}\u0000replacement`)}.lock`
     );
+
     write(
       fixture.home,
       path.relative(fixture.home, lockPath),
       JSON.stringify({ acquiredAt: Date.now(), pid: process.pid })
     );
+
     const child = spawnMonkeWorker({
       args: ["spawn", "retained"],
       cwd: fixture.repoRoot,
@@ -174,6 +181,7 @@ describe("Cleanup authority", () => {
     try {
       await waitForState(() => {
         const [repo] = loadSessionState(fixture.home, fixture.repoRoot, "retained").repos;
+
         return Boolean(
           repo?.materializationStatus === "pending" && repo.cleanupCommand?.includes("A|")
         );
@@ -204,6 +212,7 @@ function createCleanupAuthorityFixture(name: string) {
   const sandbox = makeTempDir(name);
   const home = path.join(sandbox, "home");
   const cleanupLog = path.join(sandbox, "cleanup.log");
+
   const repoRoot = createRepo(path.join(sandbox, "root"), {
     "monke.yml": authorityConfig("A", cleanupLog),
     "resource.ts": `import { appendFileSync } from "node:fs";
@@ -214,6 +223,7 @@ export default function () {
 }
 `
   });
+
   return {
     cleanupLog,
     home,
@@ -251,6 +261,7 @@ function authorityConfig(
       outputs:
         - AUTH_OUTPUT
 `;
+
   return `cleanupCommand: '${cleanupCommand(label, cleanupLog)}'
 ${resources}apps: {}
 `;
@@ -265,9 +276,11 @@ async function waitForState(predicate: () => boolean) {
     if (predicate()) {
       return;
     }
+
     await new Promise<void>((resolve) => {
       setTimeout(resolve, STATE_POLL_DELAY_MS);
     });
   }
+
   throw new Error("Timed out waiting for Session state");
 }

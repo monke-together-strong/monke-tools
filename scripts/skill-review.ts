@@ -35,6 +35,7 @@ const ReviewSchema = z.strictObject({
   commit: z.string().regex(/^[a-f\d]{40}$/u),
   id: z.string().regex(/^[a-f\d]{64}$/u)
 });
+
 const ReviewsSchema = z.array(ReviewSchema).max(3);
 const ACCEPTED_GUIDANCE_DIRECTORY = ".monke-skill-baseline";
 
@@ -47,6 +48,7 @@ export function rememberSkillGuidance(
   const baseline = path.join(repoRoot, ACCEPTED_GUIDANCE_DIRECTORY);
   const next = `${baseline}.tmp`;
   rmSync(next, { force: true, recursive: true });
+
   if (changedGuidance && existsSync(baseline)) {
     cpSync(baseline, next, { recursive: true, verbatimSymlinks: true });
     replaceSnapshotGuidance(repoRoot, next, changedGuidance, store);
@@ -54,6 +56,7 @@ export function rememberSkillGuidance(
   } else {
     snapshotSkillGuidance(repoRoot, next, store);
   }
+
   rmSync(baseline, { force: true, recursive: true });
   renameSync(next, baseline);
 }
@@ -69,10 +72,12 @@ function replaceSnapshotGuidance(
       .filter((recipe) => recipe.localSource)
       .flatMap((recipe) => recipe.skills.map((item) => item.slug))
   );
+
   for (const item of guidance) {
     const source = importedGuidancePath(repoRoot, item);
     const target = importedGuidancePath(destination, item);
     rmSync(target, { force: true, recursive: true });
+
     if (existsSync(source)) {
       copyGuidanceSnapshot(source, target, item.kind === "skill" && localSkills.has(item.slug));
     }
@@ -95,12 +100,14 @@ export function snapshotSkillGuidance(
   store = readImportRecipeStore(repoRoot)
 ) {
   mkdirSync(destination, { recursive: true });
+
   for (const root of [IMPORTED_SKILLS_ROOT, IMPORTED_REFERENCES_ROOT]) {
     if (existsSync(path.join(repoRoot, root))) {
       mkdirSync(path.dirname(path.join(destination, root)), { recursive: true });
       copyGuidanceSnapshot(path.join(repoRoot, root), path.join(destination, root), false);
     }
   }
+
   replaceSnapshotGuidance(
     repoRoot,
     destination,
@@ -119,27 +126,35 @@ export function snapshotSkillUpdateBaseline(
   store = readImportRecipeStore(repoRoot)
 ) {
   const accepted = path.join(repoRoot, ACCEPTED_GUIDANCE_DIRECTORY);
+
   if (existsSync(accepted)) {
     cpSync(accepted, destination, { recursive: true, verbatimSymlinks: true });
+
     // Installer updates compare against current editable bytes, including learned changes.
     // Plain links retain the accepted baseline so externally installed updates remain visible.
     for (const recipe of store.recipes) {
       if (!recipe.localSource?.command) {
         continue;
       }
+
       for (const item of recipe.skills) {
         const source = importedGuidancePath(repoRoot, item);
         const target = importedGuidancePath(destination, item);
+
         if (!existsSync(source)) {
           continue;
         }
+
         rmSync(target, { force: true, recursive: true });
         copyGuidanceSnapshot(source, target, true);
       }
     }
+
     return;
   }
+
   const runtime = createRuntime({ cwd: repoRoot });
+
   const trackedImports = migrating
     ? runtime.exec(
         "git",
@@ -155,12 +170,16 @@ export function snapshotSkillUpdateBaseline(
         { allowFailure: true }
       )
     : undefined;
+
   if (!trackedImports || trackedImports.exitCode !== 0 || !trackedImports.stdout.trim()) {
     snapshotSkillGuidance(repoRoot, destination, store);
+
     return;
   }
+
   mkdirSync(path.join(repoRoot, "tmp"), { recursive: true });
   const checkout = mkdtempSync(path.join(repoRoot, "tmp", "skill-migration-base-"));
+
   try {
     const commit = runtime.exec("git", ["rev-parse", "HEAD"]).stdout.trim();
     runtime.exec("git", [
@@ -181,6 +200,7 @@ export function snapshotSkillUpdateBaseline(
 
 function reviewPaths(runtime: Runtime) {
   const root = path.join(getMonkeHome(runtime), "skill-reviews");
+
   return {
     index: path.join(root, "comparisons.json"),
     repository: path.join(root, "repository"),
@@ -204,11 +224,14 @@ export async function saveSkillComparison(
     const paths = reviewPaths(runtime);
     mkdirSync(paths.root, { recursive: true });
     mkdirSync(paths.repository, { recursive: true });
+
     const git = (args: string[], stdin?: string) =>
       runtime.exec("git", args, { cwd: paths.repository, stdin }).stdout.trim();
+
     if (!existsSync(path.join(paths.repository, ".git"))) {
       git(["init", "--quiet"]);
     }
+
     git(["config", "user.name", "Monke skill review"]);
     git(["config", "user.email", "skill-review@localhost"]);
     git(["config", "core.logAllRefUpdates", "false"]);
@@ -222,6 +245,7 @@ export async function saveSkillComparison(
       "* -text -filter -ident\n"
     );
     const reviews = await readReviews(paths.index);
+
     const replaceRetainedRefs = (from: typeof reviews, to: typeof reviews) => {
       const retainedIds = new Set(to.map((review) => review.id));
       git(
@@ -238,6 +262,7 @@ export async function saveSkillComparison(
         ].join("\n")
       );
     };
+
     // An interrupted publisher can leave a newer ref transaction with the old
     // ledger. Recover from the durable ledger before creating or pruning objects.
     const recordedRefs = git([
@@ -245,22 +270,29 @@ export async function saveSkillComparison(
       "--format=%(refname) %(objectname)",
       "refs/heads/skill-review-*"
     ]);
+
     const actualReviews = recordedRefs
       ? recordedRefs.split("\n").map((row) => {
           const [ref, commit] = row.split(" ");
+
           return ReviewSchema.parse({ commit, id: ref?.slice("refs/heads/skill-review-".length) });
         })
       : [];
+
     replaceRetainedRefs(actualReviews, reviews);
+
     const previousHeadRef = reviews.at(-1)
       ? `refs/heads/skill-review-${reviews.at(-1)?.id}`
       : "refs/heads/main";
+
     git(["symbolic-ref", "HEAD", previousHeadRef]);
+
     for (const entry of readdirSync(paths.root)) {
       if (entry.startsWith(`${path.basename(paths.index)}.`) && entry.endsWith(".tmp")) {
         rmSync(path.join(paths.root, entry), { force: true });
       }
     }
+
     const clearWorkingTree = () => {
       for (const entry of readdirSync(paths.repository)) {
         if (entry !== ".git") {
@@ -268,35 +300,46 @@ export async function saveSkillComparison(
         }
       }
     };
+
     const tree = (snapshot: string) => {
       clearWorkingTree();
+
       for (const entry of readdirSync(snapshot)) {
         cpSync(path.join(snapshot, entry), path.join(paths.repository, entry), {
           recursive: true,
           verbatimSymlinks: true
         });
       }
+
       git(["read-tree", "--empty"]);
       git(["add", "--all", "--force", "--", "."]);
+
       return git(["write-tree"]);
     };
+
     try {
       const beforeTree = tree(before);
       const afterTree = tree(after);
+
       if (beforeTree === afterTree) {
         return;
       }
+
       const id = sha256(`${beforeTree}\0${afterTree}`);
       const previous = reviews.find((review) => review.id === id);
+
       const baseline = previous
         ? undefined
         : git(["commit-tree", beforeTree], "Imported guidance before update\n");
+
       const commit =
         previous?.commit ??
         git(["commit-tree", afterTree, "-p", baseline ?? ""], "Imported guidance update\n");
+
       const retained = [...reviews.filter((review) => review.id !== id), { commit, id }].slice(-3);
       const nextIndex = `${paths.index}.${crypto.randomUUID()}.tmp`;
       let refsChanged = false;
+
       try {
         // Prepare metadata before changing retention. A failed publication leaves
         // the previous ledger and all its commit pairs available for retry.
@@ -310,23 +353,28 @@ export async function saveSkillComparison(
           replaceRetainedRefs(retained, reviews);
           git(["symbolic-ref", "HEAD", previousHeadRef]);
         }
+
         throw error;
       } finally {
         rmSync(nextIndex, { force: true });
       }
+
       return { ...paths, commit, id };
     } finally {
       // The index also keeps objects alive. Restore only the selected retained commit
       // before reclaiming unpublished trees from no-op and failed comparisons.
       clearWorkingTree();
       git(["read-tree", "--empty"]);
+
       const head = runtime.exec("git", ["rev-parse", "--verify", "HEAD"], {
         allowFailure: true,
         cwd: paths.repository
       });
+
       if (head.exitCode === 0) {
         git(["reset", "--hard", "--quiet", head.stdout.trim()]);
       }
+
       git(["reflog", "expire", "--expire=now", "--all"]);
       git(["gc", "--prune=now", "--quiet"]);
     }
@@ -340,6 +388,7 @@ export async function openSkillComparison(
   const runtime = options.runtime ?? createRuntime({ writeStdout: options.writeMessage });
   const reopen = `mt diff --commit ${shellQuote(comparison.commit)} --path ${shellQuote(comparison.repository)}${options.adapter ? ` --adapter ${shellQuote(options.adapter)}` : ""}`;
   (options.writeMessage ?? runtime.writeStdout)(`Complete skill review: ${reopen}\n`);
+
   try {
     await runDiffInteractive(runtime, {
       adapter: options.adapter,
@@ -370,12 +419,14 @@ export async function reviewSkillRevisions(
   const runtime = createRuntime();
   mkdirSync(path.join(runtime.cwd, "tmp"), { recursive: true });
   const temporaryRoot = mkdtempSync(path.join(runtime.cwd, "tmp", "skill-history-"));
+
   try {
     const endpoints = await Promise.all(
       [base, head].map(async (revision, index) => {
         const commit = runtime
           .exec("git", ["rev-parse", "--verify", "--end-of-options", `${revision}^{commit}`])
           .stdout.trim();
+
         const checkout = path.join(temporaryRoot, `revision-${index}`);
         runtime.exec("git", [
           "clone",
@@ -388,6 +439,7 @@ export async function reviewSkillRevisions(
         ]);
         runtime.exec("git", ["checkout", "--quiet", "--detach", commit], { cwd: checkout });
         const config = path.join(checkout, "monke.yml");
+
         if (
           existsSync(path.join(checkout, SKILL_LOCK_PATH)) ||
           (existsSync(config) &&
@@ -399,12 +451,16 @@ export async function reviewSkillRevisions(
           // committed imported bytes, so preserve those when no repo recipe is declared.
           await restoreSkillImports(checkout, false);
         }
+
         const snapshot = path.join(temporaryRoot, `snapshot-${index}`);
         snapshotSkillGuidance(checkout, snapshot);
+
         return snapshot;
       })
     );
+
     const comparison = await saveSkillComparison(endpoints[0] ?? "", endpoints[1] ?? "", runtime);
+
     if (comparison) {
       await openSkillComparison(comparison, options);
     } else {

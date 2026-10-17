@@ -40,7 +40,9 @@ class GlobalCleanupError extends MonkeError {
     this.name = "GlobalCleanupError";
   }
 }
+
 type Inventory = Awaited<ReturnType<typeof inspectSessionCleanup>>;
+
 type SessionReport = ReturnType<typeof createSessionCleanupReport>;
 
 export interface CleanupOptions {
@@ -61,13 +63,16 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
     runtime,
     options
   );
+
   let inventory: Inventory | undefined;
   const sessions: SessionReport[] = [];
   let globalFailure: string | null = null;
+
   try {
     if (options.dryRun) {
       inventory = await inspectSessionCleanup(runtime, home, [...knownSources], inspectionOptions);
       validateInputs(inventory);
+
       for (const row of inventory.sessions) {
         sessions.push(
           reportSession(
@@ -79,6 +84,7 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
           )
         );
       }
+
       await ordinary(inventory);
     } else {
       await withGlobalLockAsync(home, async (lock) => {
@@ -95,6 +101,7 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
   } catch (error) {
     globalFailure = errorMessage(ThrownValueSchema.parse(error));
   }
+
   // Include every inspected Session even when a global failure stops execution.
   for (const row of inventory?.sessions ?? []) {
     if (!sessions.some((session) => session.stateFile === row.snapshot.filePath)) {
@@ -108,7 +115,9 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
       );
     }
   }
+
   const exitCode = cleanupExitCode(sessions, inventory, globalFailure);
+
   const report = {
     dryRun: options.dryRun,
     exitCode,
@@ -120,7 +129,9 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
     unavailableSources: inventory?.unavailableSources ?? [],
     unownedWorktrees: inventory?.unownedWorktrees ?? []
   };
+
   writeCleanupReport(runtime, { ...report, summary: cleanupSummary(report) }, options);
+
   if (exitCode !== 0) {
     throw new MonkeError(
       "Cleanup incomplete; see the report for inspection errors, failed actions, and retained Sessions."
@@ -131,36 +142,46 @@ export async function runCleanup(runtime: Runtime, options: CleanupOptions) {
 function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
   const home = getMonkeHome(runtime);
   const targets = options.targets?.map((target) => path.resolve(runtime.cwd, target));
+
   if (options.recoveryCommand !== undefined) {
     if (options.recoveryCommand.trim().length === 0) {
       throw new MonkeError("--recover-with requires a nonempty recovery command");
     }
+
     if ((targets?.length ?? 0) === 0) {
       throw new MonkeError("--recover-with requires explicit worktree targets");
     }
   }
+
   const inspectionOptions = {
     archiveUntracked: options.archiveUntracked,
     recoveryCommand: options.recoveryCommand,
     targets
   };
+
   const knownSources = new Set<string>();
   const explicitSources = new Set<string>();
   const sources = options.sources?.map((source) => path.resolve(runtime.cwd, source)) ?? [];
+
   for (const candidate of [runtime.cwd, ...(targets ?? []), ...sources]) {
     const explicit = sources.includes(candidate);
+
     if (!existsSync(candidate)) {
       if (explicit) {
         knownSources.add(candidate);
         explicitSources.add(candidate);
       }
+
       continue;
     }
+
     try {
       const source = resolveRepoContext(runtime, candidate, null, {
         inferSessionName: false
       }).sourceRoot;
+
       knownSources.add(source);
+
       if (explicit) {
         explicitSources.add(source);
       }
@@ -172,38 +193,46 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
       }
     }
   }
+
   const validateInputs = (inventory: Inventory) => {
     for (const sourceRoot of explicitSources) {
       const source = inventory.sources.find((row) => samePath(row.sourceRoot, sourceRoot));
+
       if (source?.status !== "inspected") {
         throw new MonkeError(
           `Cannot inspect requested Source ${sourceRoot}: ${source?.message ?? source?.status ?? "not discovered"}`
         );
       }
     }
+
     for (const target of targets ?? []) {
       const owned = inventory.sessions.some(
         (row) =>
           samePath(row.snapshot.filePath, target) ||
           row.state?.repos.some((repo) => samePath(repo.worktreePath, target))
       );
+
       const unowned = inventory.unownedWorktrees.some((repo) =>
         samePath(repo.worktreePath, target)
       );
+
       if (!owned && !(options.includeUnowned && unowned)) {
         throw new MonkeError(`Cleanup target not found or requires --include-unowned: ${target}`);
       }
     }
   };
+
   const ordinary = async (inventory: Inventory, lock?: OperationLock) => {
     if (!options.includeUnowned) {
       return;
     }
+
     const selected = inventory.unownedWorktrees.filter(
       (repo) =>
         (targets?.length ?? 0) === 0 ||
         targets?.some((target) => samePath(target, repo.worktreePath))
     );
+
     const results = await cleanupOrdinaryWorktrees(
       runtime,
       home,
@@ -215,10 +244,12 @@ function prepareCleanup(runtime: Runtime, options: CleanupOptions) {
       },
       lock
     );
+
     inventory.unownedWorktrees = inventory.unownedWorktrees.map(
       (repo) => results.find((result) => result.worktreePath === repo.worktreePath) ?? repo
     );
   };
+
   return { home, inspectionOptions, knownSources, ordinary, validateInputs };
 }
 
@@ -230,6 +261,7 @@ function cleanupExitCode(
   const inspectionError =
     sessions.some((session) => session.inspectionFailed) ||
     (inventory?.unavailableSources.length ?? 0) > 0;
+
   return globalFailure ||
     inventory?.unownedWorktrees.some(
       (repo) => repo.outcome === "failed" || repo.inspectionFailed
@@ -267,13 +299,16 @@ async function executeInventory(
       recoveryCommand: options.recoveryCommand,
       sessionFile: original.snapshot.filePath
     });
+
     assertGlobalSafety(lock, fresh);
     const [row] = fresh.sessions;
+
     if (!row) {
       throw new GlobalCleanupError(
         `Retained Session disappeared before inspection: ${original.snapshot.filePath}`
       );
     }
+
     if (!row.decision.eligible) {
       sessions.push(
         reportSession(
@@ -286,8 +321,10 @@ async function executeInventory(
       );
       continue;
     }
+
     const result = executeSession(runtime, home, lock, fresh, row, options);
     sessions.push(result.report);
+
     if (result.globalFailure) {
       throw new GlobalCleanupError(result.globalFailure);
     }
@@ -307,10 +344,13 @@ function cleanupSummary(report: CleanupReport) {
   const planned = report.sessions
     .filter((session) => session.outcome === "would-clean")
     .flatMap((session) => session.plannedActions);
+
   const completed = report.sessions.flatMap((session) => session.execution.completedActions ?? []);
+
   const removalCount = (actions: SessionAction[], outcome: "would-clean" | "cleaned") =>
     actions.filter((action) => action.step === "worktree-removal").length +
     report.unownedWorktrees.filter((worktree) => worktree.outcome === outcome).length;
+
   return {
     registeredWorktrees: report.sources.reduce(
       (total, source) => total + (source.worktreeCount ?? 0),
@@ -334,25 +374,30 @@ function writeCleanupReport(
   options: Pick<CleanupOptions, "eligibleOnly" | "json">
 ) {
   const { globalFailure, sessions } = report;
+
   if (options.json) {
     runtime.writeStdout(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     runtime.writeStdout(`${summarizeCleanup(report)}\n`);
+
     for (const source of report.sources) {
       runtime.writeStdout(
         `Source (${source.status}): ${source.sourceRoot}${source.worktreeCount !== null ? `; ${quantity(source.worktreeCount, "registered worktree")}` : ""}${source.message ? `: ${source.message}` : ""}\n`
       );
     }
+
     for (const session of sessions) {
       if (!options.eligibleOnly || session.outcome !== "skipped") {
         runtime.writeStdout(formatSessionCleanupReport(session));
       }
     }
+
     for (const worktree of report.unownedWorktrees) {
       runtime.writeStdout(
         `Unowned (${worktree.outcome ?? "untouched"}): ${worktree.sourceRoot} — ${worktree.worktreePath}${worktree.reason ? `: ${worktree.reason}` : ""}\n`
       );
     }
+
     if (globalFailure) {
       runtime.writeStdout(`Cleanup stopped: ${globalFailure}\n`);
     }
@@ -361,9 +406,12 @@ function writeCleanupReport(
 
 function summarizeCleanup(report: CleanupReport & { summary: ReturnType<typeof cleanupSummary> }) {
   const { sessions } = report;
+
   const count = (outcome: SessionReport["outcome"]) =>
     sessions.filter((session) => session.outcome === outcome).length;
+
   const inspectionErrors = sessions.filter((session) => session.inspectionFailed).length;
+
   const parts = (
     [
       ["would clean", count("would-clean")],
@@ -375,6 +423,7 @@ function summarizeCleanup(report: CleanupReport & { summary: ReturnType<typeof c
   )
     .filter(([, total]) => total > 0)
     .map(([label, total]) => `${total} ${label}`);
+
   const notes = [
     report.summary.sourcesSkipped > 0 ? `${report.summary.sourcesSkipped} Sources skipped` : null,
     report.summary.wouldRemoveWorktrees > 0
@@ -388,6 +437,7 @@ function summarizeCleanup(report: CleanupReport & { summary: ReturnType<typeof c
       ? `${report.unownedWorktrees.length} unowned worktrees reported`
       : null
   ].filter((note) => note !== null);
+
   return `Inspected ${quantity(report.summary.sourcesInspected, "Source")}, ${quantity(report.summary.registeredWorktrees, "registered worktree")}, ${quantity(sessions.length, "Session")}${parts.length > 0 ? `: ${parts.join(", ")}` : "."}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`;
 }
 
@@ -397,11 +447,13 @@ function assertGlobalSafety(lock: OperationLock, inventory: Inventory) {
   } catch (error) {
     throw new GlobalCleanupError(errorMessage(ThrownValueSchema.parse(error)));
   }
+
   if (inventory.unboundedOwnership) {
     throw new GlobalCleanupError(
       "Invalid retained state has unbounded ownership; no further Sessions can be cleaned."
     );
   }
+
   if (
     inventory.sessions.some((row) =>
       row.snapshot.blockers.includes("state-changed-during-inspection")
@@ -424,6 +476,7 @@ function reportSession(
 ) {
   const { snapshot } = row;
   const state = row.decision.eligible ? row.state : null;
+
   const plannedActions: SessionAction[] = state
     ? [
         ...snapshot.members
@@ -434,6 +487,7 @@ function reportSession(
           )
           .flatMap((member) => {
             const head = detachedMemberHead(member);
+
             return head ? [retainedHeadAction(member.sourceRoot, member.worktreePath, head)] : [];
           }),
         ...snapshot.members
@@ -465,6 +519,7 @@ function reportSession(
         { sourceRoot: state.rootSourceRoot, step: "state-removal" }
       ]
     : [];
+
   return createSessionCleanupReport(snapshot, execution, { dryRun, plannedActions });
 }
 
@@ -478,9 +533,11 @@ function executeSession(
 ) {
   const { snapshot } = row;
   const { state } = row;
+
   if (!state) {
     throw new GlobalCleanupError("Eligible Session has no retained state");
   }
+
   const planned = reportSession(
     row,
     { outcome: "not-attempted" },
@@ -488,6 +545,7 @@ function executeSession(
     runtime.cwd,
     options.recoveryCommand
   );
+
   const completedActions: SessionAction[] = [];
   const archives = new Map<string, string>();
   let current: SessionAction = { sourceRoot: state.rootSourceRoot, step: "revalidation" };
@@ -497,31 +555,39 @@ function executeSession(
   const scan = scanSessionStates(home);
   const states = scan.records.flatMap((record) => (record.state ? [record.state] : []));
   const sources = [...inventory.sourceRoots, ...inventory.unavailableSources];
+
   function guard() {
     assertGlobalSafety(lock, inventory);
+
     if (scanSessionStates(home).fingerprint !== inventory.stateFingerprint) {
       throw new GlobalCleanupError("Retained Session state changed after inspection.");
     }
   }
+
   const revalidateMember = (repo: SessionState["repos"][number]) => {
     const member = snapshot.members.find((candidate) =>
       samePath(candidate.worktreePath, repo.worktreePath)
     );
+
     if (!member) {
       throw new MonkeError(`Missing member evidence: ${repo.worktreePath}`);
     }
+
     revalidateSessionMember(runtime, readOnly, home, state, repo, member);
     assertNoOverlappingCheckouts(readOnly, sources, repo.worktreePath);
   };
+
   const inspectProcesses = (afterCleanup = false) => {
     const processes = scanWorktreeProcesses(
       runtime,
       state.repos.map((repo) => repo.worktreePath)
     );
+
     for (const repo of state.repos) {
       const active = processes
         .treesUnder(repo.worktreePath)
         .filter((tree) => tree.ageMs < RECENT_WORKTREE_MS || (afterCleanup && tree.attached));
+
       if (active.length > 0) {
         current = {
           sourceRoot: repo.sourceRoot,
@@ -533,21 +599,27 @@ function executeSession(
         );
       }
     }
+
     return processes;
   };
+
   try {
     guard();
     // Check every member before archives, process shutdown, or resource effects.
     const processes = inspectProcesses();
+
     for (const member of snapshot.members) {
       if (member.evidence?.pendingWork?.kind === "untracked-archive") {
         guard();
+
         const repo = state.repos.find((candidate) =>
           samePath(candidate.worktreePath, member.worktreePath)
         );
+
         if (!repo) {
           throw new MonkeError("Missing archive member");
         }
+
         revalidateMember(repo);
         current = {
           sourceRoot: member.sourceRoot,
@@ -567,6 +639,7 @@ function executeSession(
         });
       }
     }
+
     const invocation = state.repos.find((repo) => containsPath(repo.worktreePath, runtime.cwd));
     teardownSession(
       { ...runtime, writeStdout: runtime.writeStderr },
@@ -577,6 +650,7 @@ function executeSession(
       {
         authorizePreservedWork(repo) {
           revalidateMember(repo);
+
           return snapshot.members.some(
             (member) =>
               samePath(member.worktreePath, repo.worktreePath) &&
@@ -585,36 +659,48 @@ function executeSession(
         },
         beforeEffect(action) {
           guard();
+
           if (action.step === "cleanup-command" || action.step === "worktree-removal") {
             // Commands may activate any sibling; refresh before the next destructive effect.
             inspectProcesses(true);
           }
+
           if (action.step === "worktree-removal") {
             const repo = state.repos.find((candidate) =>
               samePath(candidate.worktreePath, action.worktreePath ?? "")
             );
+
             if (!repo) {
               throw new MonkeError("Missing removal member");
             }
+
             revalidateMember(repo);
+
             const member = snapshot.members.find((candidate) =>
               samePath(candidate.worktreePath, repo.worktreePath)
             );
+
             const archive = archives.get(repo.worktreePath);
+
             if (member?.evidence?.pendingWork?.kind === "untracked-archive") {
               if (!archive) {
                 throw new MonkeError("Missing required file archive");
               }
+
               assertCleanupArchive(runtime, archive, member.evidence);
             }
+
             const head = detachedMemberHead(member);
+
             if (head) {
               assertRetainedHead(runtime, repo.sourceRoot, repo.worktreePath, head);
             }
           }
+
           if (action.step === "state-removal") {
             assertFinalizationReady(readOnly, home, state);
           }
+
           started = true;
           attemptedAction = action;
         },
@@ -622,7 +708,9 @@ function executeSession(
           const member = snapshot.members.find((candidate) =>
             samePath(candidate.worktreePath, repo.worktreePath)
           );
+
           const head = detachedMemberHead(member);
+
           if (head) {
             const preservation = retainedHeadAction(repo.sourceRoot, repo.worktreePath, head);
             current = preservation;
@@ -634,40 +722,50 @@ function executeSession(
             completedActions.push(preservation);
             attemptedAction = undefined;
           }
+
           const action: SessionAction = {
             sourceRoot: repo.sourceRoot,
             step: "process-stop",
             worktreePath: repo.worktreePath
           };
+
           current = action;
           attemptedAction = undefined;
+
           if (processes.treesUnder(repo.worktreePath).length === 0) {
             return;
           }
+
           guard();
+
           const outcome = stopStaleWorktreeProcesses(runtime, processes, repo.worktreePath, {
             beforeKill() {
               started = true;
               attemptedAction = action;
             }
           });
+
           for (const tree of outcome.killed) {
             runtime.writeStderr(
               `Stopped stale process in ${repo.worktreePath}: ${describeTree(tree)}\n`
             );
           }
+
           for (const tree of outcome.bystanders) {
             runtime.writeStderr(
               `Left running; not attached to ${repo.worktreePath}: ${describeTree(tree)}\n`
             );
           }
+
           if (outcome.killed.length > 0) {
             completedActions.push({
               ...action,
               command: outcome.killed.map(describeTree).join("; ")
             });
           }
+
           attemptedAction = undefined;
+
           if (outcome.recent.length > 0) {
             throw new MonkeError(
               `Worktree ${repo.worktreePath} is in use: ${outcome.recent.map(describeTree).join("; ")}. Processes under a day old are never stopped.`
@@ -687,6 +785,7 @@ function executeSession(
       }
     );
     assertGlobalSafety(lock, inventory);
+
     return {
       globalFailure: null,
       report: createSessionCleanupReport(
@@ -697,12 +796,14 @@ function executeSession(
     };
   } catch (error) {
     const message = errorMessage(ThrownValueSchema.parse(error));
+
     const remainingActions = planned.plannedActions.filter(
       (action) =>
         !completedActions.some(
           (done) => done.step === action.step && done.sourceRoot === action.sourceRoot
         )
     );
+
     const execution: SessionCleanupExecution = {
       attemptedAction,
       completedActions,
@@ -713,6 +814,7 @@ function executeSession(
       sourceRoot: current.sourceRoot,
       step: current.step
     };
+
     return {
       globalFailure: error instanceof GlobalCleanupError ? message : null,
       report: createSessionCleanupReport(snapshot, execution, {

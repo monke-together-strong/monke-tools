@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -93,9 +93,10 @@ const INTERRUPTIONS: InterruptionCase[] = [
 ];
 
 describe("abrupt Session interruption recovery", () => {
-  test.each(INTERRUPTIONS)("spawn recovers after $checkpoint", (interruption) => {
+  it.each(INTERRUPTIONS)("recovers spawn after $checkpoint", (interruption) => {
     const sandbox = makeTempDir(`session-interruption-${interruption.checkpoint}`);
     const home = path.join(sandbox, "home");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": `bootstrapCommand: printf b >> bootstrap-runs
 cleanupCommand: printf c >> cleanup-runs
@@ -165,13 +166,14 @@ export default function () {
     );
   });
 
-  test("repo-progress interruption retains Cleanup command A before replacement command B is eligible", () => {
+  it("retains Cleanup command A on repo-progress interruption before replacement command B is eligible", () => {
     const sandbox = makeTempDir("session-interruption-retained-cleanup");
     const home = path.join(sandbox, "home");
     const oldCleanupMarker = path.join(sandbox, "old-cleanup-ran");
     const oldEffectMarker = path.join(sandbox, "old-effect-created");
     const newCleanupMarker = path.join(sandbox, "new-cleanup-ran");
     const newEffectMarker = path.join(sandbox, "new-effect-created");
+
     const repoRoot = createRepo(path.join(sandbox, "root"), {
       "monke.yml": `bootstrapCommand: touch "${oldEffectMarker}"
 cleanupCommand: touch "${oldCleanupMarker}"
@@ -216,5 +218,6 @@ apps: {}
 
 function readIfPresent(root: string, relativePath: string) {
   const filePath = path.join(root, relativePath);
+
   return existsSync(filePath) ? readFileSync(filePath, "utf-8") : "";
 }

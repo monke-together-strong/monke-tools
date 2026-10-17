@@ -112,6 +112,7 @@ export function normalizeQueryUrl(input: string) {
   }
 
   const separator = input.includes("?") ? "&" : "?";
+
   return `https://${input}${separator}output_format_pretty_row_numbers=0`;
 }
 

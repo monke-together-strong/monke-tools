@@ -36,9 +36,11 @@ export function projectSkillRegistry(runtime: Runtime, cwd = runtime.cwd): Proje
   const checkoutRoot = runtime
     .exec("git", ["rev-parse", "--path-format=absolute", "--show-toplevel"], { cwd })
     .stdout.trim();
+
   const gitCommonDir = runtime
     .exec("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd })
     .stdout.trim();
+
   return {
     checkoutRoot,
     gitCommonDir,
@@ -64,38 +66,48 @@ export function initializeProjectSkillRegistry(
   context: ProjectSkillRegistry
 ): SkillPublicationScope {
   const config = loadGlobalMonkeConfig(context.root);
+
   if (!config.skillInstallPreference) {
     const configured = loadGlobalMonkeConfig(getMonkeHome(runtime)).skillInstallPreference;
+
     const targets = configured?.targets.filter((target) => target.kind !== "custom") ?? [
       { kind: "codex" as const },
       { kind: "claude" as const },
       { kind: "cursor" as const }
     ];
+
     if (targets.length === 0) {
       throw new MonkeError(
         "Project skills require a built-in target; select one with mt skills configure"
       );
     }
+
     config.skillInstallPreference = { targets };
     saveGlobalMonkeConfig(context.root, config);
   }
+
   if (config.skillInstallPreference.targets.some((target) => target.kind === "custom")) {
     throw new MonkeError("Project skills support built-in targets inside the checkout only");
   }
+
   const scope = { homeDirectory: context.checkoutRoot, preference: config.skillInstallPreference };
   assertProjectSkillDestinations(scope);
   mkdirSync(path.join(context.root, "skills", "imported"), { recursive: true });
   writeImportRecipeStore(context.root, readImportRecipeStore(context.root));
+
   return scope;
 }
 
 function assertProjectSkillDestinations(scope: SkillPublicationScope) {
   const checkout = realpathSync.native(scope.homeDirectory);
+
   for (const target of resolveSkillInstallTargets({ ...scope, project: true })) {
     let existing = target.agentSkillRoot;
+
     while (!lstatSync(existing, { throwIfNoEntry: false })) {
       existing = path.dirname(existing);
     }
+
     if (!containsPath(checkout, realpathSync.native(existing))) {
       throw new MonkeError(
         `Project skill destination is outside this checkout: ${target.agentSkillRoot}`
@@ -126,11 +138,14 @@ export function reconcileProjectSkillRegistry(
 /** Recreate the current clone's registered links during checkout setup. */
 export async function reconcileProjectSkills(runtime: Runtime, cwd = runtime.cwd) {
   const context = projectSkillRegistry(runtime, cwd);
+
   if (!existsSync(path.join(context.root, "config.yml"))) {
     return;
   }
+
   await withProjectSkillsLock(runtime, context, () => {
     const scope = initializeProjectSkillRegistry(runtime, context);
+
     return withProjectSkillPublicationTransaction(runtime, context, scope, () => {
       reconcileProjectSkillRegistry(runtime, context.root, scope);
     });
@@ -148,6 +163,7 @@ export function withProjectSkillPublicationTransaction<T>(
   const exclude = path.join(context.gitCommonDir, "info", "exclude");
   preflightProjectSkillExclusions(exclude);
   const targets = resolveSkillInstallTargets({ ...scope, project: true });
+
   return withSkillPublicationTransaction(
     runtime,
     [
@@ -157,6 +173,7 @@ export function withProjectSkillPublicationTransaction<T>(
         const physical = existsSync(target.agentSkillRoot)
           ? [realpathSync.native(target.agentSkillRoot)]
           : [];
+
         return [target.agentSkillRoot, ...physical];
       })
     ],
@@ -168,16 +185,20 @@ export function withProjectSkillPublicationTransaction<T>(
 function preflightProjectSkillExclusions(exclude: string) {
   assertDirectoryMutationAccess(path.dirname(exclude), "Project skill exclusions directory");
   const stat = lstatSync(exclude, { throwIfNoEntry: false });
+
   if (!stat) {
     return;
   }
+
   if (!stat.isFile()) {
     throw new MonkeError(`Project skill exclusions must be a regular file: ${exclude}`);
   }
+
   // oxlint-disable-next-line eslint/no-bitwise -- Check write permissions even when running as root.
   if ((stat.mode & 0o222) === 0) {
     throw new MonkeError(`Project skill exclusions are not writable: ${exclude}`);
   }
+
   accessSync(exclude, fsConstants.R_OK + fsConstants.W_OK);
 }
 
@@ -188,20 +209,25 @@ function excludeProjectSkillLinks(runtime: Runtime, root: string, scope: SkillPu
   const start = "# monke-tools project skills:start";
   const end = "# monke-tools project skills:end";
   const current = existsSync(excludePath) ? readFileSync(excludePath, "utf-8") : "";
+
   const withoutManaged = current.replace(
     /# monke-tools project skills:start\n[\s\S]*?# monke-tools project skills:end\n?/u,
     ""
   );
+
   const paths = skillPublicationPaths(runtime, root, [], scope).map((target) => {
     const relative = path.relative(scope.homeDirectory, target);
+
     if (relative.startsWith("..") || path.isAbsolute(relative)) {
       throw new MonkeError(`Project skill destination is outside this checkout: ${target}`);
     }
+
     return `/${relative
       .split(path.sep)
       .join("/")
       .replaceAll(/[\\*?[\]#! ]/gu, "\\$&")}`;
   });
+
   const block = `${start}\n${[...new Set(paths)].join("\n")}\n${end}\n`;
   mkdirSync(path.dirname(excludePath), { recursive: true });
   writeFileSync(

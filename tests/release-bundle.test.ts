@@ -3,7 +3,7 @@ import { hash } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   buildReleaseBundle,
@@ -25,6 +25,7 @@ const RELEASE_BUNDLE_BUILD_TIMEOUT_MS = 120_000;
 
 const RELEASE_VERSION = "1.2.3";
 const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
 interface ManifestOverrides {
   artifactDigest?: string;
   createdAt?: string;
@@ -34,6 +35,7 @@ interface ManifestOverrides {
   schemaVersion?: number;
   toolBuildIdentity?: string;
 }
+
 interface ReleaseFixtureOptions {
   executableContents?: string;
   executableVersion?: string;
@@ -54,6 +56,7 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   const archivePath = path.join(sandbox, archiveName);
   const skillContents = "# Example skill\n";
   const referenceContents = "# Example reference\n";
+
   const executableContents =
     options.executableContents ??
     `#!/bin/sh\nprintf '%s\\n' '${options.executableVersion ?? RELEASE_VERSION}'\n`;
@@ -78,9 +81,11 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   writeFileSync(path.join(bundleRoot, "install.sh"), "#!/bin/sh\nexit 0\n");
   chmodSync(path.join(bundleRoot, "mt"), 0o755);
   chmodSync(path.join(bundleRoot, "install.sh"), 0o755);
+
   if (options.legacySkillLock !== undefined) {
     writeFileSync(path.join(bundleRoot, "skills.lock.json"), options.legacySkillLock);
   }
+
   writeFileSync(
     path.join(bundleRoot, "install-manifest.json"),
     `${JSON.stringify(
@@ -111,14 +116,17 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
     )}\n`,
     "utf-8"
   );
+
   if (options.extraPath) {
     const extraPath = path.join(bundleRoot, options.extraPath);
     mkdirSync(path.dirname(extraPath), { recursive: true });
     writeFileSync(extraPath, "unexpected\n", "utf-8");
   }
+
   if (options.tamperGlobalInstructions) {
     writeFileSync(path.join(bundleRoot, "instructions", "GLOBAL.md"), "# Stale Global\n", "utf-8");
   }
+
   if (options.missingPath) {
     rmSync(path.join(bundleRoot, options.missingPath), { force: true, recursive: true });
   }
@@ -126,20 +134,23 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
   const tar = spawnSync("tar", ["-czf", archivePath, "-C", bundleRoot, "."], {
     encoding: "utf-8"
   });
+
   if (tar.status !== 0) {
     throw new Error(`Could not create Release fixture: ${tar.stderr}`);
   }
+
   const checksumPath = path.join(sandbox, `monke-tools-v${RELEASE_VERSION}-checksums.txt`);
   writeFileSync(
     checksumPath,
     `${hash("sha256", readFileSync(archivePath), "hex")}  ${archiveName}\n`,
     "utf-8"
   );
+
   return { archivePath, bundleRoot, checksumPath };
 }
 
 describe("Release bundle verifier", () => {
-  test("accepts a complete version-aligned Release bundle", () => {
+  it("accepts a complete version-aligned Release bundle", () => {
     const fixture = makeReleaseArchive();
 
     const manifest = verifyReleaseArchive({
@@ -157,10 +168,11 @@ describe("Release bundle verifier", () => {
     expect(manifest.guidanceHashes).toHaveProperty("skills/internal/example/SKILL.md");
   });
 
-  test("accepts an existing schema-version-1 archive with its hashed skills.lock.json", () => {
+  it("accepts an existing schema-version-1 archive with its hashed skills.lock.json", () => {
     const fixture = makeReleaseArchive({
       legacySkillLock: '{"recipes":[],"version":3}\n'
     });
+
     const manifest = verifyReleaseArchive({
       archivePath: fixture.archivePath,
       checksumPath: fixture.checksumPath,
@@ -231,7 +243,7 @@ describe("Release bundle verifier", () => {
     }
   ] satisfies { expected: RegExp; fixture: ReleaseFixtureOptions; name: string }[];
 
-  test.each(invalidBundles)("rejects $name", ({ expected, fixture }) => {
+  it.each(invalidBundles)("rejects $name", ({ expected, fixture }) => {
     const release = makeReleaseArchive(fixture);
 
     expect(() =>
@@ -246,7 +258,7 @@ describe("Release bundle verifier", () => {
     ).toThrow(expected);
   });
 
-  test("rejects an archive whose published checksum changed", () => {
+  it("rejects an archive whose published checksum changed", () => {
     const fixture = makeReleaseArchive();
     writeFileSync(fixture.archivePath, "changed", "utf-8");
 
@@ -262,7 +274,7 @@ describe("Release bundle verifier", () => {
     ).toThrow(/checksum mismatch/u);
   });
 
-  test("rejects an internally consistent archive that omits source guidance", () => {
+  it("rejects an internally consistent archive that omits source guidance", () => {
     const fixture = makeReleaseArchive();
     writeFileSync(
       path.join(fixture.bundleRoot, "skills", "internal", "omitted.md"),
@@ -282,7 +294,7 @@ describe("Release bundle verifier", () => {
     ).toThrow(/guidance hashes do not match/u);
   });
 
-  test("requires checksums for both supported platform archives", () => {
+  it("requires checksums for both supported platform archives", () => {
     const directory = makeTempDir("release-assets");
     const source = makeReleaseArchive({ platform: "macos-arm64", sandbox: directory });
     makeReleaseArchive({ platform: "linux-x64", sandbox: directory });
@@ -302,7 +314,7 @@ describe("Release bundle verifier", () => {
     expect(readFileSync(checksumPath, "utf-8").trim().split("\n")).toHaveLength(2);
   });
 
-  test("requires one Codiff policy across platform archives", () => {
+  it("requires one Codiff policy across platform archives", () => {
     const directory = makeTempDir("release-assets-codiff-policy");
     const source = makeReleaseArchive({ platform: "macos-arm64", sandbox: directory });
     makeReleaseArchive({
@@ -322,7 +334,7 @@ describe("Release bundle verifier", () => {
     ).toThrow(/Codiff minimum does not match 1\.14\.0/u);
   });
 
-  test("writes the verified stable Release catalog contract", () => {
+  it("writes the verified stable Release catalog contract", () => {
     const directory = makeTempDir("release-catalog");
     makeReleaseArchive({ platform: "macos-arm64", sandbox: directory });
     makeReleaseArchive({ platform: "linux-x64", sandbox: directory });
@@ -355,11 +367,12 @@ describe("Release bundle verifier", () => {
     );
   });
 
-  test(
+  it(
     "builds an official bundle whose executable reports the selected version",
     async () => {
       const platform = process.platform === "darwin" ? "macos-arm64" : "linux-x64";
       const outputDirectory = makeTempDir("release-build");
+
       const archivePath = await buildReleaseBundle({
         outputDirectory,
         platform,
@@ -378,15 +391,18 @@ describe("Release bundle verifier", () => {
       expect(manifest.guidanceHashes["monke.yml"]).toBe(
         hash("sha256", readFileSync(path.join(import.meta.dirname, "..", "monke.yml")), "hex")
       );
+
       for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
         const content = spawnSync("tar", ["-xOzf", archivePath, `./${file}`], {
           encoding: "utf-8"
         });
+
         expect(content.status).toBe(0);
         expect(content.stdout).toBe(
           readFileSync(path.join(import.meta.dirname, "..", file), "utf-8")
         );
       }
+
       expect(manifest.toolBuildIdentity).toBe(RELEASE_VERSION);
       expect(manifest.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
       expect(Date.parse(manifest.createdAt)).not.toBeNaN();
@@ -398,7 +414,7 @@ describe("Release bundle verifier", () => {
 });
 
 describe("Mainline Release selection", () => {
-  test("increments the highest stable monke-tools patch tag", () => {
+  it("increments the highest stable monke-tools patch tag", () => {
     expect(
       deriveNextReleaseVersion([
         "monke-tools-v1.9.9",
@@ -412,7 +428,7 @@ describe("Mainline Release selection", () => {
     ).toBe("2.0.1");
   });
 
-  test("orders version components larger than unsigned 64-bit integers", () => {
+  it("orders version components larger than unsigned 64-bit integers", () => {
     expect(
       deriveNextReleaseVersion([
         "monke-tools-v18446744073709551615.999.999",
@@ -421,13 +437,13 @@ describe("Mainline Release selection", () => {
     ).toBe("18446744073709551616.0.1");
   });
 
-  test("rejects leading-zero versions", () => {
+  it("rejects leading-zero versions", () => {
     expect(() => releaseArchiveName("01.2.3", "macos-arm64")).toThrow(
       /stable major\.minor\.patch semantic version/u
     );
   });
 
-  test.each([
+  it.each([
     ["src/index.ts", true],
     ["skills/codex/example/SKILL.md", true],
     ["skills/internal/implement/SKILL.md", true],
@@ -448,7 +464,7 @@ describe("Mainline Release selection", () => {
     expect(isReleaseOwnedPath(filePath)).toBe(expected);
   });
 
-  test("skips an unrelated workspace dependency and lockfile change", () => {
+  it("skips an unrelated workspace dependency and lockfile change", () => {
     expect(hasReleaseOwnedChanges(["bun.lock", "packages/oxc-config/package.json"])).toBeFalsy();
     expect(hasReleaseOwnedChanges(["bun.lock", "package.json"])).toBeTruthy();
     expect(hasReleaseOwnedChanges(["bun.lock"])).toBeTruthy();

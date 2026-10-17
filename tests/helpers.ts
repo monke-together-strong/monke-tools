@@ -24,6 +24,7 @@ import { createTestRuntime } from "./runtime-fixture.ts";
 
 const tempDirectories: string[] = [];
 const runMonkeWorkerPath = fileURLToPath(new URL("run-monke-worker.ts", import.meta.url));
+
 const NEUTRALIZED_WORKER_ENV = {
   EDITOR: undefined,
   GIT_AUTHOR_EMAIL: undefined,
@@ -38,6 +39,7 @@ const NEUTRALIZED_WORKER_ENV = {
   PAGER: undefined,
   VISUAL: undefined
 };
+
 // Budget generously: a loaded CI runner can take seconds to start the second worker, and the
 // delay stays at 0.01s so the shim never needs non-POSIX fractional sleep beyond what it uses.
 const WORKTREE_ADD_BARRIER_ATTEMPTS = 2000;
@@ -47,6 +49,7 @@ const WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE = 92;
 afterEach(() => {
   while (tempDirectories.length > 0) {
     const directory = tempDirectories.pop();
+
     if (directory) {
       rmSync(directory, { force: true, recursive: true });
     }
@@ -76,6 +79,7 @@ export function spawnMonkeWorker(options: {
 export function makeTempDir(prefix: string) {
   const directory = realpathSync.native(mkdtempSync(path.join(tmpdir(), `${prefix}-`)));
   tempDirectories.push(directory);
+
   return directory;
 }
 
@@ -104,9 +108,11 @@ export function completeSessionState(
 
 export function createFiles(root: string, files: Record<string, string>) {
   mkdirSync(root, { recursive: true });
+
   for (const [relativePath, contents] of Object.entries(files)) {
     write(root, relativePath, contents);
   }
+
   return realpathSync.native(root);
 }
 
@@ -126,6 +132,7 @@ export function createRepo(root: string, files: Record<string, string>) {
 
   git(root, ["add", "."]);
   git(root, ["commit", "-m", "init"]);
+
   return realpathSync.native(root);
 }
 
@@ -135,9 +142,11 @@ export function git(cwd: string, args: string[], env?: Record<string, string>) {
     encoding: "utf-8",
     env: { ...process.env, ...env }
   });
+
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || `git ${args.join(" ")} failed`);
   }
+
   return result.stdout.trim();
 }
 
@@ -198,6 +207,7 @@ export function installGitShim(
   }
 ) {
   const logPath = path.join(binDirectory, "git.log");
+
   const failCommand =
     options?.failCommand === undefined
       ? ""
@@ -206,6 +216,7 @@ export function installGitShim(
   exit 23
 fi
 `;
+
   const afterCommand =
     options?.afterCommand === undefined
       ? ""
@@ -228,6 +239,7 @@ fi
   exit "$status"
 fi
 `;
+
   const worktreeAddBarrier =
     options?.worktreeAddBarrier === undefined
       ? ""
@@ -248,6 +260,7 @@ fi
   [ "$attempts" -lt ${String(WORKTREE_ADD_BARRIER_ATTEMPTS)} ] || exit ${String(WORKTREE_ADD_BARRIER_TIMEOUT_EXIT_CODE)}
 fi
 `;
+
   writeExecutable(
     path.join(binDirectory, "git"),
     `#!/bin/sh
@@ -267,6 +280,7 @@ ${worktreeAddBarrier}
 exec "${findExecutableOnPath("git")}" "$@"
 `
   );
+
   return logPath;
 }
 
@@ -283,6 +297,7 @@ fi
 exec /bin/sh "$@"
 `
   );
+
   return logPath;
 }
 
@@ -296,6 +311,7 @@ set -eu
 printf '%s\\n' "$@" >> ${shellQuote(logPath)}
 `
   );
+
   return logPath;
 }
 
@@ -314,24 +330,28 @@ export function installFakeCodiff(
   const logPath = path.join(binDirectory, "codiff.log");
   const coordinationDirectory = path.join(binDirectory, "codiff-coordination");
   const coordinatedBases = options.waitForBases ?? [];
+
   const markLaunch = coordinatedBases
     .map(
       (base, index) =>
         `[ "\${2:-}" = ${shellQuote(base)} ] && touch ${shellQuote(path.join(coordinationDirectory, `started-${index}`))}`
     )
     .join("\n");
+
   const waitForLaunches = coordinatedBases
     .map(
       (_base, index) =>
         `while [ ! -f ${shellQuote(path.join(coordinationDirectory, `started-${index}`))} ]; do /bin/sleep 0.02; done`
     )
     .join("\n");
+
   const delays = Object.entries(options.delayByBase ?? {})
     .map(
       ([base, seconds]) =>
         `[ "\${2:-}" = ${shellQuote(base)} ] && /bin/sleep ${shellQuote(String(seconds))}`
     )
     .join("\n");
+
   writeExecutable(
     path.join(binDirectory, "codiff"),
     `#!/bin/sh
@@ -367,6 +387,7 @@ printf '%s\\n' "$@" >> ${shellQuote(logPath)}
 exit ${String(options.exitCode ?? 0)}
 `
   );
+
   return logPath;
 }
 
@@ -379,6 +400,7 @@ printf '%s\\n' "$@" >> ${shellQuote(logPath)}
 exit 99
 `
   );
+
   return logPath;
 }
 
@@ -391,6 +413,7 @@ set -eu
 printf '%s\\n' "$@" >> ${shellQuote(logPath)}
 `
   );
+
   return logPath;
 }
 
@@ -402,12 +425,14 @@ export function installFakeGhForMergedPrs(
   }
 ) {
   const logPath = path.join(binDirectory, "gh.log");
+
   const cases = Object.entries(options.prsByHead)
     .map(
       ([head, prs]) =>
         `    ${shellQuote(head)}) printf '%s\\n' ${shellQuote(JSON.stringify(prs))}; exit 0 ;;`
     )
     .join("\n");
+
   const script = `#!/bin/sh
 set -eu
 first_arg=true
@@ -441,7 +466,9 @@ fi
 echo "unsupported gh invocation: $*" >&2
 exit 1
 `;
+
   writeExecutable(path.join(binDirectory, "gh"), script);
+
   return logPath;
 }
 
@@ -455,14 +482,17 @@ interface RunMonkeOptions {
 
 export function runMonke(options: RunMonkeOptions) {
   const result = runMonkeCapturingFailure(options);
+
   if (result.error) {
     throw result.error;
   }
+
   return { stderr: result.stderr, stdout: result.stdout };
 }
 
 export function runMonkeCapturingFailure(options: RunMonkeOptions) {
   const pathSegments = [options.binDirectory ?? "", process.env.PATH ?? ""].filter(Boolean);
+
   const result = spawnSync(process.execPath, [runMonkeWorkerPath, ...options.args], {
     cwd: options.cwd,
     encoding: "utf-8",
@@ -478,10 +508,12 @@ export function runMonkeCapturingFailure(options: RunMonkeOptions) {
       PATH: pathSegments.join(path.delimiter)
     }
   });
+
   const error =
     result.status === 0
       ? null
       : new Error(result.stderr || result.stdout || `mt ${options.args.join(" ")} failed`);
+
   return { error, stderr: result.stderr, stdout: result.stdout };
 }
 
@@ -518,12 +550,14 @@ export async function runMonkeAsync(options: {
   });
 
   await runCliAsync(options.args, runtime);
+
   return { stderr, stdout };
 }
 
 export function withPlatform<T>(platform: NodeJS.Platform, callback: () => T) {
   const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
   Object.defineProperty(process, "platform", { value: platform });
+
   try {
     return callback();
   } finally {
@@ -535,14 +569,19 @@ export function withPlatform<T>(platform: NodeJS.Platform, callback: () => T) {
 
 export function readSingleYamlFile<T extends z.ZodType>(directoryPath: string, schema: T) {
   const entries = readdirSync(directoryPath).filter((entry) => entry.endsWith(".yml"));
+
   if (entries.length !== 1) {
     throw new Error(`Expected exactly one yaml file in ${directoryPath}, found ${entries.length}`);
   }
+
   const [entry] = entries;
+
   if (entry === undefined) {
     throw new Error(`Expected one yaml file in ${directoryPath}`);
   }
+
   const value: unknown = parse(readFileSync(path.join(directoryPath, entry), "utf-8"));
+
   return schema.parse(value);
 }
 
@@ -593,8 +632,10 @@ function shellQuote(value: string) {
 
 function findExecutableOnPath(command: string) {
   const executable = Bun.which(command);
+
   if (!executable) {
     throw new Error(`Could not find ${command} on PATH`);
   }
+
   return realpathSync.native(executable);
 }

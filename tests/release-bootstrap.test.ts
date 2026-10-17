@@ -2,7 +2,7 @@ import { hash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
@@ -54,14 +54,17 @@ printf '%s\n' \
 printf '%s\n' "$@" > "$MONKE_BOOTSTRAP_TEST_INSTALL_LOG"
 `
   );
+
   if (options.invalidArchive) {
     write(responses, archiveName, "not a tar archive\n");
   } else {
     const tar = Bun.spawnSync({ cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, "."] });
+
     if (tar.exitCode !== 0) {
       throw new Error(`Could not create Release bootstrap fixture: ${tar.stderr.toString()}`);
     }
   }
+
   const archiveHash = hash("sha256", readFileSync(archivePath), "hex");
   write(
     responses,
@@ -112,6 +115,7 @@ esac
 if [ -n "$output" ]; then cp "$source" "$output"; else cat "$source"; fi
 `
   );
+
   return {
     archiveName,
     bin,
@@ -147,9 +151,10 @@ function runBootstrap(
 }
 
 describe("public Release bootstrap", () => {
-  test("uses the published stable catalog and verifies its Release", () => {
+  it("uses the published stable catalog and verifies its Release", () => {
     const fixture = prepareBootstrapFixture();
     const secret = "github-token-must-not-be-logged";
+
     const result = runBootstrap(fixture, {
       args: ["--targets", "codex"],
       env: { GH_TOKEN: secret }
@@ -181,7 +186,7 @@ describe("public Release bootstrap", () => {
     expect(readdirSync(path.join(monkeHome, "install-staging"))).toStrictEqual([]);
   });
 
-  test("maps Apple Silicon Macs to the macOS Release asset", () => {
+  it("maps Apple Silicon Macs to the macOS Release asset", () => {
     const fixture = prepareBootstrapFixture({ machine: "arm64", system: "Darwin" });
     const result = runBootstrap(fixture);
 
@@ -189,7 +194,7 @@ describe("public Release bootstrap", () => {
     expect(readFileSync(fixture.curlLog, "utf-8")).toContain(fixture.archiveName);
   });
 
-  test("accepts arbitrarily large stable SemVer components without numeric conversion", () => {
+  it("accepts arbitrarily large stable SemVer components without numeric conversion", () => {
     const selectedVersion = "9007199254740993.0.0";
     const fixture = prepareBootstrapFixture({ selectedVersion });
     const result = runBootstrap(fixture);
@@ -200,7 +205,7 @@ describe("public Release bootstrap", () => {
     );
   });
 
-  test("uses GITHUB_TOKEN without exposing it in command logs", () => {
+  it("uses GITHUB_TOKEN without exposing it in command logs", () => {
     const fixture = prepareBootstrapFixture();
     const secret = "fallback-github-token-must-not-be-logged";
     const result = runBootstrap(fixture, { env: { GITHUB_TOKEN: secret } });
@@ -209,7 +214,7 @@ describe("public Release bootstrap", () => {
     expect(readFileSync(fixture.curlLog, "utf-8")).not.toContain(secret);
   });
 
-  test("unsupported platforms fail before network access or installation changes", () => {
+  it("fails on unsupported platforms before network access or installation changes", () => {
     const fixture = prepareBootstrapFixture({ machine: "x86_64", system: "Darwin" });
     const result = runBootstrap(fixture);
 
@@ -219,7 +224,7 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  test("checksum failure prevents bundle-owned installer delegation", () => {
+  it("prevents bundle-owned installer delegation on checksum failure", () => {
     const fixture = prepareBootstrapFixture({ corruptChecksum: true });
     const result = runBootstrap(fixture);
 
@@ -228,7 +233,7 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  test("invalid selected commit metadata prevents bundle-owned installer delegation", () => {
+  it("prevents bundle-owned installer delegation on invalid selected commit metadata", () => {
     const fixture = prepareBootstrapFixture({ sourceCommit: "main" });
     const result = runBootstrap(fixture);
 
@@ -237,7 +242,7 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  test("a mismatched catalog tag prevents bundle-owned installer delegation", () => {
+  it("prevents bundle-owned installer delegation on a mismatched catalog tag", () => {
     const fixture = prepareBootstrapFixture({ catalogTag: "monke-tools-v9.9.9" });
     const result = runBootstrap(fixture);
 
@@ -246,12 +251,12 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     { expected: "Stable Release catalog lookup failed", options: { failLookup: true } },
     { expected: "archive download failed", options: { failDownload: true } },
     { expected: "missing valid platform asset digest", options: { missingAsset: true } },
     { expected: "archive extraction failed", options: { invalidArchive: true } }
-  ])("$expected prevents installer delegation", ({ expected, options }) => {
+  ])("prevents installer delegation when $expected", ({ expected, options }) => {
     const fixture = prepareBootstrapFixture(options);
     const monkeHome = path.join(fixture.sandbox, "monke-home");
     const result = runBootstrap(fixture);

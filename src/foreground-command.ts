@@ -43,6 +43,7 @@ export function prepareForegroundCommand(command: string, args: string[]) {
   const library = process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6";
   const libc = dlopen(library, POSIX_SYMBOLS);
   let terminal: number | undefined;
+
   try {
     terminal = openSync("/dev/tty", "r+");
   } catch (error) {
@@ -57,7 +58,9 @@ export function prepareForegroundCommand(command: string, args: string[]) {
       throw error;
     }
   }
+
   const originalGroup = terminal === undefined ? undefined : libc.symbols.tcgetpgrp(terminal);
+
   return {
     args: [
       "--no-env-file",
@@ -74,6 +77,7 @@ export function prepareForegroundCommand(command: string, args: string[]) {
       try {
         if (terminal !== undefined && originalGroup !== undefined && originalGroup > 0) {
           const previous = libc.symbols.signal(constants.signals.SIGTTOU, 1n);
+
           try {
             libc.symbols.tcsetpgrp(terminal, originalGroup);
           } finally {
@@ -84,6 +88,7 @@ export function prepareForegroundCommand(command: string, args: string[]) {
         if (terminal !== undefined) {
           closeSync(terminal);
         }
+
         libc.close();
       }
     }

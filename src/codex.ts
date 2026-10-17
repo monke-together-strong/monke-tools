@@ -7,14 +7,18 @@ export function openCodexWorkspace(runtime: Runtime, targetPath: string) {
   const logger = createLogger(runtime);
   const url = formatCodexWorkspaceUrl(targetPath);
   const opener = getUrlOpener(url);
+
   if (!canRunUrlOpener(runtime, opener.command)) {
     logger.warning(`Could not open workspace in Codex: ${opener.command} was not found`);
+
     return;
   }
 
   const result = runtime.exec(opener.command, opener.args, { allowFailure: true });
+
   if (result.exitCode !== 0 || result.timedOut === true) {
     logger.warning(`Could not open workspace in Codex: ${formatOpenFailure(result)}`);
+
     return;
   }
 

@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { rememberRestoredRecipe, restoreSkillImports } from "../scripts/skill-lock.ts";
@@ -10,12 +10,14 @@ import { createRepo, git, makeTempDir, read, write, writeExecutable } from "./he
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("parallel locked skill restore", () => {
-  test("batch restore preserves distinct skill and reference sources sharing a slug", async () => {
+  it("preserves distinct skill and reference sources sharing a slug in batch restore", async () => {
     const sandbox = makeTempDir("cross-kind-skill-restore");
+
     const recipes = (["skill", "reference"] as const).map((kind) => {
       const source = createRepo(path.join(sandbox, `source-${kind}`), {
         "skills/shared/SKILL.md": `---\nname: shared\ndescription: Shared fixture.\n---\nDistinct ${kind} bytes.\n`
       });
+
       return {
         commit: git(source, ["rev-parse", "HEAD"]),
         disableModelInvocation: true,
@@ -23,6 +25,7 @@ describe("parallel locked skill restore", () => {
         source
       };
     });
+
     const target = path.join(sandbox, "target");
     writeImportRecipeStore(target, { recipes, version: 4 });
     const bin = path.join(sandbox, "bin");
@@ -34,6 +37,7 @@ mkdir -p .agents/skills
 cp -R "$4/skills/shared" .agents/skills/shared
 `
     );
+
     const runtime = createTestRuntime({
       cwd: target,
       env: {
@@ -58,7 +62,7 @@ cp -R "$4/skills/shared" .agents/skills/shared
     expect(read(target, "skills/.monke-restored.json")).toBe(marker);
   });
 
-  test.each([
+  it.each([
     { expectedFailure: null, failImport: false },
     {
       expectedFailure: "Fixture import failed",
@@ -71,30 +75,38 @@ cp -R "$4/skills/shared" .agents/skills/shared
       const home = path.join(sandbox, "home");
       const bin = path.join(sandbox, "bin");
       mkdirSync(bin);
+
       const skillContents = Array.from(
         { length: 7 },
         (_, index) =>
           `---\nname: skill-${index}\ndescription: Fixture Skill\n---\naccepted skill-${index}\n`
       );
+
       const recipes = skillContents.map((content, index) => {
         const slug = `skill-${index}`;
         const skills = [{ kind: "skill" as const, selector: slug, slug }];
         write(sandbox, `skills/imported/${slug}/SKILL.md`, content);
+
         return {
           commit: String(index).padStart(40, "0"),
           skills,
           source: `owner/source-${index}`
         };
       });
+
       writeImportRecipeStore(sandbox, { recipes, version: 4 });
       const acceptedLock = read(sandbox, "skills.lock.json");
+
       for (const recipe of recipes) {
         rememberRestoredRecipe(sandbox, recipe);
       }
+
       for (let index = 0; index < 6; index += 1) {
         rmSync(path.join(sandbox, `skills/imported/skill-${index}`), { recursive: true });
       }
+
       write(sandbox, "skills/imported/obsolete/SKILL.md", "obsolete");
+
       const script = `#!${process.execPath}
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -149,26 +161,33 @@ if (importer) {
 rmSync(active);
 writeFileSync(marker(phase + "-done-" + index), "");
 `;
+
       for (const command of ["git", "npx"]) {
         const file = path.join(bin, command);
         writeFileSync(file, script);
         chmodSync(file, 0o755);
       }
+
       const originalPath = process.env.PATH;
       const originalHome = process.env.MONKE_HOME;
+
       try {
         process.env.PATH = `${bin}${path.delimiter}${originalPath}`;
         process.env.MONKE_HOME = home;
         let failure: string | null = null;
+
         try {
           await restoreSkillImports(sandbox);
         } catch (error) {
           failure = errorMessage(ThrownValueSchema.parse(error)).split("\n").at(-1) ?? null;
         }
+
         expect(failure).toStrictEqual(expectedFailure);
+
         for (let index = 0; index < 6; index += 1) {
           expect(existsSync(path.join(sandbox, `fetch-done-${index}`))).toBeTruthy();
         }
+
         for (const index of Array.from({ length: 6 }, (_, item) => item).filter(
           (item) => !failImport || item !== 0
         )) {
@@ -177,6 +196,7 @@ writeFileSync(marker(phase + "-done-" + index), "");
             skillContents[index]
           );
         }
+
         expect(existsSync(path.join(sandbox, "fetch-start-6"))).toBeFalsy();
         expect(existsSync(path.join(sandbox, "skills/imported/obsolete"))).toBe(failImport);
         expect(read(sandbox, "skills.lock.json")).toBe(acceptedLock);

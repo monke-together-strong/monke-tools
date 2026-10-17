@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { shellQuote } from "../src/shell-quote.ts";
@@ -19,6 +19,7 @@ import {
 } from "./helpers.ts";
 
 const reviewUrl = "https://viewer.example.test/repository-review/private-token";
+
 const success = JSON.stringify({
   command: "review.create",
   data: { url: reviewUrl },
@@ -47,11 +48,12 @@ printf '%s' ${shellQuote(options.stderr ?? "")} >&2
 exit ${options.exitCode ?? 0}
 `
   );
+
   return { base, binDirectory, home, log, repo, sandbox };
 }
 
 describe("LFV Diff", () => {
-  test.each([
+  it.each([
     { exitCode: 0, expectedError: null },
     {
       exitCode: 1,
@@ -67,6 +69,7 @@ describe("LFV Diff", () => {
       const session = getExpectedWorktreePath(home, repo, "feature");
       const baseWorktree = path.join(sandbox, "base");
       git(repo, ["worktree", "add", "-b", "base", baseWorktree]);
+
       const delivery = runMonkeAsync({
         args: ["diff", "--adapter", "lfv", "--pick"],
         binDirectory,
@@ -74,12 +77,15 @@ describe("LFV Diff", () => {
         monkeHome: home,
         selectValues: [`worktree:${baseWorktree}`]
       });
+
       let deliveryError: string | null = null;
+
       try {
         await delivery;
       } catch (error) {
         deliveryError = error instanceof Error ? error.message : String(error);
       }
+
       expect(deliveryError).toBe(expectedError);
       const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
       expect(state.repos[0]?.diffBaseRef).toBe(
@@ -88,7 +94,7 @@ describe("LFV Diff", () => {
     }
   );
 
-  test.each([
+  it.each([
     { stdout: "not JSON" },
     { stdout: JSON.stringify({ ...JSON.parse(success), version: 2 }) },
     { stdout: JSON.stringify({ ...JSON.parse(success), command: "review.show" }) },
@@ -116,37 +122,41 @@ describe("LFV Diff", () => {
     ({ exitCode, stdout }) => {
       const { binDirectory, home, repo } = fixture({ exitCode, stdout });
       const desktopLog = installFakeCodiff(binDirectory);
+
       const result = runMonkeCapturingFailure({
         args: ["diff", "--adapter", "lfv", "--working-tree"],
         binDirectory,
         cwd: repo,
         monkeHome: home
       });
+
       expect(result.error).not.toBeNull();
       expect(result.stdout).toBe("");
       expect(existsSync(desktopLog)).toBeFalsy();
     }
   );
 
-  test("does not invoke LFV when provider resolution fails", () => {
+  it("does not invoke LFV when provider resolution fails", () => {
     const { binDirectory, home, log, repo } = fixture();
     writeExecutable(
       path.join(binDirectory, "gh"),
       "#!/bin/sh\nprintf 'Provider sign-in required\\n' >&2\nexit 1\n"
     );
+
     const result = runMonkeCapturingFailure({
       args: ["diff", "--adapter", "lfv", "pr", "42"],
       binDirectory,
       cwd: repo,
       monkeHome: home
     });
+
     expect(result.error).not.toBeNull();
     expect(result.stderr).toContain("Provider sign-in required");
     expect(result.stdout).toBe("");
     expect(existsSync(log)).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     {
       command: "gh",
       response: { url: "https://github.com/owner/repo/pull/42/files\n" },
@@ -172,19 +182,21 @@ describe("LFV Diff", () => {
         path.join(binDirectory, command),
         `#!/bin/sh\nprintf '%s\\n' ${shellQuote(JSON.stringify(response))}\n`
       );
+
       const result = runMonkeCapturingFailure({
         args: ["diff", "--adapter", "lfv", selector, "42"],
         binDirectory,
         cwd: repo,
         monkeHome: home
       });
+
       expect(result.error).not.toBeNull();
       expect(result.stdout).toBe("");
       expect(existsSync(log)).toBeFalsy();
     }
   );
 
-  test("reports missing LFV without invoking a desktop fallback", async () => {
+  it("reports missing LFV without invoking a desktop fallback", async () => {
     const { binDirectory, home, repo } = fixture();
     rmSync(path.join(binDirectory, "lfv"));
     const desktopLog = installFakeCodiff(binDirectory);
@@ -200,7 +212,7 @@ describe("LFV Diff", () => {
     expect(existsSync(desktopLog)).toBeFalsy();
   });
 
-  test("saves LFV without launching, retains other preferences, and supports a one-off Codiff override", async () => {
+  it("saves LFV without launching, retains other preferences, and supports a one-off Codiff override", async () => {
     const { binDirectory, home, log, repo } = fixture();
     mkdirSync(home, { recursive: true });
     const configPath = path.join(home, "config.yml");
@@ -208,6 +220,7 @@ describe("LFV Diff", () => {
       configPath,
       "version: 1\nskillInstallPreference:\n  targets:\n    - kind: codex\n"
     );
+
     const configured = await runMonkeAsync({
       args: ["diff", "configure"],
       cwd: repo,
@@ -217,11 +230,13 @@ describe("LFV Diff", () => {
       },
       selectValues: ["lfv"]
     });
+
     expect(configured.stdout).toBe("Diff adapter: lfv\n");
     expect(existsSync(log)).toBeFalsy();
     const saved = readFileSync(configPath, "utf-8");
     expect(saved).toContain("diffAdapter: lfv");
     expect(saved).toContain("kind: codex");
+
     const automatic = await runMonkeAsync({
       args: ["diff"],
       binDirectory,
@@ -231,6 +246,7 @@ describe("LFV Diff", () => {
         throw new Error("default branch Diff prompted");
       }
     });
+
     expect(automatic.stdout).toBe(`${reviewUrl}\n`);
     expect(readFileSync(log, "utf-8")).toBe(
       [repo, "--json", "review", "create", repo, "--source", "working-tree", ""].join("\n")
@@ -246,7 +262,7 @@ describe("LFV Diff", () => {
     expect(readFileSync(configPath, "utf-8")).toBe(saved);
   });
 
-  test("preserves LFV failure code, message, hint, and diagnostics without printing a URL", () => {
+  it("preserves LFV failure code, message, hint, and diagnostics without printing a URL", () => {
     const { binDirectory, home, repo } = fixture({
       exitCode: 1,
       stderr: "authentication diagnostic\n",
@@ -260,12 +276,14 @@ describe("LFV Diff", () => {
         version: 1
       })
     });
+
     const result = runMonkeCapturingFailure({
       args: ["diff", "--adapter", "lfv", "--working-tree"],
       binDirectory,
       cwd: repo,
       monkeHome: home
     });
+
     expect(result.error).not.toBeNull();
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("authentication diagnostic\n");
@@ -273,7 +291,7 @@ describe("LFV Diff", () => {
     expect(result.stderr).toContain("Run lfv auth login");
   });
 
-  test.each([
+  it.each([
     {
       args: ["#42"],
       command: "gh",
@@ -344,7 +362,7 @@ printf '%s\\n' ${shellQuote(JSON.stringify(response))}
     }
   );
 
-  test.each([
+  it.each([
     { args: ["--working-tree"], source: ["--source", "working-tree"] },
     { args: ["--commit", "HEAD"], source: ["--source", "commit", "--ref", "HEAD"] },
     {
@@ -372,6 +390,7 @@ printf '%s\\n' ${shellQuote(JSON.stringify(response))}
     "preserves explicit source semantics for $args from a selected checkout",
     async ({ args, source }) => {
       const { binDirectory, home, log, repo, sandbox } = fixture();
+
       const result = await runMonkeAsync({
         args: ["diff", "--adapter", "lfv", "--path", repo, ...args],
         binDirectory,
@@ -381,6 +400,7 @@ printf '%s\\n' ${shellQuote(JSON.stringify(response))}
           throw new Error("explicit Diff prompted");
         }
       });
+
       expect(readFileSync(log, "utf-8")).toBe(
         [repo, "--json", "review", "create", repo, ...source, ""].join("\n")
       );
@@ -388,9 +408,10 @@ printf '%s\\n' ${shellQuote(JSON.stringify(response))}
     }
   );
 
-  test("delivers branch commits plus dirty changes to LFV and returns its canonical URL", async () => {
+  it("delivers branch commits plus dirty changes to LFV and returns its canonical URL", async () => {
     const { base, binDirectory, home, log, repo } = fixture({ stderr: "viewer diagnostic\n" });
     const before = git(repo, ["status", "--porcelain"]);
+
     const result = await runMonkeAsync({
       args: ["diff", "--adapter", "lfv", "--branch", base],
       binDirectory,

@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { loadEnvFileIfPresent } from "../skills/internal/betterstack-cli/scripts/betterstack-cli/env.ts";
 import { makeTempDir } from "./helpers.ts";
@@ -11,8 +11,8 @@ const cliPath = path.resolve(
 );
 
 describe("Better Stack content I/O", () => {
-  test.each(["explicit", "variable", "demo"])(
-    "Better Stack loads %s env credentials before sending SQL file contents",
+  it.each(["explicit", "variable", "demo"])(
+    "loads %s Better Stack env credentials before sending SQL file contents",
     async (selection) => {
       const directory = makeTempDir("betterstack-content-io");
       const envFile = path.join(directory, selection === "demo" ? ".env.demo" : "query.env");
@@ -41,6 +41,7 @@ describe("Better Stack content I/O", () => {
         }));`
         )
       ]);
+
       const child = Bun.spawn(
         [
           process.execPath,
@@ -77,11 +78,13 @@ describe("Better Stack content I/O", () => {
           stdout: "pipe"
         }
       );
+
       const [exitCode, stdout, stderr] = await Promise.all([
         child.exited,
         new Response(child.stdout).text(),
         new Response(child.stderr).text()
       ]);
+
       expect(stderr).toBe("");
       expect(exitCode).toBe(0);
       expect(JSON.parse(stdout)).toStrictEqual({
@@ -93,7 +96,7 @@ describe("Better Stack content I/O", () => {
     }
   );
 
-  test("Better Stack ignores missing env files and propagates other read errors", async () => {
+  it("ignores missing Better Stack env files and propagates other read errors", async () => {
     const directory = makeTempDir("betterstack-env-read-errors");
     await expect(
       loadEnvFileIfPresent(path.join(directory, "missing.env"))

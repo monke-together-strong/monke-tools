@@ -57,5 +57,6 @@ export function sessionRemovalRank(
   if (containsPath(repo.worktreePath, invocationPath)) {
     return 2;
   }
+
   return samePath(repo.sourceRoot, rootSourceRoot) ? 1 : 0;
 }

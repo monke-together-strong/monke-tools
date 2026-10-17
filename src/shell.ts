@@ -43,6 +43,7 @@ function requestShellDirectoryWithFallback(
 
   if (writeDirectoryDirective(runtime, targetPath)) {
     logger.success(`Switched to ${targetPath}`);
+
     return true;
   }
 
@@ -51,7 +52,9 @@ function requestShellDirectoryWithFallback(
   } else {
     logger.info(`Switch to ${targetPath}`);
   }
+
   runtime.writeStdout(`${targetPath}\n`);
+
   if (isShellIntegrationConfigured(runtime)) {
     logger.hint(
       "Shell integration is configured but not active; restart your shell or invoke mt through the shell adapter."
@@ -59,6 +62,7 @@ function requestShellDirectoryWithFallback(
   } else {
     logger.hint("Enable automatic switching with: mt shell install");
   }
+
   return false;
 }
 
@@ -72,12 +76,14 @@ export function runShellInstall(runtime: Runtime, options: ShellInstallOptions =
   const binary = resolveAdapterBinary(runtime, options.binary);
   const shell = resolveCurrentShell(runtime);
   const logger = createLogger(runtime);
+
   if (shell === null) {
     const currentShell = runtime.env.SHELL || "the current shell";
     logger.warning(`Shell integration is not available for ${currentShell}`);
     logger.hint(
       `No startup file was changed. Add ${path.dirname(binary)} to PATH and switch to paths printed by mt manually.`
     );
+
     return;
   }
 
@@ -127,12 +133,14 @@ monke() {
 
 function writeDirectoryDirective(runtime: Runtime, targetPath: string) {
   const directivePath = runtime.env[SHELL_DIRECTORY_DIRECTIVE_ENV];
+
   if (!directivePath) {
     return false;
   }
 
   try {
     writeFileSync(directivePath, targetPath, "utf-8");
+
     return true;
   } catch {
     return false;
@@ -142,6 +150,7 @@ function writeDirectoryDirective(runtime: Runtime, targetPath: string) {
 function isShellIntegrationConfigured(runtime: Runtime) {
   const home = getHomeDirectory(runtime);
   const currentShell = resolveCurrentShell(runtime);
+
   const startupFiles =
     currentShell === null
       ? SUPPORTED_SHELLS.map((shell) => getStartupFilePath(runtime, home, shell))
@@ -151,6 +160,7 @@ function isShellIntegrationConfigured(runtime: Runtime) {
     if (!existsSync(startupFile)) {
       return false;
     }
+
     try {
       return readFileSync(startupFile, "utf-8").includes(INTEGRATION_START);
     } catch {
@@ -186,6 +196,7 @@ ${INTEGRATION_END}
 
 function resolveAdapterBinary(runtime: Runtime, binary: string | undefined) {
   const candidate = binary ?? runtime.env.MONKE_TOOLS_BINARY ?? findExecutable("mt", runtime.env);
+
   if (!candidate) {
     return "mt";
   }
@@ -195,6 +206,7 @@ function resolveAdapterBinary(runtime: Runtime, binary: string | undefined) {
 
 function resolveCurrentShell(runtime: Runtime) {
   const shell = path.basename(runtime.env.SHELL ?? "");
+
   return isSupportedShell(shell) ? shell : null;
 }
 
@@ -202,6 +214,7 @@ function requireSupportedShell(shellName: string) {
   if (isSupportedShell(shellName)) {
     return shellName;
   }
+
   throw new MonkeError("Usage: mt shell init <bash|zsh>");
 }
 
@@ -213,5 +226,6 @@ function isSupportedShell(shellName: string): shellName is SupportedShell {
 function getStartupFilePath(runtime: Runtime, home: string, shell: SupportedShell) {
   const startupRoot =
     shell === "zsh" && runtime.env.ZDOTDIR ? path.resolve(runtime.cwd, runtime.env.ZDOTDIR) : home;
+
   return path.join(startupRoot, shell === "zsh" ? ".zshrc" : ".bashrc");
 }

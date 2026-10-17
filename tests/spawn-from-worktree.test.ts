@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { loadSessionState } from "../src/session-state-store.ts";
@@ -17,21 +17,24 @@ import {
 } from "./helpers.ts";
 
 describe("spawn from worktrees", () => {
-  test("spawn from a Session worktree carries its HEAD and edits while retaining canonical configuration", () => {
+  it("carries HEAD and edits on spawn from a Session worktree while retaining canonical configuration", () => {
     const sandbox = makeTempDir("spawn-from-worktree");
     const home = path.join(sandbox, "home");
+
     const dep = createRepo(path.join(sandbox, "dep"), {
       ".env.local": "PORT=5432\n",
       "dep.txt": "dependency\n",
       "monke.yml":
         "apps:\n  db:\n    path: .\n    envFile: .env.local\n    mappings:\n      - port: DEP_PORT\n        env: PORT\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       ".env.local": "PORT=5432\n",
       "monke.yml":
         "apps:\n  api:\n    path: .\n    envFile: .env.local\n    mappings: []\nexternal:\n  dep:\n    path: ../dep\n    pathEnv: DEP_DIR\n    mappings:\n      - port: DEP_PORT\n        app: api\n        env: PORT\n",
       "src/tracked.txt": "base\n"
     });
+
     runMonke({ args: ["spawn", "feature-a"], cwd: root, monkeHome: home });
     const donor = getExpectedWorktreePath(home, root, "feature-a");
     write(donor, "committed.txt", "donor commit\n");
@@ -74,8 +77,8 @@ describe("spawn from worktrees", () => {
     );
   });
 
-  test.each([true, false])(
-    "interrupted worktree dirty carry retains its donor (configured: %s)",
+  it.each([true, false])(
+    "retains the donor of an interrupted worktree dirty carry (configured: %s)",
     (configured) => {
       const { donor, home, root, sandbox } = createWorktreeFixture(configured);
       const target = getExpectedWorktreePath(home, root, "interrupted");
@@ -90,12 +93,14 @@ describe("spawn from worktrees", () => {
           script: 'kill -KILL "$PPID"'
         }
       });
+
       const interrupted = runMonkeCapturingFailure({
         args: ["spawn", "interrupted"],
         binDirectory,
         cwd: donor,
         monkeHome: home
       });
+
       expect(interrupted.error).not.toBeNull();
       expect(loadSessionState(home, root, "interrupted").repos[0]).toMatchObject({
         dirtyCarrySource: { checkoutRoot: donor, headCommit: originalHead },
@@ -115,11 +120,13 @@ describe("spawn from worktrees", () => {
       ).toThrow(/carrying dirty changes onto a diverged branch is unsafe/u);
       git(target, ["reset", "--soft", originalHead]);
       expect(read(target, "tracked.txt")).toBe("base\n");
+
       const resumed = runMonkeCapturingFailure({
         args: ["spawn", "interrupted"],
         cwd: donor,
         monkeHome: home
       });
+
       expect(resumed.error === null).toBe(configured);
       expect(resumed.stderr).toContain(
         configured ? "Spawned or updated session" : "Prepared Root repo Session worktree"
@@ -132,25 +139,30 @@ describe("spawn from worktrees", () => {
     }
   );
 
-  test.each([false, true])("--no-dirty checks the invoking checkout (detached: %s)", (detached) => {
-    const { donor, home, root } = createWorktreeFixture();
-    if (detached) {
-      git(donor, ["checkout", "--detach"]);
-    }
-    write(root, "tracked.txt", "unrelated source edit\n");
-    runMonke({ args: ["spawn", "clean-donor", "--no-dirty"], cwd: donor, monkeHome: home });
-    const target = getExpectedWorktreePath(home, root, "clean-donor");
-    expect(git(target, ["rev-parse", "HEAD"])).toBe(git(donor, ["rev-parse", "HEAD"]));
-    expect(read(target, "tracked.txt")).toBe("base\n");
-    write(donor, "notes.txt", "dirty donor\n");
-    expect(() =>
-      runMonke({ args: ["spawn", "dirty-donor", "--no-dirty"], cwd: donor, monkeHome: home })
-    ).toThrow(`Content checkout is dirty: ${donor}`);
-    expect(existsSync(getExpectedWorktreePath(home, root, "dirty-donor"))).toBeFalsy();
-  });
+  it.each([false, true])(
+    "checks the invoking checkout for --no-dirty (detached: %s)",
+    (detached) => {
+      const { donor, home, root } = createWorktreeFixture();
 
-  test.each([["--main"], ["--main", "--no-dirty"]])(
-    "default-branch mode from a worktree ignores donor edits: %j",
+      if (detached) {
+        git(donor, ["checkout", "--detach"]);
+      }
+
+      write(root, "tracked.txt", "unrelated source edit\n");
+      runMonke({ args: ["spawn", "clean-donor", "--no-dirty"], cwd: donor, monkeHome: home });
+      const target = getExpectedWorktreePath(home, root, "clean-donor");
+      expect(git(target, ["rev-parse", "HEAD"])).toBe(git(donor, ["rev-parse", "HEAD"]));
+      expect(read(target, "tracked.txt")).toBe("base\n");
+      write(donor, "notes.txt", "dirty donor\n");
+      expect(() =>
+        runMonke({ args: ["spawn", "dirty-donor", "--no-dirty"], cwd: donor, monkeHome: home })
+      ).toThrow(`Content checkout is dirty: ${donor}`);
+      expect(existsSync(getExpectedWorktreePath(home, root, "dirty-donor"))).toBeFalsy();
+    }
+  );
+
+  it.each([["--main"], ["--main", "--no-dirty"]])(
+    "ignores donor edits in default-branch mode from a worktree: %j",
     (...flags) => {
       const { donor, home, root } = createWorktreeFixture();
       write(donor, "tracked.txt", "dirty donor\n");
@@ -165,7 +177,7 @@ describe("spawn from worktrees", () => {
     }
   );
 
-  test("dirty carry compares an existing branch against donor HEAD and preserves existing destinations", () => {
+  it("compares an existing branch against donor HEAD during dirty carry and preserves existing destinations", () => {
     const { donor, home, root } = createWorktreeFixture();
     const target = getExpectedWorktreePath(home, root, "existing");
     git(root, ["branch", "existing"]);
@@ -189,14 +201,17 @@ describe("spawn from worktrees", () => {
 function createWorktreeFixture(configured = true) {
   const sandbox = makeTempDir("spawn-worktree-modes");
   const home = path.join(sandbox, "home");
+
   const root = createRepo(path.join(sandbox, "root"), {
     ...(configured ? { "monke.yml": "apps: {}\n" } : {}),
     "tracked.txt": "base\n"
   });
+
   const donor = path.join(sandbox, "ordinary");
   git(root, ["worktree", "add", "-b", "donor", donor]);
   write(donor, "committed.txt", "donor commit\n");
   git(donor, ["add", "committed.txt"]);
   git(donor, ["commit", "-m", "Donor commit"]);
+
   return { donor, home, root, sandbox };
 }

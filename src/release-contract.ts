@@ -26,21 +26,27 @@ import { sha256 } from "./sha256.ts";
 const CHECKSUM_PATTERN = /^(?<hash>[0-9a-f]{64}) {2}(?<name>[^/\s]+)$/u;
 const LEADING_ARCHIVE_PATH_PATTERN = /^\.\/?/u;
 const TRAILING_SLASH_PATTERN = /\/$/u;
+
 const ChecksumEntrySchema = stringSchema()
   .regex(CHECKSUM_PATTERN, "must be a SHA-256 hash followed by two spaces and an asset name")
   .transform((line) => {
     const match = CHECKSUM_PATTERN.exec(line);
+
     if (!match?.groups?.hash || !match.groups.name) {
       throw new Error("Validated Release checksum line could not be parsed");
     }
+
     return { hash: match.groups.hash, name: match.groups.name };
   });
+
 const ChecksumEntriesSchema = arraySchema(ChecksumEntrySchema).superRefine((entries, context) => {
   const names = new Set<string>();
+
   for (const entry of entries) {
     if (names.has(entry.name)) {
       context.addIssue({ code: "custom", message: `duplicate checksum entry: ${entry.name}` });
     }
+
     names.add(entry.name);
   }
 });
@@ -74,11 +80,13 @@ interface VerifyReleaseArchiveOptions {
 export function releaseArchiveName(version: string, platform: string) {
   const parsedVersion = StableSemanticVersionSchema.parse(version);
   const parsedPlatform = ReleasePlatformSchema.parse(platform);
+
   return `${RELEASE_TAG_PREFIX}${parsedVersion}-${parsedPlatform}.tar.gz`;
 }
 
 export function releaseChecksumsName(version: string) {
   const parsedVersion = StableSemanticVersionSchema.parse(version);
+
   return `${RELEASE_TAG_PREFIX}${parsedVersion}-checksums.txt`;
 }
 
@@ -95,6 +103,7 @@ export function validateReleaseBundleRoot(options: ValidateReleaseBundleOptions)
     expectedMinimumCodiffVersion: options.expectedMinimumCodiffVersion,
     manifest
   });
+
   return manifest;
 }
 
@@ -118,6 +127,7 @@ function validateVerifiedReleaseBundleRoot(options: {
     expectedMinimumCodiffVersion: options.expectedMinimumCodiffVersion,
     manifest
   });
+
   return manifest;
 }
 
@@ -126,6 +136,7 @@ function validateReleaseBundleFiles(bundleRoot: string) {
   assertNoLinks(resolvedRoot);
   assertExecutable(path.join(resolvedRoot, "mt"), "Release executable");
   assertExecutable(path.join(resolvedRoot, "install.sh"), "Release installer");
+
   return resolvedRoot;
 }
 
@@ -136,6 +147,7 @@ function assertCatalogReleaseIdentity(
   if (!expected) {
     return;
   }
+
   if (
     manifest.artifactName !== expected.artifactName ||
     manifest.releaseTag !== expected.releaseTag ||
@@ -158,9 +170,11 @@ function assertVerifiedReleaseIdentity(
       `Release manifest Tool build identity does not match ${expected.releaseVersion}`
     );
   }
+
   if (manifest.releaseTag !== expected.releaseTag) {
     throw new MonkeError(`Release manifest tag does not match ${expected.releaseTag}`);
   }
+
   if (manifest.sourceCommit !== expected.sourceCommit) {
     throw new MonkeError("Release manifest source commit does not match the selected commit");
   }
@@ -189,12 +203,15 @@ function assertExpectedArtifactName(
 function assertReleaseManifestSelfConsistency(manifest: ReleaseInstallManifest) {
   const expectedTag = `${RELEASE_TAG_PREFIX}${manifest.releaseVersion}`;
   const expectedArchiveName = releaseArchiveName(manifest.releaseVersion, manifest.platform);
+
   if (manifest.toolBuildIdentity !== manifest.releaseVersion) {
     throw new MonkeError("Release manifest Tool build identity does not match its version");
   }
+
   if (manifest.releaseTag !== expectedTag) {
     throw new MonkeError(`Release manifest tag does not match ${expectedTag}`);
   }
+
   if (manifest.artifactName !== expectedArchiveName) {
     throw new MonkeError(
       `Release manifest artifact identity does not match ${expectedArchiveName}`
@@ -217,15 +234,18 @@ function assertReleaseManifestContents(options: {
       `Release manifest Codiff minimum does not match ${options.expectedMinimumCodiffVersion}`
     );
   }
+
   if (
     options.manifest.artifactDigest !== sha256(readFileSync(path.join(options.bundleRoot, "mt")))
   ) {
     throw new MonkeError(options.digestMismatchMessage);
   }
+
   assertReleaseGuidanceHashes(
     options.manifest.guidanceHashes,
     hashReleaseGuidance(options.bundleRoot)
   );
+
   if (options.expectedGuidanceRoot) {
     assertReleaseGuidanceHashes(
       options.manifest.guidanceHashes,
@@ -242,6 +262,7 @@ function parseReleaseManifest(bundleRoot: string) {
 
 function readReleaseManifestForActivation(bundleRoot: string) {
   const manifestPath = path.join(bundleRoot, "install-manifest.json");
+
   try {
     return parseReleaseManifest(bundleRoot);
   } catch {
@@ -255,19 +276,23 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions) {
   const expectedPlatform = ReleasePlatformSchema.parse(options.expectedPlatform);
   const expectedSourceCommit = FullCommitSchema.parse(options.expectedSourceCommit);
   const expectedArchiveName = releaseArchiveName(expectedVersion, expectedPlatform);
+
   if (path.basename(archivePath) !== expectedArchiveName) {
     throw new MonkeError(
       `Release archive name mismatch: expected ${expectedArchiveName}, found ${path.basename(archivePath)}`
     );
   }
+
   if (options.checksumPath) {
     verifyArchiveChecksum(archivePath, options.checksumPath);
   }
 
   assertArchiveContract(listArchiveEntries(archivePath));
   const extractedRoot = mkdtempSync(path.join(tmpdir(), "monke-tools-release-verify-"));
+
   try {
     runReleaseCommand("tar", ["-xzf", archivePath, "-C", extractedRoot]);
+
     const manifest = validateVerifiedReleaseBundleRoot({
       bundleRoot: extractedRoot,
       expectedGuidanceRoot: options.expectedGuidanceRoot,
@@ -283,20 +308,24 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions) {
 
     if (options.verifyExecutable !== false) {
       const version = runVerificationCommand(path.join(extractedRoot, "mt"), ["--version"]);
+
       if (version.exitCode !== 0 || version.stdout.trim() !== expectedVersion) {
         throw new MonkeError(
           `Release executable Tool build identity does not match ${expectedVersion}: ${commandFailureDetail(version)}`
         );
       }
+
       const installer = runVerificationCommand(path.join(extractedRoot, "install.sh"), [
         "--verify"
       ]);
+
       if (installer.exitCode !== 0) {
         throw new MonkeError(
           `Release installer verification failed: ${commandFailureDetail(installer)}`
         );
       }
     }
+
     return manifest;
   } finally {
     rmSync(extractedRoot, { force: true, recursive: true });
@@ -306,27 +335,33 @@ export function verifyReleaseArchive(options: VerifyReleaseArchiveOptions) {
 export function readReleaseChecksums(checksumPath: string) {
   const lines = readFileSync(checksumPath, "utf-8").trim().split("\n");
   const checksums = new Map<string, string>();
+
   for (const entry of ChecksumEntriesSchema.parse(lines)) {
     checksums.set(entry.name, entry.hash);
   }
+
   return checksums;
 }
 
 export function compareStableSemanticVersions(left: string, right: string) {
   const leftParts = parseStableSemanticVersion(left);
   const rightParts = parseStableSemanticVersion(right);
+
   for (const index of [0, 1, 2]) {
     const leftPart = leftParts[index] ?? 0n;
     const rightPart = rightParts[index] ?? 0n;
+
     if (leftPart !== rightPart) {
       return leftPart < rightPart ? -1 : 1;
     }
   }
+
   return 0;
 }
 
 export function parseStableSemanticVersion(value: string) {
   const parts = StableSemanticVersionSchema.parse(value).split(".");
+
   return [BigInt(parts[0] ?? ""), BigInt(parts[1] ?? ""), BigInt(parts[2] ?? "")] as const;
 }
 
@@ -334,9 +369,11 @@ function verifyArchiveChecksum(archivePath: string, checksumPath: string) {
   const checksums = readReleaseChecksums(checksumPath);
   const archiveName = path.basename(archivePath);
   const expected = checksums.get(archiveName);
+
   if (expected === undefined) {
     throw new MonkeError(`Release checksum is missing for ${archiveName}`);
   }
+
   if (expected !== sha256(readFileSync(archivePath))) {
     throw new MonkeError(`Release checksum mismatch for ${archiveName}`);
   }
@@ -364,11 +401,14 @@ function assertArchiveContract(entries: string[]) {
     "skills/internal",
     "skills/references"
   ];
+
   if (new Set(entries).size !== entries.length) {
     throw new MonkeError("Release archive contains duplicate entries");
   }
+
   for (const entry of entries) {
     const [topLevel, skillFolder] = entry.split("/");
+
     const allowedEntry =
       [
         "install-manifest.json",
@@ -383,6 +423,7 @@ function assertArchiveContract(entries: string[]) {
       entry === "instructions/GLOBAL.md" ||
       entry === "skills" ||
       (topLevel === "skills" && BUNDLED_GUIDANCE_FOLDERS.some((folder) => folder === skillFolder));
+
     if (
       entry === "" ||
       path.posix.isAbsolute(entry) ||
@@ -392,6 +433,7 @@ function assertArchiveContract(entries: string[]) {
       throw new MonkeError(`Unsafe or unexpected Release archive entry: ${entry}`);
     }
   }
+
   for (const required of requiredEntries) {
     if (!entries.includes(required)) {
       throw new MonkeError(`Release archive entry is missing: ${required}`);
@@ -403,9 +445,11 @@ function assertNoLinks(root: string) {
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     const entryPath = path.join(root, entry.name);
     const stat = lstatSync(entryPath);
+
     if (stat.isSymbolicLink()) {
       throw new MonkeError(`Release bundle contains a symbolic link: ${entryPath}`);
     }
+
     if (stat.isDirectory()) {
       assertNoLinks(entryPath);
     }
@@ -431,6 +475,7 @@ function runVerificationCommand(command: string, args: string[]) {
       stderr: "pipe",
       stdout: "pipe"
     });
+
     return {
       exitCode: result.exitCode ?? -1,
       stderr: result.stderr.toString(),

@@ -7,6 +7,7 @@ import type { Runtime } from "../src/types.ts";
 
 export const SKILLS_CLI_VERSION = "1.7.0";
 const NPX_COMMAND = process.platform === "win32" ? "npx.cmd" : "npx";
+
 /** Options for building an upstream staged Skill install command. */
 export interface BuildSkillsInstallArgsOptions {
   importerVersion?: string;
@@ -47,6 +48,7 @@ export function buildSkillsInstallArgs(options: BuildSkillsInstallArgsOptions) {
 /** Lists Skill slugs staged by the upstream CLI under `.agents/skills`. */
 export function listStagedSkillSlugs(stagingDirectory: string) {
   const stagedSkillsRoot = path.join(stagingDirectory, ".agents", "skills");
+
   if (!existsSync(stagedSkillsRoot)) {
     throw new MonkeError(`Expected staged skills at ${stagedSkillsRoot}`);
   }
@@ -54,6 +56,7 @@ export function listStagedSkillSlugs(stagingDirectory: string) {
   const stagedSkillNames = readdirSync(stagedSkillsRoot)
     .filter((entry) => {
       const entryPath = path.join(stagedSkillsRoot, entry);
+
       return statSync(entryPath).isDirectory();
     })
     .toSorted();

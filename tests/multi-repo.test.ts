@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } f
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -31,11 +31,12 @@ const SIBLING_START_BARRIER_DELAY_SECONDS = 0.01;
 function makeRepoTempDir(prefix: string) {
   const testTempRoot = path.join(projectRoot, "tmp", "tests");
   mkdirSync(testTempRoot, { recursive: true });
+
   return realpathSync.native(mkdtempSync(path.join(testTempRoot, `${prefix}-`)));
 }
 
 describe("multi-repo sessions", () => {
-  test("spawn materializes direct dependencies before the root repo and propagates external ports", () => {
+  it("materializes direct dependencies before the root repo and propagates external ports on spawn", () => {
     const sandbox = makeTempDir("multi-repo");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -94,9 +95,10 @@ external:
     expect(sessionState.repos.map((repo) => repo.sourceRoot)).toStrictEqual([depRoot, root]);
   });
 
-  test("missing Root config cannot discard retained dependency Cleanup obligations", () => {
+  it("keeps retained dependency Cleanup obligations when Root config is missing", () => {
     const sandbox = makeTempDir("multi-repo-missing-root-config");
     const home = path.join(sandbox, "home");
+
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       "app/.env": "PORT=4100\n",
       "monke.yml": `bootstrapCommand: "true"
@@ -110,6 +112,7 @@ apps:
         env: PORT
 `
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "app/.env": "DEP_PORT=4100\n",
       "monke.yml": `bootstrapCommand: "true"
@@ -150,7 +153,7 @@ external:
     expect(before.repos.map((repo) => repo.cleanupCommand)).toStrictEqual(["true", "true"]);
   });
 
-  test("spawn warns when skipped dependency source dirt is not carried", () => {
+  it("warns on spawn when skipped dependency source dirt is not carried", () => {
     const sandbox = makeTempDir("multi-repo-skipped-dep-dirty");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -209,8 +212,9 @@ external:
     );
   });
 
-  test("spawn --no-dirty fails dirty dependency source checkouts before creating any worktrees", () => {
+  it("fails dirty dependency source checkouts for spawn --no-dirty before creating any worktrees", () => {
     const sandbox = makeRepoTempDir("multi-repo-dirty-preflight");
+
     try {
       const binDirectory = path.join(sandbox, "bin");
       const home = path.join(sandbox, "home");
@@ -238,6 +242,7 @@ external:
 `,
         "services/db/.env.local": "PORT=5432\n"
       });
+
       write(dirtyDepRoot, "untracked.txt", "dirty\n");
 
       const root = createRepo(path.join(sandbox, "root"), {
@@ -294,7 +299,7 @@ external:
     }
   });
 
-  test("spawn carries dirty state across multi-repo graph by default", () => {
+  it("carries dirty state across multi-repo graph on spawn by default", () => {
     const sandbox = makeTempDir("multi-repo-dirty-carry");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -330,6 +335,7 @@ external:
 `,
       "root.txt": "clean root\n"
     });
+
     write(depRoot, "dep.txt", "dirty dep\n");
     write(root, "root.txt", "dirty root\n");
 
@@ -348,7 +354,7 @@ external:
     );
   });
 
-  test("dirty spawn fails before creating any graph worktrees when a dependency session branch diverged", () => {
+  it("fails dirty spawn before creating any graph worktrees when a dependency session branch diverged", () => {
     const sandbox = makeTempDir("multi-repo-dirty-diverged-dep");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -407,7 +413,7 @@ external:
     expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeFalsy();
   });
 
-  test("spawn -m discovers dependencies from default branch config", () => {
+  it("discovers dependencies from default branch config for spawn -m", () => {
     const sandbox = makeTempDir("multi-repo-main-config");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -444,6 +450,7 @@ external:
         env: DATABASE_URL
 `
     });
+
     git(root, ["switch", "-c", "feature"]);
     write(
       root,
@@ -491,17 +498,19 @@ external:
 
     git(root, ["worktree", "remove", "--force", rootWorktree]);
     git(depRoot, ["worktree", "remove", "--force", depWorktree]);
+
     const cleanupResult = runMonke({
       args: ["cleanup"],
       binDirectory,
       cwd: root,
       monkeHome: home
     });
+
     expect(cleanupResult.stdout).toContain("Cleaned: root / default-graph");
     expect(cleanupResult.stderr).toBe("");
   });
 
-  test("spawn -m uses dependency resolved default branch env files", () => {
+  it("uses dependency resolved default branch env files for spawn -m", () => {
     const sandbox = makeTempDir("multi-repo-main-local-env");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -517,6 +526,7 @@ external:
 `,
       "services/db/.env.local": "PORT=5432\nDEFAULT_ONLY=1\n"
     });
+
     write(depRoot, "services/db/.env.local", "PORT=10000\nLOCAL_ONLY=1\n");
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -536,6 +546,7 @@ external:
         env: DATABASE_URL
 `
     });
+
     git(root, ["switch", "-c", "feature"]);
 
     runMonke({
@@ -556,7 +567,7 @@ external:
     );
   });
 
-  test("spawn -m materializes mixed main and master repos in one graph", () => {
+  it("materializes mixed main and master repos in one graph for spawn -m", () => {
     const sandbox = makeTempDir("multi-repo-main-master");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -572,6 +583,7 @@ external:
 `,
       "services/db/.env.local": "PORT=5432\nMASTER_DEFAULT=1\n"
     });
+
     git(depRoot, ["branch", "-m", "master"]);
 
     const root = createRepo(path.join(sandbox, "root"), {
@@ -603,9 +615,11 @@ external:
     const depWorktree = getExpectedWorktreePath(home, depRoot, "mixed-defaults");
     // Another worker can temporarily occupy the first port in the reservation.
     const state = readSingleYamlFile(path.join(home, "sessions"), SessionStateSchema);
+
     const assignedPort = state.repos
       .find((repo) => repo.sourceRoot === depRoot)
       ?.assignedPorts.find((port) => port.key === "DEP_POSTGRES_PORT")?.value;
+
     expect(assignedPort).toBeDefined();
     expect(read(depWorktree, "services/db/.env.local")).toBe(
       `PORT=${String(assignedPort)}\nMASTER_DEFAULT=1\n`
@@ -615,7 +629,7 @@ external:
     );
   });
 
-  test("spawn fails clearly when two repos collide on repo-name session worktree paths", () => {
+  it("fails spawn clearly when two repos collide on repo-name session worktree paths", () => {
     const sandbox = makeTempDir("multi-repo-worktree-collision");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -661,11 +675,11 @@ external:
     expect(existsSync(path.join(home, "worktrees", "root", "collision"))).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     { previous: [], secondSession: "alpha", symbol: "SOL/USDT:USDT" },
     { previous: ["SOL/USDT:USDT"], secondSession: "beta", symbol: "LINK/USDT:USDT" }
   ])(
-    "resource commands share checkout ownership across root graphs when the second Session is $secondSession",
+    "shares checkout ownership for resource commands across root graphs when the second Session is $secondSession",
     ({ previous, secondSession, symbol }) => {
       const sandbox = makeTempDir("multi-repo-resource-command-declaring-scope");
       const binDirectory = path.join(sandbox, "bin");
@@ -718,6 +732,7 @@ external:
         env: DATABASE_URL
 `
       });
+
       const rootB = createRepo(path.join(sandbox, "root-b"), {
         "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
         "monke.yml": `apps:
@@ -755,16 +770,18 @@ external:
       });
       expect(read(secondDepWorktree, "command-runs.log")).toBe("run\n");
       expect(read(secondDepWorktree, ".env")).not.toContain("E2E_FLOW1_SYMBOL=");
+
       const record = new CheckoutResourceStore(home).get(
         resourceOwner(depRoot, secondDepWorktree, secondSession)
       );
+
       expect(record.resourceCommandOutputs).toMatchObject([
         { name: "e2e-symbols", outputs: [{ env: "E2E_FLOW1_SYMBOL", value: symbol }] }
       ]);
     }
   );
 
-  test("resource command return violation records an incomplete root repo and rerun heals external path env", () => {
+  it("records an incomplete root repo on resource command return violation and heals external path env on rerun", () => {
     const sandbox = makeTempDir("multi-repo-resource-command-partial-root");
     const binDirectory = path.join(sandbox, "bin");
     installShShim(binDirectory);
@@ -854,15 +871,17 @@ external:
     expect(read(rootWorktree, ".env")).toBe(
       `DEP_DIR=${path.relative(rootWorktree, depWorktree)}\nAPI_PORT=11000\nDEP_POSTGRES_PORT=10000\n`
     );
+
     const record = new CheckoutResourceStore(home).get(
       resourceOwner(root, rootWorktree, "partial")
     );
+
     expect(record.resourceCommandOutputs).toMatchObject([
       { name: "e2e-channel", outputs: [{ env: "E2E_CHANNEL_ID", value: "123" }] }
     ]);
   });
 
-  test("spawn fans out one dependency-owned port to multiple local targets", () => {
+  it("fans out one dependency-owned port to multiple local targets on spawn", () => {
     const sandbox = makeTempDir("multi-repo-fanout");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -928,7 +947,7 @@ external:
     expect(depRoot).toBeTruthy();
   });
 
-  test("materialize overwrites stale root path env values and preserves unrelated entries", () => {
+  it("overwrites stale root path env values on materialize and preserves unrelated entries", () => {
     const sandbox = makeTempDir("multi-repo-pathenv-refresh");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -987,7 +1006,7 @@ external:
     );
   });
 
-  test("root path env file only includes direct externals", { timeout: 30_000 }, () => {
+  it("includes only direct externals in the root path env file", { timeout: 30_000 }, () => {
     const sandbox = makeTempDir("multi-repo-direct-pathenvs");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1003,6 +1022,7 @@ external:
 `,
       "services/leaf/.env.local": "PORT=9000\n"
     });
+
     const dep = createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `apps:
   dep:
@@ -1022,6 +1042,7 @@ external:
 `,
       "services/dep/.env.local": "PORT=5432\nLEAF_URL=http://localhost:9000\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "DATABASE_URL=postgres://localhost:5432/app\n",
       "monke.yml": `apps:
@@ -1054,7 +1075,7 @@ external:
     );
   });
 
-  test("bootstrap commands receive direct external path env bindings", () => {
+  it("passes direct external path env bindings to bootstrap commands", () => {
     const sandbox = makeTempDir("multi-repo-bootstrap-pathenv");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1102,7 +1123,7 @@ external:
     expect(read(rootWorktree, ".bootstrap-path")).toBe(path.relative(rootWorktree, depWorktree));
   });
 
-  test("Dependency repo bootstrap runs before Root repo bootstrap and the Root repo can rely on synced Path env values", () => {
+  it("runs Dependency repo bootstrap before Root repo bootstrap and lets the Root repo rely on synced Path env values", () => {
     const sandbox = makeTempDir("multi-repo-bootstrap");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1153,7 +1174,7 @@ external:
     expect(read(rootWorktree, "root-saw-dep")).toBe(path.relative(rootWorktree, depWorktree));
   });
 
-  test("current-head Dependency repo bootstrap failure leaves the Root repo Session worktree prepared", () => {
+  it("leaves the Root repo Session worktree prepared after current-head Dependency repo bootstrap failure", () => {
     const sandbox = makeTempDir("multi-repo-failed-dependency-preparation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1212,7 +1233,7 @@ external:
     expect(existsSync(getExpectedWorktreePath(home, depRoot, "failed-dependency"))).toBeTruthy();
   });
 
-  test("a failed sibling does not stop independent materialization and retry reuses its checkpoint", () => {
+  it("continues independent materialization past a failed sibling and reuses the successful sibling's checkpoint on retry", () => {
     const sandbox = makeTempDir("multi-repo-quiescent-retry");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1233,6 +1254,7 @@ apps:
 `,
       "scripts/bootstrap.sh": "exit 9\n"
     });
+
     const successfulRoot = createRepo(path.join(sandbox, "successful"), {
       "app/.env": "PORT=4200\n",
       "monke.yml": `bootstrapCommand: sleep ${INDEPENDENT_SIBLING_SETTLE_DELAY_SECONDS}; printf x >> "${successfulRuns}"; touch "${settledMarker}"
@@ -1247,6 +1269,7 @@ apps:
         env: PORT
 `
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "app/.env": "FAILING_PORT=4100\nSUCCESSFUL_PORT=4200\n",
       "monke.yml": `bootstrapCommand: touch root-materialized
@@ -1326,10 +1349,11 @@ external:
     expect(completeState.generation).toStrictEqual({ number: 1, status: "complete" });
   });
 
-  test("Materialize does not reuse a materialized Dependency repo on the wrong branch", () => {
+  it("does not reuse a materialized Dependency repo on the wrong branch during Materialize", () => {
     const sandbox = makeTempDir("multi-repo-invalid-materialized-dependency");
     const home = path.join(sandbox, "home");
     const depRuns = path.join(sandbox, "dep-runs");
+
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       "app/.env": "PORT=4100\n",
       "monke.yml": `bootstrapCommand: printf x >> "${depRuns}"
@@ -1342,6 +1366,7 @@ apps:
         env: PORT
 `
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "app/.env": "DEP_PORT=4100\n",
       "monke.yml": `bootstrapCommand: printf x >> root-runs
@@ -1399,7 +1424,7 @@ external:
     expect(read(rootWorktree, "root-runs")).toBe("x");
   });
 
-  test("a ready repo materializes without waiting for unrelated Worktree preparation", () => {
+  it("materializes a ready repo without waiting for unrelated Worktree preparation", () => {
     const sandbox = makeTempDir("multi-repo-preparation-overlap");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1418,6 +1443,7 @@ apps:
         env: PORT
 `
     });
+
     const slowRoot = createRepo(path.join(sandbox, "slow"), {
       "app/.env": "PORT=4200\n",
       "monke.yml": `bootstrapCommand: test -f "${slowPreparationDone}"
@@ -1430,6 +1456,7 @@ apps:
         env: PORT
 `
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "app/.env": "READY_PORT=4100\nSLOW_PORT=4200\n",
       "monke.yml": `apps:
@@ -1454,6 +1481,7 @@ external:
         env: SLOW_PORT
 `
     });
+
     const slowWorktree = getExpectedWorktreePath(home, slowRoot, "overlap");
     installGitShim(binDirectory, {
       afterCommand: {
@@ -1477,12 +1505,13 @@ external:
     expect(existsSync(getExpectedWorktreePath(home, readyRoot, "overlap"))).toBeTruthy();
   });
 
-  test("ready siblings materialize concurrently without losing either checkpoint", () => {
+  it("materializes ready siblings concurrently without losing either checkpoint", () => {
     const sandbox = makeTempDir("multi-repo-sibling-materialization-concurrency");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
     const firstStarted = path.join(sandbox, "first-started");
     const secondStarted = path.join(sandbox, "second-started");
+
     const waitForSibling = (ownMarker: string, siblingMarker: string) =>
       `touch "${ownMarker}"; attempts=0; while [ ! -f "${siblingMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -lt ${SIBLING_START_BARRIER_ATTEMPTS} ] || exit 91; sleep ${SIBLING_START_BARRIER_DELAY_SECONDS}; done`;
 
@@ -1498,6 +1527,7 @@ apps:
         env: PORT
 `
     });
+
     const secondRoot = createRepo(path.join(sandbox, "second"), {
       "app/.env": "PORT=4200\n",
       "monke.yml": `bootstrapCommand: ${waitForSibling(secondStarted, firstStarted)}
@@ -1510,6 +1540,7 @@ apps:
         env: PORT
 `
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "app/.env": "FIRST_PORT=4100\nSECOND_PORT=4200\n",
       "monke.yml": `apps:
@@ -1566,10 +1597,11 @@ external:
     });
   });
 
-  test("default-branch dependency bootstrap failure retains every prepared worktree", () => {
+  it("retains every prepared worktree after default-branch dependency bootstrap failure", () => {
     const sandbox = makeTempDir("multi-repo-default-failed-dependency-preparation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       "monke.yml": `bootstrapCommand: sh scripts/bootstrap.sh
 apps:
@@ -1583,6 +1615,7 @@ apps:
       "scripts/bootstrap.sh": "exit 9\n",
       "services/db/.env.local": "DEP=1\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "seed-data/\n",
       "apps/api/.env.local": "API=1\n",
@@ -1643,10 +1676,11 @@ external:
     ).toBe("complete");
   });
 
-  test("a Dependency repo Worktree preparation failure does not stop Root repo Worktree preparation", () => {
+  it("continues Root repo Worktree preparation after a Dependency repo Worktree preparation failure", () => {
     const sandbox = makeTempDir("multi-repo-preparation-failure-settlement");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
+
     const depRoot = createRepo(path.join(sandbox, "dep"), {
       ".gitignore": "seed-data/\n",
       "monke.yml": `seedPaths:
@@ -1662,6 +1696,7 @@ apps:
       "seed-data/fixture": "dependency fixture\n",
       "services/db/.env.local": "DEP=1\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       ".gitignore": "seed-data/\n",
       "apps/api/.env.local": "API=1\n",
@@ -1712,11 +1747,12 @@ external:
       // fail on an unreadable directory and mask the original failure.
       chmodSync(protectedSourcePath, 0o700);
     }
+
     expect(read(rootWorktree, "seed-data/new")).toBe("new Root material\n");
     expect(read(rootWorktree, "bootstrap-runs")).toBe("x");
   });
 
-  test("public async Spawn starts worktree preparations concurrently", async () => {
+  it("starts worktree preparations concurrently in public async Spawn", async () => {
     const sandbox = makeTempDir("multi-repo-bounded-preparation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -1732,6 +1768,7 @@ external:
 `,
       "services/db/.env.local": "DEP=9000\n"
     });
+
     const root = createRepo(path.join(sandbox, "root"), {
       "apps/api/.env.local": "API=http://localhost:9000\n",
       "monke.yml": `apps:
@@ -1760,7 +1797,7 @@ external:
     expect(existsSync(getExpectedWorktreePath(home, root, "bounded-preparation"))).toBeTruthy();
   });
 
-  test("spawn -m seeds untracked dependency env files from the dependency source checkout", () => {
+  it("seeds untracked dependency env files from the dependency source checkout for spawn -m", () => {
     const sandbox = makeTempDir("multi-repo-main-untracked-seeds");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");

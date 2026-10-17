@@ -50,12 +50,15 @@ import { buildSkillsInstallArgs, listStagedSkillSlugs, SKILLS_CLI_VERSION } from
 
 export const MATERIALIZER_VERSION = 1;
 export const SKILL_RESTORE_MARKER = "skills/.monke-restored.json";
+
 function assertSkillRestoreMarkerEntry(repoRoot: string) {
   const file = path.join(repoRoot, SKILL_RESTORE_MARKER);
   const metadata = lstatSync(file, { throwIfNoEntry: false });
+
   if (metadata && !metadata.isFile() && !metadata.isSymbolicLink()) {
     throw new MonkeError(`Skill restore marker path is obstructed: ${file}`);
   }
+
   return file;
 }
 
@@ -63,9 +66,11 @@ function assertSkillRestoreMarkerEntry(repoRoot: string) {
 export function assertSkillRestoreMarker(repoRoot: string) {
   const file = assertSkillRestoreMarkerEntry(repoRoot);
   let parent = path.dirname(file);
+
   while (!lstatSync(parent, { throwIfNoEntry: false })) {
     parent = path.dirname(parent);
   }
+
   try {
     accessSync(parent, fsConstants.W_OK + fsConstants.X_OK);
   } catch (error) {
@@ -73,9 +78,11 @@ export function assertSkillRestoreMarker(repoRoot: string) {
       cause: error
     });
   }
+
   const entry = lstatSync(file, { throwIfNoEntry: false });
   const directory = lstatSync(parent);
   const uid = process.geteuid?.();
+
   if (
     entry &&
     uid !== undefined &&
@@ -93,6 +100,7 @@ const MarkerSchema = z.record(
   z.string(),
   z.strictObject({ digest: z.string(), recipe: z.string(), tooling: z.string() })
 );
+
 function recipeIdentity(recipe: SkillImportRecipe) {
   return JSON.stringify({
     commit: recipe.commit,
@@ -107,22 +115,28 @@ function recipeIdentity(recipe: SkillImportRecipe) {
     source: recipe.source
   });
 }
+
 function readRestoreMarkers(repoRoot: string) {
   const file = path.join(repoRoot, SKILL_RESTORE_MARKER);
+
   if (!existsSync(file)) {
     return {};
   }
+
   try {
     const parsed = MarkerSchema.safeParse(JSON.parse(readFileSync(file, "utf-8")));
+
     return parsed.success ? parsed.data : {};
   } catch {
     return {};
   }
 }
+
 /** Matching accepted bytes need no marker write or upstream fetch. */
 export function isSkillRecipeRestored(repoRoot: string, recipe: SkillImportRecipe) {
   assertSkillRestoreMarkerEntry(repoRoot);
   const marker = readRestoreMarkers(repoRoot)[recipe.source];
+
   try {
     return (
       Boolean(recipe.commit) &&
@@ -147,10 +161,12 @@ export function rememberRestoredRecipe(repoRoot: string, recipe: SkillImportReci
   mkdirSync(path.dirname(file), { recursive: true });
   writeSkillImportState(file, `${JSON.stringify(markers)}\n`);
 }
+
 /** Ignore updates must not mutate another file through a symlink or hard link. */
 export function assertRepoImportIgnoreFile(repoRoot: string) {
   const file = path.join(repoRoot, ".gitignore");
   const metadata = lstatSync(file, { throwIfNoEntry: false });
+
   if (metadata && (!metadata.isFile() || metadata.nlink > 1)) {
     throw new MonkeError(`.gitignore must be a regular file without aliases: ${file}`);
   }
@@ -162,10 +178,12 @@ export function ignoreRepoImports(repoRoot: string, runtime = createRuntime({ cw
   const original = existsSync(file) ? readFileSync(file, "utf-8") : undefined;
   let text = original ?? "";
   const hasGit = existsSync(path.join(repoRoot, ".git"));
+
   const isIgnored = (entry: string) => {
     if (!hasGit) {
       return true;
     }
+
     const result = runtime.exec(
       "git",
       ["check-ignore", "--quiet", "--no-index", "--", entry.slice(1)],
@@ -174,12 +192,16 @@ export function ignoreRepoImports(repoRoot: string, runtime = createRuntime({ cw
         cwd: repoRoot
       }
     );
+
     if (result.exitCode !== 0 && result.exitCode !== 1) {
       throw new MonkeError(`Cannot check Git ignore rules for ${entry}: ${result.stderr.trim()}`);
     }
+
     return result.exitCode === 0;
   };
+
   const entries = ["/skills/imported/", "/skills/references/imported/", `/${SKILL_RESTORE_MARKER}`];
+
   for (const entry of entries) {
     if (
       !text.split(/\r?\n/u).some((line) => line === entry || line === entry.slice(1)) ||
@@ -188,9 +210,11 @@ export function ignoreRepoImports(repoRoot: string, runtime = createRuntime({ cw
       text += `${text && !text.endsWith("\n") ? "\n" : ""}${entry}\n`;
     }
   }
+
   if (text !== original) {
     writeFileSync(file, text);
   }
+
   try {
     for (const entry of entries) {
       if (!isIgnored(entry)) {
@@ -207,6 +231,7 @@ export function ignoreRepoImports(repoRoot: string, runtime = createRuntime({ cw
         writeFileSync(file, original);
       }
     }
+
     throw error;
   }
 }
@@ -219,11 +244,14 @@ async function resolveExplicitSkillCommit(repository: string, revision: string, 
       "--end-of-options",
       `${revision}^{commit}`
     ]);
+
     return result.stdout.trim();
   }
+
   const stagingDirectory = path.join(repoRoot, "tmp", `skill-pin-${crypto.randomUUID()}`);
   mkdirSync(stagingDirectory, { recursive: true });
   const runtime = createRuntime({ cwd: stagingDirectory });
+
   try {
     runtime.exec("git", ["init", "--quiet"]);
     await runtime.execAsync("git", [
@@ -235,6 +263,7 @@ async function resolveExplicitSkillCommit(repository: string, revision: string, 
       repository,
       revision
     ]);
+
     return runtime.exec("git", ["rev-parse", "--verify", "FETCH_HEAD^{commit}"]).stdout.trim();
   } finally {
     rmSync(stagingDirectory, { force: true, recursive: true });
@@ -247,8 +276,10 @@ export function describeSkillSource(source: string, repoRoot: string) {
     /^(?:https?:\/\/github\.com\/)?(?<owner>[^/\s:]+)\/(?<repo>[^/#\s]+)(?:\/tree\/(?<ref>[^/#]+)(?:\/(?<subpath>[^#]*))?|\/(?<shorthandSubpath>[^#]*))?(?:#(?<fragment>[^#]+))?$/u.exec(
       source
     );
+
   if (github?.groups && !source.startsWith(".") && !path.isAbsolute(source)) {
     const { fragment, owner, ref, repo, shorthandSubpath, subpath } = github.groups;
+
     return {
       repository: `https://github.com/${owner}/${repo?.replace(/\.git$/u, "")}.git`,
       subpath: subpath ?? shorthandSubpath ?? "",
@@ -256,17 +287,23 @@ export function describeSkillSource(source: string, repoRoot: string) {
       updateRef: fragment ?? ref ?? "HEAD"
     };
   }
+
   const fragment = source.lastIndexOf("#");
   const repository = fragment === -1 ? source : source.slice(0, fragment);
   const updateRef = fragment === -1 ? "HEAD" : source.slice(fragment + 1);
+
   if (/^(?:https?:|ssh:|git:|git@)/u.test(repository)) {
     return { repository, subpath: "", updateRef };
   }
+
   const directory = realpathSync.native(path.resolve(repoRoot, repository));
+
   const topLevel = createRuntime({ cwd: directory }).exec("git", ["rev-parse", "--show-toplevel"], {
     allowFailure: true
   });
+
   const root = topLevel.exitCode === 0 ? topLevel.stdout.trim() : directory;
+
   return {
     repository: root,
     subpath: path.relative(root, directory),
@@ -277,13 +314,16 @@ export function describeSkillSource(source: string, repoRoot: string) {
 export async function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: string) {
   const source = describeSkillSource(recipe.source, repoRoot);
   const treePath = "treePath" in source ? source.treePath : undefined;
+
   const requestedRefs = treePath
     ? treePath
         .split("/")
         .map((_, index, segments) => segments.slice(0, index + 1).join("/"))
         .toReversed()
     : [source.updateRef];
+
   let revisions: string[][] = [];
+
   if (!/^[a-f\d]{40}$/u.test(source.updateRef)) {
     const result = await createRuntime({ cwd: repoRoot }).execAsync("git", [
       "ls-remote",
@@ -291,11 +331,13 @@ export async function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: 
       source.repository,
       ...requestedRefs.flatMap((ref) => [ref, `${ref}^{}`])
     ]);
+
     revisions = result.stdout
       .trim()
       .split("\n")
       .map((row) => row.split(/\s+/u));
   }
+
   const updateRef =
     requestedRefs.find((requestedRef) =>
       revisions.some(
@@ -305,18 +347,22 @@ export async function resolveSkillRevision(recipe: SkillImportRecipe, repoRoot: 
           ref === `refs/tags/${requestedRef}`
       )
     ) ?? source.updateRef;
+
   const selected =
     revisions.find(([, ref]) => ref === updateRef) ??
     revisions.find(([, ref]) => ref === `refs/heads/${updateRef}`) ??
     revisions.find(([, ref]) => ref === `refs/tags/${updateRef}`);
+
   const commit = /^[a-f\d]{40}$/u.test(source.updateRef)
     ? await resolveExplicitSkillCommit(source.repository, source.updateRef, repoRoot)
     : (revisions.find(([, ref]) => ref === `${selected?.[1]}^{}`) ?? selected)?.[0];
+
   if (!commit || !/^[a-f\d]{40}$/u.test(commit)) {
     throw new MonkeError(
       `Cannot resolve ${recipe.source} at ${source.updateRef} to a full Git commit`
     );
   }
+
   return {
     commit,
     repository: source.repository,
@@ -349,8 +395,10 @@ export async function pinnedSkillSource(
       cwd: checkout
     });
     validateUpstreamLinks(checkout);
+
     return path.join(checkout, lock.subpath);
   }
+
   // Copy mode dereferences upstream links, so validate the exact tree before the importer.
   // Keep remote source URLs intact for upstream discovery and security assessments.
   const checkout = path.join(stagingDirectory, "upstream-validation");
@@ -369,26 +417,32 @@ export async function pinnedSkillSource(
   await runtime.execAsync("git", ["checkout", "--quiet", "--detach", lock.commit]);
   validateUpstreamLinks(checkout);
   const github = /^https:\/\/github\.com\/(?<repository>.+)\.git$/u.exec(lock.repository);
+
   if (github?.groups?.repository) {
     return `https://github.com/${github.groups.repository}/tree/${lock.commit}${lock.subpath ? `/${lock.subpath}` : ""}`;
   }
+
   return `${lock.repository}#${lock.commit}`;
 }
 
 function validateUpstreamLinks(checkout: string) {
   const root = realpathSync.native(checkout);
   const gitDirectory = path.join(root, ".git");
+
   const visit = (directory: string) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (entry.name === ".git") {
         continue;
       }
+
       const file = path.join(directory, entry.name);
+
       if (entry.isDirectory()) {
         visit(file);
       } else if (entry.isSymbolicLink()) {
         const target = path.resolve(directory, readlinkSync(file));
         const resolved = existsSync(target) ? realpathSync.native(target) : target;
+
         if (
           !containsPath(root, target) ||
           !containsPath(root, resolved) ||
@@ -399,6 +453,7 @@ function validateUpstreamLinks(checkout: string) {
       }
     }
   };
+
   visit(root);
 }
 
@@ -416,26 +471,33 @@ export async function stageGitSkillSource(options: {
   stagingDirectory: string;
 }) {
   const { recipe, repoRoot, selectors, stagingDirectory } = options;
+
   if (!recipe.commit) {
     throw new MonkeError(
       `Unpinned Skill import recipe: ${recipe.source}; run mt skills update --repo`
     );
   }
+
   const descriptor = describeSkillSource(recipe.source, repoRoot);
+
   const source = await pinnedSkillSource(
     { ...descriptor, commit: recipe.commit },
     stagingDirectory
   );
+
   const checkout = path.join(
     stagingDirectory,
     path.isAbsolute(descriptor.repository) ? "upstream" : "upstream-validation"
   );
+
   const declared =
     options.includeDeclaredImports === false
       ? { recipes: [] }
       : readRepoImportRecipeStore(checkout);
+
   const imported = declared.recipes.flatMap((entry) => entry.skills);
   const runtime = options.runtime ?? createRuntime({ cwd: stagingDirectory });
+
   const { output, ownNames, ownSkills, securityAssessments, selected, selection } =
     await stageOwnGitSkills({
       imported,
@@ -448,6 +510,7 @@ export async function stageGitSkillSource(options: {
       sourceRoot: path.join(checkout, descriptor.subpath),
       stagingDirectory
     });
+
   const retiredReferences =
     options.previousRecipe?.skills.filter(
       (item) =>
@@ -455,6 +518,7 @@ export async function stageGitSkillSource(options: {
         ownSkills.has(item.slug) &&
         !imported.some((current) => current.slug === item.slug)
     ) ?? [];
+
   const previousDeclared =
     retiredReferences.length > 0
       ? await previousPublisherGuidance(
@@ -464,6 +528,7 @@ export async function stageGitSkillSource(options: {
           runtime
         )
       : [];
+
   const ownReplacements = retiredReferences
     .filter((item) =>
       previousDeclared.some((old) => old.kind === "reference" && old.slug === item.slug)
@@ -473,6 +538,7 @@ export async function stageGitSkillSource(options: {
       selector: ownNames.get(item.slug) ?? item.slug,
       slug: item.slug
     }));
+
   for (const item of imported) {
     if (ownSkills.has(item.slug)) {
       throw new MonkeError(
@@ -480,25 +546,31 @@ export async function stageGitSkillSource(options: {
       );
     }
   }
+
   if (declared.recipes.length > 0) {
     // Never follow imports declared by an imported source itself.
     await restoreLockedImports(checkout, false, runtime, declared);
+
     for (const item of imported) {
       if (!publisherGuidanceSelected(item, selected)) {
         continue;
       }
+
       const target = path.join(stagingDirectory, ".agents", "skills", item.slug);
+
       if (existsSync(target)) {
         throw new MonkeError(
           `Imported ${item.kind} slug ${item.slug} collides with publishing source ${recipe.source}`
         );
       }
+
       cpSync(importedGuidancePath(checkout, item), target, {
         recursive: true,
         verbatimSymlinks: true
       });
     }
   }
+
   return {
     ...output,
     declaredGuidance: [...imported, ...ownReplacements],
@@ -553,6 +625,7 @@ async function stageOwnGitSkills(options: {
     sourceRoot,
     stagingDirectory
   } = options;
+
   const selectionOptions = publisherSkillSelection({
     imported,
     rejectAmbiguousSelection,
@@ -561,7 +634,9 @@ async function stageOwnGitSkills(options: {
     selectors,
     sourceRoot
   });
+
   const { explicit, inspectCollection, ownSelectors, selected } = selectionOptions;
+
   const collection = await stagePublisherCollection({
     runtime,
     selectFromCollection,
@@ -569,9 +644,11 @@ async function stageOwnGitSkills(options: {
     source,
     stagingDirectory
   });
+
   const { catalog } = collection;
   let { output } = collection;
   let securityAssessments: SecurityRiskAssessment[] | undefined;
+
   if (inspectCollection && (explicit || rejectAmbiguousSelection)) {
     await mergeAlternatePublisherCatalog({
       catalog,
@@ -585,6 +662,7 @@ async function stageOwnGitSkills(options: {
       stagingDirectory
     });
   }
+
   if (selectFromCollection) {
     securityAssessments = copyPublisherSelection(catalog, ownSelectors, source, stagingDirectory);
   } else if (inspectCollection && explicit && ownSelectors.length > 0) {
@@ -604,13 +682,16 @@ async function stageOwnGitSkills(options: {
       { cwd: stagingDirectory }
     );
   }
+
   const selection = selectors.map((selector) => {
     const previous = findRetainedSkill(retainedSkills, selector);
     const currentName = retainedPublisherSelector(previous, imported, catalog);
+
     return previous && currentName && currentName.toLowerCase() !== previous.selector.toLowerCase()
       ? previous.slug
       : selector;
   });
+
   return {
     output,
     ownNames: catalog.names,
@@ -629,6 +710,7 @@ function retainedPublisherSelector(
   if (!previous) {
     return;
   }
+
   return (
     imported.find((item) => item.slug === previous.slug)?.selector ??
     (catalog.entries.has(previous.selector.toLowerCase())
@@ -646,16 +728,21 @@ async function stagePublisherCollection(options: {
 }) {
   const { runtime, selectFromCollection, selection, source, stagingDirectory } = options;
   const { allowEmptyCollection, explicit, inspectCollection, ownSelectors } = selection;
+
   const directory =
     inspectCollection && explicit
       ? path.join(stagingDirectory, "publisher-collection")
       : stagingDirectory;
+
   const catalog: PublisherSkillCatalog = { entries: new Map(), names: new Map(), slugs: new Set() };
   let output = { exitCode: 0, stderr: "", stdout: "" };
+
   if (!inspectCollection && ownSelectors.length === 0) {
     return { catalog, output };
   }
+
   mkdirSync(directory, { recursive: true });
+
   const { empty, installed } = await installPublisherSkills({
     allowEmptyCollection: allowEmptyCollection || (inspectCollection && explicit),
     directory,
@@ -665,10 +752,13 @@ async function stagePublisherCollection(options: {
     selectors: inspectCollection ? ["*"] : ownSelectors,
     source
   });
+
   if (!empty) {
     catalog.slugs = new Set(listStagedSkillSlugs(directory));
+
     if (inspectCollection) {
       const assessments = readJsonSecurityRiskAssessments(installed.stdout);
+
       for (const item of stagedSkillGuidance(directory, { skills: [], source })) {
         catalog.names.set(item.slug, item.selector);
         catalog.entries.set(item.selector.toLowerCase(), {
@@ -679,9 +769,11 @@ async function stagePublisherCollection(options: {
       }
     }
   }
+
   if (!inspectCollection || !explicit) {
     output = installed;
   }
+
   return { catalog, output };
 }
 
@@ -705,9 +797,11 @@ async function mergeAlternatePublisherCatalog(options: {
     source,
     stagingDirectory
   } = options;
+
   const { explicit, ownSelectors } = selection;
   const internalDirectory = path.join(stagingDirectory, "publisher-alternate-collection");
   mkdirSync(internalDirectory, { recursive: true });
+
   const { empty, installed } = await installPublisherSkills({
     allowEmptyCollection: true,
     directory: internalDirectory,
@@ -717,16 +811,21 @@ async function mergeAlternatePublisherCatalog(options: {
     selectors: ["*"],
     source
   });
+
   if (empty) {
     return;
   }
+
   const assessments = readJsonSecurityRiskAssessments(installed.stdout);
+
   for (const item of stagedSkillGuidance(internalDirectory, { skills: [], source })) {
     const selectedOwn =
       ownSelectors.includes("*") ||
       ownSelectors.some((selector) => selector.toLowerCase() === item.selector.toLowerCase());
+
     const directory = path.join(internalDirectory, ".agents/skills", item.slug);
     const previous = catalog.entries.get(item.selector.toLowerCase());
+
     if (
       rejectAmbiguity &&
       selectedOwn &&
@@ -737,9 +836,11 @@ async function mergeAlternatePublisherCatalog(options: {
         `Ambiguous Skill selector ${item.selector} in ${source}; default and internal discovery deliver different guidance`
       );
     }
+
     if (explicit && (!selectFromCollection || selectedOwn)) {
       catalog.slugs.add(item.slug);
     }
+
     if (!previous) {
       catalog.entries.set(item.selector.toLowerCase(), {
         assessment: assessments.get(item.selector.toLowerCase()),
@@ -747,6 +848,7 @@ async function mergeAlternatePublisherCatalog(options: {
         slug: item.slug
       });
     }
+
     if (!catalog.names.has(item.slug)) {
       catalog.names.set(item.slug, item.selector);
     }
@@ -760,22 +862,28 @@ function copyPublisherSelection(
   stagingDirectory: string
 ) {
   const missing = selectors.filter((selector) => !catalog.entries.has(selector.toLowerCase()));
+
   if (missing.length > 0) {
     throw new MonkeError(`Selected skills not found in ${source}: ${missing.join(", ")}`);
   }
+
   const assessments: SecurityRiskAssessment[] = [];
+
   for (const selector of new Set(selectors.map((item) => item.toLowerCase()))) {
     const skill = catalog.entries.get(selector.toLowerCase());
+
     if (skill) {
       if (skill.assessment) {
         assessments.push(skill.assessment);
       }
+
       cpSync(skill.directory, path.join(stagingDirectory, ".agents/skills", skill.slug), {
         recursive: true,
         verbatimSymlinks: true
       });
     }
   }
+
   return assessments;
 }
 
@@ -797,11 +905,14 @@ async function installPublisherSkills(options: {
     selectors,
     source
   } = options;
+
   const command = runtime.platform === "win32" ? "npx.cmd" : "npx";
   const args = buildSkillsInstallArgs({ selectors, source });
+
   if (inspectCollection) {
     args.push("--json");
   }
+
   const installed = await runtime.execAsync(command, args, {
     allowFailure: inspectCollection,
     cwd: directory,
@@ -809,14 +920,18 @@ async function installPublisherSkills(options: {
       ? { env: { INSTALL_INTERNAL_SKILLS: includeInternal ? "1" : "" } }
       : {})
   });
+
   if (installed.exitCode === 0) {
     return { empty: false, installed };
   }
+
   if (allowEmptyCollection && isEmptyPublisherCollection(installed)) {
     return { empty: true, installed: { ...installed, exitCode: 0 } };
   }
+
   const reason =
     installed.stderr.trim() || installed.stdout.trim() || `exit code ${installed.exitCode}`;
+
   throw new MonkeError(`Command failed: ${formatCommand(command, args)}\n${reason}`);
 }
 
@@ -824,6 +939,7 @@ function isEmptyPublisherCollection(output: ExecResult) {
   if (output.exitCode !== 1 || output.timedOut) {
     return false;
   }
+
   const schema = z.tuple([
     z.strictObject({
       error: z.literal(
@@ -832,6 +948,7 @@ function isEmptyPublisherCollection(output: ExecResult) {
       status: z.literal("failed")
     })
   ]);
+
   try {
     return schema.safeParse(JSON.parse(output.stdout)).success;
   } catch {
@@ -865,31 +982,40 @@ function publisherSkillSelection(options: {
     selectors,
     sourceRoot
   } = options;
+
   const selected = selectors.map((selector) => {
     const previous = findRetainedSkill(retainedSkills, selector);
+
     return imported.find((item) => item.slug === previous?.slug)?.slug ?? selector;
   });
+
   // Only skip the importer for declaration-only publishers. Upstream owns discovery
   // and installed names, including hidden catalogs and names unlike their folders.
   const sourceMayHaveOwnSkills =
     imported.length === 0 ||
     !new Bun.Glob("**/SKILL.md").scanSync({ cwd: sourceRoot, dot: true, onlyFiles: true }).next()
       .done;
+
   const declaredSelectors = new Set(
     imported.flatMap((item) => [item.slug.toLowerCase(), item.selector.toLowerCase()])
   );
+
   const ownSelectors = selected.filter(
     (selector) =>
       !declaredSelectors.has(selector.toLowerCase()) && (selector !== "*" || sourceMayHaveOwnSkills)
   );
+
   const explicit = !selectors.includes("*");
+
   const inspectCollection =
     sourceMayHaveOwnSkills &&
     (rejectAmbiguousSelection ||
       selectFromCollection ||
       imported.length > 0 ||
       (explicit && (retainedSkills?.length ?? 0) > 0));
+
   const allowEmptyCollection = imported.length > 0 && (!explicit || ownSelectors.length === 0);
+
   return { allowEmptyCollection, explicit, inspectCollection, ownSelectors, selected };
 }
 
@@ -903,27 +1029,33 @@ async function previousPublisherGuidance(
   if (!commit) {
     return [];
   }
+
   const available = await runtime.execAsync("git", ["cat-file", "-e", `${commit}^{commit}`], {
     allowFailure: true,
     cwd: checkout
   });
+
   if (available.exitCode !== 0) {
     await runtime.execAsync("git", ["fetch", "--quiet", "--depth", "1", "--", repository, commit], {
       cwd: checkout
     });
   }
+
   const config = await runtime.execAsync("git", ["show", `${commit}:monke.yml`], {
     allowFailure: true,
     cwd: checkout
   });
+
   if (config.exitCode !== 0) {
     return [];
   }
+
   const previous = parseOwnedYamlText(
     config.stdout,
     `monke.yml at ${commit}`,
     z.looseObject({ skills: RepoImportRecipesSchema.default([]) })
   );
+
   return previous.skills.flatMap((entry) => entry.skills);
 }
 
@@ -938,9 +1070,11 @@ export function stagedSkillGuidance(
     const entry = path.join(stagingDirectory, ".agents", "skills", slug, "SKILL.md");
     const imported = declared.find((item) => item.slug === slug);
     const existing = previous.skills.find((item) => item.slug === slug);
+
     const kind = options.preserveImportKinds
       ? (existing?.kind ?? imported?.kind)
       : (imported?.kind ?? existing?.kind);
+
     return {
       ...existing,
       kind: options.reference ? ("reference" as const) : (kind ?? ("skill" as const)),
@@ -954,26 +1088,33 @@ function stagedSkillSelector(entry: string, slug: string, imported?: SkillImport
   if (imported?.kind === "reference") {
     return imported.selector;
   }
+
   const frontmatter = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
     readFileSync(entry, "utf-8")
   );
+
   if (!frontmatter) {
     throw new MonkeError(`Expected leading YAML frontmatter at ${entry}`);
   }
+
   const metadata = parseOwnedYamlText(
     frontmatter.groups?.frontmatter ?? "{}",
     entry,
     z.looseObject({ name: z.string().optional() })
   );
+
   if (metadata.name === undefined) {
     return imported?.selector ?? slug;
   }
+
   const selector = sanitizeSkillMetadata(metadata.name);
+
   if (!selector) {
     throw new MonkeError(
       `Skill name normalizes to an empty selector at ${entry}; use a name containing visible characters`
     );
   }
+
   return selector;
 }
 
@@ -993,7 +1134,9 @@ export async function stageLockedRecipe(
     selectors: recipe.skills.map((skill) => skill.selector),
     stagingDirectory
   });
+
   const slugs = listStagedSkillSlugs(stagingDirectory);
+
   if (
     slugs.join("\0") !==
     recipe.skills
@@ -1003,6 +1146,7 @@ export async function stageLockedRecipe(
   ) {
     throw new MonkeError(`Locked Skill slugs changed for ${recipe.source}`);
   }
+
   return output;
 }
 
@@ -1013,27 +1157,34 @@ export function guidanceDigest(
   prepared = false
 ) {
   const hash = new Bun.CryptoHasher("sha256");
+
   for (const item of guidance.toSorted((a, b) =>
     compareSkillLockStrings(`${a.kind}/${a.slug}`, `${b.kind}/${b.slug}`)
   )) {
     const root = prepared
       ? path.join(repoRoot, item.kind, item.slug)
       : importedGuidancePath(repoRoot, item);
+
     if (!lstatSync(root, { throwIfNoEntry: false })?.isDirectory()) {
       throw new MonkeError(`Imported ${item.kind} root must be a regular directory: ${root}`);
     }
+
     const entry = path.join(root, item.kind === "reference" ? "MAIN.md" : "SKILL.md");
+
     if (!lstatSync(entry, { throwIfNoEntry: false })?.isFile()) {
       throw new MonkeError(`Missing or invalid Imported ${item.kind} entry at ${entry}`);
     }
+
     hashDirectory(root, root, `${item.kind}/${item.slug}`, hash);
   }
+
   return hash.digest("hex");
 }
 
 function skillDirectoryDigest(directory: string) {
   const hash = new Bun.CryptoHasher("sha256");
   hashDirectory(directory, directory, "skill", hash);
+
   return hash.digest("hex");
 }
 
@@ -1042,6 +1193,7 @@ function hashDirectory(root: string, directory: string, prefix: string, hash: Bu
     const entry = path.join(directory, name);
     const deliveredPath = `${prefix}/${path.relative(root, entry).split(path.sep).join("/")}`;
     const metadata = lstatSync(entry);
+
     if (metadata.isDirectory()) {
       hashDirectory(root, entry, prefix, hash);
     } else if (metadata.isFile()) {
@@ -1053,11 +1205,13 @@ function hashDirectory(root: string, directory: string, prefix: string, hash: Bu
       hash.update(bytes);
     } else if (metadata.isSymbolicLink()) {
       const target = readlinkSync(entry);
+
       if (path.isAbsolute(target) || !containsPath(root, path.resolve(directory, target))) {
         throw new MonkeError(
           `Imported symlink escapes its guidance directory: ${entry} -> ${target}`
         );
       }
+
       hash.update(JSON.stringify([deliveredPath, "symlink", target]));
     } else {
       throw new MonkeError(`Unsupported imported file at ${entry}`);
@@ -1123,12 +1277,15 @@ export async function restoreLockedRecipe(
       `Unpinned Skill import recipe: ${recipe.source}; run mt skills update --repo`
     );
   }
+
   if (isSkillRecipeRestored(repoRoot, recipe)) {
     return;
   }
+
   assertSkillRestoreMarker(repoRoot);
   const stagingDirectory = path.join(repoRoot, "tmp", `skill-restore-${crypto.randomUUID()}`);
   mkdirSync(stagingDirectory, { recursive: true });
+
   try {
     await stageLockedRecipe(recipe, stagingDirectory, repoRoot, includeDeclaredImports, runtime);
     assertSkillRestoreMarker(repoRoot);
@@ -1156,16 +1313,20 @@ export async function restoreLockedImports(
 ) {
   assertManagedGuidanceRoots(repoRoot);
   const { recipes } = store ?? readImportRecipeStore(repoRoot);
+
   if (recipes.some((recipe) => !recipe.localSource && !recipe.commit)) {
     throw new MonkeError(
       "Skill lock is incomplete; run mt skills update --repo to pin every recipe before source installation"
     );
   }
+
   if (existsSync(path.join(repoRoot, "monke.yml"))) {
     ignoreRepoImports(repoRoot, runtime);
   }
+
   const restore = pLimit(4);
   const stagingDirectories: string[] = [];
+
   try {
     // Keep the mutation lock until every preparation settles, even when a sibling fails.
     const results = await Promise.allSettled(
@@ -1174,11 +1335,13 @@ export async function restoreLockedImports(
         .map((recipe) =>
           restore(async () => {
             assertSkillRestoreMarker(repoRoot);
+
             const stagingDirectory = path.join(
               repoRoot,
               "tmp",
               `skill-restore-${crypto.randomUUID()}`
             );
+
             stagingDirectories.push(stagingDirectory);
             mkdirSync(stagingDirectory, { recursive: true });
             await stageLockedRecipe(
@@ -1188,10 +1351,12 @@ export async function restoreLockedImports(
               includeDeclaredImports,
               runtime
             );
+
             const guidance = recipe.skills.map((item) => ({
               ...item,
               disableModelInvocation: item.disableModelInvocation ?? recipe.disableModelInvocation
             }));
+
             const preparedRoot = path.join(stagingDirectory, "prepared");
             prepareStagedGuidance(
               guidance,
@@ -1199,18 +1364,24 @@ export async function restoreLockedImports(
               preparedRoot
             );
             guidanceDigest(preparedRoot, recipe.skills, true);
+
             return { guidance, preparedRoot, recipe };
           })
         )
     );
+
     const prepared = results.flatMap((result) =>
       result.status === "fulfilled" ? [result.value] : []
     );
+
     const failed = results.find((result) => result.status === "rejected");
+
     if (failed && commitState) {
       throw failed.reason;
     }
+
     const guidance = prepared.flatMap((result) => result.guidance);
+
     const stagedPaths = new Map(
       prepared.flatMap(({ preparedRoot, recipe }) =>
         recipe.skills.map(
@@ -1219,15 +1390,18 @@ export async function restoreLockedImports(
         )
       )
     );
+
     const obsolete = failed
       ? []
       : obsoleteImportedGuidance(
           repoRoot,
           recipes.flatMap((recipe) => recipe.skills)
         );
+
     if (guidance.length > 0) {
       assertSkillRestoreMarker(repoRoot);
     }
+
     if (guidance.length > 0 || obsolete.length > 0) {
       copyStagedGuidanceToManagedRoots({
         commitState: failed ? undefined : commitState,
@@ -1237,9 +1411,11 @@ export async function restoreLockedImports(
         repoRoot,
         stagedGuidancePath(item) {
           const source = stagedPaths.get(`${item.kind}:${item.slug}`);
+
           if (!source) {
             throw new MonkeError(`Missing staged ${item.kind} ${item.slug}`);
           }
+
           return source;
         },
         stagingDirectory: repoRoot
@@ -1247,9 +1423,11 @@ export async function restoreLockedImports(
     } else if (!failed) {
       commitState?.();
     }
+
     for (const { recipe } of prepared) {
       rememberRestoredRecipe(repoRoot, recipe);
     }
+
     if (failed) {
       throw failed.reason;
     }
@@ -1262,12 +1440,15 @@ export async function restoreLockedImports(
 
 function obsoleteImportedGuidance(repoRoot: string, guidance: readonly SkillImportRecipeSkill[]) {
   assertManagedGuidanceRoots(repoRoot);
+
   const managedRoots = [
     { kind: "skill", root: path.join(repoRoot, IMPORTED_SKILLS_ROOT) },
     { kind: "reference", root: path.join(repoRoot, IMPORTED_REFERENCES_ROOT) }
   ] as const;
+
   return managedRoots.flatMap(({ kind, root }) => {
     const owned = new Set(guidance.filter((item) => item.kind === kind).map((item) => item.slug));
+
     return (existsSync(root) ? readdirSync(root) : [])
       .filter((slug) => !owned.has(slug))
       .map((slug) => ({ kind, slug }));
@@ -1282,6 +1463,7 @@ export function pruneImportedGuidance(repoRoot: string, guidance: SkillImportRec
     obsolete,
     obsolete.map((item) => importedGuidancePath(repoRoot, item))
   );
+
   for (const item of obsolete) {
     rmSync(importedGuidancePath(repoRoot, item), { force: true, recursive: true });
   }

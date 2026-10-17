@@ -29,12 +29,15 @@ const DEFAULT_RESOURCE_COMMAND_TIMEOUT_SECONDS = 60;
 const NonEmptyStringSchema = z
   .string({ error: "must be a non-empty string" })
   .refine((value) => value.trim().length > 0, { error: "must be a non-empty string" });
+
 const EnvNameSchema = z
   .string({ error: "must be an uppercase env name" })
   .regex(ENV_RE, { error: "must be an uppercase env name" });
+
 const PortNameSchema = z
   .string({ error: "must be an uppercase env name ending in _PORT" })
   .regex(PORT_RE, { error: "must be an uppercase env name ending in _PORT" });
+
 const LabelSchema = z
   .string({ error: "must be a string" })
   .regex(LABEL_RE, { error: "must be lowercase alphanumeric plus hyphen" });
@@ -43,16 +46,19 @@ const LocalMappingSchema = z.strictObject({
   env: EnvNameSchema,
   port: PortNameSchema
 });
+
 const AppSchema = z.strictObject({
   envFile: NonEmptyStringSchema.optional(),
   mappings: z.array(LocalMappingSchema, { error: "must be an array" }).default([]),
   path: NonEmptyStringSchema
 });
+
 const ExternalMappingSchema = z.strictObject({
   app: LabelSchema,
   env: EnvNameSchema,
   port: PortNameSchema
 });
+
 const ExternalRepoSchema = z.strictObject({
   mappings: z
     .array(ExternalMappingSchema, { error: "must be a non-empty array" })
@@ -60,6 +66,7 @@ const ExternalRepoSchema = z.strictObject({
   path: NonEmptyStringSchema,
   pathEnv: EnvNameSchema
 });
+
 const ResourceCommandSchema = z.strictObject({
   acquire: z.enum(["automatic", "explicit"]).optional(),
   outputs: z
@@ -72,16 +79,19 @@ const ResourceCommandSchema = z.strictObject({
     .positive({ error: "must be a positive integer" })
     .default(DEFAULT_RESOURCE_COMMAND_TIMEOUT_SECONDS)
 });
+
 const ResourceValuesSchema = z
   .record(EnvNameSchema, NonEmptyStringSchema)
   .refine((values) => Object.keys(values).length > 0, {
     error: "must declare at least one value"
   });
+
 const ResourceCommandsSchema = z
   .record(LabelSchema, ResourceCommandSchema)
   .refine((commands) => Object.keys(commands).length > 0, {
     error: "must declare at least one command"
   });
+
 const ResourcesSchema = z
   .strictObject({
     commands: ResourceCommandsSchema.optional(),
@@ -90,6 +100,7 @@ const ResourcesSchema = z
   .refine((resources) => resources.values !== undefined || resources.commands !== undefined, {
     error: "must contain values or commands"
   });
+
 const RawRepoConfigSchema = z.strictObject({
   apps: z.record(LabelSchema, AppSchema).default({}),
   bootstrapCommand: NonEmptyStringSchema.optional(),
@@ -101,6 +112,7 @@ const RawRepoConfigSchema = z.strictObject({
 });
 
 type RawRepoConfig = z.output<typeof RawRepoConfigSchema>;
+
 type RawResources = z.output<typeof ResourcesSchema>;
 
 /** Alternate repo-content readers used when resolving a Session graph. */
@@ -135,24 +147,30 @@ export function loadResolvedGraph(
     }
 
     visited.add(sourceRoot);
+
     for (const externalRepo of config.externalInOrder) {
       visit(externalRepo.absoluteRepoRoot);
     }
+
     reposInOrder.push(config);
+
     return config;
   }
 
   visit(rootSourceRoot);
 
   const ownerByPortKey = new Map<string, string>();
+
   for (const repo of reposInOrder) {
     for (const portKey of repo.localPortOrder) {
       const existingOwner = ownerByPortKey.get(portKey);
+
       if (existingOwner !== undefined && existingOwner !== repo.sourceRoot) {
         throw new MonkeError(
           `Port key ${portKey} is owned by both ${existingOwner} and ${repo.sourceRoot}`
         );
       }
+
       ownerByPortKey.set(portKey, repo.sourceRoot);
     }
   }
@@ -176,11 +194,13 @@ function loadRepoConfig(
   }
 
   const cached = cache.get(sourceRoot);
+
   if (cached) {
     return cached;
   }
 
   visiting.add(sourceRoot);
+
   try {
     const configPath = path.join(sourceRoot, "monke.yml");
     const configText = options.readRepoConfig(sourceRoot);
@@ -196,6 +216,7 @@ function loadRepoConfig(
         visiting,
         options
       );
+
       const dependencyLocalPorts = new Set(dependency.localPortOrder);
 
       for (const mapping of externalRepo.mappings) {
@@ -208,6 +229,7 @@ function loadRepoConfig(
     }
 
     cache.set(sourceRoot, repoConfig);
+
     return repoConfig;
   } finally {
     visiting.delete(sourceRoot);
@@ -224,6 +246,7 @@ function parseRepoConfigObject(
   const { bootstrapCommand } = config;
   const { cleanupCommand } = config;
   const seedPaths = parseSeedPaths(config.seedPaths, sourceRoot, configPath);
+
   const { resourceCommandsInOrder, resourceValuesInOrder } = parseResources(
     config.resources,
     configPath
@@ -238,11 +261,13 @@ function parseRepoConfigObject(
   for (const [label, rawApp] of Object.entries(config.apps)) {
     const relativePath = rawApp.path;
     const relativeEnvFile = rawApp.envFile ?? DEFAULT_ENV_FILE;
+
     const absoluteAppPath = resolveInside(
       sourceRoot,
       relativePath,
       `${configPath}#apps.${label}.path`
     );
+
     const absoluteEnvFilePath = resolveInside(
       absoluteAppPath,
       relativeEnvFile,
@@ -258,13 +283,16 @@ function parseRepoConfigObject(
     }
 
     const localMappings: LocalMapping[] = [];
+
     for (const rawMapping of rawApp.mappings) {
       const portKey = rawMapping.port;
       const targetEnv = rawMapping.env;
       const targetKey = `${label}\u0000${targetEnv}`;
+
       if (claimedTargets.has(targetKey)) {
         throw new MonkeError(`Duplicate rewrite target ${label}.${targetEnv} in ${configPath}`);
       }
+
       claimedTargets.set(targetKey, portKey);
 
       if (!localPorts.has(portKey)) {
@@ -295,14 +323,17 @@ function parseRepoConfigObject(
     const relativePath = rawExternal.path;
     const { pathEnv } = rawExternal;
     const existingPathEnvOwner = externalPathEnvOwners.get(pathEnv);
+
     if (existingPathEnvOwner !== undefined) {
       throw new MonkeError(
         `Duplicate external pathEnv ${pathEnv} in ${configPath} for ${existingPathEnvOwner} and ${label}`
       );
     }
+
     externalPathEnvOwners.set(pathEnv, label);
     const absoluteRepoRoot = path.resolve(sourceRoot, relativePath);
     const resolvedRepoRoot = resolveGitRepoRoot(runtime, absoluteRepoRoot);
+
     if (path.normalize(resolvedRepoRoot) !== path.normalize(absoluteRepoRoot)) {
       throw new MonkeError(
         `External dependency ${label} must point to the dependency repo root exactly: ${absoluteRepoRoot}`
@@ -316,6 +347,7 @@ function parseRepoConfigObject(
     }
 
     const mappings: ExternalMapping[] = [];
+
     for (const rawMapping of rawExternal.mappings) {
       const portKey = rawMapping.port;
       const targetApp = rawMapping.app;
@@ -326,9 +358,11 @@ function parseRepoConfigObject(
       }
 
       const targetKey = `${targetApp}\u0000${targetEnv}`;
+
       if (claimedTargets.has(targetKey)) {
         throw new MonkeError(`Duplicate rewrite target ${targetApp}.${targetEnv} in ${configPath}`);
       }
+
       claimedTargets.set(targetKey, `${label}:${portKey}`);
       externalTargetApps.add(targetApp);
 
@@ -337,6 +371,7 @@ function parseRepoConfigObject(
         targetApp,
         targetEnv
       };
+
       mappings.push(externalMapping);
       externalMappingsInOrder.push(externalMapping);
     }
@@ -374,9 +409,11 @@ function parseRepoConfigObject(
 
 function readRepoConfigFromFilesystem(sourceRoot: string) {
   const configPath = path.join(sourceRoot, "monke.yml");
+
   if (!existsSync(configPath)) {
     throw new MonkeError(`Expected monke.yml at ${configPath}`);
   }
+
   return readFileSync(configPath, "utf-8");
 }
 
@@ -386,9 +423,11 @@ function pathExistsOnFilesystem(sourceRoot: string, relativePath: string) {
 
 function resolveInside(root: string, relativePath: string, location: string) {
   const resolved = path.resolve(root, relativePath);
+
   if (!containsPath(root, resolved)) {
     throw new MonkeError(`${location} must resolve inside ${root}`);
   }
+
   return resolved;
 }
 
@@ -410,7 +449,9 @@ function parseSeedPaths(
       relativePath,
       `${configPath}#seedPaths[${index}]`
     );
+
     const normalizedPath = path.normalize(absolutePath);
+
     if (relativePath === "." || normalizedPath === path.normalize(sourceRoot)) {
       throw new MonkeError(
         `${configPath}#seedPaths[${index}] cannot point at the repo root; seedPath "." is not allowed`
@@ -418,6 +459,7 @@ function parseSeedPaths(
     }
 
     const existing = seen.get(normalizedPath);
+
     if (existing !== undefined) {
       throw new MonkeError(
         `Duplicate seedPath ${relativePath} in ${configPath}; already declared as ${existing}`
@@ -439,6 +481,7 @@ function parseResources(resources: RawResources | undefined, configPath: string)
   const seenEnvNames = new Set<string>();
 
   const resourceValuesInOrder: ResourceValueConfig[] = [];
+
   if (resources.values !== undefined) {
     for (const [env, literal] of Object.entries(resources.values)) {
       claimResourceEnvName(seenEnvNames, env, configPath);
@@ -450,6 +493,7 @@ function parseResources(resources: RawResources | undefined, configPath: string)
   }
 
   const resourceCommandsInOrder: ResourceCommandConfig[] = [];
+
   if (resources.commands !== undefined) {
     for (const [name, commandValue] of Object.entries(resources.commands)) {
       const outputs = requireResourceCommandOutputs(
@@ -458,6 +502,7 @@ function parseResources(resources: RawResources | undefined, configPath: string)
         seenEnvNames,
         configPath
       );
+
       resourceCommandsInOrder.push({
         ...(commandValue.acquire ? { acquire: commandValue.acquire } : {}),
         name,
@@ -478,6 +523,7 @@ function claimResourceEnvName(seenEnvNames: Set<string>, env: string, configPath
   if (seenEnvNames.has(env)) {
     throw new MonkeError(`Duplicate resource env name ${env} in ${configPath}`);
   }
+
   seenEnvNames.add(env);
 }
 
@@ -489,14 +535,17 @@ function requireResourceCommandOutputs(
 ) {
   const outputs: string[] = [];
   const seenOutputs = new Set<string>();
+
   for (const env of value) {
     if (seenOutputs.has(env)) {
       throw new MonkeError(`Duplicate resource command output ${env} at ${location}`);
     }
+
     seenOutputs.add(env);
     claimResourceEnvName(seenEnvNames, env, configPath);
     outputs.push(env);
   }
+
   return outputs;
 }
 
@@ -506,6 +555,7 @@ function requireResourceCommandRunPath(relativePath: string, location: string) {
   }
 
   const normalizedPath = path.normalize(relativePath);
+
   if (
     normalizedPath === "." ||
     normalizedPath.startsWith(`..${path.sep}`) ||
@@ -525,6 +575,7 @@ function requireResourceCommandRunPath(relativePath: string, location: string) {
 function requireResourceLiteral(literal: string, location: string) {
   for (const match of literal.matchAll(/\$\{(?<placeholder>[^}]*)\}/gu)) {
     const placeholder = match.groups?.placeholder ?? "";
+
     if (placeholder !== "session" && placeholder !== "user" && placeholder !== "id") {
       throw new MonkeError(
         `${location} contains unsupported placeholder \${${placeholder}}; supported placeholders are \${session}, \${user}, and \${id}`

@@ -16,21 +16,28 @@ export function relativeMarkdownLinks(source: string) {
     if (node.type !== "link" && node.type !== "image" && node.type !== "definition") {
       return;
     }
+
     const raw = node.url;
+
     if (raw.startsWith("/") || raw.startsWith("#") || URL_SCHEME.test(raw)) {
       return;
     }
+
     let destination = raw.split("#")[0] ?? "";
+
     if (!destination) {
       return;
     }
+
     try {
       destination = decodeURIComponent(destination);
     } catch {
       // A literal percent sign can occur in a local filename.
     }
+
     links.push({ destination, line: node.position?.start.line ?? 1, raw });
   });
+
   return links;
 }
 
@@ -38,8 +45,10 @@ export function relativeMarkdownLinks(source: string) {
 export async function checkSkillLinks(root: string) {
   const files = Object.keys(hashReleaseGuidance(root));
   const targets = new Set(files);
+
   for (const file of files) {
     let directory = path.dirname(file);
+
     while (directory !== ".") {
       targets.add(directory);
       directory = path.dirname(directory);
@@ -54,20 +63,25 @@ export async function checkSkillLinks(root: string) {
         source: await Bun.file(path.join(root, file)).text()
       }))
   );
+
   const failures: string[] = [];
+
   for (const { file, source } of documents) {
     for (const { destination, line, raw } of relativeMarkdownLinks(source)) {
       const target = path.relative(root, path.resolve(root, path.dirname(file), destination));
+
       if (!targets.has(target)) {
         failures.push(`${file}:${String(line)}: missing packaged link target: ${raw}`);
       }
     }
   }
+
   return failures;
 }
 
 async function main() {
   const failures = await checkSkillLinks(path.resolve(import.meta.dirname, ".."));
+
   if (failures.length > 0) {
     process.stderr.write(`${failures.join("\n")}\n`);
     process.exitCode = 1;

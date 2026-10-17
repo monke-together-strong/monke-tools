@@ -18,4 +18,5 @@ export const ReleaseCatalogEntrySchema = looseObject({
 export const ReleaseCatalogPageSchema = array(ReleaseCatalogEntrySchema);
 
 export type ReleaseCatalogAsset = output<typeof ReleaseCatalogAssetSchema>;
+
 export type ReleaseCatalogEntry = output<typeof ReleaseCatalogEntrySchema>;

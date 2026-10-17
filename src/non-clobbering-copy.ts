@@ -47,30 +47,42 @@ function copyEntry(
   policy: NonClobberingCopyPolicy
 ) {
   const sourceStat = lstatSync(sourcePath, { throwIfNoEntry: false });
+
   if (!sourceStat) {
     policy.onMissingSource(sourcePath);
+
     return;
   }
+
   const targetStat = lstatSync(targetPath, { throwIfNoEntry: false });
+
   if (targetStat) {
     if (sourceStat.isDirectory() && targetStat.isDirectory()) {
       copyDirectoryEntries(sourcePath, targetPath, relativePath, policy);
+
       return;
     }
+
     policy.onConflict({ relativePath, sourcePath, sourceStat, targetPath, targetStat });
+
     return;
   }
 
   mkdirSync(path.dirname(targetPath), { recursive: true });
+
   if (sourceStat.isDirectory()) {
     mkdirSync(targetPath);
     copyDirectoryEntries(sourcePath, targetPath, relativePath, policy);
+
     return;
   }
+
   if (sourceStat.isSymbolicLink()) {
     symlinkSync(readlinkSync(sourcePath), targetPath);
+
     return;
   }
+
   policy.writeFile({ relativePath, sourcePath, sourceStat, targetPath });
 }
 

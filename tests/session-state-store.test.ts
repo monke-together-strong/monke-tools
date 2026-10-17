@@ -1,7 +1,7 @@
 import { closeSync, openSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   allocateLocalPorts,
@@ -15,7 +15,7 @@ import type { RepoConfig, RepoReservation } from "../src/types.ts";
 import { completeSessionState, makeTempDir, materializedRepoState, write } from "./helpers.ts";
 
 describe("Session state store", () => {
-  test("missing retained state stays explicit", () => {
+  it("keeps missing retained state explicit", () => {
     const home = makeTempDir("session-state-store-missing");
     const store = new SessionStateStore(home);
 
@@ -26,19 +26,22 @@ describe("Session state store", () => {
     expect(store.list()).toStrictEqual([]);
   });
 
-  test("checkpoints atomically replace disk state and expose only committed snapshots", () => {
+  it("replaces disk state atomically on checkpoint and exposes only committed snapshots", () => {
     const home = makeTempDir("session-state-store-atomic");
     const store = new SessionStateStore(home);
+
     const original = completeSessionState({
       repos: [materializedRepoState({ sourceRoot: "/repo", worktreePath: "/worktree" })],
       rootSourceRoot: "/repo",
       session: "atomic"
     });
+
     store.checkpoint(original);
     const filePath = getSessionStateFilePath(home, "/repo", "atomic");
     const originalText = readFileSync(filePath, "utf-8");
     const openReader = openSync(filePath, "r");
     const updated = { ...original, copyDirty: false };
+
     try {
       store.checkpoint(updated);
       // A reader of the previous inode sees the complete old checkpoint, never an overwritten file.
@@ -46,6 +49,7 @@ describe("Session state store", () => {
     } finally {
       closeSync(openReader);
     }
+
     expect(loadSessionState(home, "/repo", "atomic")).toStrictEqual(updated);
     expect(store.get("/repo", "atomic")).toStrictEqual(updated);
     expect(readdirSync(path.dirname(filePath))).toStrictEqual([path.basename(filePath)]);
@@ -59,14 +63,16 @@ describe("Session state store", () => {
 
     updated.copyDirty = true;
     const borrowed = store.get("/repo", "atomic");
+
     if (!borrowed) {
       throw new Error("expected retained checkpoint");
     }
+
     borrowed.copyDirty = true;
     expect(store.get("/repo", "atomic")?.copyDirty).toBeFalsy();
   });
 
-  test("loadSessionState accepts strict v2 repo lifecycle state without an optional Diff base", () => {
+  it("accepts strict v2 repo lifecycle state without an optional Diff base in loadSessionState", () => {
     const sandbox = makeTempDir("session-state-store-v2-diff-base");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -93,7 +99,7 @@ repos:
     expect(loadSessionState(home, sourceRoot, "banana").repos[0]?.diffBaseRef).toBeUndefined();
   });
 
-  test("loadSessionState rejects an externally persisted empty Diff base", () => {
+  it("rejects an externally persisted empty Diff base in loadSessionState", () => {
     const sandbox = makeTempDir("session-state-store-invalid-diff-base");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -121,7 +127,7 @@ repos:
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(/diffBaseRef/u);
   });
 
-  test("loadSessionState rejects corrupt persisted state with the file and field path", () => {
+  it("rejects corrupt persisted state in loadSessionState with the file and field path", () => {
     const sandbox = makeTempDir("session-state-store-corrupt-session");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -144,7 +150,7 @@ repos: wrong
     );
   });
 
-  test("loadSessionState rejects persisted assigned ports with invalid port keys", () => {
+  it("rejects persisted assigned ports with invalid port keys in loadSessionState", () => {
     const sandbox = makeTempDir("session-state-store-invalid-port-key");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -173,7 +179,7 @@ repos:
     expect(() => loadSessionState(home, sourceRoot, "invalid-port-key")).toThrow(/assignedPorts/u);
   });
 
-  test("loadSessionState rejects payload identity that differs from its storage key", () => {
+  it("rejects payload identity that differs from its storage key in loadSessionState", () => {
     const sandbox = makeTempDir("session-state-store-identity-mismatch");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -200,7 +206,7 @@ repos:
     expect(() => loadSessionState(home, sourceRoot, "expected")).toThrow(/identity.*storage/u);
   });
 
-  test("loadSessionState rejects unknown keys in application-owned state", () => {
+  it("rejects application-owned state with unknown keys in loadSessionState", () => {
     const sandbox = makeTempDir("session-state-store-unknown-session-key");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -230,7 +236,7 @@ typo: true
     );
   });
 
-  test.each([
+  it.each([
     {
       expected: /complete generation requires every repo to be prepared and materialized/u,
       name: "a complete generation with pending materialization",
@@ -746,7 +752,7 @@ typo: true
         version: 2
       }
     }
-  ])("loadSessionState rejects $name", ({ expected, state }) => {
+  ])("rejects $name in loadSessionState", ({ expected, state }) => {
     const sandbox = makeTempDir("session-state-store-lifecycle-invariant");
     // Pin the named invariant: several of these states also trip a second, incidental rule,
     // so matching only /Invalid/ would not prove the intended one fired.
@@ -756,7 +762,7 @@ typo: true
     expect(() => loadSessionState(home, state.rootSourceRoot, state.session)).toThrow(expected);
   });
 
-  test.each([1, 3])("loadSessionState rejects unsupported version %i", (version) => {
+  it.each([1, 3])("rejects unsupported version %i in loadSessionState", (version) => {
     const sandbox = makeTempDir("session-state-store-future-session-version");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -776,7 +782,7 @@ repos: []
     );
   });
 
-  test("targeted state checks recognize escaped worktree paths in corrupt YAML", () => {
+  it("recognizes escaped worktree paths in corrupt YAML during targeted state checks", () => {
     const sandbox = makeTempDir("session-state-store-escaped-corrupt-session");
     const home = path.join(sandbox, "home");
     const worktreePath = String.raw`C:\worktrees\banana`;
@@ -798,7 +804,7 @@ repos:
     );
   });
 
-  test("loadSessionState rejects malformed persisted values", () => {
+  it("rejects malformed persisted values in loadSessionState", () => {
     const sandbox = makeTempDir("session-state-store-invalid-write");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -820,16 +826,18 @@ repos:
     );
   });
 
-  test("getOrCreateReservation rejects corrupt persisted reservations", () => {
+  it("rejects corrupt persisted reservations in getOrCreateReservation", () => {
     const sandbox = makeTempDir("session-state-store-corrupt-reservation");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     getOrCreateReservation(home, sourceRoot, 1);
     const reservationDirectory = path.join(home, "repo-reservations");
     const [reservationName] = readdirSync(reservationDirectory);
+
     if (reservationName === undefined) {
       throw new Error("expected a reservation file");
     }
+
     write(
       reservationDirectory,
       reservationName,
@@ -845,7 +853,7 @@ size: wrong
     );
   });
 
-  test.each([
+  it.each([
     {
       contents: (sourceRoot: string) =>
         `version: 1
@@ -867,22 +875,24 @@ size: 1000
       expected: /version/u,
       name: "unknown future versions"
     }
-  ])("getOrCreateReservation rejects $name", ({ contents, expected }) => {
+  ])("rejects $name in getOrCreateReservation", ({ contents, expected }) => {
     const sandbox = makeTempDir("session-state-store-reservation-versioning");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
     getOrCreateReservation(home, sourceRoot, 1);
     const reservationDirectory = path.join(home, "repo-reservations");
     const [reservationName] = readdirSync(reservationDirectory);
+
     if (reservationName === undefined) {
       throw new Error("expected a reservation file");
     }
+
     write(reservationDirectory, reservationName, contents(sourceRoot));
 
     expect(() => getOrCreateReservation(home, sourceRoot, 1)).toThrow(expected);
   });
 
-  test("allocateLocalPorts skips ports that are already taken inside the reserved block", async () => {
+  it("skips ports that are already taken inside the reserved block in allocateLocalPorts", async () => {
     const sandbox = makeTempDir("session-state-store-taken");
     const repoConfig = makeRepoConfig(path.join(sandbox, "root"), ["API_PORT"]);
 
@@ -893,10 +903,13 @@ size: 1000
       hostname: "127.0.0.1",
       port: 0
     });
+
     const occupiedPort = listener.port;
+
     if (occupiedPort === undefined) {
       throw new Error("expected Bun.serve to bind a TCP port");
     }
+
     const reservation = makeReservation(repoConfig.sourceRoot, occupiedPort, 2);
 
     try {
@@ -916,7 +929,7 @@ size: 1000
     }
   });
 
-  test("allocateLocalPorts skips baseline local-dev ports before choosing session ports", () => {
+  it("skips baseline local-dev ports in allocateLocalPorts before choosing session ports", () => {
     const sandbox = makeTempDir("session-state-store-baseline");
     const repoConfig = makeRepoConfig(path.join(sandbox, "root"), ["API_PORT"]);
     const reservation = makeReservation(repoConfig.sourceRoot, 10_000, 2);
@@ -934,7 +947,7 @@ size: 1000
     expect(assignments.get("API_PORT")).toBe(10_001);
   });
 
-  test("getOrCreateReservation fails instead of resizing an existing repo block", () => {
+  it("fails in getOrCreateReservation instead of resizing an existing repo block", () => {
     const sandbox = makeTempDir("session-state-store-overflow");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -948,7 +961,7 @@ size: 1000
     );
   });
 
-  test("getOrCreateReservation leaves spare ports for multiple retained sessions", () => {
+  it("leaves spare ports for multiple retained sessions in getOrCreateReservation", () => {
     const sandbox = makeTempDir("session-state-store-capacity");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -956,6 +969,7 @@ size: 1000
     const reservation = getOrCreateReservation(home, sourceRoot, repoConfig.localPortOrder.length);
 
     const store = new SessionStateStore(home);
+
     const firstSession = allocateLocalPorts({
       baselinePorts: new Set(),
       existingRepoState: undefined,
@@ -965,6 +979,7 @@ size: 1000
       session: "one",
       store
     });
+
     store.checkpoint({
       generation: { number: 1, status: "complete" },
       repos: [
@@ -981,6 +996,7 @@ size: 1000
       session: "one",
       version: 2
     });
+
     const secondSession = allocateLocalPorts({
       baselinePorts: new Set(),
       existingRepoState: undefined,

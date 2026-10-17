@@ -8,6 +8,7 @@ export const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
 export function prepareActiveRelease(monkeHome: string, version: string, activate = true) {
   const installRoot = path.join(monkeHome, "installs", `release-${version}-linux-x64`);
+
   const guidance = {
     "instructions/GLOBAL.md": "Release baseline.\n",
     "skills/codex/.keep": "\n",
@@ -15,9 +16,11 @@ export function prepareActiveRelease(monkeHome: string, version: string, activat
     "skills/internal/example/SKILL.md": "---\nname: example\n---\n",
     "skills/references/internal/example.md": "Release reference.\n"
   };
+
   for (const [filePath, contents] of Object.entries(guidance)) {
     write(installRoot, filePath, contents);
   }
+
   write(
     installRoot,
     "install-manifest.json",
@@ -41,10 +44,12 @@ export function prepareActiveRelease(monkeHome: string, version: string, activat
       toolBuildIdentity: version
     })}\n`
   );
+
   if (activate) {
     mkdirSync(monkeHome, { recursive: true });
     symlinkSync(path.relative(monkeHome, installRoot), path.join(monkeHome, "current"), "dir");
   }
+
   return installRoot;
 }
 
@@ -78,6 +83,7 @@ export function prepareActiveLocal(
   );
   mkdirSync(monkeHome, { recursive: true });
   symlinkSync(path.relative(monkeHome, installRoot), path.join(monkeHome, "current"), "dir");
+
   return installRoot;
 }
 
@@ -85,11 +91,13 @@ function localInstallId(sourceDirty: boolean, sourceCommit: string) {
   if (sourceDirty) {
     return "local-dirty";
   }
+
   return sourceCommit === SOURCE_COMMIT ? "local-clean-same" : "local-clean-different";
 }
 
 export function release(version: string, options: { draft?: boolean; prerelease?: boolean } = {}) {
   const tag = `monke-tools-v${version}`;
+
   return {
     assets: [
       {
@@ -123,6 +131,7 @@ export function prepareReleaseAsset(
   const archiveName = `${tag}-linux-x64.tar.gz`;
   const checksumsName = `${tag}-checksums.txt`;
   const bundleRoot = path.join(sandbox, `bundle-${version}`);
+
   const guidance = {
     "instructions/GLOBAL.md": `Release ${version} baseline.\n`,
     "skills/codex/.keep": "\n",
@@ -130,12 +139,15 @@ export function prepareReleaseAsset(
     "skills/internal/example/SKILL.md": `---\nname: example-${version}\n---\n`,
     "skills/references/internal/example.md": `Release ${version} reference.\n`
   };
+
   for (const [filePath, contents] of Object.entries(guidance)) {
     write(bundleRoot, filePath, contents);
   }
+
   writeExecutable(path.join(bundleRoot, "install.sh"), "#!/bin/sh\nexit 0\n");
   const executableContents = `#!/bin/sh\nprintf '%s\\n' '${version}'\n`;
   writeExecutable(path.join(bundleRoot, "mt"), executableContents);
+
   const manifest = {
     artifactDigest: hash("sha256", executableContents, "hex"),
     artifactName: archiveName,
@@ -155,20 +167,26 @@ export function prepareReleaseAsset(
     sourceCommit: options.manifestSourceCommit ?? SOURCE_COMMIT,
     toolBuildIdentity: version
   };
+
   write(bundleRoot, "install-manifest.json", `${JSON.stringify(manifest)}\n`);
   const archivePath = path.join(sandbox, archiveName);
   const tar = Bun.spawnSync({ cmd: ["tar", "-czf", archivePath, "-C", bundleRoot, "."] });
+
   if (tar.exitCode !== 0) {
     throw new Error(`Could not prepare Release archive fixture: ${tar.stderr.toString()}`);
   }
+
   const archive = new Uint8Array(readFileSync(archivePath));
   const checksums = new TextEncoder().encode(`${hash("sha256", archive, "hex")}  ${archiveName}\n`);
   const metadata = release(version);
   const [archiveAsset, checksumsAsset] = metadata.assets;
+
   if (!archiveAsset || !checksumsAsset) {
     throw new Error("Release test fixture assets are missing");
   }
+
   archiveAsset.digest = `sha256:${hash("sha256", archive, "hex")}`;
   checksumsAsset.digest = `sha256:${hash("sha256", checksums, "hex")}`;
+
   return { archive, archiveName, checksums, checksumsName, manifest, metadata };
 }

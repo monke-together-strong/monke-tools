@@ -27,6 +27,7 @@ import type { Runtime } from "./types.ts";
 /** Prompt for a Skill install preference, save it, and reconcile selected Agent skill roots. */
 export function runSkillsConfigure(runtime: Runtime) {
   const monkeHome = getMonkeHome(runtime);
+
   return withInstallMutationLockAsync(monkeHome, () => runSkillsConfigureLocked(runtime));
 }
 
@@ -35,25 +36,31 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
   const homeDirectory = getHomeDirectory(runtime);
   const config = loadGlobalMonkeConfig(monkeHome);
   const activeInstall = loadFixedToolInstall(runtime, monkeHome);
+
   const guidanceSourceRoot =
     guidanceSourceRootOverride ??
     (activeInstall?.manifest.installKind === "local"
       ? activeInstall.manifest.sourceCheckout
       : activeInstall?.installRoot);
+
   if (!guidanceSourceRoot) {
     throw new MonkeError("Active tool install is not configured; install monke-tools first");
   }
+
   if (!guidanceSourceRootOverride && activeInstall?.manifest.installKind === "local") {
     await restoreRepoSkillImports(guidanceSourceRoot);
   }
+
   resolveSkillSourceTree(guidanceSourceRoot);
 
   const previousPreference = config.skillInstallPreference ?? null;
+
   const nextPreference = await promptForSkillInstallPreference(
     runtime,
     previousPreference,
     homeDirectory
   );
+
   reconcileSkillNamespaces({
     cwd: runtime.cwd,
     environment: runtime.env,
@@ -65,32 +72,40 @@ async function runSkillsConfigureLocked(runtime: Runtime, guidanceSourceRootOver
       runtime.writeStderr(message);
     }
   });
+
   const nextConfig: GlobalMonkeConfig = {
     ...config,
     skillInstallPreference: nextPreference,
     version: 1
   };
+
   saveGlobalMonkeConfig(monkeHome, nextConfig);
   createLogger(runtime).success("Configured monke-tools skills");
 }
 
 function loadFixedToolInstall(runtime: Runtime, monkeHome: string) {
   const requestedFixedRoot = path.resolve(runtime.toolInstallRoot);
+
   const fixedRoot = existsSync(requestedFixedRoot)
     ? realpathSync.native(requestedFixedRoot)
     : requestedFixedRoot;
+
   const configuredInstallsRoot = path.join(path.resolve(monkeHome), "installs");
+
   const installsRoot = existsSync(configuredInstallsRoot)
     ? resolveManagedDirectory(configuredInstallsRoot, "Managed installs root")
     : configuredInstallsRoot;
+
   if (path.dirname(fixedRoot) !== installsRoot) {
     return loadActiveToolInstall(monkeHome);
   }
+
   if (resolveActiveInstallRoot(monkeHome) !== fixedRoot) {
     throw new MonkeError(
       "The Active tool install changed while Skills Configure was waiting; rerun mt skills configure"
     );
   }
+
   return loadToolInstall(fixedRoot);
 }
 
@@ -101,19 +116,24 @@ export function runLocalInstallSkills(
   explicitTargets?: ExplicitSkillTargetSelection
 ) {
   const monkeHome = getMonkeHome(runtime);
+
   return withInstallMutationLockAsync(monkeHome, async () => {
     const activeInstall = loadFixedToolInstall(runtime, monkeHome);
+
     if (activeInstall?.manifest.installKind !== "local") {
       throw new MonkeError(
         "Skills Local Install requires an Active Local tool install; run vpr install:local from the source checkout"
       );
     }
+
     const requestedCheckout = path.resolve(sourceCheckout);
+
     if (activeInstall.manifest.sourceCheckout !== requestedCheckout) {
       throw new MonkeError(
         `Skills Local Install checkout does not match the Active Local install: ${activeInstall.manifest.sourceCheckout}`
       );
     }
+
     await restoreRepoSkillImports(requestedCheckout);
     await runInstallSkillsLocked(runtime, requestedCheckout, explicitTargets);
   });
@@ -132,12 +152,14 @@ export async function runInstallSkillsLocked(
   const explicitPreference = explicitSkillInstallPreference(homeDirectory, explicitTargets);
   const nextPreference = explicitPreference ?? config.skillInstallPreference;
   const nextConfig: GlobalMonkeConfig = { ...config, version: 1 };
+
   if (nextPreference) {
     nextConfig.skillInstallPreference = nextPreference;
   }
 
   if (!nextPreference) {
     await runSkillsConfigureLocked(runtime, resolvedGuidanceSourceRoot);
+
     return;
   }
 
@@ -168,14 +190,19 @@ export async function runReleaseInstallSkillsLocked(
   }
 ) {
   const config = loadGlobalMonkeConfig(getMonkeHome(runtime));
+
   if (options.explicitTargets !== undefined || config.skillInstallPreference) {
     await runInstallSkillsLocked(runtime, releaseInstallRoot, options.explicitTargets);
+
     return;
   }
+
   if (options.interactive) {
     await runSkillsConfigureLocked(runtime, releaseInstallRoot);
+
     return;
   }
+
   createLogger(runtime).hint(
     "No Skill install targets were selected. Configure them later with: mt skills configure"
   );

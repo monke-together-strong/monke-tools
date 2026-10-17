@@ -44,6 +44,7 @@ import { sha256, sha256File } from "./sha256.ts";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const ZERO_COMMIT_PATTERN = /^0{40}$/u;
+
 const RELEASE_INPUTS = [
   ".github/actions/setup-mainline/",
   ".github/workflows/publish.yml",
@@ -86,6 +87,7 @@ type BunBuildConfig = Bun.BuildConfig & { bytecodeDepth?: number };
 
 export function isReleaseOwnedPath(filePath: string) {
   const normalized = filePath.replaceAll("\\", "/");
+
   return RELEASE_INPUTS.some((input) =>
     input.endsWith("/") ? normalized.startsWith(input) : normalized === input
   );
@@ -95,6 +97,7 @@ export function hasReleaseOwnedChanges(filePaths: string[]) {
   if (filePaths.some(isReleaseOwnedPath)) {
     return true;
   }
+
   return (
     filePaths.includes("bun.lock") &&
     !filePaths.some((filePath) => filePath.startsWith("packages/"))
@@ -106,7 +109,9 @@ export function deriveNextReleaseVersion(tags: string[]) {
     .filter((tag) => validate(ReleaseTagSchema, tag))
     .map((tag) => tag.slice(RELEASE_TAG_PREFIX.length))
     .toSorted(compareStableSemanticVersions);
+
   const current = parseStableSemanticVersion(versions.at(-1) ?? "0.0.0");
+
   return `${String(current[0])}.${String(current[1])}.${String(current[2] + 1n)}`;
 }
 
@@ -141,6 +146,7 @@ export async function buildReleaseBundle(options: BuildReleaseBundleOptions) {
       sourceCommit,
       toolBuildIdentity: version
     });
+
     await Bun.write(
       path.join(bundleRoot, "install-manifest.json"),
       `${JSON.stringify(manifest, null, 2)}\n`
@@ -153,6 +159,7 @@ export async function buildReleaseBundle(options: BuildReleaseBundleOptions) {
         COPYFILE_DISABLE: "1"
       }
     });
+
     return archivePath;
   } finally {
     rmSync(temporaryRoot, { force: true, recursive: true });
@@ -161,22 +168,28 @@ export async function buildReleaseBundle(options: BuildReleaseBundleOptions) {
 
 export function writeReleaseChecksums(directory: string, version: string) {
   const outputDirectory = path.resolve(directory);
+
   const archiveNames = RELEASE_PLATFORM_VALUES.map((platform) =>
     releaseArchiveName(version, platform)
   );
+
   for (const archiveName of archiveNames) {
     if (!existsSync(path.join(outputDirectory, archiveName))) {
       throw new Error(`Release archive is missing: ${archiveName}`);
     }
   }
+
   const checksumPath = path.join(outputDirectory, releaseChecksumsName(version));
+
   const contents = archiveNames
     .map(
       (archiveName) =>
         `${sha256(readFileSync(path.join(outputDirectory, archiveName)))}  ${archiveName}`
     )
     .join("\n");
+
   writeFileSync(checksumPath, `${contents}\n`, "utf-8");
+
   return checksumPath;
 }
 
@@ -190,10 +203,13 @@ export function writeStableReleaseCatalog(options: {
   const outputPath = path.resolve(options.outputPath);
   const version = StableSemanticVersionSchema.parse(options.version);
   const sourceCommit = FullCommitSchema.parse(options.sourceCommit);
+
   const archiveDigests = RELEASE_PLATFORM_VALUES.map((platform) =>
     releaseAssetDigest(directory, releaseArchiveName(version, platform))
   );
+
   const checksumsDigest = releaseAssetDigest(directory, releaseChecksumsName(version));
+
   const contents = [
     "1",
     version,
@@ -202,8 +218,10 @@ export function writeStableReleaseCatalog(options: {
     ...archiveDigests,
     checksumsDigest
   ].join("\t");
+
   mkdirSync(path.dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${contents}\n`, "utf-8");
+
   return outputPath;
 }
 
@@ -216,21 +234,26 @@ export function verifyReleaseAssets(options: {
   const directory = path.resolve(options.directory);
   const checksumPath = path.join(directory, releaseChecksumsName(options.version));
   const checksums = readReleaseChecksums(checksumPath);
+
   const expectedNames = RELEASE_PLATFORM_VALUES.map((platform) =>
     releaseArchiveName(options.version, platform)
   );
+
   const actualArchiveNames = readdirSync(directory)
     .filter((name) => name.endsWith(".tar.gz"))
     .toSorted();
+
   if (JSON.stringify(actualArchiveNames) !== JSON.stringify(expectedNames.toSorted())) {
     throw new Error("Release assets must contain exactly the supported platform archives");
   }
+
   if (
     checksums.size !== expectedNames.length ||
     expectedNames.some((archiveName) => !checksums.has(archiveName))
   ) {
     throw new Error("Release checksums must cover every supported platform archive exactly once");
   }
+
   return RELEASE_PLATFORM_VALUES.map((platform) =>
     verifyReleaseArchive({
       archivePath: path.join(directory, releaseArchiveName(options.version, platform)),
@@ -251,6 +274,7 @@ async function compileExecutable(
   version: string
 ) {
   const target = platform === "macos-arm64" ? "bun-darwin-arm64" : "bun-linux-x64";
+
   const buildConfig: BunBuildConfig = {
     bytecode: true,
     bytecodeDepth: 1,
@@ -266,11 +290,14 @@ async function compileExecutable(
     entrypoints: [path.join(repositoryRoot, "src", "index.ts")],
     root: repositoryRoot
   };
+
   const result = await Bun.build(buildConfig);
+
   if (!result.success) {
     const detail = result.logs.map((log) => log.message).join("\n") || "unknown failure";
     throw new Error(`bun build failed: ${detail}`);
   }
+
   chmodSync(outputPath, 0o755);
 }
 
@@ -278,11 +305,13 @@ function copyBundleInputs(bundleRoot: string) {
   for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md", "monke.yml"]) {
     cpSync(path.join(repositoryRoot, file), path.join(bundleRoot, file));
   }
+
   for (const folder of BUNDLED_GUIDANCE_FOLDERS) {
     cpSync(path.join(repositoryRoot, "skills", folder), path.join(bundleRoot, "skills", folder), {
       recursive: true
     });
   }
+
   mkdirSync(path.join(bundleRoot, "instructions"), { recursive: true });
   cpSync(
     path.join(repositoryRoot, "instructions", "GLOBAL.md"),
@@ -297,14 +326,17 @@ function copyBundleInputs(bundleRoot: string) {
 
 function releaseAssetDigest(directory: string, assetName: string) {
   const assetPath = path.join(directory, assetName);
+
   if (!existsSync(assetPath)) {
     throw new Error(`Release asset is missing: ${assetName}`);
   }
+
   return `sha256:${sha256(readFileSync(assetPath))}`;
 }
 
 function changedPaths(before: string, after: string) {
   FullCommitSchema.parse(after);
+
   if (ZERO_COMMIT_PATTERN.test(before)) {
     return runReleaseCommand(
       "git",
@@ -315,7 +347,9 @@ function changedPaths(before: string, after: string) {
       .split("\n")
       .filter(Boolean);
   }
+
   FullCommitSchema.parse(before);
+
   return runReleaseCommand("git", ["diff", "--name-only", "--no-renames", before, after], {
     cwd: repositoryRoot
   })

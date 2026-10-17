@@ -6,6 +6,7 @@ export function runReleaseCommand(
 ) {
   const commandText = [command, ...arguments_].join(" ");
   let result: Bun.ReadableSyncSubprocess;
+
   try {
     result = Bun.spawnSync({
       cmd: [command, ...arguments_],
@@ -17,13 +18,17 @@ export function runReleaseCommand(
   } catch (error) {
     throw new Error(`${commandText} could not be started`, { cause: error });
   }
+
   if (result.signalCode !== undefined) {
     throw new Error(`${commandText} was terminated by signal ${result.signalCode}`);
   }
+
   if (result.exitCode !== 0) {
     const detail =
       result.stderr.toString().trim() || result.stdout.toString().trim() || "unknown failure";
+
     throw new Error(`${commandText} failed: ${detail}`);
   }
+
   return result.stdout.toString();
 }
