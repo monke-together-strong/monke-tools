@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { shellQuote } from "../src/shell-quote.ts";
@@ -53,7 +53,7 @@ exit ${options.exitCode ?? 0}
 }
 
 describe("LFV Diff", () => {
-  test.each([
+  it.each([
     { exitCode: 0, expectedError: null },
     {
       exitCode: 1,
@@ -94,7 +94,7 @@ describe("LFV Diff", () => {
     }
   );
 
-  test.each([
+  it.each([
     { stdout: "not JSON" },
     { stdout: JSON.stringify({ ...JSON.parse(success), version: 2 }) },
     { stdout: JSON.stringify({ ...JSON.parse(success), command: "review.show" }) },
@@ -136,7 +136,7 @@ describe("LFV Diff", () => {
     }
   );
 
-  test("does not invoke LFV when provider resolution fails", () => {
+  it("does not invoke LFV when provider resolution fails", () => {
     const { binDirectory, home, log, repo } = fixture();
     writeExecutable(
       path.join(binDirectory, "gh"),
@@ -156,7 +156,7 @@ describe("LFV Diff", () => {
     expect(existsSync(log)).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     {
       command: "gh",
       response: { url: "https://github.com/owner/repo/pull/42/files\n" },
@@ -196,7 +196,7 @@ describe("LFV Diff", () => {
     }
   );
 
-  test("reports missing LFV without invoking a desktop fallback", async () => {
+  it("reports missing LFV without invoking a desktop fallback", async () => {
     const { binDirectory, home, repo } = fixture();
     rmSync(path.join(binDirectory, "lfv"));
     const desktopLog = installFakeCodiff(binDirectory);
@@ -212,7 +212,7 @@ describe("LFV Diff", () => {
     expect(existsSync(desktopLog)).toBeFalsy();
   });
 
-  test("saves LFV without launching, retains other preferences, and supports a one-off Codiff override", async () => {
+  it("saves LFV without launching, retains other preferences, and supports a one-off Codiff override", async () => {
     const { binDirectory, home, log, repo } = fixture();
     mkdirSync(home, { recursive: true });
     const configPath = path.join(home, "config.yml");
@@ -262,7 +262,7 @@ describe("LFV Diff", () => {
     expect(readFileSync(configPath, "utf-8")).toBe(saved);
   });
 
-  test("preserves LFV failure code, message, hint, and diagnostics without printing a URL", () => {
+  it("preserves LFV failure code, message, hint, and diagnostics without printing a URL", () => {
     const { binDirectory, home, repo } = fixture({
       exitCode: 1,
       stderr: "authentication diagnostic\n",
@@ -291,7 +291,7 @@ describe("LFV Diff", () => {
     expect(result.stderr).toContain("Run lfv auth login");
   });
 
-  test.each([
+  it.each([
     {
       args: ["#42"],
       command: "gh",
@@ -362,7 +362,7 @@ printf '%s\\n' ${shellQuote(JSON.stringify(response))}
     }
   );
 
-  test.each([
+  it.each([
     { args: ["--working-tree"], source: ["--source", "working-tree"] },
     { args: ["--commit", "HEAD"], source: ["--source", "commit", "--ref", "HEAD"] },
     {
@@ -408,7 +408,7 @@ printf '%s\\n' ${shellQuote(JSON.stringify(response))}
     }
   );
 
-  test("delivers branch commits plus dirty changes to LFV and returns its canonical URL", async () => {
+  it("delivers branch commits plus dirty changes to LFV and returns its canonical URL", async () => {
     const { base, binDirectory, home, log, repo } = fixture({ stderr: "viewer diagnostic\n" });
     const before = git(repo, ["status", "--porcelain"]);
 

@@ -1,7 +1,7 @@
 import { chmodSync, lstatSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { runCliAsync } from "../src/index.ts";
 import {
@@ -31,7 +31,7 @@ function changeOwner(file: string, owner: number) {
 }
 
 describe.skipIf(!canChangeFixtureOwner)("sticky restore marker ownership", () => {
-  test.each([
+  it.each([
     { action: "add", denied: true, marker: "file", name: "foreign owners", owner: "foreign" },
     { action: "update", denied: true, marker: "file", name: "foreign owners", owner: "foreign" },
     { action: "add", denied: false, marker: "file", name: "directory owner", owner: "directory" },

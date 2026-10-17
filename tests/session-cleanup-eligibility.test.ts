@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { stringify } from "yaml";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -148,7 +148,7 @@ describe("whole-Session read-only eligibility", () => {
     }
   });
 
-  test("requires Root PR proof and accepts its unchanged dependency, without effects", async () => {
+  it("requires Root PR proof and accepts its unchanged dependency, without effects", async () => {
     const f = fixture();
     const statePath = getSessionStateFilePath(f.home, f.root, f.state.session);
     const before = readFileSync(statePath, "utf-8");
@@ -160,7 +160,7 @@ describe("whole-Session read-only eligibility", () => {
     expect(existsSync(path.join(f.home, "lock"))).toBeFalsy();
   });
 
-  test.each(["dirty", "unique-commit", "locked"])(
+  it.each(["dirty", "unique-commit", "locked"])(
     "a %s dependency blocks the entire Session",
     async (kind) => {
       const f = fixture();
@@ -180,7 +180,7 @@ describe("whole-Session read-only eligibility", () => {
     }
   );
 
-  test("a detached dependency already in default history passes within its retained Session", async () => {
+  it("a detached dependency already in default history passes within its retained Session", async () => {
     const f = fixture();
     git(f.dependencyPath, ["checkout", "--detach"]);
     const result = await decisionFor(f);
@@ -188,7 +188,7 @@ describe("whole-Session read-only eligibility", () => {
     expect(existsSync(f.dependencyPath)).toBeTruthy();
   });
 
-  test("two Session records claiming one dependency block both owners", async () => {
+  it("two Session records claiming one dependency block both owners", async () => {
     const f = fixture();
     const [dependencyRepo] = f.state.repos;
 
@@ -212,7 +212,7 @@ describe("whole-Session read-only eligibility", () => {
     );
   });
 
-  test("collection lists each Source's worktrees once per pass and still rereads before deciding", async () => {
+  it("collection lists each Source's worktrees once per pass and still rereads before deciding", async () => {
     const f = fixture();
     const listings: string[] = [];
     const original = f.runtime.exec;
@@ -233,7 +233,7 @@ describe("whole-Session read-only eligibility", () => {
     }
   });
 
-  test.each([false, true])(
+  it.each([false, true])(
     "a corrupt record with overlap=%s is isolated only with bounded ownership",
     async (overlap) => {
       const f = fixture();
@@ -262,7 +262,7 @@ describe("whole-Session read-only eligibility", () => {
     }
   );
 
-  test("unreadable ownership cannot be bounded by an unrelated absolute scalar", async () => {
+  it("unreadable ownership cannot be bounded by an unrelated absolute scalar", async () => {
     const f = fixture();
     writeFileSync(
       path.join(f.home, "sessions", "corrupt.yml"),
@@ -272,7 +272,7 @@ describe("whole-Session read-only eligibility", () => {
     expect(result.decision.reasons).toContain("invalid-state-overlap");
   });
 
-  test.each(["hold", "operation-lock", "state-change", "member-change"])(
+  it.each(["hold", "operation-lock", "state-change", "member-change"])(
     "%s blocks a finished Session",
     async (kind) => {
       const f = fixture();
@@ -303,7 +303,7 @@ describe("whole-Session read-only eligibility", () => {
     }
   );
 
-  test("rechecks an earlier dependency after the Root finishes its provider reads", async () => {
+  it("rechecks an earlier dependency after the Root finishes its provider reads", async () => {
     const f = fixture();
     const original = f.runtime.exec;
     let dependencyStatuses = 0;
@@ -336,7 +336,7 @@ describe("whole-Session read-only eligibility", () => {
     expect(result.decision.reasons).toContain("member-changed-during-inspection");
   });
 
-  test.each(["root", "dependency"])(
+  it.each(["root", "dependency"])(
     "recovers a Session with a verified absent %s",
     async (missing) => {
       const f = fixture();
@@ -352,7 +352,7 @@ describe("whole-Session read-only eligibility", () => {
     }
   );
 
-  test("fully absent owned members can finalize, but a Session branch elsewhere blocks", async () => {
+  it("fully absent owned members can finalize, but a Session branch elsewhere blocks", async () => {
     const f = fixture();
     git(f.root, ["worktree", "remove", f.rootPath]);
     git(f.dependency, ["worktree", "remove", f.dependencyPath]);
@@ -363,7 +363,7 @@ describe("whole-Session read-only eligibility", () => {
     expect(result.decision.eligible).toBeFalsy();
   });
 
-  test("a skipped Session invalidates an earlier member that changes during provider lookup", async () => {
+  it("a skipped Session invalidates an earlier member that changes during provider lookup", async () => {
     const f = fixture();
     const original = f.runtime.execAsync;
     f.runtime.execAsync = async (command, args, options) => {
@@ -388,7 +388,7 @@ describe("whole-Session read-only eligibility", () => {
     expect(report.members[0]?.checks.committedWork.status).toBe("unknown");
   });
 
-  test("a stale member changing registered branches invalidates recovery", async () => {
+  it("a stale member changing registered branches invalidates recovery", async () => {
     const f = fixture();
     const admin = git(f.dependencyPath, ["rev-parse", "--absolute-git-dir"]);
     renameSync(f.dependencyPath, path.join(f.sandbox, "moved"));
@@ -408,7 +408,7 @@ describe("whole-Session read-only eligibility", () => {
     expect(result.decision.reasons).toContain("member-changed-during-inspection");
   });
 
-  test("nested retained ownership and Ordinary preflight protect a dirty child", async () => {
+  it("nested retained ownership and Ordinary preflight protect a dirty child", async () => {
     const f = fixture();
     const child = nestedChild(f, f.root);
     const rootRepo = f.state.repos.find((repo) => repo.sourceRoot === f.root);
@@ -440,7 +440,7 @@ describe("whole-Session read-only eligibility", () => {
     }
   });
 
-  test("a nested unowned worktree from another known Source blocks the parent", async () => {
+  it("a nested unowned worktree from another known Source blocks the parent", async () => {
     const f = fixture();
     nestedChild(f, f.dependency);
     const unowned = await decisionFor(f);
@@ -448,7 +448,7 @@ describe("whole-Session read-only eligibility", () => {
     expect(unowned.decision.reasons).toContain("ownership-conflict");
   });
 
-  test("an unowned worktree is reported without inferring Session membership", async () => {
+  it("an unowned worktree is reported without inferring Session membership", async () => {
     const f = fixture();
     const ordinary = path.join(f.sandbox, "ordinary");
     git(f.root, ["worktree", "add", "-b", "ordinary", ordinary]);

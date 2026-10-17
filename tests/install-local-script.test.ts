@@ -11,7 +11,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { object, string } from "zod";
 
 import { makeTempDir, writeExecutable } from "./helpers.ts";
@@ -80,7 +80,7 @@ ${changeDuringBuild ? `/usr/bin/touch ${JSON.stringify(sourceChangedMarker)}` : 
 }
 
 describe("Local install refresh script", () => {
-  test("recovers an installation lock left by a dead process", () => {
+  it("recovers an installation lock left by a dead process", () => {
     const sandbox = makeTempDir("install-local-dead-lock");
     const checkout = path.join(sandbox, "checkout");
     const binDirectory = path.join(sandbox, "bin");
@@ -108,7 +108,7 @@ describe("Local install refresh script", () => {
     expect(existsSync(`${lockPath}.reclaim`)).toBeFalsy();
   });
 
-  test("builds a unique versioned Local install and delegates activation with provenance", () => {
+  it("builds a unique versioned Local install and delegates activation with provenance", () => {
     const sandbox = makeTempDir("install-local-script");
     const checkout = path.join(sandbox, "checkout");
     const binDirectory = path.join(sandbox, "bin");
@@ -157,7 +157,7 @@ describe("Local install refresh script", () => {
     expect(existsSync(path.join(monkeHome, "locks", "installation.lock"))).toBeFalsy();
   });
 
-  test("two builds from the same commit receive distinct install identities", () => {
+  it("two builds from the same commit receive distinct install identities", () => {
     const sandbox = makeTempDir("install-local-unique");
     const checkout = path.join(sandbox, "checkout");
     const binDirectory = path.join(sandbox, "bin");
@@ -194,7 +194,7 @@ describe("Local install refresh script", () => {
     expect(new Set(installIdentities).size).toBe(2);
   });
 
-  test("aborts before activation when the source changes during compilation", () => {
+  it("aborts before activation when the source changes during compilation", () => {
     const sandbox = makeTempDir("install-local-source-change");
     const checkout = path.join(sandbox, "checkout");
     const binDirectory = path.join(sandbox, "bin");
@@ -221,7 +221,7 @@ describe("Local install refresh script", () => {
     expect(existsSync(path.join(monkeHome, "current"))).toBeFalsy();
   });
 
-  test("compiled Local executables report their Tool build identity", () => {
+  it("compiled Local executables report their Tool build identity", () => {
     const sandbox = makeTempDir("install-local-version");
     const executablePath = path.join(sandbox, "mt");
 
@@ -246,7 +246,7 @@ describe("Local install refresh script", () => {
     expect(version.stdout).toBe("local+0123456-dirty\n");
   });
 
-  test("the real Local refresh activates the compiled executable through the stable symlink", () => {
+  it("the real Local refresh activates the compiled executable through the stable symlink", () => {
     const sandbox = makeTempDir("install-local-end-to-end");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");

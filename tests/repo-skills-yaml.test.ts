@@ -1,7 +1,7 @@
 import { existsSync, linkSync, mkdirSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { parseDocument } from "yaml";
 
 import { runCliAsync } from "../src/index.ts";
@@ -62,7 +62,7 @@ done
 }
 
 describe("repo skill edits preserve unrelated YAML bytes", () => {
-  test.each([false, true])(
+  it.each([false, true])(
     "repo add rejects a slug shared by skills and references with reference first=%s",
     async (referenceFirst) => {
       const { repo, runtime, sandbox, upstream } = fixture();
@@ -119,7 +119,7 @@ describe("repo skill edits preserve unrelated YAML bytes", () => {
     }
   );
 
-  test.each(["restore", "update"])(
+  it.each(["restore", "update"])(
     "repo %s rejects handwritten mixed-kind slug ownership before changing restored state",
     async (action) => {
       const { bin, recipe, repo, runtime, sandbox, upstream } = fixture();
@@ -187,7 +187,7 @@ done
     }
   );
 
-  test("shared commit and source aliases resolve for restore, list, and update", async () => {
+  it("shared commit and source aliases resolve for restore, list, and update", async () => {
     const { bin, repo, runtime, sandbox, upstream } = fixture();
     write(
       upstream,
@@ -223,7 +223,7 @@ done
     { prefix: "", state: "unresolved" },
     { prefix: 'cleanupCommand: &command "echo cleanup"\n', state: "rebound" }
   ])("$state aliases outside skills", ({ prefix }) => {
-    test.each(["add", "policy", "remove", "update"])(
+    it.each(["add", "policy", "remove", "update"])(
       "%s refuses to change an anchor referenced outside skills",
       async (action) => {
         const { bin, recipe, repo, runtime, upstream } = fixture();
@@ -262,7 +262,7 @@ done
     );
   });
 
-  test.each([
+  it.each([
     { alias: "symlink", temporary: "monke.yml.tmp" },
     { alias: "hardlink", temporary: "monke.yml.tmp" },
     { alias: "symlink", temporary: "skills/.monke-restored.json.tmp" },
@@ -292,7 +292,7 @@ done
     }
   );
 
-  test("add appends skills without changing four-space indentation or quoting", async () => {
+  it("add appends skills without changing four-space indentation or quoting", async () => {
     const { repo, runtime, upstream } = fixture();
 
     const original =
@@ -305,7 +305,7 @@ done
     expect(parseDocument(updated).getIn(["skills", 0, "source"])).toBe(upstream);
   });
 
-  test("add preserves indented root keys", async () => {
+  it("add preserves indented root keys", async () => {
     const { repo, runtime, upstream } = fixture();
     const original = "    apps: {}\n    bootstrapCommand: 'echo setup'\n";
     write(repo, "monke.yml", original);
@@ -316,7 +316,7 @@ done
     expect(parseDocument(updated).getIn(["skills", 0, "source"])).toBe(upstream);
   });
 
-  test.each(["block", "flow", "flow root"])(
+  it.each(["block", "flow", "flow root"])(
     "policy replaces a %s skills value without changing surrounding comments and formatting",
     async (style) => {
       const { recipe, repo, runtime, upstream } = fixture();
@@ -350,7 +350,7 @@ done
     }
   );
 
-  test.each([
+  it.each([
     "{apps: {web: {path: '.'}}} # End\n",
     "{apps: {}, bootstrapCommand: 'echo setup'} # End\n",
     "{apps: {web: {path: '.'}}, # Keep trailing comma\n} # End\n",
@@ -366,7 +366,7 @@ done
     expect(parseDocument(updated).getIn(["skills", 0, "source"])).toBe(upstream);
   });
 
-  test.each(["", "# Guidance only\n", "---\n# Guidance only\n...\n"])(
+  it.each(["", "# Guidance only\n", "---\n# Guidance only\n...\n"])(
     "add handles an empty YAML document: %j",
     async (original) => {
       const { repo, runtime, upstream } = fixture();
@@ -381,7 +381,7 @@ done
 });
 
 describe("repo skill imports stay ignored", () => {
-  test.each([
+  it.each([
     {
       entry: "/skills/imported/",
       reference: false,
@@ -412,7 +412,7 @@ describe("repo skill imports stay ignored", () => {
     expect(read(repo, ".gitignore")).toBe(repaired);
   });
 
-  test.each([
+  it.each([
     { action: "add", ignore: "skills/.gitignore", pattern: "!imported/\n", reference: false },
     {
       action: "restore",

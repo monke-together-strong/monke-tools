@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   createConfiguredRepo,
@@ -29,7 +29,7 @@ describe("Desktop Diff", () => {
     return { binDirectory, home, log, repo, sandbox };
   }
 
-  test("keeps hex-named branches and capitalization variants of HEAD as branch reviews with local edits", async () => {
+  it("keeps hex-named branches and capitalization variants of HEAD as branch reviews with local edits", async () => {
     const { binDirectory, home, log, repo } = fixture();
     writeFileSync(path.join(repo, "local.txt"), "local change\n");
 
@@ -78,7 +78,7 @@ describe("Desktop Diff", () => {
     "https://github.com/owner/repo/pull/42?tab=files"
   ];
 
-  test.each([
+  it.each([
     ...providerReviewUrls.map((target) => ({ args: [target], delivered: [target] })),
     { args: ["--working-tree"], delivered: [] },
     { args: ["--commit", "HEAD"], delivered: ["--commit", "HEAD"] },
@@ -123,7 +123,7 @@ describe("Desktop Diff", () => {
     }
   );
 
-  test.each(providerReviewUrls)(
+  it.each(providerReviewUrls)(
     "rejects older launchers before forwarding provider URL %s",
     async (target) => {
       const { binDirectory, home, repo } = fixture();
@@ -154,7 +154,7 @@ describe("Desktop Diff", () => {
     }
   );
 
-  test.each(["HEAD^{/..}", "HEAD^{/.. }", "HEAD^{/.*.. .*}"])(
+  it.each(["HEAD^{/..}", "HEAD^{/.. }", "HEAD^{/.*.. .*}"])(
     "delivers single dotted revision %s as a commit in positional and explicit forms",
     async (ref) => {
       const { binDirectory, home, log, repo } = fixture();
@@ -183,7 +183,7 @@ describe("Desktop Diff", () => {
     }
   );
 
-  test.each([
+  it.each([
     { args: ["--working-tree"], delivered: [] },
     { args: ["--commit", "HEAD"], delivered: ["--commit", "HEAD"] },
     {
@@ -255,7 +255,7 @@ describe("Desktop Diff", () => {
     }
   );
 
-  test.each([
+  it.each([
     ["--commit", "missing"],
     ["missing..HEAD"],
     ["HEAD^{/..}..HEAD"],
@@ -287,7 +287,7 @@ describe("Desktop Diff", () => {
     expect(git(repo, ["branch", "--show-current"])).toBe("feature");
   });
 
-  test.each(["main..feature", "main...feature"])(
+  it.each(["main..feature", "main...feature"])(
     "rejects %s without advertised range forwarding or an alternate launch",
     async (range) => {
       for (const contract of [
@@ -314,7 +314,7 @@ describe("Desktop Diff", () => {
     }
   );
 
-  test("adapter launch failure reports its failure without substituting another comparison", async () => {
+  it("adapter launch failure reports its failure without substituting another comparison", async () => {
     const { binDirectory, home, repo } = fixture();
     const log = installFakeCodiff(binDirectory, { exitCode: 9 });
     await expect(
@@ -323,7 +323,7 @@ describe("Desktop Diff", () => {
     expect(readFileSync(log, "utf-8")).toBe(`${repo}\n`);
   });
 
-  test("interactive configuration saves the selected adapter without needing a repository or executable", async () => {
+  it("interactive configuration saves the selected adapter without needing a repository or executable", async () => {
     const sandbox = makeTempDir("diff-configure");
     const home = path.join(sandbox, "home");
     await runMonkeAsync({
@@ -335,7 +335,7 @@ describe("Desktop Diff", () => {
     expect(readFileSync(path.join(home, "config.yml"), "utf-8")).toContain("diffAdapter: codiff");
   });
 
-  test("desktop preference persists across invocations and explicit commit bypasses selection", async () => {
+  it("desktop preference persists across invocations and explicit commit bypasses selection", async () => {
     const sandbox = makeTempDir("diff-desktop");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");

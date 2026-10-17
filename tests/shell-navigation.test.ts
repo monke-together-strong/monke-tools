@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { SHELL_DIRECTORY_DIRECTIVE_ENV } from "../src/shell.ts";
@@ -75,7 +75,7 @@ printf '%s\\n%s\\n' "$PWD" "$mt_status"
 }
 
 describe("shell navigation", () => {
-  test("spawn writes an active shell directory directive", () => {
+  it("spawn writes an active shell directory directive", () => {
     const sandbox = makeTempDir("shell-spawn-active");
     const home = path.join(sandbox, "home");
     const directivePath = path.join(sandbox, "directive");
@@ -103,7 +103,7 @@ describe("shell navigation", () => {
     );
   });
 
-  test("spawn distinguishes configured but inactive shell integration", () => {
+  it("spawn distinguishes configured but inactive shell integration", () => {
     const sandbox = makeTempDir("shell-spawn-configured-inactive");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
@@ -141,7 +141,7 @@ describe("shell navigation", () => {
     );
   });
 
-  test("spawn treats unreadable shell startup files as inactive integration", () => {
+  it("spawn treats unreadable shell startup files as inactive integration", () => {
     const sandbox = makeTempDir("shell-spawn-unreadable-startup");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
@@ -176,7 +176,7 @@ describe("shell navigation", () => {
     }
   });
 
-  test("repo commands cannot write an active shell directory directive", () => {
+  it("repo commands cannot write an active shell directory directive", () => {
     const sandbox = makeTempDir("shell-directive-child-env");
     const home = path.join(sandbox, "home");
     const directivePath = path.join(sandbox, "directive");
@@ -216,7 +216,7 @@ apps:
     const available = isShellAvailable(shell);
     const availability = available ? "" : " (shell unavailable)";
 
-    test.skipIf(!available)(
+    it.skipIf(!available)(
       `honors a directory request and preserves a nonzero mt status${availability}`,
       () => {
         const result = runGeneratedAdapter(shell, 23, true);
@@ -227,7 +227,7 @@ apps:
       }
     );
 
-    test.skipIf(!available)(
+    it.skipIf(!available)(
       `handles a failed directory request after mt status 0${availability}`,
       () => {
         const result = runGeneratedAdapter(shell, 0, false);
@@ -238,7 +238,7 @@ apps:
       }
     );
 
-    test.skipIf(!available)(
+    it.skipIf(!available)(
       `handles a failed directory request after mt status 23${availability}`,
       () => {
         const result = runGeneratedAdapter(shell, 23, false);
@@ -250,7 +250,7 @@ apps:
     );
   });
 
-  test.each([
+  it.each([
     ["bash", ".bashrc", ".zshrc"],
     ["zsh", ".zshrc", ".bashrc"]
   ] as const)(
@@ -290,7 +290,7 @@ apps:
     }
   );
 
-  test("zsh install and configured-state detection honor relative ZDOTDIR", () => {
+  it("zsh install and configured-state detection honor relative ZDOTDIR", () => {
     const sandbox = makeTempDir("shell-install-zdotdir");
     const monkeHome = path.join(sandbox, "monke-home");
     const shellHome = path.join(sandbox, "shell-home");
@@ -327,7 +327,7 @@ apps:
     expect(result.stderr).toContain("Shell integration is configured but not active");
   });
 
-  test("shell install leaves startup files untouched for an unsupported current shell", () => {
+  it("shell install leaves startup files untouched for an unsupported current shell", () => {
     const sandbox = makeTempDir("shell-install-unsupported");
     const shellHome = path.join(sandbox, "shell-home");
 

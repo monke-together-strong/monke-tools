@@ -1,14 +1,14 @@
 import { cpSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { makeTempDir, writeExecutable } from "./helpers.ts";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 
 describe("bundle-owned Release installer", () => {
-  test("delegates automation targets to the bundled executable", () => {
+  it("delegates automation targets to the bundled executable", () => {
     const bundleRoot = makeTempDir("release-installer");
     const logPath = path.join(bundleRoot, "mt.log");
     cpSync(

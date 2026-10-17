@@ -2,7 +2,7 @@ import { ok } from "node:assert/strict";
 import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { SKILL_SUMMARY_FILE, summarizeSkillChanges } from "../scripts/skill-summary.ts";
@@ -28,7 +28,7 @@ function snapshot(root: string, slugs: string[]) {
 }
 
 describe("skill update summaries", () => {
-  test("summarizes added, removed, and supporting-file changes in a read-only run", async () => {
+  it("summarizes added, removed, and supporting-file changes in a read-only run", async () => {
     const root = makeTempDir("skill-summary");
     const before = path.join(root, "before");
     const after = path.join(root, "after");
@@ -75,7 +75,7 @@ describe("skill update summaries", () => {
     expect(messages.join("")).toContain("Updated reference.");
   });
 
-  test("removes a partial summary after Codex fails and keeps the updated guidance", async () => {
+  it("removes a partial summary after Codex fails and keeps the updated guidance", async () => {
     const root = makeTempDir("skill-summary-failure");
     const before = path.join(root, "before");
     const after = path.join(root, "after");
@@ -104,7 +104,7 @@ describe("skill update summaries", () => {
     expect(read(after, "skills/imported/alpha/SKILL.md")).toBe("Guidance for alpha.");
   });
 
-  test("skips Codex when no skill content changed", async () => {
+  it("skips Codex when no skill content changed", async () => {
     const root = makeTempDir("skill-summary-unchanged");
     const before = path.join(root, "before");
     const after = path.join(root, "after");

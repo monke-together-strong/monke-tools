@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { afterEach, describe, expect, test, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import {
@@ -57,7 +57,7 @@ function simulateDeveloperGitEnvironment(sandbox: string) {
 describe("Git test environment", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  test("fixtures ignore developer signing, hooks, ignores and injected Git settings", () => {
+  it("fixtures ignore developer signing, hooks, ignores and injected Git settings", () => {
     const sandbox = makeTempDir("git-environment-fixtures");
     simulateDeveloperGitEnvironment(sandbox);
 
@@ -80,7 +80,7 @@ describe("Git test environment", () => {
     ).toBe("Explicit Test Author");
   });
 
-  test.each(["sync", "async", "worker"] as const)(
+  it.each(["sync", "async", "worker"] as const)(
     "%s CLI carries files ignored by developer config and preserves repository hooks",
     async (mode) => {
       const sandbox = makeTempDir(`git-environment-${mode}`);

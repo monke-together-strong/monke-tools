@@ -2,13 +2,13 @@ import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { describe, expect, test, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { createRuntime, findExecutable, isProcessRunning, withGlobalLock } from "../src/runtime.ts";
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
 describe(findExecutable, () => {
-  test("uses the supplied PATH in order", () => {
+  it("uses the supplied PATH in order", () => {
     const sandbox = makeTempDir("runtime-which-order");
     const firstBin = path.join(sandbox, "first");
     const secondBin = path.join(sandbox, "second");
@@ -21,15 +21,15 @@ describe(findExecutable, () => {
     );
   });
 
-  test.each([undefined, ""])("treats PATH %j as unavailable", (pathValue) => {
+  it.each([undefined, ""])("treats PATH %j as unavailable", (pathValue) => {
     expect(findExecutable("sh", { PATH: pathValue })).toBeNull();
   });
 
-  test("returns null for a missing executable", () => {
+  it("returns null for a missing executable", () => {
     expect(findExecutable("missing", { PATH: makeTempDir("runtime-which-missing") })).toBeNull();
   });
 
-  test.skipIf(process.platform === "win32")("rejects a non-executable file", () => {
+  it.skipIf(process.platform === "win32")("rejects a non-executable file", () => {
     const sandbox = makeTempDir("runtime-which-permission");
     write(sandbox, "example", "#!/bin/sh\n");
 
@@ -38,7 +38,7 @@ describe(findExecutable, () => {
 });
 
 describe("runtime", () => {
-  test("interactive lines preserve UTF-8 across CRLF and final EOF", () => {
+  it("interactive lines preserve UTF-8 across CRLF and final EOF", () => {
     const runtimeUrl = new URL("../src/runtime.ts", import.meta.url).href;
 
     const result = Bun.spawnSync(
@@ -58,7 +58,7 @@ describe("runtime", () => {
     expect(JSON.parse(result.stdout.toString())).toStrictEqual(["café/日本語", "second/🍌", ""]);
   });
 
-  test("createRuntime executes with its cwd, environment, and stdin", () => {
+  it("createRuntime executes with its cwd, environment, and stdin", () => {
     const sandbox = makeTempDir("runtime-sync-input");
     const runtime = createRuntime({ cwd: sandbox, env: { MONKE_VALUE: "value" } });
 
@@ -78,7 +78,7 @@ describe("runtime", () => {
     });
   });
 
-  test("createRuntime preserves output from allowed command failures", () => {
+  it("createRuntime preserves output from allowed command failures", () => {
     const runtime = createRuntime();
 
     expect(
@@ -91,13 +91,13 @@ describe("runtime", () => {
     );
   });
 
-  test("createRuntime reports commands that cannot be started", () => {
+  it("createRuntime reports commands that cannot be started", () => {
     expect(() => createRuntime().exec("definitely-missing-monke-command")).toThrow(
       /Failed to run definitely-missing-monke-command/u
     );
   });
 
-  test("createRuntime normalizes allowed synchronous timeouts", () => {
+  it("createRuntime normalizes allowed synchronous timeouts", () => {
     expect(
       createRuntime().exec("sh", ["-c", "printf started; sleep 1"], {
         allowFailure: true,
@@ -106,7 +106,7 @@ describe("runtime", () => {
     ).toStrictEqual({ exitCode: -1, stderr: "", stdout: "started", timedOut: true });
   });
 
-  test("createRuntime executes asynchronously with its cwd, environment, and stdin", async () => {
+  it("createRuntime executes asynchronously with its cwd, environment, and stdin", async () => {
     const sandbox = makeTempDir("runtime-async-input");
     const runtime = createRuntime({ cwd: sandbox, env: { MONKE_VALUE: "value" } });
 
@@ -121,7 +121,7 @@ describe("runtime", () => {
     });
   });
 
-  test("createRuntime preserves output from allowed asynchronous failures", async () => {
+  it("createRuntime preserves output from allowed asynchronous failures", async () => {
     const runtime = createRuntime();
 
     await expect(
@@ -134,7 +134,7 @@ describe("runtime", () => {
     ).rejects.toThrow(/Command failed:.*error/u);
   });
 
-  test("createRuntime reports asynchronous commands that cannot be started", async () => {
+  it("createRuntime reports asynchronous commands that cannot be started", async () => {
     const signalListenerCount = process.listenerCount("SIGTERM");
     await expect(createRuntime().execAsync("definitely-missing-monke-command")).rejects.toThrow(
       /Failed to run definitely-missing-monke-command/u
@@ -142,7 +142,7 @@ describe("runtime", () => {
     expect(process.listenerCount("SIGTERM")).toBe(signalListenerCount);
   });
 
-  test("createRuntime preserves output from allowed asynchronous timeouts", async () => {
+  it("createRuntime preserves output from allowed asynchronous timeouts", async () => {
     await expect(
       createRuntime().execAsync("sh", ["-c", "printf started; trap '' TERM; sleep 10"], {
         allowFailure: true,
@@ -151,7 +151,7 @@ describe("runtime", () => {
     ).resolves.toStrictEqual({ exitCode: -1, stderr: "", stdout: "started", timedOut: true });
   });
 
-  test("createRuntime rejects successful commands that did not consume stdin", async () => {
+  it("createRuntime rejects successful commands that did not consume stdin", async () => {
     await expect(
       createRuntime().execAsync("sh", ["-c", "exec 0<&-; sleep 0.1"], {
         stdin: "input".repeat(1_000_000)
@@ -159,7 +159,7 @@ describe("runtime", () => {
     ).rejects.toThrow(/Command input was not fully written/u);
   });
 
-  test.each([
+  it.each([
     ["EPERM", true],
     ["ESRCH", false],
     ["EIO", true]
@@ -175,7 +175,7 @@ describe("runtime", () => {
     }
   });
 
-  test("createRuntime surfaces signal-terminated commands as failures", () => {
+  it("createRuntime surfaces signal-terminated commands as failures", () => {
     const runtime = createRuntime();
 
     expect(() => runtime.exec("sh", ["-c", "kill -TERM $$"])).toThrow(
@@ -183,7 +183,7 @@ describe("runtime", () => {
     );
   });
 
-  test.each(["SIGHUP", "SIGQUIT", "SIGTERM"] as const)(
+  it.each(["SIGHUP", "SIGQUIT", "SIGTERM"] as const)(
     "createRuntime forwards %s to detached async command groups",
     async (signal) => {
       const sandbox = makeTempDir("runtime-parent-termination");
@@ -249,7 +249,7 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
     }
   );
 
-  test("createRuntime kills command descendants before a timeout settles", async () => {
+  it("createRuntime kills command descendants before a timeout settles", async () => {
     const sandbox = makeTempDir("runtime-timeout-descendant");
     const childPidPath = path.join(sandbox, "child.pid");
     const descendantPidPath = path.join(sandbox, "descendant.pid");
@@ -278,7 +278,7 @@ await runtime.execAsync("sh", ["-c", ${JSON.stringify(`touch "${unexpectedComman
     }
   });
 
-  test("parent termination during timeout grace still kills command descendants", async () => {
+  it("parent termination during timeout grace still kills command descendants", async () => {
     const sandbox = makeTempDir("runtime-timeout-timeout-parent-termination");
     const workerPath = path.join(sandbox, "worker.ts");
     const childPidPath = path.join(sandbox, "child.pid");
@@ -329,7 +329,7 @@ await runtime.execAsync(
     }
   });
 
-  test("commands started during timeout grace do not duplicate termination listeners", async () => {
+  it("commands started during timeout grace do not duplicate termination listeners", async () => {
     const sandbox = makeTempDir("runtime-timeout-listener-overlap");
     const childPidPath = path.join(sandbox, "child.pid");
     const timeoutStartedMarker = path.join(sandbox, "timeout-started");
@@ -371,7 +371,7 @@ await runtime.execAsync(
     }
   });
 
-  test("Release requests fall through an empty GH_TOKEN to GITHUB_TOKEN", async () => {
+  it("Release requests fall through an empty GH_TOKEN to GITHUB_TOKEN", async () => {
     let authorization = "";
     let signal: AbortSignal | null | undefined;
 
@@ -393,7 +393,7 @@ await runtime.execAsync(
     expect(signal).toBeInstanceOf(AbortSignal);
   });
 
-  test("Release asset downloads reject unapproved URLs before sending credentials", async () => {
+  it("Release asset downloads reject unapproved URLs before sending credentials", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
     try {
@@ -407,7 +407,7 @@ await runtime.execAsync(
     }
   });
 
-  test("Release asset downloads expose the response body without buffering it", async () => {
+  it("Release asset downloads expose the response body without buffering it", async () => {
     const response = new Response("streamed asset");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
 
@@ -426,7 +426,7 @@ await runtime.execAsync(
     }
   });
 
-  test("withGlobalLock evicts stale locks left by dead processes", () => {
+  it("withGlobalLock evicts stale locks left by dead processes", () => {
     const sandbox = makeTempDir("runtime-stale-lock");
     const home = path.join(sandbox, "home");
     const lockPath = path.join(home, "lock");
@@ -445,7 +445,7 @@ await runtime.execAsync(
     expect(existsSync(`${lockPath}.reclaim`)).toBeFalsy();
   });
 
-  test("withGlobalLock waits for an in-progress stale-lock reclaim", async () => {
+  it("withGlobalLock waits for an in-progress stale-lock reclaim", async () => {
     const sandbox = makeTempDir("runtime-lock-reclaim");
     const home = path.join(sandbox, "home");
     const reclaimPath = path.join(home, "lock.reclaim");
@@ -462,7 +462,7 @@ await runtime.execAsync(
     expect(existsSync(reclaimPath)).toBeFalsy();
   });
 
-  test("withGlobalLock falls back to the file timestamp for invalid lock metadata", () => {
+  it("withGlobalLock falls back to the file timestamp for invalid lock metadata", () => {
     const sandbox = makeTempDir("runtime-invalid-lock");
     const home = path.join(sandbox, "home");
     const lockPath = path.join(home, "lock");
@@ -476,7 +476,7 @@ await runtime.execAsync(
     expect(existsSync(lockPath)).toBeFalsy();
   });
 
-  test("withGlobalLock does not evict stale locks held by a live process", () => {
+  it("withGlobalLock does not evict stale locks held by a live process", () => {
     const sandbox = makeTempDir("runtime-live-stale-lock");
     const home = path.join(sandbox, "home");
     const lockPath = path.join(home, "lock");
@@ -492,7 +492,7 @@ await runtime.execAsync(
     expect(existsSync(lockPath)).toBeTruthy();
   }, 7000);
 
-  test("withGlobalLock preserves a valid live pid when another metadata field is invalid", () => {
+  it("withGlobalLock preserves a valid live pid when another metadata field is invalid", () => {
     const sandbox = makeTempDir("runtime-live-mixed-lock");
     const home = path.join(sandbox, "home");
     const lockPath = path.join(home, "lock");

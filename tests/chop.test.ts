@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import {
@@ -187,7 +187,7 @@ function readWorktreeRemovals(gitLog: string) {
 }
 
 describe("chop", () => {
-  test("a prepared-only repo is removed without running its Cleanup command", () => {
+  it("a prepared-only repo is removed without running its Cleanup command", () => {
     const sandbox = makeTempDir("chop-prepared-only");
     const home = path.join(sandbox, "home");
     const cleanupMarker = path.join(sandbox, "cleanup-ran");
@@ -224,7 +224,7 @@ apps:
     expect(existsSync(getExpectedWorktreePath(home, root, "prepared-only"))).toBeFalsy();
   });
 
-  test("a repo that fails after its external-effect checkpoint runs its Cleanup command", () => {
+  it("a repo that fails after its external-effect checkpoint runs its Cleanup command", () => {
     const sandbox = makeTempDir("chop-failed-materialization-cleanup");
     const home = path.join(sandbox, "home");
     const cleanupMarker = path.join(sandbox, "cleanup-ran");
@@ -256,7 +256,7 @@ apps: {}
     expect(existsSync(cleanupMarker)).toBeTruthy();
   });
 
-  test("removes the current single-repo Session and preserves its branch", () => {
+  it("removes the current single-repo Session and preserves its branch", () => {
     const sandbox = makeTempDir("chop-current-session");
     const home = path.join(sandbox, "home");
 
@@ -280,7 +280,7 @@ apps: {}
     expect(result.stderr).toContain("Chopped Session banana");
   });
 
-  test.each(["staged", "modified", "untracked"] as const)(
+  it.each(["staged", "modified", "untracked"] as const)(
     "--force discards a current Session with %s files and preserves its branch",
     (dirtyKind) => {
       const sandbox = makeTempDir(`chop-force-current-session-${dirtyKind}`);
@@ -306,7 +306,7 @@ apps: {}
     }
   );
 
-  test.each(["staged", "modified", "untracked"] as const)(
+  it.each(["staged", "modified", "untracked"] as const)(
     "rejects a Session with %s files without --force",
     (dirtyKind) => {
       const sandbox = makeTempDir(`chop-dirty-session-${dirtyKind}`);
@@ -333,7 +333,7 @@ apps: {}
     }
   );
 
-  test("an explicit Session target wins over the invoking Session", () => {
+  it("an explicit Session target wins over the invoking Session", () => {
     const sandbox = makeTempDir("chop-explicit-session");
     const home = path.join(sandbox, "home");
 
@@ -358,7 +358,7 @@ apps: {}
     expect(existsSync(getSessionStateFilePath(home, root, "beta"))).toBeFalsy();
   });
 
-  test("an explicit Ordinary target wins over the invoking Session", () => {
+  it("an explicit Ordinary target wins over the invoking Session", () => {
     const sandbox = makeTempDir("chop-explicit-ordinary");
     const home = path.join(sandbox, "home");
 
@@ -384,7 +384,7 @@ apps: {}
     expect(git(root, ["rev-parse", "--verify", "refs/heads/ordinary"])).not.toBe("");
   });
 
-  test("a Session name takes precedence over an Ordinary branch with the same name", () => {
+  it("a Session name takes precedence over an Ordinary branch with the same name", () => {
     const fixture = createOrdinaryFixture("chop-session-name-precedence");
     saveSessionState(fixture.home, {
       generation: { number: 1, status: "complete" },
@@ -417,7 +417,7 @@ apps: {}
     ).toBeTruthy();
   });
 
-  test("dependency-invoked Session Chop removes the invoker last and finalizes Root first", () => {
+  it("dependency-invoked Session Chop removes the invoker last and finalizes Root first", () => {
     const fixture = createMultiRepoSessionFixture("chop-session-dependency");
     const gitLog = installGitShim(fixture.binDirectory);
     const directivePath = path.join(fixture.sandbox, "directive");
@@ -448,7 +448,7 @@ apps: {}
     ]);
   });
 
-  test("a recorded Session worktree path for a Dependency repo promotes to its owning Session", () => {
+  it("a recorded Session worktree path for a Dependency repo promotes to its owning Session", () => {
     const fixture = createMultiRepoSessionFixture("chop-session-member-path");
 
     runMonke({
@@ -468,7 +468,7 @@ apps: {}
     );
   });
 
-  test("a checked-out Session branch selects the whole owning Session", () => {
+  it("a checked-out Session branch selects the whole owning Session", () => {
     const fixture = createMultiRepoSessionFixture("chop-session-member-branch");
 
     runMonke({
@@ -488,7 +488,7 @@ apps: {}
     );
   });
 
-  test("rejects a managed Session-member path outside the current Root repo scope", () => {
+  it("rejects a managed Session-member path outside the current Root repo scope", () => {
     const sandbox = makeTempDir("chop-session-member-scope");
     const home = path.join(sandbox, "home");
 
@@ -517,7 +517,7 @@ apps: {}
     expect(existsSync(secondWorktree)).toBeTruthy();
   });
 
-  test("Session preflight reports every participating-repo failure without mutation", () => {
+  it("Session preflight reports every participating-repo failure without mutation", () => {
     const fixture = createMultiRepoSessionFixture("chop-session-preflight");
     const gitLog = installGitShim(fixture.binDirectory);
     write(fixture.rootWorktree, "dirty.txt", "dirty\n");
@@ -559,7 +559,7 @@ apps: {}
     expect(readFileSync(gitLog, "utf-8")).not.toContain("worktree remove");
   });
 
-  test("--force discards dirty files across a multi-repo Session", () => {
+  it("--force discards dirty files across a multi-repo Session", () => {
     const fixture = createMultiRepoSessionFixture("chop-force-multi-session");
     write(fixture.depWorktree, "README.md", "modified dependency\n");
     git(fixture.depWorktree, ["add", "README.md"]);
@@ -582,7 +582,7 @@ apps: {}
     );
   });
 
-  test("--force does not bypass whole-Session structural preflight", () => {
+  it("--force does not bypass whole-Session structural preflight", () => {
     const fixture = createMultiRepoSessionFixture("chop-force-structural");
     const gitLog = installGitShim(fixture.binDirectory);
     write(fixture.rootWorktree, "scratch.txt", "untracked\n");
@@ -609,7 +609,7 @@ apps: {}
     expect(readFileSync(gitLog, "utf-8")).not.toContain("worktree remove");
   });
 
-  test("removes an exact unlocked stale Session registration and finalizes the Session", () => {
+  it("removes an exact unlocked stale Session registration and finalizes the Session", () => {
     const sandbox = makeTempDir("chop-stale-session");
     const home = path.join(sandbox, "home");
 
@@ -632,7 +632,7 @@ apps: {}
     expect(git(root, ["rev-parse", "--verify", "refs/heads/banana"])).not.toBe("");
   });
 
-  test("rejects a locked stale Session registration even with --force", () => {
+  it("rejects a locked stale Session registration even with --force", () => {
     const sandbox = makeTempDir("chop-stale-session-locked");
     const home = path.join(sandbox, "home");
 
@@ -657,7 +657,7 @@ apps: {}
     expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
   });
 
-  test("source recovery retains a worktree that reappears during cleanup", () => {
+  it("source recovery retains a worktree that reappears during cleanup", () => {
     const sandbox = makeTempDir("chop-reappeared-session");
     const home = path.join(sandbox, "home");
 
@@ -684,7 +684,7 @@ apps: {}
     expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
   });
 
-  test.each(["reappeared", "branch"] as const)(
+  it.each(["reappeared", "branch"] as const)(
     "cleanup does not run in a dependency %s by the root command",
     (change) => {
       const fixture = createMultiRepoSessionFixture(`chop-cleanup-${change}`);
@@ -725,7 +725,7 @@ apps: {}
     }
   );
 
-  test("rejects a Session branch live at an unexpected path", () => {
+  it("rejects a Session branch live at an unexpected path", () => {
     const sandbox = makeTempDir("chop-session-unexpected-live-branch");
     const home = path.join(sandbox, "home");
 
@@ -750,7 +750,7 @@ apps: {}
     expect(existsSync(getSessionStateFilePath(home, root, "banana"))).toBeTruthy();
   });
 
-  test.each(["staged", "modified", "untracked"] as const)(
+  it.each(["staged", "modified", "untracked"] as const)(
     "a just-in-time %s race blocks cleanup and retains all Session worktrees",
     (dirtyKind) => {
       const fixture = createMultiRepoSessionFixture(`chop-session-${dirtyKind}-race`);
@@ -791,7 +791,7 @@ apps: {}
     }
   );
 
-  test.each(["branch", "lock", "registration", "repository"] as const)(
+  it.each(["branch", "lock", "registration", "repository"] as const)(
     "--force still detects a just-in-time %s race before Session cleanup",
     (raceKind) => {
       const fixture = createMultiRepoSessionFixture(`chop-session-${raceKind}-race`);
@@ -837,7 +837,7 @@ apps: {}
     }
   );
 
-  test("a Git removal failure preserves earlier removals and the Session retry handle", () => {
+  it("a Git removal failure preserves earlier removals and the Session retry handle", () => {
     const fixture = createMultiRepoSessionFixture("chop-session-removal-failure");
 
     const gitLog = installGitShim(fixture.binDirectory, {
@@ -875,7 +875,7 @@ apps: {}
     expect(existsSync(fixture.statePath)).toBeFalsy();
   });
 
-  test.each(["detached", "branch mismatch"] as const)(
+  it.each(["detached", "branch mismatch"] as const)(
     "removes a clean Session with a %s and warns",
     (mismatchKind) => {
       const fixture = createMultiRepoSessionFixture(
@@ -905,7 +905,7 @@ apps: {}
     }
   );
 
-  test("removes the current Session after its worktree switches branches and warns", () => {
+  it("removes the current Session after its worktree switches branches and warns", () => {
     const sandbox = makeTempDir("chop-current-session-branch-mismatch");
     const home = path.join(sandbox, "home");
 
@@ -932,7 +932,7 @@ apps: {}
     expect(git(root, ["rev-parse", "--verify", "refs/heads/unexpected"])).not.toBe("");
   });
 
-  test("a partial Session uses only recorded repos and saved Cleanup commands", () => {
+  it("a partial Session uses only recorded repos and saved Cleanup commands", () => {
     const sandbox = makeTempDir("chop-partial-session");
     const home = path.join(sandbox, "home");
     const cleanupLog = path.join(sandbox, "current-config-cleanup.log");
@@ -1007,7 +1007,7 @@ external:
     expect(existsSync(getSessionStateFilePath(home, root, "partial"))).toBeFalsy();
   });
 
-  test("failed Session cleanup retains worktrees and state for an isolated explicit retry", () => {
+  it("failed Session cleanup retains worktrees and state for an isolated explicit retry", () => {
     const sandbox = makeTempDir("chop-finalization-retry");
     const home = path.join(sandbox, "home");
 
@@ -1096,7 +1096,7 @@ external:
     expect(readFileSync(attempts, "utf-8")).toBe("retry\nretry\n");
   });
 
-  test("a Cleanup retry restarts at the Root repo and remains fail-fast", () => {
+  it("a Cleanup retry restarts at the Root repo and remains fail-fast", () => {
     const fixture = createMultiRepoSessionFixture("chop-cleanup-restart");
     const attempts = path.join(fixture.sandbox, "attempts.log");
     const allow = path.join(fixture.sandbox, "allow-cleanup");
@@ -1135,7 +1135,7 @@ external:
     expect(existsSync(fixture.statePath)).toBeFalsy();
   });
 
-  test("a dependency Source checkout can retry retained Session finalization", () => {
+  it("a dependency Source checkout can retry retained Session finalization", () => {
     const fixture = createMultiRepoSessionFixture("chop-dependency-source-retry");
     const attempts = path.join(fixture.sandbox, "attempts.log");
     const allow = path.join(fixture.sandbox, "allow-cleanup");
@@ -1178,7 +1178,7 @@ external:
     expect(existsSync(fixture.statePath)).toBeFalsy();
   });
 
-  test("Cleanup failure leaves the invoking worktree and shell location intact", () => {
+  it("Cleanup failure leaves the invoking worktree and shell location intact", () => {
     const fixture = createFailingCleanupSessionFixture("chop-cleanup-failure-shell");
     const directivePath = path.join(fixture.sandbox, "directive");
     writeFileSync(directivePath, "", "utf-8");
@@ -1199,7 +1199,7 @@ external:
     expect(readFileSync(directivePath, "utf-8")).toBe("");
   });
 
-  test("Cleanup failure does not request shell relocation without an adapter", () => {
+  it("Cleanup failure does not request shell relocation without an adapter", () => {
     const fixture = createFailingCleanupSessionFixture("chop-cleanup-failure-no-shell");
 
     const result = runMonkeCapturingFailure({
@@ -1214,7 +1214,7 @@ external:
     expect(existsSync(fixture.statePath)).toBeTruthy();
   });
 
-  test("explicit Session Chop rejects ownership recorded by another Session", () => {
+  it("explicit Session Chop rejects ownership recorded by another Session", () => {
     const sandbox = makeTempDir("chop-cross-session-ownership");
     const home = path.join(sandbox, "home");
 
@@ -1269,7 +1269,7 @@ external:
     expect(existsSync(getSessionStateFilePath(home, root, "selected"))).toBeTruthy();
   });
 
-  test("explicit Session Chop ignores unrelated corrupt Session state", () => {
+  it("explicit Session Chop ignores unrelated corrupt Session state", () => {
     const fixture = createMultiRepoSessionFixture("chop-unrelated-corrupt-session");
     const corruptStatePath = path.join(fixture.home, "sessions", "unrelated-corrupt.yml");
     write(fixture.home, "sessions/unrelated-corrupt.yml", "version: nope\n");
@@ -1286,7 +1286,7 @@ external:
     expect(existsSync(corruptStatePath)).toBeTruthy();
   });
 
-  test("explicit Session Chop rejects corrupt state referencing its worktree", () => {
+  it("explicit Session Chop rejects corrupt state referencing its worktree", () => {
     const fixture = createMultiRepoSessionFixture("chop-relevant-corrupt-session");
     write(
       fixture.home,
@@ -1314,7 +1314,7 @@ repos:
     expect(existsSync(fixture.statePath)).toBeTruthy();
   });
 
-  test("explicit Session Chop from another Session validates the selected worktree state", () => {
+  it("explicit Session Chop from another Session validates the selected worktree state", () => {
     const sandbox = makeTempDir("chop-selected-relevant-corrupt-session");
     const home = path.join(sandbox, "home");
 
@@ -1353,7 +1353,7 @@ repos:
     expect(existsSync(selectedStatePath)).toBeTruthy();
   });
 
-  test("current multi-repo Session validates corrupt state against every member", () => {
+  it("current multi-repo Session validates corrupt state against every member", () => {
     const fixture = createMultiRepoSessionFixture("chop-current-relevant-corrupt-session");
     write(
       fixture.home,
@@ -1381,7 +1381,7 @@ repos:
     expect(existsSync(fixture.statePath)).toBeTruthy();
   });
 
-  test("explicit source recovery reuses saved-state-only Root-first cleanup", () => {
+  it("explicit source recovery reuses saved-state-only Root-first cleanup", () => {
     const sandbox = makeTempDir("cleanup-targeted-finalization");
     const home = path.join(sandbox, "home");
     const cleanupLog = path.join(sandbox, "cleanup.log");
@@ -1441,7 +1441,7 @@ apps: {}
     expect(existsSync(getSessionStateFilePath(home, root, "dead"))).toBeFalsy();
   });
 
-  test("removes the current clean Ordinary worktree and preserves its branch", () => {
+  it("removes the current clean Ordinary worktree and preserves its branch", () => {
     const fixture = createOrdinaryFixture("chop-current-ordinary");
 
     const result = runMonke({
@@ -1459,7 +1459,7 @@ apps: {}
     );
   });
 
-  test.each(["branch", "absolute path", "relative path"] as const)(
+  it.each(["branch", "absolute path", "relative path"] as const)(
     "selects an Ordinary worktree by %s",
     (selector) => {
       const fixture = createOrdinaryFixture(`chop-select-${selector.replace(" ", "-")}`);
@@ -1483,7 +1483,7 @@ apps: {}
     }
   );
 
-  test("selects an Ordinary worktree through a canonical-equivalent path", () => {
+  it("selects an Ordinary worktree through a canonical-equivalent path", () => {
     const fixture = createOrdinaryFixture("chop-ordinary-canonical-path");
     const aliasPath = path.join(fixture.sandbox, "ordinary-alias");
     symlinkSync(fixture.worktreePath, aliasPath, process.platform === "win32" ? "junction" : "dir");
@@ -1498,7 +1498,7 @@ apps: {}
     expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
   });
 
-  test("rejects a branch selector checked out in multiple worktrees", () => {
+  it("rejects a branch selector checked out in multiple worktrees", () => {
     const fixture = createOrdinaryFixture("chop-ordinary-duplicate-branch");
     const duplicatePath = path.join(fixture.sandbox, "duplicate");
     git(fixture.sourceRoot, ["worktree", "add", "--force", duplicatePath, "feature"]);
@@ -1515,7 +1515,7 @@ apps: {}
     expect(existsSync(duplicatePath)).toBeTruthy();
   });
 
-  test("an unmaterialized branch does not mask a registered relative path", () => {
+  it("an unmaterialized branch does not mask a registered relative path", () => {
     const fixture = createOrdinaryFixture("chop-ordinary-branch-path");
     const nestedPath = path.join(fixture.sourceRoot, "orphan");
     git(fixture.sourceRoot, ["branch", "orphan"]);
@@ -1532,7 +1532,7 @@ apps: {}
     expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/orphan"])).not.toBe("");
   });
 
-  test("rejects a locked Ordinary worktree before removal", () => {
+  it("rejects a locked Ordinary worktree before removal", () => {
     const fixture = createOrdinaryFixture("chop-locked");
     const binDirectory = path.join(fixture.sandbox, "bin");
     mkdirSync(binDirectory);
@@ -1552,7 +1552,7 @@ apps: {}
     expect(readFileSync(gitLogPath, "utf-8")).not.toContain("worktree remove");
   });
 
-  test("removes only an exact unlocked stale Ordinary registration", () => {
+  it("removes only an exact unlocked stale Ordinary registration", () => {
     const fixture = createOrdinaryFixture("chop-stale-ordinary");
     const otherWorktree = path.join(fixture.sandbox, "other");
     git(fixture.sourceRoot, ["branch", "other"]);
@@ -1572,7 +1572,7 @@ apps: {}
     expect(git(fixture.sourceRoot, ["rev-parse", "--verify", "refs/heads/feature"])).not.toBe("");
   });
 
-  test("requires an exact registered path for stale Ordinary recovery", () => {
+  it("requires an exact registered path for stale Ordinary recovery", () => {
     const fixture = createOrdinaryFixture("chop-stale-ordinary-exact");
     const aliasPath = path.join(fixture.sandbox, "ordinary-alias");
     symlinkSync(fixture.worktreePath, aliasPath, process.platform === "win32" ? "junction" : "dir");
@@ -1591,7 +1591,7 @@ apps: {}
     );
   });
 
-  test("rejects a locked stale Ordinary registration even with --force", () => {
+  it("rejects a locked stale Ordinary registration even with --force", () => {
     const fixture = createOrdinaryFixture("chop-stale-ordinary-locked");
     git(fixture.sourceRoot, [
       "worktree",
@@ -1615,7 +1615,7 @@ apps: {}
     );
   });
 
-  test("revalidates an Ordinary worktree immediately before removal", () => {
+  it("revalidates an Ordinary worktree immediately before removal", () => {
     const fixture = createOrdinaryFixture("chop-ordinary-race");
     const binDirectory = path.join(fixture.sandbox, "bin");
     mkdirSync(binDirectory);
@@ -1641,7 +1641,7 @@ apps: {}
     expect(readFileSync(gitLog, "utf-8")).not.toContain("worktree remove");
   });
 
-  test("--force detects an Ordinary branch race immediately before removal", () => {
+  it("--force detects an Ordinary branch race immediately before removal", () => {
     const fixture = createOrdinaryFixture("chop-ordinary-branch-race");
     const binDirectory = path.join(fixture.sandbox, "bin");
     mkdirSync(binDirectory);
@@ -1667,7 +1667,7 @@ apps: {}
     expect(readFileSync(gitLog, "utf-8")).not.toContain("worktree remove");
   });
 
-  test.each(["staged", "modified", "untracked"] as const)(
+  it.each(["staged", "modified", "untracked"] as const)(
     "rejects an Ordinary worktree with %s files",
     (dirtyKind) => {
       const fixture = createOrdinaryFixture(`chop-dirty-${dirtyKind}`);
@@ -1684,7 +1684,7 @@ apps: {}
     }
   );
 
-  test.each(["staged", "modified", "untracked"] as const)(
+  it.each(["staged", "modified", "untracked"] as const)(
     "explicit --force discards an Ordinary worktree with %s files and preserves its branch",
     (dirtyKind) => {
       const fixture = createOrdinaryFixture(`chop-force-ordinary-${dirtyKind}`);
@@ -1701,7 +1701,7 @@ apps: {}
     }
   );
 
-  test("rejects a registered path replaced by a checkout from another repository", () => {
+  it("rejects a registered path replaced by a checkout from another repository", () => {
     const fixture = createOrdinaryFixture("chop-wrong-repo");
     const binDirectory = path.join(fixture.sandbox, "bin");
     mkdirSync(binDirectory);
@@ -1724,7 +1724,7 @@ apps: {}
     expect(readFileSync(gitLogPath, "utf-8")).not.toContain("worktree remove");
   });
 
-  test.each([false, true])(
+  it.each([false, true])(
     "removes an initialized-submodule Ordinary worktree (force: %s)",
     (force) => {
       const sandbox = makeTempDir(`chop-submodule-${String(force)}`);
@@ -1759,7 +1759,7 @@ apps: {}
     }
   );
 
-  test.each(["dirty", "all"])(
+  it.each(["dirty", "all"])(
     "rejects dirty initialized submodules hidden by ignore=%s",
     (ignore) => {
       const sandbox = makeTempDir(`chop-submodule-ignore-${ignore}`);
@@ -1797,7 +1797,7 @@ apps: {}
     }
   );
 
-  test("revalidates cleanliness immediately before synthesized submodule force", () => {
+  it("revalidates cleanliness immediately before synthesized submodule force", () => {
     const sandbox = makeTempDir("chop-submodule-revalidation");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -1838,7 +1838,7 @@ apps: {}
     expect(readFileSync(gitLog, "utf-8")).not.toContain("worktree remove");
   });
 
-  test("removes a clean Session worktree with an initialized submodule", () => {
+  it("removes a clean Session worktree with an initialized submodule", () => {
     const sandbox = makeTempDir("chop-session-submodule");
     const home = path.join(sandbox, "home");
 
@@ -1866,7 +1866,7 @@ apps: {}
     expect(git(sourceRoot, ["rev-parse", "--verify", "refs/heads/banana"])).not.toBe("");
   });
 
-  test("revalidates Session cleanliness before synthesized submodule force", () => {
+  it("revalidates Session cleanliness before synthesized submodule force", () => {
     const sandbox = makeTempDir("chop-session-submodule-revalidation");
     const home = path.join(sandbox, "home");
     const binDirectory = path.join(sandbox, "bin");
@@ -1907,7 +1907,7 @@ apps: {}
     expect(readFileSync(gitLog, "utf-8")).not.toContain("worktree remove");
   });
 
-  test("removes a multi-repo Session containing an initialized submodule", () => {
+  it("removes a multi-repo Session containing an initialized submodule", () => {
     const fixture = createMultiRepoSessionFixture("chop-multi-session-submodule");
 
     const submoduleRoot = createRepo(path.join(fixture.sandbox, "submodule"), {
@@ -1933,7 +1933,7 @@ apps: {}
     );
   });
 
-  test("protects Source checkouts and rejects a branch without a registered worktree", () => {
+  it("protects Source checkouts and rejects a branch without a registered worktree", () => {
     const sandbox = makeTempDir("chop-protected-targets");
     const home = path.join(sandbox, "home");
 
@@ -1955,7 +1955,7 @@ apps: {}
     expect(existsSync(sourceRoot)).toBeTruthy();
   });
 
-  test("does not treat a worktree in Monke's managed area as Ordinary", () => {
+  it("does not treat a worktree in Monke's managed area as Ordinary", () => {
     const fixture = createOrdinaryFixture("chop-managed-area", {
       worktreePath: ({ home }) => path.join(home, "worktrees", "root", "feature")
     });
@@ -1970,7 +1970,7 @@ apps: {}
     expect(existsSync(fixture.worktreePath)).toBeTruthy();
   });
 
-  test("corrupt managed Session state fails closed", () => {
+  it("corrupt managed Session state fails closed", () => {
     const fixture = createOrdinaryFixture("chop-corrupt-managed-state", {
       worktreePath: ({ home }) => path.join(home, "worktrees", "root", "feature")
     });
@@ -1988,7 +1988,7 @@ apps: {}
     expect(existsSync(fixture.worktreePath)).toBeTruthy();
   });
 
-  test.each(["current", "registered path"] as const)(
+  it.each(["current", "registered path"] as const)(
     "removes a detached Ordinary worktree selected by %s",
     (selector) => {
       const sandbox = makeTempDir(`chop-detached-${selector.replace(" ", "-")}`);
@@ -2011,7 +2011,7 @@ apps: {}
     }
   );
 
-  test("rejects a path registered to an unrelated repository", () => {
+  it("rejects a path registered to an unrelated repository", () => {
     const sandbox = makeTempDir("chop-unrelated-target");
     const home = path.join(sandbox, "home");
 
@@ -2037,7 +2037,7 @@ apps: {}
     expect(existsSync(otherWorktree)).toBeTruthy();
   });
 
-  test.each([false, true])(
+  it.each([false, true])(
     "Ordinary ignored files are deleted with the worktree (force: %s)",
     (force) => {
       const fixture = createOrdinaryFixture(`chop-ignored-${String(force)}`, {
@@ -2060,7 +2060,7 @@ apps: {}
     }
   );
 
-  test.each([false, true])(
+  it.each([false, true])(
     "Session ignored files are deleted with the worktree (force: %s)",
     (force) => {
       const sandbox = makeTempDir(`chop-session-ignored-${String(force)}`);
@@ -2086,7 +2086,7 @@ apps: {}
     }
   );
 
-  test("self-removal writes the Source checkout to an Active shell directive", () => {
+  it("self-removal writes the Source checkout to an Active shell directive", () => {
     const fixture = createOrdinaryFixture("chop-active-shell");
     const directivePath = path.join(fixture.sandbox, "directive");
     writeFileSync(directivePath, "", "utf-8");
@@ -2105,7 +2105,7 @@ apps: {}
     expect(result.stderr).toContain(`Switched to ${fixture.sourceRoot}`);
   });
 
-  test("Ordinary Chop does not run Cleanup commands or mutate Session state", () => {
+  it("Ordinary Chop does not run Cleanup commands or mutate Session state", () => {
     const fixture = createOrdinaryFixture("chop-no-session-state", {
       files: {
         "monke.yml": "cleanupCommand: 'touch cleanup-ran'\n",

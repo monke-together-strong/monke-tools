@@ -2,7 +2,7 @@ import { ok } from "node:assert/strict";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { inspectMatchingMergeDiff } from "../src/cleanup-diff-evidence.ts";
 import { readOnlyCleanupRuntime } from "../src/cleanup-eligibility.ts";
@@ -59,7 +59,7 @@ describe("complete merged change evidence", () => {
     }
   });
 
-  test("matches complete path/object/mode changes despite unrelated base advancement and diff configuration", () => {
+  it("matches complete path/object/mode changes despite unrelated base advancement and diff configuration", () => {
     const f = fixture();
     git(f.source, ["config", "diff.renames", "copies"]);
     git(f.source, ["config", "diff.relative", "true"]);
@@ -74,7 +74,7 @@ describe("complete merged change evidence", () => {
     });
   });
 
-  test.each(["whitespace", "binary", "mode", "path", "extra-change"] as const)(
+  it.each(["whitespace", "binary", "mode", "path", "extra-change"] as const)(
     "rejects a landed %s difference",
     (kind) => {
       const f = fixture();
@@ -117,7 +117,7 @@ describe("complete merged change evidence", () => {
     }
   );
 
-  test("distinguishes paths with different non-UTF-8 bytes", () => {
+  it("distinguishes paths with different non-UTF-8 bytes", () => {
     const f = fixture();
     const blob = git(f.source, ["rev-parse", `${f.head}:file.txt`]);
 
@@ -144,7 +144,7 @@ describe("complete merged change evidence", () => {
     expect(inspectMatchingMergeDiff(f.runtime, f.source, head, merge, merge)).toBeFalsy();
   });
 
-  test("rejects a divergent merge even when its net change matches the landed change", () => {
+  it("rejects a divergent merge even when its net change matches the landed change", () => {
     const f = fixture();
     git(f.source, ["switch", "-c", "side", f.base]);
     write(f.source, "side.txt", "side work\n");
@@ -156,7 +156,7 @@ describe("complete merged change evidence", () => {
     expect(inspectMatchingMergeDiff(f.runtime, f.source, head, f.merge, f.merge)).toBeFalsy();
   });
 
-  test("does not accept two empty changes as completion proof", () => {
+  it("does not accept two empty changes as completion proof", () => {
     const f = fixture();
     git(f.source, ["switch", "-c", "empty", f.base]);
     git(f.source, ["commit", "--allow-empty", "-m", "no work yet"]);
@@ -167,7 +167,7 @@ describe("complete merged change evidence", () => {
     expect(inspectMatchingMergeDiff(f.runtime, f.source, head, merge, merge)).toBeFalsy();
   });
 
-  test("missing objects and shallow history remain unavailable", () => {
+  it("missing objects and shallow history remain unavailable", () => {
     const f = fixture();
     expect(
       inspectMatchingMergeDiff(f.runtime, f.source, f.head, f.merge, "a".repeat(40))
@@ -176,7 +176,7 @@ describe("complete merged change evidence", () => {
     expect(inspectMatchingMergeDiff(f.runtime, f.source, f.head, f.merge, f.merge)).toBeNull();
   });
 
-  test("includes changed submodule commit IDs even when config hides submodule changes", () => {
+  it("includes changed submodule commit IDs even when config hides submodule changes", () => {
     const f = fixture();
     git(f.source, ["config", "diff.ignoreSubmodules", "all"]);
     git(f.source, ["update-index", "--add", "--cacheinfo", `160000,${f.base},dependency`]);

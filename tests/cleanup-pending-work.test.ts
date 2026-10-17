@@ -2,7 +2,7 @@ import { ok } from "node:assert/strict";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { readOnlyCleanupRuntime } from "../src/cleanup-eligibility.ts";
 import {
@@ -71,7 +71,7 @@ describe("cleanup preservation proofs", () => {
   });
 
   describe("pending work preservation", () => {
-    test("finds one forward commit preserving the complete bundle, including deleted directories, renames, modes and symlinks", () => {
+    it("finds one forward commit preserving the complete bundle, including deleted directories, renames, modes and symlinks", () => {
       const f = fixture({
         "a.txt": "old a\n",
         "b.txt": "old b\n",
@@ -96,7 +96,7 @@ describe("cleanup preservation proofs", () => {
       expect(f.proof()).toBeFalsy();
     });
 
-    test("witness paths are literal, including names that look like exclusion pathspecs", () => {
+    it("witness paths are literal, including names that look like exclusion pathspecs", () => {
       const name = ":(exclude)a.txt";
       const f = fixture({ "a.txt": "old\n", [name]: "keep this file\n" });
       rmSync(path.join(f.root, name));
@@ -108,7 +108,7 @@ describe("cleanup preservation proofs", () => {
       expect(f.proof()).toMatchObject({ kind: "forward-bundle", witness });
     });
 
-    test("rejects separate witnesses and content found only before HEAD", () => {
+    it("rejects separate witnesses and content found only before HEAD", () => {
       const f = fixture();
       write(f.source, "a.txt", "new a\n");
       f.commit();
@@ -126,7 +126,7 @@ describe("cleanup preservation proofs", () => {
       expect(provePendingWork(f.runtime, f.source, f.root, head, head, pending)).toBeFalsy();
     });
 
-    test("rejects staged content distinct from both HEAD and disk, intent-to-add, and hidden index entries", () => {
+    it("rejects staged content distinct from both HEAD and disk, intent-to-add, and hidden index entries", () => {
       const f = fixture();
       write(f.root, "a.txt", "staged\n");
       git(f.root, ["add", "a.txt"]);
@@ -142,7 +142,7 @@ describe("cleanup preservation proofs", () => {
       expect(inspectPendingWork(f.runtime, f.root, f.head)).toBeNull();
     });
 
-    test("fingerprints changes with the same porcelain status and detects executable changes despite local config", () => {
+    it("fingerprints changes with the same porcelain status and detects executable changes despite local config", () => {
       const f = fixture();
       write(f.root, "a.txt", "first\n");
       const first = inspectPendingWork(f.runtime, f.root, f.head);
@@ -158,7 +158,7 @@ describe("cleanup preservation proofs", () => {
       ).toBe("100755");
     });
 
-    test("rejects paths beneath symlinks and invalid UTF-8 filenames", () => {
+    it("rejects paths beneath symlinks and invalid UTF-8 filenames", () => {
       const f = fixture({ "a.txt": "old\n", "nested/file": "data\n" });
       rmSync(path.join(f.root, "nested"), { recursive: true });
       symlinkSync(f.source, path.join(f.root, "nested"));
@@ -185,7 +185,7 @@ describe("cleanup preservation proofs", () => {
       expect(inspectPendingWork(f.runtime, f.root, invalidHead)).toBeNull();
     });
 
-    test("rejects an unresolved merge index", () => {
+    it("rejects an unresolved merge index", () => {
       const f = fixture();
       write(f.root, "a.txt", "member edit\n");
       git(f.root, ["add", "."]);
@@ -196,7 +196,7 @@ describe("cleanup preservation proofs", () => {
       expect(inspectPendingWork(f.runtime, f.root, git(f.root, ["rev-parse", "HEAD"]))).toBeNull();
     });
 
-    test("requires pnpm to be the only dirty path and rejects staged/disk disagreement", () => {
+    it("requires pnpm to be the only dirty path and rejects staged/disk disagreement", () => {
       const f = fixture({ "package.json": JSON.stringify(manifest), "pnpm-lock.yaml": before });
       write(f.root, "pnpm-lock.yaml", after);
       expect(f.proof()).toMatchObject({ kind: "pnpm-bootstrap", witness: null });
@@ -211,11 +211,11 @@ describe("cleanup preservation proofs", () => {
   });
 
   describe("exact pnpm bootstrap deletion", () => {
-    test("accepts the reproduced deletion with application bytes intact", () => {
+    it("accepts the reproduced deletion with application bytes intact", () => {
       expect(isPnpmBootstrapDeletion(before, after, manifest)).toBeTruthy();
     });
 
-    test.each([
+    it.each([
       [after, before, manifest],
       [before, `${after}\n`, manifest],
       [before, after.replace("specifier: 1.0.0", "specifier: 2.0.0"), manifest],
@@ -236,7 +236,7 @@ describe("cleanup preservation proofs", () => {
     });
   });
 
-  test("replacement objects cannot make a unique HEAD tree equal default history", () => {
+  it("replacement objects cannot make a unique HEAD tree equal default history", () => {
     const f = fixture();
     write(f.root, "a.txt", "unique committed work\n");
     git(f.root, ["add", "."]);
@@ -249,7 +249,7 @@ describe("cleanup preservation proofs", () => {
     expect(inspectDefaultTree(f.runtime, f.source, head, f.head)).toBeFalsy();
   });
 
-  test("whole tree equality includes path and mode, and records the historical witness", () => {
+  it("whole tree equality includes path and mode, and records the historical witness", () => {
     const f = fixture();
     git(f.root, ["commit", "--allow-empty", "-m", "different commit same tree"]);
     const head = git(f.root, ["rev-parse", "HEAD"]);

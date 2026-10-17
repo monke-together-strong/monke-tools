@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { resolveResourceCommands, runResourceCommand } from "../src/resources.ts";
@@ -11,7 +11,7 @@ import { makeTempDir } from "./helpers.ts";
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("resources", () => {
-  test("resource runner output with a BOM is a protocol violation", async () => {
+  it("resource runner output with a BOM is a protocol violation", async () => {
     const sourceRoot = makeTempDir("resources-output-bom");
 
     const runtime: Runtime = {
@@ -36,7 +36,7 @@ describe("resources", () => {
     ).rejects.toThrow("runner protocol violation");
   });
 
-  test.each([false, true])(
+  it.each([false, true])(
     "checkpointing a new command retains each retired output once for legacy=%s",
     async (legacy) => {
       const sandbox = makeTempDir("resources-retired-output-checkpoint");
@@ -110,7 +110,7 @@ describe("resources", () => {
     }
   );
 
-  test("resource command lock covers command execution and immediate persistence", async () => {
+  it("resource command lock covers command execution and immediate persistence", async () => {
     const sandbox = makeTempDir("resources-command-lock");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "repo");
@@ -202,7 +202,7 @@ describe("resources", () => {
     ]);
   });
 
-  test("pnpm workspaces run resource modules through pnpm-mediated bun", async () => {
+  it("pnpm workspaces run resource modules through pnpm-mediated bun", async () => {
     const sandbox = makeTempDir("resources-command-pnpm-runner");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "repo");

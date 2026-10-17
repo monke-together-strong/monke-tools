@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { getExpectedWorktreePath } from "../src/git.ts";
 import { loadSessionState } from "../src/session-state-store.ts";
@@ -17,7 +17,7 @@ import {
 } from "./helpers.ts";
 
 describe("spawn from worktrees", () => {
-  test("spawn from a Session worktree carries its HEAD and edits while retaining canonical configuration", () => {
+  it("spawn from a Session worktree carries its HEAD and edits while retaining canonical configuration", () => {
     const sandbox = makeTempDir("spawn-from-worktree");
     const home = path.join(sandbox, "home");
 
@@ -77,7 +77,7 @@ describe("spawn from worktrees", () => {
     );
   });
 
-  test.each([true, false])(
+  it.each([true, false])(
     "interrupted worktree dirty carry retains its donor (configured: %s)",
     (configured) => {
       const { donor, home, root, sandbox } = createWorktreeFixture(configured);
@@ -139,7 +139,7 @@ describe("spawn from worktrees", () => {
     }
   );
 
-  test.each([false, true])("--no-dirty checks the invoking checkout (detached: %s)", (detached) => {
+  it.each([false, true])("--no-dirty checks the invoking checkout (detached: %s)", (detached) => {
     const { donor, home, root } = createWorktreeFixture();
 
     if (detached) {
@@ -158,7 +158,7 @@ describe("spawn from worktrees", () => {
     expect(existsSync(getExpectedWorktreePath(home, root, "dirty-donor"))).toBeFalsy();
   });
 
-  test.each([["--main"], ["--main", "--no-dirty"]])(
+  it.each([["--main"], ["--main", "--no-dirty"]])(
     "default-branch mode from a worktree ignores donor edits: %j",
     (...flags) => {
       const { donor, home, root } = createWorktreeFixture();
@@ -174,7 +174,7 @@ describe("spawn from worktrees", () => {
     }
   );
 
-  test("dirty carry compares an existing branch against donor HEAD and preserves existing destinations", () => {
+  it("dirty carry compares an existing branch against donor HEAD and preserves existing destinations", () => {
     const { donor, home, root } = createWorktreeFixture();
     const target = getExpectedWorktreePath(home, root, "existing");
     git(root, ["branch", "existing"]);

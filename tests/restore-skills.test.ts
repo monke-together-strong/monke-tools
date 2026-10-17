@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { writeImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { rememberRestoredRecipe, restoreSkillImports } from "../scripts/skill-lock.ts";
@@ -10,7 +10,7 @@ import { createRepo, git, makeTempDir, read, write, writeExecutable } from "./he
 import { createTestRuntime } from "./runtime-fixture.ts";
 
 describe("parallel locked skill restore", () => {
-  test("batch restore preserves distinct skill and reference sources sharing a slug", async () => {
+  it("batch restore preserves distinct skill and reference sources sharing a slug", async () => {
     const sandbox = makeTempDir("cross-kind-skill-restore");
 
     const recipes = (["skill", "reference"] as const).map((kind) => {
@@ -62,7 +62,7 @@ cp -R "$4/skills/shared" .agents/skills/shared
     expect(read(target, "skills/.monke-restored.json")).toBe(marker);
   });
 
-  test.each([
+  it.each([
     { expectedFailure: null, failImport: false },
     {
       expectedFailure: "Fixture import failed",

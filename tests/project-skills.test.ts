@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { parse } from "yaml";
 
 import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
@@ -104,7 +104,7 @@ function writeSkill(source: string, slug: string, body: string) {
 }
 
 describe("project skill installation", () => {
-  test("description overrides preserve YAML anchors and comments used by other metadata", async () => {
+  it("description overrides preserve YAML anchors and comments used by other metadata", async () => {
     const f = fixture();
     write(
       f.source,
@@ -133,7 +133,7 @@ describe("project skill installation", () => {
     expect(markdown.split("---")[2]).toBe("\nInstructions.\n");
   });
 
-  test("project description overrides reach every target and survive source refresh", async () => {
+  it("project description overrides reach every target and survive source refresh", async () => {
     const f = fixture();
     await runCliAsync(["skills", "add", f.source, "--project", "--name", "lfv"], f.runtime);
     await runCliAsync(
@@ -166,7 +166,7 @@ describe("project skill installation", () => {
     expect(existsSync(path.join(f.monkeHome, "skill-registry"))).toBeFalsy();
   });
 
-  test("local sources link by default, including supporting files, without global installation", async () => {
+  it("local sources link by default, including supporting files, without global installation", async () => {
     const f = fixture();
     write(f.source, "lfv-view/references/usage.md", "First reference.\n");
     writeSkill(path.join(f.source, "..", ".agents/skills"), "consumed-skill", "Not published.\n");
@@ -202,7 +202,7 @@ describe("project skill installation", () => {
     expect(f.stdout()).toContain("lfv\tlink\t1 skills");
   });
 
-  test("collisions preserve project skills and leave the registration unpublished", async () => {
+  it("collisions preserve project skills and leave the registration unpublished", async () => {
     const f = fixture();
     writeSkill(path.join(f.repo, ".claude/skills"), "lfv-view", "User-owned instructions.\n");
     await expect(runCliAsync(["skills", "add", f.source, "--project"], f.runtime)).rejects.toThrow(
@@ -214,7 +214,7 @@ describe("project skill installation", () => {
     expect(read(f.source, "lfv-view/SKILL.md")).toContain("First version.");
   });
 
-  test("project targets cannot write through an agent directory linked outside the repo", async () => {
+  it("project targets cannot write through an agent directory linked outside the repo", async () => {
     const f = fixture();
     const external = path.join(f.home, "global-claude");
     mkdirSync(external, { recursive: true });
@@ -227,7 +227,7 @@ describe("project skill installation", () => {
     expect(existsSync(path.join(f.repo, ".agents/skills/monke-tools"))).toBeFalsy();
   });
 
-  test.each(["directory", "read-only"] as const)(
+  it.each(["directory", "read-only"] as const)(
     "exclusion preflight rejects a %s before publishing links",
     async (kind) => {
       const f = fixture();
@@ -254,7 +254,7 @@ describe("project skill installation", () => {
     }
   );
 
-  test.each([false, true])(
+  it.each([false, true])(
     "a failed exclusion write restores project projections with an internal alias=%s",
     async (alias) => {
       const f = fixture();
@@ -294,7 +294,7 @@ describe("project skill installation", () => {
     }
   );
 
-  test("removal preserves the source, unrelated project skills, and Git exclusions", async () => {
+  it("removal preserves the source, unrelated project skills, and Git exclusions", async () => {
     const f = fixture();
     write(f.repo, ".git/info/exclude", "# User exclusions\nlocal-notes\n");
     await runCliAsync(["skills", "add", f.source, "--name", "lfv", "--project"], f.runtime);
@@ -310,7 +310,7 @@ describe("project skill installation", () => {
     expect(readImportRecipeStore(f.registry).recipes).toStrictEqual([]);
   });
 
-  test("project update rediscovers added and removed folders", async () => {
+  it("project update rediscovers added and removed folders", async () => {
     const f = fixture();
     await runCliAsync(["skills", "add", f.source, "--name", "lfv", "--project"], f.runtime);
     rmSync(path.join(f.source, "lfv-share"), { recursive: true });
@@ -325,7 +325,7 @@ describe("project skill installation", () => {
     expect(git(f.repo, ["status", "--porcelain"])).toBe("");
   });
 
-  test("spawn and setup recreate the shared registrations in a Session worktree", async () => {
+  it("spawn and setup recreate the shared registrations in a Session worktree", async () => {
     const f = fixture();
     await runCliAsync(["skills", "add", f.source, "--name", "lfv", "--project"], f.runtime);
     await runCliAsync(["spawn", "feature/demo"], f.runtime);
@@ -356,7 +356,7 @@ describe("project skill installation", () => {
     expect(f.stdout()).toContain("lfv\tlink\t2 skills");
   });
 
-  test.each([false, true])(
+  it.each([false, true])(
     "setup restores links without monke.yml in a linked worktree=%s",
     async (linkedWorktree) => {
       const f = fixture();
@@ -389,7 +389,7 @@ describe("project skill installation", () => {
     }
   );
 
-  test("each consumer repo owns its selection of the same source", async () => {
+  it("each consumer repo owns its selection of the same source", async () => {
     const f = fixture();
     const other = createRepo(path.join(f.sandbox, "other"), { "README.md": "Other consumer.\n" });
     await runCliAsync(
@@ -410,7 +410,7 @@ describe("project skill installation", () => {
     expect(git(other, ["status", "--porcelain"])).toBe("");
   });
 
-  test("an unconfigured user can link into a fresh repository before its first commit", async () => {
+  it("an unconfigured user can link into a fresh repository before its first commit", async () => {
     const f = fixture();
     rmSync(path.join(f.monkeHome, "config.yml"));
     const fresh = path.join(f.sandbox, "fresh");

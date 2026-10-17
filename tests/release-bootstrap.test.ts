@@ -2,7 +2,7 @@ import { hash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { makeTempDir, write, writeExecutable } from "./helpers.ts";
 
@@ -151,7 +151,7 @@ function runBootstrap(
 }
 
 describe("public Release bootstrap", () => {
-  test("uses the published stable catalog and verifies its Release", () => {
+  it("uses the published stable catalog and verifies its Release", () => {
     const fixture = prepareBootstrapFixture();
     const secret = "github-token-must-not-be-logged";
 
@@ -186,7 +186,7 @@ describe("public Release bootstrap", () => {
     expect(readdirSync(path.join(monkeHome, "install-staging"))).toStrictEqual([]);
   });
 
-  test("maps Apple Silicon Macs to the macOS Release asset", () => {
+  it("maps Apple Silicon Macs to the macOS Release asset", () => {
     const fixture = prepareBootstrapFixture({ machine: "arm64", system: "Darwin" });
     const result = runBootstrap(fixture);
 
@@ -194,7 +194,7 @@ describe("public Release bootstrap", () => {
     expect(readFileSync(fixture.curlLog, "utf-8")).toContain(fixture.archiveName);
   });
 
-  test("accepts arbitrarily large stable SemVer components without numeric conversion", () => {
+  it("accepts arbitrarily large stable SemVer components without numeric conversion", () => {
     const selectedVersion = "9007199254740993.0.0";
     const fixture = prepareBootstrapFixture({ selectedVersion });
     const result = runBootstrap(fixture);
@@ -205,7 +205,7 @@ describe("public Release bootstrap", () => {
     );
   });
 
-  test("uses GITHUB_TOKEN without exposing it in command logs", () => {
+  it("uses GITHUB_TOKEN without exposing it in command logs", () => {
     const fixture = prepareBootstrapFixture();
     const secret = "fallback-github-token-must-not-be-logged";
     const result = runBootstrap(fixture, { env: { GITHUB_TOKEN: secret } });
@@ -214,7 +214,7 @@ describe("public Release bootstrap", () => {
     expect(readFileSync(fixture.curlLog, "utf-8")).not.toContain(secret);
   });
 
-  test("unsupported platforms fail before network access or installation changes", () => {
+  it("unsupported platforms fail before network access or installation changes", () => {
     const fixture = prepareBootstrapFixture({ machine: "x86_64", system: "Darwin" });
     const result = runBootstrap(fixture);
 
@@ -224,7 +224,7 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  test("checksum failure prevents bundle-owned installer delegation", () => {
+  it("checksum failure prevents bundle-owned installer delegation", () => {
     const fixture = prepareBootstrapFixture({ corruptChecksum: true });
     const result = runBootstrap(fixture);
 
@@ -233,7 +233,7 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  test("invalid selected commit metadata prevents bundle-owned installer delegation", () => {
+  it("invalid selected commit metadata prevents bundle-owned installer delegation", () => {
     const fixture = prepareBootstrapFixture({ sourceCommit: "main" });
     const result = runBootstrap(fixture);
 
@@ -242,7 +242,7 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  test("a mismatched catalog tag prevents bundle-owned installer delegation", () => {
+  it("a mismatched catalog tag prevents bundle-owned installer delegation", () => {
     const fixture = prepareBootstrapFixture({ catalogTag: "monke-tools-v9.9.9" });
     const result = runBootstrap(fixture);
 
@@ -251,7 +251,7 @@ describe("public Release bootstrap", () => {
     expect(existsSync(fixture.installLog)).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     { expected: "Stable Release catalog lookup failed", options: { failLookup: true } },
     { expected: "archive download failed", options: { failDownload: true } },
     { expected: "missing valid platform asset digest", options: { missingAsset: true } },

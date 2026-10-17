@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { readImportRecipeStore } from "../scripts/skill-import-recipes.ts";
 import { saveGlobalMonkeConfig, loadGlobalMonkeConfig } from "../src/global-config.ts";
@@ -92,7 +92,7 @@ function selectActiveReleaseInstall(monkeHome: string) {
 }
 
 describe("skills CLI", () => {
-  test("target reconfiguration carries local sources and invocation policy into the new projection", async () => {
+  it("target reconfiguration carries local sources and invocation policy into the new projection", async () => {
     const sandbox = makeTempDir("skills-configure-local-sources");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -144,7 +144,7 @@ describe("skills CLI", () => {
     ]);
   });
 
-  test("mt skills local-install rejects an Active Release install", async () => {
+  it("mt skills local-install rejects an Active Release install", async () => {
     const sandbox = makeTempDir("skills-local-install-release");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -166,7 +166,7 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(osHome, ".codex", "skills", "monke-tools"))).toBeFalsy();
   });
 
-  test("mt skills local-install rejects a checkout other than the Active Local checkout", async () => {
+  it("mt skills local-install rejects a checkout other than the Active Local checkout", async () => {
     const sandbox = makeTempDir("skills-local-install-checkout-mismatch");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -188,7 +188,7 @@ describe("skills CLI", () => {
     ).rejects.toThrow("does not match the Active Local install");
   });
 
-  test("failed deselected-target cleanup remains repairable with mt skills configure", async () => {
+  it("failed deselected-target cleanup remains repairable with mt skills configure", async () => {
     const sandbox = makeTempDir("skills-local-install-cleanup-repair");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -242,7 +242,7 @@ describe("skills CLI", () => {
     });
   });
 
-  test("mt skills local-install installs shared Global agent instructions for Codex and Claude", async () => {
+  it("mt skills local-install installs shared Global agent instructions for Codex and Claude", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -266,7 +266,7 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(osHome, ".cursor", "AGENTS.md"))).toBeFalsy();
   });
 
-  test("mt skills local-install installs Global agent instructions for a Claude-only selection", async () => {
+  it("mt skills local-install installs Global agent instructions for a Claude-only selection", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-claude-only");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -290,7 +290,7 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(osHome, ".codex", "AGENTS.md"))).toBeFalsy();
   });
 
-  test("mt skills configure leaves instructions untouched for a Custom-only selection", async () => {
+  it("mt skills configure leaves instructions untouched for a Custom-only selection", async () => {
     const sandbox = makeTempDir("skills-configure-instructions-skills-only");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -324,7 +324,7 @@ describe("skills CLI", () => {
     );
   });
 
-  test("mt skills local-install leaves instructions untouched for a Cursor-only selection", async () => {
+  it("mt skills local-install leaves instructions untouched for a Cursor-only selection", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-cursor-only");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -356,7 +356,7 @@ describe("skills CLI", () => {
     );
   });
 
-  test("mt skills local-install preserves user guidance while refreshing its Managed instruction section", async () => {
+  it("mt skills local-install preserves user guidance while refreshing its Managed instruction section", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-refresh");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -390,7 +390,7 @@ describe("skills CLI", () => {
     );
   });
 
-  test.each(["refresh", "remove"] as const)(
+  it.each(["refresh", "remove"] as const)(
     "mt skills local-install consumes a CRLF boundary after Managed instructions during %s",
     async (operation) => {
       const sandbox = makeTempDir(`skills-local-install-instructions-crlf-${operation}`);
@@ -434,7 +434,7 @@ describe("skills CLI", () => {
     }
   );
 
-  test("mt skills local-install adopts only a whole-file Codex instructions match", async () => {
+  it("mt skills local-install adopts only a whole-file Codex instructions match", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-adopt");
     const sourceCheckout = path.join(sandbox, "source");
     writeSkillSource(sourceCheckout);
@@ -475,7 +475,7 @@ describe("skills CLI", () => {
     );
   });
 
-  test("mt skills local-install removes only Managed instruction sections when targets are deselected", async () => {
+  it("mt skills local-install removes only Managed instruction sections when targets are deselected", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-deselect");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -503,7 +503,7 @@ describe("skills CLI", () => {
     );
   });
 
-  test.each([
+  it.each([
     "No trailing newline",
     "One trailing newline\n",
     "Two trailing newlines\n\n",
@@ -539,7 +539,7 @@ describe("skills CLI", () => {
     }
   );
 
-  test("mt skills local-install preserves a pre-existing empty instruction file on deselection", async () => {
+  it("mt skills local-install preserves a pre-existing empty instruction file on deselection", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-empty");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -563,7 +563,7 @@ describe("skills CLI", () => {
     expect(readFileSync(destinationPath, "utf-8")).toBe("");
   });
 
-  test("mt skills local-install honors harness config directories and preserves instruction symlinks", async () => {
+  it("mt skills local-install honors harness config directories and preserves instruction symlinks", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-config");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -600,7 +600,7 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(osHome, ".claude", "CLAUDE.md"))).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     ["CODEX_HOME", "codex"],
     ["CLAUDE_CONFIG_DIR", "claude"]
   ] as const)("mt skills local-install rejects whitespace-only %s", async (variable, target) => {
@@ -627,7 +627,7 @@ describe("skills CLI", () => {
     ).rejects.toThrow(`Invalid ${variable} environment variable`);
   });
 
-  test("mt skills local-install keeps an instruction symlink valid when deselection empties its target", async () => {
+  it("mt skills local-install keeps an instruction symlink valid when deselection empties its target", async () => {
     const sandbox = makeTempDir("skills-local-install-instructions-symlink-deselect");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -654,7 +654,7 @@ describe("skills CLI", () => {
     expect(readFileSync(dotfileTarget, "utf-8")).toBe("");
   });
 
-  test.each(["broken", "cyclic", "non-file"] as const)(
+  it.each(["broken", "cyclic", "non-file"] as const)(
     "mt skills local-install refuses a %s instruction symlink and continues other targets",
     async (symlinkState) => {
       const sandbox = makeTempDir(`skills-local-install-instructions-${symlinkState}`);
@@ -698,7 +698,7 @@ describe("skills CLI", () => {
     }
   );
 
-  test.each([
+  it.each([
     ["unmatched", "<!-- monke-rules:start -->\nOld body.\n"],
     ["reversed", "<!-- monke-rules:end -->\nOld body.\n<!-- monke-rules:start -->\n"],
     [
@@ -739,7 +739,7 @@ describe("skills CLI", () => {
     }
   );
 
-  test("mt skills configure uses a multi-select and reconciles selected targets", async () => {
+  it("mt skills configure uses a multi-select and reconciles selected targets", async () => {
     const sandbox = makeTempDir("skills-configure");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -795,7 +795,7 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(monkeHome, "locks", "installation.lock"))).toBeFalsy();
   });
 
-  test("mt skills configure preselects existing targets when reconfiguring", async () => {
+  it("mt skills configure preselects existing targets when reconfiguring", async () => {
     const sandbox = makeTempDir("skills-configure-e2e");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -848,7 +848,7 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(customRoot, "monke-tools"))).toBeFalsy();
   });
 
-  test("mt skills local-install configures skills without duplicating Active install identity", async () => {
+  it("mt skills local-install configures skills without duplicating Active install identity", async () => {
     const sandbox = makeTempDir("skills-local-install-first");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -878,7 +878,7 @@ describe("skills CLI", () => {
     ).toBeTruthy();
   });
 
-  test("mt skills local-install accepts built-in targets without prompting", async () => {
+  it("mt skills local-install accepts built-in targets without prompting", async () => {
     const sandbox = makeTempDir("skills-local-install-targets");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -916,7 +916,7 @@ describe("skills CLI", () => {
     ).toBeTruthy();
   });
 
-  test("mt skills local-install replaces the saved preference when targets are explicit", async () => {
+  it("mt skills local-install replaces the saved preference when targets are explicit", async () => {
     const sandbox = makeTempDir("skills-local-install-reconfigure");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -946,7 +946,7 @@ describe("skills CLI", () => {
     expect(existsSync(path.join(osHome, ".cursor", "skills", "monke-tools"))).toBeFalsy();
   });
 
-  test("mt skills local-install reuses an existing preference and relinks after a checkout move", async () => {
+  it("mt skills local-install reuses an existing preference and relinks after a checkout move", async () => {
     const sandbox = makeTempDir("skills-local-install-refresh");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");
@@ -989,7 +989,7 @@ describe("skills CLI", () => {
     );
   });
 
-  test("mt skills configure fails clearly when the guidance source root is missing", async () => {
+  it("mt skills configure fails clearly when the guidance source root is missing", async () => {
     const sandbox = makeTempDir("skills-configure-missing-source");
     const monkeHome = path.join(sandbox, "monke-home");
     const osHome = path.join(sandbox, "home");

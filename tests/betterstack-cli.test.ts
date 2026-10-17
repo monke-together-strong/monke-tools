@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { loadEnvFileIfPresent } from "../skills/internal/betterstack-cli/scripts/betterstack-cli/env.ts";
 import { makeTempDir } from "./helpers.ts";
@@ -11,7 +11,7 @@ const cliPath = path.resolve(
 );
 
 describe("Better Stack content I/O", () => {
-  test.each(["explicit", "variable", "demo"])(
+  it.each(["explicit", "variable", "demo"])(
     "Better Stack loads %s env credentials before sending SQL file contents",
     async (selection) => {
       const directory = makeTempDir("betterstack-content-io");
@@ -96,7 +96,7 @@ describe("Better Stack content I/O", () => {
     }
   );
 
-  test("Better Stack ignores missing env files and propagates other read errors", async () => {
+  it("Better Stack ignores missing env files and propagates other read errors", async () => {
     const directory = makeTempDir("betterstack-env-read-errors");
     await expect(
       loadEnvFileIfPresent(path.join(directory, "missing.env"))

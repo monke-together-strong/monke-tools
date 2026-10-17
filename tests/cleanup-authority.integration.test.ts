@@ -1,7 +1,7 @@
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -13,7 +13,7 @@ const STATE_POLL_ATTEMPTS = 200;
 const STATE_POLL_DELAY_MS = 10;
 
 describe("Cleanup authority", () => {
-  test("a migrated release supersedes legacy snapshots and Chop does not repeat it", () => {
+  it("a migrated release supersedes legacy snapshots and Chop does not repeat it", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-migration");
     runMonke({ args: ["spawn", "retained"], cwd: fixture.repoRoot, monkeHome: fixture.home });
     const store = new CheckoutResourceStore(fixture.home);
@@ -56,7 +56,7 @@ describe("Cleanup authority", () => {
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe("A|old-value|old-output\n");
   });
 
-  test.each(["materialize", "acquire"])(
+  it.each(["materialize", "acquire"])(
     "%s retains deterministic inputs required by pending infrastructure cleanup",
     (operation) => {
       const sandbox = makeTempDir("cleanup-static-authority");
@@ -85,7 +85,7 @@ describe("Cleanup authority", () => {
     }
   );
 
-  test("all-reused Resource command outputs retain Cleanup authority A", () => {
+  it("all-reused Resource command outputs retain Cleanup authority A", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-reuse");
     runMonke({
       args: ["spawn", "retained"],
@@ -128,7 +128,7 @@ describe("Cleanup authority", () => {
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe("A|old-value|old-output\n");
   });
 
-  test("removing external-effect commands retains Cleanup authority A and its env", () => {
+  it("removing external-effect commands retains Cleanup authority A and its env", () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-removed-command");
     runMonke({
       args: ["spawn", "retained"],
@@ -151,7 +151,7 @@ describe("Cleanup authority", () => {
     expect(readFileSync(fixture.cleanupLog, "utf-8")).toBe("A|old-value|old-output\n");
   });
 
-  test("interruption while waiting for a Resource command lock retains Cleanup authority A", async () => {
+  it("interruption while waiting for a Resource command lock retains Cleanup authority A", async () => {
     const fixture = createCleanupAuthorityFixture("cleanup-authority-lock-wait");
     runMonke({
       args: ["spawn", "retained"],

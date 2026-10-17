@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -20,7 +20,7 @@ import {
 } from "./helpers.ts";
 
 describe("recovery, bootstrap, and cleanup", () => {
-  test("spawn preserves successful dependency state after root failure and resumes from the first unfinished repo", () => {
+  it("spawn preserves successful dependency state after root failure and resumes from the first unfinished repo", () => {
     const sandbox = makeTempDir("recovery");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -94,7 +94,7 @@ external:
     );
   });
 
-  test("materialize recreates a missing dependency worktree", () => {
+  it("materialize recreates a missing dependency worktree", () => {
     const sandbox = makeTempDir("recreate-dependency");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -153,7 +153,7 @@ external:
     expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
   });
 
-  test("Materialize from the Session worktree for the Root repo re-applies Dependency repos", () => {
+  it("Materialize from the Session worktree for the Root repo re-applies Dependency repos", () => {
     const sandbox = makeTempDir("rematerialize-dependency");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -212,7 +212,7 @@ external:
     expect(read(depWorktree, ".env")).toBe("DEP_POSTGRES_PORT=10000\n");
   });
 
-  test("bootstrap failure is fatal for spawn and surfaces the repo and command", () => {
+  it("bootstrap failure is fatal for spawn and surfaces the repo and command", () => {
     const sandbox = makeTempDir("bootstrap-failure");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -240,7 +240,7 @@ apps:
     }).toThrow(`Bootstrap command failed for ${root}: exit 7`);
   });
 
-  test("cleanup removes dead session state but leaves repo reservations intact", () => {
+  it("cleanup removes dead session state but leaves repo reservations intact", () => {
     const sandbox = makeTempDir("cleanup");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -288,7 +288,7 @@ apps:
     expect(reservationState.sourceRoot).toBe(root);
   });
 
-  test("cleanup removes dead no-config session state", () => {
+  it("cleanup removes dead no-config session state", () => {
     const sandbox = makeTempDir("cleanup-no-config");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -320,7 +320,7 @@ apps:
     );
   });
 
-  test("missing worktree cleanup requires explicit source recovery", () => {
+  it("missing worktree cleanup requires explicit source recovery", () => {
     const sandbox = makeTempDir("cleanup-command");
     const binDirectory = path.join(sandbox, "bin");
     const shLogPath = installShShim(binDirectory);
@@ -399,7 +399,7 @@ apps:
     );
   });
 
-  test("cleanupCommand receives resource command output env", () => {
+  it("cleanupCommand receives resource command output env", () => {
     const sandbox = makeTempDir("cleanup-command-resource-output");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -450,7 +450,7 @@ apps:
     );
   });
 
-  test("cleanupCommand uses the command remembered in session state after config drift", () => {
+  it("cleanupCommand uses the command remembered in session state after config drift", () => {
     const sandbox = makeTempDir("cleanup-command-config-drift");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -508,7 +508,7 @@ apps:
     );
   });
 
-  test("missing cleanup worktrees retain each Session without executing commands", () => {
+  it("missing cleanup worktrees retain each Session without executing commands", () => {
     const sandbox = makeTempDir("cleanup-command-failure-isolation");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");
@@ -559,7 +559,7 @@ apps:
     expect(existsSync(getSessionStateFilePath(home, root, "retry-two"))).toBeTruthy();
   });
 
-  test("cleanupCommand failure keeps session state for retry", () => {
+  it("cleanupCommand failure keeps session state for retry", () => {
     const sandbox = makeTempDir("cleanup-command-failure");
     const binDirectory = path.join(sandbox, "bin");
     const home = path.join(sandbox, "home");

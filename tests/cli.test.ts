@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { runCliAsync } from "../src/index.ts";
 import { makeTempDir } from "./helpers.ts";
@@ -12,7 +12,7 @@ import { makeTempDir } from "./helpers.ts";
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("CLI", () => {
-  test("Home prints the default Monke home", () => {
+  it("Home prints the default Monke home", () => {
     const env = { ...process.env };
     delete env.MONKE_HOME;
 
@@ -27,7 +27,7 @@ describe("CLI", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("Home prints the configured Monke home without creating it", () => {
+  it("Home prints the configured Monke home without creating it", () => {
     const home = path.join(makeTempDir("cli-home"), "custom-monke-home");
 
     const result = spawnSync("bun", ["run", "src/index.ts", "home"], {
@@ -42,7 +42,7 @@ describe("CLI", () => {
     expect(existsSync(home)).toBeFalsy();
   });
 
-  test("Home resolves a relative MONKE_HOME against the current directory", () => {
+  it("Home resolves a relative MONKE_HOME against the current directory", () => {
     const result = spawnSync("bun", ["run", "src/index.ts", "home"], {
       cwd: projectRoot,
       encoding: "utf-8",
@@ -54,11 +54,11 @@ describe("CLI", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("Chop accepts at most one target", async () => {
+  it("Chop accepts at most one target", async () => {
     await expect(runCliAsync(["chop", "first", "second"])).rejects.toThrow(/too many arguments/u);
   });
 
-  test.each([
+  it.each([
     ["root", [], "Usage: mt [options] [command]"],
     ["nested", ["shell"], "Usage: mt shell [options] [command]"]
   ])("main CLI shows %s command help when no command is selected", (_name, args, usage) => {
@@ -72,7 +72,7 @@ describe("CLI", () => {
     expect(result.stderr).toContain(usage);
   });
 
-  test.each([
+  it.each([
     ["main", "src/index.ts", ["chop", "first", "second"]],
     ["skill import", "src/index.ts", ["skills", "add", "unexpected", "extra"]],
     ["skill update", "src/index.ts", ["skills", "update", "extra"]]
@@ -87,7 +87,7 @@ describe("CLI", () => {
     expect(result.stderr).toMatch(/^error: [^\n]+\n$/u);
   });
 
-  test.each([
+  it.each([
     ["main", "src/index.ts", ["--help"], "Usage: mt [options] [command]"],
     ["main nested", "src/index.ts", ["help", "shell"], "Usage: mt shell [options] [command]"],
     ["skill import", "src/index.ts", ["skills", "add", "--help"], "Usage: mt skills add"],
@@ -103,7 +103,7 @@ describe("CLI", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("Chop help documents force, ignored-file disposal, and explicit recovery", () => {
+  it("Chop help documents force, ignored-file disposal, and explicit recovery", () => {
     const result = spawnSync("bun", ["run", "src/index.ts", "chop", "--help"], {
       cwd: projectRoot,
       encoding: "utf-8"

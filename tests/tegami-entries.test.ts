@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { parse } from "yaml";
 import * as z from "zod";
 
@@ -28,11 +28,11 @@ describe("Tegami release entries", () => {
     name.endsWith(".md")
   );
 
-  test("the release config names at least one package", () => {
+  it("the release config names at least one package", () => {
     expect(published.size).toBeGreaterThan(0);
   });
 
-  test.each(entries)("%s names only packages Tegami publishes", (entry) => {
+  it.each(entries)("%s names only packages Tegami publishes", (entry) => {
     const text = readFileSync(path.join(repositoryRoot, ".tegami", entry), "utf-8");
     const frontmatter = /^---\n(?<yaml>[\s\S]*?)\n---(?:\n|$)/u.exec(text)?.groups?.yaml;
     expect(frontmatter, "missing frontmatter").toBeDefined();

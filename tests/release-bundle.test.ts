@@ -3,7 +3,7 @@ import { hash } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   buildReleaseBundle,
@@ -150,7 +150,7 @@ function makeReleaseArchive(options: ReleaseFixtureOptions = {}) {
 }
 
 describe("Release bundle verifier", () => {
-  test("accepts a complete version-aligned Release bundle", () => {
+  it("accepts a complete version-aligned Release bundle", () => {
     const fixture = makeReleaseArchive();
 
     const manifest = verifyReleaseArchive({
@@ -168,7 +168,7 @@ describe("Release bundle verifier", () => {
     expect(manifest.guidanceHashes).toHaveProperty("skills/internal/example/SKILL.md");
   });
 
-  test("accepts an existing schema-version-1 archive with its hashed skills.lock.json", () => {
+  it("accepts an existing schema-version-1 archive with its hashed skills.lock.json", () => {
     const fixture = makeReleaseArchive({
       legacySkillLock: '{"recipes":[],"version":3}\n'
     });
@@ -243,7 +243,7 @@ describe("Release bundle verifier", () => {
     }
   ] satisfies { expected: RegExp; fixture: ReleaseFixtureOptions; name: string }[];
 
-  test.each(invalidBundles)("rejects $name", ({ expected, fixture }) => {
+  it.each(invalidBundles)("rejects $name", ({ expected, fixture }) => {
     const release = makeReleaseArchive(fixture);
 
     expect(() =>
@@ -258,7 +258,7 @@ describe("Release bundle verifier", () => {
     ).toThrow(expected);
   });
 
-  test("rejects an archive whose published checksum changed", () => {
+  it("rejects an archive whose published checksum changed", () => {
     const fixture = makeReleaseArchive();
     writeFileSync(fixture.archivePath, "changed", "utf-8");
 
@@ -274,7 +274,7 @@ describe("Release bundle verifier", () => {
     ).toThrow(/checksum mismatch/u);
   });
 
-  test("rejects an internally consistent archive that omits source guidance", () => {
+  it("rejects an internally consistent archive that omits source guidance", () => {
     const fixture = makeReleaseArchive();
     writeFileSync(
       path.join(fixture.bundleRoot, "skills", "internal", "omitted.md"),
@@ -294,7 +294,7 @@ describe("Release bundle verifier", () => {
     ).toThrow(/guidance hashes do not match/u);
   });
 
-  test("requires checksums for both supported platform archives", () => {
+  it("requires checksums for both supported platform archives", () => {
     const directory = makeTempDir("release-assets");
     const source = makeReleaseArchive({ platform: "macos-arm64", sandbox: directory });
     makeReleaseArchive({ platform: "linux-x64", sandbox: directory });
@@ -314,7 +314,7 @@ describe("Release bundle verifier", () => {
     expect(readFileSync(checksumPath, "utf-8").trim().split("\n")).toHaveLength(2);
   });
 
-  test("requires one Codiff policy across platform archives", () => {
+  it("requires one Codiff policy across platform archives", () => {
     const directory = makeTempDir("release-assets-codiff-policy");
     const source = makeReleaseArchive({ platform: "macos-arm64", sandbox: directory });
     makeReleaseArchive({
@@ -334,7 +334,7 @@ describe("Release bundle verifier", () => {
     ).toThrow(/Codiff minimum does not match 1\.14\.0/u);
   });
 
-  test("writes the verified stable Release catalog contract", () => {
+  it("writes the verified stable Release catalog contract", () => {
     const directory = makeTempDir("release-catalog");
     makeReleaseArchive({ platform: "macos-arm64", sandbox: directory });
     makeReleaseArchive({ platform: "linux-x64", sandbox: directory });
@@ -367,7 +367,7 @@ describe("Release bundle verifier", () => {
     );
   });
 
-  test(
+  it(
     "builds an official bundle whose executable reports the selected version",
     async () => {
       const platform = process.platform === "darwin" ? "macos-arm64" : "linux-x64";
@@ -414,7 +414,7 @@ describe("Release bundle verifier", () => {
 });
 
 describe("Mainline Release selection", () => {
-  test("increments the highest stable monke-tools patch tag", () => {
+  it("increments the highest stable monke-tools patch tag", () => {
     expect(
       deriveNextReleaseVersion([
         "monke-tools-v1.9.9",
@@ -428,7 +428,7 @@ describe("Mainline Release selection", () => {
     ).toBe("2.0.1");
   });
 
-  test("orders version components larger than unsigned 64-bit integers", () => {
+  it("orders version components larger than unsigned 64-bit integers", () => {
     expect(
       deriveNextReleaseVersion([
         "monke-tools-v18446744073709551615.999.999",
@@ -437,13 +437,13 @@ describe("Mainline Release selection", () => {
     ).toBe("18446744073709551616.0.1");
   });
 
-  test("rejects leading-zero versions", () => {
+  it("rejects leading-zero versions", () => {
     expect(() => releaseArchiveName("01.2.3", "macos-arm64")).toThrow(
       /stable major\.minor\.patch semantic version/u
     );
   });
 
-  test.each([
+  it.each([
     ["src/index.ts", true],
     ["skills/codex/example/SKILL.md", true],
     ["skills/internal/implement/SKILL.md", true],
@@ -464,7 +464,7 @@ describe("Mainline Release selection", () => {
     expect(isReleaseOwnedPath(filePath)).toBe(expected);
   });
 
-  test("skips an unrelated workspace dependency and lockfile change", () => {
+  it("skips an unrelated workspace dependency and lockfile change", () => {
     expect(hasReleaseOwnedChanges(["bun.lock", "packages/oxc-config/package.json"])).toBeFalsy();
     expect(hasReleaseOwnedChanges(["bun.lock", "package.json"])).toBeTruthy();
     expect(hasReleaseOwnedChanges(["bun.lock"])).toBeTruthy();

@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore } from "../src/checkout-resource-store.ts";
 import { loadResolvedGraph } from "../src/config.ts";
@@ -9,7 +9,7 @@ import { createRuntime } from "../src/runtime.ts";
 import { createFiles, makeTempDir } from "./helpers.ts";
 
 describe("resource configuration", () => {
-  test("loadResolvedGraph accepts nested resource values and cleanupCommand", () => {
+  it("loadResolvedGraph accepts nested resource values and cleanupCommand", () => {
     const sandbox = makeTempDir("config-resources");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -40,7 +40,7 @@ apps:
     ]);
   });
 
-  test("resource IDs are stable, name-safe, and distinct across repos and full Session names", () => {
+  it("resource IDs are stable, name-safe, and distinct across repos and full Session names", () => {
     const sandbox = makeTempDir("resource-id");
     const store = new CheckoutResourceStore(path.join(sandbox, "home"));
 
@@ -84,7 +84,7 @@ apps: {}
     expect(new Set(values).size).toBe(4);
   });
 
-  test("loadResolvedGraph accepts nested resource commands", () => {
+  it("loadResolvedGraph accepts nested resource commands", () => {
     const sandbox = makeTempDir("config-resource-commands");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -119,7 +119,7 @@ apps:
     ]);
   });
 
-  test("loadResolvedGraph defaults resource command timeoutSeconds to 60", () => {
+  it("loadResolvedGraph defaults resource command timeoutSeconds to 60", () => {
     const sandbox = makeTempDir("config-resource-command-default-timeout");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -145,7 +145,7 @@ apps:
     expect(graph.reposByRoot.get(root)?.resourceCommandsInOrder[0]?.timeoutSeconds).toBe(60);
   });
 
-  test.each([
+  it.each([
     {
       expected: /resources\.commands\.Bad_Name/u,
       name: "invalid command name",
@@ -294,7 +294,7 @@ apps:
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(expected);
   });
 
-  test("loadResolvedGraph rejects old flat resources mappings", () => {
+  it("loadResolvedGraph rejects old flat resources mappings", () => {
     const sandbox = makeTempDir("config-flat-resources");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -314,7 +314,7 @@ apps:
     expect(() => loadResolvedGraph(createRuntime({ cwd: root }), root)).toThrow(/DISCORD_CHANNEL/u);
   });
 
-  test("loadResolvedGraph rejects empty resources sections", () => {
+  it("loadResolvedGraph rejects empty resources sections", () => {
     const sandbox = makeTempDir("config-empty-resources");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -335,7 +335,7 @@ apps:
     );
   });
 
-  test("loadResolvedGraph rejects empty resource values sections", () => {
+  it("loadResolvedGraph rejects empty resource values sections", () => {
     const sandbox = makeTempDir("config-empty-resource-values");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -357,7 +357,7 @@ apps:
     );
   });
 
-  test("loadResolvedGraph rejects invalid resource value declarations", () => {
+  it("loadResolvedGraph rejects invalid resource value declarations", () => {
     const sandbox = makeTempDir("config-invalid-resources");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -380,7 +380,7 @@ apps:
     );
   });
 
-  test("loadResolvedGraph rejects empty resource literals", () => {
+  it("loadResolvedGraph rejects empty resource literals", () => {
     const sandbox = makeTempDir("config-empty-resource-literal");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -403,7 +403,7 @@ apps:
     );
   });
 
-  test("loadResolvedGraph rejects unsupported resource placeholders", () => {
+  it("loadResolvedGraph rejects unsupported resource placeholders", () => {
     const sandbox = makeTempDir("config-resource-placeholder");
 
     const root = createFiles(path.join(sandbox, "root"), {
@@ -426,7 +426,7 @@ apps:
     );
   });
 
-  test("loadResolvedGraph rejects duplicate resource env names", () => {
+  it("loadResolvedGraph rejects duplicate resource env names", () => {
     const sandbox = makeTempDir("config-duplicate-resource");
 
     const root = createFiles(path.join(sandbox, "root"), {

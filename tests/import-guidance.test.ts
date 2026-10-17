@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { copyStagedGuidanceToManagedRoots } from "../scripts/import-guidance.ts";
 import { makeTempDir, read, write } from "./helpers.ts";
@@ -28,7 +28,7 @@ function guidanceFixture() {
 }
 
 describe("guidance transaction recovery", () => {
-  test("a failed description publication restores linked source bytes without touching agent metadata", () => {
+  it("a failed description publication restores linked source bytes without touching agent metadata", () => {
     const fixture = guidanceFixture();
     const source = path.join(fixture.repoRoot, "linked-alpha");
     const original = "---\nname: alpha\ndescription: Original description.\n---\n\nInstructions.\n";
@@ -55,7 +55,7 @@ describe("guidance transaction recovery", () => {
     expect(fs.realpathSync(fixture.target("alpha"))).toBe(fs.realpathSync(source));
   });
 
-  test("rejects traversal that re-enters the managed destination from a different backup depth", () => {
+  it("rejects traversal that re-enters the managed destination from a different backup depth", () => {
     const fixture = guidanceFixture();
     const slug = `../../../${path.basename(fixture.repoRoot)}/skills/imported/alpha`;
     expect(path.resolve(fixture.repoRoot, "skills/imported", slug)).toBe(fixture.target("alpha"));
@@ -69,7 +69,7 @@ describe("guidance transaction recovery", () => {
     expect(read(fixture.target("alpha"), "SKILL.md")).toBe("original alpha");
   });
 
-  test.each([
+  it.each([
     ["guidance", "../unrelated"],
     ["obsoleteGuidance", "../unrelated"],
     ["guidance", "."],
@@ -88,7 +88,7 @@ describe("guidance transaction recovery", () => {
     expect(fs.existsSync(fixture.target("new"))).toBeFalsy();
   });
 
-  test("a recipe commit failure restores originals and removes newly installed guidance", () => {
+  it("a recipe commit failure restores originals and removes newly installed guidance", () => {
     const fixture = guidanceFixture();
     expect(() => {
       copyStagedGuidanceToManagedRoots({
@@ -106,7 +106,7 @@ describe("guidance transaction recovery", () => {
     ).toStrictEqual([]);
   });
 
-  test("a failed backup move does not make the original eligible for deletion", () => {
+  it("a failed backup move does not make the original eligible for deletion", () => {
     const fixture = guidanceFixture();
 
     const move = (from: string, to: string) => {
@@ -124,7 +124,7 @@ describe("guidance transaction recovery", () => {
     expect(read(fixture.target("beta"), "SKILL.md")).toBe("original beta");
   });
 
-  test("a failed restore retains its recovery copy and still restores other targets", () => {
+  it("a failed restore retains its recovery copy and still restores other targets", () => {
     const fixture = guidanceFixture();
 
     const move = (from: string, to: string) => {

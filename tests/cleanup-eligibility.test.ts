@@ -2,7 +2,7 @@ import { ok } from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import {
   collectCleanupEvidence,
@@ -52,7 +52,7 @@ function evidence(patch: Partial<CleanupEvidence> = {}): CleanupEvidence {
 }
 
 describe("cleanup committed-work policy", () => {
-  test.each([
+  it.each([
     { code: "open-pr", label: "open", merged_at: null, state: "open" },
     { code: "closed-unmerged-pr", label: "closed unmerged", merged_at: null, state: "closed" }
   ] as const)("rejects an $label PR", ({ code, merged_at, state }) => {
@@ -60,7 +60,7 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, eligible: false });
   });
 
-  test("a moved branch whose HEAD is inside the default branch passes despite a stale merged PR", () => {
+  it("a moved branch whose HEAD is inside the default branch passes despite a stale merged PR", () => {
     const snapshot = evidence({ ancestorOfDefault: true, head: OTHER_HEAD });
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       code: "unchanged-branch",
@@ -68,7 +68,7 @@ describe("cleanup committed-work policy", () => {
     });
   });
 
-  test("rejects a clean worktree with commits after merge, even for a dependency", () => {
+  it("rejects a clean worktree with commits after merge, even for a dependency", () => {
     const snapshot = evidence({
       ancestorOfDefault: false,
       candidate: { role: "dependency", sourceRoot: "/source", worktreePath: "/worktree" },
@@ -81,7 +81,7 @@ describe("cleanup committed-work policy", () => {
     });
   });
 
-  test("uses the exact head to distinguish older uses of the same branch", () => {
+  it("uses the exact head to distinguish older uses of the same branch", () => {
     const snapshot = withPrs([
       mergedPr(),
       { ...mergedPr(), head: { ...mergedPr().head, sha: OTHER_HEAD }, number: 2 }
@@ -90,7 +90,7 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot).eligible).toBeTruthy();
   });
 
-  test("a new open PR on a reused branch blocks an older exact merged match", () => {
+  it("a new open PR on a reused branch blocks an older exact merged match", () => {
     const snapshot = withPrs([
       mergedPr(),
       { ...mergedPr(), merged_at: null, number: 2, state: "open" }
@@ -99,7 +99,7 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot).code).toBe("open-pr");
   });
 
-  test("a Root with no merged PR and unique commits is a settled ineligible, not unknown", () => {
+  it("a Root with no merged PR and unique commits is a settled ineligible, not unknown", () => {
     const snapshot = withPrs([]);
     snapshot.ancestorOfDefault = false;
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
@@ -109,7 +109,7 @@ describe("cleanup committed-work policy", () => {
     });
   });
 
-  test("ambiguous exact merged matches remain unknown", () => {
+  it("ambiguous exact merged matches remain unknown", () => {
     const snapshot = withPrs([mergedPr(), { ...mergedPr(), number: 2 }]);
     expect(decideCleanupEligibility(snapshot)).toMatchObject({
       eligible: false,
@@ -117,7 +117,7 @@ describe("cleanup committed-work policy", () => {
     });
   });
 
-  test("a fork's matching branch and commit do not prove this repo's PR", () => {
+  it("a fork's matching branch and commit do not prove this repo's PR", () => {
     const snapshot = withPrs([
       { ...mergedPr(), head: { ...mergedPr().head, repo: { full_name: "fork/repo" } } }
     ]);
@@ -125,12 +125,12 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot).eligible).toBeFalsy();
   });
 
-  test("a PR merged to a non-default base does not prove completion", () => {
+  it("a PR merged to a non-default base does not prove completion", () => {
     const snapshot = withPrs([{ ...mergedPr(), base: { ...mergedPr().base, ref: "release" } }]);
     expect(decideCleanupEligibility(snapshot).eligible).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     { ancestor: true, code: "unchanged-branch", expected: true, role: "dependency" },
     { ancestor: false, code: "no-merged-pr", expected: false, role: "dependency" },
     { ancestor: null, code: "ancestry-unavailable", expected: false, role: "dependency" },
@@ -147,7 +147,7 @@ describe("cleanup committed-work policy", () => {
     }
   );
 
-  test.each([
+  it.each([
     { age: RECENT_WORKTREE_MS - 1, code: "recent-worktree", status: "ineligible" },
     { age: null, code: "recent-worktree", status: "unknown" },
     { age: undefined, code: "recent-worktree", status: "unknown" },
@@ -165,12 +165,12 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot)).toMatchObject({ code, status });
   });
 
-  test("an exact merged PR does not wait for worktree age", () => {
+  it("an exact merged PR does not wait for worktree age", () => {
     const snapshot = evidence({ ancestorOfDefault: true, worktreeAgeMs: 0 });
     expect(decideCleanupEligibility(snapshot).code).toBe("exact-merged-pr");
   });
 
-  test("ancestry proof never overrides a dirty worktree", () => {
+  it("ancestry proof never overrides a dirty worktree", () => {
     const snapshot = withPrs([]);
     snapshot.ancestorOfDefault = true;
     snapshot.localBlock = {
@@ -182,7 +182,7 @@ describe("cleanup committed-work policy", () => {
     expect(decideCleanupEligibility(snapshot).code).toBe("dirty-worktree");
   });
 
-  test.each([
+  it.each([
     { age: RECENT_WORKTREE_MS - 1, code: "recent-worktree", status: "ineligible" },
     { age: null, code: "recent-worktree", status: "unknown" },
     { age: RECENT_WORKTREE_MS, code: "merged-pr-head", status: "eligible" }
@@ -214,7 +214,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   });
 
-  test.each(["ordinary", "squash", "rebase"])(
+  it.each(["ordinary", "squash", "rebase"])(
     "proves a real %s merge from the PR head",
     async (strategy) => {
       const fixture = createFixture();
@@ -245,7 +245,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test("accepts a recorded path with a different branch name and an arbitrary verified default", async () => {
+  it("accepts a recorded path with a different branch name and an arbitrary verified default", async () => {
     const fixture = createFixture();
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate);
     expect(snapshot.branch).toBe(BRANCH);
@@ -254,7 +254,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(decideCleanupEligibility(snapshot).eligible).toBeTruthy();
   });
 
-  test.each(["identical", "changed", "missing", "shallow"])(
+  it.each(["identical", "changed", "missing", "shallow"])(
     "checks the complete merge tree after a history rewrite: %s",
     async (kind) => {
       const fixture = createCommitPrFixture();
@@ -302,7 +302,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     15_000
   );
 
-  test("finds an exact squash-merged HEAD on another branch, including later API pages", async () => {
+  it("finds an exact squash-merged HEAD on another branch, including later API pages", async () => {
     const fixture = createCommitPrFixture();
     const cache = createCleanupEvidenceCache();
     const snapshot = await collectCleanupEvidence(fixture.runtime, fixture.candidate, cache);
@@ -328,7 +328,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toBe("dirty-worktree");
   });
 
-  test.each([
+  it.each([
     "intermediate",
     "fork",
     "wrong-base",
@@ -400,7 +400,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     });
   });
 
-  test("accepts an older checkout of the same merged PR, but rejects a post-merge commit", async () => {
+  it("accepts an older checkout of the same merged PR, but rejects a post-merge commit", async () => {
     const fixture = createCommitPrFixture();
     const { sourceRoot, worktreePath } = fixture.candidate;
     const oldHead = git(worktreePath, ["rev-parse", "HEAD"]);
@@ -429,7 +429,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     "unavailable",
     "malformed",
     "ambiguous",
@@ -505,7 +505,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     });
   });
 
-  test.each([1, 3])(
+  it.each([1, 3])(
     "matches the complete change of %s rebased commits without relying on PR HEAD equality",
     async (commits) => {
       const fixture = createCommitPrFixture(commits);
@@ -539,7 +539,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test.each(["missing-object", "ambiguous", "changed-head", "open-branch", "wrong-base"] as const)(
+  it.each(["missing-object", "ambiguous", "changed-head", "open-branch", "wrong-base"] as const)(
     "complete-change proof still rejects %s",
     async (kind) => {
       const fixture = createCommitPrFixture();
@@ -616,7 +616,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test("verifies a missing local merge commit through remote comparison without fetching", async () => {
+  it("verifies a missing local merge commit through remote comparison without fetching", async () => {
     const fixture = createCommitPrFixture();
     fixture.commitPr.merge_commit_sha = OTHER_HEAD;
     const original = fixture.runtime.execAsync;
@@ -642,7 +642,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toBe("merged-pr-head");
   });
 
-  test.each([404, 422])(
+  it.each([404, 422])(
     "a commit GitHub has never seen remains a settled skip (HTTP %s)",
     async (status) => {
       const fixture = createCommitPrFixture();
@@ -671,7 +671,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test("an unrelated HTTP 422 remains an unavailable provider check", async () => {
+  it("an unrelated HTTP 422 remains an unavailable provider check", async () => {
     const fixture = createCommitPrFixture();
     const original = fixture.runtime.execAsync;
     fixture.runtime.execAsync = async (command, args, options) => {
@@ -687,7 +687,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toMatchObject({ code: "commit-pr-unavailable", status: "unknown" });
   });
 
-  test.each(["root", "dependency"] as const)(
+  it.each(["root", "dependency"] as const)(
     "proves an unchanged %s against the current default without a PR",
     async (role) => {
       const fixture = createFixture();
@@ -711,7 +711,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test.each([
+  it.each([
     { comparison: "ahead", expected: true, label: "remote ancestry proof" },
     { comparison: "behind", expected: false, label: "unique dependency commits" },
     { comparison: "unavailable", expected: false, label: "unavailable ancestry" },
@@ -763,7 +763,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(decideCleanupEligibility(snapshot).status).toBe(expectedStatus);
   });
 
-  test.each(["staged", "unstaged", "untracked"] as const)("rejects %s changes", async (kind) => {
+  it.each(["staged", "unstaged", "untracked"] as const)("rejects %s changes", async (kind) => {
     const fixture = createFixture();
     write(
       fixture.candidate.worktreePath,
@@ -790,7 +790,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     });
   });
 
-  test("dirty evidence lists at most five paths and counts the rest", async () => {
+  it("dirty evidence lists at most five paths and counts the rest", async () => {
     const fixture = createFixture();
 
     for (const index of [1, 2, 3, 4, 5, 6, 7]) {
@@ -803,7 +803,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(details.at(-1)).toBe("and 2 more");
   });
 
-  test("detects dirty submodules even when repository config hides them", async () => {
+  it("detects dirty submodules even when repository config hides them", async () => {
     const fixture = createFixture();
     const { sourceRoot, worktreePath } = fixture.candidate;
 
@@ -821,7 +821,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     expect(decideCleanupEligibility(snapshot).code).toBe("dirty-worktree");
   });
 
-  test.each(["--assume-unchanged", "--skip-worktree"])(
+  it.each(["--assume-unchanged", "--skip-worktree"])(
     "does not trust hidden index entries: %s",
     async (flag) => {
       const fixture = createFixture();
@@ -835,7 +835,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test.each(["--assume-unchanged", "--skip-worktree"])(
+  it.each(["--assume-unchanged", "--skip-worktree"])(
     "rejects concealed submodule edits across all cleanup checks: %s",
     async (flag) => {
       const fixture = createFixture();
@@ -871,7 +871,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test.each(["during lookup", "between cached calls"])(
+  it.each(["during lookup", "between cached calls"])(
     "revalidates repository identity %s",
     async (when) => {
       const fixture = createFixture();
@@ -906,7 +906,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test.each(["source", "detached", "locked", "missing", "wrong-source"])(
+  it.each(["source", "detached", "locked", "missing", "wrong-source"])(
     "excludes a %s target",
     async (kind) => {
       const fixture = createFixture();
@@ -938,7 +938,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     }
   );
 
-  test("provider failure is unknown, and never becomes a clean/unmerged success", async () => {
+  it("provider failure is unknown, and never becomes a clean/unmerged success", async () => {
     const fixture = createFixture();
     fixture.runtime.execAsync = async () => {
       throw new Error("offline");
@@ -949,7 +949,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toMatchObject({ code: "repository-unavailable", eligible: false, status: "unknown" });
   });
 
-  test("malformed provider evidence fails closed", async () => {
+  it("malformed provider evidence fails closed", async () => {
     const fixture = createFixture();
     fixture.runtime.execAsync = async () => ({ exitCode: 0, stderr: "", stdout: "{}" });
     expect(
@@ -958,7 +958,7 @@ describe("cleanup evidence from real Git worktrees", () => {
     ).toBeFalsy();
   });
 
-  test.each(["head", "dirty"])(
+  it.each(["head", "dirty"])(
     "rechecks %s after provider lookup, even with a shared cache",
     async (change) => {
       const fixture = createFixture();

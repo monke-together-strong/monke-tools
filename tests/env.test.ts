@@ -1,14 +1,14 @@
 import { existsSync, symlinkSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { rewriteEnvFile, seedWorktreeFiles } from "../src/env.ts";
 import type { RepoConfig } from "../src/types.ts";
 import { makeTempDir, read, write } from "./helpers.ts";
 
 describe("environment rewriting", () => {
-  test("seedWorktreeFiles discovers env files while pruning managed and dependency trees", () => {
+  it("seedWorktreeFiles discovers env files while pruning managed and dependency trees", () => {
     const sandbox = makeTempDir("env-seed-discovery");
     const sourceRoot = path.join(sandbox, "source");
     const worktreeRoot = path.join(sandbox, "worktree");
@@ -41,7 +41,7 @@ describe("environment rewriting", () => {
     expect(existsSync(path.join(worktreeRoot, "linked-apps/api/.env.local"))).toBeFalsy();
   });
 
-  test("rewriteEnvFile updates numeric values, urls, dsns, and duplicate active assignments", () => {
+  it("rewriteEnvFile updates numeric values, urls, dsns, and duplicate active assignments", () => {
     const sandbox = makeTempDir("env-rewrite");
     write(
       sandbox,
@@ -75,7 +75,7 @@ IGNORED=keep
 `);
   });
 
-  test("rewriteEnvFile fails when a mapped target is missing", () => {
+  it("rewriteEnvFile fails when a mapped target is missing", () => {
     const sandbox = makeTempDir("env-missing");
     write(sandbox, "app/.env.local", "PORT=3000\n");
 
@@ -84,7 +84,7 @@ IGNORED=keep
     }).toThrow(/Missing mapped env vars/u);
   });
 
-  test("rewriteEnvFile rejects malformed or portless values", () => {
+  it("rewriteEnvFile rejects malformed or portless values", () => {
     const sandbox = makeTempDir("env-invalid");
     write(
       sandbox,
@@ -101,7 +101,7 @@ IGNORED=keep
     }).toThrow(/Unsupported env value/u);
   });
 
-  test("rewriteEnvFile redacts invalid managed env values in errors", () => {
+  it("rewriteEnvFile redacts invalid managed env values in errors", () => {
     const sandbox = makeTempDir("env-redacted-invalid");
     const envPath = path.join(sandbox, "app/.env.local");
     const unsupportedValue = "fake_token_without_scheme_123";

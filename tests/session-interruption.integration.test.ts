@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { CheckoutResourceStore, resourceOwner } from "../src/checkout-resource-store.ts";
 import { getExpectedWorktreePath } from "../src/git.ts";
@@ -93,7 +93,7 @@ const INTERRUPTIONS: InterruptionCase[] = [
 ];
 
 describe("abrupt Session interruption recovery", () => {
-  test.each(INTERRUPTIONS)("spawn recovers after $checkpoint", (interruption) => {
+  it.each(INTERRUPTIONS)("spawn recovers after $checkpoint", (interruption) => {
     const sandbox = makeTempDir(`session-interruption-${interruption.checkpoint}`);
     const home = path.join(sandbox, "home");
 
@@ -166,7 +166,7 @@ export default function () {
     );
   });
 
-  test("repo-progress interruption retains Cleanup command A before replacement command B is eligible", () => {
+  it("repo-progress interruption retains Cleanup command A before replacement command B is eligible", () => {
     const sandbox = makeTempDir("session-interruption-retained-cleanup");
     const home = path.join(sandbox, "home");
     const oldCleanupMarker = path.join(sandbox, "old-cleanup-ran");

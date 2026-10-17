@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import * as z from "zod";
 
 import {
@@ -40,7 +40,7 @@ const AuditCaseSchema = z.object({
 });
 
 describe("independently labeled local worktree inventory, 2026-09-06", () => {
-  test.each(z.array(AuditCaseSchema).parse(auditCases))(
+  it.each(z.array(AuditCaseSchema).parse(auditCases))(
     "worktree $id returns $expected",
     ({ expected, snapshot }) => {
       expect(decideCleanupEligibility(snapshot).eligible).toBe(expected);

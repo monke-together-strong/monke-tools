@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { stringify } from "yaml";
 
 import {
@@ -66,7 +66,7 @@ function historyFixture() {
 }
 
 describe("historical skill review CLI", () => {
-  test("preserves committed guidance before recipes and before pinned locks", async () => {
+  it("preserves committed guidance before recipes and before pinned locks", async () => {
     const fixture = historyFixture();
     const base = git(fixture.repo, ["rev-parse", "HEAD"]);
     write(fixture.repo, skillPath, "---\nname: example\n---\nBefore pinned locks.\n");
@@ -100,7 +100,7 @@ describe("historical skill review CLI", () => {
     );
   });
 
-  test("rebuilds old v3 locks and repo recipes from accepted pins with current tooling", async () => {
+  it("rebuilds old v3 locks and repo recipes from accepted pins with current tooling", async () => {
     const fixture = historyFixture();
 
     const upstream = createRepo(path.join(fixture.sandbox, "upstream"), {
@@ -178,7 +178,7 @@ cp -R "$4/skills/"* .agents/skills/
     expect(after).toContain("description: Consumer trigger.");
   });
 
-  test("an explicit empty repo declaration removes historical guidance", async () => {
+  it("an explicit empty repo declaration removes historical guidance", async () => {
     const fixture = historyFixture();
     const base = git(fixture.repo, ["rev-parse", "HEAD"]);
     write(fixture.repo, "monke.yml", "skills: []\n");
@@ -193,7 +193,7 @@ cp -R "$4/skills/"* .agents/skills/
     );
   });
 
-  test("refuses modern unpinned declarations even when imported bytes are committed", async () => {
+  it("refuses modern unpinned declarations even when imported bytes are committed", async () => {
     const fixture = historyFixture();
     write(
       fixture.repo,

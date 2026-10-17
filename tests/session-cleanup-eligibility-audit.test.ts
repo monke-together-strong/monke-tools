@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import * as z from "zod";
 
 import { CleanupCodeSchema, CleanupRepositoryEvidenceSchema } from "../src/cleanup-eligibility.ts";
@@ -68,7 +68,7 @@ const inventory = z
   .parse(cases);
 
 describe("local whole-Session evidence, 2026-09-06", () => {
-  test.each(inventory)("Session $id returns $expected", ({ expected, snapshot }) => {
+  it.each(inventory)("Session $id returns $expected", ({ expected, snapshot }) => {
     expect(decideSessionCleanupEligibility(snapshot).eligible).toBe(expected);
   });
 });

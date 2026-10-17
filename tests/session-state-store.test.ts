@@ -1,7 +1,7 @@
 import { closeSync, openSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   allocateLocalPorts,
@@ -15,7 +15,7 @@ import type { RepoConfig, RepoReservation } from "../src/types.ts";
 import { completeSessionState, makeTempDir, materializedRepoState, write } from "./helpers.ts";
 
 describe("Session state store", () => {
-  test("missing retained state stays explicit", () => {
+  it("missing retained state stays explicit", () => {
     const home = makeTempDir("session-state-store-missing");
     const store = new SessionStateStore(home);
 
@@ -26,7 +26,7 @@ describe("Session state store", () => {
     expect(store.list()).toStrictEqual([]);
   });
 
-  test("checkpoints atomically replace disk state and expose only committed snapshots", () => {
+  it("checkpoints atomically replace disk state and expose only committed snapshots", () => {
     const home = makeTempDir("session-state-store-atomic");
     const store = new SessionStateStore(home);
 
@@ -72,7 +72,7 @@ describe("Session state store", () => {
     expect(store.get("/repo", "atomic")?.copyDirty).toBeFalsy();
   });
 
-  test("loadSessionState accepts strict v2 repo lifecycle state without an optional Diff base", () => {
+  it("loadSessionState accepts strict v2 repo lifecycle state without an optional Diff base", () => {
     const sandbox = makeTempDir("session-state-store-v2-diff-base");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -99,7 +99,7 @@ repos:
     expect(loadSessionState(home, sourceRoot, "banana").repos[0]?.diffBaseRef).toBeUndefined();
   });
 
-  test("loadSessionState rejects an externally persisted empty Diff base", () => {
+  it("loadSessionState rejects an externally persisted empty Diff base", () => {
     const sandbox = makeTempDir("session-state-store-invalid-diff-base");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -127,7 +127,7 @@ repos:
     expect(() => loadSessionState(home, sourceRoot, "banana")).toThrow(/diffBaseRef/u);
   });
 
-  test("loadSessionState rejects corrupt persisted state with the file and field path", () => {
+  it("loadSessionState rejects corrupt persisted state with the file and field path", () => {
     const sandbox = makeTempDir("session-state-store-corrupt-session");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -150,7 +150,7 @@ repos: wrong
     );
   });
 
-  test("loadSessionState rejects persisted assigned ports with invalid port keys", () => {
+  it("loadSessionState rejects persisted assigned ports with invalid port keys", () => {
     const sandbox = makeTempDir("session-state-store-invalid-port-key");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -179,7 +179,7 @@ repos:
     expect(() => loadSessionState(home, sourceRoot, "invalid-port-key")).toThrow(/assignedPorts/u);
   });
 
-  test("loadSessionState rejects payload identity that differs from its storage key", () => {
+  it("loadSessionState rejects payload identity that differs from its storage key", () => {
     const sandbox = makeTempDir("session-state-store-identity-mismatch");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -206,7 +206,7 @@ repos:
     expect(() => loadSessionState(home, sourceRoot, "expected")).toThrow(/identity.*storage/u);
   });
 
-  test("loadSessionState rejects unknown keys in application-owned state", () => {
+  it("loadSessionState rejects unknown keys in application-owned state", () => {
     const sandbox = makeTempDir("session-state-store-unknown-session-key");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -236,7 +236,7 @@ typo: true
     );
   });
 
-  test.each([
+  it.each([
     {
       expected: /complete generation requires every repo to be prepared and materialized/u,
       name: "a complete generation with pending materialization",
@@ -762,7 +762,7 @@ typo: true
     expect(() => loadSessionState(home, state.rootSourceRoot, state.session)).toThrow(expected);
   });
 
-  test.each([1, 3])("loadSessionState rejects unsupported version %i", (version) => {
+  it.each([1, 3])("loadSessionState rejects unsupported version %i", (version) => {
     const sandbox = makeTempDir("session-state-store-future-session-version");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -782,7 +782,7 @@ repos: []
     );
   });
 
-  test("targeted state checks recognize escaped worktree paths in corrupt YAML", () => {
+  it("targeted state checks recognize escaped worktree paths in corrupt YAML", () => {
     const sandbox = makeTempDir("session-state-store-escaped-corrupt-session");
     const home = path.join(sandbox, "home");
     const worktreePath = String.raw`C:\worktrees\banana`;
@@ -804,7 +804,7 @@ repos:
     );
   });
 
-  test("loadSessionState rejects malformed persisted values", () => {
+  it("loadSessionState rejects malformed persisted values", () => {
     const sandbox = makeTempDir("session-state-store-invalid-write");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -826,7 +826,7 @@ repos:
     );
   });
 
-  test("getOrCreateReservation rejects corrupt persisted reservations", () => {
+  it("getOrCreateReservation rejects corrupt persisted reservations", () => {
     const sandbox = makeTempDir("session-state-store-corrupt-reservation");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -853,7 +853,7 @@ size: wrong
     );
   });
 
-  test.each([
+  it.each([
     {
       contents: (sourceRoot: string) =>
         `version: 1
@@ -892,7 +892,7 @@ size: 1000
     expect(() => getOrCreateReservation(home, sourceRoot, 1)).toThrow(expected);
   });
 
-  test("allocateLocalPorts skips ports that are already taken inside the reserved block", async () => {
+  it("allocateLocalPorts skips ports that are already taken inside the reserved block", async () => {
     const sandbox = makeTempDir("session-state-store-taken");
     const repoConfig = makeRepoConfig(path.join(sandbox, "root"), ["API_PORT"]);
 
@@ -929,7 +929,7 @@ size: 1000
     }
   });
 
-  test("allocateLocalPorts skips baseline local-dev ports before choosing session ports", () => {
+  it("allocateLocalPorts skips baseline local-dev ports before choosing session ports", () => {
     const sandbox = makeTempDir("session-state-store-baseline");
     const repoConfig = makeRepoConfig(path.join(sandbox, "root"), ["API_PORT"]);
     const reservation = makeReservation(repoConfig.sourceRoot, 10_000, 2);
@@ -947,7 +947,7 @@ size: 1000
     expect(assignments.get("API_PORT")).toBe(10_001);
   });
 
-  test("getOrCreateReservation fails instead of resizing an existing repo block", () => {
+  it("getOrCreateReservation fails instead of resizing an existing repo block", () => {
     const sandbox = makeTempDir("session-state-store-overflow");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");
@@ -961,7 +961,7 @@ size: 1000
     );
   });
 
-  test("getOrCreateReservation leaves spare ports for multiple retained sessions", () => {
+  it("getOrCreateReservation leaves spare ports for multiple retained sessions", () => {
     const sandbox = makeTempDir("session-state-store-capacity");
     const home = path.join(sandbox, "home");
     const sourceRoot = path.join(sandbox, "root");

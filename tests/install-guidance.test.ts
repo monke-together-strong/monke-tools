@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { verifyCodiffAsync } from "../src/codiff.ts";
 import { runCliAsync } from "../src/index.ts";
@@ -13,7 +13,7 @@ const projectRoot = path.resolve(import.meta.dirname, "..");
 const skillPath = path.join("skills", "internal", "monke-install", "SKILL.md");
 
 describe("Installation guidance in errors", () => {
-  test.each(["local", "release"] as const)(
+  it.each(["local", "release"] as const)(
     "%s install failures point to their own guidance source",
     async (kind) => {
       const sandbox = makeTempDir(`install-guidance-${kind}`);
@@ -59,7 +59,7 @@ describe("Installation guidance in errors", () => {
     }
   );
 
-  test("a broken active install still points to guidance shipped with the running tool", async () => {
+  it("a broken active install still points to guidance shipped with the running tool", async () => {
     const sandbox = makeTempDir("install-guidance-broken-pointer");
     const monkeHome = path.join(sandbox, "monke-home");
     const toolInstallRoot = path.join(sandbox, "running-tool");
@@ -80,7 +80,7 @@ describe("Installation guidance in errors", () => {
     );
   });
 
-  test("missing Codiff points to installation guidance while retaining the install command", async () => {
+  it("missing Codiff points to installation guidance while retaining the install command", async () => {
     const sandbox = makeTempDir("install-guidance-codiff");
     await expect(
       verifyCodiffAsync(
@@ -94,7 +94,7 @@ describe("Installation guidance in errors", () => {
     );
   });
 
-  test("the executable prints the installation error and source guidance path", () => {
+  it("the executable prints the installation error and source guidance path", () => {
     const sandbox = makeTempDir("install-guidance-cli");
 
     const result = spawnSync("bun", ["run", "src/index.ts", "update", "--check"], {

@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, test } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import { saveGlobalMonkeConfig } from "../src/global-config.ts";
 import { runCliAsync } from "../src/index.ts";
@@ -37,7 +37,7 @@ function releaseAssetResponse(contents: Uint8Array) {
 }
 
 describe("Release update", () => {
-  test("install recovery ignores stray backups and absent retained roots", () => {
+  it("install recovery ignores stray backups and absent retained roots", () => {
     const sandbox = makeTempDir("release-update-recovery-strays");
     const monkeHome = path.join(sandbox, "monke-home");
     const active = prepareActiveRelease(monkeHome, "1.2.3");
@@ -58,7 +58,7 @@ describe("Release update", () => {
     expect(existsSync(inactive)).toBeFalsy();
   });
 
-  test("check resolves an Active tool install through a symlinked Monke home", async () => {
+  it("check resolves an Active tool install through a symlinked Monke home", async () => {
     const sandbox = makeTempDir("release-update-symlinked-home");
     const physicalRoot = path.join(sandbox, "physical-root");
     const aliasedRoot = path.join(sandbox, "aliased-root");
@@ -102,7 +102,7 @@ describe("Release update", () => {
     );
   });
 
-  test("check rejects a symbolic-link managed installs root", async () => {
+  it("check rejects a symbolic-link managed installs root", async () => {
     const sandbox = makeTempDir("release-update-symlinked-installs-root");
     const monkeHome = path.join(sandbox, "monke-home");
     const externalRoot = path.join(sandbox, "external-installs");
@@ -138,7 +138,7 @@ describe("Release update", () => {
     expect(existsSync(path.join(externalRoot, "release-1.2.3-linux-x64"))).toBeTruthy();
   });
 
-  test("update through a symlinked Monke home retains its predecessor", async () => {
+  it("update through a symlinked Monke home retains its predecessor", async () => {
     const sandbox = makeTempDir("release-update-symlinked-home-retention");
     const physicalRoot = path.join(sandbox, "physical-root");
     const aliasedRoot = path.join(sandbox, "aliased-root");
@@ -194,7 +194,7 @@ describe("Release update", () => {
     );
   });
 
-  test("check reports the highest compatible stable Release without changing installation", async () => {
+  it("check reports the highest compatible stable Release without changing installation", async () => {
     const sandbox = makeTempDir("release-update-check");
     const monkeHome = path.join(sandbox, "monke-home");
     prepareActiveRelease(monkeHome, "1.2.3");
@@ -242,7 +242,7 @@ describe("Release update", () => {
     expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
   });
 
-  test("interactive checks show colored progress while redirected output stays stable", async () => {
+  it("interactive checks show colored progress while redirected output stays stable", async () => {
     const sandbox = makeTempDir("release-update-tty");
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
@@ -282,7 +282,7 @@ describe("Release update", () => {
     expect(stderr).toContain("\u001B[");
   });
 
-  test("update verifies and atomically activates a complete Release while retaining its predecessor", async () => {
+  it("update verifies and atomically activates a complete Release while retaining its predecessor", async () => {
     const sandbox = makeTempDir("release-update-activate");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -357,7 +357,7 @@ describe("Release update", () => {
     expect(stderr).toContain("Updated monke-tools to 1.2.4");
   });
 
-  test("a Customized release install reports every changed guidance path before lookup or staging", async () => {
+  it("a Customized release install reports every changed guidance path before lookup or staging", async () => {
     const sandbox = makeTempDir("release-update-customized");
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
@@ -397,7 +397,7 @@ describe("Release update", () => {
     expect(existsSync(path.join(monkeHome, "install-staging"))).toBeFalsy();
   });
 
-  test("guidance customized during download stops update before activation", async () => {
+  it("guidance customized during download stops update before activation", async () => {
     const sandbox = makeTempDir("release-update-customized-during-download");
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
@@ -437,7 +437,7 @@ describe("Release update", () => {
     expect(readdirSync(path.join(monkeHome, "install-staging"))).toStrictEqual([]);
   });
 
-  test.each([
+  it.each([
     ["dirty", true, SOURCE_COMMIT],
     ["clean at the Release commit", false, SOURCE_COMMIT],
     ["clean at a different commit", false, "f".repeat(40)]
@@ -500,7 +500,7 @@ describe("Release update", () => {
     }
   );
 
-  test("a predictable projection collision preserves the Local tool install", async () => {
+  it("a predictable projection collision preserves the Local tool install", async () => {
     const sandbox = makeTempDir("local-to-release-partial-update");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -550,7 +550,7 @@ describe("Release update", () => {
     expect(stderr).not.toContain("Release install in place of the Local tool install");
   });
 
-  test.each([["update"], ["update", "--check"]])(
+  it.each([["update"], ["update", "--check"]])(
     "%s on the matching clean Release install performs no replacement",
     async (...arguments_) => {
       const sandbox = makeTempDir("release-update-current");
@@ -602,7 +602,7 @@ describe("Release update", () => {
     }
   );
 
-  test("a failed download preserves installs while cleaning recognized stale staging", async () => {
+  it("a failed download preserves installs while cleaning recognized stale staging", async () => {
     const sandbox = makeTempDir("release-update-download-failure");
     const monkeHome = path.join(sandbox, "monke-home");
     const predecessor = prepareActiveRelease(monkeHome, "1.2.3");
@@ -641,7 +641,7 @@ describe("Release update", () => {
     expect(readdirSync(stagingRoot)).toStrictEqual([]);
   });
 
-  test("concurrent updates serialize and the follower rechecks the Active tool install", async () => {
+  it("concurrent updates serialize and the follower rechecks the Active tool install", async () => {
     const sandbox = makeTempDir("release-update-concurrent");
     const home = path.join(sandbox, "home");
     const monkeHome = path.join(sandbox, "monke-home");
@@ -710,7 +710,7 @@ describe("Release update", () => {
     expect(downloads).toBe(2);
   });
 
-  test("an unsupported platform fails before catalog access or installation mutation", async () => {
+  it("an unsupported platform fails before catalog access or installation mutation", async () => {
     const sandbox = makeTempDir("release-update-unsupported");
     const monkeHome = path.join(sandbox, "monke-home");
     const installRoot = prepareActiveRelease(monkeHome, "1.2.3");
@@ -746,7 +746,7 @@ describe("Release update", () => {
     expect(existsSync(path.join(monkeHome, "locks"))).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     ["catalog lookup", /injected catalog failure/u],
     ["GitHub digest", /digest does not match GitHub metadata/u],
     ["published checksum", /checksum mismatch/u],
@@ -832,7 +832,7 @@ describe("Release update", () => {
     expect(existsSync(stagingRoot) ? readdirSync(stagingRoot) : []).toStrictEqual([]);
   });
 
-  test.each(["final-rename", "pointer-replacement"] as const)(
+  it.each(["final-rename", "pointer-replacement"] as const)(
     "an injected %s failure preserves the Active install and all predecessors",
     async (phase) => {
       const sandbox = makeTempDir(`release-update-${phase}`);
@@ -901,7 +901,7 @@ describe("Release update", () => {
     }
   );
 
-  test.each([
+  it.each([
     ["exact versions", ["update", "1.2.4"]],
     ["force replacement", ["update", "--force"]],
     ["quiet mode", ["update", "--quiet"]],
@@ -934,7 +934,7 @@ describe("Release update", () => {
     expect(catalogCalled).toBeFalsy();
   });
 
-  test.each([
+  it.each([
     [
       "missing checksums",
       (candidate: ReturnType<typeof release>) => {
