@@ -18,13 +18,13 @@ const perfectionistPlugin = {
 } as const;
 
 const defaultTestFiles = [
-  "**/*.{test,spec}.{ts,tsx,js,jsx}",
-  "**/__tests__/**/*.{ts,tsx,js,jsx}",
-  "**/__mocks__/**/*.{ts,tsx,js,jsx}",
-  "**/{test,tests}/**/*.{ts,tsx,js,jsx}"
+  "**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}",
+  "**/__tests__/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}",
+  "**/__mocks__/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}",
+  "**/{test,tests}/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}"
 ];
 
-const executableTestFiles = ["**/*.{test,spec}.{ts,tsx,js,jsx}"];
+const executableTestFiles = ["**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}"];
 
 const generatedFileIgnorePatterns = [
   // TanStack Router owns this file and explicitly requires linters and formatters to ignore it.
@@ -50,8 +50,10 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
     vitestExcludeFiles = [],
     ...config
   } = options;
+
   const vitestOverrides = (vitest.overrides ?? []).map<OxlintOverride>((override) => {
     const excludeFiles = [...(override.excludeFiles ?? []), ...vitestExcludeFiles];
+
     const resolvedOverride: OxlintOverride = {
       ...override,
       rules: {
@@ -66,6 +68,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
 
     return resolvedOverride;
   });
+
   const vitestConfig: OxlintConfig = {
     ...vitest,
     overrides: vitestOverrides
@@ -126,6 +129,8 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       ...overrides
     ],
     rules: {
+      // Bun runs the suggested flatMap and iterator-helper rewrites slower than filter().map().
+      "anti-slop/no-array-filter-map": "off",
       // Conditional optional fields are idiomatic; this rule generates too much noise.
       "anti-slop/no-conditional-empty-object-spread": "off",
       "class-methods-use-this": "off",

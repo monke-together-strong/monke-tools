@@ -39,15 +39,15 @@
   "dependencies": {
     "eslint-plugin-jsdoc": "63.3.3",
     "eslint-plugin-perfectionist": "5.10.1",
-    "ultracite": "7.11.1"
+    "ultracite": "8.0.1"
   },
   "devDependencies": {
-    "oxfmt": "0.70.0",
-    "oxlint": "1.82.0"
+    "oxfmt": "0.73.0",
+    "oxlint": "1.88.0"
   },
   "peerDependencies": {
-    "oxfmt": ">=0.70.0",
-    "oxlint": "^1.82.0",
-    "oxlint-tsgolint": ">=7.0.2001"
+    "oxfmt": ">=0.71.0 <1",
+    "oxlint": "^1.86.0",
+    "oxlint-tsgolint": ">=7.0.2004"
   }
 }
