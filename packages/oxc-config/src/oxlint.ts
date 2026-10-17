@@ -5,6 +5,11 @@ import antiSlop from "ultracite/oxlint/anti-slop";
 import core from "ultracite/oxlint/core";
 import vitest from "ultracite/oxlint/vitest";
 
+import type { FrameworkScopes } from "./frameworks.ts";
+import { checkFrameworkCoverage, findRepositoryRoot, resolveFrameworks } from "./frameworks.ts";
+
+export type { Framework, FrameworkScopes } from "./frameworks.ts";
+
 const localRequire = createRequire(import.meta.url);
 
 const jsdocPlugin = {
@@ -32,6 +37,13 @@ const generatedFileIgnorePatterns = [
 ];
 
 export interface CreateOxlintConfigOptions extends OxlintConfig {
+  /** Ultracite framework presets and the directories they lint. */
+  frameworks?: FrameworkScopes;
+  /**
+   * Directory holding the config, whose package manifests are checked for framework dependencies.
+   * Defaults to the nearest directory at or above the working directory that contains `.git`.
+   */
+  root?: string;
   /** Files receiving framework-neutral test policy, including test helpers. */
   testFiles?: readonly string[];
   /** Non-Vitest test files to exclude from the default Vitest preset. */
@@ -41,15 +53,22 @@ export interface CreateOxlintConfigOptions extends OxlintConfig {
 export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): OxlintConfig {
   const {
     extends: extensions = [],
+    frameworks = {},
     ignorePatterns = [],
     jsPlugins = [],
     options: lintOptions = {},
     overrides = [],
+    root = findRepositoryRoot(),
     rules = {},
+    settings = {},
     testFiles = defaultTestFiles,
     vitestExcludeFiles = [],
     ...config
   } = options;
+
+  checkFrameworkCoverage(root, frameworks);
+
+  const framework = resolveFrameworks(frameworks, rules);
 
   const vitestOverrides = (vitest.overrides ?? []).map<OxlintOverride>((override) => {
     const excludeFiles = [...(override.excludeFiles ?? []), ...vitestExcludeFiles];
@@ -76,7 +95,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
 
   return {
     ...config,
-    extends: [core, antiSlop, vitestConfig, ...extensions],
+    extends: [core, antiSlop, vitestConfig, ...framework.extends, ...extensions],
     ignorePatterns: [
       ...(core.ignorePatterns ?? []),
       ...generatedFileIgnorePatterns,
@@ -126,6 +145,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
           "unicorn/no-useless-undefined": ["error", { checkArguments: false }]
         }
       },
+      ...framework.overrides,
       ...overrides
     ],
     rules: {
@@ -192,10 +212,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "unicorn/no-negated-condition": "off",
       "unicorn/no-nested-ternary": "off",
       ...rules
-    }
+    },
+    settings: { ...framework.settings, ...settings }
   };
 }
-
-export const oxlintConfig = createOxlintConfig();
-
-export default oxlintConfig;
