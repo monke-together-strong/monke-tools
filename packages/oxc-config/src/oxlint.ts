@@ -211,7 +211,7 @@ export function createOxlintConfig(options: CreateOxlintConfigOptions = {}): Oxl
       "unicorn/no-array-reduce": "off",
       "unicorn/no-negated-condition": "off",
       "unicorn/no-nested-ternary": "off",
-      ...framework.rules
+      ...rules
     },
     settings: { ...framework.settings, ...settings }
   };

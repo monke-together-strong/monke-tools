@@ -95,7 +95,7 @@ export default createOxlintConfig({
 });
 ```
 
-Install `@shadcn/lint` for `shadcn` and `oxlint-plugin-react-doctor` for `react-doctor`. Enabling `react-doctor` together with `tanstack` adds React Doctor's TanStack rules.
+Install `@shadcn/lint` for `shadcn` and `oxlint-plugin-react-doctor` for `react-doctor`. React Doctor's TanStack rules apply where the `react-doctor` and `tanstack` scopes overlap.
 
 `createOxlintConfig` throws when the root or a workspace `package.json` depends on one of these packages without a matching `frameworks` entry:
 

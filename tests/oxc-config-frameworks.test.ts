@@ -69,6 +69,20 @@ describe("oxc-config frameworks", () => {
     expect(core).toContain("eslint(no-var)");
   });
 
+  it("applies React Doctor's TanStack rules only where both scopes overlap", () => {
+    const config = createOxlintConfig({
+      frameworks: { "react-doctor": ["."], tanstack: ["apps/web"] },
+      root: makeTempDir("oxc-frameworks")
+    });
+
+    // Repository-wide React Doctor extends the config, so only its TanStack rules form overrides.
+    const reactDoctorOverrides = (config.overrides ?? []).filter((override) =>
+      Object.keys(override.rules ?? {}).some((rule) => rule.startsWith("react-doctor/"))
+    );
+
+    expect(reactDoctorOverrides.map((override) => override.files)).toStrictEqual([["apps/web/**"]]);
+  });
+
   it("rejects a workspace framework dependency until a scope covers or declines it", () => {
     const root = makeTempDir("oxc-frameworks");
     write(root, "package.json", JSON.stringify({ workspaces: ["apps/*"] }));

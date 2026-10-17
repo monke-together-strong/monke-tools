@@ -23,27 +23,41 @@ export type FrameworkScopes = Partial<Record<Framework, false | readonly string[
 interface FrameworkConfig {
   extends: OxlintConfig[];
   overrides: OxlintOverride[];
-  rules: DummyRuleMap;
   settings: NonNullable<OxlintConfig["settings"]>;
+}
+
+interface PlacedPreset {
+  directories: string[];
+  preset: OxlintConfig;
 }
 
 interface FrameworkPresets {
   /** Rule namespaces registered by the presets' JavaScript plugins. */
   jsPluginNamespaces: readonly string[];
-  presets: (scopes: FrameworkScopes) => OxlintConfig[];
+  presets: (directories: string[], scopes: FrameworkScopes) => PlacedPreset[];
 }
 
 const frameworkPresets: Record<Framework, FrameworkPresets> = {
-  react: { jsPluginNamespaces: [], presets: () => [react] },
+  react: { jsPluginNamespaces: [], presets: (directories) => [{ directories, preset: react }] },
   "react-doctor": {
     jsPluginNamespaces: ["react-doctor"],
-    presets: (scopes) =>
-      normalizeDirectories(scopes.tanstack).length > 0
-        ? [selectJsPlugins(["react-doctor"]), tanstackReactDoctor]
-        : [selectJsPlugins(["react-doctor"])]
+    presets: (directories, scopes) => [
+      { directories, preset: selectJsPlugins(["react-doctor"]) },
+      // React Doctor's TanStack rules belong where both frameworks apply.
+      {
+        directories: overlap(directories, normalizeDirectories(scopes.tanstack)),
+        preset: tanstackReactDoctor
+      }
+    ]
   },
-  shadcn: { jsPluginNamespaces: ["shadcn"], presets: () => [shadcn] },
-  tanstack: { jsPluginNamespaces: [], presets: () => [tanstack] }
+  shadcn: {
+    jsPluginNamespaces: ["shadcn"],
+    presets: (directories) => [{ directories, preset: shadcn }]
+  },
+  tanstack: {
+    jsPluginNamespaces: [],
+    presets: (directories) => [{ directories, preset: tanstack }]
+  }
 };
 
 // A framework package must be covered where it is used. Plugin packages are often installed beside
@@ -134,12 +148,12 @@ export function checkFrameworkCoverage(root: string, scopes: FrameworkScopes) {
 }
 
 /**
- * Applies framework presets. Repository-wide frameworks extend the config. Directory-scoped
- * frameworks become overrides, and root `rules` for their plugins move into a matching override,
- * because Oxlint applies overrides after root rules.
+ * Applies framework presets. Repository-wide presets extend the config. Directory-scoped presets
+ * become overrides, followed by a copy of the root `rules` for their plugins, because Oxlint
+ * applies overrides after root rules.
  */
 export function resolveFrameworks(scopes: FrameworkScopes, rules: DummyRuleMap): FrameworkConfig {
-  const resolved: FrameworkConfig = { extends: [], overrides: [], rules, settings: {} };
+  const resolved: FrameworkConfig = { extends: [], overrides: [], settings: {} };
 
   for (const framework of frameworkNames) {
     const directories = normalizeDirectories(scopes[framework]);
@@ -148,39 +162,39 @@ export function resolveFrameworks(scopes: FrameworkScopes, rules: DummyRuleMap):
       continue;
     }
 
-    const { jsPluginNamespaces, presets: selectPresets } = frameworkPresets[framework];
-    const presets = selectPresets(scopes);
+    const { jsPluginNamespaces, presets } = frameworkPresets[framework];
+    const placed = presets(directories, scopes).filter((entry) => entry.directories.length > 0);
 
-    for (const preset of presets) {
+    for (const { directories: presetDirectories, preset } of placed) {
       resolved.settings = { ...resolved.settings, ...preset.settings };
+
+      if (presetDirectories.includes(".")) {
+        resolved.extends.push(preset);
+      } else {
+        resolved.overrides.push(...scopePreset(preset, presetDirectories));
+      }
     }
 
-    if (directories.includes(".")) {
-      resolved.extends.push(...presets);
+    const scoped = [
+      ...new Set(
+        placed.flatMap((entry) => (entry.directories.includes(".") ? [] : entry.directories))
+      )
+    ];
 
-      continue;
-    }
-
-    resolved.overrides.push(...presets.flatMap((preset) => scopePreset(preset, directories)));
-
-    const plugins = presets.flatMap((preset) => preset.plugins ?? []);
+    const plugins = placed.flatMap(({ preset }) => preset.plugins ?? []);
     const namespaces = new Set<string>([...plugins, ...jsPluginNamespaces]);
 
-    const routed = Object.entries(resolved.rules).filter(([rule]) =>
+    const tuning = Object.entries(rules).filter(([rule]) =>
       namespaces.has(rule.split("/")[0] ?? "")
     );
 
-    if (routed.length > 0) {
+    if (scoped.length > 0 && tuning.length > 0) {
       // A scoped override must list its built-in plugins again for Oxlint to apply their rule changes.
       resolved.overrides.push({
-        files: within(directories, ["**"]),
+        files: within(scoped, ["**"]),
         plugins,
-        rules: Object.fromEntries(routed)
+        rules: Object.fromEntries(tuning)
       });
-
-      resolved.rules = Object.fromEntries(
-        Object.entries(resolved.rules).filter(([rule]) => !routed.some(([moved]) => moved === rule))
-      );
     }
   }
 
@@ -230,6 +244,23 @@ function covers(scope: readonly string[], directory: string): boolean {
   return normalizeDirectories(scope).some(
     (scoped) => scoped === "." || directory === scoped || directory.startsWith(`${scoped}/`)
   );
+}
+
+/** Returns the directories covered by both scopes, keeping the narrower directory of each pair. */
+function overlap(left: readonly string[], right: readonly string[]): string[] {
+  return [
+    ...new Set(
+      left.flatMap((outer) =>
+        right.flatMap((inner) => {
+          if (covers([outer], inner)) {
+            return [inner];
+          }
+
+          return covers([inner], outer) ? [outer] : [];
+        })
+      )
+    )
+  ];
 }
 
 function readManifest(directory: string): Manifest | undefined {
